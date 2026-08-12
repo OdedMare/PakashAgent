@@ -1,0 +1,273 @@
+"""LLM client: the degradation ladder, the parse retry, and the helpers.
+
+Driven by a fake OpenAI client — no server, no network.
+"""
+
+import json
+
+import httpx
+import pytest
+from openai import BadRequestError
+
+from app.common.errors import AgentError
+from app.dal.llm.json_response_parser import extract_json
+from app.dal.llm.message_merger import merge_system_into_user
+from app.dal.llm.model_id_extractor import extract_model_ids
+from app.dal.llm.openai_client import OpenAIJsonClient
+
+
+class _Settings:
+    def __init__(self, **overrides):
+        self.llm_model = "test-model"
+        self.llm_diet_mode = False
+        self.llm_repetition_penalty = 0.0
+        self.llm_timeout_seconds = 120
+        self.llm_base_url = "http://localhost:11434/v1"
+        self.openai_api_key = ""
+        for key, value in overrides.items():
+            setattr(self, key, value)
+
+
+class _Store:
+    def __init__(self, settings):
+        self._settings = settings
+
+    def get(self):
+        return self._settings
+
+
+class _Usage:
+    prompt_tokens = 10
+    completion_tokens = 5
+    total_tokens = 15
+
+
+class _Response:
+    def __init__(self, content, usage=True):
+        message = type("Message", (), {"content": content})()
+        self.choices = [type("Choice", (), {"message": message})()]
+        self.usage = _Usage() if usage else None
+
+
+def _bad_request(message="unsupported"):
+    request = httpx.Request("POST", "http://localhost:11434/v1/chat/completions")
+    response = httpx.Response(400, request=request)
+    return BadRequestError(message, response=response, body=None)
+
+
+class _FakeCompletions:
+    """Records every request and replies from a scripted queue.
+
+    A callable in the queue is raised or returned as the script decides.
+    """
+
+    def __init__(self, script):
+        self.script = list(script)
+        self.calls = []
+
+    def create(self, model, temperature, **kwargs):
+        self.calls.append(kwargs)
+        item = self.script.pop(0) if self.script else _Response('{"ok": true}')
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+
+class _FakeClient:
+    def __init__(self, script):
+        self.completions = _FakeCompletions(script)
+        self.chat = type("Chat", (), {"completions": self.completions})()
+
+
+def _client(script, settings=None, monkeypatch=None):
+    llm = OpenAIJsonClient(_Store(settings or _Settings()))
+    fake = _FakeClient(script)
+    # Bypass the real OpenAI constructor and the connection cache.
+    llm._client_for = lambda *args, **kwargs: fake
+    return llm, fake
+
+
+# --- the degradation ladder ------------------------------------------------
+
+def test_schema_is_the_first_rung_when_one_is_given():
+    llm, fake = _client([_Response('{"ok": true}')])
+    llm.complete_json("sys", "usr", schema={"type": "object"})
+    assert fake.completions.calls[0]["response_format"]["type"] == "json_schema"
+
+
+def test_json_mode_is_the_first_rung_without_a_schema():
+    llm, fake = _client([_Response('{"ok": true}')])
+    llm.complete_json("sys", "usr")
+    assert fake.completions.calls[0]["response_format"]["type"] == "json_object"
+
+
+def test_ladder_steps_down_through_every_rung_on_bad_request():
+    # schema → json_object → plain → merged system prompt
+    llm, fake = _client([
+        _bad_request(), _bad_request(), _bad_request(),
+        _Response('{"ok": true}'),
+    ])
+    result = llm.complete_json("sys", "usr", schema={"type": "object"})
+
+    assert result["ok"] is True
+    formats = [call.get("response_format") for call in fake.completions.calls]
+    assert formats[0]["type"] == "json_schema"
+    assert formats[1]["type"] == "json_object"
+    assert formats[2] is None
+    # The last rung carries no system role at all.
+    last = fake.completions.calls[3]["messages"]
+    assert [item["role"] for item in last] == ["user"]
+    assert "sys" in last[0]["content"]
+
+
+def test_a_non_bad_request_error_does_not_advance_the_ladder():
+    # Only a 400 means "the server rejected this shape". Anything else is a
+    # real failure and must surface immediately rather than being retried
+    # three more times against the same broken server.
+    llm, fake = _client([RuntimeError("connection reset")])
+    with pytest.raises(AgentError):
+        llm.complete_json("sys", "usr")
+    assert len(fake.completions.calls) == 1
+
+
+def test_every_rung_failing_raises_agent_error():
+    llm, _ = _client([_bad_request() for _ in range(4)])
+    with pytest.raises(AgentError):
+        llm.complete_json("sys", "usr")
+
+
+# --- the parse retry -------------------------------------------------------
+
+def test_a_non_json_reply_is_retried_with_the_error_appended():
+    llm, fake = _client([_Response("sorry, no"), _Response('{"ok": true}')])
+    assert llm.complete_json("sys", "usr")["ok"] is True
+
+    second = fake.completions.calls[1]["messages"]
+    roles = [item["role"] for item in second]
+    assert roles == ["system", "user", "assistant", "user"]
+    assert "not valid JSON" in second[-1]["content"]
+
+
+def test_two_invalid_replies_raise_agent_error():
+    llm, fake = _client([_Response("nope"), _Response("still nope")])
+    with pytest.raises(AgentError):
+        llm.complete_json("sys", "usr")
+    assert len(fake.completions.calls) == 2
+
+
+def test_an_empty_reply_is_an_error_not_an_empty_object():
+    llm, _ = _client([_Response("")])
+    with pytest.raises(AgentError):
+        llm.complete_json("sys", "usr")
+
+
+# --- usage, diet mode, penalty --------------------------------------------
+
+def test_usage_is_reported_when_the_server_provides_it():
+    llm, _ = _client([_Response('{"ok": true}')])
+    assert llm.complete_json("sys", "usr")["_usage"]["total_tokens"] == 15
+
+
+def test_usage_is_omitted_when_the_server_reports_none():
+    llm, _ = _client([_Response('{"ok": true}', usage=False)])
+    assert "_usage" not in llm.complete_json("sys", "usr")
+
+
+def test_usage_accumulates_across_a_parse_retry():
+    # Tokens spent on the rejected reply were still spent.
+    llm, _ = _client([_Response("nope"), _Response('{"ok": true}')])
+    assert llm.complete_json("sys", "usr")["_usage"]["total_tokens"] == 30
+
+
+def test_diet_mode_bounds_the_completion():
+    llm, fake = _client(
+        [_Response('{"ok": true}')], _Settings(llm_diet_mode=True)
+    )
+    llm.complete_json("sys", "usr")
+    assert fake.completions.calls[0]["max_tokens"] == 1200
+
+
+def test_no_max_tokens_is_sent_when_diet_mode_is_off():
+    llm, fake = _client([_Response('{"ok": true}')])
+    llm.complete_json("sys", "usr")
+    assert "max_tokens" not in fake.completions.calls[0]
+
+
+def test_neutral_repetition_penalty_is_never_sent():
+    # OpenAI 400s on the unknown key, and that 400 is indistinguishable from
+    # the ones the ladder exists to step around.
+    llm, fake = _client([_Response('{"ok": true}')])
+    llm.complete_json("sys", "usr")
+    assert "extra_body" not in fake.completions.calls[0]
+
+
+def test_a_set_repetition_penalty_travels_in_extra_body():
+    llm, fake = _client(
+        [_Response('{"ok": true}')], _Settings(llm_repetition_penalty=1.1)
+    )
+    llm.complete_json("sys", "usr")
+    assert fake.completions.calls[0]["extra_body"] == {
+        "repetition_penalty": 1.1
+    }
+
+
+# --- local-server accommodations ------------------------------------------
+
+def test_no_api_key_is_required_when_a_base_url_is_set():
+    llm, _ = _client([_Response('{"ok": true}')], _Settings(openai_api_key=""))
+    assert llm.complete_json("sys", "usr")["ok"] is True
+
+
+def test_neither_key_nor_base_url_is_a_hebrew_configuration_error():
+    llm, _ = _client(
+        [], _Settings(openai_api_key="", llm_base_url=None)
+    )
+    with pytest.raises(AgentError) as caught:
+        llm.complete_json("sys", "usr")
+    assert "API" in str(caught.value)
+
+
+# --- helpers ---------------------------------------------------------------
+
+def test_extract_json_strips_a_markdown_fence():
+    assert extract_json('```json\n{"a": 1}\n```') == {"a": 1}
+
+
+def test_extract_json_finds_an_object_inside_prose():
+    assert extract_json('Here you go: {"a": 1} — hope that helps') == {"a": 1}
+
+
+def test_extract_json_rejects_a_bare_array():
+    # Callers index the result by key; a list would fail later and further away.
+    with pytest.raises(json.JSONDecodeError):
+        extract_json("[1, 2, 3]")
+
+
+def test_extract_json_keeps_hebrew_intact():
+    assert extract_json('{"shift": "בוקר"}')["shift"] == "בוקר"
+
+
+def test_merge_system_into_user_folds_the_system_turn():
+    merged = merge_system_into_user([
+        {"role": "system", "content": "S"},
+        {"role": "user", "content": "U"},
+    ])
+    assert merged == [{"role": "user", "content": "S\n\nU"}]
+
+
+def test_merge_leaves_messages_without_a_system_turn_alone():
+    messages = [{"role": "user", "content": "U"}]
+    assert merge_system_into_user(messages) == messages
+
+
+@pytest.mark.parametrize("payload", [
+    {"data": [{"id": "b"}, {"id": "a"}]},
+    {"models": [{"name": "b"}, {"name": "a"}]},
+    ["b", "a"],
+])
+def test_model_ids_are_read_from_every_envelope_servers_use(payload):
+    assert extract_model_ids(payload) == ["a", "b"]
+
+
+def test_model_ids_of_an_unexpected_payload_is_empty_not_an_error():
+    assert extract_model_ids({"unexpected": True}) == []

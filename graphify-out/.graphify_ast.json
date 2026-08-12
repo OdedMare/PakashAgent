@@ -1,0 +1,962 @@
+{
+  "nodes": [
+    {
+      "id": "backend_app_init",
+      "label": "__init__.py",
+      "file_type": "code",
+      "source_file": "backend/app/__init__.py",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_api_init",
+      "label": "__init__.py",
+      "file_type": "code",
+      "source_file": "backend/app/api/__init__.py",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_api_routers_init",
+      "label": "__init__.py",
+      "file_type": "code",
+      "source_file": "backend/app/api/routers/__init__.py",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_bl_init",
+      "label": "__init__.py",
+      "file_type": "code",
+      "source_file": "backend/app/bl/__init__.py",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_init",
+      "label": "__init__.py",
+      "file_type": "code",
+      "source_file": "backend/app/common/__init__.py",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_config_init",
+      "label": "__init__.py",
+      "file_type": "code",
+      "source_file": "backend/app/common/config/__init__.py",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_config_settings",
+      "label": "settings.py",
+      "file_type": "code",
+      "source_file": "backend/app/common/config/settings.py",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_config_settings_settings",
+      "label": "Settings",
+      "file_type": "code",
+      "source_file": "backend/app/common/config/settings.py",
+      "source_location": "L9",
+      "_origin": "ast"
+    },
+    {
+      "id": "basesettings",
+      "label": "BaseSettings",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_config_settings_rationale_1",
+      "label": "Environment defaults; UI overrides are applied by RuntimeSettingsStore.",
+      "file_type": "rationale",
+      "source_file": "backend/app/common/config/settings.py",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_config_settings_rationale_10",
+      "label": "Env-derived DEFAULTS. Values the boss can edit in the UI live in     common.runt",
+      "file_type": "rationale",
+      "source_file": "backend/app/common/config/settings.py",
+      "source_location": "L10",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_errors",
+      "label": "errors.py",
+      "file_type": "code",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_errors_apperror",
+      "label": "AppError",
+      "file_type": "code",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L8",
+      "_origin": "ast"
+    },
+    {
+      "id": "exception",
+      "label": "Exception",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_errors_agenterror",
+      "label": "AgentError",
+      "file_type": "code",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L12",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_errors_notfounderror",
+      "label": "NotFoundError",
+      "file_type": "code",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L21",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_errors_conflicterror",
+      "label": "ConflictError",
+      "file_type": "code",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L25",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_errors_autherror",
+      "label": "AuthError",
+      "file_type": "code",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L29",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_errors_unavailableerror",
+      "label": "UnavailableError",
+      "file_type": "code",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L33",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_errors_rationale_1",
+      "label": "Error types leaving the backend.  Messages are Hebrew: they reach a Hebrew-speak",
+      "file_type": "rationale",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_errors_rationale_13",
+      "label": "Anything the agent or the model layer failed to do.      The error type everythi",
+      "file_type": "rationale",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L13",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_errors_rationale_34",
+      "label": "The process is alive but cannot accept work.      503 rather than 500: nothing r",
+      "file_type": "rationale",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L34",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_runtime_settings_init",
+      "label": "__init__.py",
+      "file_type": "code",
+      "source_file": "backend/app/common/runtime_settings/__init__.py",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_runtime_settings_normalizers",
+      "label": "normalizers.py",
+      "file_type": "code",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_runtime_settings_normalizers_normalize_http_url",
+      "label": "normalize_http_url()",
+      "file_type": "code",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L21",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_runtime_settings_normalizers_normalize_llm_base_url",
+      "label": "normalize_llm_base_url()",
+      "file_type": "code",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L28",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_runtime_settings_normalizers_normalize_database_url",
+      "label": "normalize_database_url()",
+      "file_type": "code",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L41",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_runtime_settings_normalizers_extract_url_schema",
+      "label": "extract_url_schema()",
+      "file_type": "code",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L51",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_runtime_settings_normalizers_normalize_database_schema",
+      "label": "normalize_database_schema()",
+      "file_type": "code",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L61",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_runtime_settings_normalizers_translate_current_schema",
+      "label": "_translate_current_schema()",
+      "file_type": "code",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L73",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_runtime_settings_normalizers_strip_suffixes",
+      "label": "_strip_suffixes()",
+      "file_type": "code",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L90",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_runtime_settings_normalizers_rationale_29",
+      "label": "Accept a pasted endpoint, not just the base.      Users copy the URL they see in",
+      "file_type": "rationale",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L29",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_runtime_settings_normalizers_rationale_52",
+      "label": "The schema a JDBC-style URL asks for, or \"\" when it names none.      Lets a past",
+      "file_type": "rationale",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L52",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_runtime_settings_normalizers_rationale_62",
+      "label": "Validate a schema name. Empty means \"use the server default\".",
+      "file_type": "rationale",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L62",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_runtime_settings_normalizers_rationale_74",
+      "label": "Rewrite JDBC's `currentSchema=x` into libpq's `options=-csearch_path=x`.      li",
+      "file_type": "rationale",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L74",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_runtime_settings_runtime_settings",
+      "label": "runtime_settings.py",
+      "file_type": "code",
+      "source_file": "backend/app/common/runtime_settings/runtime_settings.py",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_runtime_settings_runtime_settings_runtimesettings",
+      "label": "RuntimeSettings",
+      "file_type": "code",
+      "source_file": "backend/app/common/runtime_settings/runtime_settings.py",
+      "source_location": "L6",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_common_runtime_settings_runtime_settings_rationale_7",
+      "label": "The live settings every caller reads. Mutated by the store, never by     callers",
+      "file_type": "rationale",
+      "source_file": "backend/app/common/runtime_settings/runtime_settings.py",
+      "source_location": "L7",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_dal_init",
+      "label": "__init__.py",
+      "file_type": "code",
+      "source_file": "backend/app/dal/__init__.py",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_dal_database_init",
+      "label": "__init__.py",
+      "file_type": "code",
+      "source_file": "backend/app/dal/database/__init__.py",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_dal_llm_init",
+      "label": "__init__.py",
+      "file_type": "code",
+      "source_file": "backend/app/dal/llm/__init__.py",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "backend_app_dal_repository_init",
+      "label": "__init__.py",
+      "file_type": "code",
+      "source_file": "backend/app/dal/repository/__init__.py",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "pkg_pakash_backend",
+      "label": "pakash-backend",
+      "file_type": "code",
+      "type": "package",
+      "ecosystem": "python",
+      "source_file": "backend/pyproject.toml",
+      "source_location": "L1",
+      "version": "0.1.0",
+      "_origin": "ast"
+    }
+  ],
+  "edges": [
+    {
+      "source": "backend_app_common_config_init",
+      "target": "backend_app_common_config_settings",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/config/__init__.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_config_settings",
+      "target": "typing",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/config/settings.py",
+      "source_location": "L3",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_config_settings",
+      "target": "pydantic",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/config/settings.py",
+      "source_location": "L5",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_config_settings",
+      "target": "pydantic_settings",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/config/settings.py",
+      "source_location": "L6",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_config_settings",
+      "target": "backend_app_common_config_settings_settings",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/config/settings.py",
+      "source_location": "L9",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_config_settings_settings",
+      "target": "basesettings",
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/config/settings.py",
+      "source_location": "L9",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_config_settings_rationale_1",
+      "target": "backend_app_common_config_settings",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/config/settings.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_config_settings_rationale_10",
+      "target": "backend_app_common_config_settings_settings",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/config/settings.py",
+      "source_location": "L10",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_errors",
+      "target": "backend_app_common_errors_apperror",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L8",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_errors_apperror",
+      "target": "exception",
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L8",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_errors",
+      "target": "backend_app_common_errors_agenterror",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L12",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_errors_agenterror",
+      "target": "backend_app_common_errors_apperror",
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L12",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_errors",
+      "target": "backend_app_common_errors_notfounderror",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L21",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_errors_notfounderror",
+      "target": "backend_app_common_errors_apperror",
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L21",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_errors",
+      "target": "backend_app_common_errors_conflicterror",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L25",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_errors_conflicterror",
+      "target": "backend_app_common_errors_apperror",
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L25",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_errors",
+      "target": "backend_app_common_errors_autherror",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L29",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_errors_autherror",
+      "target": "backend_app_common_errors_apperror",
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L29",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_errors",
+      "target": "backend_app_common_errors_unavailableerror",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L33",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_errors_unavailableerror",
+      "target": "backend_app_common_errors_apperror",
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L33",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_errors_rationale_1",
+      "target": "backend_app_common_errors",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_errors_rationale_13",
+      "target": "backend_app_common_errors_agenterror",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L13",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_errors_rationale_34",
+      "target": "backend_app_common_errors_unavailableerror",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/errors.py",
+      "source_location": "L34",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_normalizers",
+      "target": "re",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_normalizers",
+      "target": "backend_app_common_runtime_settings_normalizers_normalize_http_url",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L21",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_normalizers",
+      "target": "backend_app_common_runtime_settings_normalizers_normalize_llm_base_url",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L28",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_normalizers",
+      "target": "backend_app_common_runtime_settings_normalizers_normalize_database_url",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L41",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_normalizers",
+      "target": "backend_app_common_runtime_settings_normalizers_extract_url_schema",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L51",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_normalizers",
+      "target": "backend_app_common_runtime_settings_normalizers_normalize_database_schema",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L61",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_normalizers",
+      "target": "backend_app_common_runtime_settings_normalizers_translate_current_schema",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L73",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_normalizers",
+      "target": "backend_app_common_runtime_settings_normalizers_strip_suffixes",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L90",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_normalizers_normalize_llm_base_url",
+      "target": "backend_app_common_runtime_settings_normalizers_strip_suffixes",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L35",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_normalizers_normalize_llm_base_url",
+      "target": "backend_app_common_runtime_settings_normalizers_normalize_http_url",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L38",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_normalizers_normalize_database_url",
+      "target": "backend_app_common_runtime_settings_normalizers_translate_current_schema",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L48",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_normalizers_translate_current_schema",
+      "target": "backend_app_common_runtime_settings_normalizers_normalize_database_schema",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L82",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_normalizers_rationale_29",
+      "target": "backend_app_common_runtime_settings_normalizers_normalize_llm_base_url",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L29",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_normalizers_rationale_52",
+      "target": "backend_app_common_runtime_settings_normalizers_extract_url_schema",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L52",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_normalizers_rationale_62",
+      "target": "backend_app_common_runtime_settings_normalizers_normalize_database_schema",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L62",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_normalizers_rationale_74",
+      "target": "backend_app_common_runtime_settings_normalizers_translate_current_schema",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/normalizers.py",
+      "source_location": "L74",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_runtime_settings",
+      "target": "dataclasses",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/runtime_settings.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_runtime_settings",
+      "target": "typing",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/runtime_settings.py",
+      "source_location": "L2",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_runtime_settings",
+      "target": "backend_app_common_runtime_settings_runtime_settings_runtimesettings",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/runtime_settings.py",
+      "source_location": "L6",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_runtime_settings_runtime_settings_rationale_7",
+      "target": "backend_app_common_runtime_settings_runtime_settings_runtimesettings",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/runtime_settings/runtime_settings.py",
+      "source_location": "L7",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "pkg_pakash_backend",
+      "target": "pkg_fastapi",
+      "relation": "depends_on",
+      "context": "dependency",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/pyproject.toml",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "pkg_pakash_backend",
+      "target": "pkg_uvicorn",
+      "relation": "depends_on",
+      "context": "dependency",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/pyproject.toml",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "pkg_pakash_backend",
+      "target": "pkg_pydantic",
+      "relation": "depends_on",
+      "context": "dependency",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/pyproject.toml",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "pkg_pakash_backend",
+      "target": "pkg_pydantic_settings",
+      "relation": "depends_on",
+      "context": "dependency",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/pyproject.toml",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "pkg_pakash_backend",
+      "target": "pkg_httpx",
+      "relation": "depends_on",
+      "context": "dependency",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/pyproject.toml",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "pkg_pakash_backend",
+      "target": "pkg_structlog",
+      "relation": "depends_on",
+      "context": "dependency",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/pyproject.toml",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "pkg_pakash_backend",
+      "target": "pkg_psycopg",
+      "relation": "depends_on",
+      "context": "dependency",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/pyproject.toml",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "pkg_pakash_backend",
+      "target": "pkg_openai",
+      "relation": "depends_on",
+      "context": "dependency",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/pyproject.toml",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "pkg_pakash_backend",
+      "target": "pkg_typing_extensions",
+      "relation": "depends_on",
+      "context": "dependency",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/pyproject.toml",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "pkg_pakash_backend",
+      "target": "pkg_numpy",
+      "relation": "depends_on",
+      "context": "dependency",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/pyproject.toml",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "pkg_pakash_backend",
+      "target": "pkg_pandas",
+      "relation": "depends_on",
+      "context": "dependency",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/pyproject.toml",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "pkg_pakash_backend",
+      "target": "pkg_openpyxl",
+      "relation": "depends_on",
+      "context": "dependency",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/pyproject.toml",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_config_init",
+      "target": "backend_app_common_config_settings",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/config/__init__.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "backend_app_common_config_init",
+      "target": "backend_app_common_config_settings_settings",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "backend/app/common/config/__init__.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

@@ -1,0 +1,11 @@
+/Users/odedmarellie/Desktop/repos/PakashAgent/README.md
+/Users/odedmarellie/Desktop/repos/PakashAgent/backend/CLAUDE.md
+/Users/odedmarellie/Desktop/repos/PakashAgent/backend/app/api/CLAUDE.md
+/Users/odedmarellie/Desktop/repos/PakashAgent/backend/app/bl/CLAUDE.md
+/Users/odedmarellie/Desktop/repos/PakashAgent/backend/app/common/CLAUDE.md
+/Users/odedmarellie/Desktop/repos/PakashAgent/backend/app/dal/CLAUDE.md
+/Users/odedmarellie/Desktop/repos/PakashAgent/backend/app/dal/llm/CLAUDE.md
+/Users/odedmarellie/Desktop/repos/PakashAgent/docs/BUILD_ORDER.md
+/Users/odedmarellie/Desktop/repos/PakashAgent/docs/DECISIONS.md
+/Users/odedmarellie/Desktop/repos/PakashAgent/docs/FILE_FORMATS.md
+/Users/odedmarellie/Desktop/repos/PakashAgent/frontend/CLAUDE.md
