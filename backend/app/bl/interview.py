@@ -13,11 +13,19 @@ from app.common.errors import AgentError
 INTERVIEW_TOPICS = (
     {
         "id": "workplace_mission",
-        "question": "מה שם מקום העבודה, על מה המשמרת אחראית ומה נחשב הצלחה?",
+        "question": "מה שם מקום העבודה ועל מה המשמרת אחראית?",
+    },
+    {
+        "id": "success_criteria",
+        "question": "איך יודעים שהמשמרת הצליחה?",
     },
     {
         "id": "operation_calendar",
-        "question": "באילו ימים ושעות המקום פעיל, מה אזור הזמן ולאיזו תקופה מתכננים בכל פעם?",
+        "question": "באילו ימים ושעות מקום העבודה פעיל?",
+    },
+    {
+        "id": "planning_cycle",
+        "question": "לאיזו תקופה בונים סידור ומתי נסגרת הגשת האילוצים?",
     },
     {
         "id": "shift_vocabulary",
@@ -40,8 +48,8 @@ INTERVIEW_TOPICS = (
         "question": "מי מוסמך לכל סוג משמרת ואיך מזהים את ההכשרה או המגבלה?",
     },
     {
-        "id": "overlap_and_training",
-        "question": "האם יש חפיפה או הכשרה במשמרת, מי נחפף ומי רשאי לחפוף?",
+        "id": "shadow_training",
+        "question": "האם יש מתלמדים במשמרות צל ומה מדיניות החפיפה שלהם?",
     },
     {
         "id": "availability",
@@ -72,6 +80,14 @@ INTERVIEW_TOPICS = (
         "question": "מאיפה מגיעים אילוצים, חופשות ושינויים, ומי אחראי לעדכן אותם?",
     },
     {
+        "id": "recurring_constraints",
+        "question": "האם קיימים אילוצים קבועים שחוזרים בכל תקופת סידור?",
+    },
+    {
+        "id": "scheduling_authority",
+        "question": "מי רשאי לשבץ ולאשר את הסידור, והאם הוא עובד במשמרות?",
+    },
+    {
         "id": "existing_schedule",
         "question": "האם יש סידורים קודמים או קובץ לדוגמה שמהם כדאי ללמוד?",
     },
@@ -87,26 +103,32 @@ _PROFILE_SCHEMA = {
     "additionalProperties": False,
     "required": [
         "workplace", "employees", "shifts", "dependencies", "rules",
-        "availability_process", "rest_policy", "weekend_policy",
-        "fairness_policy", "conflict_policy", "existing_schedule_source",
-        "summary",
+        "availability_process", "constraint_deadline", "casual_worker_policy",
+        "training_policy", "rest_policy", "weekend_policy", "fairness_policy",
+        "conflict_policy", "existing_schedule_source", "summary",
     ],
     "properties": {
         "workplace": {
             "type": "object",
             "additionalProperties": False,
             "required": [
-                "name", "mission", "timezone", "operating_days",
-                "planning_horizon",
+                "name", "mission", "success_criteria", "timezone",
+                "operating_days", "planning_horizon", "scheduler_name",
+                "scheduler_works_shifts",
             ],
             "properties": {
                 "name": {"type": "string"},
                 "mission": {"type": "string"},
+                "success_criteria": {
+                    "type": "array", "items": {"type": "string"},
+                },
                 "timezone": {"type": "string"},
                 "operating_days": {
                     "type": "array", "items": {"type": "string"},
                 },
                 "planning_horizon": {"type": "string"},
+                "scheduler_name": {"type": "string"},
+                "scheduler_works_shifts": {"type": "boolean"},
             },
         },
         "employees": {
@@ -116,7 +138,9 @@ _PROFILE_SCHEMA = {
                 "additionalProperties": False,
                 "required": [
                     "name", "role", "workload", "eligible_shifts",
-                    "trainer_for", "is_casual", "availability",
+                    "is_shift_manager", "is_trainee",
+                    "counts_toward_staffing", "can_train", "trainers",
+                    "is_casual", "availability", "recurring_constraints",
                 ],
                 "properties": {
                     "name": {"type": "string"},
@@ -125,11 +149,18 @@ _PROFILE_SCHEMA = {
                     "eligible_shifts": {
                         "type": "array", "items": {"type": "string"},
                     },
-                    "trainer_for": {
+                    "is_shift_manager": {"type": "boolean"},
+                    "is_trainee": {"type": "boolean"},
+                    "counts_toward_staffing": {"type": "boolean"},
+                    "can_train": {"type": "boolean"},
+                    "trainers": {
                         "type": "array", "items": {"type": "string"},
                     },
                     "is_casual": {"type": "boolean"},
                     "availability": {"type": "string"},
+                    "recurring_constraints": {
+                        "type": "array", "items": {"type": "string"},
+                    },
                 },
             },
         },
@@ -192,6 +223,24 @@ _PROFILE_SCHEMA = {
             },
         },
         "availability_process": {"type": "string"},
+        "constraint_deadline": {"type": "string"},
+        "casual_worker_policy": {"type": "string"},
+        "training_policy": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "shadow_shift_fraction", "shadow_shifts_per_week",
+                "alternate_halves", "counts_toward_staffing",
+            ],
+            "properties": {
+                "shadow_shift_fraction": {
+                    "type": "number", "minimum": 0, "maximum": 1,
+                },
+                "shadow_shifts_per_week": {"type": "integer", "minimum": 0},
+                "alternate_halves": {"type": "boolean"},
+                "counts_toward_staffing": {"type": "boolean"},
+            },
+        },
         "rest_policy": {"type": "string"},
         "weekend_policy": {"type": "string"},
         "fairness_policy": {"type": "string"},
@@ -201,17 +250,33 @@ _PROFILE_SCHEMA = {
     },
 }
 
+_OPTION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["id", "label", "recommended"],
+    "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9_]+$"},
+        "label": {"type": "string"},
+        "recommended": {"type": "boolean"},
+    },
+}
+
 INTERVIEW_RESPONSE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "required": [
-        "status", "question_id", "question", "recommendation", "profile",
+        "status", "question_id", "question", "recommendation", "options",
+        "allow_free_text", "profile",
     ],
     "properties": {
         "status": {"type": "string", "enum": ["question", "complete"]},
         "question_id": {"type": ["string", "null"]},
         "question": {"type": ["string", "null"]},
         "recommendation": {"type": ["string", "null"]},
+        "options": {
+            "type": "array", "items": _OPTION_SCHEMA, "maxItems": 5,
+        },
+        "allow_free_text": {"type": "boolean"},
         "profile": {"oneOf": [_PROFILE_SCHEMA, {"type": "null"}]},
     },
 }
@@ -273,10 +338,15 @@ def _validated_response(response: dict) -> dict:
             raise AgentError("המודל החזיר שאלת ראיון לא תקינה")
         if result.get("profile") is not None:
             raise AgentError("המודל החזיר פרופיל לפני סיום הראיון")
+        _validate_options(result.get("options"))
+        if result.get("allow_free_text") is not True:
+            raise AgentError("שאלת ראיון חייבת לאפשר תשובה חופשית")
     elif status == "complete":
         if any(result.get(key) is not None
                for key in ("question_id", "question", "recommendation")):
             raise AgentError("המודל סיים את הראיון עם שאלה פתוחה")
+        if result.get("options") != [] or result.get("allow_free_text") is not False:
+            raise AgentError("המודל סיים את הראיון עם אפשרויות פתוחות")
         profile = result.get("profile")
         required = set(_PROFILE_SCHEMA["required"])
         if not isinstance(profile, dict) or not required.issubset(profile):
@@ -286,3 +356,26 @@ def _validated_response(response: dict) -> dict:
     if usage is not None:
         result["_usage"] = usage
     return result
+
+
+def _validate_options(options) -> None:
+    if not isinstance(options, list) or not 2 <= len(options) <= 5:
+        raise AgentError("שאלת ראיון חייבת לכלול בין 2 ל-5 אפשרויות")
+    identifiers = set()
+    recommended = 0
+    for option in options:
+        if not isinstance(option, dict):
+            raise AgentError("אפשרות תשובה בראיון אינה תקינה")
+        option_id = option.get("id")
+        label = option.get("label")
+        is_recommended = option.get("recommended")
+        if (not isinstance(option_id, str) or not option_id
+                or not isinstance(label, str) or not label.strip()
+                or not isinstance(is_recommended, bool)):
+            raise AgentError("אפשרות תשובה בראיון אינה תקינה")
+        if option_id in identifiers:
+            raise AgentError("אפשרויות התשובה בראיון חייבות להיות ייחודיות")
+        identifiers.add(option_id)
+        recommended += int(is_recommended)
+    if recommended > 1:
+        raise AgentError("רק אפשרות אחת יכולה להיות מומלצת")

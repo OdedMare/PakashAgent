@@ -26,7 +26,10 @@ and a wrong answer looks identical to a right one.
 
 ## `interview.py`
 
-One question per turn, each carrying the agent's own recommendation.
+One question per turn, each carrying 2–5 selectable answers, a separate free-text
+answer path, and the agent's own recommendation when one is useful. Choices are
+never numbered in their labels: a bare number may be either a selection or a real
+value, and the interview must clarify rather than guess.
 
 Collects:
 - the workplace profile (what the job is, the mission) — free text
