@@ -46,6 +46,9 @@ Do not parse them into typed records — that was considered and rejected.
 The declared shift vocabulary is what `importer.py` matches sheet headers against,
 so this must run before a meaningful import.
 
+The completed product mock and the prompt lessons it exposed are documented in
+[`../../../docs/INTERVIEW_REFERENCE.md`](../../../docs/INTERVIEW_REFERENCE.md).
+
 ## `scheduler.py`
 
 Feeds the profile, rules, availability, and recent history to `complete_json`;

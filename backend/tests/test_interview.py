@@ -24,6 +24,19 @@ def _question_response():
         "question_id": "workplace_mission",
         "question": "על מה המשמרת אחראית?",
         "recommendation": "כדאי לתאר במשפט אחד את האחריות והתוצאה הרצויה.",
+        "options": [
+            {
+                "id": "service",
+                "label": "מתן שירות ומענה",
+                "recommended": False,
+            },
+            {
+                "id": "operations",
+                "label": "רציפות תפעולית וטיפול בתקלות",
+                "recommended": True,
+            },
+        ],
+        "allow_free_text": True,
         "profile": None,
     }
 
@@ -33,15 +46,26 @@ def _complete_profile():
         "workplace": {
             "name": "מוקד",
             "mission": "לתת מענה",
+            "success_criteria": ["רציפות"],
             "timezone": "Asia/Jerusalem",
             "operating_days": ["א-ה"],
             "planning_horizon": "שבוע",
+            "scheduler_name": "שרון",
+            "scheduler_works_shifts": False,
         },
         "employees": [],
         "shifts": [],
         "dependencies": [],
         "rules": [],
         "availability_process": "המנהל מעדכן",
+        "constraint_deadline": "שבוע מראש",
+        "casual_worker_policy": "לפי צורך ולאחר אישור זמינות",
+        "training_policy": {
+            "shadow_shift_fraction": 0.5,
+            "shadow_shifts_per_week": 2,
+            "alternate_halves": True,
+            "counts_toward_staffing": False,
+        },
         "rest_policy": "",
         "weekend_policy": "",
         "fairness_policy": "חלוקה מאוזנת",
@@ -57,6 +81,8 @@ def test_first_turn_sends_the_full_question_bank_and_returns_one_question():
     result = IntroInterview(llm).next_turn([])
 
     assert result["question"] == "על מה המשמרת אחראית?"
+    assert result["allow_free_text"] is True
+    assert result["options"][1]["recommended"] is True
     payload = json.loads(llm.calls[0]["user"])
     assert payload["conversation"] == []
     assert payload["topics"] == [dict(item) for item in INTERVIEW_TOPICS]
@@ -104,6 +130,8 @@ def test_complete_turn_returns_the_confirmed_profile_and_usage():
         "question_id": None,
         "question": None,
         "recommendation": None,
+        "options": [],
+        "allow_free_text": False,
         "profile": _complete_profile(),
         "_usage": {"total_tokens": 42},
     }
@@ -131,12 +159,42 @@ def test_a_question_without_a_recommendation_is_rejected():
         IntroInterview(_FakeLlm(response)).next_turn([])
 
 
+def test_a_question_without_selectable_answers_is_rejected():
+    response = _question_response()
+    response["options"] = []
+    with pytest.raises(AgentError):
+        IntroInterview(_FakeLlm(response)).next_turn([])
+
+
+def test_only_one_answer_may_be_recommended():
+    response = _question_response()
+    response["options"][0]["recommended"] = True
+    with pytest.raises(AgentError):
+        IntroInterview(_FakeLlm(response)).next_turn([])
+
+
+def test_answer_ids_are_stable_machine_readable_values():
+    response = _question_response()
+    response["options"][0]["id"] = "אפשרות 1"
+    with pytest.raises(AgentError):
+        IntroInterview(_FakeLlm(response)).next_turn([])
+
+
+def test_free_text_must_remain_available_on_every_question():
+    response = _question_response()
+    response["allow_free_text"] = False
+    with pytest.raises(AgentError):
+        IntroInterview(_FakeLlm(response)).next_turn([])
+
+
 def test_completion_with_a_partial_profile_is_rejected():
     response = {
         "status": "complete",
         "question_id": None,
         "question": None,
         "recommendation": None,
+        "options": [],
+        "allow_free_text": False,
         "profile": {"summary": "חסר"},
     }
     with pytest.raises(AgentError):

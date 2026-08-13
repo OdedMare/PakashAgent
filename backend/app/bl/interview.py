@@ -1,6 +1,7 @@
 """Model-driven intro interview, one Hebrew question per turn."""
 
 import json
+import re
 from typing import Dict, List
 
 from app.bl.prompts import load
@@ -369,7 +370,8 @@ def _validate_options(options) -> None:
         option_id = option.get("id")
         label = option.get("label")
         is_recommended = option.get("recommended")
-        if (not isinstance(option_id, str) or not option_id
+        if (not isinstance(option_id, str)
+                or re.fullmatch(r"[a-z0-9_]+", option_id) is None
                 or not isinstance(label, str) or not label.strip()
                 or not isinstance(is_recommended, bool)):
             raise AgentError("אפשרות תשובה בראיון אינה תקינה")
