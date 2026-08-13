@@ -30,3 +30,6 @@ __pycache__/
 venv/
 *.egg-info/
 .pytest_cache/
+
+# Runtime settings written at rest (may contain secrets)
+backend/runtime-settings.json
