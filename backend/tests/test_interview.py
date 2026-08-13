@@ -83,6 +83,21 @@ def test_conversation_is_trimmed_and_passed_to_the_next_turn():
     ]
 
 
+def test_an_ambiguous_answer_can_produce_one_follow_up_question():
+    response = _question_response()
+    response.update({
+        "question_id": "follow_up",
+        "question": "כשאתה אומר אילוץ, הוא פוסל יום שלם?",
+    })
+
+    result = IntroInterview(_FakeLlm(response)).next_turn([
+        {"role": "user", "content": "אילוץ רגיל"},
+    ])
+
+    assert result["question_id"] == "follow_up"
+    assert isinstance(result["question"], str)
+
+
 def test_complete_turn_returns_the_confirmed_profile_and_usage():
     response = {
         "status": "complete",
