@@ -1,5 +1,7 @@
 """The settings HTTP boundary: masking, partial saves, and the model probe."""
 
+import os
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -30,7 +32,14 @@ class FakeLLM:
 
 @pytest.fixture
 def store(tmp_path, monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    # `_env_file=None` stops the .env file being read, but NOT the real
+    # environment — and these tests assert on the declared defaults. Any
+    # ambient PAKASH_* would otherwise change the answer, which is exactly
+    # what happens inside the devsandbox container, where the compose file
+    # sets PAKASH_LLM_BASE_URL.
+    for name in list(os.environ):
+        if name.startswith("PAKASH_") or name == "OPENAI_API_KEY":
+            monkeypatch.delenv(name, raising=False)
     env = Settings(
         _env_file=None,
         runtime_settings_file=str(tmp_path / "runtime-settings.json"),

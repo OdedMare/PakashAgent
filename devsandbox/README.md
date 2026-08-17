@@ -15,7 +15,7 @@ From the **repository root** — the build contexts are relative to that:
 docker compose -p pakash-sandbox -f devsandbox/docker-compose.sandbox.yml up --build
 ```
 
-Then open <http://localhost:3100>.
+Then open <http://localhost:3200>.
 
 Tear it down, volumes included:
 
@@ -25,19 +25,30 @@ docker compose -p pakash-sandbox -f devsandbox/docker-compose.sandbox.yml down -
 
 ## What is where
 
-| | Sandbox | Normal stack |
-|---|---|---|
-| Frontend | <http://localhost:3100> | 3000 |
-| Backend | <http://localhost:8000> | 8000 |
-| Postgres | `localhost:55432` | 5432 |
-| Project name | `pakash-sandbox` | `pakashagent` |
-| Volumes | `sandbox-db`, `sandbox-settings` | `pakash-db`, `pakash-settings` |
+| | Sandbox | Normal stack | AiSummryIO sandbox |
+|---|---|---|---|
+| Frontend | <http://localhost:3200> | 3000 | 3100 |
+| Backend | <http://localhost:8100> | 8000 | 8000 |
+| Postgres | `localhost:55433` | 5432 | 55432 |
+| Project name | `pakash-sandbox` | `pakashagent` | `aisummry-sandbox` |
+| Volumes | `sandbox-db`, `sandbox-settings` | `pakash-db`, `pakash-settings` | — |
 
-The frontend and database ports are deliberately shifted so the sandbox can
-run beside a dev server and a local Postgres without taking either port.
+Every host port is deliberately shifted so this stack can run beside a dev
+server, a local Postgres, **and** the AiSummryIO sandbox without taking a
+port from any of them. Only the host side moves: inside the compose network
+the frontend still reaches the backend at `http://backend:8000`.
+
+Override any of them if they still collide:
 
 ```bash
-psql postgresql://pakash:pakash@localhost:55432/pakash
+PAKASH_SANDBOX_FRONTEND_PORT=3300 \
+PAKASH_SANDBOX_BACKEND_PORT=8200 \
+PAKASH_SANDBOX_DB_PORT=55434 \
+  docker compose -p pakash-sandbox -f devsandbox/docker-compose.sandbox.yml up
+```
+
+```bash
+psql postgresql://pakash:pakash@localhost:55433/pakash
 ```
 
 ## The model

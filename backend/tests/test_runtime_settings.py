@@ -1,6 +1,7 @@
 """Settings store: env defaults, UI overrides, secret masking, normalization."""
 
 import json
+import os
 
 import pytest
 
@@ -13,9 +14,13 @@ from app.common.runtime_settings.runtime_settings_store import (
 
 @pytest.fixture
 def store(tmp_path, monkeypatch):
-    # A stray OPENAI_API_KEY in the developer's shell would otherwise leak
-    # into the defaults these tests assert on.
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    # `_env_file=None` stops the .env file being read, but NOT the real
+    # environment, and these tests assert on the declared defaults. A stray
+    # OPENAI_API_KEY in the developer's shell, or the PAKASH_* the devsandbox
+    # container sets, would otherwise change what the defaults are.
+    for name in list(os.environ):
+        if name.startswith("PAKASH_") or name == "OPENAI_API_KEY":
+            monkeypatch.delenv(name, raising=False)
     env = Settings(
         _env_file=None,
         runtime_settings_file=str(tmp_path / "runtime-settings.json"),

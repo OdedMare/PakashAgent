@@ -17,10 +17,12 @@ services:
       POSTGRES_USER: pakash
       POSTGRES_PASSWORD: pakash
     ports:
-      # 55432, not 5432: a local Postgres of the developer's own may already
+      # 55433, not 5432: a local Postgres of the developer's own may already
       # hold the default port, and the sandbox must never take it away.
+      # Not 55432 either — that is AiSummryIO's sandbox, and these two are
+      # expected to run side by side.
       # Exposed so psql can reach the sandbox database from the host.
-      - "55432:5432"
+      - "${PAKASH_SANDBOX_DB_PORT:-55433}:5432"
     volumes:
       - sandbox-db:/var/lib/postgresql/data
     healthcheck:
@@ -74,7 +76,10 @@ services:
     volumes:
       - sandbox-settings:/data
     ports:
-      - "8000:8000"
+      # 8100, not 8000: AiSummryIO's sandbox holds 8000, and a backend of
+      # your own may too. Only the host side moves — inside the network the
+      # frontend still reaches http://backend:8000.
+      - "${PAKASH_SANDBOX_BACKEND_PORT:-8100}:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -92,9 +97,10 @@ services:
     environment:
       BACKEND_URL: http://backend:8000
     ports:
-      # 3100, not 3000: a dev server of the developer's own may already hold
+      # 3200, not 3000: a dev server of the developer's own may already hold
       # 3000, and the sandbox must never take a port out from under it.
-      - "3100:3000"
+      # Not 3100 either — that is AiSummryIO's sandbox.
+      - "${PAKASH_SANDBOX_FRONTEND_PORT:-3200}:3000"
     depends_on:
       - backend
 
