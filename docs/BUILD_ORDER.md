@@ -17,11 +17,14 @@ including one deliberate tradeoff that looks like a bug), then
 
 ## Resolve before writing much code
 
-**Python version.** The plan mirrors AiSummryIO's **3.8.10**, which is EOL and was
-probably a constraint of *their* deployment target, not ours. Ask the boss whether
-PakashAgent deploys to that same environment. If yes, keep 3.8.10 and avoid
-`X | Y`, `list[str]`, and `match`. If no, use 3.11+ — it costs nothing now and
-gets more expensive later.
+**Python version — decided: stay on 3.8.10.** The boss chose to mirror
+AiSummryIO's target, so no `X | Y`, no `list[str]`, no `match`; use `Optional`,
+`List`, `Dict`. `backend/Dockerfile` builds on `python:3.8.10-slim` to match.
+
+*Caveat worth knowing:* the local `backend/.venv` runs 3.13, so the test suite
+passing there does not prove 3.8 compatibility. `vermin -t=3.8 app/` is the check
+that does, and the Docker build is what proves the pinned dependency set actually
+resolves on 3.8.
 
 ## Steps
 
