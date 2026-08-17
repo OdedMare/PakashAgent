@@ -1,0 +1,103 @@
+# Throwaway local stack: Postgres + backend + frontend, wired to a model on
+# the host.
+#
+# Separate project name and separate volumes, so nothing here touches the
+# real `pakashagent_*` volumes. Tear the whole thing down with:
+#   docker compose -p pakash-sandbox -f devsandbox/docker-compose.sandbox.yml down -v
+#
+# Run from the REPOSITORY ROOT — build contexts are relative to this file.
+
+name: pakash-sandbox
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: pakash
+      POSTGRES_USER: pakash
+      POSTGRES_PASSWORD: pakash
+    ports:
+      # 55432, not 5432: a local Postgres of the developer's own may already
+      # hold the default port, and the sandbox must never take it away.
+      # Exposed so psql can reach the sandbox database from the host.
+      - "55432:5432"
+    volumes:
+      - sandbox-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pakash"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Docker creates a named volume owned by root, but the backend runs as the
+  # unprivileged `app` user and must write runtime-settings.json there — the
+  # Settings panel 500s on save otherwise. This one-shot chown runs before
+  # the backend starts and then exits.
+  settings-permissions:
+    image: busybox
+    command: chown -R 999:999 /data
+    user: root
+    volumes:
+      - sandbox-settings:/data
+
+  backend:
+    build:
+      context: ..
+      dockerfile: devsandbox/backend.sandbox.Dockerfile
+    environment:
+      PAKASH_DATABASE_URL: postgresql://pakash:pakash@db:5432/pakash
+      PAKASH_DATABASE_SCHEMA: pakash
+      # The per-field defaults in Settings point at localhost, which inside
+      # this container is the container itself. Blanking them leaves the URL
+      # above as the single source of the connection.
+      PAKASH_DATABASE_USER: ""
+      PAKASH_DATABASE_PASSWORD: ""
+      PAKASH_DATABASE_HOST: ""
+      PAKASH_DATABASE_NAME: ""
+      PAKASH_DATABASE_PORT: "5432"
+
+      # Settings saved in the UI live here and outlast a container rebuild.
+      PAKASH_RUNTIME_SETTINGS_FILE: /data/runtime-settings.json
+
+      # The model runs on the HOST, not in this network.
+      # `host.docker.internal` resolves to an unreachable IPv6 address from
+      # some images, so the gateway alias below is used instead.
+      PAKASH_LLM_BASE_URL: ${PAKASH_LLM_BASE_URL:-http://pghost:11434/v1}
+      PAKASH_LLM_MODEL: ${PAKASH_LLM_MODEL:-gemma3:27b}
+      PAKASH_LLM_DIET_MODE: "true"
+      # Ollama ignores the value but the SDK requires a non-empty key.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-ollama}
+
+      PAKASH_LOG_LEVEL: ${PAKASH_LOG_LEVEL:-DEBUG}
+    extra_hosts:
+      - "pghost:host-gateway"
+    volumes:
+      - sandbox-settings:/data
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      settings-permissions:
+        condition: service_completed_successfully
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../devsandbox/frontend.sandbox.Dockerfile
+      args:
+        # Must be a build arg: next.config.ts bakes the rewrite target into
+        # the build, so a runtime-only value never reaches the compiled app.
+        BACKEND_URL: http://backend:8000
+    environment:
+      BACKEND_URL: http://backend:8000
+    ports:
+      # 3100, not 3000: a dev server of the developer's own may already hold
+      # 3000, and the sandbox must never take a port out from under it.
+      - "3100:3000"
+    depends_on:
+      - backend
+
+volumes:
+  sandbox-db:
+  sandbox-settings:
