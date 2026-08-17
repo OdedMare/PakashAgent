@@ -1,0 +1,535 @@
+/* The intro interview: a Claude-style conversation column with selectable
+   answers under the live question. RTL throughout — Hebrew is data here, not
+   a translation layer (frontend/CLAUDE.md). */
+
+.interview {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+/* --- header ------------------------------------------------------------ */
+
+.interview-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.brand-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  place-items: center;
+  color: #fff;
+  background: var(--brand-gradient);
+  border-radius: 9px;
+  box-shadow: var(--brand-glow);
+}
+
+.brand-sub {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 9px;
+}
+
+.icon-button:hover {
+  color: var(--text);
+  background: var(--surface-3);
+}
+
+/* --- progress ---------------------------------------------------------- */
+
+.progress {
+  height: 2px;
+  background: var(--surface-3);
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--brand-gradient);
+  transition: width 420ms ease;
+}
+
+/* --- conversation ------------------------------------------------------ */
+
+.thread {
+  width: min(768px, 100%);
+  flex: 1;
+  padding: 32px 24px 40px;
+  margin: 0 auto;
+}
+
+.turn {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 26px;
+  animation: rise 320ms ease both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.avatar {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  flex: none;
+  margin-top: 1px;
+  place-items: center;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.turn.assistant .avatar {
+  color: #fff;
+  background: var(--brand-gradient);
+}
+
+.turn.user .avatar {
+  color: var(--text-soft);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+}
+
+.turn-body {
+  min-width: 0;
+  flex: 1;
+  padding-top: 3px;
+}
+
+.turn-name {
+  margin-bottom: 5px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.turn-text {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.72;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The boss's own answers sit in a quiet card so the eye can find the thread
+   of what was already decided while scrolling back. */
+.turn.user .turn-text {
+  padding: 11px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+/* --- the agent's recommendation ---------------------------------------- */
+
+/* A recommendation is the agent's opinion, not a fact about the workplace —
+   it is marked as such so it never reads as something the boss already
+   said. */
+.recommendation {
+  display: flex;
+  gap: 9px;
+  padding: 11px 13px;
+  margin-top: 13px;
+  color: var(--text-soft);
+  background: var(--primary-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.recommendation svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--primary);
+}
+
+/* --- answer options ---------------------------------------------------- */
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 15px;
+  color: var(--text);
+  text-align: right;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.option:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-soft);
+}
+
+.option:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+/* Deliberately not a number. The prompt treats a bare number as ambiguous —
+   it may be a choice or a real value like a headcount — so the UI must never
+   teach the boss to answer "2". */
+.option-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  background: var(--border-strong);
+  border-radius: 50%;
+}
+
+.option:hover:not(:disabled) .option-dot {
+  background: var(--primary);
+}
+
+.option-label {
+  flex: 1;
+}
+
+.option-badge {
+  padding: 3px 8px;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* --- composer ---------------------------------------------------------- */
+
+.composer-wrap {
+  position: sticky;
+  bottom: 0;
+  padding: 0 24px 22px;
+  background: linear-gradient(
+    to top,
+    var(--bg) 55%,
+    color-mix(in srgb, var(--bg) 0%, transparent)
+  );
+}
+
+.composer {
+  width: min(768px, 100%);
+  padding: 10px 12px;
+  margin: 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.composer:focus-within {
+  border-color: var(--primary);
+  box-shadow: var(--focus);
+}
+
+.composer textarea {
+  display: block;
+  width: 100%;
+  max-height: 190px;
+  padding: 6px 4px;
+  background: none;
+  border: 0;
+  outline: none;
+  font-size: 15px;
+  line-height: 1.6;
+  resize: none;
+}
+
+.composer textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.composer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.composer-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.send {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  color: #fff;
+  background: var(--brand-gradient);
+  border: 0;
+  border-radius: 9px;
+}
+
+.send:disabled {
+  cursor: default;
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+
+/* The arrow points right-to-left with the language. */
+.send svg {
+  transform: scaleX(-1);
+}
+
+/* --- states ------------------------------------------------------------ */
+
+.thinking {
+  display: flex;
+  gap: 5px;
+  padding-top: 9px;
+}
+
+.thinking span {
+  width: 6px;
+  height: 6px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  animation: pulse 1.25s ease-in-out infinite;
+}
+
+.thinking span:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.thinking span:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+@keyframes pulse {
+  0%,
+  70%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 14px;
+  margin: 0 auto 16px;
+  width: min(768px, 100%);
+  color: var(--danger);
+  background: var(--danger-soft);
+  border: 1px solid color-mix(in srgb, var(--danger) 26%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.error button {
+  margin-inline-start: auto;
+  padding: 5px 11px;
+  color: var(--danger);
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* --- completion -------------------------------------------------------- */
+
+.done {
+  padding: 20px;
+  margin-top: 8px;
+  background: var(--success-soft);
+  border: 1px solid color-mix(in srgb, var(--success) 28%, transparent);
+  border-radius: var(--radius);
+}
+
+.done-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--success);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.done p {
+  margin: 10px 0 0;
+  color: var(--text-soft);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.profile-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.profile-card {
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.profile-card dt {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.profile-card dd {
+  margin: 5px 0 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.profile-json {
+  margin-top: 14px;
+}
+
+.profile-json summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.profile-json pre {
+  max-height: 320px;
+  padding: 13px;
+  margin: 10px 0 0;
+  overflow: auto;
+  direction: ltr;
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* --- empty / loading --------------------------------------------------- */
+
+.center {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  padding: 60px 24px;
+  text-align: center;
+}
+
+.center h1 {
+  margin: 18px 0 8px;
+  font-size: 26px;
+  letter-spacing: -0.025em;
+}
+
+.center p {
+  max-width: 420px;
+  margin: 0 0 22px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.start-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 22px;
+  color: #fff;
+  background: var(--brand-gradient);
+  border: 0;
+  border-radius: 11px;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: var(--brand-glow);
+}
+
+.start-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+@media (max-width: 640px) {
+  .thread {
+    padding: 22px 16px 30px;
+  }
+
+  .composer-wrap {
+    padding: 0 16px 16px;
+  }
+
+  .interview-header {
+    padding: 12px 16px;
+  }
+
+  .brand-sub {
+    display: none;
+  }
+}

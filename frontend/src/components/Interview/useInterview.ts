@@ -1,0 +1,115 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import {
+  answerInterview,
+  resumeInterview,
+  startInterview,
+} from "@/services/api";
+import type { InterviewTurn } from "@/types";
+
+/** The interview lives server-side; this holds only the session id, so a
+ *  refresh resumes the same conversation rather than starting a second one.
+ *  Resuming replays the stored question and costs no model call. */
+const STORAGE_KEY = "pakash.interview.session";
+
+export interface InterviewState {
+  turn: InterviewTurn | null;
+  busy: boolean;
+  error: string | null;
+  start: () => void;
+  answer: (content: string) => void;
+  reset: () => void;
+  retry: () => void;
+}
+
+export function useInterview(): InterviewState {
+  const [turn, setTurn] = useState<InterviewTurn | null>(null);
+  const [busy, setBusy] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // What to re-run when the boss presses "retry" on a failed turn.
+  const lastAction = useRef<(() => Promise<void>) | null>(null);
+
+  const run = useCallback(async (action: () => Promise<InterviewTurn>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await action();
+      setTurn(next);
+      window.localStorage.setItem(STORAGE_KEY, next.session_id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const start = useCallback(() => {
+    lastAction.current = () => run(startInterview);
+    void lastAction.current();
+  }, [run]);
+
+  const answer = useCallback(
+    (content: string) => {
+      const sessionId = turn?.session_id;
+      if (!sessionId) return;
+      // Echo the answer immediately. A turn is a full model generation, and
+      // waiting to render it makes the interface feel like it dropped the
+      // input rather than that it is thinking.
+      setTurn((current) =>
+        current
+          ? {
+              ...current,
+              turns: [
+                ...current.turns,
+                { role: "user", content, options: [], recommendation: null },
+              ],
+              options: [],
+            }
+          : current,
+      );
+      lastAction.current = () => run(() => answerInterview(sessionId, content));
+      void lastAction.current();
+    },
+    [run, turn?.session_id],
+  );
+
+  const reset = useCallback(() => {
+    window.localStorage.removeItem(STORAGE_KEY);
+    setTurn(null);
+    setError(null);
+    lastAction.current = null;
+  }, []);
+
+  const retry = useCallback(() => {
+    void lastAction.current?.();
+  }, []);
+
+  // On load, resume the stored session. A session the server no longer has
+  // (a dropped database, a cleared schema) must not strand the boss on an
+  // error screen forever, so it is cleared and the start screen returns.
+  useEffect(() => {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (!stored) {
+      setBusy(false);
+      return;
+    }
+    let cancelled = false;
+    resumeInterview(stored)
+      .then((next) => {
+        if (!cancelled) setTurn(next);
+      })
+      .catch(() => {
+        window.localStorage.removeItem(STORAGE_KEY);
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { turn, busy, error, start, answer, reset, retry };
+}
