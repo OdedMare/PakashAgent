@@ -6,9 +6,12 @@ import {
   MessagesSquare,
   Moon,
   RotateCcw,
+  Settings2,
   Sun,
 } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { SettingsPanel } from "@/components/Settings";
 
 import { Composer } from "./Composer";
 import { ProfileSummary } from "./ProfileSummary";
@@ -25,6 +28,7 @@ const EXPECTED_TURNS = 21;
 export function Interview() {
   const { turn, busy, error, start, answer, reset, retry } = useInterview();
   const { theme, toggle } = useTheme();
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
 
   const answered = turn?.turns.filter((row) => row.role === "user").length ?? 0;
@@ -52,6 +56,15 @@ export function Interview() {
           </span>
         </div>
         <div className="header-actions">
+          <button
+            type="button"
+            className="icon-button"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="הגדרות מערכת"
+            title="הגדרות מערכת"
+          >
+            <Settings2 size={17} />
+          </button>
           <button
             type="button"
             className="icon-button"
@@ -113,6 +126,10 @@ export function Interview() {
 
       {turn && !complete ? (
         <Composer disabled={busy} onSend={answer} />
+      ) : null}
+
+      {settingsOpen ? (
+        <SettingsPanel onClose={() => setSettingsOpen(false)} />
       ) : null}
     </div>
   );

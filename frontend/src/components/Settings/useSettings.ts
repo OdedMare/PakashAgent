@@ -23,6 +23,7 @@ const MASKED = "********";
 export function useSettings() {
   const [activeSection, setActiveSection] = useState<SettingsSection>("agent");
   const [values, setValues] = useState<Record<string, unknown>>({});
+  const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -35,6 +36,7 @@ export function useSettings() {
     getSettings()
       .then((next) => {
         setValues(next as unknown as Record<string, unknown>);
+        setLoaded(true);
         // Fill the model datalist from the saved connection right away. A
         // failure here is not worth showing before the boss asks for it —
         // the model server simply may not be running yet.
@@ -90,7 +92,7 @@ export function useSettings() {
   const secretSaved = (key: string) => values[key] === MASKED;
 
   return {
-    activeSection, setActiveSection, loading, saving, message, error,
+    activeSection, setActiveSection, loaded, loading, saving, message, error,
     models, loadingModels, modelsError,
     save, loadModels, set, text, checked, secretSaved,
   };
