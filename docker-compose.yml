@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: pakash
+      POSTGRES_USER: pakash
+      POSTGRES_PASSWORD: pakash
+    volumes:
+      - pakash-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pakash"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build: ./backend
+    environment:
+      PAKASH_DATABASE_URL: ${PAKASH_DATABASE_URL:-postgresql://pakash:pakash@db:5432/pakash}
+      PAKASH_DATABASE_SCHEMA: ${PAKASH_DATABASE_SCHEMA:-pakash}
+      PAKASH_DATABASE_HOST: db
+      PAKASH_RUNTIME_SETTINGS_FILE: /data/runtime-settings.json
+      # The model runs on the host, not in the compose network.
+      PAKASH_LLM_BASE_URL: ${PAKASH_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      PAKASH_LLM_MODEL: ${PAKASH_LLM_MODEL:-gemma3:27b}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - pakash-settings:/data
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    environment:
+      BACKEND_URL: http://backend:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  pakash-db:
+  pakash-settings:
