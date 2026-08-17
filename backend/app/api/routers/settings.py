@@ -12,6 +12,7 @@ If that ever changes, the guard belongs here, not in the store.
 from fastapi import APIRouter
 
 from app.api.contracts import ModelsProbeRequest
+from app.common.errors import AppError
 
 
 def build_router(store, llm) -> APIRouter:
@@ -26,11 +27,16 @@ def build_router(store, llm) -> APIRouter:
     def update_settings(patch: dict) -> dict:
         """Apply a partial update and return the new masked state.
 
-        A bad value raises rather than being skipped — the panel shows the
-        message, so a typo in a schema name or URL is visible instead of
-        silently doing nothing.
+        A bad value is rejected rather than skipped, so a typo in a schema
+        name or a URL is visible instead of silently doing nothing. The
+        normalizers signal that with `ValueError`, which would otherwise
+        escape as a 500 and a stack trace; as an `AppError` it reaches the
+        panel as the 400 its message was written for.
         """
-        store.update(patch)
+        try:
+            store.update(patch)
+        except (TypeError, ValueError) as exc:
+            raise AppError(str(exc))
         return store.public()
 
     @router.get("/models")

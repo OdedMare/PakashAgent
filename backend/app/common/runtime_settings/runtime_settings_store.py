@@ -6,7 +6,7 @@ a masked value coming back means "unchanged", so the stored secret is kept.
 """
 
 import json
-from dataclasses import asdict, fields
+from dataclasses import asdict, fields, replace
 from pathlib import Path
 
 from app.common.config.settings import Settings
@@ -70,7 +70,17 @@ class RuntimeSettingsStore:
         return data
 
     def update(self, patch: dict) -> RuntimeSettings:
-        self._apply(patch, True)
+        """Apply a UI save, all of it or none of it.
+
+        `_apply` walks the patch key by key, so a bad value midway would
+        otherwise leave the earlier keys live in memory while `_persist` never
+        runs — the file on disk and the settings every caller reads would
+        disagree until the next restart. Validating against a copy and
+        swapping it in only on success keeps the two in step.
+        """
+        candidate = replace(self._settings)
+        self._apply(patch, True, candidate)
+        self._settings = candidate
         self._persist()
         return self._settings
 
@@ -81,20 +91,22 @@ class RuntimeSettingsStore:
             encoding="utf-8",
         )
 
-    def _apply(self, patch: dict, strict: bool) -> None:
-        """Fold a patch into the live settings.
+    def _apply(self, patch: dict, strict: bool, target=None) -> None:
+        """Fold a patch into `target` (the live settings by default).
 
         `strict` separates the two callers: a UI save must reject a bad value
         loudly, while a saved file from an older version must not stop the
-        process from booting.
+        process from booting. `target` lets `update` validate against a copy,
+        so a strict failure leaves the live settings untouched.
         """
+        settings = self._settings if target is None else target
         known = {item.name for item in fields(RuntimeSettings)}
         for key, value in patch.items():
             # A masked secret means "unchanged" — keep what is stored.
             if key not in known or value == MASKED_SECRET:
                 continue
             if key in _NULLABLE and (value is None or value == ""):
-                setattr(self._settings, key, None)
+                setattr(settings, key, None)
                 continue
             if value is None:
                 continue
@@ -104,7 +116,7 @@ class RuntimeSettingsStore:
                     # unless the patch names one explicitly.
                     in_url = extract_url_schema(value)
                     if in_url and not patch.get("database_schema"):
-                        self._settings.database_schema = (
+                        settings.database_schema = (
                             normalize_database_schema(in_url)
                         )
                     value = normalize_database_url(value)
@@ -122,7 +134,7 @@ class RuntimeSettingsStore:
                 if strict:
                     raise
                 continue
-            setattr(self._settings, key, value)
+            setattr(settings, key, value)
 
 
 def _safe_database_url(value: str) -> str:

@@ -1,4 +1,4 @@
-import type { InterviewTurn } from "@/types";
+import type { InterviewTurn, RuntimeSettings } from "@/types";
 
 /**
  * Every backend call is traced to the browser console.
@@ -64,5 +64,33 @@ export function answerInterview(
   return request<InterviewTurn>(`/api/interview/${sessionId}/answer`, {
     method: "POST",
     body: JSON.stringify({ content }),
+  });
+}
+
+/** Current settings, with every secret already masked by the backend. */
+export function getSettings(): Promise<RuntimeSettings> {
+  return request<RuntimeSettings>("/api/settings");
+}
+
+/** Save a partial patch. A masked secret sent back means "unchanged", so a
+ *  field the boss did not retype keeps its stored value. */
+export function updateSettings(
+  patch: Record<string, unknown>,
+): Promise<RuntimeSettings> {
+  return request<RuntimeSettings>("/api/settings", {
+    method: "PUT",
+    body: JSON.stringify(patch),
+  });
+}
+
+/** Models available on a connection — the one typed into the form when
+ *  `overrides` carries it, otherwise the saved one. Lets a base URL or key be
+ *  tested before it is committed. */
+export function probeModels(
+  overrides: { llm_base_url?: string; openai_api_key?: string } = {},
+): Promise<{ models: string[] }> {
+  return request<{ models: string[] }>("/api/models", {
+    method: "POST",
+    body: JSON.stringify(overrides),
   });
 }
