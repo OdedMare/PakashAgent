@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.common.runtime_settings.normalizers import MASKED_SECRET
+
 
 class AnswerRequest(BaseModel):
     """One answer from the boss.
@@ -40,3 +42,18 @@ class InterviewTurn(BaseModel):
     allow_free_text: bool = False
     turns: List[Message] = []
     profile: Optional[Dict[str, Any]] = None
+
+
+class ModelsProbeRequest(BaseModel):
+    """Unsaved LLM connection settings used to probe available models.
+
+    Empty, omitted, or masked means "use the saved value", so the panel can
+    check a typed base URL without the boss re-entering a stored API key.
+    """
+
+    llm_base_url: Optional[str] = None
+    openai_api_key: Optional[str] = None
+
+    def override(self, name: str) -> Optional[str]:
+        value = (getattr(self, name) or "").strip()
+        return None if not value or value == MASKED_SECRET else value
