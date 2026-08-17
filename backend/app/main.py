@@ -5,7 +5,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from app.api.routers import health, interview
+from app.api.routers import health, interview, settings
 from app.bl.interview_service import InterviewService
 from app.common.config.settings import Settings
 from app.common.errors import AppError
@@ -34,6 +34,7 @@ app = FastAPI(
 
 app.include_router(health.build_router(repository))
 app.include_router(interview.build_router(interview_service))
+app.include_router(settings.build_router(store, llm))
 
 
 @app.on_event("startup")
