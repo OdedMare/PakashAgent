@@ -22,9 +22,16 @@ AiSummryIO's target, so no `X | Y`, no `list[str]`, no `match`; use `Optional`,
 `List`, `Dict`. `backend/Dockerfile` builds on `python:3.8.10-slim` to match.
 
 *Caveat worth knowing:* the local `backend/.venv` runs 3.13, so the test suite
-passing there does not prove 3.8 compatibility. `vermin -t=3.8 app/` is the check
-that does, and the Docker build is what proves the pinned dependency set actually
-resolves on 3.8.
+passing there does not prove 3.8 compatibility. `vermin -t=3.8 app/` checks the
+syntax; `docker build ./backend` is what proves the pinned dependencies actually
+resolve. Both pass today, and every module imports under 3.8.10 in the image.
+
+The pin is not free, and `backend/Dockerfile` is where the bill lands: the
+3.8.10 image is Debian buster, which is past EOL, so apt has to be pointed at
+`archive.debian.org`, and `pydantic-settings` pulls `backports.zoneinfo`, which
+has no aarch64 wheel for 3.8 and needs `gcc` to compile. None of that is wrong,
+but it is all sunk cost if the deployment target turns out to be newer — worth
+re-asking the boss once before more code depends on it.
 
 ## Steps
 

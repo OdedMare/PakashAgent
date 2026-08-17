@@ -1,6 +1,12 @@
 # Frontend (`frontend/`)
 
-Next.js. Shell ported from AiSummryIO's `AppShell`.
+Next.js App Router, TypeScript, plain CSS. Deps and conventions ported from
+AiSummryIO; the design tokens in `src/styles/tokens.css` are its `shell.css`
+palette — warm cream ground, terracotta accent — so the two products read as
+one system.
+
+`next.config.ts` proxies `/api/*` to FastAPI, so the browser sees one origin
+and there is no CORS setup.
 
 ## Shape
 
@@ -8,9 +14,11 @@ Chat-first. The boss talks to the agent in a conversation pane; the schedule
 renders beside it as a grid. There is no schedule *editor* — changes happen by
 talking, which is the product ([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
 
+Built so far: the interview. The rest of the table is the plan.
+
 | Surface | Purpose |
 |---|---|
-| Interview | The intro conversation, one question per turn |
+| Interview | The intro conversation, one question per turn — `src/components/Interview/` |
 | Schedule | The living grid for a period, RTL |
 | Import confirm | Inferred interpretation beside the raw sheet |
 | Change confirm | The agent's reasoning plus resulting warnings |
@@ -22,6 +30,26 @@ talking, which is the product ([D3](../docs/DECISIONS.md#d3--the-agent-decides-c
 files. Hebrew is also *data* — shift names, weekdays, and availability markers all
 arrive in Hebrew from the backend ([FILE_FORMATS.md](../docs/FILE_FORMATS.md)).
 Never assume a Latin-script fallback.
+
+## The interview surface
+
+One question per turn, rendered as a Claude-style conversation column: the
+agent's question, its recommendation in a marked-off card, and 2–5 selectable
+answers beneath it.
+
+- **Answers send the option's label, not a number.** A bare number is
+  ambiguous — choice or headcount — and the prompt makes the model ask rather
+  than guess. Numbering the buttons would teach the boss to answer "2".
+- **Free text is a separate field, never an "אחר" option.** An option called
+  "other" makes writing your own answer look like a last resort; the prompt
+  forbids it for that reason.
+- **A recommendation is the agent's opinion, not a workplace fact.** It is
+  styled as its own card so it never reads as something the boss already said.
+- **Only the newest question is answerable.** Past turns keep rendering their
+  options, disabled, so the thread stays readable without letting a question
+  be answered twice.
+- **The session id is the only client state**, held in `localStorage`. A
+  refresh resumes server-side and costs no model call.
 
 ## Audit warnings
 

@@ -5,9 +5,12 @@ a file; `dal/` only fetches and sends. Nothing here imports `psycopg` or `openai
 directly — it goes through the repository and the LLM client it was constructed
 with.
 
+Built so far: `interview.py`, `interview_service.py`, `prompts/`.
+
 | File | Owns |
 |---|---|
 | `interview.py` | The intro interview — workplace profile, employees, rules, shift vocabulary |
+| `interview_service.py` | Persistence around it: sessions, turns, resume, completion |
 | `scheduler.py` | Generating a schedule; every assignment carries a reason |
 | `changes.py` | Conversational edits and the change log |
 | `audit.py` | **Pure-Python advisory checks. No LLM.** |
@@ -48,6 +51,14 @@ so this must run before a meaningful import.
 
 The completed product mock and the prompt lessons it exposed are documented in
 [`../../../docs/INTERVIEW_REFERENCE.md`](../../../docs/INTERVIEW_REFERENCE.md).
+
+`IntroInterview` is **stateless on purpose** — it is a function of the
+conversation, which is what lets its whole contract be tested against a fake
+model with no database. `interview_service.py` is the piece that owns
+remembering: it appends each turn, stores the pending question so a refresh
+resumes without a model call, and writes the profile once on completion.
+Keep that split. Folding persistence into `IntroInterview` would cost the
+tests that make its validation trustworthy.
 
 ## `scheduler.py`
 

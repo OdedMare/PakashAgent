@@ -8,8 +8,19 @@ Fetches and sends. Makes no decisions — those live in `bl/`.
 
 ## Tables
 
+Built so far: `interview_sessions` and `interview_turns` (in `schema.py`). The
+rest below are the planned model, not yet created.
+
+`schema.py` commits after each independent block. That is not cosmetic: the
+whole script is sent as one simple-query message, which Postgres wraps in a
+single implicit transaction, so without the checkpoints one failing guarded
+migration rolls back every unrelated statement that already succeeded in the
+same call. Add a new guarded migration after its own `COMMIT`.
+
 | Table | Holds |
 |---|---|
+| `interview_sessions` | One intro interview: status, the confirmed profile, the pending question |
+| `interview_turns` | Each turn; assistant turns keep the options they offered as `payload` |
 | `workplace_profile` | What the job is, the mission, the **shift vocabulary** (names, times, on-call flags and weighting) |
 | `employees` | People, with whatever roles/qualifications the interview surfaced |
 | `rules` | The boss's own sentences, each tagged hard or soft |

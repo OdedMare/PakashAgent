@@ -5,6 +5,9 @@ the result.
 
 ## Routers
 
+Built so far: `interview.py`, `health.py`. The rest arrive with their `bl/`
+modules.
+
 | Router | Serves |
 |---|---|
 | `interview.py` | The intro interview, one turn at a time |
@@ -13,6 +16,21 @@ the result.
 | `imports.py` | Upload a file, return the inferred interpretation, commit on confirm |
 | `employees.py` | Roster management |
 | `health.py` | Liveness |
+
+## The interview contract
+
+`POST /api/interview` opens a session and returns its first question.
+`POST /api/interview/{id}/answer` records an answer and returns the next
+question — or `status: "complete"` with the confirmed profile.
+`GET /api/interview/{id}` re-serves the pending question and **costs no model
+call**: a refresh must not re-ask the model, because the same conversation
+would come back differently worded and the boss would see their answered
+question replaced by a near-duplicate.
+
+The answer body carries the option's **label**, never its index. A bare number
+is ambiguous by design — it may be a choice or a real value like a headcount —
+and `bl/prompts/interview.md` instructs the model to ask rather than guess.
+Sending "2" would manufacture exactly that ambiguity.
 
 ## The two-step contracts
 
