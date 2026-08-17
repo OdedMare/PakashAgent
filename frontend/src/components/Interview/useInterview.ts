@@ -86,21 +86,22 @@ export function useInterview(): InterviewState {
     void lastAction.current?.();
   }, []);
 
-  // On load, resume the stored session. A session the server no longer has
-  // (a dropped database, a cleared schema) must not strand the boss on an
-  // error screen forever, so it is cleared and the start screen returns.
+  // On load, resume the stored session so a refresh continues the interview.
   useEffect(() => {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (!stored) {
-      setBusy(false);
-      return;
-    }
     let cancelled = false;
-    resumeInterview(stored)
-      .then((next) => {
-        if (!cancelled) setTurn(next);
-      })
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    // Resolved rather than returned early even when there is nothing stored,
+    // so `busy` is always cleared from a callback. Clearing it synchronously
+    // in the effect body cascades an extra render on every first paint.
+    const resumed = stored
+      ? resumeInterview(stored).then((next) => {
+          if (!cancelled) setTurn(next);
+        })
+      : Promise.resolve();
+    resumed
       .catch(() => {
+        // A session the server no longer has (a dropped database, a cleared
+        // schema) must not strand the boss on an error screen forever.
         window.localStorage.removeItem(STORAGE_KEY);
       })
       .finally(() => {
