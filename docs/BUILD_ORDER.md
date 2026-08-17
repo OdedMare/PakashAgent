@@ -1,7 +1,15 @@
 # Build order
 
-**Start here in a new session.** Nothing is implemented yet — the repo currently
-holds documentation and an empty package skeleton.
+**Start here in a new session.**
+
+Done so far: step 1 (scaffold and port), the interview half of step 2 (the
+`interview_sessions` / `interview_turns` tables and their repository), step 4
+(the intro interview, now wired through HTTP to an RTL chat UI), and the
+interview slice of step 8.
+
+**Next: step 3, `bl/audit.py`.** It was deliberately skipped to get the interview
+demonstrable, but nothing downstream should be built on top of an audit that
+does not exist yet.
 
 Read first: [`DECISIONS.md`](DECISIONS.md) (the reasoning behind the architecture,
 including one deliberate tradeoff that looks like a bug), then

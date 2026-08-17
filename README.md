@@ -12,12 +12,22 @@ markers, and errors are all Hebrew. See [`backend/app/bl/CLAUDE.md`](backend/app
 
 ## Status
 
-**Design complete, implementation not started.** Every architectural decision was
-settled in a design interview and is recorded — with its reasoning — in
-[`docs/DECISIONS.md`](docs/DECISIONS.md). Read that before writing code; several
-decisions are counterintuitive and one is a deliberate, accepted tradeoff.
+**Step 1 — the intro interview — works end to end.** The boss can open the app,
+answer one question per turn (a selectable answer or their own words), and reach
+a confirmed workplace profile stored in Postgres.
 
-The next session should start at [`docs/BUILD_ORDER.md`](docs/BUILD_ORDER.md).
+Built: the ported `dal/llm` client, settings and runtime settings, the interview
+prompt and its validation, the interview session/turn tables, the HTTP layer, and
+the RTL chat UI.
+
+Not built yet: `bl/audit.py`, `scheduler.py`, `changes.py`, `importer.py`, and the
+schedule surfaces. Next up is the audit — see
+[`docs/BUILD_ORDER.md`](docs/BUILD_ORDER.md) step 3.
+
+Every architectural decision was settled in a design interview and is recorded —
+with its reasoning — in [`docs/DECISIONS.md`](docs/DECISIONS.md). Read that before
+writing code; several decisions are counterintuitive and one is a deliberate,
+accepted tradeoff.
 
 ## The four steps the product exists to serve
 
@@ -51,14 +61,27 @@ and the repository base. See [`backend/CLAUDE.md`](backend/CLAUDE.md).
 ## Running it
 
 ```bash
-docker compose up          # backend, frontend, postgres, nginx
+docker compose up          # backend, frontend, postgres
 ```
+
+Then open <http://localhost:3000> and start the interview.
+
+Running the two halves directly instead:
 
 ```bash
 cd backend
-python -m pytest -q        # audit.py and the importer fixtures
-uvicorn app.main:app --reload
+python -m pytest -q
+uvicorn app.main:app --reload          # :8000
 ```
+
+```bash
+cd frontend
+npm install
+npm run dev                            # :3000, proxies /api to the backend
+```
+
+Postgres must be reachable at `PAKASH_DATABASE_URL`; the app creates its own
+schema and tables on startup.
 
 The model defaults to a local Ollama endpoint; set `PAKASH_LLM_BASE_URL` and
 `PAKASH_LLM_MODEL` to point elsewhere. Nothing here is OpenAI-specific.
