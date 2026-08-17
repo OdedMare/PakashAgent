@@ -1,0 +1,133 @@
+/* Warm, paper-like theme: cream ground, terracotta accent, near-black warm
+   text — the Claude palette, ported from AiSummryIO's shell.css so the two
+   products read as one system. Depth comes from borders and generous space
+   rather than elevation and glow, so shadows stay quiet and the background
+   stays flat. */
+:root {
+  --bg: #f5f4ee;
+  --surface: #ffffff;
+  --surface-2: #faf9f5;
+  --surface-3: #eeece3;
+  --sidebar: #262624;
+  --sidebar-2: #35342f;
+  --text: #1f1e1d;
+  --text-soft: #4a483f;
+  /* Light-mode ink runs darker than the terracotta brand fill: these carry
+     text and icons, so each clears 4.5:1 on both --bg and --surface. */
+  --text-muted: #726f66;
+  --text-on-dark: #f5f4ee;
+  --border: #e5e2d9;
+  --border-strong: #cfcabb;
+  --primary: #a94f32;
+  --primary-hover: #8f3f24;
+  --primary-soft: #f7ebe4;
+  --accent: #a94f32;
+  --success: #42704f;
+  --success-soft: #eaf1ea;
+  --warning: #946619;
+  --warning-soft: #faf0dc;
+  --danger: #b3402f;
+  --danger-soft: #fbeae6;
+  --shadow: 0 12px 32px rgba(31, 30, 29, 0.09);
+  --shadow-soft: 0 2px 8px rgba(31, 30, 29, 0.05);
+  --radius: 18px;
+  --radius-sm: 12px;
+  --focus: 0 0 0 3px rgba(217, 119, 87, 0.32);
+  --brand-gradient: linear-gradient(135deg, #d97757, #b8563c);
+  --brand-glow: 0 6px 18px rgba(217, 119, 87, 0.22);
+}
+
+:root[data-theme="dark"] {
+  --bg: #1f1e1d;
+  --surface: #262624;
+  --surface-2: #2d2c2a;
+  --surface-3: #35342f;
+  --text: #f5f4ee;
+  --text-soft: #d4d1c7;
+  --text-muted: #a6a29a;
+  --sidebar: #1a1917;
+  --sidebar-2: #2d2c2a;
+  --border: #3a3937;
+  --border-strong: #524f4a;
+  --primary: #e08a6b;
+  --primary-hover: #eda087;
+  --primary-soft: #3a2c25;
+  --accent: #e08a6b;
+  --success: #7fae87;
+  --success-soft: #26332a;
+  --warning: #d9a94e;
+  --warning-soft: #3a2f1c;
+  --danger: #e07a63;
+  --danger-soft: #3d2520;
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.18);
+  --brand-gradient: linear-gradient(135deg, #e08a6b, #c25f3f);
+  --brand-glow: 0 6px 20px rgba(217, 119, 87, 0.26);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family: "Noto Sans Hebrew", "Arial Hebrew", Arial, sans-serif;
+  font-size: 14px;
+}
+
+button,
+input,
+textarea,
+select {
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    color 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease,
+    opacity 180ms ease,
+    box-shadow 180ms ease;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 200;
+  inset: 8px 8px auto auto;
+  padding: 10px 14px;
+  color: #fff;
+  background: var(--primary);
+  border-radius: 9px;
+  transform: translateY(-150%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
