@@ -51,7 +51,11 @@ uvicorn app.main:app --reload
 - `bl/schedule_service.py` — persistence and ordering around those three plus
   the audit: propose, confirm, apply, publish, constraints, history.
 - `bl/audit.py` — **pure Python, no LLM.** Recomputes countable facts and returns
-  warnings. Never blocks.
+  warnings. Never blocks. Also owns `personal_summary()` and `fairness()`, which
+  the employee area renders — they live here so one person's hours are literally
+  the same arithmetic as the manager's warnings, not a second implementation.
+- `bl/employee_service.py` — identity claims, the personal view, and constraint
+  requests. Approval is the only thing that writes a constraint (D14).
 - `bl/importer.py` — Excel/doc ingest with layout inference.
 - `bl/prompts/` — prompt text as markdown, loaded by `prompts.load(name)`.
   Shared fragments compose via `<!-- include: shared/name.md -->`.
@@ -83,8 +87,21 @@ one concern; split rather than append.
   requires the manager's reason exactly as a spoken change does ([D12](../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
 - **An import is never committed before confirmation.** Inference produces an
   interpretation the boss approves; only then does anything persist ([D7](../docs/DECISIONS.md#d7--import-infers-layout-boss-confirms)).
-- **Employees are read-only.** No endpoint lets an employee mutate a schedule ([D5](../docs/DECISIONS.md#d5--employees-are-read-only)).
-  Enforced by `guards.boss()` on every mutating route — not by convention.
+- **No endpoint lets an employee mutate a schedule.** Enforced by
+  `guards.boss()` on every schedule-mutating route — not by convention.
+  [D14](../docs/DECISIONS.md) narrowed [D5](../docs/DECISIONS.md#d5--employees-are-read-only)
+  but did **not** remove it: a signed-in employee may submit a constraint
+  *request* via `guards.employee()` and nothing else. They cannot assign,
+  move, publish, or approve — including their own request.
+- **A pending constraint request is inert.** It lives in `constraint_requests`,
+  not `availability`, so `bl/audit.py` cannot see it and submitting one cannot
+  move the arithmetic. The manager's approval is what promotes it into an
+  `availability` row with `source='employee_reported'` (D13/D14). Keeping the
+  two tables separate is what makes that a property of the schema rather than
+  a filter every reader must remember.
+- **An employee's identity comes off the signed cookie, never the request.**
+  `session["employee"]` scopes every personal read. A name accepted from a body
+  would let any signed-in employee read a colleague's hours and stated reasons.
 - **Every workplace-owned read is scoped by `team_id`, taken from the signed
   session cookie** and never from the request ([D10](../docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)).
 - **`PAKASH_SESSION_SECRET` must be set in any real deployment.** Unset, each

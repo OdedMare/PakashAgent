@@ -18,6 +18,7 @@ the team scoping.
 | `imports.py` | Upload a file, return the inferred interpretation, commit on confirm |
 | `employees.py` | Roster management |
 | `health.py` | Liveness |
+| `employee.py` | The employee's own area: claim an identity, read your own hours, submit a constraint request — plus the boss-guarded router that rules on them |
 
 ## The interview contract
 
@@ -60,10 +61,15 @@ Every route states its own requirement as a dependency —
 path prefix. A middleware rule matched on a prefix is invisible at the route,
 and a new route added under the wrong prefix silently inherits the wrong guard.
 
-- `guards.visitor()` — any authenticated visitor, boss or member.
-- `guards.boss()` — the boss only. **This is where [D5](../../../docs/DECISIONS.md#d5--employees-are-read-only)
-  is enforced.** Every mutating route depends on it, so a member session cannot
-  reach a write no matter which URL it is pointed at.
+- `guards.visitor()` — any authenticated visitor: boss, member, or employee.
+- `guards.boss()` — the boss only. **Every schedule-mutating route depends on
+  it**, so neither a member nor a signed-in employee can reach a write no
+  matter which URL it is pointed at.
+- `guards.employee()` — a signed-in employee acting as themselves
+  ([D14](../../../docs/DECISIONS.md)). Admits exactly one write, a constraint
+  *request*, and nothing that touches a schedule. The identity comes from
+  `session["employee"]` on the signed cookie; a route that took the name from
+  the body would let one employee read or act as another.
 
 **Route order matters in `schedules.py`.** A path parameter at the root of a
 prefix matches any single segment, so `/{schedule_id}` is declared *after* every
@@ -80,8 +86,11 @@ for why it is not per-team yet.
 
 ## Rules
 
-- **The employee view is read-only.** Whatever route serves employees exposes no
-  mutation ([D5](../../../docs/DECISIONS.md#d5--employees-are-read-only)).
+- **No employee route mutates a schedule.** `POST /api/employee/requests` is
+  the single write an employee gets, and it creates a *pending request* that
+  changes nothing until a manager approves it. Deciding requests lives on a
+  separate `boss`-guarded router (`/api/schedule/requests`) so the guard is
+  unmistakable at a glance.
 - A change request without the boss's reason is answered by *asking for it*, not
   by rejecting the request.
 - Errors are `AgentError` in Hebrew, rendered for a Hebrew RTL client.

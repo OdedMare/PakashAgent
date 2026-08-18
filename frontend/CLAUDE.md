@@ -34,6 +34,8 @@ the import screens remain.
 | Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `ConfirmMove.tsx` |
 | Import confirm | Inferred interpretation beside the raw sheet *(not built)* |
 | Employee view | **Read-only** schedule — `MemberArea` renders the same `Calendar` with `readOnly` |
+| Personal area | One employee's own hours, shifts and constraint requests — `src/components/Employee/` |
+| Request inbox | The manager ruling on submissions — `Management/RequestInbox.tsx` |
 
 ## The management area
 
@@ -54,16 +56,21 @@ durable result and exactly the thing the area needs to run on.
   rather than patching locally: the schedule, its warnings, the constraints and
   the log all move together, and a locally patched grid beside a stale audit is
   worse than a brief spinner.
-- **Constraints show their source.** Employees never entered any of them (D5,
-  D10) — `source` says whether the manager decided it or wrote down what
-  someone reported, and the panel labels it that way rather than implying a
-  submission that cannot exist.
+- **Constraints show their source.** `source` says whether the manager decided
+  it, the agent recorded it, or it came from the employee — an approved
+  submission is stored as `employee_reported`, keeping "Dana said she cannot
+  do Thursdays" distinct from "the manager decided Dana is off Thursdays"
+  (D13/D14).
+- **Approving is one click; rejecting requires a reason.** `RequestInbox`
+  keeps the reject button disabled until there is one, mirroring `ConfirmMove`
+  — the requirement is visible rather than arriving as a server error.
 
 ## Workspaces
 
 `src/components/Workspace/index.tsx` picks the surface from the role the
-server reported: no session → the login gate, `member` → `MemberArea`, `boss` →
-the interview until the workplace has been taught, then the management area.
+server reported: no session → the login gate, `member` → `MemberArea` (with a
+door into the personal area), `employee` → the personal area, `boss` → the
+interview until the workplace has been taught, then the management area.
 `workspace.profile` is what switches those last two, and reopening the interview
 over an existing profile is a deliberate choice the manager makes — re-running it
 replaces the profile everything downstream reads.
@@ -119,9 +126,14 @@ with warnings is a valid schedule the boss may knowingly accept
 
 ## Rules
 
-- The employee view exposes no mutation ([D5](../docs/DECISIONS.md#d5--employees-are-read-only)).
-  `MemberArea` has no edit, accept, decline, or availability control — that is
-  the decision, not an unfinished screen.
+- **`MemberArea` exposes no mutation.** The share link carries no identity
+  (D10), so there is nothing to scope a personal view by and nobody to
+  attribute a submission to — that is the decision, not an unfinished screen.
+- **The personal area (`Employee/`) mutates nothing but its own requests**
+  ([D14](../docs/DECISIONS.md)). It renders the same `readOnly` `Calendar`
+  with no `onDrop`. Submitting a constraint creates a **pending request** and
+  the copy says so — an employee who believes a submitted constraint is
+  already in force is the failure mode this feature would otherwise create.
 - Import and change are two-step: interpretation/proposal, then confirmation.
   Never auto-confirm either.
 - The agent's reasoning is shown before the boss confirms — it is the point, not a

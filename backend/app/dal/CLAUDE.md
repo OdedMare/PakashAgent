@@ -35,6 +35,8 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | `assignments` | person → slot, **with the agent's reason** (`NOT NULL`) |
 | `availability` | Known unavailability. `source` records where it came from — the manager, the agent, or the manager writing down what an employee reported ([D13](../../../docs/DECISIONS.md#d13--constraints-are-recorded-by-the-manager-with-their-source-marked)) |
 | `change_log` | **Append-only**: what changed, both reasons, when |
+| `employee_identities` | A claimed roster name plus its scrypt passcode hash — one claim per name per team ([D14](../../../docs/DECISIONS.md)) |
+| `constraint_requests` | An employee's submission awaiting the manager. **Not** `availability`: pending rows are invisible to `audit.py`, and approval is what promotes one |
 
 The workplace profile — the mission, the **shift vocabulary** (names, times,
 on-call flags and weighting), the employees, and the rules — lives as JSON on
@@ -53,7 +55,13 @@ the interview owns its shape.
   Distinguishing them turns any id-taking endpoint into an oracle for which
   rows exist in workspaces the caller cannot see.
 - **Passwords are hashed with `scrypt`, never stored or logged in the clear.**
-  `teams.password_hash` ends up in backups and in psql sessions.
+  `teams.password_hash` and `employee_identities.passcode_hash` both end up in
+  backups and in psql sessions. Employee passcodes reuse `teams.hash_password`
+  rather than a second scheme — one password format, one place to change it.
+- **A pending constraint request is never an `availability` row.** Promoting one
+  is `bl/`'s job and happens only on the manager's approval; writing it here on
+  submission would let an employee move the audit's arithmetic by asking, which
+  reverses [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-).
 - **`change_log` is append-only.** Never update or delete a row. It is the only
   history the system has ([D4](../../../docs/DECISIONS.md#d4--living-schedule-not-versioned)).
 - **`assignments.reason` is not nullable in spirit** — an assignment without the
