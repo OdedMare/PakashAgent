@@ -345,6 +345,46 @@ def test_the_overview_returns_roster_vocabulary_and_period():
     assert body["schedule"]["assignments"]
 
 
+def test_the_overview_carries_the_periods_numbers():
+    """The charts' figures ride along on the overview the screen already
+    fetches, so the panel and the calendar beside it can never be a refresh
+    apart. Pinned through the HTTP contract because the Pydantic models are
+    what the browser actually receives -- a field added to `shift_stats` but
+    missing from `ShiftStats` would be silently dropped here.
+    """
+    app, _ = _build_app([_generation([
+        {"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+         "reason": "מוסמכת"},
+    ])])
+    client = _client(app)
+    client.post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+
+    stats = client.get("/api/schedule/overview").json()["stats"]
+
+    assert stats["total_shifts"] == 1
+    assert stats["people_working"] == 1
+    # Everyone on the roster is present, including the person with no
+    # shifts -- that zero is the whole point of the per-person chart.
+    assert {row["employee"] for row in stats["by_employee"]} == {"דנה", "יוסי"}
+    assert stats["coverage"]["assigned"] == 1
+
+
+def test_the_overview_carries_zeroed_stats_before_anything_is_built():
+    """The state the management screen opens in.
+
+    The panel renders whatever arrives, so "no schedule yet" has to be a
+    well-formed shape rather than a null the client special-cases.
+    """
+    app, _ = _build_app([])
+
+    stats = _client(app).get("/api/schedule/overview").json()["stats"]
+
+    assert stats["total_shifts"] == 0
+    assert stats["coverage"]["required"] == 0
+
+
 def test_a_member_sees_only_published_periods():
     """A draft is the manager's working state; publishing makes it the team's."""
     app, _ = _build_app([_generation([])])
