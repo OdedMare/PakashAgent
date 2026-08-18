@@ -6,7 +6,10 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from app.api.dependencies import Guards
-from app.api.routers import health, interview, schedules, settings, workspace
+from app.api.routers import (
+    employee, health, interview, schedules, settings, workspace,
+)
+from app.bl.employee_service import EmployeeService
 from app.bl.interview_service import InterviewService
 from app.bl.schedule_service import ScheduleService
 from app.bl.workspace_service import WorkspaceService
@@ -31,6 +34,10 @@ llm = OpenAIJsonClient(store)
 interview_service = InterviewService(repository, llm)
 workspace_service = WorkspaceService(repository)
 schedule_service = ScheduleService(repository, llm)
+# Takes the schedule service, not just the repository: the personal view needs
+# an audited schedule, and recomputing the audit for the employee would be a
+# second implementation of the arithmetic the manager sees (D14).
+employee_service = EmployeeService(repository, schedule_service)
 
 # An unset secret is generated per process. Fine for a single-worker dev run,
 # wrong for a multi-worker deployment — each worker would sign with its own
@@ -60,6 +67,15 @@ app.include_router(
 app.include_router(interview.build_router(interview_service, guards))
 app.include_router(schedules.build_router(schedule_service, guards))
 app.include_router(settings.build_router(store, llm, guards))
+app.include_router(
+    employee.build_router(
+        employee_service, guards, session_secret, env.session_days
+    )
+)
+# The manager's side of constraint requests. A separate router so that every
+# route on it depends on `boss` visibly, rather than sitting next to the
+# employee-guarded ones.
+app.include_router(employee.build_manager_router(employee_service, guards))
 
 
 @app.on_event("startup")

@@ -230,4 +230,73 @@ CREATE INDEX IF NOT EXISTS change_log_team_idx
     ON change_log (team_id, created_at DESC);
 
 COMMIT;
+
+-- ---------------------------------------------------------------------------
+-- Employee identity and the one thing an employee may write (D14).
+-- ---------------------------------------------------------------------------
+
+-- A claimed name plus a personal passcode. This is what D10 said did not
+-- exist and D14 introduced: without it there is no "his hours" to show,
+-- because the share link is one bearer token for the whole team and every
+-- visitor looks identical.
+--
+-- The identity is a claim over a NAME from the workplace profile, not a user
+-- record. `employee` matches `assignments.employee` and
+-- `availability.employee` exactly -- the whole product identifies people by
+-- the name the interview recorded, and inventing a separate id here would
+-- mean reconciling two identifiers for one person on every read.
+CREATE TABLE IF NOT EXISTS employee_identities (
+    id TEXT PRIMARY KEY,
+    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    employee TEXT NOT NULL,
+    -- scrypt, same format and same helpers as the boss password. Never the
+    -- passcode itself.
+    passcode_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen_at TIMESTAMPTZ,
+    -- One claim per name per team. This is the constraint that makes a claim
+    -- meaningful: the second person to try a taken name is refused rather
+    -- than silently sharing it.
+    UNIQUE (team_id, employee)
+);
+
+COMMIT;
+
+-- An employee's constraint submission, awaiting the manager.
+--
+-- Deliberately NOT a row in `availability`. A pending request must be
+-- invisible to `audit.py` (D3 -- the arithmetic may not move because someone
+-- asked), and approval is what promotes it into a real constraint with
+-- `source='employee_reported'` (D13). Keeping them in separate tables is what
+-- makes "pending changes nothing" a property of the schema rather than a
+-- filter every reader has to remember.
+CREATE TABLE IF NOT EXISTS constraint_requests (
+    id TEXT PRIMARY KEY,
+    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    employee TEXT NOT NULL,
+    constraint_date DATE NOT NULL,
+    -- Empty means the whole day, read exactly as `availability.shift_name` is.
+    shift_name TEXT NOT NULL DEFAULT '',
+    -- FALSE is "I cannot work this" -- the common case. TRUE is an offer to
+    -- work, which a manager may also want.
+    available BOOLEAN NOT NULL DEFAULT FALSE,
+    -- The employee's own words. This is the whole point of letting them
+    -- submit: "family event", "exam" is context the manager otherwise never
+    -- gets in writing.
+    reason TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending','approved','rejected','withdrawn')),
+    -- The manager's answer. A rejection without one tells the employee
+    -- nothing, which is how a feature like this stops being used.
+    decided_reason TEXT NOT NULL DEFAULT '',
+    decided_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+COMMIT;
+
+CREATE INDEX IF NOT EXISTS constraint_requests_team_idx
+    ON constraint_requests (team_id, status, created_at DESC);
+
+COMMIT;
 """

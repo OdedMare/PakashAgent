@@ -65,6 +65,11 @@ decline, or submit availability through the app.
 one unresponsive person hold a schedule hostage and needs deadlines, escalation,
 and boss override — contradicting "only the boss confirms."
 
+**⚠️ Superseded in part by [D14](#d14--employees-get-real-identities-and-may-submit-constraints-️-reverses-d5-amends-d10).**
+Employees now have identities and may *submit constraint requests*. The
+reasoning above still holds where it was actually about blocking — no
+submission gates a schedule. Read D14 before acting on this entry.
+
 ## D6 — The boss can author *or* generate
 
 Both. The boss may hand over a finished schedule (typically an import) or ask the
@@ -201,6 +206,74 @@ manager decided Dana is off Thursdays" — without inventing employee accounts.
 If per-employee submission is ever genuinely wanted, that is the point to
 revisit D5 and D10 together and give members real identities. Do not bolt an
 unauthenticated form onto the share link.
+
+**That happened — see [D14](#d14--employees-get-real-identities-and-may-submit-constraints-️-reverses-d5-amends-d10).**
+The condition holds: identities are real, and the submission path is
+authenticated rather than bolted onto the share link. `source` keeps the
+meaning defined here — an approved employee submission is written as
+`employee_reported`.
+
+---
+
+## D14 — Employees get real identities and may submit constraints ⚠️ *(reverses D5, amends D10)*
+
+**This reverses [D5](#d5--employees-are-read-only) and amends [D10](#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link). Both were opened deliberately, together, at the boss's request.**
+
+An employee now has an identity in their workspace and a personal area: their
+own hours, their own shifts, their own warnings, and a form that **submits a
+constraint for the manager's approval**. [D13](#d13--constraints-are-recorded-by-the-manager-with-their-source-marked)
+anticipated exactly this and named the condition — *"if per-employee
+submission is ever genuinely wanted, that is the point to revisit D5 and D10
+together and give members real identities."* That is what this is. The
+condition D13 attached still binds: this is a real identity, **not** an
+unauthenticated form bolted onto the share link.
+
+**What is now true:**
+
+- **Employees have identities.** A member claims a name from the workplace
+  profile and sets a personal passcode. `employee_identities` maps a claimed
+  name to a credential within one team.
+- **Employees write, in exactly one way.** They submit *constraint requests*.
+  They still do not assign, move, accept, decline, or edit a schedule. The
+  write surface is one table, `constraint_requests`, and nothing else.
+- **A submission is a request, not a constraint.** It lands as `pending` and
+  changes nothing. Only the manager's approval writes an `availability` row
+  — with `source='employee_reported'`, which is the value D13 already
+  defined for this exact fact.
+
+**What is deliberately unchanged:**
+
+- **The share link still works, still grants read-only.** Claiming a name is
+  an *upgrade* on top of it, not a replacement. A team that does not want
+  identities keeps the D10 behaviour untouched, and the roster view for an
+  unclaimed visitor is what it was.
+- **The audit stays advisory.** A pending request is not a constraint and is
+  invisible to `audit.py` until approved. Approving one is what makes it
+  countable — which keeps [D3](#d3--the-agent-decides-code-only-audits-)
+  intact rather than letting a submission silently change the arithmetic.
+- **The manager remains the sole decider.** Approval is a manager action, and
+  a rejection carries the manager's reason.
+
+*Why the reversal was accepted:* D5's stated cost was that employee consent
+as a *finalization gate* lets one unresponsive person hold a schedule
+hostage. That reasoning is about **blocking**, and it survives — nothing here
+blocks. A pending request does not delay publishing, does not gate a change,
+and expires into irrelevance if ignored. What D5 also cost, which was not
+priced at the time, is that every constraint had to route through the
+manager's memory: "Dana said she cannot do Thursdays" was only in the app if
+the manager remembered to type it. That is the failure this fixes.
+
+*Why identity could not be avoided:* "the hours **he** worked" is not
+expressible under D10. The share link is one bearer token for the whole team,
+so every visitor is indistinguishable from every other — there is no "he" to
+filter on. A personal view requires knowing who is looking. This is the
+consequence D10 flagged in its own text.
+
+**⚠️ The share link remains a bearer credential.** Claiming a name requires
+holding it, so anyone with the link can attempt to claim any *unclaimed*
+name. A claimed name is protected by its passcode. Rotating the link does not
+release claims — `POST /api/workspace/identity/release` is what a manager
+uses when someone leaves.
 
 ---
 

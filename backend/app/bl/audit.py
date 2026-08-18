@@ -98,6 +98,146 @@ def audit(
     return warnings
 
 
+def personal_summary(
+    employee: str,
+    assignments: List[dict],
+    shifts: List[dict],
+    warnings: Optional[List[dict]] = None,
+    availability: Optional[List[dict]] = None,
+) -> dict:
+    """One person's own totals: hours, shifts, and the warnings about them.
+
+    Added for the employee's personal area
+    ([D14](../../../docs/DECISIONS.md#d14--employees-get-real-identities-and-may-submit-constraints-️-reverses-d5-amends-d10)),
+    and put *here* rather than in `bl/` for one reason: it must reuse
+    `_shift_hours`, the same weighted arithmetic the warnings are computed
+    from. A second hours calculation elsewhere would eventually disagree with
+    this one, and an employee reading 38 where their manager reads 41 is worse
+    than showing nothing at all.
+
+    The on-call split is broken out because it is the number that surprises
+    people. `כונן לילה` in one of the real files counts at a weight the
+    interview collects (D9), so an eight-hour on-call may count as four --
+    which looks like a mistake unless the breakdown says so plainly.
+
+    Still no model call and still no authority: this reports, exactly as the
+    rest of the module does.
+    """
+    name = _text(employee)
+    shift_index = _index_shifts(shifts)
+    rows = [_row(item, shift_index) for item in assignments or []]
+    rows = [
+        row for row in rows if row is not None and row["employee"] == name
+    ]
+    rows.sort(key=lambda row: (row["date"], row["shift"]))
+
+    total = round(sum(row["hours"] for row in rows), 2)
+    on_call_rows = [row for row in rows if row["is_on_call"]]
+    on_call_hours = round(sum(row["hours"] for row in on_call_rows), 2)
+
+    by_shift: Dict[str, dict] = {}
+    for row in rows:
+        entry = by_shift.setdefault(
+            row["shift"], {"shift": row["shift"], "count": 0, "hours": 0.0}
+        )
+        entry["count"] += 1
+        entry["hours"] = round(entry["hours"] + row["hours"], 2)
+
+    weeks: Dict[str, float] = {}
+    for row in rows:
+        if row["day"] is None:
+            continue
+        year, week, _ = row["day"].isocalendar()
+        key = "%d-W%02d" % (year, week)
+        weeks[key] = round(weeks.get(key, 0.0) + row["hours"], 2)
+
+    return {
+        "employee": name,
+        "total_hours": total,
+        "shift_count": len(rows),
+        "days_worked": len(set(row["date"] for row in rows)),
+        # Split out so a weighted on-call total reads as intentional rather
+        # than as arithmetic gone wrong.
+        "on_call_count": len(on_call_rows),
+        "on_call_hours": on_call_hours,
+        "worked_hours": round(total - on_call_hours, 2),
+        "by_shift": sorted(by_shift.values(), key=lambda item: item["shift"]),
+        "by_week": [
+            {"week": key, "hours": weeks[key]} for key in sorted(weeks)
+        ],
+        "shifts": [
+            {
+                "date": row["date"],
+                "shift": row["shift"],
+                "hours": row["hours"],
+                "is_on_call": row["is_on_call"],
+                "weekday": _hebrew_weekday(row["day"]),
+            }
+            for row in rows
+        ],
+        # Only the warnings naming this person. A team-wide warning
+        # (`unfilled`, `overstaffed`) carries no employee and is deliberately
+        # not shown here: it is the manager's problem, and surfacing it in a
+        # personal view invites someone to read it as being about them.
+        "warnings": [
+            item for item in (warnings or [])
+            if _text(item.get("employee")) == name
+        ],
+        "constraints": [
+            item for item in (availability or [])
+            if _text(item.get("employee")) == name
+        ],
+    }
+
+
+def fairness(
+    assignments: List[dict], shifts: List[dict], employees: List[dict]
+) -> dict:
+    """Hours per person against the team average.
+
+    The number that answers "why is it always me". It is arithmetic over the
+    same rows the audit already walks, so it is honest by construction -- and
+    it is a *report*, not a rule: nothing here says a schedule is unfair, only
+    what the totals are.
+
+    Everyone on the roster appears, including people with no shifts at all.
+    Dropping them would hide the most significant case the comparison exists
+    to reveal.
+    """
+    shift_index = _index_shifts(shifts)
+    rows = [_row(item, shift_index) for item in assignments or []]
+    rows = [row for row in rows if row is not None]
+
+    totals: Dict[str, float] = {}
+    for employee in employees or []:
+        name = _text(
+            employee.get("name") if isinstance(employee, dict) else employee
+        )
+        if name:
+            totals.setdefault(name, 0.0)
+    for row in rows:
+        totals[row["employee"]] = round(
+            totals.get(row["employee"], 0.0) + row["hours"], 2
+        )
+
+    values = list(totals.values())
+    average = round(sum(values) / len(values), 2) if values else 0.0
+    return {
+        "average_hours": average,
+        "people": sorted(
+            [
+                {
+                    "employee": name,
+                    "hours": hours,
+                    "delta": round(hours - average, 2),
+                }
+                for name, hours in totals.items()
+            ],
+            key=lambda item: (-item["hours"], item["employee"]),
+        ),
+    }
+
+
 def _policy(profile: Optional[dict]) -> dict:
     """Thresholds, taken from the profile where it states them.
 
@@ -559,7 +699,7 @@ def _text(value: Any) -> str:
 
 
 __all__ = [
-    "audit", "OVER_HOURS", "CONSECUTIVE", "SHORT_REST", "DOUBLE_BOOKED",
+    "audit", "personal_summary", "fairness", "OVER_HOURS", "CONSECUTIVE", "SHORT_REST", "DOUBLE_BOOKED",
     "UNAVAILABLE", "UNFILLED", "OVERSTAFFED",
     "SEVERITY_WARNING", "SEVERITY_NOTICE",
 ]

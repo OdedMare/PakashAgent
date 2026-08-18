@@ -10,7 +10,9 @@ from fastapi import Cookie, Depends
 from typing import Optional
 
 from app.common.errors import AuthError
-from app.common.sessions import COOKIE_NAME, ROLE_BOSS, read
+from app.common.sessions import (
+    COOKIE_NAME, ROLE_BOSS, ROLE_EMPLOYEE, read,
+)
 
 
 class Guards:
@@ -20,7 +22,7 @@ class Guards:
         self._secret = secret
 
     def visitor(self):
-        """Any authenticated visitor -- boss or member."""
+        """Any authenticated visitor -- boss, member, or employee."""
         def dependency(
             pakash_session: Optional[str] = Cookie(default=None, alias=COOKIE_NAME)
         ) -> dict:
@@ -33,14 +35,38 @@ class Guards:
     def boss(self):
         """The boss of a workspace, and nobody else.
 
-        This is the single place D5 (employees are read-only) is enforced.
-        Every mutating route depends on it, so a member's cookie -- which is
-        issued by the share link and carries `role: member` -- cannot reach a
-        write no matter which URL it is pointed at.
+        Every route that touches a *schedule* depends on this. A member's
+        cookie (from the share link) and an employee's cookie (from a claimed
+        identity) are both refused here no matter which URL they are pointed
+        at, which is what keeps "the manager remains the sole decider" a
+        property of the routing layer rather than a convention
+        ([D14](../../../docs/DECISIONS.md#d14--employees-get-real-identities-and-may-submit-constraints-️-reverses-d5-amends-d10)
+        narrowed D5, it did not remove it).
         """
         def dependency(session: dict = Depends(self.visitor())) -> dict:
             if session.get("role") != ROLE_BOSS:
                 raise AuthError("הפעולה מותרת למנהל בלבד")
+            return session
+        return dependency
+
+    def employee(self):
+        """A signed-in employee, acting as themselves.
+
+        The narrow counterpart to `boss`. It admits exactly one kind of write
+        -- a constraint *request* -- and nothing that touches a schedule; a
+        route that assigns, moves, or publishes must depend on `boss` even if
+        it feels employee-adjacent.
+
+        The identity comes off the cookie, never off the request. That is the
+        whole security property of the personal area: `session["employee"]` is
+        signed, so an employee cannot read a colleague's hours or their stated
+        reasons by putting another name in the body.
+        """
+        def dependency(session: dict = Depends(self.visitor())) -> dict:
+            if session.get("role") != ROLE_EMPLOYEE:
+                raise AuthError("נדרשת התחברות אישית")
+            if not session.get("employee"):
+                raise AuthError("נדרשת התחברות אישית")
             return session
         return dependency
 
