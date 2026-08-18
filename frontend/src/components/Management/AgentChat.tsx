@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, HelpCircle, Send, Sparkles, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { Proposal } from "@/types";
 
@@ -24,18 +24,33 @@ import { formatDate } from "./Calendar";
 export function AgentChat({
   proposal,
   busy,
+  draft,
   onPropose,
   onConfirm,
   onDismiss,
 }: {
   proposal: Proposal | null;
   busy: boolean;
+  /** A sentence the briefing offered, seeded into the composer.
+   *
+   *  Seeded, never sent: the manager still presses send, which is what keeps
+   *  a suggestion a suggestion. An agent observation that dispatched itself
+   *  would be the agent acting on its own conclusion — exactly what D15 is
+   *  drawn to prevent. */
+  draft?: string;
   onPropose: (request: string, reason?: string) => void;
   onConfirm: (reason: string) => void;
   onDismiss: () => void;
 }) {
   const [request, setRequest] = useState("");
   const [reason, setReason] = useState("");
+
+  // Keyed on the draft's own value so clicking the same suggestion twice
+  // after editing the box puts it back, while the manager's typing is never
+  // overwritten by a re-render carrying the same draft.
+  useEffect(() => {
+    if (draft) setRequest(draft);
+  }, [draft]);
 
   const needsReason = proposal?.needs_reason ?? false;
   // The manager's reason: whatever they already stated, otherwise what they
