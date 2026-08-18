@@ -3,6 +3,10 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
+# rewrites() is baked into the build output, so the backend URL must be
+# known here — not only at container start.
+ARG BACKEND_URL=http://127.0.0.1:8000
+ENV BACKEND_URL=$BACKEND_URL
 RUN npm run build
 RUN npm prune --omit=dev
 

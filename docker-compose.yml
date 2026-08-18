@@ -39,7 +39,12 @@ services:
         condition: service_healthy
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      # Next bakes rewrites() into the build output, so the proxy target has
+      # to be known at build time, not just in the running container.
+      args:
+        BACKEND_URL: http://backend:8000
     environment:
       BACKEND_URL: http://backend:8000
     ports:
