@@ -277,6 +277,53 @@ uses when someone leaves.
 
 ---
 
+## D15 — The agent speaks first, but still never writes
+
+The agent no longer waits to be addressed. It reads the current state on its
+own and **opens the conversation**: when the manager enters the management
+area, after anything changes, before a period is published, and periodically
+while the room is left open.
+
+What it produces is a **briefing** — a headline, up to four observations, and
+for each one a *suggestion*: the sentence the manager could send to act on it.
+
+**A suggestion is text, not an action.** Clicking one types it into the
+composer. The manager still sends it, the agent still proposes, and the
+manager still confirms with their reason. There is no field in a briefing
+that `apply` can read, and `bl/briefing.py` returns exactly three keys —
+`headline`, `items`, `quiet` — so there is nothing an operation could hide in.
+
+*Why this shape and not autonomy:* "be proactive" reads like a request for an
+agent that acts. Acting would reverse three decisions at once —
+[D3](#d3--the-agent-decides-code-only-audits-) (the manager decides what
+lands), [D8](#d8--two-reasons-both-required) (every change carries the
+manager's reason, which only they can supply), and
+[D12](#d12--dragging-a-shift-is-a-proposal-not-an-edit) (even a *drag* is only
+a proposal). The gap those protect is not friction, it is the product. What
+was actually missing was different: the agent had nothing to say until spoken
+to, so noticing anything required the manager to think to ask. Initiating the
+conversation fixes that and costs none of it.
+
+**The arithmetic does not move.** `warnings` and `fairness` are computed by
+`bl/audit.py` and handed to the model as facts to reason about. It is asked
+what the numbers *mean together* — the part code cannot do — and never to
+count anything. Speaking first does not change which side of D3 does
+arithmetic.
+
+**Silence is a supported answer.** `quiet` is the common case by design, and
+it is decided in code from whether there are items rather than taken from the
+model's own label. An agent that finds something urgent every time gets tuned
+out, and being tuned out is the only real failure mode for something that
+speaks unprompted.
+
+**A briefing never fails loudly.** It is decoration on a screen that must
+render regardless, so a model that is down or slow returns quiet rather than
+an error. `POST /api/schedule/brief` is boss-only, like every other agent
+route: a briefing reads drafts, pending requests, and other people's stated
+reasons.
+
+---
+
 ## Open
 
 - **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment

@@ -6,8 +6,8 @@ directly — it goes through the repository and the LLM client it was constructe
 with.
 
 Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
-`audit.py`, `scheduler.py`, `changes.py`, `schedule_service.py`, `prompts/`.
-Only `importer.py` remains.
+`audit.py`, `scheduler.py`, `changes.py`, `briefing.py`, `schedule_service.py`,
+`prompts/`. Only `importer.py` remains.
 
 | File | Owns |
 |---|---|
@@ -16,6 +16,7 @@ Only `importer.py` remains.
 | `workspace_service.py` | Workspace rules: entering a team, roles, the share link |
 | `scheduler.py` | Generating a schedule; every assignment carries a reason |
 | `changes.py` | Conversational edits and the change log |
+| `briefing.py` | **The agent speaking first.** Observes; proposes nothing that lands |
 | `schedule_service.py` | Persistence and orchestration around all three: propose, confirm, apply |
 | `audit.py` | **Pure-Python advisory checks. No LLM.** |
 | `importer.py` | Excel/doc ingest with layout inference |
@@ -114,6 +115,36 @@ The step-4 loop: *"Dana's sick Thursday."*
 The schedule is edited in place; the change log is append-only and is the only
 history ([D4](../../../docs/DECISIONS.md#d4--living-schedule-not-versioned)).
 No versioning, no rollback.
+
+## `briefing.py` — the agent speaking first
+
+The only model call in this package that answers nothing the manager said. It
+reads the current state and says what it noticed
+([D15](../../../docs/DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)).
+
+Four triggers, each changing what is worth saying: `opened`, `changed`,
+`publishing`, `periodic`.
+
+**It returns exactly three keys — `headline`, `items`, `quiet`.** That is the
+guard, not a coincidence: there is no field a confirmation could read, so
+there is no path from a briefing to `apply`. An item's `suggestion` is a
+sentence the manager may *send*; the ordinary propose-then-confirm loop then
+runs unchanged. An agent that acted on its own conclusion would reverse D3,
+D8 and D12 together — being proactive here means *initiating the
+conversation*, never skipping it.
+
+**The model is never asked to count.** `warnings` and `fairness` arrive
+already computed by `audit.py` and are handed over as facts to reason about.
+Speaking first does not move the D3 line about which side does arithmetic.
+
+`quiet` is decided in code from whether there are items, not taken from the
+model's own label — the two disagreeing would render an all-clear above a
+list of problems. Silence is the common case by design: an agent that finds
+something urgent every time gets tuned out, which is the only way this
+feature actually fails.
+
+`schedule_service.brief()` swallows failures and returns quiet. This sits
+beside a calendar that must render regardless of what the model is doing.
 
 ## `audit.py` — the advisory checker
 

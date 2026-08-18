@@ -32,6 +32,7 @@ the import screens remain.
 | Management | The manager's control room — `src/components/Management/` |
 | Schedule | The living grid for a period, RTL — `Management/Calendar.tsx` |
 | Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `ConfirmMove.tsx` |
+| Briefing | What the agent noticed unprompted — `Management/Briefing.tsx` |
 | Import confirm | Inferred interpretation beside the raw sheet *(not built)* |
 | Employee view | **Read-only** schedule — `MemberArea` renders the same `Calendar` with `readOnly` |
 | Personal area | One employee's own hours, shifts and constraint requests — `src/components/Employee/` |
@@ -52,6 +53,19 @@ durable result and exactly the thing the area needs to run on.
   the manager confirms. A proposal that comes back `needs_reason` carries no
   operations — the agent is asking why, and the answer goes back through the
   same call.
+- **The agent speaks first, and still writes nothing.** `Briefing` renders
+  what the agent noticed on its own — on open, after every write, before
+  publishing, and every half hour in an idle room
+  ([D15](../docs/DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)).
+  Clicking a suggestion **types the sentence into the composer**; the manager
+  still sends it and still confirms with a reason. A briefing carries no
+  operations at all, so there is nothing here that could apply itself. A quiet
+  briefing renders as one calm line rather than vanishing — "I looked and it is
+  fine" is worth reading, and hiding it would leave the manager unsure the
+  agent looked.
+- **A briefing never breaks the screen.** It has its own `busy` flag and never
+  sets `error`: a failure means the agent has nothing to say, not that the
+  manager's action failed. `brief()` never throws.
 - **Everything re-reads after a write.** `useManagement` refetches the overview
   rather than patching locally: the schedule, its warnings, the constraints and
   the log all move together, and a locally patched grid beside a stale audit is

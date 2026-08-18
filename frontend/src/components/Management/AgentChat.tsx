@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, HelpCircle, Send, Sparkles, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import type { Proposal } from "@/types";
 
@@ -25,6 +25,7 @@ export function AgentChat({
   proposal,
   busy,
   draft,
+  draftKey,
   onPropose,
   onConfirm,
   onDismiss,
@@ -38,6 +39,10 @@ export function AgentChat({
    *  would be the agent acting on its own conclusion — exactly what D15 is
    *  drawn to prevent. */
   draft?: string;
+  /** Bumped each time a suggestion is clicked, so choosing the same one
+   *  again re-seeds the box after the manager has edited it. Without it the
+   *  effect below would not re-run on an identical `draft`. */
+  draftKey?: number;
   onPropose: (request: string, reason?: string) => void;
   onConfirm: (reason: string) => void;
   onDismiss: () => void;
@@ -45,12 +50,19 @@ export function AgentChat({
   const [request, setRequest] = useState("");
   const [reason, setReason] = useState("");
 
-  // Keyed on the draft's own value so clicking the same suggestion twice
-  // after editing the box puts it back, while the manager's typing is never
-  // overwritten by a re-render carrying the same draft.
-  useEffect(() => {
+  // Adjusting state during render rather than in an effect: this is React's
+  // own pattern for a value that resets when a prop changes, and it avoids
+  // the cascading re-render an effect would cost.
+  //
+  // Keyed on `draftKey` rather than on the text, so clicking the same
+  // suggestion again puts it back after the manager has edited the box —
+  // while an ordinary re-render carrying the same draft never overwrites
+  // what they are in the middle of typing.
+  const [seeded, setSeeded] = useState(draftKey);
+  if (draftKey !== seeded) {
+    setSeeded(draftKey);
     if (draft) setRequest(draft);
-  }, [draft]);
+  }
 
   const needsReason = proposal?.needs_reason ?? false;
   // The manager's reason: whatever they already stated, otherwise what they

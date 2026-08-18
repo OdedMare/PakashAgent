@@ -21,6 +21,7 @@ import { ShareLink } from "@/components/Workspace/ShareLink";
 import type { Assignment, TeamView } from "@/types";
 
 import { AgentChat } from "./AgentChat";
+import { Briefing } from "./Briefing";
 import { Calendar, formatDate } from "./Calendar";
 import { ConfirmMove } from "./ConfirmMove";
 import { History } from "./History";
@@ -68,6 +69,13 @@ export function Management({
     shift_name: string;
     slot_date: string;
   } | null>(null);
+  // A sentence the briefing offered, on its way to the composer. Held as a
+  // counter alongside the text so clicking the same suggestion again re-seeds
+  // the box after the manager has edited it.
+  const [suggested, setSuggested] = useState<{ text: string; n: number }>({
+    text: "",
+    n: 0,
+  });
 
   const overview = state.overview;
   const schedule = overview?.schedule ?? null;
@@ -239,9 +247,23 @@ export function Management({
         </div>
 
         <div className="management-side">
+          {/* The agent's own initiative, above the conversation because it is
+              what it said before being asked (D15). It proposes nothing and
+              applies nothing — clicking a suggestion types it into the
+              composer below and the manager still sends it. */}
+          <Briefing
+            briefing={state.briefing}
+            busy={state.briefing_busy}
+            onAsk={(text) =>
+              setSuggested((previous) => ({ text, n: previous.n + 1 }))
+            }
+            onDismiss={state.dismissBriefing}
+          />
           <AgentChat
             proposal={state.proposal}
             busy={state.busy}
+            draft={suggested.text}
+            draftKey={suggested.n}
             onPropose={state.propose}
             onConfirm={state.confirm}
             onDismiss={state.dismissProposal}

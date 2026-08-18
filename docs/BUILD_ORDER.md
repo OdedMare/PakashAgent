@@ -16,6 +16,13 @@ Nothing downstream depends on it and it does not change the order below.
 **Each new table still arrives with its own `team_id`** — added at creation
 time, never retrofitted onto a populated table.
 
+Also done, likewise out of order: the **proactive agent** — `bl/briefing.py`
+and `Management/Briefing.tsx`, where the agent opens the conversation instead
+of waiting to be asked
+([D15](DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)). It
+adds no table and reads only what the management area already assembles, so
+it too leaves the order below untouched.
+
 **Next: step 6, the importer.** It is the last unbuilt step. Build the two
 fixtures from [`FILE_FORMATS.md`](FILE_FORMATS.md) *first*, then make
 inference pass both — they are structurally different on purpose.

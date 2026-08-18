@@ -30,11 +30,19 @@ schedule. They can generate a week, drag a shift (which asks why before it
 moves), talk to the agent about the assignment, record constraints against
 employees, and publish to the team.
 
+**The agent speaks first.** It reads the state on its own and opens the
+conversation — when the manager arrives, after anything changes, before a
+period is published, and periodically in an idle room. It says what it
+noticed and offers the sentence that would act on it, but it still writes
+nothing: the manager sends the sentence, the agent proposes, the manager
+confirms with their reason
+([D15](docs/DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)).
+
 Built: the ported `dal/llm` client, settings and runtime settings, the interview
 and its prompt, the workspace layer (teams, boss login, member share links, route
 guards), `bl/audit.py` and its table-driven tests, `bl/scheduler.py`,
-`bl/changes.py`, the schedule tables, the management HTTP layer, and the RTL UI
-for all of it.
+`bl/changes.py`, `bl/briefing.py`, the schedule tables, the management HTTP
+layer, and the RTL UI for all of it.
 
 Not built yet: `bl/importer.py` and the import-confirmation screens — see
 [`docs/BUILD_ORDER.md`](docs/BUILD_ORDER.md) step 6.

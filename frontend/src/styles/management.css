@@ -783,3 +783,122 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* -- the agent speaking first (D15) --------------------------------------
+ *
+ * Styled as the agent's own voice rather than as an alert: it sits above the
+ * conversation, carries the same brand mark, and uses the soft primary tint
+ * instead of the warning palette. That is deliberate — this surface reports
+ * what the agent noticed, and dressing it as a failure would teach the
+ * manager to dismiss it unread, which is the one way a thing that speaks
+ * unprompted actually fails.
+ */
+
+.briefing {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+  box-shadow: var(--shadow-soft);
+}
+
+.briefing-header {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+
+.briefing-headline {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.briefing-headline strong {
+  font-weight: 600;
+}
+
+/* The honest all-clear. Muted rather than hidden: "I looked and it is fine"
+   is worth reading once, and worth no more space than that. */
+.briefing-quiet {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.83rem;
+  color: var(--text-muted);
+}
+
+.briefing-items {
+  list-style: none;
+  margin: 0.7rem 0 0;
+  padding: 0;
+}
+
+.briefing-item {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.briefing-icon {
+  display: flex;
+  padding-top: 0.15rem;
+  color: var(--text-muted);
+}
+
+.briefing-item.gap .briefing-icon,
+.briefing-item.risk .briefing-icon {
+  color: var(--warning);
+}
+
+.briefing-item.fairness .briefing-icon,
+.briefing-item.pattern .briefing-icon {
+  color: var(--accent);
+}
+
+.briefing-item.request .briefing-icon {
+  color: var(--success);
+}
+
+.briefing-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.briefing-body p {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+/* A suggestion is a sentence, so it looks like one — a quoted line the
+   manager can send, not a command button. Clicking it types the sentence
+   into the composer below; it applies nothing on its own (D15). */
+.briefing-ask {
+  margin-top: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: start;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.briefing-ask:hover:not(:disabled) {
+  border-color: var(--primary);
+}
+
+.briefing-ask:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.briefing[aria-busy="true"] {
+  opacity: 0.75;
+}

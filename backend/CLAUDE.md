@@ -48,6 +48,9 @@ uvicorn app.main:app --reload
 - `bl/changes.py` — conversational edits; asks for the boss's reason, proposes a
   replacement with justification, applies on confirmation. Proposes only — it is
   handed no repository, so it cannot write.
+- `bl/briefing.py` — **the agent speaking first.** Reads the current state and
+  says what it noticed, unprompted. Returns exactly `headline`, `items`,
+  `quiet` — no operations, so there is no path from a briefing to a write.
 - `bl/schedule_service.py` — persistence and ordering around those three plus
   the audit: propose, confirm, apply, publish, constraints, history.
 - `bl/audit.py` — **pure Python, no LLM.** Recomputes countable facts and returns
@@ -83,6 +86,17 @@ one concern; split rather than append.
   Enforced in three places on purpose: `assignments.reason` is `NOT NULL`, the
   repository refuses a blank one, and `scheduler.py` drops an unreasoned row
   rather than storing it.
+- **A briefing observes; it never acts.** `bl/briefing.py` returns three keys
+  and none of them is an operation, so nothing it says can be applied
+  ([D15](../docs/DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)).
+  A `suggestion` is a sentence the manager may send, after which the ordinary
+  propose-then-confirm path runs unchanged. Giving a briefing operations that
+  `apply` could read would reverse D3, D8 and D12 at once.
+- **A briefing never counts.** `warnings` and `fairness` are computed by
+  `audit.py` and handed to the model as facts. Speaking first does not move
+  the D3 line about which side does arithmetic.
+- **`schedule_service.brief()` never raises.** It returns quiet on any failure:
+  it decorates a screen that must render regardless of what the model is doing.
 - **A dragged shift is a proposal, not an edit.** `POST /api/schedule/move`
   requires the manager's reason exactly as a spoken change does ([D12](../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
 - **An import is never committed before confirmation.** Inference produces an
