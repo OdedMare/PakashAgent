@@ -1,0 +1,363 @@
+"""The advisory checker: arithmetic over a roster, no model.
+
+Table-driven per BUILD_ORDER step 3. Everything downstream trusts these
+numbers, and the whole reason the audit is Python rather than a prompt is
+that its answers can be pinned exactly -- so each check gets a fixture where
+the expected warning is obvious by inspection.
+
+The last test in the file is the one that matters most: the audit never
+blocks. If it ever grows a raise or a veto, that test fails and D3 has been
+reversed.
+"""
+
+import pytest
+
+from app.bl.audit import (
+    CONSECUTIVE,
+    DOUBLE_BOOKED,
+    OVERSTAFFED,
+    OVER_HOURS,
+    SEVERITY_NOTICE,
+    SEVERITY_WARNING,
+    SHORT_REST,
+    UNAVAILABLE,
+    UNFILLED,
+    audit,
+)
+
+# A workplace vocabulary, as the interview would have collected it. Shift
+# names are this workplace's own -- the audit never knows them in advance.
+MORNING = "בוקר"
+EVENING = "צהריים"
+ON_CALL = "כונן לילה"
+
+SHIFTS = [
+    {
+        "name": MORNING, "start_time": "07:00", "end_time": "15:00",
+        "is_on_call": False, "hour_weight": 1.0,
+        "staffing": [{"days": [], "headcount": 2, "required_roles": []}],
+    },
+    {
+        "name": EVENING, "start_time": "15:00", "end_time": "23:00",
+        "is_on_call": False, "hour_weight": 1.0,
+        "staffing": [{"days": [], "headcount": 1, "required_roles": []}],
+    },
+    {
+        # On-call: eight clock hours that count as four, which is exactly the
+        # weighting D9 says to read from the interview rather than assume.
+        "name": ON_CALL, "start_time": "23:00", "end_time": "07:00",
+        "is_on_call": True, "hour_weight": 0.5,
+        "staffing": [{"days": [], "headcount": 1, "required_roles": []}],
+    },
+]
+
+EMPLOYEES = [
+    {"name": "דנה"}, {"name": "יוסי"}, {"name": "רון"},
+]
+
+
+def _assign(employee, shift, date):
+    return {"employee": employee, "shift": shift, "date": date}
+
+
+def _codes(warnings):
+    return [warning["code"] for warning in warnings]
+
+
+def _by_code(warnings, code):
+    return [warning for warning in warnings if warning["code"] == code]
+
+
+def test_clean_schedule_produces_no_warnings():
+    """A fully staffed day inside every limit warns about nothing."""
+    warnings = audit(
+        [
+            _assign("דנה", MORNING, "2026-08-17"),
+            _assign("יוסי", MORNING, "2026-08-17"),
+            _assign("רון", EVENING, "2026-08-17"),
+        ],
+        SHIFTS, EMPLOYEES,
+    )
+    assert warnings == []
+
+
+def test_double_booking_is_caught():
+    """The same person twice on one slot."""
+    warnings = audit(
+        [
+            _assign("דנה", MORNING, "2026-08-17"),
+            _assign("דנה", MORNING, "2026-08-17"),
+            _assign("רון", EVENING, "2026-08-17"),
+        ],
+        SHIFTS, EMPLOYEES,
+    )
+    doubled = _by_code(warnings, DOUBLE_BOOKED)
+    assert len(doubled) == 1
+    assert doubled[0]["employee"] == "דנה"
+    assert doubled[0]["severity"] == SEVERITY_WARNING
+
+
+def test_assignment_against_a_recorded_constraint_is_caught():
+    warnings = audit(
+        [_assign("דנה", MORNING, "2026-08-17")],
+        SHIFTS, EMPLOYEES,
+        availability=[{
+            "employee": "דנה", "date": "2026-08-17", "shift": MORNING,
+            "available": False, "reason": "תואר",
+        }],
+    )
+    conflicts = _by_code(warnings, UNAVAILABLE)
+    assert len(conflicts) == 1
+    assert "תואר" in conflicts[0]["message"]
+
+
+def test_a_whole_day_constraint_blocks_every_shift_that_day():
+    """A constraint row with no shift name rules out the entire day.
+
+    This is the question the interview asks explicitly, so the audit has to
+    honour the answer rather than only matching shift-for-shift.
+    """
+    warnings = audit(
+        [
+            _assign("דנה", MORNING, "2026-08-17"),
+            _assign("דנה", EVENING, "2026-08-17"),
+        ],
+        SHIFTS, EMPLOYEES,
+        availability=[{
+            "employee": "דנה", "date": "2026-08-17", "shift": "",
+            "available": False, "reason": "מילואים",
+        }],
+    )
+    assert len(_by_code(warnings, UNAVAILABLE)) == 2
+
+
+def test_availability_marked_available_is_not_a_conflict():
+    warnings = audit(
+        [_assign("דנה", MORNING, "2026-08-17")],
+        SHIFTS, EMPLOYEES,
+        availability=[{
+            "employee": "דנה", "date": "2026-08-17", "shift": MORNING,
+            "available": True,
+        }],
+    )
+    assert _by_code(warnings, UNAVAILABLE) == []
+
+
+def test_weekly_hours_over_the_ceiling_are_reported():
+    """Six morning shifts is 48 hours, past the 45-hour default."""
+    assignments = [
+        _assign("דנה", MORNING, "2026-08-%02d" % day)
+        for day in range(17, 23)
+    ]
+    warnings = audit(assignments, SHIFTS, EMPLOYEES)
+    over = _by_code(warnings, OVER_HOURS)
+    assert len(over) == 1
+    assert over[0]["details"]["hours"] == pytest.approx(48.0)
+
+
+def test_a_personal_hour_limit_overrides_the_default():
+    """`max_weekly_hours` on the employee wins over the policy default."""
+    assignments = [
+        _assign("דנה", MORNING, "2026-08-%02d" % day)
+        for day in range(17, 20)
+    ]
+    warnings = audit(
+        assignments, SHIFTS,
+        [{"name": "דנה", "max_weekly_hours": 16}],
+    )
+    over = _by_code(warnings, OVER_HOURS)
+    assert len(over) == 1
+    assert over[0]["details"]["limit"] == pytest.approx(16.0)
+
+
+def test_on_call_hours_are_weighted_not_counted_whole():
+    """Eight on-call hours at weight 0.5 count as four.
+
+    The point of D9's on-call question: counting a `כונן לילה` as a full
+    night would push people over a ceiling they never actually crossed.
+    """
+    assignments = [
+        _assign("דנה", ON_CALL, "2026-08-%02d" % day)
+        for day in range(17, 23)
+    ]
+    warnings = audit(assignments, SHIFTS, EMPLOYEES)
+    # 6 * 8 clock hours = 48 raw, but 6 * 4 weighted = 24, under the ceiling.
+    assert _by_code(warnings, OVER_HOURS) == []
+
+
+def test_seven_consecutive_days_is_reported():
+    assignments = [
+        _assign("יוסי", EVENING, "2026-08-%02d" % day)
+        for day in range(17, 24)
+    ]
+    warnings = audit(assignments, SHIFTS, EMPLOYEES)
+    runs = _by_code(warnings, CONSECUTIVE)
+    assert len(runs) == 1
+    assert runs[0]["details"]["days"] == 7
+
+
+def test_a_break_in_the_run_resets_the_count():
+    """Two runs of four with a day off between them warn about neither."""
+    days = list(range(17, 21)) + list(range(22, 26))
+    assignments = [
+        _assign("יוסי", EVENING, "2026-08-%02d" % day) for day in days
+    ]
+    warnings = audit(assignments, SHIFTS, EMPLOYEES)
+    assert _by_code(warnings, CONSECUTIVE) == []
+
+
+def test_insufficient_rest_between_shifts_is_reported():
+    """Evening ending 23:00 then morning starting 07:00 is 8 hours.
+
+    Set against a 10-hour minimum so the fixture is unambiguous.
+    """
+    warnings = audit(
+        [
+            _assign("רון", EVENING, "2026-08-17"),
+            _assign("רון", MORNING, "2026-08-18"),
+        ],
+        SHIFTS, EMPLOYEES,
+        profile={"audit_policy": {"min_rest_hours": 10}},
+    )
+    rest = _by_code(warnings, SHORT_REST)
+    assert len(rest) == 1
+    assert rest[0]["details"]["rest_hours"] == pytest.approx(8.0)
+
+
+def test_a_shift_crossing_midnight_is_measured_into_the_next_day():
+    """On-call runs 23:00->07:00, so a 07:00 morning after it is zero rest."""
+    warnings = audit(
+        [
+            _assign("רון", ON_CALL, "2026-08-17"),
+            _assign("רון", MORNING, "2026-08-18"),
+        ],
+        SHIFTS, EMPLOYEES,
+    )
+    rest = _by_code(warnings, SHORT_REST)
+    assert len(rest) == 1
+    assert rest[0]["details"]["rest_hours"] == pytest.approx(0.0)
+
+
+def test_an_understaffed_slot_is_reported():
+    """Morning needs two; one is assigned."""
+    warnings = audit(
+        [_assign("דנה", MORNING, "2026-08-17")], SHIFTS, EMPLOYEES,
+    )
+    unfilled = _by_code(warnings, UNFILLED)
+    assert len(unfilled) == 1
+    assert unfilled[0]["details"] == {"assigned": 1, "required": 2}
+
+
+def test_an_overstaffed_slot_is_a_notice_not_a_warning():
+    """Costs money, breaks nothing -- and may well be deliberate."""
+    warnings = audit(
+        [
+            _assign("דנה", EVENING, "2026-08-17"),
+            _assign("יוסי", EVENING, "2026-08-17"),
+        ],
+        SHIFTS, EMPLOYEES,
+    )
+    over = _by_code(warnings, OVERSTAFFED)
+    assert len(over) == 1
+    assert over[0]["severity"] == SEVERITY_NOTICE
+
+
+def test_per_day_staffing_overrides_the_default_group():
+    """A group naming this weekday beats the group naming none.
+
+    2026-08-21 is a Friday; the fixture asks for one person on Fridays and
+    two the rest of the week.
+    """
+    shifts = [{
+        "name": MORNING, "start_time": "07:00", "end_time": "15:00",
+        "is_on_call": False, "hour_weight": 1.0,
+        "staffing": [
+            {"days": [], "headcount": 2, "required_roles": []},
+            {"days": ["יום שישי"], "headcount": 1, "required_roles": []},
+        ],
+    }]
+    warnings = audit(
+        [_assign("דנה", MORNING, "2026-08-21")], shifts, EMPLOYEES,
+    )
+    assert _by_code(warnings, UNFILLED) == []
+
+
+def test_an_unknown_shift_name_contributes_no_invented_hours():
+    """A shift the vocabulary does not have still counts as a slot filled,
+    but contributes zero hours rather than a guessed length."""
+    assignments = [
+        {"employee": "דנה", "shift": "משמרת שלא קיימת",
+         "date": "2026-08-%02d" % day}
+        for day in range(17, 24)
+    ]
+    warnings = audit(assignments, SHIFTS, EMPLOYEES)
+    assert _by_code(warnings, OVER_HOURS) == []
+    # It is still seven consecutive days of work.
+    assert len(_by_code(warnings, CONSECUTIVE)) == 1
+
+
+def test_malformed_rows_are_skipped_rather_than_raising():
+    """The audit is handed model-produced data and must never be the thing
+    that takes a schedule down."""
+    warnings = audit(
+        [
+            None,
+            "not a row",
+            {"employee": "", "shift": MORNING, "date": "2026-08-17"},
+            {"employee": "דנה", "shift": MORNING, "date": "not-a-date"},
+            _assign("דנה", MORNING, "2026-08-17"),
+        ],
+        SHIFTS, EMPLOYEES,
+    )
+    assert isinstance(warnings, list)
+
+
+def test_empty_inputs_are_not_an_error():
+    assert audit([], [], []) == []
+    assert audit(None, None, None) == []
+
+
+def test_warnings_sort_stably_with_warnings_before_notices():
+    """The manager reads this list top-down; two identical audits must not
+    reorder themselves."""
+    assignments = [
+        _assign("דנה", MORNING, "2026-08-17"),
+        _assign("יוסי", EVENING, "2026-08-17"),
+        _assign("רון", EVENING, "2026-08-17"),
+    ]
+    first = audit(assignments, SHIFTS, EMPLOYEES)
+    second = audit(list(reversed(assignments)), SHIFTS, EMPLOYEES)
+    assert _codes(first) == _codes(second)
+    severities = [warning["severity"] for warning in first]
+    assert severities == sorted(
+        severities, key=lambda value: 0 if value == SEVERITY_WARNING else 1
+    )
+
+
+def test_the_audit_never_blocks_and_never_mutates():
+    """D3, asserted directly.
+
+    The audit reports. It does not raise on a broken rule, does not return
+    a rejection the caller must honour, and does not touch what it was
+    handed. A schedule that breaks every rule in the file still comes back
+    as a list of warnings and an untouched schedule.
+    """
+    assignments = [
+        _assign("דנה", MORNING, "2026-08-%02d" % day)
+        for day in range(17, 25)
+    ] + [_assign("דנה", MORNING, "2026-08-17")]
+    before = [dict(row) for row in assignments]
+    availability = [{
+        "employee": "דנה", "date": "2026-08-17", "shift": "",
+        "available": False,
+    }]
+
+    warnings = audit(assignments, SHIFTS, EMPLOYEES, availability=availability)
+
+    # Every category fired...
+    assert {OVER_HOURS, CONSECUTIVE, DOUBLE_BOOKED, UNAVAILABLE} <= set(
+        _codes(warnings)
+    )
+    # ...and nothing was rejected, rewritten, or removed.
+    assert assignments == before
+    assert all(isinstance(warning, dict) for warning in warnings)
