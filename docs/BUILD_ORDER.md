@@ -16,12 +16,21 @@ Nothing downstream depends on it and it does not change the order below.
 **Each new table still arrives with its own `team_id`** — added at creation
 time, never retrofitted onto a populated table.
 
-Also done, likewise out of order: the **proactive agent** — `bl/briefing.py`
-and `Management/Briefing.tsx`, where the agent opens the conversation instead
-of waiting to be asked
-([D15](DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)). It
-adds no table and reads only what the management area already assembles, so
-it too leaves the order below untouched.
+Also done, likewise out of order, three features the boss asked for directly:
+
+- the **proactive agent** — `bl/briefing.py` and `Management/Briefing.tsx`,
+  where the agent opens the conversation instead of waiting to be asked
+  ([D15](DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes));
+- **change notifications for employees** — the personal area leads with what
+  moved since they last looked, marked by `employee_identities.acknowledged_at`
+  ([D16](DECISIONS.md#d16--an-employee-is-told-what-changed-and-acknowledging-is-what-marks-it-read));
+- **export** — `bl/export.py`, a period out as `.xlsx`
+  ([D17](DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
+
+None of them adds a table beyond one guarded column, and none changes the
+order below. **`export.py` is worth reading before step 6:** it already
+writes the Sample A layout the importer must parse, so the two are the same
+shape seen from opposite ends.
 
 **Next: step 6, the importer.** It is the last unbuilt step. Build the two
 fixtures from [`FILE_FORMATS.md`](FILE_FORMATS.md) *first*, then make
