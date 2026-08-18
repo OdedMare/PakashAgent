@@ -121,6 +121,14 @@ class EmployeeService:
             employee, assignments, shifts,
             warnings=warnings, availability=constraints,
         )
+        identity = self._repository.find_identity(team_id, employee) or {}
+        changes = _mark_unseen(
+            [
+                row for row in self._repository.change_log(team_id, limit=200)
+                if _names(row, employee)
+            ][:40],
+            identity.get("acknowledged_at"),
+        )
         return {
             "employee": employee,
             "schedule": schedule,
@@ -137,12 +145,27 @@ class EmployeeService:
             ),
             # Only the log entries naming this person. The full change log is
             # the manager's, and it carries other people's stated reasons.
-            "changes": [
-                row for row in self._repository.change_log(team_id, limit=200)
-                if _names(row, employee)
-            ][:40],
+            "changes": changes,
+            # What landed since they last acknowledged (D16). The count is
+            # what the screen leads with: an employee whose shift moved
+            # yesterday should not have to compare a grid against memory to
+            # find out.
+            "unseen": sum(1 for row in changes if row.get("is_new")),
             "shifts": shifts,
         }
+
+    def acknowledge(self, team_id: str, employee: str) -> dict:
+        """Mark what the employee was just shown as read (D16).
+
+        Called by the personal area, not by a login: the point is to record
+        that a person *saw* the moves that concern them, and a login proves
+        only that they arrived.
+
+        Returns the new count rather than a bare status so the caller can
+        settle the badge without a second round trip.
+        """
+        self._repository.acknowledge(team_id, employee)
+        return {"employee": employee, "unseen": 0}
 
     # -- constraint requests -----------------------------------------------
 
@@ -292,6 +315,35 @@ def _teammates(assignments: List[dict], employee: str) -> List[dict]:
         {"date": key[0], "shift": key[1], "with": sorted(grouped[key])}
         for key in sorted(grouped)
     ]
+
+
+def _mark_unseen(rows: List[dict], acknowledged_at: Any) -> List[dict]:
+    """Flag the log rows that landed after the employee last acknowledged.
+
+    A NULL `acknowledged_at` marks **everything** new rather than nothing: a
+    person who has never opened the screen has by definition not seen the
+    moves that concern them, and the opposite default would swallow exactly
+    the first notification worth sending.
+
+    Compared as `datetime`s, never as text -- both sides come from Postgres
+    as aware timestamps, and string comparison would quietly do the wrong
+    thing across a timezone or a differing microsecond precision.
+    """
+    marked = []
+    for row in rows:
+        created = row.get("created_at")
+        is_new = True
+        if acknowledged_at is not None and created is not None:
+            try:
+                is_new = created > acknowledged_at
+            except TypeError:
+                # Mixed aware/naive timestamps: treat as new rather than
+                # dropping the notification on an error nobody would see.
+                is_new = True
+        entry = dict(row)
+        entry["is_new"] = is_new
+        marked.append(entry)
+    return marked
 
 
 def _names(row: dict, employee: str) -> bool:

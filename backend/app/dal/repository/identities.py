@@ -105,10 +105,25 @@ class IdentityRepository(RepositoryBase):
 
     def find_identity(self, team_id: str, employee: str) -> Optional[dict]:
         rows = self._all("""
-            SELECT id, team_id, employee, created_at, last_seen_at
+            SELECT id, team_id, employee, created_at, last_seen_at,
+                   acknowledged_at
             FROM employee_identities WHERE team_id=%s AND employee=%s
         """, (team_id, (employee or "").strip()))
         return rows[0] if rows else None
+
+    def acknowledge(self, team_id: str, employee: str) -> None:
+        """Mark everything up to now as seen by this employee.
+
+        Separate from `last_seen_at`, which moves on every login: by the time
+        the personal area renders, that one is already "now" and nothing
+        could ever be new against it. This advances only when the employee
+        says they have read what they were shown, which is what makes "what
+        changed for me since I last looked" answerable (D16).
+        """
+        self._execute("""
+            UPDATE employee_identities SET acknowledged_at=NOW()
+            WHERE team_id=%s AND employee=%s
+        """, (team_id, (employee or "").strip()))
 
     def claimed_names(self, team_id: str) -> List[str]:
         """Which names are already taken.

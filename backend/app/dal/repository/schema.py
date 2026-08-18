@@ -299,4 +299,21 @@ CREATE INDEX IF NOT EXISTS constraint_requests_team_idx
     ON constraint_requests (team_id, status, created_at DESC);
 
 COMMIT;
+
+-- Guarded migration: what the employee has already been shown.
+--
+-- Deliberately NOT `last_seen_at`, which moves on every login and so is
+-- always "now" by the time the personal area renders -- there would be
+-- nothing left to be new. This column advances only when the employee
+-- acknowledges what they were shown, which is what makes "what changed for
+-- me since I last looked" answerable at all (D16).
+--
+-- NULL means "has never acknowledged anything". Read as *everything is new*
+-- rather than *nothing is*: a person who has never opened the screen has by
+-- definition not seen the moves that concern them, and defaulting the other
+-- way would silently swallow exactly the first notification that matters.
+ALTER TABLE employee_identities
+    ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMPTZ;
+
+COMMIT;
 """

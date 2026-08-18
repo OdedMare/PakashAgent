@@ -116,6 +116,19 @@ def build_router(service, guards, secret: str, days: int) -> APIRouter:
         """
         return service.me(session["team_id"], session["employee"])
 
+    @router.post("/acknowledge")
+    def acknowledge(session: dict = Depends(employee)) -> dict:
+        """Mark the changes just shown as read (D16).
+
+        Sent by the personal area once it has rendered them, never by the
+        login: the point is that a person *saw* the moves affecting them, and
+        arriving is not seeing.
+
+        The employee comes from the signed cookie, so this can only ever
+        settle the caller's own badge.
+        """
+        return service.acknowledge(session["team_id"], session["employee"])
+
     # -- constraint requests, employee side --------------------------------
 
     @router.get("/requests")

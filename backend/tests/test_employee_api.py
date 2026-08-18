@@ -15,6 +15,8 @@ ever moves the audit's arithmetic on its own, `test_a_pending_request_is_not_a
 _constraint` fails and D14's central promise has been broken.
 """
 
+import datetime
+
 import pytest
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -56,6 +58,10 @@ class _FakeIdentities:
 
     def __init__(self):
         self.identities = {}       # (team, employee) -> passcode_hash
+        # (team, employee) -> when they last acknowledged their changes.
+        # Separate from the hash exactly as the real column is separate from
+        # `last_seen_at`: a login is not a reading (D16).
+        self.acknowledged = {}
         self.requests = {}         # id -> row
         # Promoted constraints. Named `_constraints` because `availability`
         # is a *method* on the real repository -- a list attribute of that
@@ -88,8 +94,27 @@ class _FakeIdentities:
             for (team, name) in self.identities if team == team_id
         ]
 
+    def find_identity(self, team_id, employee):
+        key = (team_id, (employee or "").strip())
+        if key not in self.identities:
+            return None
+        return {
+            "team_id": team_id, "employee": key[1],
+            "created_at": None, "last_seen_at": None,
+            "acknowledged_at": self.acknowledged.get(key),
+        }
+
+    def acknowledge(self, team_id, employee):
+        key = (team_id, (employee or "").strip())
+        if key in self.identities:
+            self.acknowledged[key] = datetime.datetime.now(
+                datetime.timezone.utc
+            )
+
     def release_identity(self, team_id, employee):
-        self.identities.pop((team_id, (employee or "").strip()), None)
+        key = (team_id, (employee or "").strip())
+        self.identities.pop(key, None)
+        self.acknowledged.pop(key, None)
 
     # -- requests --
     def submit_request(self, team_id, employee, constraint_date,
