@@ -85,11 +85,19 @@ export interface RuntimeSettings {
 
 /** Who the current visitor is inside a workspace.
  *
- *  `boss` authors — the interview, the settings, the schedule. `member` only
- *  reads (D5). The role arrives from the signed session cookie and is never
- *  chosen by the client, so this type describes what the server said, not a
- *  preference the UI may set. */
-export type Role = "boss" | "member";
+ *  `boss` authors — the interview, the settings, the schedule.
+ *
+ *  `member` is the share link: it reads the published roster and carries no
+ *  identity at all (D10), so nothing personal can be scoped to it.
+ *
+ *  `employee` is a claimed identity (D14). It reads its *own* hours and may
+ *  submit a constraint **request** — and nothing else. It cannot assign,
+ *  move, or publish; those still answer only to `boss`.
+ *
+ *  The role arrives from the signed session cookie and is never chosen by the
+ *  client, so this type describes what the server said, not a preference the
+ *  UI may set. */
+export type Role = "boss" | "member" | "employee";
 
 /** A team on the login picker. Deliberately carries no secrets — this list
  *  is served before anyone has authenticated. */

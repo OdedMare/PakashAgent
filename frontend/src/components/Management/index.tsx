@@ -24,6 +24,7 @@ import { AgentChat } from "./AgentChat";
 import { Calendar, formatDate } from "./Calendar";
 import { ConfirmMove } from "./ConfirmMove";
 import { History } from "./History";
+import { RequestInbox } from "./RequestInbox";
 import { TeamPanel } from "./TeamPanel";
 import { Warnings } from "./Warnings";
 import { useManagement } from "./useManagement";
@@ -245,6 +246,10 @@ export function Management({
             onConfirm={state.confirm}
             onDismiss={state.dismissProposal}
           />
+          {/* Employee submissions awaiting a ruling (D14). Above the team
+              panel because a pending request is a thing to act on, while the
+              panel below it is reference. */}
+          <RequestInbox onDecided={state.refresh} />
           <TeamPanel
             employees={overview?.employees ?? []}
             shifts={overview?.shifts ?? []}

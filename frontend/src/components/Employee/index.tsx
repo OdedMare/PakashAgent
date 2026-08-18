@@ -1,0 +1,239 @@
+"use client";
+
+import { CalendarClock, LogOut, Moon, Sun, UserCircle } from "lucide-react";
+
+import { useTheme } from "@/components/Interview/useTheme";
+import { Calendar } from "@/components/Management/Calendar";
+import type { EmployeeView } from "@/types";
+
+import { ConstraintForm } from "./ConstraintForm";
+import { HoursPanel } from "./HoursPanel";
+import { IdentityGate } from "./IdentityGate";
+import { useEmployee } from "./useEmployee";
+
+/** The employee's personal area.
+ *
+ *  What [D14](../../../../docs/DECISIONS.md) added, and the boundary of what
+ *  it added: this screen shows one person their own hours, their own shifts
+ *  and their own warnings, and lets them **ask** not to be scheduled. It has
+ *  no control that edits a schedule — the calendar below is the same
+ *  `readOnly` grid the team view renders, taking no `onDrop`, because the
+ *  manager remains the sole decider.
+ *
+ *  Everything shown is scoped server-side by the name in the signed cookie.
+ *  There is no name parameter anywhere in this component tree, which is what
+ *  keeps one employee out of another's hours and stated reasons. */
+export function Employee({ onLeave }: { onLeave?: () => void }) {
+  const { theme, toggle } = useTheme();
+  const state = useEmployee();
+  const { view } = state;
+
+  // Not asked yet. Rendering the gate here would flash a claim screen at
+  // someone who is already signed in.
+  if (view === undefined) {
+    return <div className="workspace-gate" aria-busy="true" />;
+  }
+
+  if (view === null) {
+    return (
+      <IdentityGate
+        roster={state.roster}
+        busy={state.busy}
+        error={state.error}
+        onClaim={state.claim}
+        onLogin={state.login}
+        onDismissError={state.clearError}
+      />
+    );
+  }
+
+  const shiftNames = readShiftNames(view.shifts);
+
+  return (
+    <div className="interview">
+      <header className="interview-header">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true">
+            <UserCircle size={17} />
+          </span>
+          <span>
+            {view.employee}
+            <span className="brand-sub"> · האזור שלי</span>
+          </span>
+        </div>
+        <div className="header-actions">
+          <button
+            type="button"
+            className="icon-button"
+            onClick={toggle}
+            aria-label={theme === "dark" ? "מצב בהיר" : "מצב כהה"}
+          >
+            {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
+          <button
+            type="button"
+            className="icon-button"
+            onClick={() => {
+              void state.logout();
+              onLeave?.();
+            }}
+            aria-label="יציאה"
+            title="יציאה"
+          >
+            <LogOut size={17} />
+          </button>
+        </div>
+      </header>
+
+      <main id="employee" className="employee-main">
+        {view.schedule ? (
+          <>
+            <HoursPanel summary={view.summary} fairness={view.fairness} />
+            <MyShifts view={view} />
+            <ConstraintForm
+              shiftNames={shiftNames}
+              requests={view.requests}
+              busy={state.busy}
+              onSubmit={state.submit}
+              onWithdraw={state.withdraw}
+            />
+            <MyChanges view={view} />
+            <section className="employee-panel">
+              <h2>הסידור המלא</h2>
+              {/* `readOnly`, no `onDrop`: there is no gesture here that could
+                  change anything. The same component the manager uses, so the
+                  team never sees a second rendering that could drift. */}
+              <Calendar
+                schedule={view.schedule}
+                constraints={view.summary.constraints}
+                readOnly
+              />
+            </section>
+          </>
+        ) : (
+          <div className="center">
+            <span className="brand-mark" aria-hidden="true">
+              <CalendarClock size={17} />
+            </span>
+            <h1>הסידור עוד לא פורסם</h1>
+            <p>
+              ברגע שהמנהל יפרסם את הסידור יופיעו כאן השעות והמשמרות שלך.
+              אפשר לשלוח בקשות אילוץ כבר עכשיו.
+            </p>
+            <ConstraintForm
+              shiftNames={shiftNames}
+              requests={view.requests}
+              busy={state.busy}
+              onSubmit={state.submit}
+              onWithdraw={state.withdraw}
+            />
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+/** This person's shifts, each with who else is on it.
+ *
+ *  The teammate list needs no new data — the roster is already visible to the
+ *  whole team — and it answers a question people actually ask before a
+ *  shift. */
+function MyShifts({ view }: { view: EmployeeView }) {
+  const withMe = new Map(
+    view.teammates.map((row) => [`${row.date}|${row.shift}`, row.with]),
+  );
+
+  if (view.summary.shifts.length === 0) {
+    return (
+      <section className="employee-panel">
+        <h2>המשמרות שלי</h2>
+        <p className="employee-note">
+          אין לך משמרות בתקופה הזו. אם זו טעות — כדאי לדבר עם המנהל.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="employee-panel">
+      <h2>המשמרות שלי</h2>
+      <ul className="shift-list">
+        {view.summary.shifts.map((shift) => {
+          const others = withMe.get(`${shift.date}|${shift.shift}`) ?? [];
+          return (
+            <li key={`${shift.date}-${shift.shift}`}>
+              <div className="shift-when">
+                <strong>{shift.weekday}</strong>
+                <span>{formatDate(shift.date)}</span>
+              </div>
+              <div className="shift-what">
+                <span className="shift-name">{shift.shift}</span>
+                {shift.is_on_call ? (
+                  <span className="shift-oncall">כוננות</span>
+                ) : null}
+                {others.length > 0 ? (
+                  <span className="shift-with">עם {others.join(", ")}</span>
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+/** Changes that touched this person, with the manager's reason.
+ *
+ *  Read from the append-only change log (D4) and filtered server-side to
+ *  entries naming them. Showing the reason is what turns an arbitrary-looking
+ *  move into something explained — which is the reason D8 required it be
+ *  recorded in the first place. */
+function MyChanges({ view }: { view: EmployeeView }) {
+  if (view.changes.length === 0) return null;
+
+  return (
+    <section className="employee-panel">
+      <h2>שינויים שנגעו לי</h2>
+      <ul className="change-list">
+        {view.changes.map((entry) => (
+          <li key={entry.id}>
+            <span className="change-when">
+              {entry.slot_date ? formatDate(entry.slot_date) : ""}
+              {entry.shift_name ? ` · ${entry.shift_name}` : ""}
+            </span>
+            {entry.reason ? (
+              <span className="change-reason">{entry.reason}</span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** Shift names as the profile recorded them.
+ *
+ *  Read defensively: the profile is model-produced JSON whose shape the
+ *  interview owns, so anything unexpected degrades to an empty list rather
+ *  than throwing. Never hardcode shift names — they are per-workplace data
+ *  (D9). */
+function readShiftNames(shifts: EmployeeView["shifts"]): string[] {
+  if (!Array.isArray(shifts)) return [];
+  return shifts
+    .map((shift) =>
+      typeof shift === "string"
+        ? shift
+        : ((shift as { name?: unknown })?.name ?? ""),
+    )
+    .filter((name): name is string => typeof name === "string" && name !== "");
+}
+
+function formatDate(iso: string): string {
+  const date = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return iso;
+  return `${date.getDate()}.${date.getMonth() + 1}`;
+}
+
+export { useEmployee };

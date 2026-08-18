@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { Employee } from "@/components/Employee";
 import { Interview } from "@/components/Interview";
 import { Management } from "@/components/Management";
 
@@ -39,7 +40,14 @@ export function Workspace({ memberToken }: { memberToken?: string }) {
   }
 
   if (workspace.role === "member") {
-    return <MemberArea workspace={workspace} onLeave={state.logout} />;
+    return <MemberSurface state={state} workspace={workspace} />;
+  }
+
+  // An employee who signed in personally. The role is on the signed cookie,
+  // so this is a render of what the server decided — every route the personal
+  // area calls is guarded independently by `Guards.employee()`.
+  if (workspace.role === "employee") {
+    return <Employee onLeave={state.logout} />;
   }
 
   return <BossSurface state={state} workspace={workspace} />;
@@ -84,6 +92,35 @@ function BossSurface({
       onLogout={state.logout}
       onRotateLink={state.rotateLink}
       onDone={taught ? () => setReinterview(false) : undefined}
+    />
+  );
+}
+
+/** The team view, with a door into the personal area.
+ *
+ *  Two surfaces rather than one because they authenticate differently: the
+ *  share link grants the read-only roster (D10), and claiming a name grants a
+ *  personal identity on top of it (D14). Keeping the roster reachable without
+ *  claiming is deliberate — a team that does not want identities is not
+ *  forced into them. */
+function MemberSurface({
+  state,
+  workspace,
+}: {
+  state: ReturnType<typeof useWorkspace>;
+  workspace: NonNullable<ReturnType<typeof useWorkspace>["workspace"]>;
+}) {
+  const [personal, setPersonal] = useState(false);
+
+  if (personal) {
+    return <Employee onLeave={() => setPersonal(false)} />;
+  }
+
+  return (
+    <MemberArea
+      workspace={workspace}
+      onLeave={state.logout}
+      onOpenPersonal={() => setPersonal(true)}
     />
   );
 }

@@ -1,0 +1,560 @@
+/* The employee's personal area (D14).
+ *
+ * Every colour is a token from `tokens.css`, never a literal: the palette has
+ * a dark variant, and a hardcoded hex here would look correct in one theme
+ * and wrong in the other.
+ *
+ * RTL is not a theme (frontend/CLAUDE.md) — spacing uses logical properties
+ * (`margin-inline`, `padding-inline`) so the layout follows `dir="rtl"`
+ * rather than being mirrored by hand.
+ */
+
+/* -- the claim / sign-in gate --------------------------------------------- */
+
+.identity-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block: 18px 4px;
+}
+
+.identity-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.identity-name:hover {
+  border-color: var(--border-strong);
+}
+
+.identity-name.is-selected {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.identity-name:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+/* A claimed name stays visible and selectable — its owner still has to sign
+   in, and hiding it would read as the roster being broken. */
+.identity-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.identity-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-block-start: 16px;
+  text-align: start;
+}
+
+.identity-form label {
+  font-size: 0.85rem;
+  color: var(--text-soft);
+}
+
+.identity-form input {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.identity-form input:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: var(--focus);
+}
+
+.identity-form button {
+  padding: 10px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  color: var(--text-on-dark);
+  font: inherit;
+  cursor: pointer;
+}
+
+.identity-form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.identity-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* -- the personal area ---------------------------------------------------- */
+
+.employee-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 900px;
+  margin-inline: auto;
+  padding: 20px 16px 48px;
+}
+
+.employee-panel {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.employee-panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.employee-panel h3 {
+  margin: 18px 0 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+.employee-note {
+  margin: 8px 0 0;
+  font-size: 0.83rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* -- the hours tiles ------------------------------------------------------ */
+
+.employee-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.employee-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.employee-stat .stat-icon {
+  color: var(--primary);
+}
+
+.employee-stat .stat-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.employee-stat .stat-value {
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.employee-stat .stat-note {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.employee-breakdown {
+  margin-block-start: 16px;
+}
+
+.employee-breakdown ul,
+.shift-list,
+.change-list,
+.request-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.employee-breakdown li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-block-end: 1px solid var(--border);
+  font-size: 0.87rem;
+}
+
+.employee-breakdown li:last-child {
+  border-block-end: none;
+}
+
+.breakdown-name {
+  flex: 1;
+  color: var(--text);
+}
+
+.breakdown-count,
+.breakdown-hours {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.breakdown-hours {
+  min-width: 62px;
+  text-align: end;
+  color: var(--text-soft);
+}
+
+/* -- warnings: advisory, never an error state (D3) ------------------------ */
+
+.employee-warnings {
+  margin-block-start: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--warning-soft);
+}
+
+.employee-warnings h2 {
+  margin-block-end: 8px;
+  font-size: 0.88rem;
+  color: var(--warning);
+}
+
+.employee-warnings ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.employee-warnings li {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+/* -- my shifts ------------------------------------------------------------ */
+
+.shift-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 10px 0;
+  border-block-end: 1px solid var(--border);
+}
+
+.shift-list li:last-child {
+  border-block-end: none;
+}
+
+.shift-when {
+  display: flex;
+  flex-direction: column;
+  min-width: 58px;
+}
+
+.shift-when strong {
+  font-size: 0.87rem;
+  color: var(--text);
+}
+
+.shift-when span {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.shift-what {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.shift-name {
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
+.shift-oncall {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-soft);
+  font-size: 0.72rem;
+}
+
+.shift-with {
+  font-size: 0.79rem;
+  color: var(--text-muted);
+}
+
+/* -- the constraint request form ------------------------------------------ */
+
+.constraint-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-block-start: 12px;
+}
+
+.constraint-form label {
+  font-size: 0.83rem;
+  color: var(--text-soft);
+}
+
+.constraint-form input[type="date"],
+.constraint-form select,
+.constraint-form textarea {
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+.constraint-form input:focus-visible,
+.constraint-form select:focus-visible,
+.constraint-form textarea:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: var(--focus);
+}
+
+.constraint-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-block-start: 4px;
+  font-size: 0.85rem;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.constraint-toggle input {
+  inline-size: 16px;
+  block-size: 16px;
+  accent-color: var(--primary);
+}
+
+.constraint-form button[type="submit"] {
+  align-self: flex-start;
+  margin-block-start: 8px;
+  padding: 9px 18px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  color: var(--text-on-dark);
+  font: inherit;
+  cursor: pointer;
+}
+
+.constraint-form button[type="submit"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* -- submitted requests --------------------------------------------------- */
+
+.request-list li {
+  padding: 11px 0;
+  border-block-end: 1px solid var(--border);
+}
+
+.request-list li:last-child {
+  border-block-end: none;
+}
+
+.request-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.request-date {
+  font-size: 0.83rem;
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
+/* Pending is deliberately neutral, not a warning colour: waiting is the
+   normal state of a submission, not a problem with it. */
+.status.pending {
+  background: var(--surface-3);
+  color: var(--text-soft);
+}
+
+.status.approved {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.status.rejected {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.status.withdrawn {
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+
+.request-reason,
+.request-decision {
+  margin: 6px 0 0;
+  font-size: 0.83rem;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+/* The manager's answer is set apart: on a rejection it is the whole point of
+   the row, and it must not read as the employee's own text. */
+.request-decision {
+  padding-inline-start: 10px;
+  border-inline-start: 2px solid var(--border-strong);
+  color: var(--text-muted);
+}
+
+.request-withdraw {
+  margin-block-start: 8px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.request-withdraw:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.request-withdraw:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* -- changes that touched this person ------------------------------------- */
+
+.change-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 0;
+  border-block-end: 1px solid var(--border);
+}
+
+.change-list li:last-child {
+  border-block-end: none;
+}
+
+.change-when {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.change-reason {
+  font-size: 0.85rem;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+/* -- the manager's request inbox ------------------------------------------ */
+
+.request-inbox .request-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-start: 8px;
+}
+
+.request-inbox .request-actions input {
+  flex: 1;
+  min-inline-size: 160px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.83rem;
+}
+
+.request-inbox button {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.request-inbox button.approve:hover:not(:disabled) {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.request-inbox button.reject:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.request-inbox button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inbox-count {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 0.74rem;
+}

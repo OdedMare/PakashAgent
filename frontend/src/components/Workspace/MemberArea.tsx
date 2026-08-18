@@ -1,18 +1,31 @@
 "use client";
 
-import { CalendarClock, LogOut, Moon, Sun, Users } from "lucide-react";
+import {
+  CalendarClock,
+  LogOut,
+  Moon,
+  Sun,
+  UserCircle,
+  Users,
+} from "lucide-react";
 
 import { useTheme } from "@/components/Interview/useTheme";
 import { Calendar, formatDate } from "@/components/Management/Calendar";
 import { useManagement } from "@/components/Management/useManagement";
 import type { TeamView } from "@/types";
 
-/** What a team member sees.
+/** What a team member sees before they have a personal identity.
  *
- *  Read-only, and not by omission — D5 makes the boss the sole actor, so this
- *  surface deliberately has no controls to edit, accept, decline, or submit
- *  availability. Adding one here would reverse a settled decision, not extend
- *  a screen.
+ *  Read-only, and not by omission. The share link carries no identity at all
+ *  (D10), so there is nobody here to attribute a submission to and nothing to
+ *  scope "my hours" by — which is why this surface has no controls to edit,
+ *  accept, decline, or submit.
+ *
+ *  [D14](../../../../docs/DECISIONS.md) is what changed: an employee may now
+ *  claim their name and get a personal area with their own hours and a
+ *  constraint-request form. That is an **upgrade on top of this view**, not a
+ *  replacement — a team that never claims a name keeps exactly the behaviour
+ *  below. `onOpenPersonal` is the door to it.
  *
  *  The grid is the same `Calendar` the manager uses, in `readOnly` mode: it
  *  takes no `onDrop`, so there is nothing to drag and nothing to drop onto.
@@ -26,9 +39,11 @@ import type { TeamView } from "@/types";
 export function MemberArea({
   workspace,
   onLeave,
+  onOpenPersonal,
 }: {
   workspace: TeamView;
   onLeave: () => void;
+  onOpenPersonal?: () => void;
 }) {
   const { theme, toggle } = useTheme();
   const { overview } = useManagement();
@@ -48,6 +63,17 @@ export function MemberArea({
           </span>
         </div>
         <div className="header-actions">
+          {onOpenPersonal ? (
+            <button
+              type="button"
+              className="icon-button"
+              onClick={onOpenPersonal}
+              aria-label="האזור האישי שלי"
+              title="האזור האישי שלי"
+            >
+              <UserCircle size={17} />
+            </button>
+          ) : null}
           <button
             type="button"
             className="icon-button"
@@ -88,7 +114,8 @@ export function MemberArea({
               readOnly
             />
             <p className="member-note">
-              הדף הזה לצפייה בלבד — שינויים נעשים מול המנהל.
+              הדף הזה לצפייה בלבד — שינויים נעשים מול המנהל. כדי לראות את
+              השעות שלך ולשלוח אילוצים, היכנס/י לאזור האישי.
             </p>
           </div>
         ) : (
