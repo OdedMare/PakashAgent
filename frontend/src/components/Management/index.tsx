@@ -3,6 +3,7 @@
 import {
   AlertCircle,
   CalendarDays,
+  Download,
   Eye,
   EyeOff,
   LogOut,
@@ -187,6 +188,21 @@ export function Management({
             </div>
 
             <div className="toolbar-actions">
+              {/* The copy that leaves the app (D17). Laid out shift-major
+                  like the real source files, so a week can be edited in
+                  Excel and imported back rather than only looked at. */}
+              {schedule ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => state.exportSchedule(schedule.id)}
+                  disabled={state.busy}
+                  title="הורדת הסידור כקובץ אקסל"
+                >
+                  <Download size={14} />
+                  אקסל
+                </button>
+              ) : null}
               {schedule ? (
                 <button
                   type="button"

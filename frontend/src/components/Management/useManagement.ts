@@ -6,6 +6,7 @@ import {
   applyChange,
   briefManager,
   deleteConstraint,
+  downloadSchedule,
   generateSchedule,
   moveAssignment,
   proposeChange,
@@ -57,6 +58,8 @@ export interface ManagementState {
     instructions?: string;
   }) => Promise<void>;
   publish: (scheduleId: string, published: boolean) => Promise<void>;
+  /** Download the period as `.xlsx` (D17). */
+  exportSchedule: (scheduleId: string) => Promise<void>;
   propose: (request: string, reason?: string) => Promise<Proposal | null>;
   confirm: (reason: string) => Promise<void>;
   dismissProposal: () => void;
@@ -181,6 +184,24 @@ export function useManagement(): ManagementState {
     },
     [run, brief],
   );
+
+  /** Hand the period out as a file.
+   *
+   *  Not routed through `run()`: that refetches the world and re-briefs the
+   *  agent after every call, and a download changes nothing for either to
+   *  react to. It still surfaces its Hebrew error the same way, because a
+   *  failed download is otherwise completely silent. */
+  const exportSchedule = useCallback(async (scheduleId: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await downloadSchedule(scheduleId);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
+    } finally {
+      setBusy(false);
+    }
+  }, []);
 
   /** Ask the agent what it would do. Persists nothing.
    *
@@ -314,6 +335,7 @@ export function useManagement(): ManagementState {
     refresh,
     generate,
     publish,
+    exportSchedule,
     propose,
     confirm,
     dismissProposal,

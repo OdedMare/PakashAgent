@@ -29,6 +29,7 @@ from app.bl.briefing import (
     TRIGGER_OPENED,
 )
 from app.bl.changes import ChangeAgent, OP_ASSIGN, OP_REMOVE, OP_SWAP
+from app.bl.export import as_workbook, filename
 from app.bl.scheduler import Scheduler
 from app.common.errors import AgentError, NotFoundError
 from app.dal.repository.schedules import (
@@ -430,6 +431,32 @@ class ScheduleService:
         self, team_id: str, schedule_id: Optional[str] = None
     ) -> List[dict]:
         return self._repository.change_log(team_id, schedule_id)
+
+    # -- leaving the app ---------------------------------------------------
+
+    def workbook(
+        self, team_id: str, schedule_id: Optional[str] = None
+    ) -> tuple:
+        """One period as `.xlsx`, plus the filename to serve it under.
+
+        Exported in the layout `FILE_FORMATS.md` calls Sample A, which is the
+        shape the importer is being built to read — so a week can leave, be
+        edited in Excel, and come back
+        ([D17](../../../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
+
+        The unaudited stored schedule is passed deliberately: an export is a
+        picture of what was decided, and warnings are advice to the manager
+        about it, not part of the roster people read.
+        """
+        schedule = self._require_schedule(team_id, schedule_id)
+        profile = self._repository.team_profile(team_id) or {}
+        workplace = profile.get("workplace")
+        title = ""
+        if isinstance(workplace, dict) and isinstance(
+            workplace.get("name"), str
+        ):
+            title = workplace["name"].strip()
+        return as_workbook(schedule, title=title), filename(schedule, "xlsx")
 
     # -- speaking first ----------------------------------------------------
 

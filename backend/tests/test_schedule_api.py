@@ -678,3 +678,51 @@ def test_briefing_before_the_interview_is_quiet_without_calling_the_model():
     ).json()
 
     assert body["quiet"] is True
+
+
+# -- leaving the app as a file (D17) ---------------------------------------
+
+def test_a_period_downloads_as_a_workbook():
+    app, _ = _build_app([_generation([
+        {"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+         "reason": "דנה מוסמכת לבוקר"},
+    ])])
+    client = _client(app)
+    schedule = client.post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+
+    response = client.get("/api/schedule/export/%s" % schedule["id"])
+
+    assert response.status_code == 200
+    assert "spreadsheetml" in response.headers["content-type"]
+    assert "attachment" in response.headers["content-disposition"]
+    # A real xlsx is a zip; anything else means an error page came back 200.
+    assert response.content[:2] == b"PK"
+
+
+def test_a_member_cannot_download_the_workbook():
+    """The share link is how the team reads the roster. A file is a copy that
+    leaves the app entirely, and handing that out is the manager's call."""
+    app, _ = _build_app([_generation([])])
+    client = _client(app)
+    schedule = client.post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+
+    member = _client(app, role=ROLE_MEMBER)
+    assert member.get(
+        "/api/schedule/export/%s" % schedule["id"]
+    ).status_code == 401
+
+
+def test_one_workspace_cannot_download_anothers_period():
+    app, _ = _build_app([_generation([])])
+    schedule = _client(app).post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+
+    other = _client(app, team=OTHER_TEAM)
+    assert other.get(
+        "/api/schedule/export/%s" % schedule["id"]
+    ).status_code == 404

@@ -504,6 +504,67 @@
   line-height: 1.5;
 }
 
+/* -- what moved since I last looked (D16) --------------------------------- */
+
+/* The banner only exists when there is something new, so it is allowed to be
+   prominent. A permanent "nothing changed" strip would train people to stop
+   reading the one place a real change appears. */
+.change-alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-block-end: 16px;
+  background: var(--primary-soft);
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+}
+
+.change-alert-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.change-alert-body strong {
+  display: block;
+  font-size: 0.9rem;
+}
+
+.change-alert-body p {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-soft);
+  line-height: 1.45;
+}
+
+.change-badge {
+  margin-inline-start: 8px;
+  padding: 1px 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.change-list li.is-new .change-reason {
+  color: var(--text);
+}
+
+/* A dot rather than a colour change on the whole row: the row still has to
+   read as history, and an unread marker that restyles everything makes the
+   list look like a list of problems. */
+.change-dot {
+  display: inline-block;
+  inline-size: 6px;
+  block-size: 6px;
+  margin-inline-end: 6px;
+  background: var(--primary);
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
 /* -- the manager's request inbox ------------------------------------------ */
 
 .request-inbox .request-actions {

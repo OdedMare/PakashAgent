@@ -35,7 +35,7 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | `assignments` | person → slot, **with the agent's reason** (`NOT NULL`) |
 | `availability` | Known unavailability. `source` records where it came from — the manager, the agent, or the manager writing down what an employee reported ([D13](../../../docs/DECISIONS.md#d13--constraints-are-recorded-by-the-manager-with-their-source-marked)) |
 | `change_log` | **Append-only**: what changed, both reasons, when |
-| `employee_identities` | A claimed roster name plus its scrypt passcode hash — one claim per name per team ([D14](../../../docs/DECISIONS.md)) |
+| `employee_identities` | A claimed roster name plus its scrypt passcode hash — one claim per name per team ([D14](../../../docs/DECISIONS.md)). Also holds `acknowledged_at`, the mark behind "what changed for me" ([D16](../../../docs/DECISIONS.md#d16--an-employee-is-told-what-changed-and-acknowledging-is-what-marks-it-read)) |
 | `constraint_requests` | An employee's submission awaiting the manager. **Not** `availability`: pending rows are invisible to `audit.py`, and approval is what promotes one |
 
 The workplace profile — the mission, the **shift vocabulary** (names, times,
@@ -64,6 +64,11 @@ the interview owns its shape.
   reverses [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-).
 - **`change_log` is append-only.** Never update or delete a row. It is the only
   history the system has ([D4](../../../docs/DECISIONS.md#d4--living-schedule-not-versioned)).
+- **`acknowledged_at` and `last_seen_at` are different columns on purpose.**
+  `last_seen_at` moves on every login, so nothing could ever be new against
+  it. `acknowledged_at` moves only when the employee acknowledges what they
+  were shown — collapsing the two would silently delete the feature
+  ([D16](../../../docs/DECISIONS.md#d16--an-employee-is-told-what-changed-and-acknowledging-is-what-marks-it-read)).
 - **`assignments.reason` is not nullable in spirit** — an assignment without the
   agent's reasoning defeats [D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required).
 - A schedule is edited in place. There are no version rows and no rollback.

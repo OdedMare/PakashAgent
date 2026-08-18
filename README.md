@@ -38,10 +38,21 @@ nothing: the manager sends the sentence, the agent proposes, the manager
 confirms with their reason
 ([D15](docs/DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)).
 
+**Employees are told what changed.** Someone with a claimed identity opens
+their personal area and sees, first, what moved since they last looked — with
+the manager's reason attached. Pressing "ראיתי" is what marks it read
+([D16](docs/DECISIONS.md#d16--an-employee-is-told-what-changed-and-acknowledging-is-what-marks-it-read)).
+
+**A schedule can leave.** The manager downloads the period as an Excel file
+laid out like the real source sheets, so a week can be edited outside the app
+and imported back. A message for the group chat is asked of the agent instead
+— it is writing, and writing here is the agent's job
+([D17](docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
+
 Built: the ported `dal/llm` client, settings and runtime settings, the interview
 and its prompt, the workspace layer (teams, boss login, member share links, route
 guards), `bl/audit.py` and its table-driven tests, `bl/scheduler.py`,
-`bl/changes.py`, `bl/briefing.py`, the schedule tables, the management HTTP
+`bl/changes.py`, `bl/briefing.py`, `bl/export.py`, the schedule tables, the management HTTP
 layer, and the RTL UI for all of it.
 
 Not built yet: `bl/importer.py` and the import-confirmation screens — see

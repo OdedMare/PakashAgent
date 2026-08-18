@@ -654,3 +654,93 @@ def test_an_employee_cannot_release_a_claim(client):
     assert client.post(
         "/api/schedule/requests/identities/release", json={"employee": YOSSI}
     ).status_code == 401
+
+
+# --- what changed for me since I last looked (D16) --------------------------
+
+def _change(repository, employee=DANA, action="moved", when=None):
+    """A change-log row naming an employee, at a chosen moment."""
+    repository.changes.append({
+        "team_id": TEAM, "action": action, "employee": employee,
+        "replaced_employee": "", "shift_name": "בוקר",
+        "slot_date": "2026-08-20", "reason": "מחלה",
+        "agent_reason": "המנהל העביר את המשמרת",
+        "created_at": when or datetime.datetime.now(datetime.timezone.utc),
+    })
+
+
+def test_changes_are_new_until_the_employee_acknowledges(client, context):
+    """The whole feature: a moved shift is *news* until it has been read."""
+    _, repository, _ = context
+    _claim(client)
+    _change(repository)
+
+    assert client.get("/api/employee/me").json()["unseen"] == 1
+
+    client.post("/api/employee/acknowledge")
+
+    assert client.get("/api/employee/me").json()["unseen"] == 0
+
+
+def test_a_change_after_acknowledging_is_new_again(client, context):
+    """Acknowledging settles what was shown, not everything that ever
+    follows — otherwise the badge would fire exactly once per person."""
+    _, repository, _ = context
+    _claim(client)
+    _change(repository)
+    client.post("/api/employee/acknowledge")
+
+    _change(repository, action="assigned")
+
+    body = client.get("/api/employee/me").json()
+    assert body["unseen"] == 1
+    assert [row["is_new"] for row in body["changes"]].count(True) == 1
+
+
+def test_everything_is_new_before_the_first_acknowledgement(client, context):
+    """A person who has never opened the screen has not seen the moves that
+    concern them. Defaulting the other way would swallow the first
+    notification, which is the one that matters most."""
+    _, repository, _ = context
+    _claim(client)
+    _change(repository)
+    _change(repository, action="assigned")
+
+    assert client.get("/api/employee/me").json()["unseen"] == 2
+
+
+def test_only_changes_naming_this_employee_are_counted(client, context):
+    """The full change log is the manager's and carries other people's
+    stated reasons."""
+    _, repository, _ = context
+    _claim(client)
+    _change(repository, employee=YOSSI)
+
+    body = client.get("/api/employee/me").json()
+    assert body["unseen"] == 0
+    assert body["changes"] == []
+
+
+def test_acknowledging_settles_only_the_caller(client, context):
+    """The employee comes off the signed cookie, so one person reading their
+    own changes can never clear a colleague's badge."""
+    _, repository, _ = context
+    _claim(client, name=DANA, passcode="1234")
+    _claim(client, name=YOSSI, passcode="5678")
+    _change(repository, employee=DANA)
+    _change(repository, employee=YOSSI)
+
+    # Yossi is the one signed in after the second claim.
+    client.post("/api/employee/acknowledge")
+    assert client.get("/api/employee/me").json()["unseen"] == 0
+
+    _as(client, ROLE_EMPLOYEE, name=DANA)
+    assert client.get("/api/employee/me").json()["unseen"] == 1
+
+
+def test_a_member_without_an_identity_cannot_acknowledge(client):
+    """Acknowledging needs somebody to acknowledge *for*, and the share link
+    carries no identity at all (D10)."""
+    _as(client, ROLE_MEMBER)
+
+    assert client.post("/api/employee/acknowledge").status_code == 401

@@ -324,6 +324,93 @@ reasons.
 
 ---
 
+## D16 — An employee is told what changed, and acknowledging is what marks it read
+
+The personal area leads with **what moved since this person last looked**: a
+count, a banner, and the affected rows marked in their own change list.
+
+`employee_identities.acknowledged_at` is what "last looked" means, and it is
+deliberately **not** `last_seen_at`. That column advances on every login, so
+by the time the personal area renders it is already *now* and nothing could
+ever be new against it. `acknowledged_at` moves only when the employee says
+they have read what they were shown — `POST /api/employee/acknowledge`.
+
+*Why this was the gap:* the change log already recorded every move and its
+reason ([D4](#d4--living-schedule-not-versioned),
+[D8](#d8--two-reasons-both-required)), and
+[D14](#d14--employees-get-real-identities-and-may-submit-constraints-️-reverses-d5-amends-d10)
+already gave each employee a personal view of it. What was missing was the
+smallest part: nothing said *this is new*. A manager could move someone's
+shift, record the reason, publish, and the person would find out by noticing
+a difference in a grid — or not at all. The data was all there; only the mark
+was missing.
+
+**A NULL acknowledgement means everything is new, not nothing.** Somebody who
+has never opened the screen has by definition not seen the moves that concern
+them, and defaulting the other way would swallow precisely the first
+notification worth sending.
+
+**It is a mark, not a message.** Nothing is sent anywhere: no email, no push,
+no employee contact details. That would need a delivery channel and addresses
+the product does not hold, and it is a separate decision from this one. This
+is the app telling someone what changed while they are looking at it.
+
+**It changes nothing about who decides.** An acknowledgement is not consent,
+not an acceptance, and gates nothing —
+[D5](#d5--employees-are-read-only)'s real cost was blocking, and nothing here
+blocks. The manager publishes whether or not anyone has read anything.
+
+**It settles only the caller.** The employee comes off the signed session
+cookie, exactly as every other personal read does, so one person clearing
+their own badge can never clear a colleague's.
+
+---
+
+## D17 — A schedule leaves as a file; a message is something the agent writes
+
+Two different things people meant by "share the schedule", answered
+differently on purpose.
+
+**The file is Excel, and its layout is not a preference.** `GET
+/api/schedule/export/{id}` serves the period as `.xlsx` laid out shift-major
+with dates across the top — the shape of Sample A in
+[`FILE_FORMATS.md`](FILE_FORMATS.md). That is the layout
+[the importer](BUILD_ORDER.md) is being built to read, so a week can leave,
+be edited in Excel, and come back. Inventing a prettier layout would produce
+a file this product cannot read, which is a strange thing for the product to
+emit.
+
+`bl/export.py` is pure functions over a stored schedule: no model call, no
+repository, nothing decided. It re-presents what the manager already
+confirmed, which is what makes it safe for this to be the one output nobody
+reviews before it is sent.
+
+**The message is the agent's job.** Posting the week to a group chat is
+*writing*, and writing in this product is what the agent does — the manager
+asks for it in the conversation they are already having, and can ask for a
+different one ("רק הסופ״ש", "רק מה שהשתנה"). A fixed template in code would
+be a second voice saying the same thing worse, and it would answer only the
+one phrasing somebody anticipated.
+
+The change agent returns it as `reply` with **no operations**, because
+nothing is changing — and `needs_reason` stays false for the same reason,
+since there is no change to explain the reason for.
+
+**Nothing is sent anywhere.** The product has no channel to the team beyond
+the share link, holds no employee contact details, and neither half of this
+delivers anything. The manager copies the message wherever it goes. Adding a
+real delivery channel is a separate decision with its own consequences —
+addresses, consent, and a schedule that can reach people who have not opened
+the app.
+
+**Export is boss-only.** A member already reads the published roster through
+the share link; a file is a copy that leaves the app entirely, and handing
+that out is the manager's call. The unaudited schedule is exported
+deliberately: warnings are advice to the manager about the roster, not part
+of the roster people read.
+
+---
+
 ## Open
 
 - **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment

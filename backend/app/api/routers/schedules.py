@@ -21,6 +21,7 @@ a team id from the caller.
 from typing import Optional
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import Response
 
 from app.api.contracts import (
     ApplyRequest,
@@ -136,6 +137,29 @@ def build_router(service, guards) -> APIRouter:
             request.slot_date,
             reason=request.reason,
             agent_reason=request.agent_reason,
+        )
+
+    @router.get("/export/{schedule_id}")
+    def export(schedule_id: str, session: dict = Depends(boss)) -> Response:
+        """One period as an `.xlsx` download.
+
+        Boss-only. A member already reads the published roster through the
+        share link; a file is a copy that leaves the app entirely, and
+        handing that out is the manager's call
+        ([D17](../../../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
+
+        The filename is ASCII on purpose — a Hebrew one is correct but
+        travels badly through `Content-Disposition`, and the period is what
+        actually distinguishes one export from the next.
+        """
+        content, name = service.workbook(session["team_id"], schedule_id)
+        return Response(
+            content=content,
+            media_type=(
+                "application/vnd.openxmlformats-officedocument"
+                ".spreadsheetml.sheet"
+            ),
+            headers={"Content-Disposition": 'attachment; filename="%s"' % name},
         )
 
     @router.get("/constraints/list")

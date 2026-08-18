@@ -1,6 +1,14 @@
 "use client";
 
-import { CalendarClock, LogOut, Moon, Sun, UserCircle } from "lucide-react";
+import {
+  BellRing,
+  CalendarClock,
+  Check,
+  LogOut,
+  Moon,
+  Sun,
+  UserCircle,
+} from "lucide-react";
 
 import { useTheme } from "@/components/Interview/useTheme";
 import { Calendar } from "@/components/Management/Calendar";
@@ -86,6 +94,14 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
       </header>
 
       <main id="employee" className="employee-main">
+        {/* What moved since this person last looked (D16). Above everything
+            because it is the reason to open the app at all — an employee
+            whose shift changed should not have to spot it by comparing the
+            grid against memory. */}
+        <ChangeAlert
+          unseen={view.unseen}
+          onAcknowledge={() => void state.acknowledge()}
+        />
         {view.schedule ? (
           <>
             <HoursPanel summary={view.summary} fairness={view.fairness} />
@@ -195,11 +211,19 @@ function MyChanges({ view }: { view: EmployeeView }) {
 
   return (
     <section className="employee-panel">
-      <h2>שינויים שנגעו לי</h2>
+      <h2>
+        שינויים שנגעו לי
+        {view.unseen > 0 ? (
+          <span className="change-badge">{view.unseen} חדשים</span>
+        ) : null}
+      </h2>
       <ul className="change-list">
         {view.changes.map((entry) => (
-          <li key={entry.id}>
+          <li key={entry.id} className={entry.is_new ? "is-new" : undefined}>
             <span className="change-when">
+              {entry.is_new ? (
+                <span className="change-dot" aria-label="חדש" />
+              ) : null}
               {entry.slot_date ? formatDate(entry.slot_date) : ""}
               {entry.shift_name ? ` · ${entry.shift_name}` : ""}
             </span>
@@ -209,6 +233,44 @@ function MyChanges({ view }: { view: EmployeeView }) {
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/** The banner that says something moved.
+ *
+ *  Renders nothing when there is nothing new — this is the common case, and
+ *  a permanent "no changes" strip would train people to stop reading the one
+ *  place a real change appears.
+ *
+ *  Dismissing is what acknowledges: the badge clears because the employee
+ *  looked, not because time passed. */
+function ChangeAlert({
+  unseen,
+  onAcknowledge,
+}: {
+  unseen: number;
+  onAcknowledge: () => void;
+}) {
+  if (unseen <= 0) return null;
+
+  return (
+    <section className="change-alert" role="status">
+      <span className="brand-mark" aria-hidden="true">
+        <BellRing size={16} />
+      </span>
+      <div className="change-alert-body">
+        <strong>
+          {unseen === 1
+            ? "יש שינוי אחד שנוגע אליך"
+            : `יש ${unseen} שינויים שנוגעים אליך`}
+        </strong>
+        <p>מאז הפעם האחרונה שהיית כאן. הפירוט למטה, תחת &rdquo;שינויים שנגעו לי&rdquo;.</p>
+      </div>
+      <button type="button" className="ghost-button" onClick={onAcknowledge}>
+        <Check size={14} />
+        ראיתי
+      </button>
     </section>
   );
 }

@@ -6,8 +6,8 @@ directly — it goes through the repository and the LLM client it was constructe
 with.
 
 Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
-`audit.py`, `scheduler.py`, `changes.py`, `briefing.py`, `schedule_service.py`,
-`prompts/`. Only `importer.py` remains.
+`audit.py`, `scheduler.py`, `changes.py`, `briefing.py`, `export.py`,
+`schedule_service.py`, `prompts/`. Only `importer.py` remains.
 
 | File | Owns |
 |---|---|
@@ -19,6 +19,7 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | `briefing.py` | **The agent speaking first.** Observes; proposes nothing that lands |
 | `schedule_service.py` | Persistence and orchestration around all three: propose, confirm, apply |
 | `audit.py` | **Pure-Python advisory checks. No LLM.** |
+| `export.py` | **A period out as `.xlsx`.** Pure functions, no model, no repository |
 | `importer.py` | Excel/doc ingest with layout inference |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
 
@@ -192,6 +193,24 @@ Two shapes are load-bearing:
 `propose()` audits the schedule *as the change would leave it*, computed in
 memory and never written, so the manager sees the consequence of a change
 before accepting it rather than after.
+
+## `export.py`
+
+A period out as `.xlsx`, shift-major with dates across the top — the shape of
+Sample A in [`../../../docs/FILE_FORMATS.md`](../../../docs/FILE_FORMATS.md).
+That layout is the point, not a style: it is what `importer.py` is being
+built to read, so an exported week can be edited in Excel and brought back
+([D17](../../../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
+
+The grid is built from the **slot grid** and then filled from the
+assignments, never from the assignments alone — an unstaffed shift leaves no
+assignment row, which is the same trap `audit.py` documents for the unfilled
+warning. An empty cell means the shift does not run that day; `UNFILLED`
+means it runs and nobody is on it. Conflating them would report a gap that
+does not exist.
+
+**A message for the team is not here.** That is the agent's job, answered in
+`changes.py` as `reply` with no operations.
 
 ## `importer.py`
 

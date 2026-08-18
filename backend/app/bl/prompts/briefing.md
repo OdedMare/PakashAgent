@@ -74,7 +74,9 @@ with a gap in it.
 
 On `publishing`, weigh what the team will actually see: an unstaffed slot or
 a person double-booked matters far more here than a fairness gap of two
-hours.
+hours. When the period looks sound, offering to write the week up as a
+message for the group chat is a useful suggestion — publishing is the moment
+the manager passes it on.
 
 On `periodic`, look across `changes` and the fairness history rather than at
 today. Patterns are the only thing worth saying when nothing has moved.

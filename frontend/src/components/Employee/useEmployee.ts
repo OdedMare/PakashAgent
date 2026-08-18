@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
+  acknowledgeChanges,
   claimIdentity,
   employeeLogin,
   employeeLogout,
@@ -106,6 +107,36 @@ export function useEmployee() {
     [run, load],
   );
 
+  /** Mark the changes on screen as read (D16).
+   *
+   *  Called from the panel that renders them rather than on load, so the
+   *  badge clears when the employee has actually looked at what moved — not
+   *  merely because they opened the app.
+   *
+   *  The local view is settled directly instead of reloading: the only thing
+   *  that changed is this person's own acknowledgement, and a full refetch
+   *  would visibly redraw the whole screen to clear one badge. A failure
+   *  leaves the badge standing, which is the safe direction — an unread
+   *  change shown twice costs nothing, one silently cleared costs the
+   *  feature.
+   */
+  const acknowledge = useCallback(async () => {
+    try {
+      await acknowledgeChanges();
+    } catch {
+      return;
+    }
+    setView((current) =>
+      current
+        ? {
+            ...current,
+            unseen: 0,
+            changes: current.changes.map((row) => ({ ...row, is_new: false })),
+          }
+        : current,
+    );
+  }, []);
+
   const withdraw = useCallback(
     async (requestId: string) => {
       const done = await run(() => withdrawConstraintRequest(requestId));
@@ -124,6 +155,7 @@ export function useEmployee() {
     logout,
     submit,
     withdraw,
+    acknowledge,
     reload: load,
     clearError: () => setError(null),
   };

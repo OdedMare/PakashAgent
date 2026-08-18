@@ -66,6 +66,12 @@ durable result and exactly the thing the area needs to run on.
 - **A briefing never breaks the screen.** It has its own `busy` flag and never
   sets `error`: a failure means the agent has nothing to say, not that the
   manager's action failed. `brief()` never throws.
+- **Export downloads; it does not navigate.** `downloadSchedule` fetches the
+  binary with the session cookie and triggers the browser's own download from
+  an object URL, so a failure surfaces as a Hebrew error rather than a blank
+  tab ([D17](../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
+  It is the one management action that does *not* go through `run()` — a
+  download changes nothing for a refetch or a briefing to react to.
 - **Everything re-reads after a write.** `useManagement` refetches the overview
   rather than patching locally: the schedule, its warnings, the constraints and
   the log all move together, and a locally patched grid beside a stale audit is
@@ -143,6 +149,15 @@ with warnings is a valid schedule the boss may knowingly accept
 - **`MemberArea` exposes no mutation.** The share link carries no identity
   (D10), so there is nothing to scope a personal view by and nobody to
   attribute a submission to — that is the decision, not an unfinished screen.
+- **The personal area leads with what changed.** `ChangeAlert` renders only
+  when something moved since this person last acknowledged, and pressing
+  "ראיתי" is what marks it read
+  ([D16](../docs/DECISIONS.md#d16--an-employee-is-told-what-changed-and-acknowledging-is-what-marks-it-read)).
+  `is_new` is computed server-side against their own acknowledgement — local
+  state could disagree with the server and would reset on every device. A
+  failed acknowledge leaves the badge standing, which is the safe direction:
+  an unread change shown twice costs nothing, one silently cleared costs the
+  feature.
 - **The personal area (`Employee/`) mutates nothing but its own requests**
   ([D14](../docs/DECISIONS.md)). It renders the same `readOnly` `Calendar`
   with no `onDrop`. Submitting a constraint creates a **pending request** and

@@ -237,6 +237,37 @@ export function briefManager(
   });
 }
 
+/** Download one period as `.xlsx` (D17).
+ *
+ *  Deliberately not routed through `request()`: that helper parses every
+ *  response as JSON, and this one is a binary body. The browser's own
+ *  download is triggered from an object URL rather than by navigating to the
+ *  route, so the session cookie is sent the same way every other call sends
+ *  it and a failure surfaces as a Hebrew error instead of a blank tab.
+ */
+export async function downloadSchedule(scheduleId: string): Promise<void> {
+  const path = `/api/schedule/export/${scheduleId}`;
+  console.debug(`[api] → GET ${path}`);
+  const response = await fetch(path, { credentials: "same-origin" });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    console.error(`[api] ✗ GET ${path} → ${response.status}`, data);
+    throw new Error(errorDetail(data, response.status));
+  }
+
+  // The filename the server chose, so a folder of these stays readable.
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = /filename="?([^"]+)"?/.exec(disposition);
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = match?.[1] ?? "schedule.xlsx";
+  link.click();
+  // Revoked on the next tick: revoking synchronously can race the click on
+  // some browsers and produce an empty file.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 export function proposeChange(
   body: { request: string; schedule_id?: string; reason?: string },
 ): Promise<Proposal> {
@@ -371,6 +402,19 @@ export function employeeMe(): Promise<EmployeeView> {
  *
  *  Returns a **pending** row. Nothing about the schedule has changed — the
  *  manager's approval is what turns this into a constraint (D14). */
+/** Mark the changes just shown as read (D16).
+ *
+ *  Sent once the personal area has rendered them, never on login: the point
+ *  is that a person *saw* the moves affecting them, and arriving is not
+ *  seeing. The employee comes off the signed cookie, so this can only ever
+ *  settle the caller's own badge. */
+export function acknowledgeChanges(): Promise<{
+  employee: string;
+  unseen: number;
+}> {
+  return request("/api/employee/acknowledge", { method: "POST" });
+}
+
 export function submitConstraintRequest(body: {
   constraint_date: string;
   shift_name?: string;

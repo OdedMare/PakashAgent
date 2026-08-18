@@ -376,9 +376,23 @@ export interface EmployeeView {
   teammates: Teammates[];
   requests: ConstraintRequestRow[];
   /** Only log entries naming this person — the full log is the manager's and
-   *  carries other people's stated reasons. */
-  changes: ChangeEntry[];
+   *  carries other people's stated reasons. Each carries `is_new` (D16). */
+  changes: EmployeeChange[];
+  /** How many of those landed since this person last acknowledged. The
+   *  screen leads with it: an employee whose shift moved yesterday should
+   *  not have to compare a grid against memory to find out. */
+  unseen: number;
   shifts: Record<string, unknown>[];
+}
+
+/** A change-log entry as the employee sees it — the manager's row plus
+ *  whether it has been read yet.
+ *
+ *  `is_new` is computed server-side against the employee's own
+ *  acknowledgement, never in the browser: local state could disagree with
+ *  what the server holds and would reset on every device. */
+export interface EmployeeChange extends ChangeEntry {
+  is_new: boolean;
 }
 
 /** A roster name and whether it is already claimed. Carries no last-seen
