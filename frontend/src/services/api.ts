@@ -1,10 +1,14 @@
 import type {
   ChangeEntry,
   Constraint,
+  ConstraintRequestRow,
+  EmployeeIdentity,
+  EmployeeView,
   InterviewTurn,
   ManagementOverview,
   Operation,
   Proposal,
+  RosterName,
   RuntimeSettings,
   Schedule,
   TeamSummary,
@@ -294,5 +298,124 @@ export function deleteConstraint(rowId: string): Promise<{ status: string }> {
 export function listChanges(scheduleId?: string): Promise<ChangeEntry[]> {
   return request<ChangeEntry[]>(
     `/api/schedule/history/list${scheduleId ? `?schedule_id=${scheduleId}` : ""}`,
+  );
+}
+
+/* -- the employee's own area (D14) ----------------------------------------
+ *
+ * None of these send the employee's name in a body. The server reads it from
+ * the signed cookie, which is what stops one employee acting or reading as
+ * another — so there is deliberately no parameter for it.
+ */
+
+/** Roster names and which are taken. Reachable with a share-link session:
+ *  it is the screen someone sees *before* they have an identity. */
+export function employeeRoster(): Promise<{ names: RosterName[] }> {
+  return request<{ names: RosterName[] }>("/api/employee/roster");
+}
+
+/** Claim a roster name and set a passcode. Signs in on success. */
+export function claimIdentity(body: {
+  employee: string;
+  passcode: string;
+}): Promise<{ employee: string }> {
+  return request<{ employee: string }>("/api/employee/claim", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function employeeLogin(body: {
+  employee: string;
+  passcode: string;
+}): Promise<{ employee: string }> {
+  return request<{ employee: string }>("/api/employee/login", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function employeeLogout(): Promise<{ status: string }> {
+  return request<{ status: string }>("/api/employee/logout", {
+    method: "POST",
+  });
+}
+
+/** Hours, shifts, warnings, teammates and requests, in one call. */
+export function employeeMe(): Promise<EmployeeView> {
+  return request<EmployeeView>("/api/employee/me");
+}
+
+/** Submit a constraint request.
+ *
+ *  Returns a **pending** row. Nothing about the schedule has changed — the
+ *  manager's approval is what turns this into a constraint (D14). */
+export function submitConstraintRequest(body: {
+  constraint_date: string;
+  shift_name?: string;
+  available?: boolean;
+  reason?: string;
+}): Promise<ConstraintRequestRow> {
+  return request<ConstraintRequestRow>("/api/employee/requests", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function withdrawConstraintRequest(
+  requestId: string,
+): Promise<ConstraintRequestRow> {
+  return request<ConstraintRequestRow>(
+    `/api/employee/requests/${requestId}/withdraw`,
+    { method: "POST" },
+  );
+}
+
+/* -- the manager's side of the same feature -------------------------------- */
+
+/** Requests awaiting a decision. Boss-only. */
+export function pendingRequests(): Promise<ConstraintRequestRow[]> {
+  return request<ConstraintRequestRow[]>("/api/schedule/requests/pending");
+}
+
+export function allRequests(): Promise<ConstraintRequestRow[]> {
+  return request<ConstraintRequestRow[]>("/api/schedule/requests");
+}
+
+/** Approve, which writes the constraint it becomes — with
+ *  `source='employee_reported'`, keeping the provenance D13 defined. */
+export function approveRequest(
+  requestId: string,
+  reason = "",
+): Promise<{ request: ConstraintRequestRow; constraint: Constraint }> {
+  return request(`/api/schedule/requests/${requestId}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+/** Reject. The reason is required — the employee will read it. */
+export function rejectRequest(
+  requestId: string,
+  reason: string,
+): Promise<{ request: ConstraintRequestRow }> {
+  return request(`/api/schedule/requests/${requestId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function listIdentities(): Promise<EmployeeIdentity[]> {
+  return request<EmployeeIdentity[]>("/api/schedule/requests/identities");
+}
+
+/** Free a claimed name. The manager's tool for a departure or a lost
+ *  passcode — rotating the share link does not do this. */
+export function releaseIdentity(
+  employee: string,
+): Promise<{ status: string }> {
+  return request<{ status: string }>(
+    "/api/schedule/requests/identities/release",
+    { method: "POST", body: JSON.stringify({ employee }) },
   );
 }

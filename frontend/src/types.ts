@@ -246,3 +246,107 @@ export interface Proposal {
   constraints: Record<string, unknown>[];
   warnings: ScheduleWarning[];
 }
+
+/* -- the employee's own area (D14) ----------------------------------------
+ *
+ * Note what these types do NOT carry: the employee's own name on any request
+ * body. It is taken from the signed session cookie server-side, so there is
+ * no field here for a client to put a colleague's name in.
+ */
+
+/** One shift as it appears in a personal list. */
+export interface PersonalShift {
+  date: string;
+  shift: string;
+  hours: number;
+  is_on_call: boolean;
+  weekday: string;
+}
+
+/** Hours grouped by shift name, so a total is legible rather than disputable. */
+export interface ShiftBreakdown {
+  shift: string;
+  count: number;
+  hours: number;
+}
+
+/** One person's own totals, computed by `bl/audit.py` — the same arithmetic
+ *  the manager's warnings come from, so the two can never disagree. */
+export interface PersonalSummary {
+  employee: string;
+  total_hours: number;
+  shift_count: number;
+  days_worked: number;
+  /** On-call is split out because it is the number that surprises people: an
+   *  eight-hour on-call may count as four, which looks like a bug unless the
+   *  breakdown says otherwise (D9). */
+  on_call_count: number;
+  on_call_hours: number;
+  worked_hours: number;
+  by_shift: ShiftBreakdown[];
+  by_week: { week: string; hours: number }[];
+  shifts: PersonalShift[];
+  /** Only warnings naming this person. Team-wide ones are the manager's. */
+  warnings: ScheduleWarning[];
+  constraints: Constraint[];
+}
+
+/** Hours against the team average — the number that answers "why is it
+ *  always me". A report, never a rule (D3). */
+export interface Fairness {
+  average_hours: number;
+  people: { employee: string; hours: number; delta: number }[];
+}
+
+/** A constraint an employee asked for. **Pending changes nothing** — it is
+ *  invisible to the audit until a manager approves it (D14). */
+export interface ConstraintRequestRow {
+  id: string;
+  employee: string;
+  constraint_date: string;
+  shift_name: string;
+  available: boolean;
+  reason: string;
+  status: "pending" | "approved" | "rejected" | "withdrawn";
+  /** The manager's answer. Required on a rejection — a refusal that says
+   *  nothing is how a submission channel stops being used. */
+  decided_reason: string;
+  decided_at: string | null;
+  created_at?: string | null;
+}
+
+/** Who is on shift alongside this person, read off the same assignments as
+ *  the grid so it cannot drift from it. */
+export interface Teammates {
+  date: string;
+  shift: string;
+  with: string[];
+}
+
+/** Everything the personal area opens with, in one call. */
+export interface EmployeeView {
+  employee: string;
+  schedule: Schedule | null;
+  summary: PersonalSummary;
+  fairness: Fairness;
+  teammates: Teammates[];
+  requests: ConstraintRequestRow[];
+  /** Only log entries naming this person — the full log is the manager's and
+   *  carries other people's stated reasons. */
+  changes: ChangeEntry[];
+  shifts: Record<string, unknown>[];
+}
+
+/** A roster name and whether it is already claimed. Carries no last-seen
+ *  time: this screen is reachable by anyone holding the share link. */
+export interface RosterName {
+  employee: string;
+  claimed: boolean;
+}
+
+/** A claim, as the manager's panel sees it. */
+export interface EmployeeIdentity {
+  employee: string;
+  created_at: string | null;
+  last_seen_at: string | null;
+}
