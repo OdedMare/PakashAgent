@@ -1,6 +1,12 @@
 import type {
+  ChangeEntry,
+  Constraint,
   InterviewTurn,
+  ManagementOverview,
+  Operation,
+  Proposal,
   RuntimeSettings,
+  Schedule,
   TeamSummary,
   TeamView,
   Workspace,
@@ -168,4 +174,125 @@ export function changePassword(
     method: "POST",
     body: JSON.stringify({ current, replacement }),
   });
+}
+
+/** Everything the management area opens with. Served to members too — the
+ *  backend shapes it by role, giving them published periods only. */
+export function scheduleOverview(): Promise<ManagementOverview> {
+  return request<ManagementOverview>("/api/schedule/overview");
+}
+
+/** Build a period. Omitted dates mean the current week. Stored as a draft —
+ *  publishing is a separate, deliberate act. */
+export function generateSchedule(
+  body: { starts_on?: string; ends_on?: string; instructions?: string } = {},
+): Promise<Schedule> {
+  return request<Schedule>("/api/schedule/generate", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function publishSchedule(scheduleId: string): Promise<Schedule> {
+  return request<Schedule>(`/api/schedule/${scheduleId}/publish`, {
+    method: "POST",
+  });
+}
+
+export function unpublishSchedule(scheduleId: string): Promise<Schedule> {
+  return request<Schedule>(`/api/schedule/${scheduleId}/unpublish`, {
+    method: "POST",
+  });
+}
+
+export function getSchedule(scheduleId: string): Promise<Schedule> {
+  return request<Schedule>(`/api/schedule/${scheduleId}`);
+}
+
+/** Ask the agent what it would do. **Persists nothing** — the manager
+ *  confirms before anything lands, and that gap is where the agent's
+ *  reasoning gets read (D8). */
+export function proposeChange(
+  body: { request: string; schedule_id?: string; reason?: string },
+): Promise<Proposal> {
+  return request<Proposal>("/api/schedule/propose", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Apply a proposal the manager confirmed. The manager's reason is required
+ *  by now — they have already been asked for it. */
+export function applyChange(body: {
+  schedule_id: string;
+  operations: Operation[];
+  reason: string;
+  agent_reason?: string;
+}): Promise<Schedule> {
+  return request<Schedule>("/api/schedule/apply", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** A drag the manager confirmed. The gesture itself changed nothing — this
+ *  is what the confirmation dialog sends once they have given a reason, so a
+ *  dragged shift carries the same two reasons a spoken change does (D8). */
+export function moveAssignment(body: {
+  assignment_id: string;
+  shift_name: string;
+  slot_date: string;
+  reason: string;
+  agent_reason?: string;
+}): Promise<Schedule> {
+  return request<Schedule>("/api/schedule/move", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function listConstraints(params: {
+  starts_on?: string;
+  ends_on?: string;
+  employee?: string;
+} = {}): Promise<Constraint[]> {
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([, value]) => Boolean(value)) as [
+      string,
+      string,
+    ][],
+  ).toString();
+  return request<Constraint[]>(
+    `/api/schedule/constraints/list${query ? `?${query}` : ""}`,
+  );
+}
+
+/** Record a constraint. Boss-only: employees never write (D5). `source`
+ *  distinguishes the manager entering it from the manager writing down what
+ *  an employee reported. */
+export function setConstraint(body: {
+  employee: string;
+  constraint_date: string;
+  shift_name?: string;
+  available?: boolean;
+  reason?: string;
+  source?: string;
+}): Promise<Constraint> {
+  return request<Constraint>("/api/schedule/constraints", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteConstraint(rowId: string): Promise<{ status: string }> {
+  return request<{ status: string }>(`/api/schedule/constraints/${rowId}`, {
+    method: "DELETE",
+  });
+}
+
+/** The append-only change log — the only history there is (D4). */
+export function listChanges(scheduleId?: string): Promise<ChangeEntry[]> {
+  return request<ChangeEntry[]>(
+    `/api/schedule/history/list${scheduleId ? `?schedule_id=${scheduleId}` : ""}`,
+  );
 }

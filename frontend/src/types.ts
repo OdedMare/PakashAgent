@@ -117,3 +117,132 @@ export interface Workspace {
 export interface TeamView extends Workspace {
   profile: WorkplaceProfile | null;
 }
+
+/** One advisory finding from `bl/audit.py`.
+ *
+ *  Advisory is the whole contract: a schedule carrying warnings is still a
+ *  valid schedule the manager may knowingly accept, so these render as
+ *  non-blocking banners and never gate a save (D3). */
+export interface ScheduleWarning {
+  code: string;
+  severity: "warning" | "notice";
+  message: string;
+  employee: string;
+  date: string;
+  shift: string;
+  details: Record<string, unknown>;
+}
+
+/** One shift on one date — the thing a person is assigned into. */
+export interface Slot {
+  id: string;
+  shift_name: string;
+  slot_date: string;
+  start_time: string;
+  end_time: string;
+  headcount: number;
+  is_on_call: boolean;
+}
+
+/** A person on a slot, with the agent's reason.
+ *
+ *  `reason` is never empty — the backend refuses to store an assignment
+ *  without one, because an assignment nobody can account for is what D8
+ *  exists to prevent. */
+export interface Assignment {
+  id: string;
+  employee: string;
+  shift: string;
+  date: string;
+  reason: string;
+  slot_id: string;
+}
+
+/** One living period (D4) — edited in place, never versioned. */
+export interface Schedule {
+  id: string;
+  starts_on: string;
+  ends_on: string;
+  status: "draft" | "published";
+  slots: Slot[];
+  assignments: Assignment[];
+  warnings: ScheduleWarning[];
+  notes: string[];
+  summary: string;
+}
+
+export interface SchedulePeriod {
+  id: string;
+  starts_on: string;
+  ends_on: string;
+  status: "draft" | "published";
+}
+
+/** A recorded availability constraint.
+ *
+ *  An empty `shift_name` covers the whole day. `source` says where the
+ *  information came from — employees have no account and never write here
+ *  themselves (D5/D10), so `employee_reported` means the manager wrote down
+ *  what someone told them. */
+export interface Constraint {
+  id: string;
+  employee: string;
+  constraint_date: string;
+  shift_name: string;
+  available: boolean;
+  reason: string;
+  source: "manager" | "agent" | "employee_reported" | "interview";
+}
+
+/** One append-only change-log row. Both reasons are present because they
+ *  answer different questions (D8). */
+export interface ChangeEntry {
+  id: string;
+  action: string;
+  employee: string;
+  replaced_employee: string;
+  slot_date: string | null;
+  shift_name: string;
+  reason: string;
+  agent_reason: string;
+  created_at: string | null;
+}
+
+/** Everything the management area opens with, in one call. */
+export interface ManagementOverview {
+  profile: WorkplaceProfile | null;
+  employees: Record<string, unknown>[];
+  shifts: Record<string, unknown>[];
+  schedule: Schedule | null;
+  periods: SchedulePeriod[];
+  availability: Constraint[];
+  changes: ChangeEntry[];
+}
+
+/** One concrete move inside a proposal. */
+export interface Operation {
+  action: "assign" | "remove" | "swap";
+  employee: string;
+  shift: string;
+  date: string;
+  reason: string;
+  with_employee?: string;
+  with_shift?: string;
+  with_date?: string;
+}
+
+/** What the agent would do, and why. **Nothing has been applied.**
+ *
+ *  `needs_reason` true means the agent asked the manager why the change is
+ *  happening and is deliberately proposing nothing until they answer — a
+ *  missing reason is met with a question, never a rejection (D8). */
+export interface Proposal {
+  schedule_id: string;
+  reply: string;
+  needs_reason: boolean;
+  agent_reason: string;
+  stated_reason: string;
+  operations: Operation[];
+  constraints: Record<string, unknown>[];
+  warnings: ScheduleWarning[];
+}

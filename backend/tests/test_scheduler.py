@@ -1,0 +1,342 @@
+"""The scheduler and the change agent, against a fake model.
+
+Both are stateless by design, so their whole contract is testable with no
+database: hand them a profile and a scripted model reply, assert what comes
+back. What these pin down is the part that is *not* the model's judgment —
+the slot grid, which is arithmetic, and the two reason gates, which are
+decisions the product cannot afford to leave to a prompt.
+"""
+
+import pytest
+
+from app.bl.changes import ChangeAgent, OP_ASSIGN, OP_REMOVE, OP_SWAP
+from app.bl.scheduler import Scheduler, build_slots
+from app.common.errors import AgentError
+
+MORNING = "בוקר"
+EVENING = "צהריים"
+
+PROFILE = {
+    "workplace": {"name": "מוקד", "mission": "מענה"},
+    "employees": [
+        {"name": "דנה", "eligible_shifts": [MORNING]},
+        {"name": "יוסי", "eligible_shifts": [MORNING, EVENING]},
+        {"name": "רון", "eligible_shifts": [EVENING]},
+    ],
+    "shifts": [
+        {
+            "name": MORNING, "start_time": "07:00", "end_time": "15:00",
+            "days": [], "is_on_call": False, "hour_weight": 1.0,
+            "staffing": [{"days": [], "headcount": 1, "required_roles": []}],
+        },
+        {
+            "name": EVENING, "start_time": "15:00", "end_time": "23:00",
+            "days": ["יום ראשון"], "is_on_call": False, "hour_weight": 1.0,
+            "staffing": [{"days": [], "headcount": 1, "required_roles": []}],
+        },
+    ],
+    "rules": [{"text": "אסור שתי משמרות ברצף", "priority": "hard"}],
+}
+
+
+class _ScriptedLlm:
+    """Returns the next scripted answer and records what it was asked."""
+
+    def __init__(self, answers):
+        self._answers = list(answers)
+        self.calls = []
+
+    def complete_json(self, system, user, schema=None):
+        self.calls.append({"system": system, "user": user})
+        if not self._answers:
+            raise AssertionError("model called more times than scripted")
+        return self._answers.pop(0)
+
+
+# -- the slot grid ---------------------------------------------------------
+
+def test_slots_cover_every_day_of_the_period():
+    """A shift with no `days` runs every day.
+
+    An empty list means "not restricted", not "never" -- reading it as never
+    would turn a complete-looking profile into an empty schedule.
+    """
+    slots = build_slots(PROFILE, "2026-08-17", "2026-08-19")
+    morning = [slot for slot in slots if slot["shift_name"] == MORNING]
+    assert [slot["slot_date"] for slot in morning] == [
+        "2026-08-17", "2026-08-18", "2026-08-19",
+    ]
+
+
+def test_a_shift_restricted_to_a_weekday_only_appears_on_it():
+    """2026-08-23 is a Sunday; the evening shift runs only on Sundays."""
+    slots = build_slots(PROFILE, "2026-08-17", "2026-08-23")
+    evening = [slot for slot in slots if slot["shift_name"] == EVENING]
+    assert [slot["slot_date"] for slot in evening] == ["2026-08-23"]
+
+
+def test_headcount_follows_the_matching_day_group():
+    shifts = [{
+        "name": MORNING, "start_time": "07:00", "end_time": "15:00",
+        "days": [], "staffing": [
+            {"days": [], "headcount": 3},
+            {"days": ["יום שישי"], "headcount": 1},
+        ],
+    }]
+    slots = build_slots({"shifts": shifts}, "2026-08-20", "2026-08-21")
+    by_date = {slot["slot_date"]: slot["headcount"] for slot in slots}
+    # 2026-08-20 is a Thursday, 2026-08-21 a Friday.
+    assert by_date == {"2026-08-20": 3, "2026-08-21": 1}
+
+
+def test_an_inverted_or_oversized_period_is_refused():
+    with pytest.raises(AgentError):
+        build_slots(PROFILE, "2026-08-20", "2026-08-17")
+    with pytest.raises(AgentError):
+        build_slots(PROFILE, "2026-01-01", "2026-12-31")
+
+
+def test_generating_without_any_shift_is_an_error_not_an_empty_schedule():
+    """A profile with no vocabulary cannot produce a grid, and saying so
+    beats returning an empty schedule that looks like a success."""
+    scheduler = Scheduler(_ScriptedLlm([]))
+    with pytest.raises(AgentError):
+        scheduler.generate({"shifts": []}, "2026-08-17", "2026-08-18")
+
+
+# -- assignments -----------------------------------------------------------
+
+def _reply(assignments, notes=None, summary="סידור לשבוע"):
+    return {
+        "assignments": assignments,
+        "notes": notes or [],
+        "summary": summary,
+    }
+
+
+def test_assignments_come_back_with_their_reasons():
+    llm = _ScriptedLlm([_reply([
+        {"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+         "reason": "דנה מוסמכת לבוקר ובשעות הנמוכות בצוות"},
+    ])])
+    result = Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
+    assert len(result["assignments"]) == 1
+    assert result["assignments"][0]["reason"].startswith("דנה מוסמכת")
+
+
+def test_an_assignment_without_a_reason_is_dropped():
+    """D8 enforced in code, not left to the prompt.
+
+    An assignment nobody can account for is dropped rather than stored --
+    storing it is how the decision gets quietly lost, at exactly the moment
+    the manager would have caught a bad call cheaply.
+    """
+    llm = _ScriptedLlm([_reply([
+        {"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+         "reason": ""},
+        {"employee": "יוסי", "shift": MORNING, "date": "2026-08-18",
+         "reason": "יוסי זמין"},
+    ])])
+    result = Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
+    assert [row["employee"] for row in result["assignments"]] == ["יוסי"]
+
+
+def test_an_assignment_to_a_slot_outside_the_period_is_dropped():
+    llm = _ScriptedLlm([_reply([
+        {"employee": "דנה", "shift": MORNING, "date": "2026-09-01",
+         "reason": "מחוץ לתקופה"},
+    ])])
+    result = Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
+    assert result["assignments"] == []
+
+
+def test_an_unknown_employee_is_dropped():
+    """A name nobody declared cannot be rostered onto a real shift."""
+    llm = _ScriptedLlm([_reply([
+        {"employee": "מישהו אחר", "shift": MORNING, "date": "2026-08-17",
+         "reason": "המצאה"},
+    ])])
+    result = Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
+    assert result["assignments"] == []
+
+
+def test_a_questionable_but_valid_assignment_is_kept():
+    """The scheduler is not a second audit.
+
+    Assigning someone outside `eligible_shifts` is a bad call the audit will
+    comment on. Dropping it here would make this code the authority D3 says
+    it is not -- the agent decides, and code reports.
+    """
+    llm = _ScriptedLlm([_reply([
+        {"employee": "רון", "shift": MORNING, "date": "2026-08-17",
+         "reason": "אין אף אחד אחר זמין"},
+    ])])
+    result = Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
+    assert len(result["assignments"]) == 1
+
+
+def test_duplicate_assignments_are_collapsed():
+    row = {"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+           "reason": "זמינה"}
+    llm = _ScriptedLlm([_reply([row, dict(row)])])
+    result = Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
+    assert len(result["assignments"]) == 1
+
+
+def test_notes_survive_to_the_caller():
+    """`notes` is where a slot left short gets said out loud."""
+    llm = _ScriptedLlm([_reply([], notes=["לא היה מי לאייש את בוקר שישי"])])
+    result = Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
+    assert result["notes"] == ["לא היה מי לאייש את בוקר שישי"]
+
+
+def test_the_model_is_handed_the_rules_as_written():
+    """Rules travel as the manager's sentences, unparsed (D2)."""
+    llm = _ScriptedLlm([_reply([])])
+    Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
+    assert "אסור שתי משמרות ברצף" in llm.calls[0]["user"]
+
+
+# -- the change agent ------------------------------------------------------
+
+SCHEDULE = {
+    "id": "sched-1",
+    "starts_on": "2026-08-17",
+    "ends_on": "2026-08-23",
+    "slots": [
+        {"shift_name": MORNING, "slot_date": "2026-08-20", "headcount": 1},
+        {"shift_name": MORNING, "slot_date": "2026-08-21", "headcount": 1},
+    ],
+    "assignments": [
+        {"employee": "דנה", "shift": MORNING, "date": "2026-08-20",
+         "reason": "שיבוץ מקורי"},
+    ],
+}
+
+
+def _change(operations=None, needs_reason=False, agent_reason="",
+            constraints=None, reply="הצעה"):
+    return {
+        "reply": reply,
+        "needs_reason": needs_reason,
+        "agent_reason": agent_reason,
+        "operations": operations or [],
+        "constraints": constraints or [],
+    }
+
+
+def test_a_request_without_a_reason_asks_for_one_and_proposes_nothing():
+    """D8: the answer to a missing reason is a question, not a rejection."""
+    llm = _ScriptedLlm([_change(
+        operations=[{"action": OP_REMOVE, "employee": "דנה",
+                     "shift": MORNING, "date": "2026-08-20", "reason": ""}],
+        needs_reason=True, reply="למה דנה לא מגיעה?",
+    )])
+    proposal = ChangeAgent(llm).propose(PROFILE, SCHEDULE, "תוריד את דנה")
+    assert proposal["needs_reason"] is True
+    assert proposal["operations"] == []
+
+
+def test_a_stated_reason_lets_the_proposal_through():
+    llm = _ScriptedLlm([_change(
+        operations=[{"action": OP_ASSIGN, "employee": "יוסי",
+                     "shift": MORNING, "date": "2026-08-20",
+                     "reason": "יוסי ב-22 שעות מול רון ב-31"}],
+        agent_reason="יוסי הכי פנוי ומוסמך לבוקר",
+    )])
+    proposal = ChangeAgent(llm).propose(
+        PROFILE, SCHEDULE, "דנה לא מגיעה", stated_reason="מחלה",
+    )
+    assert proposal["needs_reason"] is False
+    assert proposal["stated_reason"] == "מחלה"
+    assert proposal["agent_reason"]
+
+
+def test_operations_are_withdrawn_when_the_model_forgets_to_justify():
+    """A change with neither reason cannot land in the append-only log.
+
+    Enforced here rather than trusted to the prompt: a model that forgets
+    once would otherwise write an unexplained row into the only history the
+    system keeps.
+    """
+    llm = _ScriptedLlm([_change(
+        operations=[{"action": OP_REMOVE, "employee": "דנה",
+                     "shift": MORNING, "date": "2026-08-20", "reason": ""}],
+        agent_reason="",
+    )])
+    proposal = ChangeAgent(llm).propose(PROFILE, SCHEDULE, "תוריד את דנה")
+    assert proposal["needs_reason"] is True
+    assert proposal["operations"] == []
+
+
+def test_an_operation_on_a_slot_the_period_lacks_is_dropped():
+    llm = _ScriptedLlm([_change(
+        operations=[{"action": OP_ASSIGN, "employee": "יוסי",
+                     "shift": MORNING, "date": "2026-12-25",
+                     "reason": "מחוץ לתקופה"}],
+        agent_reason="נימוק",
+    )])
+    proposal = ChangeAgent(llm).propose(
+        PROFILE, SCHEDULE, "שבץ את יוסי", stated_reason="כיסוי",
+    )
+    assert proposal["operations"] == []
+
+
+def test_a_swap_needs_both_halves_to_exist():
+    llm = _ScriptedLlm([_change(
+        operations=[{
+            "action": OP_SWAP, "employee": "דנה", "shift": MORNING,
+            "date": "2026-08-20", "with_employee": "יוסי",
+            "with_shift": MORNING, "with_date": "2026-08-21",
+            "reason": "החלפה",
+        }],
+        agent_reason="שניהם מוסמכים",
+    )])
+    proposal = ChangeAgent(llm).propose(
+        PROFILE, SCHEDULE, "תחליף ביניהם", stated_reason="בקשת העובדים",
+    )
+    assert len(proposal["operations"]) == 1
+    assert proposal["operations"][0]["with_employee"] == "יוסי"
+
+
+def test_an_implied_constraint_is_captured_for_next_time():
+    """"דנה חולה ביום חמישי" is both a change and a fact about Thursday.
+
+    Storing the fact is what stops the next schedule putting her right back.
+    """
+    llm = _ScriptedLlm([_change(
+        operations=[{"action": OP_REMOVE, "employee": "דנה",
+                     "shift": MORNING, "date": "2026-08-20",
+                     "reason": "חולה"}],
+        agent_reason="דנה לא זמינה",
+        constraints=[{"employee": "דנה", "date": "2026-08-20",
+                      "shift": "", "reason": "מחלה"}],
+    )])
+    proposal = ChangeAgent(llm).propose(
+        PROFILE, SCHEDULE, "דנה חולה ביום חמישי", stated_reason="מחלה",
+    )
+    assert proposal["constraints"][0]["employee"] == "דנה"
+
+
+def test_an_empty_request_is_refused():
+    with pytest.raises(AgentError):
+        ChangeAgent(_ScriptedLlm([])).propose(PROFILE, SCHEDULE, "   ")
+
+
+def test_the_proposal_never_applies_anything():
+    """Propose and apply are two calls; this one writes nothing.
+
+    Asserted structurally: the agent is handed no repository at all, so
+    there is nothing it could write to even if it tried.
+    """
+    llm = _ScriptedLlm([_change(
+        operations=[{"action": OP_REMOVE, "employee": "דנה",
+                     "shift": MORNING, "date": "2026-08-20",
+                     "reason": "חולה"}],
+        agent_reason="נימוק",
+    )])
+    before = [dict(row) for row in SCHEDULE["assignments"]]
+    ChangeAgent(llm).propose(
+        PROFILE, SCHEDULE, "דנה חולה", stated_reason="מחלה",
+    )
+    assert SCHEDULE["assignments"] == before
