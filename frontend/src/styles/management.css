@@ -902,3 +902,287 @@
 .briefing[aria-busy="true"] {
   opacity: 0.75;
 }
+
+/* -- stats: the period in numbers ----------------------------------------
+
+   Reads as information, exactly like `.warnings` above it and for the same
+   reason (D3): these figures describe the period, they do not grade it. So
+   there is no red-below-a-threshold coverage bar and no colour that means
+   "bad" — a schedule at 70% coverage is a fact the manager acts on, not a
+   failed check. Charts are CSS bars rather than a charting library: the
+   shapes are simple, and a dependency for four bar charts would be the
+   heaviest thing in this frontend.
+
+   RTL like the rest of the area. The bars grow from the inline start, so
+   they fill right-to-left without a mirrored stylesheet. */
+
+.stats {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+}
+
+.stats h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.7rem;
+  font-size: 0.92rem;
+}
+
+.stats-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-inline-start: auto;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.stats-toggle:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.stats-chevron {
+  transition: transform 180ms ease;
+}
+
+.stats-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+/* -- the headline tiles --------------------------------------------------- */
+
+.stats-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.6rem;
+}
+
+.stats-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.6rem 0.7rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.stats-tile .stat-icon {
+  color: var(--primary);
+}
+
+.stats-tile .stat-label {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.stats-tile .stat-value {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.stats-tile .stat-note {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+/* -- the charts ----------------------------------------------------------- */
+
+.stats-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border);
+}
+
+.stats-chart {
+  margin: 0;
+  min-width: 0;
+}
+
+.stats-chart figcaption {
+  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-soft);
+}
+
+/* Days: vertical columns, one per date in the period. */
+
+.day-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.3rem;
+  height: 7rem;
+}
+
+.day-bar {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+  height: 100%;
+}
+
+.day-bar-value {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  min-height: 0.9rem;
+}
+
+.day-bar-track {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  flex: 1;
+  background: var(--surface-3);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  overflow: hidden;
+}
+
+.day-bar-fill {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  min-height: 2px;
+  background: var(--primary);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  transition: height 220ms ease;
+}
+
+/* Stacked inside the column: a day that looks staffed but is mostly standby
+   has to read differently from one that is not (D9). */
+.day-bar-oncall {
+  width: 100%;
+  background: var(--warning);
+  opacity: 0.85;
+}
+
+.day-bar-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* People and shifts: horizontal rows, growing from the inline start. */
+
+.load-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.load-row {
+  display: grid;
+  grid-template-columns: minmax(4rem, 6rem) 1fr auto;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8rem;
+}
+
+.load-name {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.load-tag {
+  font-size: 0.62rem;
+  padding: 0.02rem 0.3rem;
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-radius: 999px;
+}
+
+.load-track {
+  height: 0.65rem;
+  background: var(--surface-3);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.load-fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  background: var(--primary);
+  border-radius: 999px;
+  transition: width 220ms ease;
+}
+
+.load-fill.is-oncall {
+  background: var(--warning);
+}
+
+/* Nobody on this person at all. Muted rather than absent: the zero row is
+   the most informative one on the chart. */
+.load-fill.is-empty {
+  min-width: 0;
+}
+
+.load-value {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.load-oncall {
+  color: var(--warning);
+}
+
+/* Warning counts: a tally per code, never summed into a score. */
+
+.warning-counts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.warning-counts li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+
+.warning-counts li.warning {
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.warning-count-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-footnote {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
