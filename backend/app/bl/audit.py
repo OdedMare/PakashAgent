@@ -238,6 +238,284 @@ def fairness(
     }
 
 
+def shift_stats(
+    assignments: List[dict],
+    shifts: List[dict],
+    employees: List[dict],
+    slots: Optional[List[dict]] = None,
+    warnings: Optional[List[dict]] = None,
+    availability: Optional[List[dict]] = None,
+) -> dict:
+    """The period in numbers: coverage, load, distribution, and pressure.
+
+    The manager's counterpart to `personal_summary` -- one person's totals
+    turned around to face the whole roster. It is here rather than in `bl/`
+    for the same reason that one is: it must reuse `_shift_hours`, so the
+    hours a chart draws and the hours a warning names are the same
+    arithmetic. A second calculation feeding the graphs would eventually
+    disagree with the audit, and a bar chart that contradicts the warning
+    printed under it is worse than no chart.
+
+    Still a report and still no authority
+    ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+    Nothing here is a target, a quota, or a threshold the schedule is graded
+    against. `coverage` counts filled slots against the headcount the shifts
+    ask for; it does not say a schedule is unacceptable at 80%.
+
+    Everyone on the roster appears in `by_employee`, including people with no
+    shifts at all -- the zero is the most informative bar on the chart, and
+    dropping it would hide exactly the person the manager is looking for.
+    """
+    shift_index = _index_shifts(shifts)
+    rows = [_row(item, shift_index) for item in assignments or []]
+    rows = [row for row in rows if row is not None]
+
+    return {
+        "total_hours": round(sum(row["hours"] for row in rows), 2),
+        "total_shifts": len(rows),
+        "people_working": len(set(row["employee"] for row in rows)),
+        "coverage": _coverage(rows, shifts or [], slots),
+        "by_shift": _stats_by_shift(rows, shift_index),
+        "by_day": _stats_by_day(rows, slots),
+        "by_employee": _stats_by_employee(rows, employees or []),
+        "warning_counts": _warning_counts(warnings or []),
+        "constraint_pressure": _constraint_pressure(
+            rows, availability or []
+        ),
+    }
+
+
+def _coverage(
+    rows: List[dict], shifts: List[dict], slots: Optional[List[dict]]
+) -> dict:
+    """Filled seats against required seats, over the period's grid.
+
+    Counted in *seats*, not slots: a shift needing three people with two on
+    it is two thirds covered, and rounding that up to "filled" would hide the
+    understaffing the manager most wants to see. Slots whose headcount the
+    profile does not state are left out of both halves rather than assumed to
+    need one -- an invented denominator would make the percentage fiction.
+    """
+    filled: Dict[tuple, int] = {}
+    for row in rows:
+        key = (row["date"], row["shift"])
+        filled[key] = filled.get(key, 0) + 1
+
+    if slots:
+        checked = {
+            (_text(slot.get("slot_date")) or _iso_date(slot.get("slot_date")),
+             _text(slot.get("shift_name")))
+            for slot in slots if isinstance(slot, dict)
+        }
+        checked = {pair for pair in checked if pair[0] and pair[1]}
+    else:
+        checked = set(filled)
+
+    required = 0
+    assigned = 0
+    unfilled_slots = 0
+    for date, shift_name in checked:
+        needed = _headcount_for(shifts, shift_name, _parse_date(date))
+        if needed is None:
+            continue
+        count = filled.get((date, shift_name), 0)
+        required += needed
+        assigned += min(count, needed)
+        if count < needed:
+            unfilled_slots += 1
+
+    return {
+        "required": required,
+        "assigned": assigned,
+        "unfilled_slots": unfilled_slots,
+        # Guarded because a period whose shifts state no headcount has a
+        # required of zero, and "0 filled of 0" is 100% covered, not an error.
+        "percent": round(assigned / required * 100, 1) if required else 100.0,
+    }
+
+
+def _stats_by_shift(
+    rows: List[dict], shift_index: Dict[str, dict]
+) -> List[dict]:
+    """Load per shift name, in the workplace's own vocabulary (D9).
+
+    Every shift the vocabulary declares appears, whether or not anyone was
+    put on it. A named shift missing from the chart reads as "no such shift"
+    when it actually means "nobody scheduled" -- opposite meanings.
+    """
+    totals: Dict[str, dict] = {}
+    for name, shift in shift_index.items():
+        totals[name] = {
+            "shift": name,
+            "count": 0,
+            "hours": 0.0,
+            "is_on_call": bool(shift.get("is_on_call")),
+        }
+    for row in rows:
+        entry = totals.setdefault(
+            row["shift"],
+            {"shift": row["shift"], "count": 0, "hours": 0.0,
+             "is_on_call": row["is_on_call"]},
+        )
+        entry["count"] += 1
+        entry["hours"] = round(entry["hours"] + row["hours"], 2)
+    return sorted(totals.values(), key=lambda item: item["shift"])
+
+
+def _stats_by_day(rows: List[dict], slots: Optional[List[dict]]) -> List[dict]:
+    """Headcount and hours per date, ordered as the period runs.
+
+    Dates come from the grid where there is one, so a day nobody was
+    scheduled on is a visible zero rather than a gap the chart closes up.
+    """
+    days: Dict[str, dict] = {}
+
+    def entry(date: str) -> dict:
+        return days.setdefault(
+            date,
+            {
+                "date": date,
+                "weekday": _hebrew_weekday(_parse_date(date)),
+                "count": 0,
+                "hours": 0.0,
+                "on_call": 0,
+            },
+        )
+
+    for slot in slots or []:
+        if not isinstance(slot, dict):
+            continue
+        date = _text(slot.get("slot_date")) or _iso_date(slot.get("slot_date"))
+        if date:
+            entry(date)
+    for row in rows:
+        item = entry(row["date"])
+        item["count"] += 1
+        item["hours"] = round(item["hours"] + row["hours"], 2)
+        if row["is_on_call"]:
+            item["on_call"] += 1
+
+    return [days[key] for key in sorted(days)]
+
+
+def _stats_by_employee(rows: List[dict], employees: List[dict]) -> List[dict]:
+    """Per-person load, heaviest first, with everyone on the roster present.
+
+    The same numbers `fairness` reports, plus the shift and on-call counts
+    behind them -- so the chart can show *why* two people on equal hours are
+    not carrying an equal week.
+    """
+    totals: Dict[str, dict] = {}
+
+    def entry(name: str) -> dict:
+        return totals.setdefault(
+            name,
+            {
+                "employee": name,
+                "hours": 0.0,
+                "shifts": 0,
+                "on_call": 0,
+                "days": 0,
+            },
+        )
+
+    for employee in employees or []:
+        name = _text(
+            employee.get("name") if isinstance(employee, dict) else employee
+        )
+        if name:
+            entry(name)
+
+    worked_days: Dict[str, set] = {}
+    for row in rows:
+        item = entry(row["employee"])
+        item["hours"] = round(item["hours"] + row["hours"], 2)
+        item["shifts"] += 1
+        if row["is_on_call"]:
+            item["on_call"] += 1
+        worked_days.setdefault(row["employee"], set()).add(row["date"])
+
+    for name, dates in worked_days.items():
+        totals[name]["days"] = len(dates)
+
+    return sorted(
+        totals.values(),
+        key=lambda item: (-item["hours"], item["employee"]),
+    )
+
+
+def _warning_counts(warnings: List[dict]) -> List[dict]:
+    """How many findings of each kind, most first.
+
+    Presentation of a count, not a score. A period with six overstaffing
+    notices is not "worse" than one with a single double-booking, and nothing
+    here totals them into a number that would imply it does.
+    """
+    counts: Dict[str, dict] = {}
+    for item in warnings or []:
+        if not isinstance(item, dict):
+            continue
+        code = _text(item.get("code"))
+        if not code:
+            continue
+        entry = counts.setdefault(
+            code,
+            {
+                "code": code,
+                "severity": _text(item.get("severity")) or SEVERITY_NOTICE,
+                "count": 0,
+            },
+        )
+        entry["count"] += 1
+    return sorted(
+        counts.values(),
+        key=lambda item: (
+            0 if item["severity"] == SEVERITY_WARNING else 1,
+            -item["count"],
+            item["code"],
+        ),
+    )
+
+
+def _constraint_pressure(
+    rows: List[dict], availability: List[dict]
+) -> dict:
+    """How constrained the period was, and how often that was overridden.
+
+    `blocked` counts recorded unavailability inside the period; `honored` is
+    how much of it the schedule respected. It answers the question a manager
+    asks after a hard week -- "how much were we working around?" -- which the
+    warning list cannot, because a constraint that was honored produces no
+    warning and so leaves no trace there at all.
+    """
+    assigned = set()
+    for row in rows:
+        assigned.add((row["employee"], row["date"], row["shift"]))
+        assigned.add((row["employee"], row["date"], ""))
+
+    blocked = 0
+    conflicts = 0
+    people = set()
+    for item in availability or []:
+        if not isinstance(item, dict) or item.get("available"):
+            continue
+        employee = _text(item.get("employee"))
+        date = _text(item.get("date"))
+        if not employee or not date:
+            continue
+        blocked += 1
+        people.add(employee)
+        if (employee, date, _text(item.get("shift"))) in assigned:
+            conflicts += 1
+
+    return {
+        "blocked": blocked,
+        "people": len(people),
+        "conflicts": conflicts,
+        "honored": blocked - conflicts,
+    }
+
+
 def _policy(profile: Optional[dict]) -> dict:
     """Thresholds, taken from the profile where it states them.
 
@@ -699,7 +977,8 @@ def _text(value: Any) -> str:
 
 
 __all__ = [
-    "audit", "personal_summary", "fairness", "OVER_HOURS", "CONSECUTIVE", "SHORT_REST", "DOUBLE_BOOKED",
+    "audit", "personal_summary", "fairness", "shift_stats",
+    "OVER_HOURS", "CONSECUTIVE", "SHORT_REST", "DOUBLE_BOOKED",
     "UNAVAILABLE", "UNFILLED", "OVERSTAFFED",
     "SEVERITY_WARNING", "SEVERITY_NOTICE",
 ]

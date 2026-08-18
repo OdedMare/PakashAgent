@@ -23,7 +23,7 @@ the repository, which filters on it. It is never taken from a request body.
 import datetime
 from typing import Any, Dict, List, Optional
 
-from app.bl.audit import audit, fairness
+from app.bl.audit import audit, fairness, shift_stats
 from app.bl.briefing import (
     BriefingAgent,
     TRIGGER_OPENED,
@@ -101,7 +101,60 @@ class ScheduleService:
                 team_id, window[0], window[1]
             ),
             "changes": self._repository.change_log(team_id, limit=40),
+            # The period in numbers, for the control room's charts. Computed
+            # here by `audit.py` rather than in the browser, for the same
+            # reason `personal_summary` is: a chart drawn from a second
+            # implementation of the hours arithmetic would eventually
+            # disagree with the warning printed beside it. A report, never a
+            # grade -- nothing here gates publishing (D3).
+            "stats": self._stats(team_id, profile, schedule),
         }
+
+    def _stats(
+        self, team_id: str, profile: dict, schedule: Optional[dict]
+    ) -> dict:
+        """The current period's numbers, or empty totals when there is none.
+
+        Reads the same assignments, slots and warnings the calendar and the
+        audit already render, so the charts cannot drift from the grid they
+        sit under. Availability is re-read over the period's own window,
+        which is what makes the constraint figures about *this* week rather
+        than about everything ever recorded.
+        """
+        if not schedule:
+            return shift_stats([], _shifts(profile), _employees(profile))
+        window = _window(schedule)
+        return shift_stats(
+            [
+                {
+                    "employee": row.get("employee"),
+                    "shift": row.get("shift"),
+                    "date": _iso(row.get("date")),
+                }
+                for row in schedule.get("assignments") or []
+            ],
+            _shifts(profile),
+            _employees(profile),
+            slots=[
+                {
+                    "shift_name": slot.get("shift_name"),
+                    "slot_date": _iso(slot.get("slot_date")),
+                }
+                for slot in schedule.get("slots") or []
+            ],
+            warnings=schedule.get("warnings") or [],
+            availability=[
+                {
+                    "employee": row.get("employee"),
+                    "date": _iso(row.get("constraint_date")),
+                    "shift": row.get("shift_name") or "",
+                    "available": row.get("available"),
+                }
+                for row in self._repository.availability(
+                    team_id, window[0], window[1]
+                )
+            ],
+        )
 
     # -- generating --------------------------------------------------------
 

@@ -216,6 +216,93 @@ export interface ChangeEntry {
   created_at: string | null;
 }
 
+/* -- the period in numbers ------------------------------------------------
+ *
+ * Every figure below is computed by `bl/audit.py` and rendered as given.
+ * None of it is recomputed in the browser, for the same reason the employee's
+ * hours are not: a chart derived from a second implementation would
+ * eventually disagree with the warning printed beneath it, and a manager
+ * cannot tell by eye which of the two is lying.
+ *
+ * All of it reports and none of it grades. There is no score here, no target,
+ * and no threshold a period passes or fails — coverage at 80% is a fact about
+ * the week, not a verdict on it (D3).
+ */
+
+/** Filled seats against required seats.
+ *
+ *  Seats rather than slots: a shift needing three people with two on it is
+ *  two thirds covered, and rounding that up to "filled" would hide exactly
+ *  the understaffing the number exists to reveal. */
+export interface Coverage {
+  required: number;
+  assigned: number;
+  unfilled_slots: number;
+  percent: number;
+}
+
+/** One shift name's share of the period, in the workplace's own vocabulary
+ *  (D9). Shifts nobody was put on are present at zero — an absent bar reads
+ *  as "no such shift" rather than "nobody scheduled". */
+export interface ShiftLoad {
+  shift: string;
+  count: number;
+  hours: number;
+  is_on_call: boolean;
+}
+
+/** One date's load. Days nobody worked are present as zeros so the chart
+ *  shows the gap instead of closing it up. */
+export interface DayLoad {
+  date: string;
+  weekday: string;
+  count: number;
+  hours: number;
+  on_call: number;
+}
+
+/** One person's load, with the counts behind the hours — so two people on
+ *  equal hours who are not carrying an equal week are distinguishable. */
+export interface EmployeeLoad {
+  employee: string;
+  hours: number;
+  shifts: number;
+  on_call: number;
+  days: number;
+}
+
+/** How many audit findings of one code. A count, never a score. */
+export interface WarningCount {
+  code: string;
+  severity: "warning" | "notice";
+  count: number;
+}
+
+/** How constrained the period was, and how often that was overridden.
+ *
+ *  `honored` is the figure the warning list structurally cannot give: a
+ *  constraint the schedule respected produces no warning, so it leaves no
+ *  trace there at all. */
+export interface ConstraintPressure {
+  blocked: number;
+  people: number;
+  conflicts: number;
+  honored: number;
+}
+
+/** The current period in numbers, for the control room's charts. */
+export interface ShiftStats {
+  total_hours: number;
+  total_shifts: number;
+  people_working: number;
+  coverage: Coverage;
+  by_shift: ShiftLoad[];
+  by_day: DayLoad[];
+  by_employee: EmployeeLoad[];
+  warning_counts: WarningCount[];
+  constraint_pressure: ConstraintPressure;
+}
+
 /** Everything the management area opens with, in one call. */
 export interface ManagementOverview {
   profile: WorkplaceProfile | null;
@@ -225,6 +312,10 @@ export interface ManagementOverview {
   periods: SchedulePeriod[];
   availability: Constraint[];
   changes: ChangeEntry[];
+  /** The charts' numbers, for the period in `schedule`. Part of the same
+   *  call so the figures and the calendar they describe can never be one
+   *  refresh apart. */
+  stats: ShiftStats;
 }
 
 /** One concrete move inside a proposal. */

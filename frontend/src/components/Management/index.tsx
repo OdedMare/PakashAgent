@@ -19,7 +19,7 @@ import { useState } from "react";
 import { useTheme } from "@/components/Interview/useTheme";
 import { SettingsPanel } from "@/components/Settings";
 import { ShareLink } from "@/components/Workspace/ShareLink";
-import type { Assignment, TeamView } from "@/types";
+import type { Assignment, ShiftStats, TeamView } from "@/types";
 
 import { AgentChat } from "./AgentChat";
 import { Briefing } from "./Briefing";
@@ -27,6 +27,7 @@ import { Calendar, formatDate } from "./Calendar";
 import { ConfirmMove } from "./ConfirmMove";
 import { History } from "./History";
 import { RequestInbox } from "./RequestInbox";
+import { Stats } from "./Stats";
 import { TeamPanel } from "./TeamPanel";
 import { Warnings } from "./Warnings";
 import { useManagement } from "./useManagement";
@@ -254,6 +255,13 @@ export function Management({
                 </ul>
               ) : null}
               <Warnings warnings={schedule.warnings} />
+              {/* The same period the calendar above shows, counted. Placed
+                  under the warnings rather than over the grid: the schedule
+                  is what the manager opened this screen for, and the figures
+                  are what they turn to once they have looked at it. Both are
+                  the audit's arithmetic, so the panel and the warnings can
+                  never disagree. */}
+              <Stats stats={overview?.stats ?? EMPTY_STATS} />
             </>
           ) : (
             <EmptyState busy={state.busy} hasProfile={Boolean(overview?.profile)} />
@@ -325,6 +333,23 @@ export function Management({
     </div>
   );
 }
+
+/** Zeros, for the moment before the first overview lands.
+ *
+ *  The backend sends a well-formed `stats` on every overview, including for
+ *  a team with no schedule at all — this exists only so the panel has a
+ *  shape during the first fetch, and it renders nothing from it. */
+const EMPTY_STATS: ShiftStats = {
+  total_hours: 0,
+  total_shifts: 0,
+  people_working: 0,
+  coverage: { required: 0, assigned: 0, unfilled_slots: 0, percent: 100 },
+  by_shift: [],
+  by_day: [],
+  by_employee: [],
+  warning_counts: [],
+  constraint_pressure: { blocked: 0, people: 0, conflicts: 0, honored: 0 },
+};
 
 /** Before the first schedule exists.
  *
