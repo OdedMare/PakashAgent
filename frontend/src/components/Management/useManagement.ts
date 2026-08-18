@@ -118,6 +118,12 @@ export function useManagement(): ManagementState {
    *  The result is held in `proposal` until the manager confirms or dismisses
    *  it. A proposal that comes back with `needs_reason` is the agent asking
    *  why — it carries no operations, and the composer shows the question. */
+  // Read out of the overview rather than reached for inside the callback:
+  // the dependency the compiler infers from `overview?.schedule?.id` is the
+  // whole `overview`, which would not match the narrower one declared here
+  // and costs the memoization entirely.
+  const scheduleId = overview?.schedule?.id;
+
   const propose = useCallback(
     async (request: string, reason?: string) => {
       setBusy(true);
@@ -126,7 +132,7 @@ export function useManagement(): ManagementState {
         const result = await proposeChange({
           request,
           reason: reason ?? "",
-          schedule_id: overview?.schedule?.id,
+          schedule_id: scheduleId,
         });
         setProposal(result);
         return result;
@@ -137,7 +143,7 @@ export function useManagement(): ManagementState {
         setBusy(false);
       }
     },
-    [overview?.schedule?.id],
+    [scheduleId],
   );
 
   /** Apply the pending proposal with the manager's reason attached. */

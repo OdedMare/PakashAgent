@@ -3,6 +3,8 @@
 import { CalendarClock, LogOut, Moon, Sun, Users } from "lucide-react";
 
 import { useTheme } from "@/components/Interview/useTheme";
+import { Calendar, formatDate } from "@/components/Management/Calendar";
+import { useManagement } from "@/components/Management/useManagement";
 import type { TeamView } from "@/types";
 
 /** What a team member sees.
@@ -12,11 +14,15 @@ import type { TeamView } from "@/types";
  *  availability. Adding one here would reverse a settled decision, not extend
  *  a screen.
  *
- *  The schedule grid itself waits on `bl/scheduler.py` and the `schedules`
- *  table, neither of which exists yet (docs/BUILD_ORDER.md steps 5–7). Rather
- *  than render a plausible-looking empty grid whose shape is a guess at data
- *  that has never been produced, this says plainly that nothing is published
- *  yet — and slots the grid in unchanged when it is. */
+ *  The grid is the same `Calendar` the manager uses, in `readOnly` mode: it
+ *  takes no `onDrop`, so there is nothing to drag and nothing to drop onto.
+ *  That is the decision rather than an unfinished screen — and reusing the
+ *  component means the team sees the schedule exactly as the manager does,
+ *  rather than a second rendering that could drift from it.
+ *
+ *  Only *published* schedules ever reach here: the backend filters on it, so
+ *  a draft the manager is still working on is not something a member can see
+ *  even by asking for it directly. */
 export function MemberArea({
   workspace,
   onLeave,
@@ -25,7 +31,9 @@ export function MemberArea({
   onLeave: () => void;
 }) {
   const { theme, toggle } = useTheme();
+  const { overview } = useManagement();
   const shifts = readShiftNames(workspace.profile);
+  const schedule = overview?.schedule ?? null;
 
   return (
     <div className="interview">
@@ -60,22 +68,46 @@ export function MemberArea({
         </div>
       </header>
 
-      <main id="interview">
-        <div className="center">
-          <span className="brand-mark" aria-hidden="true">
-            <CalendarClock size={17} />
-          </span>
-          <h1>הסידור עוד לא פורסם</h1>
-          <p>
-            כאן יופיע הסידור של {workspace.name} ברגע שהמנהל יפרסם אותו. הדף
-            הזה לצפייה בלבד — שינויים נעשים מול המנהל.
-          </p>
-          {shifts.length > 0 ? (
-            <p className="member-shifts">
-              המשמרות בצוות: {shifts.join(" · ")}
+      <main id="interview" className="member-main">
+        {schedule ? (
+          <div className="member-schedule">
+            <div className="management-toolbar">
+              <div className="period">
+                <span className="period-range">
+                  {formatDate(schedule.starts_on)} –{" "}
+                  {formatDate(schedule.ends_on)}
+                </span>
+              </div>
+            </div>
+            {/* `readOnly` and no `onDrop`: there is no gesture here that
+                could change anything, which is D5 rendered rather than
+                merely enforced on the server. */}
+            <Calendar
+              schedule={schedule}
+              constraints={overview?.availability ?? []}
+              readOnly
+            />
+            <p className="member-note">
+              הדף הזה לצפייה בלבד — שינויים נעשים מול המנהל.
             </p>
-          ) : null}
-        </div>
+          </div>
+        ) : (
+          <div className="center">
+            <span className="brand-mark" aria-hidden="true">
+              <CalendarClock size={17} />
+            </span>
+            <h1>הסידור עוד לא פורסם</h1>
+            <p>
+              כאן יופיע הסידור של {workspace.name} ברגע שהמנהל יפרסם אותו. הדף
+              הזה לצפייה בלבד — שינויים נעשים מול המנהל.
+            </p>
+            {shifts.length > 0 ? (
+              <p className="member-shifts">
+                המשמרות בצוות: {shifts.join(" · ")}
+              </p>
+            ) : null}
+          </div>
+        )}
       </main>
     </div>
   );

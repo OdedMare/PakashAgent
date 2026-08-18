@@ -3,6 +3,7 @@
 import {
   AlertCircle,
   CalendarDays,
+  LayoutGrid,
   LogOut,
   MessagesSquare,
   Moon,
@@ -39,11 +40,16 @@ export function Interview({
   busy: workspaceBusy = false,
   onLogout,
   onRotateLink,
+  onDone,
 }: {
   workspace?: TeamView;
   busy?: boolean;
   onLogout?: () => void;
   onRotateLink?: () => void;
+  /** Leave the interview for the management area. Supplied only when there
+   *  is one to go back to — a workplace already taught — so a first-time
+   *  interview has no exit that would strand the manager without a profile. */
+  onDone?: () => void;
 } = {}) {
   const { turn, busy, error, start, answer, reset, retry } = useInterview();
   const { theme, toggle } = useTheme();
@@ -120,6 +126,17 @@ export function Interview({
               <RotateCcw size={17} />
             </button>
           ) : null}
+          {onDone ? (
+            <button
+              type="button"
+              className="icon-button"
+              onClick={onDone}
+              aria-label="חזרה לאיזור הניהול"
+              title="חזרה לאיזור הניהול"
+            >
+              <LayoutGrid size={17} />
+            </button>
+          ) : null}
           {onLogout ? (
             <button
               type="button"
@@ -190,6 +207,22 @@ export function Interview({
 
       {turn && !complete ? (
         <Composer disabled={busy} onSend={answer} />
+      ) : null}
+
+      {/* The interview's result is the profile the management area runs on,
+          so finishing it hands the manager straight to that area rather than
+          leaving them on a summary screen. Reloading is what re-reads
+          `/api/workspace/me`, whose `profile` is the switch. */}
+      {complete ? (
+        <div className="interview-done">
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => (onDone ? onDone() : window.location.reload())}
+          >
+            מעבר לאיזור הניהול
+          </button>
+        </div>
       ) : null}
 
       {settingsOpen ? (

@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
+
 import { Interview } from "@/components/Interview";
+import { Management } from "@/components/Management";
 
 import { Login } from "./Login";
 import { MemberArea } from "./MemberArea";
@@ -39,12 +42,48 @@ export function Workspace({ memberToken }: { memberToken?: string }) {
     return <MemberArea workspace={workspace} onLeave={state.logout} />;
   }
 
+  return <BossSurface state={state} workspace={workspace} />;
+}
+
+/** The manager's side: the interview until the workplace is taught, the
+ *  management area after.
+ *
+ *  The profile is what switches them. It is the interview's durable result,
+ *  so its presence means the workplace has been taught and there is
+ *  something to schedule against — which is exactly the condition the
+ *  management area needs. A manager can still reopen the interview to
+ *  re-teach the workplace, and `reinterview` is that door; it is deliberately
+ *  an explicit choice rather than something the app decides for them, since
+ *  re-running the interview replaces the profile everything downstream reads. */
+function BossSurface({
+  state,
+  workspace,
+}: {
+  state: ReturnType<typeof useWorkspace>;
+  workspace: NonNullable<ReturnType<typeof useWorkspace>["workspace"]>;
+}) {
+  const [reinterview, setReinterview] = useState(false);
+  const taught = Boolean(workspace.profile);
+
+  if (taught && !reinterview) {
+    return (
+      <Management
+        workspace={workspace}
+        busy={state.busy}
+        onLogout={state.logout}
+        onRotateLink={state.rotateLink}
+        onOpenInterview={() => setReinterview(true)}
+      />
+    );
+  }
+
   return (
     <Interview
       workspace={workspace}
       busy={state.busy}
       onLogout={state.logout}
       onRotateLink={state.rotateLink}
+      onDone={taught ? () => setReinterview(false) : undefined}
     />
   );
 }
