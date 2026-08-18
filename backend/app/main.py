@@ -5,11 +5,14 @@ import logging
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from app.api.routers import health, interview, settings
+from app.api.dependencies import Guards
+from app.api.routers import health, interview, settings, workspace
 from app.bl.interview_service import InterviewService
+from app.bl.workspace_service import WorkspaceService
 from app.common.config.settings import Settings
 from app.common.errors import AppError
 from app.common.logging_setup import configure_logging
+from app.common.sessions import generate_secret
 from app.common.runtime_settings.runtime_settings_store import (
     RuntimeSettingsStore,
 )
@@ -25,6 +28,20 @@ store = RuntimeSettingsStore(env)
 repository = Repository(store)
 llm = OpenAIJsonClient(store)
 interview_service = InterviewService(repository, llm)
+workspace_service = WorkspaceService(repository)
+
+# An unset secret is generated per process. Fine for a single-worker dev run,
+# wrong for a multi-worker deployment — each worker would sign with its own
+# key and reject the others' cookies, logging bosses out at random. Warned
+# about rather than defaulted to a constant, since a hardcoded fallback
+# secret is the version of this that fails silently and forever.
+session_secret = env.session_secret or generate_secret()
+if not env.session_secret:
+    _log.warning(
+        "PAKASH_SESSION_SECRET is not set; generated one for this process. "
+        "Sessions will not survive a restart and will break across workers."
+    )
+guards = Guards(session_secret)
 
 app = FastAPI(
     title="PakashAgent",
@@ -33,8 +50,13 @@ app = FastAPI(
 )
 
 app.include_router(health.build_router(repository))
-app.include_router(interview.build_router(interview_service))
-app.include_router(settings.build_router(store, llm))
+app.include_router(
+    workspace.build_router(
+        workspace_service, guards, session_secret, env.session_days
+    )
+)
+app.include_router(interview.build_router(interview_service, guards))
+app.include_router(settings.build_router(store, llm, guards))
 
 
 @app.on_event("startup")

@@ -2,7 +2,7 @@
 
 Fetches and sends. Makes no decisions — those live in `bl/`.
 
-- `database/postgres.py` — connection and schema creation.
+- `database/postgres.py` — connection; verifies the schema exists (never creates it).
 - `llm/` — the OpenAI-compatible JSON client. See [llm/CLAUDE.md](llm/CLAUDE.md).
 - `repository/` — the only SQL owner in the codebase.
 

@@ -29,7 +29,7 @@ uvicorn app.main:app --reload
 
 - `common/` — env defaults (`PAKASH_` prefix) plus the live runtime-settings
   override store. Saved settings override env without restart; secrets masked.
-- `dal/database/postgres.py` — connection and schema creation.
+- `dal/database/postgres.py` — connection; verifies the schema exists.
 - `dal/llm/` — the OpenAI-compatible JSON client and its degradation ladder,
   ported unchanged from AiSummryIO. Model/base URL/API key stay live per call.
 - `dal/repository/` — the only SQL owner.

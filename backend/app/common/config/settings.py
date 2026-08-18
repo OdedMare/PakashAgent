@@ -68,4 +68,17 @@ class Settings(BaseSettings):
     """Read unprefixed, as the SDK expects. Empty is fine when a local
     `llm_base_url` is set — those servers ignore auth."""
 
+    session_secret: str = ""
+    """Key that signs the workspace session cookie.
+
+    Empty means "generate one per process". That is the safe default for a
+    single-machine dev run, and deliberately NOT safe for a deployment with
+    more than one worker: each worker would sign with a different key and
+    reject the others' cookies, so everyone would be logged out at random.
+    Set `PAKASH_SESSION_SECRET` in production — and note that changing it
+    logs every boss out, since their existing cookies stop verifying."""
+
+    session_days: int = 30
+    """How long a boss stays logged in before the cookie expires."""
+
     runtime_settings_file: str = "runtime-settings.json"

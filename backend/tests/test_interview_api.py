@@ -9,9 +9,16 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.api.dependencies import Guards
 from app.api.routers import health, interview
 from app.bl.interview_service import InterviewService
 from app.common.errors import AppError, ConflictError, NotFoundError
+from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
+
+# The team every test authenticates into. Its value is arbitrary; what matters
+# is that the routes now take it from the cookie rather than the request.
+TEAM = "team-under-test"
+SECRET = "test-secret"
 
 
 class _FakeRepository:
@@ -24,21 +31,31 @@ class _FakeRepository:
         self._next += 1
         return "session-%d" % self._next
 
-    def create_session(self):
+    def create_session(self, team_id):
         session_id = self._new_id()
         self.sessions[session_id] = {
-            "id": session_id, "status": "active",
+            "id": session_id, "team_id": team_id, "status": "active",
             "profile": None, "pending": None,
         }
         self.turns[session_id] = []
-        return self.get_session(session_id)
+        return self.get_session(session_id, team_id)
 
-    def get_session(self, session_id):
-        if session_id not in self.sessions:
+    def get_session(self, session_id, team_id):
+        session = self.sessions.get(session_id)
+        # A session belonging to another team is indistinguishable from one
+        # that does not exist — the real repository filters in SQL and gets
+        # the same 404, and the tests below depend on that being true.
+        if session is None or session["team_id"] != team_id:
             raise NotFoundError("הפריט לא נמצא")
-        session = dict(self.sessions[session_id])
+        session = dict(session)
         session["turns"] = self.history(session_id)
         return session
+
+    def active_session(self, team_id):
+        for session in self.sessions.values():
+            if session["team_id"] == team_id and session["status"] == "active":
+                return self.get_session(session["id"], team_id)
+        return None
 
     def history(self, session_id):
         return [dict(row) for row in self.turns.get(session_id, [])]
@@ -51,13 +68,13 @@ class _FakeRepository:
     def save_pending(self, session_id, pending):
         self.sessions[session_id]["pending"] = pending
 
-    def complete(self, session_id, profile):
+    def complete(self, session_id, team_id, profile):
         if self.sessions[session_id]["status"] == "complete":
             raise ConflictError("הראיון כבר הושלם")
         self.sessions[session_id].update(
             status="complete", profile=profile, pending=None
         )
-        return self.get_session(session_id)
+        return self.get_session(session_id, team_id)
 
     def health(self):
         return {"database": "ok"}
@@ -122,12 +139,18 @@ def _complete():
     }
 
 
-def _client(llm):
+def _client(llm, role=ROLE_BOSS, team=TEAM):
+    """A client already holding a session cookie for `team`.
+
+    Authenticated by default: every test here predates workspaces and asserts
+    on interview behaviour, not on the guard. The guard gets its own tests
+    below, which pass a member role or no cookie at all.
+    """
     repository = _FakeRepository()
     service = InterviewService(repository, llm)
     app = FastAPI()
     app.include_router(health.build_router(repository))
-    app.include_router(interview.build_router(service))
+    app.include_router(interview.build_router(service, Guards(SECRET)))
 
     @app.exception_handler(AppError)
     async def handler(request, exc):
@@ -136,7 +159,10 @@ def _client(llm):
             status_code=exc.status_code, content={"detail": str(exc)}
         )
 
-    return TestClient(app), repository
+    client = TestClient(app)
+    if role is not None:
+        client.cookies.set(COOKIE_NAME, issue(SECRET, team, role, 1))
+    return client, repository
 
 
 def test_starting_an_interview_returns_the_first_question_with_options():

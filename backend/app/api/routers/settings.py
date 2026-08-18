@@ -5,26 +5,32 @@ the HTTP boundary onto it. Secrets never leave here in the clear — `public()`
 masks them, and a patch that echoes the mask back is ignored rather than
 overwriting the stored value with literal asterisks.
 
-PakashAgent is single-tenant and local, so these routes carry no auth guard.
-If that ever changes, the guard belongs here, not in the store.
+Boss-only. These settings are process-wide rather than per-team — they hold
+the database credentials and the model API key — so with workspaces in play
+they are strictly more sensitive than before, not less: a member arriving on
+a share link must not read them, and one workspace's boss editing them moves
+the ground under every other workspace. Guarding them as boss-only is the
+floor, not the ceiling; if workspaces ever need their own model settings, the
+store is what has to become per-team.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.api.contracts import ModelsProbeRequest
 from app.common.errors import AppError
 
 
-def build_router(store, llm) -> APIRouter:
+def build_router(store, llm, guards) -> APIRouter:
     router = APIRouter(prefix="/api", tags=["settings"])
+    boss = guards.boss()
 
     @router.get("/settings")
-    def get_settings() -> dict:
+    def get_settings(session: dict = Depends(boss)) -> dict:
         """The current settings, with every secret masked."""
         return store.public()
 
     @router.put("/settings")
-    def update_settings(patch: dict) -> dict:
+    def update_settings(patch: dict, session: dict = Depends(boss)) -> dict:
         """Apply a partial update and return the new masked state.
 
         A bad value is rejected rather than skipped, so a typo in a schema
@@ -40,12 +46,14 @@ def build_router(store, llm) -> APIRouter:
         return store.public()
 
     @router.get("/models")
-    def models() -> dict:
+    def models(session: dict = Depends(boss)) -> dict:
         """Models available on the saved connection."""
         return {"models": llm.list_models()}
 
     @router.post("/models")
-    def probe_models(request: ModelsProbeRequest) -> dict:
+    def probe_models(
+        request: ModelsProbeRequest, session: dict = Depends(boss)
+    ) -> dict:
         """Models available on a connection typed into the form but not yet
         saved, so a base URL or key can be tested before committing it."""
         return {"models": llm.list_models(

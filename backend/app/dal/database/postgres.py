@@ -34,12 +34,13 @@ def connect(store: RuntimeSettingsStore) -> psycopg.Connection:
     return connection
 
 
-def ensure_schema(store: RuntimeSettingsStore) -> None:
-    """Create the configured schema if it does not exist yet.
+def require_schema(store: RuntimeSettingsStore) -> None:
+    """Fail loudly if the configured schema does not exist.
 
-    The app creates its own tables, so it must also be able to create the
-    schema holding them; otherwise the first CREATE TABLE fails on a fresh
-    database.
+    The app creates its tables but deliberately not the schema holding them,
+    so a schema that was never provisioned has to be reported rather than
+    worked around. `search_path` will not do that reporting: an unresolvable
+    name in it is silently skipped, sending every CREATE TABLE to `public`.
     """
     settings = store.get()
     schema = getattr(settings, "database_schema", "")
@@ -50,12 +51,15 @@ def ensure_schema(store: RuntimeSettingsStore) -> None:
         row_factory=dict_row,
         **_credentials(settings),
     ) as connection:
-        connection.execute(
-            sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
-                sql.Identifier(schema)
-            )
+        exists = connection.execute(
+            "SELECT 1 FROM information_schema.schemata WHERE schema_name = %s",
+            (schema,),
+        ).fetchone()
+    if not exists:
+        raise RuntimeError(
+            "schema %r does not exist in the target database; create it "
+            "before starting the app (CREATE SCHEMA %s)" % (schema, schema)
         )
-        connection.commit()
 
 
 def _credentials(settings) -> dict:
