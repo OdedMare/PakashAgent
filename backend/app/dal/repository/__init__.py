@@ -2,11 +2,12 @@
 
 from app.dal.database.postgres import connect, require_schema
 from app.dal.repository.interviews import InterviewRepository
+from app.dal.repository.schedules import ScheduleRepository
 from app.dal.repository.schema import SCHEMA
 from app.dal.repository.teams import TeamRepository
 
 
-class Repository(InterviewRepository, TeamRepository):
+class Repository(InterviewRepository, TeamRepository, ScheduleRepository):
     """One repository object composed of the per-concern mixins.
 
     Callers get a single dependency; each concern still owns its own module.
@@ -32,4 +33,7 @@ class Repository(InterviewRepository, TeamRepository):
             connection.commit()
 
 
-__all__ = ["Repository", "InterviewRepository", "TeamRepository", "SCHEMA"]
+__all__ = [
+    "Repository", "InterviewRepository", "TeamRepository",
+    "ScheduleRepository", "SCHEMA",
+]
