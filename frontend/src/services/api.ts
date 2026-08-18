@@ -1,4 +1,10 @@
-import type { InterviewTurn, RuntimeSettings } from "@/types";
+import type {
+  InterviewTurn,
+  RuntimeSettings,
+  TeamSummary,
+  TeamView,
+  Workspace,
+} from "@/types";
 
 /**
  * Every backend call is traced to the browser console.
@@ -17,6 +23,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   try {
     response = await fetch(path, {
       ...options,
+      // The workspace session is an HttpOnly cookie. Without this the browser
+      // withholds it on anything it treats as cross-origin, and every guarded
+      // route answers 401 while the user is plainly logged in.
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json", ...options?.headers },
     });
   } catch (reason) {
@@ -92,5 +102,70 @@ export function probeModels(
   return request<{ models: string[] }>("/api/models", {
     method: "POST",
     body: JSON.stringify(overrides),
+  });
+}
+
+
+/** Teams for the login picker. Served unauthenticated. */
+export function listTeams(): Promise<TeamSummary[]> {
+  return request<TeamSummary[]>("/api/workspace/teams");
+}
+
+/** Open a workspace and log in as its boss. */
+export function createTeam(
+  name: string,
+  password: string,
+): Promise<Workspace> {
+  return request<Workspace>("/api/workspace", {
+    method: "POST",
+    body: JSON.stringify({ name, password }),
+  });
+}
+
+export function loginTeam(
+  teamId: string,
+  password: string,
+): Promise<Workspace> {
+  return request<Workspace>("/api/workspace/login", {
+    method: "POST",
+    body: JSON.stringify({ team_id: teamId, password }),
+  });
+}
+
+/** Exchange a share link for a member session. The token moves into an
+ *  HttpOnly cookie here, so the rest of the visit does not carry it in the
+ *  URL where it would land in history. */
+export function openMemberLink(token: string): Promise<Workspace> {
+  return request<Workspace>(`/api/workspace/member/${encodeURIComponent(token)}`, {
+    method: "POST",
+  });
+}
+
+/** The current workspace, shaped by the visitor's role. 401 when there is no
+ *  session — the caller treats that as "show the login screen", not an error. */
+export function currentWorkspace(): Promise<TeamView> {
+  return request<TeamView>("/api/workspace/me");
+}
+
+export function logout(): Promise<{ status: string }> {
+  return request<{ status: string }>("/api/workspace/logout", {
+    method: "POST",
+  });
+}
+
+/** Revoke the outstanding share link and mint a new one. Boss only. */
+export function rotateMemberLink(): Promise<Workspace> {
+  return request<Workspace>("/api/workspace/member-link/rotate", {
+    method: "POST",
+  });
+}
+
+export function changePassword(
+  current: string,
+  replacement: string,
+): Promise<{ status: string }> {
+  return request<{ status: string }>("/api/workspace/password", {
+    method: "POST",
+    body: JSON.stringify({ current, replacement }),
   });
 }

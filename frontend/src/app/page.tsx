@@ -1,5 +1,5 @@
-import { Interview } from "@/components/Interview";
+import { Workspace } from "@/components/Workspace";
 
 export default function Page() {
-  return <Interview />;
+  return <Workspace />;
 }

@@ -3,15 +3,19 @@
 import {
   AlertCircle,
   CalendarDays,
+  LogOut,
   MessagesSquare,
   Moon,
   RotateCcw,
   Settings2,
+  Share2,
   Sun,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { SettingsPanel } from "@/components/Settings";
+import { ShareLink } from "@/components/Workspace/ShareLink";
+import type { TeamView } from "@/types";
 
 import { Composer } from "./Composer";
 import { ProfileSummary } from "./ProfileSummary";
@@ -25,10 +29,26 @@ import { useTheme } from "./useTheme";
  *  profile actually lands. */
 const EXPECTED_TURNS = 21;
 
-export function Interview() {
+/** The boss's surface: the intro interview plus the workspace controls.
+ *
+ *  `workspace` is optional so the component still renders standalone in a
+ *  test or a storybook; in the app it always arrives, supplied by the
+ *  `Workspace` router after the server has confirmed the boss role. */
+export function Interview({
+  workspace,
+  busy: workspaceBusy = false,
+  onLogout,
+  onRotateLink,
+}: {
+  workspace?: TeamView;
+  busy?: boolean;
+  onLogout?: () => void;
+  onRotateLink?: () => void;
+} = {}) {
   const { turn, busy, error, start, answer, reset, retry } = useInterview();
   const { theme, toggle } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
 
   const answered = turn?.turns.filter((row) => row.role === "user").length ?? 0;
@@ -51,11 +71,23 @@ export function Interview() {
             <CalendarDays size={17} />
           </span>
           <span>
-            פקש
+            {workspace ? workspace.name : "פקש"}
             <span className="brand-sub"> · ראיון היכרות</span>
           </span>
         </div>
         <div className="header-actions">
+          {workspace?.member_token ? (
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setShareOpen((open) => !open)}
+              aria-label="קישור לצוות"
+              title="קישור לצוות"
+              aria-expanded={shareOpen}
+            >
+              <Share2 size={17} />
+            </button>
+          ) : null}
           <button
             type="button"
             className="icon-button"
@@ -84,8 +116,27 @@ export function Interview() {
               <RotateCcw size={17} />
             </button>
           ) : null}
+          {onLogout ? (
+            <button
+              type="button"
+              className="icon-button"
+              onClick={onLogout}
+              aria-label="יציאה"
+              title="יציאה"
+            >
+              <LogOut size={17} />
+            </button>
+          ) : null}
         </div>
       </header>
+
+      {shareOpen && workspace?.member_token ? (
+        <ShareLink
+          token={workspace.member_token}
+          busy={workspaceBusy}
+          onRotate={() => onRotateLink?.()}
+        />
+      ) : null}
 
       {turn ? (
         <div

@@ -1,0 +1,214 @@
+/* Workspace surfaces: the login gate, the share-link panel, and the member
+   area's few additions. Everything else is inherited from interview.css —
+   these screens are the same product, not a separate console. */
+
+.workspace-gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 24px;
+}
+
+.gate-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 380px;
+  padding: 30px 28px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.gate-card h1 {
+  margin: 0;
+  font-size: 21px;
+}
+
+.gate-card .brand-mark {
+  align-self: center;
+}
+
+.gate-lede {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.gate-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: right;
+  font-size: 13px;
+}
+
+.gate-field > span {
+  color: var(--text-soft);
+  font-weight: 600;
+}
+
+.gate-field input,
+.gate-field select {
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+}
+
+.gate-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.gate-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-radius: var(--radius-sm);
+  text-align: right;
+  font-size: 13px;
+}
+
+.gate-switch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  font-size: 13px;
+}
+
+.gate-switch:hover:not(:disabled) {
+  color: var(--primary);
+}
+
+/* --- the share link ---------------------------------------------------- */
+
+.share-link {
+  margin: 0 auto;
+  padding: 16px 18px;
+  width: min(720px, calc(100% - 32px));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+}
+
+.share-link h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.share-lede {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.share-row {
+  display: flex;
+  gap: 8px;
+}
+
+.share-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  /* The token is Latin-script inside an RTL document; without this the
+     directional characters reorder it on screen and a copy-by-hand of what
+     is displayed produces a link that does not work. */
+  direction: ltr;
+  text-align: left;
+}
+
+.share-row button,
+.share-rotate {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 13px;
+  color: var(--text-soft);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.share-row button:hover:not(:disabled),
+.share-rotate:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.share-rotate {
+  margin-top: 10px;
+}
+
+.share-confirm {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--warning-soft);
+  border-radius: var(--radius-sm);
+}
+
+.share-confirm p {
+  margin: 0 0 10px;
+  color: var(--text-soft);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.share-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.share-confirm-actions button {
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.share-confirm-actions .danger {
+  color: #fff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+/* --- member area ------------------------------------------------------- */
+
+.member-shifts {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 560px) {
+  .share-row {
+    flex-direction: column;
+  }
+}

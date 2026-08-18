@@ -61,3 +61,38 @@ export interface RuntimeSettings {
   llm_base_url: string | null;
   openai_api_key: string;
 }
+
+/** Who the current visitor is inside a workspace.
+ *
+ *  `boss` authors — the interview, the settings, the schedule. `member` only
+ *  reads (D5). The role arrives from the signed session cookie and is never
+ *  chosen by the client, so this type describes what the server said, not a
+ *  preference the UI may set. */
+export type Role = "boss" | "member";
+
+/** A team on the login picker. Deliberately carries no secrets — this list
+ *  is served before anyone has authenticated. */
+export interface TeamSummary {
+  id: string;
+  name: string;
+}
+
+/** The signed-in workspace.
+ *
+ *  `member_token` is the share link's secret half and is present only for a
+ *  boss; a member gets null, having no reason to re-read the credential they
+ *  arrived on. */
+export interface Workspace {
+  id: string;
+  name: string;
+  role: Role;
+  member_token: string | null;
+  /** Interviews recorded before workspaces existed, adopted by the first
+   *  team created. Present only on that first creation. */
+  claimed_sessions?: number | null;
+}
+
+/** A workspace plus the profile its interview produced. */
+export interface TeamView extends Workspace {
+  profile: WorkplaceProfile | null;
+}
