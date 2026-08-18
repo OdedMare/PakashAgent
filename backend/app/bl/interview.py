@@ -1,16 +1,40 @@
-"""Model-driven intro interview, one Hebrew question per turn."""
+"""One conversational turn of the intro interview.
+
+Ported from the `plan-chat` planners in AiSummryIO
+(`bl/workflow_engine_pkg/conversational_planning.py`): the model interviews
+the manager one question per turn, each question carrying a recommended
+answer and clickable options, and every turn returns the draft profile so far
+so the summary fills in as the interview proceeds rather than landing all at
+once at the end.
+
+The interview never acts on its own conclusion. A turn that still asks
+something — or that is only now presenting its summary for approval — is not
+ready, and `_is_ready` enforces that here rather than trusting the prompt to.
+
+This module stays a pure function of the conversation. `interview_service`
+owns the session and replays the history on every turn, which is what lets
+this be tested against a fake model with no database.
+"""
 
 import json
-import re
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
 
 from app.bl.prompts import load
 from app.common.errors import AgentError
 
+# The interview is bounded at roughly the topic count, so history is not
+# windowed for a context budget — this is a guard against a pathological
+# session, not a summarization strategy.
+_MAX_MESSAGES = 200
+_MAX_MESSAGE_CHARS = 4000
+_MAX_TEXT_CHARS = 20000
+# Clickable answers per question. Past four the manager is reading a list
+# instead of choosing, which is the deliberation the options exist to save.
+_MAX_OPTIONS = 4
+# A label is a button caption; the full sentence lives in `answer`.
+_MAX_OPTION_CHARS = 120
 
-# The boss's questions plus the missing inputs the scheduler and audit need.
-# The model may skip a topic already answered elsewhere, but may not complete
-# until every topic is covered and the final summary is confirmed.
+
 INTERVIEW_TOPICS = (
     {
         "id": "workplace_mission",
@@ -251,14 +275,43 @@ _PROFILE_SCHEMA = {
     },
 }
 
+
+# Every profile field the interview may fill. The draft is merged field by
+# field across turns, so this is the list that decides what "carried forward"
+# means — a field absent here would be silently dropped every turn.
+_TEXT_FIELDS = (
+    "availability_process", "constraint_deadline", "casual_worker_policy",
+    "rest_policy", "weekend_policy", "fairness_policy", "conflict_policy",
+    "existing_schedule_source", "summary",
+)
+_LIST_FIELDS = ("employees", "shifts", "dependencies", "rules")
+_OBJECT_FIELDS = ("workplace", "training_policy")
+
+
 _OPTION_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["id", "label", "recommended"],
+    "required": ["label", "answer"],
     "properties": {
-        "id": {"type": "string", "pattern": "^[a-z0-9_]+$"},
+        # The button caption.
         "label": {"type": "string"},
-        "recommended": {"type": "boolean"},
+        # The full sentence sent as the manager's own message when clicked.
+        # An option without one has nothing to send, so both are required.
+        "answer": {"type": "string"},
+    },
+}
+
+_QUESTION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["question", "recommendation", "why", "options"],
+    "properties": {
+        "question": {"type": "string"},
+        "recommendation": {"type": "string"},
+        "why": {"type": "string"},
+        "options": {
+            "type": "array", "items": _OPTION_SCHEMA, "maxItems": _MAX_OPTIONS,
+        },
     },
 }
 
@@ -266,49 +319,207 @@ INTERVIEW_RESPONSE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "required": [
-        "status", "question_id", "question", "recommendation", "options",
-        "allow_free_text", "profile",
+        "reply", "question", "resolved", "open_points",
+        "awaiting_confirmation", "ready", "draft",
     ],
     "properties": {
-        "status": {"type": "string", "enum": ["question", "complete"]},
-        "question_id": {"type": ["string", "null"]},
-        "question": {"type": ["string", "null"]},
-        "recommendation": {"type": ["string", "null"]},
-        "options": {
-            "type": "array", "items": _OPTION_SCHEMA, "maxItems": 5,
-        },
-        "allow_free_text": {"type": "boolean"},
-        "profile": {"oneOf": [_PROFILE_SCHEMA, {"type": "null"}]},
+        "reply": {"type": "string"},
+        # Null on the turn that presents the summary and on the turn that
+        # finishes; a question object on every other turn.
+        "question": {"oneOf": [_QUESTION_SCHEMA, {"type": "null"}]},
+        "resolved": {"type": "array", "items": {"type": "string"}},
+        "open_points": {"type": "array", "items": {"type": "string"}},
+        "awaiting_confirmation": {"type": "boolean"},
+        "ready": {"type": "boolean"},
+        "draft": _PROFILE_SCHEMA,
     },
 }
 
 
 class IntroInterview:
-    """Ask the next question or return the confirmed workplace profile.
+    """Ask the next question and return the profile drafted so far.
 
     The caller owns persistence and passes the conversation back on every
-    turn. Keeping this service stateless avoids inventing a session store
-    before the repository layer exists.
+    turn, so this stays a pure function of the history plus the draft it is
+    handed.
     """
 
     def __init__(self, llm):
         self._llm = llm
-        self._system_prompt = load("interview")
 
-    def next_turn(self, history: List[Dict[str, str]]) -> dict:
-        conversation = _validated_history(history)
-        response = self._llm.complete_json(
-            self._system_prompt,
-            json.dumps(
-                {"topics": INTERVIEW_TOPICS, "conversation": conversation},
-                ensure_ascii=False,
-            ),
+    def next_turn(
+        self, history: List[Dict[str, str]], draft: Optional[dict] = None,
+    ) -> dict:
+        """One turn: gather context, ask the model once, shape the answer."""
+        payload = {
+            "topics": INTERVIEW_TOPICS,
+            "conversation": _validated_history(history),
+            "draft_so_far": _as_dict(draft),
+        }
+        answer = self._ask(payload)
+        return _result(answer, draft)
+
+    def _ask(self, payload: dict) -> dict:
+        # Loaded per turn rather than at import, so editing the markdown
+        # takes effect without a restart. The loader caches the read.
+        answer = self._llm.complete_json(
+            load("interview"),
+            json.dumps(payload, ensure_ascii=False),
             schema=INTERVIEW_RESPONSE_SCHEMA,
         )
-        return _validated_response(response)
+        if not isinstance(answer, dict):
+            raise AgentError("המודל החזיר תוצאת ראיון לא תקינה")
+        return answer
 
 
-def _validated_history(history: List[Dict[str, str]]) -> List[Dict[str, str]]:
+def _result(answer: dict, previous) -> dict:
+    """The model's turn, bounded and normalized, plus the merged draft."""
+    usage = answer.get("_usage")
+    question = _question(answer.get("question"))
+    merged = _merged_draft(answer.get("draft"), previous)
+    open_points = _lines(answer.get("open_points"))
+    # An open question means the interview is still running, whatever the
+    # model claimed, so it cannot also be awaiting confirmation.
+    awaiting = bool(answer.get("awaiting_confirmation")) and question is None
+    missing = _missing_topics(merged)
+    open_points = open_points + missing
+    if missing:
+        # A profile still owing a required field is not a summary the manager
+        # can meaningfully approve, so the confirmation turn is withdrawn
+        # rather than shown over an incomplete draft.
+        awaiting = False
+    result = {
+        "reply": _bounded(answer.get("reply")),
+        "question": question,
+        "resolved": _lines(answer.get("resolved")),
+        "open_points": open_points,
+        "awaiting_confirmation": awaiting,
+        "ready": _is_ready(answer, question, awaiting) and not missing,
+        "draft": merged,
+    }
+    if usage is not None:
+        result["_usage"] = usage
+    return result
+
+
+def _is_ready(answer: dict, question, awaiting: bool) -> bool:
+    """Whether the profile may be treated as confirmed.
+
+    The interview does not finish before the manager confirms, so a turn that
+    still asks something, or that is only now presenting its summary for
+    approval, is never ready however the model labelled itself. Enforced here
+    rather than trusted to the prompt: `ready` is what closes the session and
+    writes the profile.
+    """
+    return bool(answer.get("ready")) and question is None and not awaiting
+
+
+def _question(value) -> Optional[dict]:
+    """The single question for this turn, or None when none is asked."""
+    value = _as_dict(value)
+    asked = _bounded(value.get("question"))
+    if not asked:
+        return None
+    return {
+        "question": asked,
+        "recommendation": _bounded(value.get("recommendation")),
+        "why": _bounded(value.get("why")),
+        "options": _options(value),
+    }
+
+
+def _options(question: dict) -> List[dict]:
+    """Clickable answers, bounded and deduplicated.
+
+    A clicked option is sent verbatim as the manager's own message, so an
+    option missing its `answer` has nothing to send and is dropped rather
+    than falling back to the label — the label is a button caption, and
+    sending it would put a fragment in the thread where a sentence belongs.
+
+    One option is not a choice: the manager would be reading a menu with a
+    single item next to the recommendation that already says the same thing.
+    Below two, the recommendation carries the turn on its own.
+    """
+    offered = question.get("options")
+    if not isinstance(offered, list):
+        return []
+    options, seen = [], set()
+    for item in offered:
+        item = _as_dict(item)
+        label = _bounded(item.get("label"), _MAX_OPTION_CHARS)
+        answer = _bounded(item.get("answer"))
+        if not label or not answer or label in seen:
+            continue
+        seen.add(label)
+        options.append({"label": label, "answer": answer})
+        if len(options) == _MAX_OPTIONS:
+            break
+    return options if len(options) > 1 else []
+
+
+def _merged_draft(offered, previous) -> dict:
+    """This turn's draft over the last, so nothing agreed is dropped.
+
+    The model rebuilds the draft from scratch every turn, and a turn that
+    answers a narrow question by re-emitting only the field it touched would
+    otherwise blank the twenty fields it did not — precisely at the
+    confirmation turn, where the manager is asked to approve a summary that
+    just lost most of its content.
+
+    A field is carried forward only when this turn left it empty, so the
+    model can still correct any value by actually restating it.
+    """
+    offered, previous = _as_dict(offered), _as_dict(previous)
+    merged: Dict[str, Any] = {}
+    for field in _TEXT_FIELDS:
+        merged[field] = (
+            _bounded(offered.get(field), _MAX_TEXT_CHARS)
+            or _bounded(previous.get(field), _MAX_TEXT_CHARS)
+        )
+    for field in _LIST_FIELDS:
+        value = offered.get(field)
+        if not isinstance(value, list) or not value:
+            value = previous.get(field)
+        merged[field] = value if isinstance(value, list) else []
+    for field in _OBJECT_FIELDS:
+        value = _as_dict(offered.get(field))
+        carried = _as_dict(previous.get(field))
+        # Merged per key rather than whole: `workplace` holds eight fields
+        # settled across different turns, and taking it as one blob would
+        # make the last turn to mention it the only one that counts.
+        merged[field] = dict(carried, **{
+            key: item for key, item in value.items()
+            if item != "" and item != [] and item is not None
+        })
+    return merged
+
+
+# What `ready` requires beyond the model's own say-so. These are the fields
+# the scheduler cannot run without: a profile missing one is not a finished
+# interview whatever the model claimed, and the gap resurfaces as an open
+# point rather than the manager discovering it after the session closed.
+_REQUIRED_TOPICS = (
+    ("workplace", "name", "חסר שם למקום העבודה."),
+    ("workplace", "mission", "חסר תיאור האחריות של המשמרת."),
+    ("workplace", "planning_horizon", "חסרה תקופת התכנון של הסידור."),
+)
+
+
+def _missing_topics(draft: dict) -> List[str]:
+    """One line per required field the draft still owes."""
+    missing = []
+    for section, field, message in _REQUIRED_TOPICS:
+        if not _bounded(_as_dict(draft.get(section)).get(field)):
+            missing.append(message)
+    if not draft.get("shifts"):
+        missing.append("לא הוגדר אף סוג משמרת.")
+    if not draft.get("employees"):
+        missing.append("לא נרשם אף עובד.")
+    return missing
+
+
+def _validated_history(history) -> List[Dict[str, str]]:
+    """The conversation, bounded, with only the two roles the prompt names."""
     if not isinstance(history, list):
         raise AgentError("היסטוריית הראיון אינה תקינה")
     clean = []
@@ -322,62 +533,35 @@ def _validated_history(history: List[Dict[str, str]]) -> List[Dict[str, str]]:
         content = content.strip()
         if not content:
             raise AgentError("הודעה בראיון אינה יכולה להיות ריקה")
-        clean.append({"role": role, "content": content})
-    return clean
+        clean.append({"role": role, "content": content[:_MAX_MESSAGE_CHARS]})
+    return clean[-_MAX_MESSAGES:]
 
 
-def _validated_response(response: dict) -> dict:
-    if not isinstance(response, dict):
-        raise AgentError("המודל החזיר תוצאת ראיון לא תקינה")
-    result = dict(response)
-    usage = result.pop("_usage", None)
-    status = result.get("status")
-    if status == "question":
-        required = ("question_id", "question", "recommendation")
-        if any(not isinstance(result.get(key), str) or not result[key].strip()
-               for key in required):
-            raise AgentError("המודל החזיר שאלת ראיון לא תקינה")
-        if result.get("profile") is not None:
-            raise AgentError("המודל החזיר פרופיל לפני סיום הראיון")
-        _validate_options(result.get("options"))
-        if result.get("allow_free_text") is not True:
-            raise AgentError("שאלת ראיון חייבת לאפשר תשובה חופשית")
-    elif status == "complete":
-        if any(result.get(key) is not None
-               for key in ("question_id", "question", "recommendation")):
-            raise AgentError("המודל סיים את הראיון עם שאלה פתוחה")
-        if result.get("options") != [] or result.get("allow_free_text") is not False:
-            raise AgentError("המודל סיים את הראיון עם אפשרויות פתוחות")
-        profile = result.get("profile")
-        required = set(_PROFILE_SCHEMA["required"])
-        if not isinstance(profile, dict) or not required.issubset(profile):
-            raise AgentError("המודל החזיר פרופיל מקום עבודה חסר")
-    else:
-        raise AgentError("המודל החזיר סטטוס ראיון לא תקין")
-    if usage is not None:
-        result["_usage"] = usage
-    return result
+def _lines(value) -> List[str]:
+    if not isinstance(value, list):
+        return []
+    lines = [_bounded(item) for item in value]
+    return [line for line in lines if line]
 
 
-def _validate_options(options) -> None:
-    if not isinstance(options, list) or not 2 <= len(options) <= 5:
-        raise AgentError("שאלת ראיון חייבת לכלול בין 2 ל-5 אפשרויות")
-    identifiers = set()
-    recommended = 0
-    for option in options:
-        if not isinstance(option, dict):
-            raise AgentError("אפשרות תשובה בראיון אינה תקינה")
-        option_id = option.get("id")
-        label = option.get("label")
-        is_recommended = option.get("recommended")
-        if (not isinstance(option_id, str)
-                or re.fullmatch(r"[a-z0-9_]+", option_id) is None
-                or not isinstance(label, str) or not label.strip()
-                or not isinstance(is_recommended, bool)):
-            raise AgentError("אפשרות תשובה בראיון אינה תקינה")
-        if option_id in identifiers:
-            raise AgentError("אפשרויות התשובה בראיון חייבות להיות ייחודיות")
-        identifiers.add(option_id)
-        recommended += int(is_recommended)
-    if recommended > 1:
-        raise AgentError("רק אפשרות אחת יכולה להיות מומלצת")
+def _bounded(value, limit: int = _MAX_MESSAGE_CHARS) -> str:
+    return value.strip()[:limit] if isinstance(value, str) else ""
+
+
+def _as_dict(value) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
+def empty_draft() -> dict:
+    """A profile with every field present and nothing filled in.
+
+    The first turn is rendered before the model has said anything, so the
+    summary panel needs a draft of the right shape to render empty.
+    """
+    return _merged_draft({}, {})
+
+
+__all__ = [
+    "INTERVIEW_RESPONSE_SCHEMA", "INTERVIEW_TOPICS", "IntroInterview",
+    "empty_draft",
+]

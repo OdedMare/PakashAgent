@@ -10,36 +10,65 @@ from app.common.runtime_settings.normalizers import MASKED_SECRET
 class AnswerRequest(BaseModel):
     """One answer from the boss.
 
-    A selected option and free text arrive on the same field: the model is
-    told to treat a bare number as ambiguous rather than a choice
-    (bl/prompts/interview.md), so the UI sends the option's *label*, not its
-    index. Sending "2" would be exactly the ambiguity the prompt guards.
+    A clicked option and free text arrive on the same field: an option's
+    `answer` is a full sentence, sent verbatim as the boss's own message, so
+    the model reads a click and a typed reply identically. That is why the UI
+    sends `answer` and never a label or an index — a bare "2" would be the
+    ambiguity the prompt explicitly guards against.
     """
 
     content: str = Field(min_length=1, max_length=4000)
 
 
 class Option(BaseModel):
-    id: str
+    """A clickable answer. `label` captions the button, `answer` is sent."""
+
     label: str
-    recommended: bool
+    answer: str
+
+
+class Question(BaseModel):
+    """The single question a turn asks, with the agent's own recommendation."""
+
+    question: str
+    recommendation: str = ""
+    why: str = ""
+    options: List[Option] = []
 
 
 class Message(BaseModel):
+    """One turn in the thread as the UI replays it.
+
+    `options` and `recommendation` are lifted out of `question` so a past
+    assistant turn can re-render its buttons without the client reaching
+    into a nested object that is null on half the rows.
+    """
+
     role: str
     content: str
+    question: Optional[Question] = None
     options: List[Option] = []
     recommendation: Optional[str] = None
 
 
 class InterviewTurn(BaseModel):
+    """One conversational turn, shaped like the reference `plan-chat` reply.
+
+    `draft` is the profile so far and is present on every turn, so the
+    summary panel fills in as the interview proceeds. `profile` stays null
+    until the interview is confirmed complete — it is the durable result,
+    while `draft` is a proposal that may still change.
+    """
+
     session_id: str
     status: str
-    question_id: Optional[str] = None
-    question: Optional[str] = None
-    recommendation: Optional[str] = None
-    options: List[Option] = []
-    allow_free_text: bool = False
+    reply: str = ""
+    question: Optional[Question] = None
+    resolved: List[str] = []
+    open_points: List[str] = []
+    awaiting_confirmation: bool = False
+    ready: bool = False
+    draft: Optional[Dict[str, Any]] = None
     turns: List[Message] = []
     profile: Optional[Dict[str, Any]] = None
 

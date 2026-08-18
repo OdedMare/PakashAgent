@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.api.dependencies import Guards
 from app.api.routers import health, interview
+from app.bl.interview import empty_draft
 from app.bl.interview_service import InterviewService
 from app.common.errors import AppError, ConflictError, NotFoundError
 from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
@@ -94,30 +95,46 @@ class _ScriptedLlm:
         return self.responses[0]
 
 
-def _question(question_id="workplace_mission", question="על מה המשמרת אחראית?"):
-    return {
-        "status": "question",
-        "question_id": question_id,
-        "question": question,
-        "recommendation": "כדאי לתאר את האחריות במשפט אחד.",
-        "options": [
-            {"id": "service", "label": "מתן שירות", "recommended": False},
-            {"id": "operations", "label": "רציפות תפעולית", "recommended": True},
-        ],
-        "allow_free_text": True,
-        "profile": None,
+def _question(question="על מה המשמרת אחראית?", **overrides):
+    response = {
+        "reply": "תודה, רשמתי.",
+        "question": {
+            "question": question,
+            "recommendation": "כדאי לתאר את האחריות במשפט אחד.",
+            "why": "בלי זה אי אפשר לדעת מה נחשב משמרת מוצלחת.",
+            "options": [
+                {"label": "מתן שירות", "answer": "אנחנו נותנים שירות ומענה."},
+                {
+                    "label": "רציפות תפעולית",
+                    "answer": "אנחנו אחראים על רציפות תפעולית.",
+                },
+            ],
+        },
+        "resolved": [],
+        "open_points": ["עדיין לא הוגדרו סוגי המשמרות."],
+        "awaiting_confirmation": False,
+        "ready": False,
+        "draft": _empty(),
     }
+    response.update(overrides)
+    return response
+
+
+def _empty():
+    return dict(empty_draft())
 
 
 def _profile():
-    return {
+    return dict(_empty(), **{
         "workplace": {
             "name": "צוות תפעול", "mission": "רציפות",
             "success_criteria": ["שירות רציף"], "timezone": "Asia/Jerusalem",
             "operating_days": ["א-ה"], "planning_horizon": "שבועיים",
             "scheduler_name": "שרון", "scheduler_works_shifts": False,
         },
-        "employees": [], "shifts": [], "dependencies": [], "rules": [],
+        "employees": [{"name": "דנה", "role": "נציגה"}],
+        "shifts": [{"name": "בוקר", "start_time": "08:00"}],
+        "dependencies": [], "rules": [],
         "availability_process": "שרון מזין", "constraint_deadline": "שבוע",
         "casual_worker_policy": "לפי צורך",
         "training_policy": {
@@ -128,15 +145,24 @@ def _profile():
         "fairness_policy": "איזון", "conflict_policy": "מציגים לשרון",
         "existing_schedule_source": "קבצים קודמים",
         "summary": "צוות תפעול, שלוש משמרות",
-    }
+    })
+
+
+def _confirming():
+    """The turn that presents the summary. Not yet ready — the manager has
+    not confirmed it."""
+    return _question(
+        question=None, awaiting_confirmation=True, ready=False,
+        reply="זה מה שסיכמנו. נכון?", draft=_profile(),
+    )
 
 
 def _complete():
-    return {
-        "status": "complete", "question_id": None, "question": None,
-        "recommendation": None, "options": [], "allow_free_text": False,
-        "profile": _profile(),
-    }
+    """The turn after the manager confirms."""
+    return _question(
+        question=None, awaiting_confirmation=False, ready=True,
+        reply="מצוין, סיימנו.", draft=_profile(),
+    )
 
 
 def _client(llm, role=ROLE_BOSS, team=TEAM):
@@ -171,11 +197,14 @@ def test_starting_an_interview_returns_the_first_question_with_options():
     body = client.post("/api/interview").json()
 
     assert body["status"] == "question"
-    assert body["question"] == "על מה המשמרת אחראית?"
-    assert body["allow_free_text"] is True
-    assert [option["label"] for option in body["options"]] == [
+    assert body["question"]["question"] == "על מה המשמרת אחראית?"
+    assert body["question"]["recommendation"]
+    assert [option["label"] for option in body["question"]["options"]] == [
         "מתן שירות", "רציפות תפעולית"
     ]
+    # The draft rides along from the very first turn, so the summary panel
+    # fills in as the interview runs rather than appearing at the end.
+    assert body["draft"] is not None
     assert body["session_id"]
 
 
@@ -186,11 +215,13 @@ def test_the_question_is_persisted_as_an_assistant_turn():
 
     turns = repository.history(session_id)
     assert [row["role"] for row in turns] == ["assistant"]
-    assert turns[0]["payload"]["options"][1]["recommended"] is True
+    payload = turns[0]["payload"]
+    assert payload["question"]["options"][1]["label"] == "רציפות תפעולית"
+    assert payload["draft"] is not None
 
 
 def test_an_answer_is_recorded_and_passed_back_to_the_model():
-    llm = _ScriptedLlm([_question(), _question("success_criteria", "איך יודעים?")])
+    llm = _ScriptedLlm([_question(), _question("איך יודעים?")])
     client, repository = _client(llm)
     session_id = client.post("/api/interview").json()["session_id"]
 
@@ -199,7 +230,7 @@ def test_an_answer_is_recorded_and_passed_back_to_the_model():
         json={"content": "רציפות תפעולית"},
     ).json()
 
-    assert body["question"] == "איך יודעים?"
+    assert body["question"]["question"] == "איך יודעים?"
     assert [row["role"] for row in repository.history(session_id)] == [
         "assistant", "user", "assistant"
     ]
@@ -214,13 +245,24 @@ def test_resuming_replays_the_pending_question_without_calling_the_model():
 
     body = client.get("/api/interview/%s" % session_id).json()
 
-    assert body["question"] == "על מה המשמרת אחראית?"
+    assert body["question"]["question"] == "על מה המשמרת אחראית?"
     assert len(llm.calls) == calls_after_start
 
 
 def test_a_confirmed_summary_completes_the_session_and_stores_the_profile():
-    client, repository = _client(_ScriptedLlm([_question(), _complete()]))
+    client, repository = _client(
+        _ScriptedLlm([_question(), _confirming(), _complete()])
+    )
     session_id = client.post("/api/interview").json()["session_id"]
+
+    # The summary turn presents the profile for approval but does not store
+    # it: `ready` is false until the manager actually confirms.
+    summary = client.post(
+        "/api/interview/%s/answer" % session_id, json={"content": "זהו"}
+    ).json()
+    assert summary["status"] == "question"
+    assert summary["awaiting_confirmation"] is True
+    assert repository.sessions[session_id]["status"] == "active"
 
     body = client.post(
         "/api/interview/%s/answer" % session_id, json={"content": "כן, נכון"}
@@ -228,7 +270,7 @@ def test_a_confirmed_summary_completes_the_session_and_stores_the_profile():
 
     assert body["status"] == "complete"
     assert body["profile"]["workplace"]["name"] == "צוות תפעול"
-    assert body["options"] == []
+    assert body["question"] is None
     assert repository.sessions[session_id]["status"] == "complete"
 
 
