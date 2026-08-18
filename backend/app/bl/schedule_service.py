@@ -23,7 +23,11 @@ the repository, which filters on it. It is never taken from a request body.
 import datetime
 from typing import Any, Dict, List, Optional
 
-from app.bl.audit import audit
+from app.bl.audit import audit, fairness
+from app.bl.briefing import (
+    BriefingAgent,
+    TRIGGER_OPENED,
+)
 from app.bl.changes import ChangeAgent, OP_ASSIGN, OP_REMOVE, OP_SWAP
 from app.bl.scheduler import Scheduler
 from app.common.errors import AgentError, NotFoundError
@@ -49,6 +53,7 @@ class ScheduleService:
         self._repository = repository
         self._scheduler = Scheduler(llm)
         self._changes = ChangeAgent(llm)
+        self._briefing = BriefingAgent(llm)
 
     # -- reading -----------------------------------------------------------
 
@@ -426,6 +431,70 @@ class ScheduleService:
     ) -> List[dict]:
         return self._repository.change_log(team_id, schedule_id)
 
+    # -- speaking first ----------------------------------------------------
+
+    def brief(
+        self, team_id: str, trigger: str = TRIGGER_OPENED,
+        last_said: Optional[List[str]] = None,
+    ) -> dict:
+        """What the agent has to say, unprompted. Writes nothing.
+
+        The one call in this service the manager did not ask for. It gathers
+        the same state the management screen already shows -- the period, the
+        audit's warnings, the fairness totals, the pending requests -- and
+        lets the agent say what it makes of them
+        ([D15](../../../docs/DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)).
+
+        The warnings and the fairness totals are computed here, by
+        `audit.py`, and handed over as facts. The model is never asked to
+        count anything: that division is the whole of
+        [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)
+        and speaking first does not change which side of it does arithmetic.
+
+        A failure is not raised. This is decoration on a screen that must
+        render regardless, so a model that is down or slow costs the manager
+        their briefing, never their calendar.
+        """
+        profile = self._repository.team_profile(team_id) or {}
+        if not profile:
+            # Nothing to brief on before the interview: the agent knows
+            # neither the shifts nor the people, and a briefing built on that
+            # would be invented rather than observed.
+            return _quiet()
+
+        schedule = self.current(team_id)
+        window = _window(schedule)
+        warnings = (schedule or {}).get("warnings") or []
+        try:
+            return self._briefing.brief(
+                trigger,
+                profile,
+                schedule=schedule,
+                warnings=warnings,
+                fairness=fairness(
+                    [
+                        {
+                            "employee": row.get("employee"),
+                            "shift": row.get("shift"),
+                            "date": _iso(row.get("date")),
+                        }
+                        for row in (schedule or {}).get("assignments") or []
+                    ],
+                    _shifts(profile),
+                    _employees(profile),
+                ),
+                requests=self._repository.list_requests(
+                    team_id, status="pending"
+                ),
+                availability=self._repository.availability(
+                    team_id, window[0], window[1]
+                ),
+                changes=self._repository.change_log(team_id, limit=40),
+                last_said=last_said,
+            )
+        except Exception:
+            return _quiet()
+
     # -- helpers -----------------------------------------------------------
 
     def _view(self, schedule: dict, team_id: str) -> dict:
@@ -515,6 +584,17 @@ class ScheduleService:
             if len(rows) > 300:
                 break
         return rows
+
+
+def _quiet() -> dict:
+    """A briefing with nothing to say.
+
+    The shape a caller gets when the agent cannot speak -- no profile yet, or
+    the model failed. Identical to the shape it returns when it genuinely has
+    nothing to report, so the UI has one case to render and a briefing that
+    could not be produced never surfaces as an error beside the calendar.
+    """
+    return {"headline": "", "items": [], "quiet": True}
 
 
 def _window(schedule: Optional[dict]) -> tuple:

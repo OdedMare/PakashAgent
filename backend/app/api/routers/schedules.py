@@ -24,6 +24,8 @@ from fastapi import APIRouter, Depends
 
 from app.api.contracts import (
     ApplyRequest,
+    Briefing,
+    BriefingRequest,
     ConstraintRequest,
     GenerateRequest,
     ManagementOverview,
@@ -65,6 +67,30 @@ def build_router(service, guards) -> APIRouter:
             starts_on=request.starts_on,
             ends_on=request.ends_on,
             instructions=request.instructions,
+        )
+
+    @router.post("/brief", response_model=Briefing)
+    def brief(
+        request: BriefingRequest, session: dict = Depends(boss)
+    ) -> dict:
+        """What the agent has to say unprompted. **Persists nothing.**
+
+        The one route here the manager did not initiate — the frontend calls
+        it when the screen opens, after state changes, and before publishing
+        ([D15](../../../docs/DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)).
+
+        Boss-only, like every other agent route. A briefing reads drafts,
+        pending requests and other people's stated reasons, none of which a
+        member may see.
+
+        It never fails: a briefing that could not be produced comes back
+        quiet, because this sits beside a calendar that must render whatever
+        the model is doing.
+        """
+        return service.brief(
+            session["team_id"],
+            trigger=request.trigger,
+            last_said=request.last_said,
         )
 
     @router.post("/propose", response_model=Proposal)
