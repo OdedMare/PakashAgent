@@ -1,4 +1,6 @@
 import type {
+  Briefing,
+  BriefingTrigger,
   ChangeEntry,
   Constraint,
   ConstraintRequestRow,
@@ -216,6 +218,25 @@ export function getSchedule(scheduleId: string): Promise<Schedule> {
 /** Ask the agent what it would do. **Persists nothing** — the manager
  *  confirms before anything lands, and that gap is where the agent's
  *  reasoning gets read (D8). */
+/** What the agent has to say without being asked (D15).
+ *
+ *  Called when the management area opens, after the state changes, and
+ *  before publishing. It writes nothing and it never fails loudly: a
+ *  briefing that could not be produced comes back `quiet`, because this sits
+ *  beside a calendar that has to render regardless.
+ *
+ *  `lastSaid` is the headlines already shown this sitting, sent back so the
+ *  agent does not repeat an opening the manager has read. */
+export function briefManager(
+  trigger: BriefingTrigger,
+  lastSaid: string[] = [],
+): Promise<Briefing> {
+  return request<Briefing>("/api/schedule/brief", {
+    method: "POST",
+    body: JSON.stringify({ trigger, last_said: lastSaid.slice(-8) }),
+  });
+}
+
 export function proposeChange(
   body: { request: string; schedule_id?: string; reason?: string },
 ): Promise<Proposal> {

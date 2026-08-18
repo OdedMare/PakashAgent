@@ -255,6 +255,42 @@ export interface Proposal {
   warnings: ScheduleWarning[];
 }
 
+/* -- the agent speaking first (D15) ---------------------------------------
+ *
+ * Note what a briefing does NOT carry: operations. There is no field here a
+ * confirmation could read, because nothing in a briefing is ever applied. A
+ * `suggestion` is text for the composer — the manager still says it, and the
+ * ordinary propose-then-confirm path still runs.
+ */
+
+export type BriefingKind =
+  | "risk"
+  | "fairness"
+  | "gap"
+  | "request"
+  | "pattern";
+
+/** Why the agent is speaking. The backend branches on these by name. */
+export type BriefingTrigger =
+  | "opened"
+  | "changed"
+  | "publishing"
+  | "periodic";
+
+export interface BriefingItem {
+  text: string;
+  kind: BriefingKind;
+  /** The sentence the manager could send. Empty when there is nothing to do. */
+  suggestion: string;
+}
+
+export interface Briefing {
+  headline: string;
+  items: BriefingItem[];
+  /** The honest all-clear, and the common case by design. */
+  quiet: boolean;
+}
+
 /* -- the employee's own area (D14) ----------------------------------------
  *
  * Note what these types do NOT carry: the employee's own name on any request

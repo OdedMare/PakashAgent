@@ -52,6 +52,7 @@ class _FakeScheduleRepo:
         self.assignment_rows = {}
         self.availability_rows = []
         self.changes = []
+        self.requests = []
         self.profiles = {TEAM: PROFILE, OTHER_TEAM: PROFILE}
         self._n = 0
 
@@ -237,6 +238,12 @@ class _FakeScheduleRepo:
         if schedule_id:
             rows = [r for r in rows if r["schedule_id"] == schedule_id]
         return list(reversed(rows))[:limit]
+
+    def list_requests(self, team_id, employee=None, status=None):
+        rows = [r for r in self.requests if r["team_id"] == team_id]
+        if status:
+            rows = [r for r in rows if r["status"] == status]
+        return rows
 
 
 class _ScriptedLlm:
@@ -607,3 +614,67 @@ def test_the_change_log_is_readable_as_history():
     })
     history = client.get("/api/schedule/history/list").json()
     assert any(row["action"] == "generated" for row in history)
+
+
+# -- the agent speaking first ----------------------------------------------
+
+def test_the_agent_briefs_the_manager_unprompted():
+    """The one route the manager did not initiate (D15)."""
+    app, _ = _build_app([
+        _generation([]),
+        {"headline": "יש חור בשלישי", "quiet": False, "items": [
+            {"text": "משמרת בוקר של שלישי ריקה", "kind": "gap",
+             "suggestion": "מי יכול לכסות את בוקר שלישי?"},
+        ]},
+    ])
+    client = _client(app)
+    client.post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+
+    body = client.post("/api/schedule/brief", json={
+        "trigger": "opened", "last_said": [],
+    }).json()
+
+    assert body["quiet"] is False
+    assert body["items"][0]["suggestion"]
+
+
+def test_a_briefing_never_breaks_the_screen():
+    """No model answer is scripted, so the call fails inside the service.
+
+    It must come back quiet and `200`. This sits beside a calendar that has
+    to render whatever the model is doing — an error here would take the
+    management area down with it.
+    """
+    app, _ = _build_app([])
+
+    response = _client(app).post("/api/schedule/brief", json={
+        "trigger": "opened",
+    })
+
+    assert response.status_code == 200
+    assert response.json() == {"headline": "", "items": [], "quiet": True}
+
+
+def test_a_member_cannot_ask_for_a_briefing():
+    """A briefing reads drafts and other people's stated reasons."""
+    app, _ = _build_app([])
+    member = _client(app, role=ROLE_MEMBER)
+
+    assert member.post(
+        "/api/schedule/brief", json={"trigger": "opened"}
+    ).status_code == 401
+
+
+def test_briefing_before_the_interview_is_quiet_without_calling_the_model():
+    """Nothing to observe: the agent knows neither the shifts nor the people,
+    and a briefing built on that would be invented rather than noticed."""
+    app, repo = _build_app([])
+    repo.profiles = {}
+
+    body = _client(app).post(
+        "/api/schedule/brief", json={"trigger": "opened"}
+    ).json()
+
+    assert body["quiet"] is True
