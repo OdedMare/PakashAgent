@@ -17,7 +17,7 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | `changes.py` | Conversational edits and the change log |
 | `audit.py` | **Pure-Python advisory checks. No LLM.** |
 | `importer.py` | Excel/doc ingest with layout inference |
-| `prompts/` | Prompt text as markdown, `prompts.load(name)` |
+| `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
 
 ## The division that defines this layer
 
@@ -31,10 +31,30 @@ and a wrong answer looks identical to a right one.
 
 ## `interview.py`
 
-One question per turn, each carrying 2–5 selectable answers, a separate free-text
-answer path, and the agent's own recommendation when one is useful. Choices are
-never numbered in their labels: a bare number may be either a selection or a real
-value, and the interview must clarify rather than guess.
+The turn shape is ported from the `plan-chat` planners in AiSummryIO
+(`bl/workflow_engine_pkg/conversational_planning.py`). One question per turn,
+each carrying the agent's own `recommendation`, a `why`, and up to four
+clickable `options`. An option's `answer` is a full sentence sent verbatim as
+the boss's own message — never a label, never an index, because a bare number
+may be either a selection or a real value and the interview must clarify
+rather than guess. Below two options the list is dropped: one option is not a
+choice.
+
+Every turn also returns `draft` — the profile so far — plus `resolved` and
+`open_points`, the agent's own account of what is settled and what is not. The
+draft is **merged** across turns (`_merged_draft`): the model rebuilds it from
+scratch each turn, so a narrow answer that re-emits only the field it touched
+would otherwise blank the twenty it did not, precisely at the confirmation
+turn. A field is carried forward only when the new turn left it empty, so a
+correction still lands.
+
+**The interview never acts on its own conclusion.** `_is_ready` is the gate,
+enforced in code rather than trusted to the prompt: a turn that still asks
+something, or that is only now presenting its summary for approval
+(`awaiting_confirmation`), is never `ready` however the model labelled itself.
+A draft still missing a required topic is not ready either — the gap resurfaces
+in `open_points` instead of the boss discovering it after the session closed.
+`ready` is what closes the session and writes the profile.
 
 Collects:
 - the workplace profile (what the job is, the mission) — free text
@@ -55,12 +75,20 @@ The completed product mock and the prompt lessons it exposed are documented in
 [`../../../docs/INTERVIEW_REFERENCE.md`](../../../docs/INTERVIEW_REFERENCE.md).
 
 `IntroInterview` is **stateless on purpose** — it is a function of the
-conversation, which is what lets its whole contract be tested against a fake
-model with no database. `interview_service.py` is the piece that owns
-remembering: it appends each turn, stores the pending question so a refresh
-resumes without a model call, and writes the profile once on completion.
-Keep that split. Folding persistence into `IntroInterview` would cost the
-tests that make its validation trustworthy.
+conversation plus the draft it is handed, which is what lets its whole
+contract be tested against a fake model with no database.
+`interview_service.py` is the piece that owns remembering: it appends each
+turn, stores the pending turn so a refresh resumes without a model call, and
+writes the profile once `ready` turns true. Keep that split. Folding
+persistence into `IntroInterview` would cost the tests that make its gating
+trustworthy.
+
+The reference is stateless on *both* sides — its client replays the history
+and the draft on every turn. Here the session holds them instead, so a boss
+who refreshes or opens the app on a second machine resumes the profile they
+had rather than the empty one their browser happened to keep. The draft handed
+to the model is read back from the session, never taken from the request, so a
+stale client copy cannot rewrite what was already agreed.
 
 ## `scheduler.py`
 

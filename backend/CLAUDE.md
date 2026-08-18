@@ -38,8 +38,10 @@ uvicorn app.main:app --reload
   role, and what a new workspace inherits.
 - `api/dependencies.py` — the route guards (`visitor`, `boss`).
 - `common/sessions.py` — signed session cookies (HMAC-SHA256, no library).
-- `bl/interview.py` — the intro interview. Collects the workplace profile,
-  employees, rules (tagged hard/soft), and the **shift vocabulary**.
+- `bl/interview.py` — the intro interview, one `plan-chat` turn at a time
+  (ported from AiSummryIO). Collects the workplace profile, employees, rules
+  (tagged hard/soft), and the **shift vocabulary**. Every turn returns the
+  draft profile so far; `ready` is gated in code, never trusted to the prompt.
 - `bl/scheduler.py` — generates a schedule; every assignment carries a reason.
 - `bl/changes.py` — conversational edits; asks for the boss's reason, proposes a
   replacement with justification, applies on confirmation.
@@ -47,6 +49,7 @@ uvicorn app.main:app --reload
   warnings. Never blocks.
 - `bl/importer.py` — Excel/doc ingest with layout inference.
 - `bl/prompts/` — prompt text as markdown, loaded by `prompts.load(name)`.
+  Shared fragments compose via `<!-- include: shared/name.md -->`.
 - `api/` — Pydantic HTTP contracts and routers.
 - `main.py` — FastAPI routes and composition root.
 

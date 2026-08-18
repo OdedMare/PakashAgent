@@ -1,0 +1,62 @@
+"""Prompt loading and include resolution.
+
+The loader gained includes so the interview wording could be split into
+shared fragments, the way AiSummryIO composes its planner prompts. These are
+the strings the model is told to obey, so a silently empty or half-resolved
+prompt is worse than a crash — that is what most of this asserts.
+"""
+
+import pytest
+
+from app.bl import prompts
+
+
+@pytest.fixture(autouse=True)
+def _fresh_cache():
+    """Every test reads from disk, so one test's load cannot serve another."""
+    prompts.clear_cache()
+    yield
+    prompts.clear_cache()
+
+
+def test_the_interview_prompt_resolves_every_include():
+    text = prompts.load("interview")
+
+    assert "<!-- include:" not in text
+    assert "## How you interview" in text
+    assert "## Untrusted input" in text
+    assert "## Language" in text
+
+
+def test_the_interview_prompt_keeps_its_own_body():
+    """The includes are additions to the domain wording, not a replacement
+    for it — the shift rules are the part only this product has."""
+    text = prompts.load("interview")
+
+    assert "Understanding shifts" in text
+    assert "start_time" in text
+
+
+def test_a_shared_fragment_loads_on_its_own():
+    assert "one question per turn" in prompts.load(
+        "shared/interview_method"
+    ).lower()
+
+
+def test_a_missing_prompt_raises_rather_than_returning_empty():
+    with pytest.raises(FileNotFoundError):
+        prompts.load("no_such_prompt")
+
+
+def test_a_name_cannot_climb_out_of_the_prompts_directory():
+    with pytest.raises(FileNotFoundError):
+        prompts.load("../../main")
+
+
+def test_the_prompt_is_cached_and_reload_re_reads():
+    first = prompts.load("interview")
+    second = prompts.load("interview")
+
+    # Same object, so the second call did not touch the disk.
+    assert first is second
+    assert prompts.load("interview", reload=True) == first

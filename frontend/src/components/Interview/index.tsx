@@ -18,16 +18,16 @@ import { ShareLink } from "@/components/Workspace/ShareLink";
 import type { TeamView } from "@/types";
 
 import { Composer } from "./Composer";
+import { DraftPanel } from "./DraftPanel";
 import { ProfileSummary } from "./ProfileSummary";
 import { Turn } from "./Turn";
 import { useInterview } from "./useInterview";
 import { useTheme } from "./useTheme";
 
-/** Roughly the topic count in `bl/interview.py`. The bar is a sense of
- *  distance travelled, not a promise — the model may fold two topics into
- *  one turn or ask a follow-up, so it is capped just short of full until the
- *  profile actually lands. */
-const EXPECTED_TURNS = 21;
+/** Roughly the topic count in `bl/interview.py`. Used only as a floor for
+ *  the denominator early on, when the agent has resolved two points and
+ *  raised one — without it, the bar would read 66% on the second turn. */
+const EXPECTED_TOPICS = 21;
 
 /** The boss's surface: the intro interview plus the workspace controls.
  *
@@ -51,11 +51,15 @@ export function Interview({
   const [shareOpen, setShareOpen] = useState(false);
   const bottom = useRef<HTMLDivElement>(null);
 
-  const answered = turn?.turns.filter((row) => row.role === "user").length ?? 0;
   const complete = turn?.status === "complete";
-  const progress = complete
-    ? 100
-    : Math.min(94, (answered / EXPECTED_TURNS) * 100);
+  // The agent now reports its own state, so the bar tracks what it says is
+  // settled against what it says remains — a far better signal than counting
+  // turns, which credited a follow-up as progress and a folded answer as
+  // none. Capped just short of full until the profile actually lands.
+  const resolved = turn?.resolved.length ?? 0;
+  const open = turn?.open_points.length ?? 0;
+  const known = Math.max(resolved + open, EXPECTED_TOPICS);
+  const progress = complete ? 100 : Math.min(94, (resolved / known) * 100);
 
   // Follow the conversation as it grows, including while a turn is being
   // generated — the thinking dots are the thing worth keeping in view.
@@ -151,15 +155,24 @@ export function Interview({
         </div>
       ) : null}
 
-      <main id="interview">
+      <main id="interview" className={turn && !complete ? "with-draft" : ""}>
         {turn ? (
-          <Thread
-            turn={turn}
-            busy={busy}
-            complete={complete}
-            onSelect={answer}
-            bottomRef={bottom}
-          />
+          <>
+            <Thread
+              turn={turn}
+              busy={busy}
+              complete={complete}
+              onSelect={answer}
+              bottomRef={bottom}
+            />
+            {!complete ? (
+              <DraftPanel
+                draft={turn.draft}
+                resolved={turn.resolved}
+                openPoints={turn.open_points}
+              />
+            ) : null}
+          </>
         ) : (
           <Welcome busy={busy} onStart={start} />
         )}
@@ -196,7 +209,7 @@ function Thread({
   turn: NonNullable<ReturnType<typeof useInterview>["turn"]>;
   busy: boolean;
   complete: boolean;
-  onSelect: (label: string) => void;
+  onSelect: (answer: string) => void;
   bottomRef: React.Ref<HTMLDivElement>;
 }) {
   // Only the final assistant turn may be answered, and only while nothing is
@@ -233,6 +246,9 @@ function Thread({
         </div>
       ) : null}
 
+      {/* The draft is shown from the first turn, so the profile visibly fills
+          in as the interview proceeds instead of appearing all at once at
+          the end. Once complete, `profile` is the durable version. */}
       {complete && turn.profile ? (
         <ProfileSummary profile={turn.profile} />
       ) : null}
