@@ -10,11 +10,12 @@ interface Props {
    *  turns keep rendering theirs, disabled, so the boss can see what was
    *  offered without being able to answer a question twice. */
   live?: boolean;
-  onSelect?: (label: string) => void;
+  onSelect?: (answer: string) => void;
 }
 
 export function Turn({ message, live = false, onSelect }: Props) {
   const assistant = message.role === "assistant";
+  const why = message.question?.why;
   return (
     <article className={`turn ${message.role}`}>
       <div className="avatar" aria-hidden="true">
@@ -24,19 +25,34 @@ export function Turn({ message, live = false, onSelect }: Props) {
         <div className="turn-name">{assistant ? "פקש" : "אתם"}</div>
         <p className="turn-text">{message.content}</p>
 
+        {/* The question is kept separate from the reply above it: the reply
+            reacts to the last answer, the question is what is being asked
+            now, and running them together buries the ask in the prose. */}
+        {assistant && message.question ? (
+          <p className="turn-question">{message.question.question}</p>
+        ) : null}
+
         {assistant && message.recommendation ? (
           <div className="recommendation">
             <Lightbulb size={15} />
-            <span>{message.recommendation}</span>
+            <span>
+              {message.recommendation}
+              {/* Why it matters, so the boss can weigh the recommendation
+                  rather than only accept or reject it. */}
+              {why ? <em className="recommendation-why">{why}</em> : null}
+            </span>
           </div>
         ) : null}
 
         {assistant && message.options.length > 0 ? (
           <div className="options" role="group" aria-label="אפשרויות תשובה">
-            {message.options.map((option) => (
+            {message.options.map((option, index) => (
               <OptionButton
-                key={option.id}
+                key={option.label}
                 option={option}
+                // The first option is the agent's recommendation, so
+                // accepting it is one click.
+                recommended={index === 0}
                 disabled={!live}
                 onSelect={onSelect}
               />
@@ -50,28 +66,29 @@ export function Turn({ message, live = false, onSelect }: Props) {
 
 function OptionButton({
   option,
+  recommended,
   disabled,
   onSelect,
 }: {
   option: Option;
+  recommended: boolean;
   disabled: boolean;
-  onSelect?: (label: string) => void;
+  onSelect?: (answer: string) => void;
 }) {
   return (
     <button
       type="button"
       className="option"
       disabled={disabled}
-      // The label is sent, not the id and not an index. The prompt treats a
-      // bare number as ambiguous — it may be a choice or a real value like a
-      // headcount — so the answer has to arrive as the words the boss saw.
-      onClick={() => onSelect?.(option.label)}
+      // `answer` is sent, never the label and never an index. The label is a
+      // button caption; the answer is a full sentence, so a click and a typed
+      // reply reach the model as the same kind of thing. Sending a number
+      // would be exactly the ambiguity the prompt guards against.
+      onClick={() => onSelect?.(option.answer)}
     >
       <span className="option-dot" aria-hidden="true" />
       <span className="option-label">{option.label}</span>
-      {option.recommended ? (
-        <span className="option-badge">מומלץ</span>
-      ) : null}
+      {recommended ? <span className="option-badge">מומלץ</span> : null}
     </button>
   );
 }

@@ -1,19 +1,29 @@
 /** Mirrors `backend/app/api/contracts.py`. */
 
+/** A clickable answer. `label` captions the button; `answer` is the full
+ *  sentence sent verbatim as the boss's own message when it is clicked. */
 export interface Option {
-  id: string;
   label: string;
-  recommended: boolean;
+  answer: string;
+}
+
+/** The single question a turn asks, with the agent's own recommendation. */
+export interface Question {
+  question: string;
+  recommendation: string;
+  why: string;
+  options: Option[];
 }
 
 export interface Message {
   role: "assistant" | "user";
   content: string;
+  question: Question | null;
   options: Option[];
   recommendation: string | null;
 }
 
-/** The confirmed workplace profile. Only the fields the summary screen
+/** The workplace profile as it stands. Only the fields the summary screen
  *  reads are named — the rest is shown as JSON, since the interview owns the
  *  full shape and duplicating it here would drift. */
 export interface WorkplaceProfile {
@@ -32,12 +42,23 @@ export interface WorkplaceProfile {
 export interface InterviewTurn {
   session_id: string;
   status: "question" | "complete";
-  question_id: string | null;
-  question: string | null;
-  recommendation: string | null;
-  options: Option[];
-  allow_free_text: boolean;
+  /** What the agent says this turn, above the question. */
+  reply: string;
+  question: Question | null;
+  /** What is settled, and what still is not — the interview's own state,
+   *  rendered beside the conversation so progress is visible. */
+  resolved: string[];
+  open_points: string[];
+  /** The summary is on screen awaiting a yes. `ready` follows on the turn
+   *  after the boss confirms it. */
+  awaiting_confirmation: boolean;
+  ready: boolean;
+  /** The profile so far. Present on every turn, so the summary panel fills
+   *  in as the interview proceeds. */
+  draft: WorkplaceProfile | null;
   turns: Message[];
+  /** The confirmed result. Null until the interview is complete — `draft` is
+   *  a proposal, this is the durable answer. */
   profile: WorkplaceProfile | null;
 }
 

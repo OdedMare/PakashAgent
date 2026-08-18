@@ -63,9 +63,18 @@ export function useInterview(): InterviewState {
               ...current,
               turns: [
                 ...current.turns,
-                { role: "user", content, options: [], recommendation: null },
+                {
+                  role: "user",
+                  content,
+                  question: null,
+                  options: [],
+                  recommendation: null,
+                },
               ],
-              options: [],
+              // Retire the buttons with the question they belonged to, so the
+              // boss cannot answer the same question twice while it is in
+              // flight.
+              question: null,
             }
           : current,
       );

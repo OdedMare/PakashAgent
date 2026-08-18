@@ -5,16 +5,28 @@ them apart is what lets the interview stay a pure function of the
 conversation — the piece that made it testable against a fake model without a
 database.
 
+The turn shape is the `plan-chat` one ported from AiSummryIO: the model is
+handed the conversation plus the draft so far and returns the draft again,
+merged. The difference from the reference is who holds that draft between
+turns. There the client replays it; here the session does, so a boss who
+refreshes — or opens the app on a second machine — resumes the profile they
+had rather than the empty one their browser happened to keep.
+
 Every method takes the team the caller is authenticated into and passes it
 down to the repository, which filters on it. The team is never taken from the
 request body — it comes from the signed session cookie, so a boss cannot
 reach another workspace's interview by naming it.
 """
 
-from typing import Optional
-
-from app.bl.interview import IntroInterview
+from app.bl.interview import IntroInterview, empty_draft
 from app.common.errors import AgentError, ConflictError
+
+# What a turn stores and serves. Named once because the payload written to
+# the turn, the pending question, and the HTTP response are the same fields.
+_TURN_FIELDS = (
+    "reply", "question", "resolved", "open_points", "awaiting_confirmation",
+    "ready", "draft",
+)
 
 
 class InterviewService:
@@ -42,8 +54,8 @@ class InterviewService:
 
         A refresh must not re-ask the model: the same conversation would
         produce a differently worded question, and the boss would see their
-        answered question replaced by a near-duplicate. The pending question
-        is stored precisely so this path is free.
+        answered question replaced by a near-duplicate. The pending turn is
+        stored precisely so this path is free.
         """
         session = self._repository.get_session(session_id, team_id)
         if session["status"] == "complete":
@@ -65,31 +77,36 @@ class InterviewService:
         return self._advance(session_id, team_id)
 
     def _advance(self, session_id: str, team_id: str) -> dict:
+        """One model turn: replay the history, merge, store, return.
+
+        The draft handed to the model is the one the last turn produced, read
+        back from the session rather than taken from the request, so a stale
+        or edited client copy can never rewrite what was already agreed.
+        """
+        session = self._repository.get_session(session_id, team_id)
         history = [
             {"role": row["role"], "content": row["content"]}
-            for row in self._repository.history(session_id)
+            for row in session["turns"]
         ]
-        result = self._interview.next_turn(history)
-        if result["status"] == "complete":
+        draft = (session["pending"] or {}).get("draft")
+        result = self._interview.next_turn(history, draft)
+        pending = {key: result[key] for key in _TURN_FIELDS}
+        # The reply is the turn's content; the question, the draft, and the
+        # rest ride along as payload so the UI can re-render the buttons a
+        # past turn offered instead of inferring them from prose.
+        self._repository.append_turn(
+            session_id, "assistant", result["reply"], pending
+        )
+        if result["ready"]:
+            # `ready` means the boss confirmed the summary on the previous
+            # turn. `bl/interview.py` gates it, so a model that mislabels an
+            # open question or an incomplete profile cannot reach here.
             session = self._repository.complete(
-                session_id, team_id, result["profile"]
+                session_id, team_id, result["draft"]
             )
             return _completed(session)
-        # The question text is the turn's content; the options and the
-        # recommendation ride along as payload so the UI can re-render the
-        # buttons a past turn offered instead of inferring them from prose.
-        payload = {
-            "question_id": result["question_id"],
-            "question": result["question"],
-            "recommendation": result["recommendation"],
-            "options": result["options"],
-            "allow_free_text": result["allow_free_text"],
-        }
-        self._repository.append_turn(
-            session_id, "assistant", result["question"], payload
-        )
-        self._repository.save_pending(session_id, payload)
-        return _turn(session_id, payload, self._repository.history(session_id))
+        self._repository.save_pending(session_id, pending)
+        return _turn(session_id, pending, self._repository.history(session_id))
 
 
 def _turn(session_id: str, pending: dict, turns) -> dict:
@@ -103,26 +120,39 @@ def _turn(session_id: str, pending: dict, turns) -> dict:
 
 
 def _completed(session: dict) -> dict:
+    profile = session["profile"]
     return {
         "session_id": session["id"],
         "status": "complete",
-        "question_id": None,
+        "reply": "",
         "question": None,
-        "recommendation": None,
-        "options": [],
-        "allow_free_text": False,
+        "resolved": [],
+        "open_points": [],
+        "awaiting_confirmation": False,
+        "ready": True,
+        # The finished profile is served as the draft too, so the summary
+        # panel reads one field whether the interview is running or done.
+        "draft": profile or empty_draft(),
         "turns": [_message(row) for row in session["turns"]],
-        "profile": session["profile"],
+        "profile": profile,
     }
 
 
 def _message(row: dict) -> dict:
+    """One thread row as the UI replays it.
+
+    `options` and `recommendation` are lifted out of the stored question so a
+    past assistant turn can re-render its buttons without the client reaching
+    into an object that is null on every user row.
+    """
     payload = row.get("payload") or {}
+    question = payload.get("question") or {}
     return {
         "role": row["role"],
         "content": row["content"],
-        "options": payload.get("options", []),
-        "recommendation": payload.get("recommendation"),
+        "question": payload.get("question"),
+        "options": question.get("options", []),
+        "recommendation": question.get("recommendation"),
     }
 
 
