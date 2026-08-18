@@ -55,6 +55,7 @@ def audit(
     employees: List[dict],
     availability: Optional[List[dict]] = None,
     profile: Optional[dict] = None,
+    slots: Optional[List[dict]] = None,
 ) -> List[dict]:
     """Every warning the countable facts support, most severe first.
 
@@ -62,6 +63,13 @@ def audit(
     stores them. `shifts` and `employees` come from the workplace profile,
     which is why shift names are read from the data rather than known here
     ([D9](../../../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)).
+
+    `slots` is the schedule's own grid — every shift on every date the period
+    contains. It matters because a slot with *nobody* on it leaves no trace in
+    `assignments`: without the grid, an entirely unstaffed shift is invisible
+    to a check that walks the assignments, which is precisely the case the
+    unfilled-slot warning exists for. Callers that have a stored schedule pass
+    it; the assignments are the fallback when they do not.
 
     Returns a list; it does not raise on a broken rule, because a broken rule
     is a thing to report rather than an error in the caller.
@@ -77,7 +85,7 @@ def audit(
     warnings.extend(_over_hours(rows, employees or [], policy))
     warnings.extend(_consecutive_days(rows, policy))
     warnings.extend(_short_rest(rows, shift_index, policy))
-    warnings.extend(_staffing(rows, shifts or []))
+    warnings.extend(_staffing(rows, shifts or [], slots))
     # Sorted for a stable render: the manager reads this list top-down, and a
     # set of warnings that reorders itself between two identical audits looks
     # like the schedule changed when it did not.
@@ -365,24 +373,42 @@ def _short_rest(
     return warnings
 
 
-def _staffing(rows: List[dict], shifts: List[dict]) -> List[dict]:
+def _staffing(
+    rows: List[dict], shifts: List[dict], slots: Optional[List[dict]] = None
+) -> List[dict]:
     """Slots short of their headcount, and slots over it.
 
     Understaffing is a warning -- somebody does not show up. Overstaffing is
     a notice: it costs money but nothing breaks, and the manager may have
     done it deliberately for training or cover.
+
+    The set of slots to check comes from the schedule's grid when the caller
+    has one, and from the assignments only as a fallback. Deriving it from
+    assignments alone would skip any slot with nobody on it at all -- an
+    entirely unstaffed shift would report nothing, which is the exact
+    situation the manager most needs told about.
     """
     filled: Dict[tuple, int] = {}
     for row in rows:
         key = (row["date"], row["shift"])
         filled[key] = filled.get(key, 0) + 1
 
+    if slots:
+        checked = {
+            (_text(slot.get("slot_date")) or _iso_date(slot.get("slot_date")),
+             _text(slot.get("shift_name")))
+            for slot in slots if isinstance(slot, dict)
+        }
+        checked = {pair for pair in checked if pair[0] and pair[1]}
+    else:
+        checked = {(row["date"], row["shift"]) for row in rows}
+
     warnings = []
-    for date, shift_name in sorted({(row["date"], row["shift"]) for row in rows}):
+    for date, shift_name in sorted(checked):
         needed = _headcount_for(shifts, shift_name, _parse_date(date))
         if needed is None:
             continue
-        count = filled[(date, shift_name)]
+        count = filled.get((date, shift_name), 0)
         if count < needed:
             warnings.append(_warning(
                 UNFILLED, SEVERITY_WARNING,
@@ -481,6 +507,17 @@ def _warning(
         "shift": shift,
         "details": details or {},
     }
+
+
+def _iso_date(value: Any) -> str:
+    """A slot date as an ISO string, however the row carried it.
+
+    Repository rows come back as `datetime.date`; a caller building a grid in
+    memory passes strings. Both are compared against assignment dates here.
+    """
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return ""
 
 
 def _parse_date(value: str) -> Optional[datetime.date]:

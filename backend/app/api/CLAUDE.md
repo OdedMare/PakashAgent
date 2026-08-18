@@ -5,15 +5,16 @@ the result.
 
 ## Routers
 
-Built so far: `workspace.py`, `interview.py`, `health.py`. The rest arrive with
-their `bl/` modules.
+Built so far: `workspace.py`, `interview.py`, `schedules.py`, `health.py`.
+`imports.py` arrives with `bl/importer.py`; `changes.py` and `employees.py` were
+folded into `schedules.py` rather than split, since they share the schedule and
+the team scoping.
 
 | Router | Serves |
 |---|---|
 | `workspace.py` | Create/enter a workspace, the member share link, logout |
 | `interview.py` | The intro interview, one turn at a time |
-| `schedules.py` | Read a period, generate a schedule |
-| `changes.py` | Propose a change, confirm a change |
+| `schedules.py` | The management area: read/generate a period, propose and apply changes, constraints, history |
 | `imports.py` | Upload a file, return the inferred interpretation, commit on confirm |
 | `employees.py` | Roster management |
 | `health.py` | Liveness |
@@ -41,6 +42,9 @@ Two flows are deliberately **two calls**, not one:
   A second call commits it. Never collapse these ([D7](../../../docs/DECISIONS.md#d7--import-infers-layout-boss-confirms)).
 - **Change** — proposing returns the agent's reasoning and the resulting warnings.
   A second call applies it. The boss confirms in between ([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)).
+  **A drag on the calendar is the same contract**: the gesture writes nothing,
+  and `POST /api/schedule/move` is what the confirmation dialog sends once the
+  manager has given a reason ([D12](../../../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
 
 ## Audit warnings in responses
 
@@ -60,6 +64,11 @@ and a new route added under the wrong prefix silently inherits the wrong guard.
 - `guards.boss()` — the boss only. **This is where [D5](../../../docs/DECISIONS.md#d5--employees-are-read-only)
   is enforced.** Every mutating route depends on it, so a member session cannot
   reach a write no matter which URL it is pointed at.
+
+**Route order matters in `schedules.py`.** A path parameter at the root of a
+prefix matches any single segment, so `/{schedule_id}` is declared *after* every
+literal path under it — otherwise `/constraints` and `/history` are read as
+schedule ids. FastAPI resolves in declaration order.
 
 **The team always comes from the signed session cookie, never from the request
 body or a path parameter.** A route that accepts a team id from the caller is a

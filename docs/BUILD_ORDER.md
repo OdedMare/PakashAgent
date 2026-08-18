@@ -2,10 +2,12 @@
 
 **Start here in a new session.**
 
-Done so far: step 1 (scaffold and port), the interview half of step 2 (the
-`interview_sessions` / `interview_turns` tables and their repository), step 4
-(the intro interview, now wired through HTTP to an RTL chat UI), and the
-interview slice of step 8.
+Done so far: step 1 (scaffold and port), step 2 (all tables and their
+repositories), **step 3 (`bl/audit.py` and its table-driven tests)**, step 4
+(the intro interview, wired through HTTP to an RTL chat UI), step 5
+(`bl/scheduler.py`), step 7 (`bl/changes.py` and the change log), and the
+management slice of step 8 — the calendar, the agent chat, the roster and
+constraints panel, and the read-only member view.
 
 Also done, out of order and at the boss's request: **workspaces** — the `teams`
 table, boss login, member share links, and the route guards
@@ -14,9 +16,15 @@ Nothing downstream depends on it and it does not change the order below.
 **Each new table still arrives with its own `team_id`** — added at creation
 time, never retrofitted onto a populated table.
 
-**Next: step 3, `bl/audit.py`.** It was deliberately skipped to get the interview
-demonstrable, but nothing downstream should be built on top of an audit that
-does not exist yet.
+**Next: step 6, the importer.** It is the last unbuilt step. Build the two
+fixtures from [`FILE_FORMATS.md`](FILE_FORMATS.md) *first*, then make
+inference pass both — they are structurally different on purpose.
+
+Worth knowing about the audit, since everything trusts it: `audit()` takes the
+schedule's **slot grid** as well as the assignments. A slot with nobody on it
+leaves no row among the assignments, so an audit walking only those reports
+nothing for an entirely unstaffed shift — the case the manager most needs
+told about. Callers with a stored schedule pass `slots`.
 
 Read first: [`DECISIONS.md`](DECISIONS.md) (the reasoning behind the architecture,
 including one deliberate tradeoff that looks like a bug), then

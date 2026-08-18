@@ -470,6 +470,16 @@ class ScheduleService:
                 )
             ],
             profile=profile,
+            # The grid, so a slot with nobody on it is still checked. Without
+            # it an entirely unstaffed shift leaves no row to notice and the
+            # unfilled warning never fires -- the case most worth reporting.
+            slots=[
+                {
+                    "shift_name": slot.get("shift_name"),
+                    "slot_date": _iso(slot.get("slot_date")),
+                }
+                for slot in schedule.get("slots") or []
+            ],
         )
 
     def _require_schedule(

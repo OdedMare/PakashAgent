@@ -146,12 +146,61 @@ by decision, does nothing but read.
 - **`session_secret` must be set in a real deployment.** Unset, each worker
   generates its own and rejects the others' cookies.
 
-## D11 — The audit is still the next thing to build
+## D11 — The audit was built before anything trusted it *(resolved)*
 
 Workspaces were built ahead of [`BUILD_ORDER.md`](BUILD_ORDER.md) step 3 at the
-boss's request. Nothing about them depends on the audit, and nothing downstream
-was built on top of the gap — but the ordering note in BUILD_ORDER still holds:
-`bl/audit.py` comes before the scheduler, the importer, and the changes loop.
+boss's request. The ordering note held: `bl/audit.py` and its table-driven tests
+landed **before** the scheduler and the changes loop, so nothing downstream was
+built on top of an audit that did not exist.
+
+*Kept as a record.* The reason it mattered is worth remembering — `audit.py` is
+the one module whose correctness everything else assumes, and it is the easiest
+thing in the codebase to get exactly right. The importer, still unbuilt, is the
+last thing that will lean on it.
+
+---
+
+## D12 — Dragging a shift is a *proposal*, not an edit
+
+The management calendar lets the manager drag an assignment to another slot.
+The drop **does not write**. It opens a confirmation that collects the
+manager's reason, and only that dialog applies the move.
+
+*Why:* [D3](#d3--the-agent-decides-code-only-audits-) says changes happen by
+talking, and [D8](#d8--two-reasons-both-required) requires two reasons on
+every change. A drag that wrote directly would satisfy neither — the
+`change_log` would gain a row nobody could account for, which is the one
+thing the log exists to prevent. Routing the gesture through the same
+propose-then-confirm path as a typed sentence keeps the direct-manipulation
+feel without reversing either decision. The drag is a faster way to *say what
+you want*, not a way around saying why.
+
+The move is stored with the manager's reason and an agent reason that says
+plainly that the manager moved it — rather than manufacturing a judgment the
+agent did not make.
+
+## D13 — Constraints are recorded by the manager, with their source marked
+
+The management area lets the **manager and the agent** record availability
+constraints. Employees still do not enter anything themselves.
+
+`availability.source` is one of `manager`, `agent`, `employee_reported`, or
+`interview`. It records **where the information came from, not who typed it**.
+`employee_reported` means the manager wrote down what someone told them out
+of band.
+
+*Why:* the product wants "the agent can set constraints for employees, and
+see the ones they raised themselves". The second half cannot mean employees
+writing to the app: [D5](#d5--employees-are-read-only) makes them read-only
+and [D10](#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)
+gives them no identity at all, so there is nobody to attribute a submission
+to and no way to authenticate one. Marking provenance answers the real need —
+"Dana said she cannot do Thursdays" is preserved as a distinct fact from "the
+manager decided Dana is off Thursdays" — without inventing employee accounts.
+
+If per-employee submission is ever genuinely wanted, that is the point to
+revisit D5 and D10 together and give members real identities. Do not bolt an
+unauthenticated form onto the share link.
 
 ---
 

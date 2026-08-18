@@ -361,3 +361,48 @@ def test_the_audit_never_blocks_and_never_mutates():
     # ...and nothing was rejected, rewritten, or removed.
     assert assignments == before
     assert all(isinstance(warning, dict) for warning in warnings)
+
+
+# -- the slot grid ---------------------------------------------------------
+
+def test_a_slot_with_nobody_on_it_is_reported_when_the_grid_is_given():
+    """An entirely unstaffed shift leaves no row among the assignments.
+
+    Walking only the assignments would skip it silently -- and a shift with
+    nobody on it is the single case the manager most needs told about, since
+    the failure mode is that no one turns up. The schedule's own grid is what
+    makes it visible.
+    """
+    slots = [
+        {"shift_name": MORNING, "slot_date": "2026-08-17"},
+        {"shift_name": MORNING, "slot_date": "2026-08-18"},
+    ]
+    warnings = audit(
+        [_assign("דנה", MORNING, "2026-08-17"), _assign("יוסי", MORNING, "2026-08-17")],
+        SHIFTS, EMPLOYEES, slots=slots,
+    )
+    unfilled = _by_code(warnings, UNFILLED)
+    assert len(unfilled) == 1
+    assert unfilled[0]["date"] == "2026-08-18"
+    assert unfilled[0]["details"] == {"assigned": 0, "required": 2}
+
+
+def test_slot_dates_may_arrive_as_dates_rather_than_strings():
+    """Repository rows carry `datetime.date`; a grid built in memory carries
+    strings. Both have to compare against the assignment dates."""
+    import datetime
+
+    slots = [{
+        "shift_name": MORNING,
+        "slot_date": datetime.date(2026, 8, 18),
+    }]
+    warnings = audit([], SHIFTS, EMPLOYEES, slots=slots)
+    assert len(_by_code(warnings, UNFILLED)) == 1
+
+
+def test_without_a_grid_the_audit_still_checks_what_it_can_see():
+    """The assignments remain the fallback, so an older caller keeps working."""
+    warnings = audit(
+        [_assign("דנה", MORNING, "2026-08-17")], SHIFTS, EMPLOYEES,
+    )
+    assert len(_by_code(warnings, UNFILLED)) == 1

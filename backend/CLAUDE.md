@@ -43,8 +43,13 @@ uvicorn app.main:app --reload
   (tagged hard/soft), and the **shift vocabulary**. Every turn returns the
   draft profile so far; `ready` is gated in code, never trusted to the prompt.
 - `bl/scheduler.py` — generates a schedule; every assignment carries a reason.
+  Builds the slot grid in code (which dates fall in a period is arithmetic) and
+  asks the model only to assign people into it.
 - `bl/changes.py` — conversational edits; asks for the boss's reason, proposes a
-  replacement with justification, applies on confirmation.
+  replacement with justification, applies on confirmation. Proposes only — it is
+  handed no repository, so it cannot write.
+- `bl/schedule_service.py` — persistence and ordering around those three plus
+  the audit: propose, confirm, apply, publish, constraints, history.
 - `bl/audit.py` — **pure Python, no LLM.** Recomputes countable facts and returns
   warnings. Never blocks.
 - `bl/importer.py` — Excel/doc ingest with layout inference.
@@ -71,6 +76,11 @@ one concern; split rather than append.
 - **No structured rule vocabulary.** Rules are the boss's own sentences ([D2](../docs/DECISIONS.md#d2--rules-stay-natural-language)).
 - **Every assignment carries the agent's reason**; every change carries the boss's
   reason too. Neither is optional — they serve different purposes ([D8](../docs/DECISIONS.md#d8--two-reasons-both-required)).
+  Enforced in three places on purpose: `assignments.reason` is `NOT NULL`, the
+  repository refuses a blank one, and `scheduler.py` drops an unreasoned row
+  rather than storing it.
+- **A dragged shift is a proposal, not an edit.** `POST /api/schedule/move`
+  requires the manager's reason exactly as a spoken change does ([D12](../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
 - **An import is never committed before confirmation.** Inference produces an
   interpretation the boss approves; only then does anything persist ([D7](../docs/DECISIONS.md#d7--import-infers-layout-boss-confirms)).
 - **Employees are read-only.** No endpoint lets an employee mutate a schedule ([D5](../docs/DECISIONS.md#d5--employees-are-read-only)).

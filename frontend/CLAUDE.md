@@ -11,27 +11,62 @@ and there is no CORS setup.
 ## Shape
 
 Chat-first. The boss talks to the agent in a conversation pane; the schedule
-renders beside it as a grid. There is no schedule *editor* — changes happen by
-talking, which is the product ([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+renders beside it as a grid.
 
-Built so far: the workspace gate and the interview. The rest of the table is
-the plan.
+There is no schedule *editor*. The calendar does let the manager **drag** an
+assignment, but the drop writes nothing — it opens a confirmation that collects
+their reason, and that dialog is what applies the move
+([D12](../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
+Dragging is a faster way to say what you want, not a way around saying why
+([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-),
+[D8](../docs/DECISIONS.md#d8--two-reasons-both-required)).
+
+Built so far: the workspace gate, the interview, and the management area. Only
+the import screens remain.
 
 | Surface | Purpose |
 |---|---|
 | Workspace gate | Boss login / team creation — `src/components/Workspace/` |
 | Member area | The employee's read-only surface — `MemberArea.tsx` |
 | Interview | The intro conversation, one question per turn — `src/components/Interview/` |
-| Schedule | The living grid for a period, RTL |
-| Import confirm | Inferred interpretation beside the raw sheet |
-| Change confirm | The agent's reasoning plus resulting warnings |
-| Employee view | **Read-only** schedule |
+| Management | The manager's control room — `src/components/Management/` |
+| Schedule | The living grid for a period, RTL — `Management/Calendar.tsx` |
+| Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `ConfirmMove.tsx` |
+| Import confirm | Inferred interpretation beside the raw sheet *(not built)* |
+| Employee view | **Read-only** schedule — `MemberArea` renders the same `Calendar` with `readOnly` |
+
+## The management area
+
+`Management/index.tsx` is where the manager lands once the interview has produced
+a profile — `workspace.profile` is the switch, since it is the interview's
+durable result and exactly the thing the area needs to run on.
+
+- **Drag proposes; the dialog writes.** `Calendar` reports a drop upward and
+  changes nothing itself. `ConfirmMove` collects the manager's reason and its
+  confirm button stays disabled until there is one, so the requirement is
+  visible rather than enforced by a server error afterwards.
+- **The agent chat is two-step.** A proposal renders the agent's reasoning in
+  full, plus the warnings the change *would* cause, and nothing is applied until
+  the manager confirms. A proposal that comes back `needs_reason` carries no
+  operations — the agent is asking why, and the answer goes back through the
+  same call.
+- **Everything re-reads after a write.** `useManagement` refetches the overview
+  rather than patching locally: the schedule, its warnings, the constraints and
+  the log all move together, and a locally patched grid beside a stale audit is
+  worse than a brief spinner.
+- **Constraints show their source.** Employees never entered any of them (D5,
+  D10) — `source` says whether the manager decided it or wrote down what
+  someone reported, and the panel labels it that way rather than implying a
+  submission that cannot exist.
 
 ## Workspaces
 
 `src/components/Workspace/index.tsx` picks the surface from the role the
-server reported: no session → the login gate, `member` → `MemberArea`, `boss`
-→ the interview.
+server reported: no session → the login gate, `member` → `MemberArea`, `boss` →
+the interview until the workplace has been taught, then the management area.
+`workspace.profile` is what switches those last two, and reopening the interview
+over an existing profile is a deliberate choice the manager makes — re-running it
+replaces the profile everything downstream reads.
 
 - **The session is an HttpOnly cookie**, so this code cannot read it. "Am I
   logged in?" is answered by `GET /api/workspace/me`, never by local state

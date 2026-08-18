@@ -8,8 +8,11 @@ Fetches and sends. Makes no decisions — those live in `bl/`.
 
 ## Tables
 
-Built so far: `teams`, `interview_sessions`, and `interview_turns` (in
-`schema.py`). The rest below are the planned model, not yet created.
+Built so far: `teams`, `interview_sessions`, `interview_turns`, `schedules`,
+`shift_slots`, `assignments`, `availability`, and `change_log` (all in
+`schema.py`). `workplace_profile`, `employees`, `rules` and `conversations` are
+not separate tables: the interview's confirmed profile holds all four as JSON on
+`interview_sessions.profile`, which is what `team_profile()` reads.
 
 **Every workplace-owned table carries `team_id`** ([D10](../../../docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)).
 Add it when the table is created, not later: retrofitting a tenant key onto a
@@ -27,15 +30,18 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | `teams` | One workspace: name, the boss's password hash, the member share token |
 | `interview_sessions` | One intro interview: its **team**, status, the confirmed profile, the pending question |
 | `interview_turns` | Each turn; assistant turns keep the options they offered as `payload` |
-| `workplace_profile` | What the job is, the mission, the **shift vocabulary** (names, times, on-call flags and weighting) |
-| `employees` | People, with whatever roles/qualifications the interview surfaced |
-| `rules` | The boss's own sentences, each tagged hard or soft |
-| `shifts` | Slot definitions per period, named from the workplace vocabulary |
-| `assignments` | person → shift, **with the agent's reason** |
-| `schedules` | One living schedule per period |
-| `change_log` | **Append-only**: what changed, the boss's reason, when |
-| `availability` | Known unavailability, including what an import inferred |
-| `conversations` | Interview and chat turns |
+| `schedules` | One living schedule per period, `draft` or `published` |
+| `shift_slots` | One shift on one date — the thing an assignment points into |
+| `assignments` | person → slot, **with the agent's reason** (`NOT NULL`) |
+| `availability` | Known unavailability. `source` records where it came from — the manager, the agent, or the manager writing down what an employee reported ([D13](../../../docs/DECISIONS.md#d13--constraints-are-recorded-by-the-manager-with-their-source-marked)) |
+| `change_log` | **Append-only**: what changed, both reasons, when |
+
+The workplace profile — the mission, the **shift vocabulary** (names, times,
+on-call flags and weighting), the employees, and the rules — lives as JSON on
+`interview_sessions.profile` rather than in tables of its own. It is written
+once when the interview is confirmed and read through `team_profile()`. Splitting
+it into relational tables would buy nothing today: nothing queries across it, and
+the interview owns its shape.
 
 ## Rules
 

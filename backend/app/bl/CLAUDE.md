@@ -6,7 +6,8 @@ directly — it goes through the repository and the LLM client it was constructe
 with.
 
 Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
-`prompts/`.
+`audit.py`, `scheduler.py`, `changes.py`, `schedule_service.py`, `prompts/`.
+Only `importer.py` remains.
 
 | File | Owns |
 |---|---|
@@ -15,6 +16,7 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | `workspace_service.py` | Workspace rules: entering a team, roles, the share link |
 | `scheduler.py` | Generating a schedule; every assignment carries a reason |
 | `changes.py` | Conversational edits and the change log |
+| `schedule_service.py` | Persistence and orchestration around all three: propose, confirm, apply |
 | `audit.py` | **Pure-Python advisory checks. No LLM.** |
 | `importer.py` | Excel/doc ingest with layout inference |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
@@ -133,8 +135,32 @@ boss chose this shape knowingly, including its tradeoff with D1.
 On-call shifts may weight differently — read the weighting from the interview's
 shift vocabulary rather than assuming.
 
+**Pass `slots` when you have them.** `audit()` takes the schedule's slot grid as
+well as the assignments. A slot with nobody on it leaves no row among the
+assignments, so an audit walking only those reports nothing for an entirely
+unstaffed shift — the case the manager most needs told about. The assignments
+are the fallback for callers that have no stored grid.
+
 This file is the easiest thing here to get exactly right and the easiest to test.
 Build it early and table-drive its tests.
+
+## `schedule_service.py`
+
+Owns what `scheduler.py`, `changes.py` and `audit.py` deliberately do not: the
+repository, and the order things happen in.
+
+Two shapes are load-bearing:
+
+- **Propose and apply are separate calls.** A proposal writes nothing; the
+  manager confirms in between ([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)).
+  A drag on the calendar goes through the same two steps as a typed sentence —
+  the gesture is a proposal, not an edit ([D12](../../../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
+- **Every response carrying a schedule carries its warnings**, and a response
+  with warnings is still a success.
+
+`propose()` audits the schedule *as the change would leave it*, computed in
+memory and never written, so the manager sees the consequence of a change
+before accepting it rather than after.
 
 ## `importer.py`
 

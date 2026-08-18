@@ -16,21 +16,28 @@ markers, and errors are all Hebrew. See [`backend/app/bl/CLAUDE.md`](backend/app
 
 ## Status
 
-**Step 1 — the intro interview — works end to end.** The boss can open the app,
-answer one question per turn (a selectable answer or their own words), and reach
-a confirmed workplace profile stored in Postgres.
+**The intro interview works end to end.** The boss opens the app, answers one
+question per turn (a selectable answer or their own words), and reaches a
+confirmed workplace profile stored in Postgres.
 
 **Workspaces work end to end.** A boss opens a team, gets a share link for the
 employees, and everything they author is scoped to that team.
 
-Built: the ported `dal/llm` client, settings and runtime settings, the interview
-prompt and its validation, the interview session/turn tables, the HTTP layer, the
-RTL chat UI, and the workspace layer (teams, boss login, member share links,
-route guards).
+**The management area works end to end.** Once the interview is done the manager
+lands in a control room holding the shift calendar, the roster and its
+constraints, and a conversation with the agent about the current and future
+schedule. They can generate a week, drag a shift (which asks why before it
+moves), talk to the agent about the assignment, record constraints against
+employees, and publish to the team.
 
-Not built yet: `bl/audit.py`, `scheduler.py`, `changes.py`, `importer.py`, and the
-schedule surfaces. Next up is the audit — see
-[`docs/BUILD_ORDER.md`](docs/BUILD_ORDER.md) step 3.
+Built: the ported `dal/llm` client, settings and runtime settings, the interview
+and its prompt, the workspace layer (teams, boss login, member share links, route
+guards), `bl/audit.py` and its table-driven tests, `bl/scheduler.py`,
+`bl/changes.py`, the schedule tables, the management HTTP layer, and the RTL UI
+for all of it.
+
+Not built yet: `bl/importer.py` and the import-confirmation screens — see
+[`docs/BUILD_ORDER.md`](docs/BUILD_ORDER.md) step 6.
 
 Every architectural decision was settled in a design interview and is recorded —
 with its reasoning — in [`docs/DECISIONS.md`](docs/DECISIONS.md). Read that before
@@ -86,9 +93,11 @@ npm install
 npm run dev                            # :3000, proxies /api to the backend
 ```
 
-Then open <http://localhost:3000>, create a team, and start the interview. The
-share button in the header reveals the link employees open (`/team/<token>`);
-it grants a read-only view and no password.
+Then open <http://localhost:3000>, create a team, and start the interview.
+Finishing it opens the management area, where "בניית סידור לשבוע" generates a
+week. The share button in the header reveals the link employees open
+(`/team/<token>`); it grants a read-only view and no password, and shows only
+schedules the manager has published.
 
 Postgres must be reachable at `PAKASH_DATABASE_URL`; the app creates its own
 tables on startup (the schema itself must already exist).
