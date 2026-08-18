@@ -20,6 +20,10 @@ services:
       PAKASH_DATABASE_SCHEMA: ${PAKASH_DATABASE_SCHEMA:-pakash}
       PAKASH_DATABASE_HOST: db
       PAKASH_RUNTIME_SETTINGS_FILE: /data/runtime-settings.json
+      # Signs the workspace session cookie. Unset, the backend generates one
+      # per process — fine for a single-container dev run, but sessions then
+      # die on every restart. Set it in .env for anything long-lived.
+      PAKASH_SESSION_SECRET: ${PAKASH_SESSION_SECRET:-}
       # The model runs on the host, not in the compose network.
       PAKASH_LLM_BASE_URL: ${PAKASH_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       PAKASH_LLM_MODEL: ${PAKASH_LLM_MODEL:-gemma3:27b}

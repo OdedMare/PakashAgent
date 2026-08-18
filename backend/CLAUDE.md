@@ -32,7 +32,12 @@ uvicorn app.main:app --reload
 - `dal/database/postgres.py` — connection; verifies the schema exists.
 - `dal/llm/` — the OpenAI-compatible JSON client and its degradation ladder,
   ported unchanged from AiSummryIO. Model/base URL/API key stay live per call.
-- `dal/repository/` — the only SQL owner.
+- `dal/repository/` — the only SQL owner. `teams.py` also owns password
+  hashing (`scrypt`, stdlib) and the member share token.
+- `bl/workspace_service.py` — workspace rules: who may enter a team, in which
+  role, and what a new workspace inherits.
+- `api/dependencies.py` — the route guards (`visitor`, `boss`).
+- `common/sessions.py` — signed session cookies (HMAC-SHA256, no library).
 - `bl/interview.py` — the intro interview. Collects the workplace profile,
   employees, rules (tagged hard/soft), and the **shift vocabulary**.
 - `bl/scheduler.py` — generates a schedule; every assignment carries a reason.
@@ -66,6 +71,11 @@ one concern; split rather than append.
 - **An import is never committed before confirmation.** Inference produces an
   interpretation the boss approves; only then does anything persist ([D7](../docs/DECISIONS.md#d7--import-infers-layout-boss-confirms)).
 - **Employees are read-only.** No endpoint lets an employee mutate a schedule ([D5](../docs/DECISIONS.md#d5--employees-are-read-only)).
+  Enforced by `guards.boss()` on every mutating route — not by convention.
+- **Every workplace-owned read is scoped by `team_id`, taken from the signed
+  session cookie** and never from the request ([D10](../docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)).
+- **`PAKASH_SESSION_SECRET` must be set in any real deployment.** Unset, each
+  worker signs with its own key and rejects the others' cookies.
 - **The change log is append-only.** The schedule is edited in place; its history
   lives only in the log ([D4](../docs/DECISIONS.md#d4--living-schedule-not-versioned)).
 - Errors leaving the backend are `AgentError` in Hebrew.

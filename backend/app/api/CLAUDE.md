@@ -5,11 +5,12 @@ the result.
 
 ## Routers
 
-Built so far: `interview.py`, `health.py`. The rest arrive with their `bl/`
-modules.
+Built so far: `workspace.py`, `interview.py`, `health.py`. The rest arrive with
+their `bl/` modules.
 
 | Router | Serves |
 |---|---|
+| `workspace.py` | Create/enter a workspace, the member share link, logout |
 | `interview.py` | The intro interview, one turn at a time |
 | `schedules.py` | Read a period, generate a schedule |
 | `changes.py` | Propose a change, confirm a change |
@@ -47,6 +48,26 @@ Any response carrying a schedule also carries `warnings` from `bl/audit.py`. The
 are **advisory** — a response with warnings is still a success, still `200`, and
 the schedule is still valid to display. Do not turn a warning into a `4xx`
 ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+
+## Access control
+
+Every route states its own requirement as a dependency —
+`session: dict = Depends(guards.boss())` — rather than inheriting one from a
+path prefix. A middleware rule matched on a prefix is invisible at the route,
+and a new route added under the wrong prefix silently inherits the wrong guard.
+
+- `guards.visitor()` — any authenticated visitor, boss or member.
+- `guards.boss()` — the boss only. **This is where [D5](../../../docs/DECISIONS.md#d5--employees-are-read-only)
+  is enforced.** Every mutating route depends on it, so a member session cannot
+  reach a write no matter which URL it is pointed at.
+
+**The team always comes from the signed session cookie, never from the request
+body or a path parameter.** A route that accepts a team id from the caller is a
+route that lets one workspace name another.
+
+`/api/settings` is boss-only and process-wide — it holds the database
+credentials and the model key. See [D10](../../../docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)
+for why it is not per-team yet.
 
 ## Rules
 

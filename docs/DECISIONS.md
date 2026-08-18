@@ -112,6 +112,49 @@ weight it.
 
 ---
 
+## D10 — One workspace per team; the boss holds a password, members hold a link
+
+Each team gets a separate workspace. Every row that belongs to a workplace
+carries `team_id`, and every read filters on it.
+
+The two sides authenticate differently, on purpose:
+
+- **The boss** picks a password when the workspace is created. It is what
+  authorizes authoring — the interview, the settings, and later the schedule.
+- **Members** get an unguessable share link (`/team/<token>`) and no account at
+  all. Following it grants a read-only session.
+
+*Why the asymmetry:* it falls out of [D5](#d5--employees-are-read-only). Members
+never write, so they never need an identity — only proof they were invited.
+Giving them accounts would mean signup, password reset, and invitations by
+email: a large amount of machinery in service of a side of the product that,
+by decision, does nothing but read.
+
+*Consequences worth knowing:*
+
+- **A share link is a bearer credential.** Anyone holding it sees the roster.
+  Rotation (`POST /api/workspace/member-link/rotate`) is the only revocation,
+  and it revokes for *everyone* — that is what leaves the team.
+- **There is no per-member identity**, so "who looked at the schedule" is not
+  answerable and "Dana's personal view" is not expressible. If either is ever
+  wanted, that is the point to revisit this and give members real accounts.
+- **Settings stay process-wide**, not per-team: they hold the database
+  credentials and the model key. They are guarded as boss-only, but one
+  workspace's boss editing them still moves the ground under every other
+  workspace. Per-team model settings would mean making the runtime store
+  per-team, which has not been done.
+- **`session_secret` must be set in a real deployment.** Unset, each worker
+  generates its own and rejects the others' cookies.
+
+## D11 — The audit is still the next thing to build
+
+Workspaces were built ahead of [`BUILD_ORDER.md`](BUILD_ORDER.md) step 3 at the
+boss's request. Nothing about them depends on the audit, and nothing downstream
+was built on top of the gap — but the ordering note in BUILD_ORDER still holds:
+`bl/audit.py` comes before the scheduler, the importer, and the changes loop.
+
+---
+
 ## Open
 
 - **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment

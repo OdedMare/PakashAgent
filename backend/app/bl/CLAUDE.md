@@ -5,12 +5,14 @@ a file; `dal/` only fetches and sends. Nothing here imports `psycopg` or `openai
 directly — it goes through the repository and the LLM client it was constructed
 with.
 
-Built so far: `interview.py`, `interview_service.py`, `prompts/`.
+Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
+`prompts/`.
 
 | File | Owns |
 |---|---|
 | `interview.py` | The intro interview — workplace profile, employees, rules, shift vocabulary |
 | `interview_service.py` | Persistence around it: sessions, turns, resume, completion |
+| `workspace_service.py` | Workspace rules: entering a team, roles, the share link |
 | `scheduler.py` | Generating a schedule; every assignment carries a reason |
 | `changes.py` | Conversational edits and the change log |
 | `audit.py` | **Pure-Python advisory checks. No LLM.** |

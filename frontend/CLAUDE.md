@@ -14,15 +14,39 @@ Chat-first. The boss talks to the agent in a conversation pane; the schedule
 renders beside it as a grid. There is no schedule *editor* — changes happen by
 talking, which is the product ([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
 
-Built so far: the interview. The rest of the table is the plan.
+Built so far: the workspace gate and the interview. The rest of the table is
+the plan.
 
 | Surface | Purpose |
 |---|---|
+| Workspace gate | Boss login / team creation — `src/components/Workspace/` |
+| Member area | The employee's read-only surface — `MemberArea.tsx` |
 | Interview | The intro conversation, one question per turn — `src/components/Interview/` |
 | Schedule | The living grid for a period, RTL |
 | Import confirm | Inferred interpretation beside the raw sheet |
 | Change confirm | The agent's reasoning plus resulting warnings |
 | Employee view | **Read-only** schedule |
+
+## Workspaces
+
+`src/components/Workspace/index.tsx` picks the surface from the role the
+server reported: no session → the login gate, `member` → `MemberArea`, `boss`
+→ the interview.
+
+- **The session is an HttpOnly cookie**, so this code cannot read it. "Am I
+  logged in?" is answered by `GET /api/workspace/me`, never by local state
+  that could disagree with the cookie the browser actually holds.
+- **`undefined` and `null` are different workspace states.** `undefined` is
+  "not asked yet" and `null` is "no session" — rendering the login screen
+  during the first check would flash it at a boss who is already signed in.
+- **Every request sends `credentials: "same-origin"`.** Without it the browser
+  withholds the cookie and every guarded route answers 401 while the user is
+  plainly logged in.
+- **The member share link is `/team/<token>`.** `MemberEntry` exchanges the
+  token for a cookie and then `replaceState`s it out of the URL, so the
+  credential stops travelling in the address bar and the back stack.
+- **This routing is not the access control.** The backend guards every route
+  independently; a visitor who forced past the component still gets a 401.
 
 ## RTL is not a theme
 
@@ -61,6 +85,8 @@ with warnings is a valid schedule the boss may knowingly accept
 ## Rules
 
 - The employee view exposes no mutation ([D5](../docs/DECISIONS.md#d5--employees-are-read-only)).
+  `MemberArea` has no edit, accept, decline, or availability control — that is
+  the decision, not an unfinished screen.
 - Import and change are two-step: interpretation/proposal, then confirmation.
   Never auto-confirm either.
 - The agent's reasoning is shown before the boss confirms — it is the point, not a

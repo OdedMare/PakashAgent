@@ -7,6 +7,13 @@ Done so far: step 1 (scaffold and port), the interview half of step 2 (the
 (the intro interview, now wired through HTTP to an RTL chat UI), and the
 interview slice of step 8.
 
+Also done, out of order and at the boss's request: **workspaces** — the `teams`
+table, boss login, member share links, and the route guards
+([D10](DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)).
+Nothing downstream depends on it and it does not change the order below.
+**Each new table still arrives with its own `team_id`** — added at creation
+time, never retrofitted onto a populated table.
+
 **Next: step 3, `bl/audit.py`.** It was deliberately skipped to get the interview
 demonstrable, but nothing downstream should be built on top of an audit that
 does not exist yet.

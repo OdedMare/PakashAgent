@@ -7,6 +7,10 @@ the agent builds schedules, absorbs schedules the boss already has (Excel or
 docs), and rearranges them on request — always explaining what it did and why.
 Employees see the result; they do not edit it.
 
+**Each team gets its own workspace.** The boss logs in with a password; team
+members open a read-only view through a share link, with no account at all
+([D10](docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)).
+
 **Hebrew, right-to-left.** Not just the UI — shift names, weekdays, availability
 markers, and errors are all Hebrew. See [`backend/app/bl/CLAUDE.md`](backend/app/bl/CLAUDE.md).
 
@@ -16,9 +20,13 @@ markers, and errors are all Hebrew. See [`backend/app/bl/CLAUDE.md`](backend/app
 answer one question per turn (a selectable answer or their own words), and reach
 a confirmed workplace profile stored in Postgres.
 
+**Workspaces work end to end.** A boss opens a team, gets a share link for the
+employees, and everything they author is scoped to that team.
+
 Built: the ported `dal/llm` client, settings and runtime settings, the interview
-prompt and its validation, the interview session/turn tables, the HTTP layer, and
-the RTL chat UI.
+prompt and its validation, the interview session/turn tables, the HTTP layer, the
+RTL chat UI, and the workspace layer (teams, boss login, member share links,
+route guards).
 
 Not built yet: `bl/audit.py`, `scheduler.py`, `changes.py`, `importer.py`, and the
 schedule surfaces. Next up is the audit — see
@@ -64,8 +72,6 @@ and the repository base. See [`backend/CLAUDE.md`](backend/CLAUDE.md).
 docker compose up          # backend, frontend, postgres
 ```
 
-Then open <http://localhost:3000> and start the interview.
-
 Running the two halves directly instead:
 
 ```bash
@@ -80,8 +86,16 @@ npm install
 npm run dev                            # :3000, proxies /api to the backend
 ```
 
+Then open <http://localhost:3000>, create a team, and start the interview. The
+share button in the header reveals the link employees open (`/team/<token>`);
+it grants a read-only view and no password.
+
 Postgres must be reachable at `PAKASH_DATABASE_URL`; the app creates its own
-schema and tables on startup.
+tables on startup (the schema itself must already exist).
+
+**Set `PAKASH_SESSION_SECRET` in any real deployment.** Left unset it is
+generated per process, so sessions do not survive a restart and break across
+workers.
 
 The model defaults to a local Ollama endpoint; set `PAKASH_LLM_BASE_URL` and
 `PAKASH_LLM_MODEL` to point elsewhere. Nothing here is OpenAI-specific.
