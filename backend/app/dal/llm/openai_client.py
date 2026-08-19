@@ -25,6 +25,7 @@ be hallucinated (D3).
 
 import json
 import threading
+import time
 from typing import List, Optional
 
 import httpx
@@ -50,7 +51,33 @@ _MODELS_PROBE_TIMEOUT_SECONDS = 30
 # The local model server is a shared finite resource, and a single generation
 # can occupy it for a minute. Bound concurrent HTTP completions process-wide
 # so a burst of requests queues here instead of thrashing the server.
-_LLM_SLOTS = threading.BoundedSemaphore(4)
+_LLM_SLOTS = threading.BoundedSemaphore(_llm_slot_count())
+
+# Ceiling on one logical `complete_json` call. `llm_timeout_seconds` bounds a
+# single HTTP round-trip, but the ladder can run four of them and each retries
+# up to three times — multiplied out, one request could hold a worker for the
+# better part of an hour. This is the number that actually stops that.
+_TOTAL_BUDGET_SECONDS = 300
+
+# Substrings local servers use when the prompt exceeds the context window.
+# Matched on text because none of them use a distinct status or error code:
+# vLLM, Ollama and llama.cpp all answer 400 with prose.
+_CONTEXT_OVERFLOW_MARKERS = (
+    "context length",
+    "context window",
+    "maximum context",
+    "too long",
+    "reduce the length",
+    "exceeds",
+    "n_ctx",
+)
+
+
+def _is_context_overflow(error) -> bool:
+    """Whether a 400 means "prompt too long" rather than "bad request shape"."""
+    return any(
+        marker in str(error).lower() for marker in _CONTEXT_OVERFLOW_MARKERS
+    )
 
 
 class OpenAIJsonClient:
@@ -165,13 +192,27 @@ class OpenAIJsonClient:
         # Only a BadRequestError advances the ladder; any other exception is
         # a real failure and becomes an AgentError immediately.
         last_bad_request = None
+        deadline = time.monotonic() + _TOTAL_BUDGET_SECONDS
         with _LLM_SLOTS:
             for kwargs in OpenAIJsonClient._attempts(
                 messages, max_tokens, schema, penalty,
             ):
                 try:
-                    response = create_with_retry(client, model, kwargs)
+                    response = create_with_retry(
+                        client, model, kwargs, deadline=deadline
+                    )
                 except BadRequestError as exc:
+                    # Not every 400 is a shape rejection. A prompt longer than
+                    # the server's context window is also a 400, and stepping
+                    # down the ladder cannot shorten it — every remaining rung
+                    # sends the same oversized messages, fails identically, and
+                    # buries the real cause behind whichever rung happened to
+                    # be last. Say what actually happened instead.
+                    if _is_context_overflow(exc):
+                        raise AgentError(
+                            "הבקשה ארוכה מדי לחלון ההקשר של המודל. "
+                            "צמצם את התקופה או את כמות הנתונים."
+                        )
                     last_bad_request = exc
                     continue
                 except Exception as exc:
