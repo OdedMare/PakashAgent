@@ -228,11 +228,47 @@ def test_a_sheet_of_only_dates_and_people_is_read():
     """
     grid = [
         ["", "1/6/25", "2/6/25", "3/6/25"],
-        ["משמרת", "דנה", "יוסי", "דנה"],
+        ["", "דנה", "יוסי", "דנה"],
     ]
     found = infer(grid, {})
+    assert found.layout == "date_only"
     assert len(found.assignments) == 3
     assert sorted(found.people) == ["דנה", "יוסי"]
+
+
+def test_a_sheet_with_no_shifts_says_so_rather_than_inventing_one():
+    """An empty shift name is the question made visible (D9).
+
+    Naming it `בוקר` would be hardcoding a vocabulary the file never gave.
+    """
+    found = infer(
+        [["", "1/6/25", "2/6/25"], ["", "דנה", "יוסי"]], {},
+    )
+    assert found.shifts == []
+    assert all(row["shift"] == "" for row in found.assignments)
+    assert any("אין שמות משמרות" in note for note in found.warnings)
+
+
+def test_a_labelled_sheet_is_not_flattened_into_the_date_only_layout():
+    """A real shift axis must win over the fallback that ignores it."""
+    grid = [
+        ["משמרות", "1/6/25", "2/6/25"],
+        ["בוקר", "דנה", "יוסי"],
+        ["צהריים", "יוסי", "דנה"],
+    ]
+    found = infer(grid, {"shifts": [{"name": MORNING}, {"name": EVENING}]})
+    assert found.layout == "shift_major"
+    assert found.shifts == [MORNING, EVENING]
+
+
+def test_a_single_day_sheet_is_read():
+    """One column is a short schedule, not an unreadable one."""
+    found = infer(
+        [["משמרות", "1/6/25"], ["בוקר", "דנה"]],
+        {"shifts": [{"name": MORNING}]},
+    )
+    assert len(found.assignments) == 1
+    assert found.starts_on == found.ends_on == "2025-06-01"
 
 
 def test_hours_in_the_header_are_matched_to_the_declared_shift():

@@ -1000,6 +1000,23 @@ def _upload(book, name="schedule.xlsx"):
     )
 
 
+def _sheet(grid):
+    """An ad-hoc `.xlsx` from a list of rows, for one-off layouts."""
+    from openpyxl import Workbook
+
+    book = Workbook()
+    for row in grid:
+        book.active.append(row)
+    return book
+
+
+def _preview_grid(client, grid):
+    return client.post(
+        "/api/schedule/import/preview?learn_rules=false",
+        files=[_upload(_sheet(grid), "sheet.xlsx")],
+    ).json()
+
+
 def _preview(client, books, learn_rules=False):
     return client.post(
         "/api/schedule/import/preview?learn_rules=%s"
@@ -1017,35 +1034,48 @@ def test_previewing_an_import_reads_the_file():
     assert response.status_code == 200
     body = response.json()
     assert body["periods"][0]["layout"] == "shift_major"
-    # `PROFILE` declares only `בוקר`, so only that row of the sheet is read.
-    # The evening row is left alone rather than invented, which is D9 doing
-    # its job -- see `test_a_shift_the_workplace_never_declared_is_not_read`.
-    assert len(body["periods"][0]["assignments"]) == 5
+    # Both rows are read. `PROFILE` declares only `בוקר`, and the `צהריים`
+    # row is still taken from the sheet's own wording rather than dropped --
+    # the file records something the workplace really ran.
+    assert len(body["periods"][0]["assignments"]) == 10
 
 
-def test_a_shift_the_workplace_never_declared_is_not_read():
-    """D9: shift names come from the interview, never from the sheet.
+def test_a_shift_the_workplace_never_declared_is_still_read():
+    """A file may name a shift the interview never heard of (D7).
 
-    Sample A has a `צהריים` row. This workplace never declared one, so
-    reading it would be inventing vocabulary the manager did not give.
+    Sample A has a `צהריים` row this workplace never declared. Refusing it
+    would silently lose real history and would make the product reject the
+    very files it exists to absorb. Nothing is invented — the name is the
+    manager's own.
     """
     from tests.fixtures.build import sample_a
 
     app, repo = _build_app([])
     body = _preview(_client(app), [sample_a()]).json()
+    assert body["periods"][0]["shifts"] == [MORNING, EVENING]
+
+
+def test_a_declared_shift_is_still_matched_to_its_declared_name():
+    """D9 where it applies: the vocabulary's spelling wins."""
+    app, repo = _build_app([])
+    body = _preview_grid(_client(app), [
+        ["משמרות", "1/6/25"],
+        ["משמרת בוקר", "דנה"],
+    ])
     assert body["periods"][0]["shifts"] == [MORNING]
 
 
-def test_declaring_the_shift_is_what_makes_it_readable():
-    """The same file, read whole, once the vocabulary contains both."""
-    from tests.fixtures.build import sample_a
-
+def test_a_sheet_of_only_dates_and_people_is_read():
+    """No shift column at all — the plainest file a manager keeps."""
     app, repo = _build_app([])
-    repo.profiles[TEAM] = dict(PROFILE, shifts=[
-        {"name": MORNING}, {"name": EVENING},
+    body = _preview_grid(_client(app), [
+        ["", "1/6/25", "2/6/25"],
+        ["", "דנה", "יוסי"],
     ])
-    body = _preview(_client(app), [sample_a()]).json()
-    assert len(body["periods"][0]["assignments"]) == 10
+    period = body["periods"][0]
+    assert period["layout"] == "date_only"
+    assert period["shifts"] == []
+    assert any("אין שמות משמרות" in note for note in period["warnings"])
 
 
 def test_previewing_an_import_stores_nothing():

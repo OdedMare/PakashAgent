@@ -336,4 +336,75 @@ ALTER TABLE assignments
     ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'agent';
 
 COMMIT;
+
+-- An agreed swap between two employees, awaiting the manager.
+--
+-- The same shape as `constraint_requests` and for the same reason: a request
+-- is inert until the manager rules on it. Approval is what performs the
+-- OP_SWAP that `bl/changes.py` already knows how to apply, so nothing here
+-- writes an assignment and nothing here is visible to `audit.py` while it
+-- waits -- D3 and D14 both hold unchanged.
+--
+-- What this table adds over `constraint_requests` is a *counterparty*. A
+-- constraint concerns one person; a swap is an agreement between two, and
+-- the second person's consent is a fact worth storing rather than assuming.
+-- `counterparty_agreed` is that consent, and a swap reaches the manager's
+-- inbox only once it is TRUE -- otherwise the manager rules on an
+-- arrangement the other half has not accepted.
+--
+-- Both sides are named by `assignments.employee` strings, exactly as
+-- `employee_identities` is: the product identifies people by the name the
+-- interview recorded, and a second identifier would need reconciling on
+-- every read.
+CREATE TABLE IF NOT EXISTS swap_requests (
+    id TEXT PRIMARY KEY,
+    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    -- The schedule the swap was proposed against. A swap outlives neither a
+    -- deleted schedule nor the period it belongs to.
+    schedule_id TEXT NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
+    -- The person asking, and the shift they are giving away.
+    requester TEXT NOT NULL,
+    requester_date DATE NOT NULL,
+    requester_shift TEXT NOT NULL DEFAULT '',
+    -- The person asked, and the shift they give back. Both are required: a
+    -- swap is an exchange, and a one-sided handover is a different feature
+    -- with different fairness consequences (it moves hours, rather than
+    -- trading them) -- not one to smuggle in through the same table.
+    counterparty TEXT NOT NULL,
+    counterparty_date DATE NOT NULL,
+    counterparty_shift TEXT NOT NULL DEFAULT '',
+    -- The requester's own words, the same context `constraint_requests`
+    -- exists to capture in writing.
+    reason TEXT NOT NULL DEFAULT '',
+    -- The other half's answer. NULL while they have not replied, which is
+    -- distinct from FALSE -- "has not answered" and "said no" are different
+    -- states and the requester needs to tell them apart.
+    counterparty_agreed BOOLEAN,
+    counterparty_replied_at TIMESTAMPTZ,
+    -- 'awaiting_counterparty' precedes 'pending': a swap is not the
+    -- manager's problem until both employees agree. 'declined' is the
+    -- counterparty's refusal, kept separate from the manager's 'rejected'
+    -- for the reason `withdrawn` is kept separate from both.
+    status TEXT NOT NULL DEFAULT 'awaiting_counterparty'
+        CHECK (status IN ('awaiting_counterparty','pending','approved',
+                          'rejected','declined','withdrawn')),
+    -- The manager's answer, read by both employees.
+    decided_reason TEXT NOT NULL DEFAULT '',
+    decided_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+COMMIT;
+
+CREATE INDEX IF NOT EXISTS swap_requests_team_idx
+    ON swap_requests (team_id, status, created_at DESC);
+
+COMMIT;
+
+-- Read by the counterparty's inbox, which filters on their name rather than
+-- the requester's -- the one query the index above does not serve.
+CREATE INDEX IF NOT EXISTS swap_requests_counterparty_idx
+    ON swap_requests (team_id, counterparty, status);
+
+COMMIT;
 """

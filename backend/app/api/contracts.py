@@ -592,11 +592,31 @@ class ReleaseRequest(BaseModel):
     employee: str = Field(min_length=1, max_length=120)
 
 
+class ReadAssignment(BaseModel):
+    """One row as the importer read it, before anyone has confirmed anything.
+
+    `shift` may be empty. A sheet of dates and people carries no shift
+    information at all, and an empty name is how that absence stays visible
+    instead of being silently answered with an invented one
+    ([D9](../../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)).
+    The confirm screen is where the manager supplies it — which is why
+    `ImportedAssignment`, the shape that comes *back*, requires it.
+    """
+
+    employee: str = Field(min_length=1, max_length=120)
+    shift: str = Field(default="", max_length=80)
+    date: str = Field(min_length=1, max_length=10)
+    reason: str = Field(default="", max_length=1000)
+
+
 class ImportedAssignment(BaseModel):
     """One row of an interpretation, as the manager approved it.
 
     Sent back from the confirm screen rather than re-read from the file, so a
-    name the manager corrected there is what gets stored (D7).
+    name the manager corrected there is what gets stored (D7). `shift` is
+    required here even though the read shape allows it empty: by the time a
+    row is being stored the question has been asked, and storing a shiftless
+    assignment would put a row on the grid that no slot can hold.
     """
 
     employee: str = Field(min_length=1, max_length=120)
@@ -643,7 +663,7 @@ class ImportedPeriod(BaseModel):
     dates: List[str] = []
     starts_on: str = ""
     ends_on: str = ""
-    assignments: List[ImportedAssignment] = []
+    assignments: List[ReadAssignment] = []
     unavailability: List[ImportedConstraint] = []
     warnings: List[str] = []
     summary: str = ""

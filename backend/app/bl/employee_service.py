@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional
 from app.bl.audit import fairness, personal_summary
 from app.common.errors import AgentError, AuthError
 from app.dal.repository.identities import (
-    STATUS_APPROVED, STATUS_PENDING, STATUS_REJECTED,
+    STATUS_APPROVED, STATUS_AWAITING, STATUS_PENDING, STATUS_REJECTED,
 )
 from app.dal.repository.schedules import SOURCE_EMPLOYEE_REPORTED
 
@@ -35,6 +35,11 @@ from app.dal.repository.schedules import SOURCE_EMPLOYEE_REPORTED
 # approval is traceable in the same place every other change is (D4).
 ACTION_REQUEST_APPROVED = "request_approved"
 ACTION_REQUEST_REJECTED = "request_rejected"
+# A swap the manager refused. The approval has no action of its own: applying
+# it goes through the ordinary swap path in `schedule_service`, which appends
+# `ACTION_SWAPPED` exactly as a manager-initiated swap does. Two log rows for
+# one swap would make the history read as two moves.
+ACTION_SWAP_REJECTED = "swap_rejected"
 
 
 class EmployeeService:
