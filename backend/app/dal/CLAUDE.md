@@ -2,9 +2,44 @@
 
 Fetches and sends. Makes no decisions — those live in `bl/`.
 
-- `database/postgres.py` — connection; verifies the schema exists (never creates it).
+- `database/postgres.py` — **pooled** connections; verifies the schema exists
+  (never creates it).
 - `llm/` — the OpenAI-compatible JSON client. See [llm/CLAUDE.md](llm/CLAUDE.md).
 - `repository/` — the only SQL owner in the codebase.
+
+## Connection pooling
+
+Connections are pooled (`psycopg_pool`). They were not originally: every query
+opened a fresh `psycopg.connect()`, paying a TCP handshake, authentication and
+a `SET search_path` round-trip before running any SQL — and one page load
+issues several queries. Measured against a local Postgres, that was 1.97ms per
+query versus 0.14ms pooled; over a network the gap is wider, because handshake
+cost dominates.
+
+Two properties are load-bearing:
+
+- **The pool is re-keyed on the database settings**, the same way `dal/llm/`
+  keys its OpenAI client. Without it a database edit saved in the UI would
+  appear to do nothing — the pool would keep serving connections to the old
+  host forever, which is a far more confusing failure than a slow query. The
+  replaced pool is `close()`d rather than dropped, or its sockets leak until
+  it happens to be collected.
+- **`search_path` is set in `configure`**, which runs once per pooled
+  connection rather than once per query. It is connection state, so this is
+  both correct and the point of pooling it.
+
+`require_schema()` is deliberately **not** pooled: the pool's `configure` sets
+`search_path` to the very schema it is checking for, so borrowing a pooled
+connection to ask whether the schema exists would put the question after the
+assumption.
+
+`close_pool()` runs on FastAPI shutdown. Without it the pool's worker threads
+outlive the process and Postgres accumulates idle backends across restarts.
+
+**A pooled connection commits differently.** Leaving a `with connect(...)`
+block returns the connection to the pool instead of closing it, and the pool's
+context manager commits on a clean exit. Callers that commit explicitly still
+should — that is what the repository does, and it stays correct either way.
 
 ## Tables
 

@@ -102,6 +102,31 @@ default:
 
 4 is the middle that assumes neither.
 
+## Telemetry
+
+`complete_json` logs one line per logical call to the `pakash.llm` logger:
+flow, model, prompt/completion/total tokens, retries and wall duration.
+
+`flow` is what the `flow=` argument on `complete_json` exists for —
+`scheduler`, `interview`, `changes`, `briefing`. Without it every measurement
+reads "some model call", and the first question anyone asks of the numbers is
+which feature is the expensive one.
+
+This was added because nothing recorded it: `_usage` came back from here and
+only `bl/interview.py` ever read it, and even that dropped it. "How many
+tokens does a schedule cost" had no answer, so every performance decision was
+an estimate.
+
+**Counts and timings only — never the prompt, the reply, or any part of
+either.** Those carry employee names, stated reasons for absence, and the
+manager's own sentences about their staff. Token counts describe the call
+without describing anybody.
+
+The failed path is logged too, marked `FAILED`: a call that spent tokens and
+then failed is exactly the one worth seeing. `retries` is broken out because a
+call that silently took two attempts costs double and is identical to a clean
+one in every other metric.
+
 ## Connection reuse
 
 `_client_for(api_key, base_url)` caches one `OpenAI` client keyed by
