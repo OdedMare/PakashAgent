@@ -1,17 +1,148 @@
 "use client";
 
 // TEMPORARY preview harness — deleted after the screenshot.
-import { Stats } from "@/components/Management/Stats";
-import "@/styles/management.css";
+import { useState } from "react";
 
-const STATS = {"total_hours": 140.0, "total_shifts": 19, "people_working": 4, "coverage": {"required": 28, "assigned": 19, "unfilled_slots": 8, "percent": 67.9}, "by_shift": [{"shift": "בוקר", "count": 11, "hours": 88.0, "is_on_call": false}, {"shift": "כונן לילה", "count": 3, "hours": 12.0, "is_on_call": true}, {"shift": "צהריים", "count": 5, "hours": 40.0, "is_on_call": false}], "by_day": [{"date": "2026-08-17", "weekday": "יום שני", "count": 4, "hours": 28.0, "on_call": 1}, {"date": "2026-08-18", "weekday": "יום שלישי", "count": 4, "hours": 28.0, "on_call": 1}, {"date": "2026-08-19", "weekday": "יום רביעי", "count": 3, "hours": 24.0, "on_call": 0}, {"date": "2026-08-20", "weekday": "יום חמישי", "count": 4, "hours": 28.0, "on_call": 1}, {"date": "2026-08-21", "weekday": "יום שישי", "count": 3, "hours": 24.0, "on_call": 0}, {"date": "2026-08-22", "weekday": "שבת", "count": 1, "hours": 8.0, "on_call": 0}, {"date": "2026-08-23", "weekday": "יום ראשון", "count": 0, "hours": 0.0, "on_call": 0}], "by_employee": [{"employee": "דנה", "hours": 40.0, "shifts": 5, "on_call": 0, "days": 5}, {"employee": "יוסי", "hours": 36.0, "shifts": 5, "on_call": 1, "days": 5}, {"employee": "רון", "hours": 36.0, "shifts": 5, "on_call": 1, "days": 5}, {"employee": "מיכל", "hours": 28.0, "shifts": 4, "on_call": 1, "days": 4}, {"employee": "אבי", "hours": 0.0, "shifts": 0, "on_call": 0, "days": 0}], "warning_counts": [{"code": "unfilled", "severity": "warning", "count": 5}, {"code": "over_hours", "severity": "warning", "count": 1}, {"code": "overstaffed", "severity": "notice", "count": 2}], "constraint_pressure": {"blocked": 3, "people": 3, "conflicts": 1, "honored": 2}} as never;
+import { Calendar } from "@/components/Management/Calendar";
+import type { Assignment, Schedule } from "@/types";
+import "@/styles/management.css";
+import "@/styles/tokens.css";
+
+const ROSTER = ["דנה", "יוסי", "רון", "מיכל", "אבי", "שירה", "עומר"];
+const SHIFTS = ["בוקר", "צהריים", "כונן לילה"];
+const DATES = [
+  "2026-08-17",
+  "2026-08-18",
+  "2026-08-19",
+  "2026-08-20",
+  "2026-08-21",
+  "2026-08-22",
+];
+
+const slots = DATES.flatMap((date) =>
+  SHIFTS.map((shift) => ({
+    id: `${shift}-${date}`,
+    shift_name: shift,
+    slot_date: date,
+    start_time: shift === "בוקר" ? "07:00" : shift === "צהריים" ? "15:00" : "23:00",
+    end_time: shift === "בוקר" ? "15:00" : shift === "צהריים" ? "23:00" : "07:00",
+    headcount: shift === "כונן לילה" ? 1 : 2,
+    is_on_call: shift === "כונן לילה",
+  })),
+);
+
+const PLACED: Array<[string, string, string, string]> = [
+  ["דנה", "בוקר", "2026-08-17", "agent"],
+  ["יוסי", "בוקר", "2026-08-17", "agent"],
+  ["רון", "צהריים", "2026-08-17", "agent"],
+  ["מיכל", "כונן לילה", "2026-08-17", "manager"],
+  ["דנה", "בוקר", "2026-08-18", "agent"],
+  ["שירה", "צהריים", "2026-08-18", "manager"],
+  ["עומר", "צהריים", "2026-08-18", "agent"],
+  ["רון", "בוקר", "2026-08-19", "agent"],
+  ["אבי", "בוקר", "2026-08-19", "agent"],
+  ["דנה", "צהריים", "2026-08-19", "agent"],
+  ["יוסי", "כונן לילה", "2026-08-19", "agent"],
+  ["מיכל", "בוקר", "2026-08-20", "manager"],
+  ["שירה", "צהריים", "2026-08-20", "agent"],
+  ["דנה", "בוקר", "2026-08-21", "agent"],
+  ["עומר", "בוקר", "2026-08-21", "agent"],
+  ["רון", "כונן לילה", "2026-08-21", "manager"],
+  ["אבי", "בוקר", "2026-08-22", "agent"],
+];
+
+const SCHEDULE: Schedule = {
+  id: "preview",
+  starts_on: DATES[0],
+  ends_on: DATES[DATES.length - 1],
+  status: "draft",
+  slots,
+  assignments: PLACED.map(([employee, shift, date, source], i) => ({
+    id: `a${i}`,
+    employee,
+    shift,
+    date,
+    reason: `${employee} מוסמך/ת למשמרת ${shift}`,
+    slot_id: `${shift}-${date}`,
+    source: source as Assignment["source"],
+  })),
+  warnings: [
+    {
+      code: "unfilled",
+      severity: "warning",
+      message: "משמרת צהריים ב-21.8 ללא איוש",
+      employee: "",
+      date: "2026-08-21",
+      shift: "צהריים",
+      details: {},
+    },
+    {
+      code: "consecutive",
+      severity: "warning",
+      message: "דנה משובצת 5 ימים ברצף",
+      employee: "דנה",
+      date: "2026-08-21",
+      shift: "בוקר",
+      details: {},
+    },
+  ],
+  notes: [],
+  summary: "",
+};
+
+const CONSTRAINTS = [
+  {
+    id: "c1",
+    employee: "אבי",
+    constraint_date: "2026-08-22",
+    shift_name: "בוקר",
+    available: false,
+    reason: "לימודים",
+    source: "employee_reported",
+  },
+] as never;
 
 export default function Preview() {
+  const [dark, setDark] = useState(false);
+  // The tokens are scoped to :root, so the toggle has to move the attribute
+  // on <html> exactly as the real useTheme hook does.
+  if (typeof document !== "undefined") {
+    document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+  }
   return (
     <div className="management">
       <main className="management-body">
         <div className="management-main">
-          <Stats stats={STATS} />
+          <div className="management-toolbar">
+            <div className="period">
+              <span className="period-range">17.8 – 22.8</span>
+              <span className="period-status is-draft">טיוטה</span>
+            </div>
+            <div className="toolbar-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setDark((d) => !d)}
+              >
+                {dark ? "בהיר" : "כהה"}
+              </button>
+              <button type="button" className="ghost-button">
+                סידור ריק
+              </button>
+              <button type="button" className="primary-button">
+                בניית סידור לשבוע
+              </button>
+            </div>
+          </div>
+          <Calendar
+            schedule={SCHEDULE}
+            constraints={CONSTRAINTS}
+            employees={ROSTER}
+            dark={dark}
+            onDrop={() => {}}
+            onAssign={() => {}}
+            onUnassign={() => {}}
+          />
         </div>
       </main>
     </div>

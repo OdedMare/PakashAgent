@@ -49,6 +49,12 @@ export function MemberArea({
   const { overview } = useManagement();
   const shifts = readShiftNames(workspace.profile);
   const schedule = overview?.schedule ?? null;
+  // The roster in profile order, so a member reads the same colours the
+  // manager does — the hue is the person, and it should not depend on which
+  // screen you are looking at.
+  const roster = (overview?.employees ?? [])
+    .map((row) => (typeof row.name === "string" ? row.name.trim() : ""))
+    .filter((name) => name !== "");
 
   return (
     <div className="interview">
@@ -111,6 +117,8 @@ export function MemberArea({
             <Calendar
               schedule={schedule}
               constraints={overview?.availability ?? []}
+              employees={roster}
+              dark={theme === "dark"}
               readOnly
             />
             <p className="member-note">

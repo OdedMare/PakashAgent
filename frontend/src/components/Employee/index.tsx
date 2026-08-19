@@ -119,9 +119,14 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
               {/* `readOnly`, no `onDrop`: there is no gesture here that could
                   change anything. The same component the manager uses, so the
                   team never sees a second rendering that could drift. */}
+              {/* No roster is loaded once signed in — it is fetched only
+                  for the identity gate — so colours fall back to the hashed
+                  hue here. Stable per name, which is what this view needs:
+                  the employee is looking for themselves in the grid. */}
               <Calendar
                 schedule={view.schedule}
                 constraints={view.summary.constraints}
+                dark={theme === "dark"}
                 readOnly
               />
             </section>
