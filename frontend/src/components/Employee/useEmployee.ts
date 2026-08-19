@@ -4,13 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   acknowledgeChanges,
+  answerSwap,
   claimIdentity,
   employeeLogin,
   employeeLogout,
   employeeMe,
   employeeRoster,
+  proposeSwap,
   submitConstraintRequest,
   withdrawConstraintRequest,
+  withdrawSwap,
 } from "@/services/api";
 import type { EmployeeView, RosterName } from "@/types";
 
@@ -145,6 +148,49 @@ export function useEmployee() {
     [run, load],
   );
 
+  /** Offer a colleague a trade of shifts.
+   *
+   *  Reloads rather than appending the returned row, for the reason `submit`
+   *  gives: the server owns which offers are open, and a locally appended
+   *  row would survive a refusal the server made on a rule this hook does
+   *  not know about.
+   */
+  const offerSwap = useCallback(
+    async (body: {
+      assignment_id: string;
+      counterparty: string;
+      counterparty_assignment_id: string;
+      reason?: string;
+    }) => {
+      const done = await run(() => proposeSwap(body));
+      if (done) await load();
+      return Boolean(done);
+    },
+    [run, load],
+  );
+
+  /** Accept or decline an offer addressed to this employee.
+   *
+   *  Accepting changes nothing about the schedule — it moves the swap into
+   *  the manager's inbox — so the reload here is picking up a status, not a
+   *  new set of shifts.
+   */
+  const answer = useCallback(
+    async (swapId: string, agreed: boolean) => {
+      const done = await run(() => answerSwap(swapId, agreed));
+      if (done) await load();
+    },
+    [run, load],
+  );
+
+  const cancelSwap = useCallback(
+    async (swapId: string) => {
+      const done = await run(() => withdrawSwap(swapId));
+      if (done) await load();
+    },
+    [run, load],
+  );
+
   return {
     view,
     roster,
@@ -155,6 +201,9 @@ export function useEmployee() {
     logout,
     submit,
     withdraw,
+    offerSwap,
+    answer,
+    cancelSwap,
     acknowledge,
     reload: load,
     clearError: () => setError(null),
