@@ -175,6 +175,69 @@ class Scheduler:
         return answer
 
 
+def _chunks(slots: List[dict]) -> List[List[dict]]:
+    """The slot grid split into runs of at most `_CHUNK_DAYS` distinct dates.
+
+    Split on dates rather than on slot count, so a day is never divided across
+    two calls: half a Tuesday in one request and half in another is how the
+    same person ends up on two shifts at once, and neither call would have the
+    information to notice.
+
+    A period short enough to fit is returned as one chunk, which is the common
+    case -- a single week is built in exactly one model call, as it always was.
+    """
+    dates = sorted({slot["slot_date"] for slot in slots})
+    if len(dates) <= _CHUNK_DAYS:
+        return [slots]
+    by_date: Dict[str, List[dict]] = {}
+    for slot in slots:
+        by_date.setdefault(slot["slot_date"], []).append(slot)
+    chunks = []
+    for index in range(0, len(dates), _CHUNK_DAYS):
+        window = dates[index:index + _CHUNK_DAYS]
+        chunks.append([slot for date in window for slot in by_date[date]])
+    return chunks
+
+
+def _merge(existing: List[dict], incoming: List[dict]) -> List[dict]:
+    """Assignments from a later chunk added to what earlier ones decided.
+
+    A duplicate is kept as the earlier chunk placed it. The later call is the
+    one working from incomplete information -- it was told what was already
+    scheduled and answered with it anyway -- so the first decision stands and
+    nothing silently overwrites a slot the manager may already be looking at.
+    """
+    seen = {
+        (row["employee"], row["shift"], row["date"]) for row in existing
+    }
+    merged = list(existing)
+    for row in incoming:
+        key = (row["employee"], row["shift"], row["date"])
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(row)
+    return merged
+
+
+def _committed_for_model(assignments: List[dict]) -> List[dict]:
+    """What earlier chunks already placed, as this chunk needs to see it.
+
+    Without the reasons: the next chunk needs to know a slot is taken and who
+    is on it, not to re-read a paragraph of justification per row. Dropping
+    them is most of the size of this list, and it is the field the chunk has
+    no use for.
+    """
+    return [
+        {
+            "employee": row["employee"],
+            "shift": row["shift"],
+            "date": row["date"],
+        }
+        for row in assignments
+    ]
+
+
 def build_slots(profile: dict, starts_on: str, ends_on: str) -> List[dict]:
     """One slot per shift per day the shift actually runs.
 

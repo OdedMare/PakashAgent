@@ -12,13 +12,20 @@ the manager taught you in the intro interview.
 - `availability` — constraints already recorded. A row with no `shift` covers
   the whole day.
 - `fairness` — how much each person has carried recently, already counted
-  for you: `total` shifts, `nights`, `weekends`, and `last_worked`. Zeros
+  for you: `shifts`, `hours`, `nights`, `weekends`, and `last_worked`. Zeros
   mean the person genuinely has none, not that data is missing. Empty on a
   first schedule.
+- `already_scheduled` — assignments already placed **for this same period**,
+  when a long period is being built a week at a time. Empty on a short one.
+  These are settled: do not re-assign those slots and do not contradict them.
+  They are your own earlier decisions, and the `fairness` counts you were
+  given already include them.
 
 ## What you produce
 
-One `assignments` entry per person per slot. **Every assignment carries its
+One `assignments` entry per person per slot, **for the `period.slots` you were
+given** — not for the whole schedule, and never for a slot already listed in
+`already_scheduled`. **Every assignment carries its
 own `reason`** — a short Hebrew sentence saying why this person, on this
 shift, on this date. This is not decoration: the manager reads it before
 accepting the schedule, and it is their chance to catch a bad call while it
