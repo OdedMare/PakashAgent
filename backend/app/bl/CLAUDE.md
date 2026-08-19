@@ -187,6 +187,12 @@ Two shapes are load-bearing:
   manager confirms in between ([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)).
   A drag on the calendar goes through the same two steps as a typed sentence —
   the gesture is a proposal, not an edit ([D12](../../../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
+- **The manual path is the exception, and deliberately so.** `create_blank`,
+  `assign` and `unassign` write immediately and call no model
+  ([D18](../../../docs/DECISIONS.md#d18--the-boss-can-place-a-shift-without-the-agent-️-completes-d6)).
+  They are the authoring half of D6, which until now had no implementation.
+  Filling an empty cell takes nothing away from anybody, so nothing is owed a
+  justification; `assignments.reason` is still never blank.
 - **Every response carrying a schedule carries its warnings**, and a response
   with warnings is still a success.
 

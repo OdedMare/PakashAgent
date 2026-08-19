@@ -14,7 +14,7 @@ the team scoping.
 |---|---|
 | `workspace.py` | Create/enter a workspace, the member share link, logout |
 | `interview.py` | The intro interview, one turn at a time |
-| `schedules.py` | The management area: read/generate a period, propose and apply changes, constraints, history |
+| `schedules.py` | The management area: read/generate a period, open one blank and fill it by hand (D18), propose and apply changes, constraints, history |
 | `imports.py` | Upload a file, return the inferred interpretation, commit on confirm |
 | `employees.py` | Roster management |
 | `health.py` | Liveness |
@@ -70,6 +70,13 @@ and a new route added under the wrong prefix silently inherits the wrong guard.
   *request*, and nothing that touches a schedule. The identity comes from
   `session["employee"]` on the signed cookie; a route that took the name from
   the body would let one employee read or act as another.
+
+**The manual routes are one call, not two** ([D18](../../../docs/DECISIONS.md#d18--the-boss-can-place-a-shift-without-the-agent-️-completes-d6)).
+`/blank`, `/assign` and `/unassign` write on the first call and involve no
+model. That is not a collapse of the two-step contracts above: those exist so
+a *change* is explained before it lands, and placing somebody in an empty
+cell changes nothing for anybody. All three are `guards.boss()` like every
+other schedule write.
 
 **Route order matters in `schedules.py`.** A path parameter at the root of a
 prefix matches any single segment, so `/{schedule_id}` is declared *after* every

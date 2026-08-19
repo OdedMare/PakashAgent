@@ -60,6 +60,8 @@ uvicorn app.main:app --reload
 - `bl/employee_service.py` — identity claims, the personal view, constraint
   requests, and the unread-change mark. Approval is the only thing that writes
   a constraint (D14).
+- `bl/schedule_service.create_blank/assign/unassign` — the manual path (D18).
+  The only schedule writes with no model call anywhere on them.
 - `bl/export.py` — a period out as `.xlsx`. Pure functions, no model, no
   repository. Laid out shift-major like `FILE_FORMATS.md` Sample A so an
   exported week can be edited and imported back.
@@ -103,6 +105,17 @@ one concern; split rather than append.
   it decorates a screen that must render regardless of what the model is doing.
 - **A dragged shift is a proposal, not an edit.** `POST /api/schedule/move`
   requires the manager's reason exactly as a spoken change does ([D12](../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
+- **The boss can build a schedule without the agent** ([D18](../docs/DECISIONS.md#d18--the-boss-can-place-a-shift-without-the-agent-️-completes-d6)).
+  `/blank`, `/assign` and `/unassign` call no model at all — `build_slots()`
+  was always pure arithmetic. `assign` writes immediately and that is *not* a
+  reversal of D12: a drag takes a shift away from somebody, while filling an
+  empty cell takes nothing from anybody, so there is no one for a reason to be
+  owed to. `assignments.reason` stays `NOT NULL` — a hand-placed row carries
+  the manager's sentence or a plain statement that a person placed it.
+- **`assignments.source` says where a row came from**, never who typed it —
+  `availability.source` (D13) applied to the other table. Defaults to `agent`
+  so rows predating the column keep their meaning, and `move_assignment`
+  leaves it alone: dragging a hand-placed shift does not make it the agent's.
 - **The export layout is Sample A, not a design choice.** `bl/export.py`
   writes the shape `bl/importer.py` is being built to read, so a week can
   leave and come back ([D17](../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
