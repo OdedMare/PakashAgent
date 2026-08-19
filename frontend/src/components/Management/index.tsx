@@ -11,6 +11,7 @@ import {
   PencilLine,
   Settings2,
   Share2,
+  Upload,
   Sparkles,
   Sun,
   Users,
@@ -27,6 +28,7 @@ import { Briefing } from "./Briefing";
 import { Calendar, formatDate } from "./Calendar";
 import { ConfirmMove } from "./ConfirmMove";
 import { History } from "./History";
+import { ImportSchedule } from "./ImportSchedule";
 import { RequestInbox } from "./RequestInbox";
 import { Stats } from "./Stats";
 import { TeamPanel } from "./TeamPanel";
@@ -65,6 +67,9 @@ export function Management({
   const { theme, toggle } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  // The import flow. Opening it writes nothing; the screen's own confirm
+  // button is what persists (D7).
+  const [importOpen, setImportOpen] = useState(false);
   // A drop parks the intended move here and opens the confirmation. Nothing
   // has been sent to the server at this point — the dialog is what writes.
   const [pendingMove, setPendingMove] = useState<{
@@ -195,6 +200,20 @@ export function Management({
             </div>
 
             <div className="toolbar-actions">
+              {/* The other direction of D6: a schedule the workplace already
+                  had, absorbed rather than retyped. Always available, not
+                  only when a period exists — an import is usually the first
+                  thing a new workspace does. */}
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setImportOpen(true)}
+                disabled={state.busy}
+                title="טעינת סידור קיים מאקסל או וורד"
+              >
+                <Upload size={14} />
+                טעינת סידור
+              </button>
               {/* The copy that leaves the app (D17). Laid out shift-major
                   like the real source files, so a week can be edited in
                   Excel and imported back rather than only looked at. */}

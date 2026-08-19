@@ -24,6 +24,8 @@ from app.api.contracts import (
     EmployeeLoginRequest,
     ReleaseRequest,
     RequestDecision,
+    SwapAnswer,
+    SwapProposal,
 )
 from app.common.sessions import COOKIE_NAME, ROLE_EMPLOYEE, issue
 
@@ -163,6 +165,73 @@ def build_router(service, guards, secret: str, days: int) -> APIRouter:
             session["team_id"], session["employee"], request_id
         )
 
+    # -- swap requests, employee side --------------------------------------
+
+    @router.get("/swaps")
+    def my_swaps(session: dict = Depends(employee)) -> list:
+        """Swaps naming the caller, on either side.
+
+        Both people see the same row — the requester to learn whether their
+        offer was taken, the counterparty to answer it — each labelled with
+        which side they are on.
+        """
+        return service.my_swaps(session["team_id"], session["employee"])
+
+    @router.get("/swaps/incoming")
+    def incoming_swaps(session: dict = Depends(employee)) -> list:
+        """Offers waiting on the caller's answer. Declared before
+        `/{swap_id}/...` for the reason the module docstring gives."""
+        return service.incoming_swaps(
+            session["team_id"], session["employee"]
+        )
+
+    @router.post("/swaps")
+    def propose_swap(
+        request: SwapProposal, session: dict = Depends(employee)
+    ) -> dict:
+        """Offer a colleague a trade. Moves nothing.
+
+        `200` with a row whose status is `awaiting_counterparty` — the
+        response says plainly that two more people have to agree before
+        anything happens to the schedule.
+        """
+        return service.propose_swap(
+            session["team_id"],
+            session["employee"],
+            request.assignment_id,
+            request.counterparty,
+            request.counterparty_assignment_id,
+            reason=request.reason,
+        )
+
+    @router.post("/swaps/{swap_id}/answer")
+    def answer_swap(
+        swap_id: str,
+        request: SwapAnswer,
+        session: dict = Depends(employee),
+    ) -> dict:
+        """Accept or decline an offer.
+
+        Scoped to the counterparty inside the repository, not here: the
+        requester answering their own proposal must fail on the row, not on
+        a route that happens to be named for the other side.
+
+        Accepting still moves nothing. It puts the swap in the manager's
+        inbox, which is the only place a schedule change can come from.
+        """
+        return service.answer_swap(
+            session["team_id"], session["employee"], swap_id, request.agreed
+        )
+
+    @router.post("/swaps/{swap_id}/withdraw")
+    def withdraw_swap(
+        swap_id: str, session: dict = Depends(employee)
+    ) -> dict:
+        """The requester taking back their own offer."""
+        return service.withdraw_swap(
+            session["team_id"], session["employee"], swap_id
+        )
+
     return router
 
 
@@ -223,5 +292,66 @@ def build_manager_router(service, guards) -> APIRouter:
     ) -> dict:
         """Reject, with a reason the employee will read."""
         return service.reject(session["team_id"], request_id, request.reason)
+
+    return router
+
+
+def build_swap_router(service, guards) -> APIRouter:
+    """The manager's side of swaps, on its own prefix.
+
+    Separate from the constraint-request router for the same reason that one
+    is separate from the employee routes: every route here depends on `boss`,
+    and a reader should be able to see that without tracing a prefix. It also
+    keeps `/{request_id}` and `/{swap_id}` in different routers, where they
+    cannot shadow one another.
+    """
+    router = APIRouter(prefix="/api/schedule/swaps", tags=["swaps"])
+    boss = guards.boss()
+
+    @router.get("")
+    def all_swaps(session: dict = Depends(boss)) -> list:
+        return service.all_swaps(session["team_id"])
+
+    @router.get("/pending")
+    def pending(session: dict = Depends(boss)) -> list:
+        """The inbox: swaps both employees have agreed to.
+
+        One still awaiting its counterparty is deliberately absent — the
+        manager rules on arrangements, and an offer nobody has accepted is
+        not yet one. Declared before `/{swap_id}` on purpose.
+        """
+        return service.pending_swaps(session["team_id"])
+
+    @router.post("/{swap_id}/approve")
+    def approve(
+        swap_id: str,
+        request: RequestDecision,
+        session: dict = Depends(boss),
+    ) -> dict:
+        """Approve, and perform the swap.
+
+        This is the only route in the feature that moves an assignment, and
+        it does so through the same `OP_SWAP` path a manager-typed swap
+        takes — so the change log records one `swapped` event either way.
+
+        The reason is required here even though `RequestDecision` makes it
+        optional for a constraint approval: this one *changes a schedule*,
+        and D8 does not exempt a change for having been suggested by the
+        people it affects.
+        """
+        return service.approve_swap(
+            session["team_id"], swap_id, request.reason
+        )
+
+    @router.post("/{swap_id}/reject")
+    def reject(
+        swap_id: str,
+        request: RequestDecision,
+        session: dict = Depends(boss),
+    ) -> dict:
+        """Refuse a swap, with a reason both employees will read."""
+        return service.reject_swap(
+            session["team_id"], swap_id, request.reason
+        )
 
     return router

@@ -111,6 +111,10 @@ app.include_router(
 # route on it depends on `boss` visibly, rather than sitting next to the
 # employee-guarded ones.
 app.include_router(employee.build_manager_router(employee_service, guards))
+# The manager's side of swaps, on its own prefix. Kept apart from the router
+# above so `/{request_id}` and `/{swap_id}` cannot shadow each other, and so
+# the `boss` guard stays visible on every route of both.
+app.include_router(employee.build_swap_router(employee_service, guards))
 
 
 @app.on_event("startup")

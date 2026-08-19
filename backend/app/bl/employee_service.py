@@ -148,6 +148,16 @@ class EmployeeService:
             "requests": self._repository.list_requests(
                 team_id, employee=employee
             ),
+            # Swaps naming this person on either side. Carried in the same
+            # call as everything else the screen renders, for the reason the
+            # docstring gives: a half-loaded personal area is worse than a
+            # slightly slower one.
+            "swaps": self.my_swaps(team_id, employee),
+            # Offers waiting on *their* answer. Separate from the count of
+            # unseen changes: one is "something moved", the other is
+            # "somebody is waiting on you", and a single badge for both
+            # would hide the half that has a deadline.
+            "swaps_awaiting_me": len(self.incoming_swaps(team_id, employee)),
             # Only the log entries naming this person. The full change log is
             # the manager's, and it carries other people's stated reasons.
             "changes": changes,

@@ -581,6 +581,37 @@ class RequestDecision(BaseModel):
     reason: str = Field(default="", max_length=1000)
 
 
+class SwapProposal(BaseModel):
+    """One employee offering another a trade of shifts.
+
+    Both shifts are named by **assignment id**, not by date and shift name.
+    The employee picks two cells off a grid they are already looking at, and
+    ids mean the request can only ever name shifts that are really on the
+    published schedule — a date-and-name pair could describe a slot that does
+    not exist, or one belonging to somebody else.
+
+    Nothing here moves an assignment. It lands awaiting the colleague's
+    answer, and even their agreement only puts it in the manager's inbox
+    (D14 — the manager remains the sole decider).
+    """
+
+    assignment_id: str = Field(min_length=1, max_length=64)
+    counterparty: str = Field(min_length=1, max_length=120)
+    counterparty_assignment_id: str = Field(min_length=1, max_length=64)
+    reason: str = Field(default="", max_length=1000)
+
+
+class SwapAnswer(BaseModel):
+    """The colleague's reply to an offer.
+
+    `agreed` false is a decline, which ends the swap — distinct from the
+    manager's rejection, because which of the two people said no is a fact
+    the requester needs in order to know whether to ask again.
+    """
+
+    agreed: bool
+
+
 class ReleaseRequest(BaseModel):
     """Free a claimed name so it can be claimed again.
 
