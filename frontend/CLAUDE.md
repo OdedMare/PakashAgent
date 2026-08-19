@@ -39,8 +39,8 @@ falls back to a hashed hue so a departed employee's past shifts stay coloured.
 Every hue clears 4.5:1 in both themes and avoids the warning and danger
 colours, which mean something specific on this grid.
 
-Built so far: the workspace gate, the interview, and the management area. Only
-the import screens remain.
+Built so far: the workspace gate, the interview, the management area, and the
+import screen. All surfaces exist.
 
 | Surface | Purpose |
 |---|---|
@@ -51,10 +51,35 @@ the import screens remain.
 | Schedule | The living grid for a period, RTL — `Management/Calendar.tsx` |
 | Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `ConfirmMove.tsx` |
 | Briefing | What the agent noticed unprompted — `Management/Briefing.tsx` |
-| Import confirm | Inferred interpretation beside the raw sheet *(not built)* |
+| Import confirm | Inferred interpretation, confirmed before anything is stored — `Management/ImportSchedule.tsx` |
 | Employee view | **Read-only** schedule — `MemberArea` renders the same `Calendar` with `readOnly` |
 | Personal area | One employee's own hours, shifts and constraint requests — `src/components/Employee/` |
 | Request inbox | The manager ruling on submissions — `Management/RequestInbox.tsx` |
+
+## Importing a schedule the workplace already had
+
+`Management/ImportSchedule.tsx`, opened from the toolbar. Two screens, and the
+split is the decision
+([D7](../docs/DECISIONS.md#d7--import-infers-layout-boss-confirms)): reading
+files calls `previewImport`, which **writes nothing**, and the confirm button
+is the only thing that persists. The screen says so outright, because a filled
+interpretation otherwise looks like a completed result.
+
+**There is no template, and the screen says that before the first click.** A
+manager who has been asked for one by other software will go looking for it
+here. The importer infers axis semantics, so shifts-in-rows, people-in-rows,
+and a bare list of dates and names are all readable.
+
+**Where the file named no shift, the screen asks.** A `date_only` sheet
+imports with an empty shift name and the confirm button stays disabled until
+one is chosen — filling it in with a guess is exactly the hardcoding
+[D9](../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace) forbids, and
+a disabled button is how the question stays visible.
+
+**Learned rules arrive unticked.** Each candidate shows the count behind it,
+so the manager approves a claim they can check rather than one they must
+trust. Nothing is ticked by default: a candidate becomes a rule by being
+chosen, never by having been proposed.
 
 ## The management area
 

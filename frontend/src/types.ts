@@ -462,6 +462,44 @@ export interface ConstraintRequestRow {
   created_at?: string | null;
 }
 
+/** A proposed trade of shifts between two employees.
+ *
+ *  Its lifecycle has one more state than a constraint request:
+ *  `awaiting_counterparty` precedes `pending`, because a swap is not the
+ *  manager's to rule on until the *other* employee has agreed. `declined` is
+ *  that colleague's refusal, kept apart from the manager's `rejected` so the
+ *  requester can tell who said no and whether it is worth asking again. */
+export interface SwapRow {
+  id: string;
+  schedule_id: string;
+  requester: string;
+  requester_date: string;
+  requester_shift: string;
+  counterparty: string;
+  counterparty_date: string;
+  counterparty_shift: string;
+  reason: string;
+  status:
+    | "awaiting_counterparty"
+    | "pending"
+    | "approved"
+    | "rejected"
+    | "declined"
+    | "withdrawn";
+  /** null while the colleague has not replied — distinct from false, which
+   *  is a decline. "Has not answered" and "said no" are different states. */
+  counterparty_agreed: boolean | null;
+  counterparty_replied_at: string | null;
+  decided_reason: string;
+  decided_at: string | null;
+  created_at?: string | null;
+  /** Which side of the swap the reader is on. Computed server-side: one row
+   *  serves two people asking different questions, and deciding it here
+   *  would mean comparing names in every component that renders one. */
+  is_requester?: boolean;
+  is_counterparty?: boolean;
+}
+
 /** Who is on shift alongside this person, read off the same assignments as
  *  the grid so it cannot drift from it. */
 export interface Teammates {
@@ -478,6 +516,12 @@ export interface EmployeeView {
   fairness: Fairness;
   teammates: Teammates[];
   requests: ConstraintRequestRow[];
+  /** Swaps naming this person on either side. */
+  swaps: SwapRow[];
+  /** How many are waiting on *their* answer. Kept separate from `unseen`:
+   *  "something moved" and "somebody is waiting on you" are different, and
+   *  one badge for both hides the half that has a deadline. */
+  swaps_awaiting_me: number;
   /** Only log entries naming this person — the full log is the manager's and
    *  carries other people's stated reasons. Each carries `is_new` (D16). */
   changes: EmployeeChange[];

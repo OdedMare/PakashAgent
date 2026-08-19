@@ -1336,3 +1336,267 @@
   font-size: 0.76rem;
   color: var(--text-muted);
 }
+
+/* -- import (D7) ---------------------------------------------------------
+ *
+ * Wider than the other modals: the manager is reading an interpretation of
+ * several files and deciding whether it is right, which is a different task
+ * from answering one question in a dialog.
+ */
+
+.import-modal {
+  max-width: 780px;
+  width: min(780px, 94vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.import-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 34px 20px;
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.import-drop p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.import-result {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-inline-end: 4px;
+}
+
+.import-headline {
+  margin: 0;
+  font-size: 0.98rem;
+  color: var(--text);
+}
+
+/* Nothing has been written yet. Said in warning colour because the screen
+   otherwise reads as a completed result. */
+.import-pending {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 0.85rem;
+}
+
+.import-failures {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 0.84rem;
+}
+
+.import-failures p {
+  margin: 0 0 3px;
+}
+
+.import-periods {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.import-period {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.import-period-head {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 10px 13px;
+  background: var(--surface-2);
+  border: 0;
+  cursor: pointer;
+  text-align: start;
+  font: inherit;
+  color: var(--text);
+}
+
+.import-period-head:hover {
+  background: var(--surface-3);
+}
+
+.import-period-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.import-period-summary {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.import-period-body {
+  padding: 12px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  border-top: 1px solid var(--border);
+}
+
+.import-layout {
+  margin: 0;
+  font-size: 0.83rem;
+  color: var(--text-soft);
+}
+
+.import-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--warning);
+}
+
+/* The file named no shift, so the manager is asked rather than a name being
+   invented for them (D9). */
+.import-shift-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  font-size: 0.85rem;
+}
+
+.import-shift-pick select {
+  padding: 7px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.import-rows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.import-row {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  font-size: 0.76rem;
+  color: var(--text-soft);
+}
+
+.import-row-more {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.import-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.import-rules h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.import-rule {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.import-rule-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.import-rule-text {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
+.import-rule-kind {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+}
+
+.import-rule-kind.kind-hard {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.import-rule-kind.kind-soft {
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+
+/* The count behind the claim: the manager approves something they can
+   check, not something they must trust. */
+.import-rule-evidence {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.import-notes {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.import-notes p {
+  margin: 0 0 4px;
+}
+
+.import-error {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 0.85rem;
+}

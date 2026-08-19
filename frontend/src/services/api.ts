@@ -15,6 +15,7 @@ import type {
   RosterName,
   RuntimeSettings,
   Schedule,
+  SwapRow,
   TeamSummary,
   TeamView,
   Workspace,
@@ -481,6 +482,98 @@ export function withdrawConstraintRequest(
     `/api/employee/requests/${requestId}/withdraw`,
     { method: "POST" },
   );
+}
+
+/* -- swaps, employee side --------------------------------------------------- */
+
+/** Offer a colleague a trade of shifts.
+ *
+ *  Both shifts are named by **assignment id**: the employee picks two cells
+ *  off the published grid, and ids mean the offer can only ever name shifts
+ *  that are really on it. Returns a row with status `awaiting_counterparty` —
+ *  nothing has moved, and two more people have to agree before anything
+ *  does (D14 — the manager remains the sole decider). */
+export function proposeSwap(body: {
+  assignment_id: string;
+  counterparty: string;
+  counterparty_assignment_id: string;
+  reason?: string;
+}): Promise<SwapRow> {
+  return request<SwapRow>("/api/employee/swaps", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Swaps naming the caller, on either side. */
+export function mySwaps(): Promise<SwapRow[]> {
+  return request<SwapRow[]>("/api/employee/swaps");
+}
+
+/** Offers waiting on the caller's answer — their badge. */
+export function incomingSwaps(): Promise<SwapRow[]> {
+  return request<SwapRow[]>("/api/employee/swaps/incoming");
+}
+
+/** Accept or decline an offer.
+ *
+ *  Accepting still moves nothing: it puts the swap in the manager's inbox,
+ *  which is the only place a schedule change can come from. */
+export function answerSwap(
+  swapId: string,
+  agreed: boolean,
+): Promise<SwapRow> {
+  return request<SwapRow>(`/api/employee/swaps/${swapId}/answer`, {
+    method: "POST",
+    body: JSON.stringify({ agreed }),
+  });
+}
+
+/** The requester taking back their own offer. */
+export function withdrawSwap(swapId: string): Promise<SwapRow> {
+  return request<SwapRow>(`/api/employee/swaps/${swapId}/withdraw`, {
+    method: "POST",
+  });
+}
+
+/* -- swaps, manager side ---------------------------------------------------- */
+
+/** Swaps both employees agreed to, awaiting the manager. Boss-only.
+ *
+ *  One still awaiting its colleague is deliberately absent: the manager
+ *  rules on arrangements, and an offer nobody has accepted is not yet one. */
+export function pendingSwaps(): Promise<SwapRow[]> {
+  return request<SwapRow[]>("/api/schedule/swaps/pending");
+}
+
+export function allSwaps(): Promise<SwapRow[]> {
+  return request<SwapRow[]>("/api/schedule/swaps");
+}
+
+/** Approve, and perform the swap.
+ *
+ *  The reason is **required**, unlike a constraint approval: this one moves
+ *  two assignments, and D8 does not exempt a change for having been
+ *  suggested by the people it affects. */
+export function approveSwap(
+  swapId: string,
+  reason: string,
+): Promise<{ swap: SwapRow; schedule: Schedule }> {
+  return request(`/api/schedule/swaps/${swapId}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+/** Refuse a swap, with a reason both employees will read. */
+export function rejectSwap(
+  swapId: string,
+  reason: string,
+): Promise<{ swap: SwapRow }> {
+  return request(`/api/schedule/swaps/${swapId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
 }
 
 /* -- the manager's side of the same feature -------------------------------- */

@@ -25,7 +25,9 @@ from fastapi.testclient import TestClient
 from app.api.dependencies import Guards
 from app.api.routers import employee as employee_router
 from app.bl.employee_service import EmployeeService
-from app.common.errors import AppError, AuthError, ConflictError, NotFoundError
+from app.common.errors import (
+    AgentError, AppError, AuthError, ConflictError, NotFoundError,
+)
 from app.common.sessions import (
     COOKIE_NAME, ROLE_BOSS, ROLE_EMPLOYEE, ROLE_MEMBER, issue,
 )
@@ -63,6 +65,7 @@ class _FakeIdentities:
         # `last_seen_at`: a login is not a reading (D16).
         self.acknowledged = {}
         self.requests = {}         # id -> row
+        self.swaps = {}            # id -> row
         # Promoted constraints. Named `_constraints` because `availability`
         # is a *method* on the real repository -- a list attribute of that
         # name would shadow it and hide the call the service actually makes.
@@ -166,6 +169,80 @@ class _FakeIdentities:
         self.requests[request_id]["status"] = "withdrawn"
         return dict(self.requests[request_id])
 
+    # -- swaps --
+    def submit_swap(self, team_id, schedule_id, requester, requester_date,
+                    requester_shift, counterparty, counterparty_date,
+                    counterparty_shift, reason=""):
+        requester = (requester or "").strip()
+        counterparty = (counterparty or "").strip()
+        if requester == counterparty:
+            raise AgentError("אי אפשר להחליף משמרת עם עצמך")
+        for row in self.swaps.values():
+            if (row["team_id"] == team_id and row["requester"] == requester
+                    and row["counterparty"] == counterparty
+                    and row["requester_date"] == requester_date
+                    and row["requester_shift"] == (requester_shift or "")
+                    and row["status"] in ("awaiting_counterparty", "pending")):
+                raise ConflictError(
+                    "כבר קיימת בקשת החלפה פתוחה על המשמרת הזו"
+                )
+        self._next += 1
+        row_id = "swap-%d" % self._next
+        self.swaps[row_id] = {
+            "id": row_id, "team_id": team_id, "schedule_id": schedule_id,
+            "requester": requester, "requester_date": requester_date,
+            "requester_shift": requester_shift or "",
+            "counterparty": counterparty,
+            "counterparty_date": counterparty_date,
+            "counterparty_shift": counterparty_shift or "",
+            "reason": reason, "status": "awaiting_counterparty",
+            "counterparty_agreed": None, "counterparty_replied_at": None,
+            "decided_reason": "", "decided_at": None,
+        }
+        return dict(self.swaps[row_id])
+
+    def get_swap(self, swap_id, team_id):
+        row = self.swaps.get(swap_id)
+        if row is None or row["team_id"] != team_id:
+            raise NotFoundError("הפריט לא נמצא")
+        return dict(row)
+
+    def list_swaps(self, team_id, employee=None, status=None):
+        return [
+            dict(row) for row in self.swaps.values()
+            if row["team_id"] == team_id
+            and (employee is None
+                 or employee in (row["requester"], row["counterparty"]))
+            and (status is None or row["status"] == status)
+        ]
+
+    def answer_swap(self, swap_id, team_id, employee, agreed):
+        row = self.get_swap(swap_id, team_id)
+        if row["counterparty"] != (employee or "").strip():
+            raise AuthError("אין הרשאה לבקשה הזו")
+        if row["status"] != "awaiting_counterparty":
+            raise ConflictError("הבקשה כבר טופלה")
+        self.swaps[swap_id]["status"] = "pending" if agreed else "declined"
+        self.swaps[swap_id]["counterparty_agreed"] = bool(agreed)
+        return dict(self.swaps[swap_id])
+
+    def decide_swap(self, swap_id, team_id, status, decided_reason=""):
+        row = self.get_swap(swap_id, team_id)
+        if row["status"] != "pending":
+            raise ConflictError("הבקשה אינה ממתינה להחלטת מנהל")
+        self.swaps[swap_id]["status"] = status
+        self.swaps[swap_id]["decided_reason"] = decided_reason
+        return dict(self.swaps[swap_id])
+
+    def withdraw_swap(self, swap_id, team_id, employee):
+        row = self.get_swap(swap_id, team_id)
+        if row["requester"] != (employee or "").strip():
+            raise AuthError("אין הרשאה לבקשה הזו")
+        if row["status"] not in ("awaiting_counterparty", "pending"):
+            raise ConflictError("הבקשה כבר טופלה")
+        self.swaps[swap_id]["status"] = "withdrawn"
+        return dict(self.swaps[swap_id])
+
     # -- the rest of the repository surface the service touches --
     def team_profile(self, team_id):
         return PROFILE if team_id in (TEAM, OTHER_TEAM) else None
@@ -201,8 +278,25 @@ class _FakeSchedules:
         self._repository = repository
         self.schedule = schedule
         self.constraints = []
+        self.applied = []
 
     def current(self, team_id, role="boss"):
+        return self.schedule
+
+    def apply(self, team_id, schedule_id, operations, reason,
+              agent_reason=""):
+        """Records what an approved swap asked the schedule service to do.
+
+        The real `apply` performs the OP_SWAP; here it only remembers the
+        call, which is what lets the approval test assert that a swap goes
+        through the *same* path a manager-typed swap does rather than a
+        second implementation.
+        """
+        self.applied.append({
+            "team_id": team_id, "schedule_id": schedule_id,
+            "operations": operations, "reason": reason,
+            "agent_reason": agent_reason,
+        })
         return self.schedule
 
     def set_constraint(self, team_id, employee, constraint_date,

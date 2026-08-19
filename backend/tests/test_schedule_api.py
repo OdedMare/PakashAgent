@@ -1221,6 +1221,23 @@ def test_patterns_are_counted_across_all_the_uploaded_files():
     assert len(both["periods"]) == 2
 
 
+def test_a_shiftless_row_cannot_be_confirmed():
+    """The read shape allows an empty shift; the stored shape does not.
+
+    A sheet of dates and people carries no shift, and that stays visible
+    through the preview. By the time rows are being stored the manager has
+    been asked, and a shiftless assignment has no slot on the grid to sit in.
+    """
+    app, repo = _build_app([])
+    response = _client(app).post("/api/schedule/import/confirm", json={
+        "assignments": [
+            {"employee": "דנה", "shift": "", "date": "2026-08-17"},
+        ],
+    })
+    assert response.status_code == 422
+    assert repo.schedules == {}
+
+
 def test_a_member_cannot_preview_an_import():
     from tests.fixtures.build import sample_a
 

@@ -372,6 +372,21 @@ export function Management({
         />
       ) : null}
 
+      {/* Reading the files writes nothing; this screen's own confirm button
+          is the only thing that persists (D7). */}
+      {importOpen ? (
+        <ImportSchedule
+          shiftNames={(overview?.shifts ?? [])
+            .map((shift) => String((shift as { name?: unknown }).name ?? ""))
+            .filter(Boolean)}
+          onClose={() => setImportOpen(false)}
+          onImported={() => {
+            setImportOpen(false);
+            void state.refresh();
+          }}
+        />
+      ) : null}
+
       {settingsOpen ? (
         <SettingsPanel onClose={() => setSettingsOpen(false)} />
       ) : null}

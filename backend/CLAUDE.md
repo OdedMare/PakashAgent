@@ -68,7 +68,13 @@ uvicorn app.main:app --reload
 - `bl/importer.py` — Excel/Word ingest with layout inference. **No model
   call**: which axis is time and whether shift is nested under date is grid
   arithmetic, and code that counts cannot hallucinate a person into a shift.
-  Returns an `Interpretation`; it is handed no repository, so it cannot write.
+  Three layouts, scored against each other: `shift_major` (Sample A),
+  `person_major` (Sample B), and `date_only` — dates and people with no shift
+  axis at all, tried last and only when no row carries a lane label, so a real
+  shift axis is never flattened into it. Column headers written as hours
+  (`07:00-15:00`) fold into the declared shift running those hours rather than
+  becoming a second shift with the same meaning. Returns an `Interpretation`;
+  handed no repository, so it cannot write.
 - `bl/learn.py` — what a stack of past files says about the workplace.
   `observe()` counts patterns across every uploaded file (no model);
   `RuleLearner` turns those counts into candidate rules in the manager's own
@@ -94,6 +100,13 @@ one concern; split rather than append.
   loud warning when broken. This is a deliberate, accepted tradeoff — see D1/D3.
 - **Shift names are never hardcoded.** They come from the interview. Any literal
   `"בוקר"` outside a test fixture or a Hebrew vocabulary table is a bug ([D9](../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)).
+  On import this means *matched against* the declared vocabulary, not
+  *restricted to* it: a header that matches none is taken from the sheet's own
+  wording, because the file records something the workplace really ran and
+  dropping it would silently lose history. Nothing is invented — a name is
+  either the workplace's or the manager's file's. A sheet naming no shift at
+  all (`date_only`) imports with the name **empty**, and the confirm screen
+  asks; filling it in with a guess is the bug D9 is about.
 - **No structured rule vocabulary.** Rules are the boss's own sentences ([D2](../docs/DECISIONS.md#d2--rules-stay-natural-language)).
 - **Every assignment carries the agent's reason**; every change carries the boss's
   reason too. Neither is optional — they serve different purposes ([D8](../docs/DECISIONS.md#d8--two-reasons-both-required)).
