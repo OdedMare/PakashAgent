@@ -296,6 +296,190 @@ class ScheduleService:
             self._repository.get_schedule(schedule["id"], team_id), team_id
         )
 
+    # -- import (D7) -------------------------------------------------------
+
+    def preview_import(
+        self, team_id: str, files: List[dict], learn_rules: bool = True
+    ) -> dict:
+        """Read uploaded schedule files and say what they contain. Writes nothing.
+
+        This is the whole of [D7](../../../docs/DECISIONS.md#d7--import-infers-layout-boss-confirms)
+        on the service side: inference runs, the manager reads an
+        interpretation, and **nothing reaches the database until
+        `commit_import`**. The absence of a repository write in this method
+        is the decision, not an implementation detail.
+
+        `files` is every sheet the manager uploaded at once — a year of them
+        is the normal case, not an edge one. Each is inferred separately,
+        because they were written at different times and may not share a
+        layout, and then read *together* for patterns: a rule about how
+        somebody works is only visible across periods.
+
+        One unreadable file does not sink the batch. Its error is reported
+        beside the others' results, because a manager uploading a year of
+        spreadsheets will have one that is a summary tab or a stray
+        document, and refusing everything over it would be useless.
+        """
+        profile = self._repository.team_profile(team_id) or {}
+        if not files:
+            raise AgentError("לא נבחרו קבצים לייבוא")
+
+        periods, failures = [], []
+        assignments, unavailability = [], []
+        for item in files or []:
+            name = (item or {}).get("filename") or ""
+            try:
+                found = infer(
+                    read_grid((item or {}).get("content") or b"", name),
+                    profile,
+                )
+            except AgentError as error:
+                failures.append({"filename": name, "error": str(error)})
+                continue
+            periods.append(dict(found.to_dict(), filename=name))
+            assignments.extend(found.assignments)
+            unavailability.extend(found.unavailability)
+
+        if not periods:
+            raise AgentError(
+                "לא הצלחתי לקרוא אף אחד מהקבצים. "
+                "ודא שהם מכילים טבלת סידור עם תאריכים ושמות משמרות"
+            )
+
+        # Counted over every file together. A pattern is by definition
+        # something one period cannot show.
+        observations = observe(assignments, unavailability, profile)
+
+        rules = {"rules": [], "notes": []}
+        if learn_rules:
+            try:
+                rules = RuleLearner(self._llm).propose(observations, profile)
+            except AgentError as error:
+                # The schedules were read successfully; only the rule
+                # suggestions failed. Losing the import over an unavailable
+                # model would throw away the expensive half of the work.
+                rules = {"rules": [], "notes": [str(error)]}
+
+        return {
+            "periods": periods,
+            "failures": failures,
+            "observations": observations,
+            "candidate_rules": rules["rules"],
+            "notes": rules["notes"],
+        }
+
+    def commit_import(
+        self,
+        team_id: str,
+        assignments: List[dict],
+        unavailability: Optional[List[dict]] = None,
+        starts_on: Optional[str] = None,
+        ends_on: Optional[str] = None,
+    ) -> dict:
+        """Store an interpretation the manager has approved (D7).
+
+        Takes the rows back from the caller rather than re-reading the file:
+        what is stored must be exactly what was shown and approved, and
+        re-inferring here would open a gap between the two — the manager
+        could correct a name on the confirm screen and have the correction
+        silently discarded.
+
+        The slot grid is built from the imported rows, not from
+        `build_slots`. A past schedule ran the shifts it actually ran, and
+        regenerating the grid from today's vocabulary would quietly reshape
+        history to match a profile that may have changed since
+        ([D9](../../../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)) —
+        which is the same reason `shift_slots` are stored rows rather than
+        derived on read.
+
+        Every row lands with `source='imported'`, so the history can always
+        say which assignments the product decided and which it merely
+        recorded.
+        """
+        rows = [row for row in (assignments or []) if isinstance(row, dict)]
+        if not rows:
+            raise AgentError("אין שיבוצים לשמור")
+
+        dates = sorted({
+            _iso(row.get("date")) for row in rows if _iso(row.get("date"))
+        })
+        if not dates:
+            raise AgentError("לשיבוצים המיובאים אין תאריכים תקינים")
+        starts_on = starts_on or dates[0]
+        ends_on = ends_on or dates[-1]
+
+        # The grid the file describes: one slot per (shift, date) actually
+        # seen. Deduplicated because several people on one shift is one slot
+        # with two assignments, not two slots.
+        slots = []
+        seen = set()
+        for row in rows:
+            key = (_text(row.get("shift")), _iso(row.get("date")))
+            if not key[0] or not key[1] or key in seen:
+                continue
+            seen.add(key)
+            slots.append({"shift_name": key[0], "slot_date": key[1]})
+        if not slots:
+            raise AgentError("לא ניתן לבנות את מבנה הסידור מהקובץ")
+
+        schedule = self._repository.create_schedule(
+            team_id, starts_on, ends_on
+        )
+        stored = self._repository.replace_slots(
+            schedule["id"], team_id, slots
+        )
+        index = {
+            (slot["shift_name"], _iso(slot["slot_date"])): slot["id"]
+            for slot in stored
+        }
+        placements = []
+        for row in rows:
+            slot_id = index.get((_text(row.get("shift")), _iso(row.get("date"))))
+            employee = _text(row.get("employee"))
+            if slot_id is None or not employee:
+                continue
+            placements.append({
+                "slot_id": slot_id,
+                "employee": employee,
+                "reason": _text(row.get("reason")) or IMPORTED_REASON,
+                "source": ASSIGNED_BY_IMPORT,
+            })
+        self._repository.replace_assignments(
+            schedule["id"], team_id, placements
+        )
+
+        # Constraints the sheet stated outright travel with the schedule.
+        # `source='employee_reported'` would be a lie -- nobody submitted
+        # these -- so they are the manager's, which is what a sheet they
+        # maintained actually makes them.
+        recorded = 0
+        for row in unavailability or []:
+            if not isinstance(row, dict):
+                continue
+            employee = _text(row.get("employee"))
+            date = _iso(row.get("date"))
+            if not employee or not date:
+                continue
+            self._repository.set_availability(
+                team_id, employee, date,
+                shift_name=_text(row.get("shift")),
+                available=False,
+                reason=_text(row.get("reason")),
+                source=SOURCE_MANAGER,
+            )
+            recorded += 1
+
+        self._repository.append_change(
+            team_id, ACTION_IMPORTED, schedule_id=schedule["id"],
+            agent_reason=(
+                "יובאו %d שיבוצים ו-%d אילוצים מקובץ קיים"
+                % (len(placements), recorded)
+            ),
+        )
+        return self._view(
+            self._repository.get_schedule(schedule["id"], team_id), team_id
+        )
+
     def assign(
         self,
         team_id: str,
@@ -937,6 +1121,10 @@ def _iso(value: Any) -> str:
     """Dates arrive as `datetime.date` from SQL and as strings from the model."""
     if hasattr(value, "isoformat"):
         return value.isoformat()
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
