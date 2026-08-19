@@ -119,6 +119,35 @@ this side of the line is that a model asked "who worked the most nights" is
 doing arithmetic by generation, and a wrong answer looks exactly like a right
 one.
 
+**A long period is built one week at a time.** Past `_CHUNK_DAYS` (7), the
+slot grid is split and the model is asked once per week. The binding
+constraint is the *output*, not the context: a fortnight of three daily
+shifts is ~126 assignments each carrying its own Hebrew sentence, and a small
+model asked for all of them in one reply loses consistency somewhere in the
+middle. It is an attention limit, not a context one.
+
+Three properties make the split safe, and each has a test:
+
+- **A day is never divided across two calls.** `_chunks` splits on dates, not
+  on slot count. Half a Tuesday in one request and half in another is how one
+  person ends up on two shifts at once, with neither call able to notice.
+- **Later chunks see earlier ones.** Each is passed `already_scheduled`, and
+  its `fairness` tally is recomputed over the real history *plus* what this
+  run has already placed. A scheduler blind to week one hands week two to the
+  same people — turning the fairness feature into the unfairness it exists to
+  prevent.
+- **A short period is still exactly one call.** The common case does not pay
+  for the long one.
+
+Assignments are bounded against the whole grid rather than the current chunk,
+so a model naming a date from next week is not penalised for answering early.
+On a duplicate the earlier chunk wins: the later call is the one working from
+incomplete information, and it was told what was already scheduled.
+
+The audit still sees the merged period, never the chunks — a run of
+consecutive shifts crossing a boundary is caught exactly as one inside a week
+is.
+
 ## `changes.py`
 
 The step-4 loop: *"Dana's sick Thursday."*

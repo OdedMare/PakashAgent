@@ -7,6 +7,8 @@ the slot grid, which is arithmetic, and the two reason gates, which are
 decisions the product cannot afford to leave to a prompt.
 """
 
+import json
+
 import pytest
 
 from app.bl.changes import ChangeAgent, OP_ASSIGN, OP_REMOVE, OP_SWAP
@@ -340,3 +342,118 @@ def test_the_proposal_never_applies_anything():
         PROFILE, SCHEDULE, "דנה חולה", stated_reason="מחלה",
     )
     assert SCHEDULE["assignments"] == before
+
+
+# -- chunking: a long period is built a week at a time ---------------------
+
+def _week_profile():
+    """A one-shift workplace, so the slot count tracks the day count."""
+    return {
+        "workplace": {"name": "מוקד"},
+        "employees": [{"name": "דנה"}, {"name": "יוסי"}, {"name": "רון"}],
+        "shifts": [{
+            "name": MORNING, "start_time": "07:00", "end_time": "15:00",
+            "days": [], "is_on_call": False,
+            "staffing": [{"days": [], "headcount": 1}],
+        }],
+        "rules": [],
+    }
+
+
+def _covering(first, last, employee="דנה"):
+    return _reply([
+        {"employee": employee, "shift": MORNING,
+         "date": "2026-08-%02d" % day, "reason": "כיסוי"}
+        for day in range(first, last + 1)
+    ])
+
+
+def test_a_short_period_is_still_one_call():
+    """The common case must not pay for the long one: a single week is built
+    in exactly one model call, as it always was."""
+    llm = _ScriptedLlm([_covering(17, 23)])
+    Scheduler(llm).generate(_week_profile(), "2026-08-17", "2026-08-23")
+    assert len(llm.calls) == 1
+
+
+def test_a_long_period_is_split_into_weeks():
+    llm = _ScriptedLlm([_covering(17, 23), _covering(24, 30)])
+    result = Scheduler(llm).generate(
+        _week_profile(), "2026-08-17", "2026-08-30"
+    )
+    assert len(llm.calls) == 2
+    assert len(result["assignments"]) == 14
+
+
+def test_a_chunk_never_splits_a_day_across_two_calls():
+    """Half a Tuesday in one request and half in another is how one person
+    ends up on two shifts at once, with neither call able to notice."""
+    profile = _week_profile()
+    profile["shifts"].append({
+        "name": EVENING, "start_time": "15:00", "end_time": "23:00",
+        "days": [], "is_on_call": False,
+        "staffing": [{"days": [], "headcount": 1}],
+    })
+    llm = _ScriptedLlm([_reply([]), _reply([])])
+    Scheduler(llm).generate(profile, "2026-08-17", "2026-08-30")
+    for call in llm.calls:
+        payload = json.loads(call["user"])
+        dates = [slot["date"] for slot in payload["period"]["slots"]]
+        # Every date present appears once per shift, never split.
+        assert all(dates.count(date) == 2 for date in set(dates))
+
+
+def test_a_later_chunk_is_told_what_the_earlier_one_decided():
+    """A scheduler that cannot see week one gives week two to the same
+    people -- turning the fairness feature into the unfairness it prevents."""
+    llm = _ScriptedLlm([_covering(17, 23), _covering(24, 30, "יוסי")])
+    Scheduler(llm).generate(_week_profile(), "2026-08-17", "2026-08-30")
+    second = json.loads(llm.calls[1]["user"])
+    assert len(second["already_scheduled"]) == 7
+    assert second["already_scheduled"][0]["employee"] == "דנה"
+    # Without the reasons: the next chunk needs to know a slot is taken, not
+    # to re-read a paragraph of justification per row.
+    assert "reason" not in second["already_scheduled"][0]
+
+
+def test_the_fairness_tally_grows_with_what_this_run_has_placed():
+    """Week two must see week one's shifts as shifts already worked."""
+    llm = _ScriptedLlm([_covering(17, 23), _covering(24, 30, "יוסי")])
+    Scheduler(llm).generate(_week_profile(), "2026-08-17", "2026-08-30")
+    first = json.loads(llm.calls[0]["user"])
+    second = json.loads(llm.calls[1]["user"])
+    before = {row["employee"]: row for row in first["fairness"]}
+    after = {row["employee"]: row for row in second["fairness"]}
+    assert before["דנה"]["shifts"] == 0
+    assert after["דנה"]["shifts"] == 7
+
+
+def test_an_assignment_repeated_by_a_later_chunk_is_not_duplicated():
+    """The later call is the one working from incomplete information, so the
+    earlier decision stands."""
+    llm = _ScriptedLlm([_covering(17, 23), _covering(17, 23)])
+    result = Scheduler(llm).generate(
+        _week_profile(), "2026-08-17", "2026-08-30"
+    )
+    assert len(result["assignments"]) == 7
+
+
+def test_notes_from_every_chunk_survive():
+    """A slot left short in week one is not the manager's problem only until
+    week two is built."""
+    llm = _ScriptedLlm([
+        _reply([], notes=["חסר אדם ביום שני"]),
+        _reply([], notes=["חסר אדם ביום שלישי"]),
+    ])
+    result = Scheduler(llm).generate(
+        _week_profile(), "2026-08-17", "2026-08-30"
+    )
+    assert result["notes"] == ["חסר אדם ביום שני", "חסר אדם ביום שלישי"]
+
+
+def test_the_slot_grid_is_the_whole_period_not_the_last_chunk():
+    llm = _ScriptedLlm([_reply([]), _reply([])])
+    result = Scheduler(llm).generate(
+        _week_profile(), "2026-08-17", "2026-08-30"
+    )
+    assert len(result["slots"]) == 14

@@ -323,13 +323,25 @@ def test_generating_without_a_finished_interview_is_refused():
     assert "ראיון" in response.json()["detail"]
 
 
-def test_a_generated_schedule_carries_its_warnings_and_still_returns_200():
-    """D3: warnings are advisory. A schedule that breaks a rule still renders."""
-    app, _ = _build_app([_generation([
+def _days(first, last):
+    return [
         {"employee": "דנה", "shift": MORNING, "date": "2026-08-%02d" % day,
          "reason": "כיסוי"}
-        for day in range(17, 25)
-    ])])
+        for day in range(first, last + 1)
+    ]
+
+
+def test_a_generated_schedule_carries_its_warnings_and_still_returns_200():
+    """D3: warnings are advisory. A schedule that breaks a rule still renders.
+
+    Eight days is past `_CHUNK_DAYS`, so this also covers the case the warning
+    needs most: a run of consecutive shifts that crosses a chunk boundary and
+    is only visible once the chunks are merged. The audit sees the period, not
+    the calls it took to build it.
+    """
+    app, _ = _build_app([
+        _generation(_days(17, 23)), _generation(_days(24, 24)),
+    ])
     response = _client(app).post("/api/schedule/generate", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-24",
     })
