@@ -306,6 +306,21 @@ def build_router(service, guards) -> APIRouter:
         """The append-only change log — the only history there is (D4)."""
         return service.history(session["team_id"], schedule_id)
 
+    @router.get("/history/learn")
+    def learn_from_changes(session: dict = Depends(boss)) -> dict:
+        """Candidate rules from what the manager kept correcting by hand.
+
+        Boss-only and read-only. Nothing here is stored: these are proposals
+        the manager approves one at a time (D7), exactly like the candidates
+        an import produces — the endpoint that would *save* one is the
+        interview, where rules live.
+
+        Declared before `/{schedule_id}` for the reason the module docstring
+        gives: a path parameter at the root of this prefix would otherwise
+        read "history" as a schedule id.
+        """
+        return service.learn_from_changes(session["team_id"])
+
     @router.post("/{schedule_id}/publish", response_model=Schedule)
     def publish(schedule_id: str, session: dict = Depends(boss)) -> dict:
         """Make a draft visible to the team."""

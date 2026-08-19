@@ -31,7 +31,7 @@ from app.bl.briefing import (
 from app.bl.changes import ChangeAgent, OP_ASSIGN, OP_REMOVE, OP_SWAP
 from app.bl.export import as_workbook, filename
 from app.bl.importer import infer, read_grid
-from app.bl.learn import RuleLearner, observe
+from app.bl.learn import RuleLearner, observe, observe_corrections
 from app.bl.scheduler import Scheduler, build_slots
 from app.common.errors import AgentError, NotFoundError
 from app.dal.repository.schedules import (
@@ -61,6 +61,13 @@ ACTION_OPENED = "opened"
 # each other: the history should say where a schedule came from, and
 # "imported from the manager's own spreadsheet" is a third origin.
 ACTION_IMPORTED = "imported"
+
+# How far back `learn_from_changes` reads. Generous, because a rule the
+# manager keeps applying by hand shows up as a handful of corrections spread
+# across months -- a short window would see one of each and find nothing. The
+# rows are counted rather than sent, so the cost of a wide window is
+# arithmetic, not context.
+_LEARN_HISTORY = 500
 
 # What a manually placed row says for itself when the manager gave no
 # sentence of their own. `assignments.reason` is NOT NULL and D8 is not
@@ -830,6 +837,53 @@ class ScheduleService:
         self, team_id: str, schedule_id: Optional[str] = None
     ) -> List[dict]:
         return self._repository.change_log(team_id, schedule_id)
+
+    def learn_from_changes(self, team_id: str) -> dict:
+        """Candidate rules from what the manager kept correcting by hand.
+
+        The other end of `preview_import`'s learning: that one reads what the
+        workplace *did* out of old files, this one reads what the manager
+        **decided** out of the change log. Every row it counts is a moment
+        somebody overrode the schedule and stated why, which
+        [D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)
+        guaranteed would be there.
+
+        Counting first, and returning early when nothing repeats: the tally
+        is arithmetic (D3) and the common case — a workspace whose manager
+        has corrected a handful of things once each — is answerable without a
+        model call at all.
+
+        **Nothing is stored.** Like every other learned candidate, these are
+        proposals the manager approves one at a time
+        ([D7](../../../docs/DECISIONS.md#d7--import-infers-layout-boss-confirms)),
+        and this method is handed no path to the rules on the profile.
+
+        A model failure degrades to the counts alone rather than raising: the
+        panel this feeds sits beside the calendar, and losing the screen over
+        an unavailable model would be the wrong trade — the same reasoning
+        `preview_import` applies to its own learning step.
+        """
+        profile = self._repository.team_profile(team_id) or {}
+        corrections = observe_corrections(
+            self._repository.change_log(team_id, limit=_LEARN_HISTORY)
+        )
+        if not corrections["repeated"]:
+            return {
+                "corrections": corrections,
+                "candidate_rules": [],
+                "notes": [],
+            }
+        try:
+            proposed = self._learner.propose_from_corrections(
+                corrections, profile
+            )
+        except AgentError as error:
+            proposed = {"rules": [], "notes": [str(error)]}
+        return {
+            "corrections": corrections,
+            "candidate_rules": proposed["rules"],
+            "notes": proposed["notes"],
+        }
 
     # -- leaving the app ---------------------------------------------------
 

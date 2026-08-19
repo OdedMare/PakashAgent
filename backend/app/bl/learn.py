@@ -412,42 +412,90 @@ class RuleLearner(object):
             }, ensure_ascii=False),
             schema=CANDIDATE_SCHEMA,
         )
-        if not isinstance(answer, dict):
-            raise AgentError("המודל החזיר תשובה לא תקינה")
+        return _candidates(answer)
 
-        rules = []
-        for item in answer.get("rules") or []:
-            if not isinstance(item, dict):
-                continue
-            text = _bounded(item.get("text"), 400)
-            evidence = _bounded(item.get("evidence"), 400)
-            if not text or not evidence:
-                continue
-            kind = item.get("kind")
-            rules.append({
-                "text": text,
-                # Anything but an explicit `hard` is soft. A rule wrongly
-                # marked hard is the expensive direction: D1 makes hard rules
-                # strong instructions plus a loud warning, so an invented one
-                # would nag the manager about a rule they never stated.
-                "kind": "hard" if kind == "hard" else "soft",
-                "evidence": evidence,
-                "confidence": (
-                    item.get("confidence")
-                    if item.get("confidence") in ("high", "medium", "low")
-                    else "low"
-                ),
-                # Never approved by the act of being proposed.
-                "approved": False,
-            })
-        return {
-            "rules": rules,
-            "notes": [
-                _bounded(note, 400)
-                for note in (answer.get("notes") or [])
-                if _bounded(note, 400)
-            ],
-        }
+
+    def propose_from_corrections(
+        self,
+        corrections: dict,
+        profile: Optional[dict] = None,
+    ) -> dict:
+        """Candidate rules from what the manager kept overriding.
+
+        Same contract as `propose()` and deliberately the same shape: rules
+        carrying their evidence, nothing approved by being proposed, and no
+        repository anywhere near it. What differs is the *source* -- these
+        come from decisions the manager already made and explained, not from
+        absences counted in a file.
+
+        Returns early on too little history rather than asking the model to
+        say so. A round trip to be told there is nothing yet costs a model
+        call on every screen that shows this panel, and the answer is
+        computable here.
+        """
+        if not (corrections or {}).get("repeated"):
+            return {"rules": [], "notes": []}
+
+        answer = self._llm.complete_json(
+            load("learn_changes"),
+            json.dumps({
+                "corrections": corrections,
+                "profile": _profile_for_model(profile),
+            }, ensure_ascii=False),
+            schema=CANDIDATE_SCHEMA,
+        )
+        return _candidates(answer)
+
+
+def _candidates(answer: Any) -> dict:
+    """Validate and normalise what the model returned.
+
+    Shared by both `propose` methods so the two cannot drift: a candidate
+    without evidence is dropped, anything but an explicit `hard` is soft, and
+    `approved` is always false. Each of those is a decision
+    ([D1](../../../docs/DECISIONS.md#d1--rules-are-hard-or-soft),
+    [D7](../../../docs/DECISIONS.md#d7--import-infers-layout-boss-confirms)),
+    not a formatting detail, and one path quietly relaxing one of them is
+    exactly the drift this function exists to prevent.
+    """
+    if not isinstance(answer, dict):
+        raise AgentError("המודל החזיר תשובה לא תקינה")
+
+    rules = []
+    for item in answer.get("rules") or []:
+        if not isinstance(item, dict):
+            continue
+        text = _bounded(item.get("text"), 400)
+        evidence = _bounded(item.get("evidence"), 400)
+        # A rule the manager cannot check is one they cannot meaningfully
+        # approve, which would make the confirm step theatre.
+        if not text or not evidence:
+            continue
+        kind = item.get("kind")
+        rules.append({
+            "text": text,
+            # Anything but an explicit `hard` is soft. A rule wrongly marked
+            # hard is the expensive direction: D1 makes hard rules strong
+            # instructions plus a loud warning, so an invented one would nag
+            # the manager about a rule they never stated.
+            "kind": "hard" if kind == "hard" else "soft",
+            "evidence": evidence,
+            "confidence": (
+                item.get("confidence")
+                if item.get("confidence") in ("high", "medium", "low")
+                else "low"
+            ),
+            # Never approved by the act of being proposed.
+            "approved": False,
+        })
+    return {
+        "rules": rules,
+        "notes": [
+            _bounded(note, 400)
+            for note in (answer.get("notes") or [])
+            if _bounded(note, 400)
+        ],
+    }
 
 
 def _profile_for_model(profile: Optional[dict]) -> dict:
