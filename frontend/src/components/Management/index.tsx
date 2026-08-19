@@ -28,6 +28,7 @@ import { Briefing } from "./Briefing";
 import { Calendar, formatDate } from "./Calendar";
 import { ConfirmMove } from "./ConfirmMove";
 import { History } from "./History";
+import { LearnedFromChanges } from "./LearnedFromChanges";
 import { ImportSchedule } from "./ImportSchedule";
 import { RequestInbox } from "./RequestInbox";
 import { SwapInbox } from "./SwapInbox";
@@ -313,7 +314,12 @@ export function Management({
             <EmptyState busy={state.busy} hasProfile={Boolean(overview?.profile)} />
           )}
 
+          {/* Beneath the log it is derived from: the entries are what
+              happened, and this is what they may add up to. Proposals
+              only — nothing here is a rule until the manager makes it
+              one (D7). */}
           <History entries={overview?.changes ?? []} />
+          <LearnedFromChanges />
         </div>
 
         <div className="management-side">

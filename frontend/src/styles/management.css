@@ -1600,3 +1600,98 @@
   color: var(--danger);
   font-size: 0.85rem;
 }
+
+/* -- rules the manager's own corrections suggest --------------------------- */
+
+/* Shares `.history`'s frame because it sits directly beneath the log and is
+   derived from it — a differently-styled card would read as a separate
+   feature rather than as what the entries above add up to. */
+.learned-panel h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.learned-panel h3 .icon-button {
+  margin-inline-start: auto;
+}
+
+/* The sentence that keeps the panel honest. Not small print: a manager who
+   reads this as a settings page has had the "is this a rule?" decision made
+   for them, which is the one decision D7 reserves for a person. */
+.learned-intro {
+  margin: 0 0 10px;
+  font-size: 0.78rem;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+.learned-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.learned-list li {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.learned-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-block-end: 6px;
+}
+
+.learned-text {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+/* The count and the manager's own words, always visible. A candidate whose
+   evidence is hidden behind a disclosure is one approved on trust. */
+.learned-evidence {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-soft);
+  line-height: 1.45;
+}
+
+.learned-confidence {
+  font-size: 0.72rem;
+  color: var(--text-soft);
+}
+
+.learned-confidence.is-high {
+  color: var(--text);
+}
+
+.learned-notes {
+  list-style: disc;
+  margin: 10px 0 0;
+  padding-inline-start: 18px;
+  font-size: 0.78rem;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+/* A soft candidate is a preference and a hard one is a rule the manager
+   would state outright. Coloured apart because approving the wrong kind is
+   the expensive direction: D1 makes a hard rule a loud warning every time it
+   is broken. */
+.op-badge.op-soft {
+  background: var(--surface);
+  color: var(--text-soft);
+}
+
+.op-badge.op-hard {
+  background: var(--primary-soft);
+  color: var(--primary);
+}

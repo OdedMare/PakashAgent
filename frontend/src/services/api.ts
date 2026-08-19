@@ -2,6 +2,7 @@ import type {
   Briefing,
   BriefingTrigger,
   ChangeEntry,
+  ChangeLearning,
   Constraint,
   ConstraintRequestRow,
   EmployeeIdentity,
@@ -482,6 +483,16 @@ export function withdrawConstraintRequest(
     `/api/employee/requests/${requestId}/withdraw`,
     { method: "POST" },
   );
+}
+
+/** Candidate rules from what the manager kept correcting by hand.
+ *
+ *  Read-only and boss-only. Nothing is stored: like the candidates an import
+ *  produces, these are proposals the manager approves one at a time (D7).
+ *  A workspace with too little history answers with empty lists and costs no
+ *  model call, so this is cheap to ask on a screen that shows it. */
+export function learnFromChanges(): Promise<ChangeLearning> {
+  return request<ChangeLearning>("/api/schedule/history/learn");
 }
 
 /* -- swaps, employee side --------------------------------------------------- */

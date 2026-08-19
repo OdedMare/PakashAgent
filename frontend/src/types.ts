@@ -592,6 +592,40 @@ export interface CandidateRule {
   approved: boolean;
 }
 
+/** One combination the manager kept correcting by hand.
+ *
+ *  Keyed on person, shift and weekday rather than on the date: a rule is
+ *  about Fridays, not about the 3rd of March. `reasons` are the manager's own
+ *  words, verbatim and de-duplicated — they are what makes a candidate rule
+ *  checkable, since a bare count says only that something happened often. */
+export interface RepeatedCorrection {
+  employee: string;
+  shift: string;
+  weekday: string;
+  count: number;
+  reasons: string[];
+  first_seen: string;
+  last_seen: string;
+}
+
+/** Rules the change log suggests, with the corrections behind them.
+ *
+ *  The other end of what an import learns: uploaded files say what the
+ *  workplace *did*, while this says what the manager **decided** and why.
+ *  Nothing here is stored — these are proposals approved one at a time (D7),
+ *  exactly like the candidates an import produces. */
+export interface ChangeLearning {
+  corrections: {
+    repeated: RepeatedCorrection[];
+    totals: { changes: number; corrections: number; people: number };
+    /** Combinations corrected exactly once, and therefore withheld. Shown as
+     *  context, never as a rule: one correction is not a pattern. */
+    single_corrections: number;
+  };
+  candidate_rules: CandidateRule[];
+  notes: string[];
+}
+
 /** What one uploaded file was understood to say. */
 export interface ImportedPeriod {
   filename: string;
