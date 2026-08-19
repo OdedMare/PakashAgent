@@ -65,7 +65,15 @@ uvicorn app.main:app --reload
 - `bl/export.py` — a period out as `.xlsx`. Pure functions, no model, no
   repository. Laid out shift-major like `FILE_FORMATS.md` Sample A so an
   exported week can be edited and imported back.
-- `bl/importer.py` — Excel/doc ingest with layout inference.
+- `bl/importer.py` — Excel/Word ingest with layout inference. **No model
+  call**: which axis is time and whether shift is nested under date is grid
+  arithmetic, and code that counts cannot hallucinate a person into a shift.
+  Returns an `Interpretation`; it is handed no repository, so it cannot write.
+- `bl/learn.py` — what a stack of past files says about the workplace.
+  `observe()` counts patterns across every uploaded file (no model);
+  `RuleLearner` turns those counts into candidate rules in the manager's own
+  words (D2) with the evidence attached. Proposes only — nothing is approved
+  by having been proposed.
 - `bl/prompts/` — prompt text as markdown, loaded by `prompts.load(name)`.
   Shared fragments compose via `<!-- include: shared/name.md -->`.
 - `api/` — Pydantic HTTP contracts and routers.
@@ -128,6 +136,21 @@ one concern; split rather than append.
   share link and holds no employee contact details.
 - **An import is never committed before confirmation.** Inference produces an
   interpretation the boss approves; only then does anything persist ([D7](../docs/DECISIONS.md#d7--import-infers-layout-boss-confirms)).
+  Split across two endpoints so the confirmation is structural rather than a
+  dialog in front of a write that already happened: `/import/preview` reads
+  and returns, `/import/confirm` is the only one that writes. `confirm` takes
+  the rows back from the caller rather than re-reading the file, so a name the
+  manager corrected on the screen is what gets stored.
+- **An imported schedule keeps the shifts it actually ran.** `commit_import`
+  builds the slot grid from the file's own rows, not from `build_slots` —
+  regenerating it from today's vocabulary would quietly reshape history to
+  match a profile that may have changed since ([D9](../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)).
+- **A learned pattern is not a rule.** `bl/learn.py` returns *candidates*
+  carrying their evidence, and the leap from "has not happened" to "must not
+  happen" is the manager's to make: a file showing nobody on Saturday may mean
+  Saturday is closed, or that the sheet only covered weekdays. Anything but an
+  explicit `hard` is stored soft — an invented hard rule nags the manager
+  about a rule they never stated ([D1](../docs/DECISIONS.md#d1--rules-are-hard-or-soft)).
 - **No endpoint lets an employee mutate a schedule.** Enforced by
   `guards.boss()` on every schedule-mutating route — not by convention.
   [D14](../docs/DECISIONS.md) narrowed [D5](../docs/DECISIONS.md#d5--employees-are-read-only)

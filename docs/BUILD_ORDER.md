@@ -37,9 +37,16 @@ order below. **`export.py` is worth reading before step 6:** it already
 writes the Sample A layout the importer must parse, so the two are the same
 shape seen from opposite ends.
 
-**Next: step 6, the importer.** It is the last unbuilt step. Build the two
-fixtures from [`FILE_FORMATS.md`](FILE_FORMATS.md) *first*, then make
-inference pass both — they are structurally different on purpose.
+**Step 6, the importer, is now built** — `bl/importer.py` (layout inference)
+and `bl/learn.py` (what a stack of past files says about the workplace), with
+both `FILE_FORMATS.md` samples as fixtures under `tests/fixtures/build.py`.
+One inference reads both, which is the regression the two samples exist for.
+
+**All eight steps are done.** What remains on the importer is the frontend
+confirm screen: `POST /api/schedule/import/preview` returns the
+interpretation and writes nothing, and `POST /api/schedule/import/confirm`
+is the only endpoint that persists — the D7 split is already enforced at the
+HTTP boundary, so the screen has a contract to build against.
 
 Worth knowing about the audit, since everything trusts it: `audit()` takes the
 schedule's **slot grid** as well as the assignments. A slot with nobody on it
@@ -96,10 +103,18 @@ including on-call weighting — the importer and the audit both depend on it.
 **5. Schedule generation.**
 Assignments carry reasons. Same representation as imported schedules.
 
-**6. Importer.**
-Build the two fixtures from [`FILE_FORMATS.md`](FILE_FORMATS.md) *first*, then make
-inference pass both. They are structurally different on purpose — that is the
-whole test.
+**6. Importer.** *(done)*
+Both fixtures from [`FILE_FORMATS.md`](FILE_FORMATS.md) are built in
+`tests/fixtures/build.py` and one inference passes both — they are
+structurally different on purpose, and that is the whole test.
+
+`bl/importer.py` infers axis semantics (which axis is time, whether shift is
+nested under date, whether the lanes are shifts or people) with **no model
+call**: it is grid arithmetic, and code that counts cannot hallucinate a
+person into a shift. `bl/learn.py` is the layer above it — `observe()`
+counts patterns across every uploaded file, and `RuleLearner` turns those
+counts into candidate rules in the manager's own words (D2), each carrying
+the evidence behind it and none of them approved by being proposed (D7).
 
 **7. Conversational changes.**
 Ask for the reason, propose with justification, apply on confirm, append to log.
