@@ -47,6 +47,9 @@ _DEFAULT_MIN_REST_HOURS = 8.0
 # A shift whose end time is at or before its start crosses midnight. There is
 # no date arithmetic to do here beyond that: shifts are bounded by a day.
 _MINUTES_PER_HOUR = 60.0
+# Friday and Saturday: the Israeli weekend, matching how the interview
+# collects a shift's `days` and how the real files are written.
+_WEEKEND_WEEKDAYS = frozenset({4, 5})
 
 
 def audit(
@@ -235,6 +238,88 @@ def fairness(
             ],
             key=lambda item: (-item["hours"], item["employee"]),
         ),
+    }
+
+
+def load_history(
+    assignments: List[dict],
+    shifts: List[dict],
+    employees: List[dict],
+) -> List[dict]:
+    """How much each person has carried across *past* periods.
+
+    The other side of `fairness()`. That one compares hours inside the period
+    on screen; this one looks backwards, at who has been taking the nights and
+    the weekends, and is what the scheduler reasons from when it decides whose
+    turn the next one is.
+
+    It exists because the scheduler used to be handed several hundred raw
+    assignment rows and left to count them itself. That is wrong twice: on a
+    two-week period the rows were roughly 60% of the whole prompt, crowding out
+    the period actually being built, and counting is the one thing
+    [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)
+    puts on this side of the line. A model asked "who has worked the most
+    nights" is doing arithmetic by generation, and a wrong answer there looks
+    exactly like a right one.
+
+    Nothing here decides anything. It reports that Ron has six nights and Dana
+    none; whether that means Dana takes the next one is the model's call.
+
+    Everyone on the roster appears, zeros included -- for the same reason
+    `fairness()` keeps them. A person with no nights yet is the most useful row
+    in the table, and an absent row reads as missing data rather than as zero.
+    """
+    shift_index = _index_shifts(shifts)
+    rows = [_row(item, shift_index) for item in assignments or []]
+    rows = [row for row in rows if row is not None]
+
+    totals: Dict[str, dict] = {}
+    for employee in employees or []:
+        name = _text(
+            employee.get("name") if isinstance(employee, dict) else employee
+        )
+        if name:
+            totals.setdefault(name, _empty_load())
+    for row in rows:
+        # A name the roster no longer lists -- someone who left, or a spelling
+        # that changed. Kept, because dropping it would understate how much of
+        # the load the people still here actually carried.
+        entry = totals.setdefault(row["employee"], _empty_load())
+        entry["shifts"] += 1
+        entry["hours"] = round(entry["hours"] + row["hours"], 2)
+        if row["is_on_call"] or _is_night(shift_index.get(row["shift"])):
+            entry["nights"] += 1
+        if row["day"] is not None and row["day"].weekday() in _WEEKEND_WEEKDAYS:
+            entry["weekends"] += 1
+        if row["date"] > entry["last_worked"]:
+            entry["last_worked"] = row["date"]
+
+    return sorted(
+        [dict(counts, employee=name) for name, counts in totals.items()],
+        key=lambda item: (-item["nights"], -item["hours"], item["employee"]),
+    )
+
+
+def _is_night(shift: Optional[dict]) -> bool:
+    """Whether the vocabulary marks this shift as a night.
+
+    Read off the shift definition, never inferred from its name or its start
+    time: the vocabulary is per-workplace
+    ([D9](../../../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)),
+    so a guess here would be the hardcoding that decision forbids. A workplace
+    that never flags a night simply reports zero nights, which is honest --
+    unlike a number produced by matching against a list of names nobody
+    declared.
+    """
+    if not isinstance(shift, dict):
+        return False
+    return bool(shift.get("is_night") or shift.get("is_overnight"))
+
+
+def _empty_load() -> dict:
+    return {
+        "shifts": 0, "hours": 0.0, "nights": 0,
+        "weekends": 0, "last_worked": "",
     }
 
 
@@ -977,7 +1062,7 @@ def _text(value: Any) -> str:
 
 
 __all__ = [
-    "audit", "personal_summary", "fairness", "shift_stats",
+    "audit", "personal_summary", "fairness", "load_history", "shift_stats",
     "OVER_HOURS", "CONSECUTIVE", "SHORT_REST", "DOUBLE_BOOKED",
     "UNAVAILABLE", "UNFILLED", "OVERSTAFFED",
     "SEVERITY_WARNING", "SEVERITY_NOTICE",

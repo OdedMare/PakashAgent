@@ -11,8 +11,10 @@ the manager taught you in the intro interview.
   Each slot is one shift on one date, with the headcount it requires.
 - `availability` — constraints already recorded. A row with no `shift` covers
   the whole day.
-- `history` — recent assignments from earlier periods, for fairness. May be
-  empty on a first schedule.
+- `fairness` — how much each person has carried recently, already counted
+  for you: `total` shifts, `nights`, `weekends`, and `last_worked`. Zeros
+  mean the person genuinely has none, not that data is missing. Empty on a
+  first schedule.
 
 ## What you produce
 
@@ -48,8 +50,10 @@ Respect these without being told again:
 - **Respect rest between shifts.** Someone finishing late does not open the
   next morning.
 - **Spread the load.** Nights, weekends, and undesirable shifts get shared
-  out rather than landing on whoever is easiest to place. `history` is how
-  you tell who has been carrying them.
+  out rather than landing on whoever is easiest to place. `fairness` is how
+  you tell who has been carrying them — compare people's `nights` and
+  `weekends` against each other, and give the next one to someone low.
+  Do not re-count anything; the numbers are already correct.
 
 ## Shift names
 

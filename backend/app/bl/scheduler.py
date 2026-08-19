@@ -22,6 +22,7 @@ import datetime
 import json
 from typing import Any, Dict, List, Optional
 
+from app.bl.audit import load_history
 from app.bl.prompts import load
 from app.common.errors import AgentError
 
@@ -30,8 +31,8 @@ from app.common.errors import AgentError
 # model in one payload.
 _MAX_PERIOD_DAYS = 62
 _MAX_TEXT_CHARS = 4000
-# Recent assignments handed over for fairness. Enough to see who has been
-# carrying the nights, not so much that the period being built is buried.
+# Past assignments read for the fairness tally. They are counted here and
+# never sent, so this bounds the arithmetic rather than the prompt.
 _MAX_HISTORY_ROWS = 400
 
 # Hebrew weekdays, matching how the interview collects `days` on a shift and
@@ -102,7 +103,14 @@ class Scheduler:
                 "slots": [_slot_for_model(slot) for slot in slots],
             },
             "availability": _bounded_rows(availability),
-            "history": _bounded_rows(history, _MAX_HISTORY_ROWS),
+            # Counted rather than handed over raw. Several hundred assignment
+            # rows were roughly 60% of this payload, and counting them is
+            # code's job under D3 — so the model gets the tally, not the rows.
+            "fairness": load_history(
+                _bounded_rows(history, _MAX_HISTORY_ROWS),
+                (profile or {}).get("shifts") or [],
+                (profile or {}).get("employees") or [],
+            ),
             "instructions": _bounded(instructions),
         }
         answer = self._ask(payload)
