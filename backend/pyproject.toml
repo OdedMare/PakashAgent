@@ -17,6 +17,11 @@ dependencies = [
     "numpy>=1.24,<1.25",
     "pandas>=2.0,<2.1",
     "openpyxl>=3.1,<3.2",
+    # Multipart form parsing, required by FastAPI's `UploadFile`. The import
+    # route (D7) takes the manager's own spreadsheets as file uploads, and
+    # without this FastAPI raises at route-registration time rather than on
+    # first request -- the whole app fails to start.
+    "python-multipart>=0.0.9,<0.1",
 ]
 
 [project.optional-dependencies]

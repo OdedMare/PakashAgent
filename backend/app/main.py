@@ -21,6 +21,7 @@ from app.common.sessions import generate_secret
 from app.common.runtime_settings.runtime_settings_store import (
     RuntimeSettingsStore,
 )
+from app.dal.database.postgres import close_pool
 from app.dal.llm.openai_client import OpenAIJsonClient
 from app.dal.repository import Repository
 
@@ -124,6 +125,17 @@ def startup() -> None:
         repository.initialize()
     except Exception as exc:
         _log.error("database initialization failed: %s", exc)
+
+
+@app.on_event("shutdown")
+def shutdown() -> None:
+    """Return every pooled connection before the process goes away.
+
+    Without this the pool's own worker threads outlive the shutdown and
+    Postgres is left holding connections until it times them out — visible as
+    a server that slowly accumulates idle backends across restarts.
+    """
+    close_pool()
 
 
 @app.exception_handler(AppError)

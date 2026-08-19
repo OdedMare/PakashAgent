@@ -18,9 +18,9 @@ The team always comes from the signed session cookie. No route here accepts
 a team id from the caller.
 """
 
-from typing import Optional
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import Response
 
 from app.api.contracts import (
@@ -31,6 +31,8 @@ from app.api.contracts import (
     BriefingRequest,
     ConstraintRequest,
     GenerateRequest,
+    ImportConfirmRequest,
+    ImportPreview,
     ManagementOverview,
     MoveRequest,
     ProposeRequest,
@@ -210,6 +212,56 @@ def build_router(service, guards) -> APIRouter:
                 ".spreadsheetml.sheet"
             ),
             headers={"Content-Disposition": 'attachment; filename="%s"' % name},
+        )
+
+    @router.post("/import/preview", response_model=ImportPreview)
+    async def import_preview(
+        files: List[UploadFile] = File(...),
+        learn_rules: bool = True,
+        session: dict = Depends(boss),
+    ) -> dict:
+        """Read uploaded schedule files and return an interpretation.
+
+        **This route writes nothing.** Under
+        [D7](../../../docs/DECISIONS.md#d7--import-infers-layout-boss-confirms)
+        the manager reads what the importer believes the files say and
+        confirms it; `/import/confirm` is the only endpoint that persists.
+        Splitting them across two calls is what makes the confirmation real
+        rather than a dialog in front of a write that already happened.
+
+        Takes many files at once because that is the actual case: the
+        manager has a folder of past sheets, and patterns worth learning are
+        only visible across them.
+
+        Boss-only, like every schedule route
+        ([D5](../../../docs/DECISIONS.md#d5--employees-are-read-only)/D14).
+        """
+        uploads = []
+        for upload in files or []:
+            uploads.append({
+                "filename": upload.filename or "",
+                "content": await upload.read(),
+            })
+        return service.preview_import(
+            session["team_id"], uploads, learn_rules=learn_rules
+        )
+
+    @router.post("/import/confirm", response_model=Schedule)
+    def import_confirm(
+        request: ImportConfirmRequest, session: dict = Depends(boss)
+    ) -> dict:
+        """Store an interpretation the manager approved (D7).
+
+        The rows come from the request rather than from a re-read of the
+        file, so what is stored is exactly what was shown and approved —
+        including any correction the manager made on the confirm screen.
+        """
+        return service.commit_import(
+            session["team_id"],
+            [row.model_dump() for row in request.assignments],
+            [row.model_dump() for row in request.unavailability],
+            starts_on=request.starts_on,
+            ends_on=request.ends_on,
         )
 
     @router.get("/constraints/list")
