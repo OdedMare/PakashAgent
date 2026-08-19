@@ -35,6 +35,20 @@ _MAX_TEXT_CHARS = 4000
 # never sent, so this bounds the arithmetic rather than the prompt.
 _MAX_HISTORY_ROWS = 400
 
+# A period longer than this is built one chunk at a time rather than in one
+# call. Seven days because a week is the unit the manager already thinks in,
+# so a chunk boundary falls where a person would have put one -- and because
+# the output is what actually binds: a fortnight of three daily shifts is
+# ~126 assignments, each carrying its own Hebrew sentence, and a small model
+# asked for all of them in one reply loses consistency somewhere in the
+# middle. It is not a context limit; it is an attention one.
+#
+# Chunks are NOT independent. Each is told what the earlier ones decided
+# (`_committed_for_model`), because a scheduler that cannot see week one will
+# happily give week two to the same people -- turning a fairness feature into
+# the exact unfairness it exists to prevent.
+_CHUNK_DAYS = 7
+
 # Hebrew weekdays, matching how the interview collects `days` on a shift and
 # how the source files write them. Hebrew is data here, not presentation.
 _HEBREW_WEEKDAYS = (
@@ -95,30 +109,59 @@ class Scheduler:
             raise AgentError(
                 "לא ניתן לבנות סידור: לא הוגדרו משמרות לתקופה הזו"
             )
-        payload = {
-            "profile": _profile_for_model(profile),
-            "period": {
-                "starts_on": starts_on,
-                "ends_on": ends_on,
-                "slots": [_slot_for_model(slot) for slot in slots],
-            },
-            "availability": _bounded_rows(availability),
-            # Counted rather than handed over raw. Several hundred assignment
-            # rows were roughly 60% of this payload, and counting them is
-            # code's job under D3 — so the model gets the tally, not the rows.
-            "fairness": load_history(
-                _bounded_rows(history, _MAX_HISTORY_ROWS),
-                (profile or {}).get("shifts") or [],
-                (profile or {}).get("employees") or [],
-            ),
-            "instructions": _bounded(instructions),
-        }
-        answer = self._ask(payload)
+        past = _bounded_rows(history, _MAX_HISTORY_ROWS)
+        shifts = (profile or {}).get("shifts") or []
+        employees = (profile or {}).get("employees") or []
+        trimmed = _profile_for_model(profile)
+        rows = _bounded_rows(availability)
+
+        assignments: List[dict] = []
+        notes: List[str] = []
+        summaries: List[str] = []
+        for chunk in _chunks(slots):
+            # The tally is recomputed per chunk over the real history *plus*
+            # what this run has already decided, so week two sees week one's
+            # nights as nights. Passing the original tally to every chunk
+            # would let the model hand the same person every weekend in the
+            # period and never notice.
+            fairness = load_history(past + assignments, shifts, employees)
+            answer = self._ask({
+                "profile": trimmed,
+                "period": {
+                    "starts_on": chunk[0]["slot_date"],
+                    "ends_on": chunk[-1]["slot_date"],
+                    "slots": [_slot_for_model(slot) for slot in chunk],
+                },
+                "availability": rows,
+                # Counted rather than handed over raw. Several hundred
+                # assignment rows were roughly 60% of this payload, and
+                # counting them is code's job under D3 — so the model gets
+                # the tally, not the rows.
+                "fairness": fairness,
+                "already_scheduled": _committed_for_model(assignments),
+                "instructions": _bounded(instructions),
+            })
+            # Bounded against the whole grid, not just this chunk: a model
+            # that answers with a date from next week is naming a real slot,
+            # and dropping it for being outside the chunk would lose a
+            # decision that is perfectly valid for the period being built.
+            assignments = _merge(
+                assignments,
+                _assignments(answer.get("assignments"), slots, profile),
+            )
+            notes.extend(_lines(answer.get("notes")))
+            summary = _bounded(answer.get("summary"))
+            if summary:
+                summaries.append(summary)
+
         return {
             "slots": slots,
-            "assignments": _assignments(answer.get("assignments"), slots, profile),
-            "notes": _lines(answer.get("notes")),
-            "summary": _bounded(answer.get("summary")),
+            "assignments": assignments,
+            "notes": notes,
+            # One period gets one summary. Several chunks produce several, and
+            # joining them is honest -- inventing a single sentence over them
+            # would mean writing prose here, which is the model's job.
+            "summary": _bounded(" ".join(summaries)),
         }
 
     def _ask(self, payload: dict) -> dict:
