@@ -270,6 +270,208 @@ class EmployeeService:
         return {"request": request}
 
 
+    # -- swap requests -----------------------------------------------------
+
+    def propose_swap(
+        self,
+        team_id: str,
+        employee: str,
+        assignment_id: str,
+        counterparty: str,
+        counterparty_assignment_id: str,
+        reason: str = "",
+    ) -> dict:
+        """Offer a swap to a colleague. Moves nothing.
+
+        Both shifts are named by *assignment id* rather than by date and
+        shift: the employee picks two cells off a grid they are already
+        looking at, and resolving ids here means a swap can never name a
+        shift that is not really on the schedule. Both are then verified to
+        belong to the people they are claimed for -- otherwise a requester
+        could offer away a shift that was never theirs.
+
+        Read from the published schedule only, which is the same one the
+        personal area renders. Offering to swap a draft shift would be
+        trading something the manager has not committed to yet.
+        """
+        schedule = self._schedules.current(team_id, role="member")
+        if not schedule:
+            raise AgentError("אין סידור מפורסם להחליף בו משמרות")
+        mine = _assignment(schedule, assignment_id)
+        theirs = _assignment(schedule, counterparty_assignment_id)
+        if mine is None or theirs is None:
+            raise AgentError("אחת המשמרות לא נמצאה בסידור")
+        if _text(mine.get("employee")) != employee:
+            raise AuthError("אפשר להציע רק משמרת שלך")
+        if _text(theirs.get("employee")) != (counterparty or "").strip():
+            raise AgentError("המשמרת שנבחרה אינה של העובד שנבחר")
+        return self._repository.submit_swap(
+            team_id,
+            schedule["id"],
+            employee,
+            _iso_date(mine.get("date")),
+            _text(mine.get("shift")),
+            _text(theirs.get("employee")),
+            _iso_date(theirs.get("date")),
+            _text(theirs.get("shift")),
+            reason=(reason or "").strip(),
+        )
+
+    def answer_swap(
+        self, team_id: str, employee: str, swap_id: str, agreed: bool
+    ) -> dict:
+        """The colleague accepting or declining. Still moves nothing.
+
+        Accepting is consent, not approval: it moves the swap into the
+        manager's inbox and no further. Two employees agreeing between
+        themselves does not change a schedule -- D14 gave employees exactly
+        one write and this is still it, widened from "a constraint request"
+        to "a request", with the manager as sole decider either way.
+        """
+        return self._repository.answer_swap(
+            swap_id, team_id, employee, agreed
+        )
+
+    def withdraw_swap(
+        self, team_id: str, employee: str, swap_id: str
+    ) -> dict:
+        return self._repository.withdraw_swap(swap_id, team_id, employee)
+
+    def my_swaps(self, team_id: str, employee: str) -> List[dict]:
+        """Every swap naming this person, on either side.
+
+        Both sides read the same rows: the requester needs to see whether
+        their offer was taken up, and the counterparty needs to see what they
+        are being asked. `_mark_side` labels which of the two the caller is,
+        so the screen does not have to compare names to know whether to show
+        an accept button.
+        """
+        rows = self._repository.list_swaps(team_id, employee=employee)
+        return [_mark_side(row, employee) for row in rows]
+
+    def incoming_swaps(self, team_id: str, employee: str) -> List[dict]:
+        """Offers waiting on this employee's answer -- their badge."""
+        return [
+            _mark_side(row, employee)
+            for row in self._repository.list_swaps(
+                team_id, employee=employee, status=STATUS_AWAITING
+            )
+            if _text(row.get("counterparty")) == employee
+        ]
+
+    # -- the manager's side ------------------------------------------------
+
+    def pending_swaps(self, team_id: str) -> List[dict]:
+        """Swaps both employees agreed to, awaiting the manager."""
+        return self._repository.list_swaps(team_id, status=STATUS_PENDING)
+
+    def all_swaps(self, team_id: str) -> List[dict]:
+        return self._repository.list_swaps(team_id)
+
+    def approve_swap(
+        self, team_id: str, swap_id: str, decided_reason: str = ""
+    ) -> dict:
+        """Approve a swap and perform it.
+
+        The ruling first, then the swap itself through
+        `schedule_service.apply` -- the *same* `OP_SWAP` path a manager-typed
+        swap takes. Reusing it is the point: a swap that arrived through the
+        employee inbox and one the manager asked the agent for produce the
+        same assignments and the same `ACTION_SWAPPED` log row, so the
+        history reads as one kind of event rather than two.
+
+        The manager's reason is required, exactly as D8 requires it of every
+        other change. `agent_reason` records that the swap came from the
+        employees rather than from the agent's judgment -- nobody's judgment
+        was involved, and claiming otherwise in the log would be a
+        justification the agent never made.
+        """
+        if not (decided_reason or "").strip():
+            raise AgentError("צריך לציין סיבה לאישור ההחלפה")
+        swap = self._repository.decide_swap(
+            swap_id, team_id, STATUS_APPROVED, decided_reason.strip()
+        )
+        schedule = self._schedules.apply(
+            team_id,
+            swap["schedule_id"],
+            [{
+                "action": "swap",
+                "employee": swap["requester"],
+                "shift": swap.get("requester_shift") or "",
+                "date": _iso_date(swap["requester_date"]),
+                "with_employee": swap["counterparty"],
+                "with_shift": swap.get("counterparty_shift") or "",
+                "with_date": _iso_date(swap["counterparty_date"]),
+            }],
+            decided_reason.strip(),
+            agent_reason=_swap_note(swap),
+        )
+        return {"swap": swap, "schedule": schedule}
+
+    def reject_swap(
+        self, team_id: str, swap_id: str, decided_reason: str = ""
+    ) -> dict:
+        """Refuse a swap, with a reason both employees will read.
+
+        Required for the reason a constraint rejection requires one: two
+        people arranged this between themselves, and a refusal that says
+        nothing is how they stop using the feature and go back to arranging
+        swaps the schedule never hears about.
+        """
+        if not (decided_reason or "").strip():
+            raise AgentError("צריך לציין סיבה לדחייה")
+        swap = self._repository.decide_swap(
+            swap_id, team_id, STATUS_REJECTED, decided_reason.strip()
+        )
+        self._repository.append_change(
+            team_id, ACTION_SWAP_REJECTED,
+            schedule_id=swap.get("schedule_id"),
+            employee=swap["requester"],
+            replaced_employee=swap["counterparty"],
+            slot_date=_iso_date(swap["requester_date"]),
+            shift_name=swap.get("requester_shift") or "",
+            reason=decided_reason.strip(),
+            agent_reason="בקשת החלפה נדחתה",
+        )
+        return {"swap": swap}
+
+
+def _assignment(schedule: dict, assignment_id: str) -> Optional[dict]:
+    for row in (schedule or {}).get("assignments") or []:
+        if row.get("id") == assignment_id:
+            return row
+    return None
+
+
+def _mark_side(row: dict, employee: str) -> dict:
+    """Label which side of the swap the reader is on.
+
+    One row serves two people with different questions -- "did they accept?"
+    and "do I accept?" -- and deciding that in the client would mean
+    comparing names in three components instead of once here.
+    """
+    entry = dict(row)
+    entry["is_requester"] = _text(row.get("requester")) == employee
+    entry["is_counterparty"] = _text(row.get("counterparty")) == employee
+    return entry
+
+
+def _swap_note(swap: dict) -> str:
+    """What the change log records as the agent's half of the reason.
+
+    A swap the employees arranged had no agent judgment behind it, so this
+    states the provenance rather than inventing a justification -- the same
+    reasoning `assignments.source` encodes for a hand-placed row (D18).
+    """
+    requester = swap.get("requester") or ""
+    counterparty = swap.get("counterparty") or ""
+    note = "החלפה שסוכמה בין {} ל{} ואושרה על ידי המנהל".format(
+        requester, counterparty
+    )
+    reason = (swap.get("reason") or "").strip()
+    return "{}. הסיבה שנמסרה: {}".format(note, reason) if reason else note
+
+
 def _roster_names(profile: dict) -> List[str]:
     """Employee names as the interview recorded them.
 

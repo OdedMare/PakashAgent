@@ -6,6 +6,8 @@ import type {
   ConstraintRequestRow,
   EmployeeIdentity,
   EmployeeView,
+  ImportedConstraint,
+  ImportPreview,
   InterviewTurn,
   ManagementOverview,
   Operation,
@@ -528,4 +530,63 @@ export function releaseIdentity(
     "/api/schedule/requests/identities/release",
     { method: "POST", body: JSON.stringify({ employee }) },
   );
+}
+
+/** Read uploaded schedule files and return what they appear to say.
+ *
+ *  **Writes nothing.** Under D7 the manager reads the interpretation and
+ *  confirms it; `confirmImport` is the only call that persists. Sent as
+ *  multipart rather than through `request`, which forces a JSON
+ *  content-type — setting it by hand here would break the boundary the
+ *  browser generates.
+ *
+ *  Many files at once because that is the real case: a manager has a folder
+ *  of past sheets, and a pattern worth learning is only visible across them.
+ */
+export async function previewImport(
+  files: File[],
+  learnRules = true,
+): Promise<ImportPreview> {
+  const path = `/api/schedule/import/preview?learn_rules=${learnRules}`;
+  const body = new FormData();
+  files.forEach((file) => body.append("files", file));
+  console.debug(`[api] → POST ${path}`, files.map((f) => f.name));
+
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: "POST",
+      credentials: "same-origin",
+      body,
+    });
+  } catch (reason) {
+    console.error(`[api] ✗ POST ${path} network error`, reason);
+    throw new Error("לא ניתן להתחבר לשרת");
+  }
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    console.error(`[api] ✗ POST ${path} → ${response.status}`, data);
+    throw new Error(errorDetail(data, response.status));
+  }
+  console.debug(`[api] ✓ POST ${path}`, data);
+  return data as ImportPreview;
+}
+
+/** Store an interpretation the manager approved (D7).
+ *
+ *  The rows travel back from the screen rather than being re-read from the
+ *  file, so a shift the manager chose or a name they corrected is what gets
+ *  stored — re-inferring here would silently discard the correction.
+ */
+export function confirmImport(body: {
+  assignments: { employee: string; shift: string; date: string }[];
+  unavailability?: ImportedConstraint[];
+  starts_on?: string;
+  ends_on?: string;
+}): Promise<Schedule> {
+  return request<Schedule>("/api/schedule/import/confirm", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
