@@ -231,19 +231,159 @@
   justify-content: center;
 }
 
+/* The chip carries the person's own colour, set inline from the roster --
+   a week should read as a shape before it reads as text. The fill and text
+   colour arrive as a style attribute, so only the geometry lives here. */
 .calendar-person {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
   font-size: 0.82rem;
+  font-weight: 500;
   padding: 0.2rem 0.5rem;
   border-radius: 999px;
   background: var(--surface-3);
   border: 1px solid var(--border-strong);
   cursor: grab;
   user-select: none;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.calendar-person:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-soft);
 }
 
 .calendar-person:active {
   cursor: grabbing;
+  transform: none;
+}
+
+/* Placed by the manager rather than generated (D18). A dotted edge, not a
+   colour: nothing is wrong with a hand-placed shift, and spending a warning
+   colour on it would say there was. */
+.calendar-person.is-manual {
+  border-style: dashed;
+}
+
+/* Clearing one person off a cell. Hidden until the chip is hovered or
+   focused, so a dense week is not a wall of close buttons -- but focus
+   counts, or the control would be unreachable from the keyboard. */
+.calendar-person-remove {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.calendar-person:hover .calendar-person-remove,
+.calendar-person-remove:focus-visible {
+  opacity: 0.75;
+}
+
+.calendar-person-remove:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+/* Fill an empty cell (D18). Quiet until the cell is hovered: the grid is
+   read far more often than it is edited, and a plus sign in every cell of a
+   built week is noise on top of the thing the manager came to look at. */
+.calendar-add {
+  display: inline-grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.calendar-cell:hover .calendar-add,
+.calendar-add:focus-visible {
+  opacity: 1;
+}
+
+/* An empty cell is where the manual path is actually used, so the affordance
+   stays visible there rather than waiting for a hover to be discovered. */
+.calendar-cell.is-short .calendar-add {
+  opacity: 0.65;
+}
+
+.calendar-add:hover {
+  opacity: 1;
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+/* Choosing who goes in. Absolutely positioned so it floats over the
+   neighbouring cells instead of stretching the row it opens in -- a picker
+   that resized its own cell would shift the whole grid under the cursor. */
+.calendar-picker {
+  position: absolute;
+  z-index: 5;
+  inset-inline-start: 0.25rem;
+  inset-block-start: 100%;
+  min-width: 8rem;
+  max-height: 12rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+
+.calendar-picker-option {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.calendar-picker-option:hover {
+  filter: brightness(0.95);
+}
+
+.calendar-picker-empty {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  padding: 0.25rem;
+  white-space: nowrap;
+}
+
+/* Friday and Saturday. Presentation only -- the audit treats no day
+   specially, and a workplace that runs through the weekend still shows
+   exactly the shifts it declared. */
+.calendar thead th.is-weekend {
+  background: var(--surface-3);
+}
+
+.calendar-cell.is-weekend {
+  background: color-mix(in srgb, var(--surface-3) 45%, transparent);
+}
+
+/* Short of headcount still wins over the weekend tint: one is information
+   about the schedule, the other is a reading aid. */
+.calendar-cell.is-weekend.is-short {
+  background: var(--warning-soft);
 }
 
 /* Assigned against a recorded constraint. Marked, never prevented — the

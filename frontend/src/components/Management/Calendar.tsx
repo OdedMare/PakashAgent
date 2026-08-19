@@ -1,41 +1,71 @@
 "use client";
 
-import { AlertTriangle, Moon, Users } from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, Moon, Plus, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { Assignment, Constraint, Schedule, Slot } from "@/types";
 
-/** The living schedule as a week grid, right-to-left.
+import { buildPalette, colorStyle } from "./palette";
+
+/** The living schedule as a grid, right-to-left.
  *
- *  Dragging an assignment does **not** edit anything. The drop opens a
- *  confirmation that collects the manager's reason, and only that dialog
- *  writes ([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)).
- *  This keeps the direct-manipulation feel of a calendar without letting a
- *  gesture put a row in the schedule that nobody can account for — the drag
- *  is a way of *proposing* a move, which is the same thing typing "move Dana
- *  to Tuesday" does.
+ *  Two gestures write, and they are deliberately not the same gesture:
+ *
+ *  - **Dragging an assignment does not edit anything.** The drop opens a
+ *    confirmation that collects the manager's reason, and only that dialog
+ *    writes ([D12](../../../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
+ *    A drag moves somebody who is already placed — it takes a shift away
+ *    from one person and hands it to another, and that is a change somebody
+ *    is owed an account of.
+ *  - **Filling an empty cell writes immediately** (D18). It takes nothing
+ *    away from anybody, so there is no one for a reason to be owed to, and
+ *    asking for a justification per cell would make authoring a week by hand
+ *    cost a dialog per shift. The boss may build a schedule without the
+ *    agent being involved at all.
+ *
+ *  Every person carries a colour drawn from the roster, so a week reads as a
+ *  shape before it reads as text — "is anyone on five days running" is
+ *  answerable without parsing a single name. Provenance is marked too: a
+ *  chip the manager placed is dotted, one the agent generated is not, which
+ *  is what makes a hand-built week distinguishable from a generated one
+ *  after the fact.
  *
  *  Warnings are painted onto the cells they belong to and never prevent a
- *  drop ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
- *  A cell can be short-staffed, double-booked, and still perfectly draggable:
+ *  drop or an assignment ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+ *  A cell can be short-staffed, double-booked, and still perfectly editable:
  *  the manager is the one who decides, and the grid only has to tell them. */
 export function Calendar({
   schedule,
   constraints,
+  employees = [],
   readOnly = false,
+  dark = false,
   onDrop,
+  onAssign,
+  onUnassign,
 }: {
   schedule: Schedule;
   constraints: Constraint[];
+  /** The roster, in profile order — what the colours are assigned from. */
+  employees?: string[];
   readOnly?: boolean;
+  dark?: boolean;
   onDrop?: (move: {
     assignment: Assignment;
     shift_name: string;
     slot_date: string;
   }) => void;
+  /** Fill an empty cell. Writes immediately (D18). */
+  onAssign?: (input: { shift_name: string; slot_date: string; employee: string }) => void;
+  /** Clear one person off a cell. */
+  onUnassign?: (assignment: Assignment) => void;
 }) {
   const [dragging, setDragging] = useState<Assignment | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  // Which empty cell has its employee picker open, as `shift|date`. One at a
+  // time: two open pickers would let the manager start two assignments and
+  // lose track of which cell the next click lands in.
+  const [picking, setPicking] = useState<string | null>(null);
 
   const dates = uniqueSorted(schedule.slots.map((slot) => slot.slot_date));
   // Shift rows keep the order the vocabulary gave them, by first appearance,
@@ -45,6 +75,13 @@ export function Calendar({
   const shifts = uniqueByAppearance(
     schedule.slots.map((slot) => slot.shift_name),
   );
+
+  // Colours come from the roster's own order, so ten people get ten distinct
+  // hues. Names on the grid that the roster no longer carries still get a
+  // stable colour — see `buildPalette`.
+  const hueOf = useMemo(() => buildPalette(employees), [employees]);
+
+  const editable = !readOnly && Boolean(onAssign);
 
   const assignmentsFor = (shift: string, date: string) =>
     schedule.assignments.filter(
@@ -69,7 +106,11 @@ export function Calendar({
               משמרת
             </th>
             {dates.map((date) => (
-              <th key={date} scope="col">
+              <th
+                key={date}
+                scope="col"
+                className={isWeekend(date) ? "is-weekend" : undefined}
+              >
                 <span className="calendar-weekday">{hebrewWeekday(date)}</span>
                 <span className="calendar-date">{formatDate(date)}</span>
               </th>
@@ -111,6 +152,7 @@ export function Calendar({
                       short ? "is-short" : "",
                       over === key ? "is-over" : "",
                       cellWarnings.length ? "has-warning" : "",
+                      isWeekend(date) ? "is-weekend" : "",
                     ]
                       .filter(Boolean)
                       .join(" ")}
@@ -147,7 +189,11 @@ export function Calendar({
                         <Person
                           key={row.id}
                           assignment={row}
+                          hue={hueOf(row.employee)}
+                          dark={dark}
                           draggable={!readOnly}
+                          removable={editable && Boolean(onUnassign)}
+                          onRemove={() => onUnassign?.(row)}
                           onDragStart={() => setDragging(row)}
                           onDragEnd={() => {
                             setDragging(null);
@@ -160,6 +206,38 @@ export function Calendar({
                         <span className="calendar-gap">
                           חסרים {slot.headcount - rows.length}
                         </span>
+                      ) : null}
+                      {/* D18: the manual path. Present on every editable
+                          cell rather than only on empty ones — a slot that
+                          wants two people is still short with one on it. */}
+                      {editable ? (
+                        picking === key ? (
+                          <EmployeePicker
+                            employees={employees}
+                            taken={rows.map((row) => row.employee)}
+                            hueOf={hueOf}
+                            dark={dark}
+                            onPick={(employee) => {
+                              setPicking(null);
+                              onAssign?.({
+                                shift_name: shift,
+                                slot_date: date,
+                                employee,
+                              });
+                            }}
+                            onClose={() => setPicking(null)}
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            className="calendar-add"
+                            onClick={() => setPicking(key)}
+                            aria-label={`שיבוץ ל${shift} ב-${formatDate(date)}`}
+                            title="שיבוץ ידני"
+                          >
+                            <Plus size={13} />
+                          </button>
+                        )
                       ) : null}
                     </div>
                     {slot.is_on_call ? (
@@ -186,25 +264,51 @@ export function Calendar({
   );
 }
 
-/** One assigned person. The agent's reason rides along as the title, so it
- *  is always one hover away rather than hidden behind a click — under D3 the
- *  agent's judgment is final, and the reasoning is how the manager audits it. */
+/** One assigned person, in their own colour.
+ *
+ *  The agent's reason rides along as the title, so it is always one hover
+ *  away rather than hidden behind a click — under D3 the agent's judgment is
+ *  final, and the reasoning is how the manager audits it.
+ *
+ *  A chip the manager placed by hand is marked (D18). Not as a warning —
+ *  there is nothing wrong with it — but because "did I put this here or did
+ *  the agent" is exactly the question a half-generated, half-edited week
+ *  raises, and the reason text alone answers it only if you stop to read. */
 function Person({
   assignment,
+  hue,
+  dark,
   draggable,
+  removable,
+  onRemove,
   onDragStart,
   onDragEnd,
   blocked,
 }: {
   assignment: Assignment;
+  hue: number;
+  dark: boolean;
   draggable: boolean;
+  removable: boolean;
+  onRemove: () => void;
   onDragStart: () => void;
   onDragEnd: () => void;
   blocked: boolean;
 }) {
+  const manual = assignment.source === "manager";
   return (
     <span
-      className={`calendar-person${blocked ? " is-blocked" : ""}`}
+      className={[
+        "calendar-person",
+        blocked ? "is-blocked" : "",
+        manual ? "is-manual" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      // The colour is per-name and computed at render, so it cannot be a
+      // class. `is-blocked` overrides it in CSS — a constraint conflict has
+      // to out-shout a decorative hue.
+      style={blocked ? undefined : colorStyle(hue, dark)}
       draggable={draggable}
       onDragStart={(event) => {
         // Some browsers refuse to start a drag without transfer data set.
@@ -213,10 +317,97 @@ function Person({
         onDragStart();
       }}
       onDragEnd={onDragEnd}
-      title={assignment.reason}
+      title={
+        manual
+          ? `${assignment.employee} — שובץ ידנית. ${assignment.reason}`
+          : assignment.reason
+      }
     >
       {assignment.employee}
+      {removable ? (
+        <button
+          type="button"
+          className="calendar-person-remove"
+          // The chip is draggable; without this the button press starts a
+          // drag instead of a click on some browsers.
+          draggable={false}
+          onDragStart={(event) => event.preventDefault()}
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove();
+          }}
+          aria-label={`הסרת ${assignment.employee}`}
+          title="הסרה מהמשמרת"
+        >
+          <X size={11} />
+        </button>
+      ) : null}
     </span>
+  );
+}
+
+/** Choose who goes into a cell.
+ *
+ *  Lists the whole roster rather than filtering to who is "available": the
+ *  audit reports conflicts and never blocks (D3), so hiding a person here
+ *  would be the grid quietly enforcing what the product decided not to
+ *  enforce. Somebody already on this slot is dropped, because assigning them
+ *  twice conflicts silently server-side and would look like nothing
+ *  happened. */
+function EmployeePicker({
+  employees,
+  taken,
+  hueOf,
+  dark,
+  onPick,
+  onClose,
+}: {
+  employees: string[];
+  taken: string[];
+  hueOf: (name: string) => number;
+  dark: boolean;
+  onPick: (employee: string) => void;
+  onClose: () => void;
+}) {
+  const box = useRef<HTMLDivElement | null>(null);
+
+  // Close on outside click and on Escape. Without both, a picker opened by
+  // mistake can only be dismissed by choosing somebody — which is a write.
+  useEffect(() => {
+    const onDown = (event: MouseEvent) => {
+      if (!box.current?.contains(event.target as Node)) onClose();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  const options = employees.filter((name) => !taken.includes(name));
+
+  return (
+    <div className="calendar-picker" ref={box} role="dialog" aria-label="בחירת עובד">
+      {options.length ? (
+        options.map((name) => (
+          <button
+            key={name}
+            type="button"
+            className="calendar-picker-option"
+            style={colorStyle(hueOf(name), dark)}
+            onClick={() => onPick(name)}
+          >
+            {name}
+          </button>
+        ))
+      ) : (
+        <span className="calendar-picker-empty">כל הצוות כבר משובץ</span>
+      )}
+    </div>
   );
 }
 
@@ -293,6 +484,16 @@ export function hebrewWeekday(iso: string): string {
   const date = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(date.getTime())) return "";
   return HEBREW_WEEKDAYS[date.getDay()];
+}
+
+/** Friday and Saturday — the Israeli weekend, tinted so a week reads at a
+ *  glance. Presentation only: nothing in the audit or the profile treats
+ *  these days differently, and a workplace whose shifts run through the
+ *  weekend still shows them exactly as declared. */
+export function isWeekend(iso: string): boolean {
+  const date = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return false;
+  return date.getDay() === 5 || date.getDay() === 6;
 }
 
 export function formatDate(iso: string): string {

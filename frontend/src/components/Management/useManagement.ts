@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   applyChange,
+  assignEmployee,
+  blankSchedule,
   briefManager,
   deleteConstraint,
   downloadSchedule,
@@ -13,6 +15,7 @@ import {
   publishSchedule,
   scheduleOverview,
   setConstraint,
+  unassignEmployee,
   unpublishSchedule,
 } from "@/services/api";
 import type {
@@ -56,6 +59,20 @@ export interface ManagementState {
     starts_on?: string;
     ends_on?: string;
     instructions?: string;
+  }) => Promise<void>;
+  /** Open an empty period to fill in by hand (D18). Calls no model. */
+  openBlank: (input: { starts_on?: string; ends_on?: string }) => Promise<void>;
+  /** Place one person on one slot, by hand (D18). Writes immediately. */
+  assign: (input: {
+    shift_name: string;
+    slot_date: string;
+    employee: string;
+    reason?: string;
+  }) => Promise<void>;
+  /** Take one person off a slot, by hand (D18). */
+  unassign: (input: {
+    assignment_id: string;
+    reason?: string;
   }) => Promise<void>;
   publish: (scheduleId: string, published: boolean) => Promise<void>;
   /** Download the period as `.xlsx` (D17). */
@@ -131,9 +148,22 @@ export function useManagement(): ManagementState {
 
   const dismissBriefing = useCallback(() => setBriefing(null), []);
 
-  /** Run a write, surface its Hebrew error, and re-read the world after. */
+  /** Run a write, surface its Hebrew error, and re-read the world after.
+   *
+   *  `quiet` suppresses the briefing that normally follows a write. It is
+   *  for the manual path (D18), where the manager is placing one person per
+   *  click: a model call per cell would make authoring a week by hand the
+   *  most expensive thing in the product, and the agent would be remarking
+   *  on a half-built grid it is watching being typed. The audit still runs
+   *  on every one of those writes — it is pure arithmetic and costs nothing
+   *  — so the warnings under the calendar stay live throughout. The agent
+   *  catches up on the next ordinary write, on publish, or when the manager
+   *  asks. */
   const run = useCallback(
-    async <T,>(action: () => Promise<T>): Promise<T | null> => {
+    async <T,>(
+      action: () => Promise<T>,
+      options?: { quiet?: boolean },
+    ): Promise<T | null> => {
       setBusy(true);
       setError(null);
       try {
@@ -144,7 +174,7 @@ export function useManagement(): ManagementState {
         // constraint and a ruled-on request alike. Deliberately not awaited:
         // the manager gets their updated calendar immediately and the
         // agent's remark arrives when it arrives.
-        void brief("changed");
+        if (!options?.quiet) void brief("changed");
         return result;
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
@@ -163,6 +193,39 @@ export function useManagement(): ManagementState {
       instructions?: string;
     }) => {
       await run(() => generateSchedule(input));
+    },
+    [run],
+  );
+
+  /** Open an empty period for the manager to fill in themselves (D18).
+   *
+   *  The one schedule-building path with no model on it at all. It *does*
+   *  brief afterwards, unlike the per-cell writes below: an empty week is a
+   *  state worth one remark, and it happens once rather than forty times. */
+  const openBlank = useCallback(
+    async (input: { starts_on?: string; ends_on?: string }) => {
+      await run(() => blankSchedule(input));
+    },
+    [run],
+  );
+
+  /** Place one person on one slot. Quiet: see `run`. */
+  const assign = useCallback(
+    async (input: {
+      shift_name: string;
+      slot_date: string;
+      employee: string;
+      reason?: string;
+    }) => {
+      await run(() => assignEmployee(input), { quiet: true });
+    },
+    [run],
+  );
+
+  /** Take one person off a slot. Quiet for the same reason as `assign`. */
+  const unassign = useCallback(
+    async (input: { assignment_id: string; reason?: string }) => {
+      await run(() => unassignEmployee(input), { quiet: true });
     },
     [run],
   );
@@ -334,6 +397,9 @@ export function useManagement(): ManagementState {
     dismissBriefing,
     refresh,
     generate,
+    openBlank,
+    assign,
+    unassign,
     publish,
     exportSchedule,
     propose,

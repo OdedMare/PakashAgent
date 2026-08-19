@@ -8,6 +8,7 @@ import {
   EyeOff,
   LogOut,
   Moon,
+  PencilLine,
   Settings2,
   Share2,
   Sparkles,
@@ -81,6 +82,11 @@ export function Management({
 
   const overview = state.overview;
   const schedule = overview?.schedule ?? null;
+  // The roster in profile order. It is what the calendar assigns colours
+  // from, so the order matters: position is the hue (see `palette.ts`).
+  const roster = (overview?.employees ?? [])
+    .map((row) => (typeof row.name === "string" ? row.name.trim() : ""))
+    .filter((name) => name !== "");
 
   return (
     <div className="management">
@@ -229,6 +235,20 @@ export function Management({
                   )}
                 </button>
               ) : null}
+              {/* The authoring half of D6, which until now had no button.
+                  Placed beside "generate" rather than hidden behind it:
+                  they are two equal ways to start a week, and this one
+                  calls no model at all. */}
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => state.openBlank({})}
+                disabled={state.busy}
+                title="פתיחת שבוע ריק לשיבוץ ידני, בלי הסוכן"
+              >
+                <PencilLine size={14} />
+                סידור ריק
+              </button>
               <button
                 type="button"
                 className="primary-button"
@@ -245,7 +265,13 @@ export function Management({
               <Calendar
                 schedule={schedule}
                 constraints={overview?.availability ?? []}
+                employees={roster}
+                dark={theme === "dark"}
                 onDrop={setPendingMove}
+                onAssign={state.assign}
+                onUnassign={(assignment) =>
+                  state.unassign({ assignment_id: assignment.id })
+                }
               />
               {schedule.notes?.length ? (
                 <ul className="schedule-notes">
@@ -371,8 +397,8 @@ function EmptyState({
       <h1>{hasProfile ? "עוד לא נבנה סידור" : "צריך להשלים את הראיון"}</h1>
       <p>
         {hasProfile
-          ? "אפשר לבקש מהסוכן לבנות סידור לשבוע הקרוב, ואז להזיז משמרות או לדבר איתו על השיבוץ."
-          : "ראיון ההיכרות הוא מה שמלמד את הסוכן את המשמרות, העובדים והכללים. בלעדיו אין ממה לבנות סידור."}
+          ? "אפשר לבקש מהסוכן לבנות סידור לשבוע הקרוב, או לפתוח שבוע ריק ולשבץ בעצמך. בשני המקרים אפשר להזיז משמרות ולדבר עם הסוכן על השיבוץ."
+          : "ראיון ההיכרות הוא מה שמלמד את הסוכן את המשמרות, העובדים והכללים. בלעדיו אין ממה לבנות סידור — גם לא ידנית, כי המשמרות עצמן מגיעות משם."}
       </p>
       {busy ? <p className="management-empty-busy">בונה סידור…</p> : null}
     </div>
