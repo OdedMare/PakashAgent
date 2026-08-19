@@ -411,6 +411,68 @@ of the roster people read.
 
 ---
 
+---
+
+## D18 — The boss can place a shift without the agent ⚠️ *(completes D6)*
+
+[D6](#d6--the-boss-can-author-or-generate) has always said the boss may
+**author or generate**. Only the generating half was ever built: every path
+that put a person on a slot ran through the model, so "author" meant
+importing a file that did not exist yet. This is the authoring half.
+
+**What is now true:**
+
+- **A period can be opened empty.** `POST /api/schedule/blank` builds the
+  slot grid and stores it as a draft with nobody on it. It calls **no
+  model**: `build_slots()` was always pure Python, because which dates fall
+  in a period and which shifts run on them is arithmetic.
+- **A cell can be filled by hand.** `POST /api/schedule/assign` writes one
+  assignment immediately. `POST /api/schedule/unassign` clears one.
+- **`assignments.source` records where a row came from** — `agent`,
+  `manager`, or `imported`. This is `availability.source`
+  ([D13](#d13--constraints-are-recorded-by-the-manager-with-their-source-marked))
+  applied to the other table and means the same thing: **where the
+  information came from, not who typed it**. It defaults to `agent`, so every
+  row written before this decision keeps the meaning it was written with.
+
+**⚠️ Assigning writes immediately; this does not reverse [D12](#d12--dragging-a-shift-is-a-proposal-not-an-edit).**
+A drag *moves somebody who is already placed* — it takes a shift away from
+one person and hands it to another, and that is a change somebody is owed an
+account of, which is what the confirmation dialog collects. Filling an empty
+cell takes nothing away from anybody. There is no one for a reason to be owed
+to, and requiring one per cell would make authoring a week by hand cost a
+dialog per shift — which is the same as not building this at all. Removing
+somebody *is* a change in D12's sense, and the UI asks; it is recorded when
+given rather than enforced, because a cell cleared seconds after being filled
+by mistake is a correction, not a decision.
+
+**D8 is answered, not relaxed.** `assignments.reason` stays `NOT NULL` and
+all three enforcement points stay. A hand-placed row carries the manager's
+own sentence, or — when they gave none — a plain statement that a person
+placed it. That is the same honesty `_moved_from` already applies to a
+dragged shift: say what happened rather than manufacture a judgment the agent
+never made.
+
+**The audit does not move.** `bl/audit.py` runs on a hand-built week exactly
+as it runs on a generated one, and it still only warns
+([D3](#d3--the-agent-decides-code-only-audits-)). This is the *cheap* half of
+the product — pure arithmetic, no model — so a manually built schedule is
+fully checked even though nothing about it was generated.
+
+**The agent is not in this loop, and that is the point.** A model call per
+placed cell would make building a week by hand the most expensive thing in
+the product, on a deployment whose model is small and rate-limited. The
+manual writes are deliberately *quiet*: they skip the briefing that normally
+follows a write. The agent catches up on the next ordinary write, on
+publish, or when the manager asks — and
+[D15](#d15--the-agent-speaks-first-but-still-never-writes) is untouched,
+since a briefing was never something a write was required to trigger.
+
+**The interview is still required.** Skipping the agent is not skipping the
+profile: without the declared shift vocabulary there is no grid to build, and
+inventing one is exactly the hardcoding
+[D9](#d9--shift-vocabulary-is-per-workplace) forbids.
+
 ## Open
 
 - **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment

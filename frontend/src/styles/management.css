@@ -336,7 +336,10 @@
   inset-inline-start: 0.25rem;
   inset-block-start: 100%;
   min-width: 8rem;
-  max-height: 12rem;
+  /* Capped so a large roster scrolls inside the picker instead of running
+     past the grid, which clips it -- the calendar's own scroll container
+     bounds both axes. Small enough to fit beside a three-row week. */
+  max-height: 9rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -346,6 +349,13 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow);
+}
+
+/* Opens upward when there is no room below -- the grid scrolls, and a
+   scroll container clips on both axes however far the list would reach. */
+.calendar-picker.is-flipped {
+  inset-block-start: auto;
+  inset-block-end: 100%;
 }
 
 .calendar-picker-option {

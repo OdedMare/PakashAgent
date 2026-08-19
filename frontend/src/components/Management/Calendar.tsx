@@ -370,6 +370,29 @@ function EmployeePicker({
   onClose: () => void;
 }) {
   const box = useRef<HTMLDivElement | null>(null);
+  // Opening downward off the bottom of the grid would clip the list: the
+  // calendar scrolls horizontally, and a box with `overflow-x: auto` clips
+  // vertically on the other axis too.
+  //
+  // The test is *which side has more room*, not "does it fit below" — on a
+  // three-row grid a full roster fits below almost nowhere, so the latter
+  // flips every picker including the top row's, where flipping puts it
+  // further out than leaving it. Measured after mount, because how much room
+  // there is depends on the viewport rather than on the row index.
+  const [flip, setFlip] = useState(false);
+
+  useEffect(() => {
+    const element = box.current;
+    const scroller = element?.closest(".calendar-scroll");
+    const cell = element?.closest("td");
+    if (!element || !scroller || !cell) return;
+    const frame = scroller.getBoundingClientRect();
+    const anchor = cell.getBoundingClientRect();
+    const room = element.getBoundingClientRect().height;
+    const below = frame.bottom - anchor.bottom;
+    const above = anchor.top - frame.top;
+    if (below < room && above > below) setFlip(true);
+  }, []);
 
   // Close on outside click and on Escape. Without both, a picker opened by
   // mistake can only be dismissed by choosing somebody — which is a write.
@@ -391,7 +414,12 @@ function EmployeePicker({
   const options = employees.filter((name) => !taken.includes(name));
 
   return (
-    <div className="calendar-picker" ref={box} role="dialog" aria-label="בחירת עובד">
+    <div
+      className={`calendar-picker${flip ? " is-flipped" : ""}`}
+      ref={box}
+      role="dialog"
+      aria-label="בחירת עובד"
+    >
       {options.length ? (
         options.map((name) => (
           <button

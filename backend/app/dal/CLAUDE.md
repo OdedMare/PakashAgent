@@ -32,7 +32,7 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | `interview_turns` | Each turn; assistant turns keep the options they offered as `payload` |
 | `schedules` | One living schedule per period, `draft` or `published` |
 | `shift_slots` | One shift on one date — the thing an assignment points into |
-| `assignments` | person → slot, **with the agent's reason** (`NOT NULL`) |
+| `assignments` | person → slot, **with the agent's reason** (`NOT NULL`). `source` records whether the agent generated the row, the manager placed it by hand, or it was imported ([D18](../../../docs/DECISIONS.md#d18--the-boss-can-place-a-shift-without-the-agent-️-completes-d6)) |
 | `availability` | Known unavailability. `source` records where it came from — the manager, the agent, or the manager writing down what an employee reported ([D13](../../../docs/DECISIONS.md#d13--constraints-are-recorded-by-the-manager-with-their-source-marked)) |
 | `change_log` | **Append-only**: what changed, both reasons, when |
 | `employee_identities` | A claimed roster name plus its scrypt passcode hash — one claim per name per team ([D14](../../../docs/DECISIONS.md)). Also holds `acknowledged_at`, the mark behind "what changed for me" ([D16](../../../docs/DECISIONS.md#d16--an-employee-is-told-what-changed-and-acknowledging-is-what-marks-it-read)) |
@@ -71,6 +71,13 @@ the interview owns its shape.
   ([D16](../../../docs/DECISIONS.md#d16--an-employee-is-told-what-changed-and-acknowledging-is-what-marks-it-read)).
 - **`assignments.reason` is not nullable in spirit** — an assignment without the
   agent's reasoning defeats [D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required).
+  A hand-placed row is no exception: it carries the manager's own sentence, or a
+  plain statement that a person placed it, rather than a blank or a judgment the
+  agent never made (D18).
+- **`assignments.source` defaults to `agent`.** Every row written before the
+  column existed was generated, so the default preserves what those rows already
+  meant. `move_assignment` deliberately leaves it alone — dragging a
+  hand-placed shift does not make it the agent's.
 - A schedule is edited in place. There are no version rows and no rollback.
 - Shift names are data, not enums — they come from `workplace_profile`.
 - SQL lives here and nowhere else. `bl/` never imports `psycopg`.

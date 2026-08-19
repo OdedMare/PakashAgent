@@ -16,7 +16,7 @@ Nothing downstream depends on it and it does not change the order below.
 **Each new table still arrives with its own `team_id`** — added at creation
 time, never retrofitted onto a populated table.
 
-Also done, likewise out of order, three features the boss asked for directly:
+Also done, likewise out of order, four features the boss asked for directly:
 
 - the **proactive agent** — `bl/briefing.py` and `Management/Briefing.tsx`,
   where the agent opens the conversation instead of waiting to be asked
@@ -25,7 +25,12 @@ Also done, likewise out of order, three features the boss asked for directly:
   moved since they last looked, marked by `employee_identities.acknowledged_at`
   ([D16](DECISIONS.md#d16--an-employee-is-told-what-changed-and-acknowledging-is-what-marks-it-read));
 - **export** — `bl/export.py`, a period out as `.xlsx`
-  ([D17](DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
+  ([D17](DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes));
+- **the manual path** — a period opened empty and filled in by hand, with
+  `assignments.source` recording where each row came from
+  ([D18](DECISIONS.md#d18--the-boss-can-place-a-shift-without-the-agent-️-completes-d6)).
+  It adds one guarded column and no table, and it is the only
+  schedule-building path with no model call on it at all.
 
 None of them adds a table beyond one guarded column, and none changes the
 order below. **`export.py` is worth reading before step 6:** it already
