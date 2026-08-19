@@ -527,7 +527,11 @@ def _find_date_row(grid: List[List[str]]) -> Optional[Tuple[int, List[tuple]]]:
             iso = _parse_date(value)
             if iso:
                 dates.append((column, iso))
-        if len(dates) >= 2 and (best is None or len(dates) > len(best[1])):
+        # One date is enough. A sheet covering a single day is a real thing
+        # a manager keeps, and requiring two would refuse it for being
+        # short. Ambiguity is handled by *preferring* the row with more
+        # dates, not by rejecting thin ones.
+        if dates and (best is None or len(dates) > len(best[1])):
             best = (index, dates)
     return best
 
