@@ -503,31 +503,68 @@ def _carried_date(by_column: Dict[int, str], column: int) -> str:
 
 # -- cell classification ---------------------------------------------------
 
-def _match_shift(value: str, vocabulary: List[str]) -> str:
-    """A header cell read against the workplace's declared shift names (D9).
+def _match_shift(value: str, vocabulary: List[dict]) -> str:
+    """A header cell read as a shift name.
 
-    Returns the *declared* spelling, so a sheet writing `בוקר ` or `משמרת
-    בוקר` still lands on the vocabulary's own name. With no vocabulary — a
-    file imported before the interview ran — the cell's own text is taken,
-    which is the only honest fallback: inventing names here would be the
-    hardcoding D9 forbids.
+    The declared vocabulary
+    ([D9](../../../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace))
+    is what a header is matched *against*, and a match returns the declared
+    spelling -- so a sheet writing `בוקר `, `משמרת בוקר`, or the shift's own
+    hours all land on the one name the workplace uses. Matching against
+    declared names rather than inferring from scratch is D9's point, and it
+    is still what happens first.
+
+    **An unmatched header is not discarded.** The file is a real schedule the
+    workplace ran, and a sheet naming a shift the interview never mentioned
+    -- an old name, a one-off, or a column headed only by its hours -- is
+    describing something that genuinely happened. Dropping it would silently
+    lose real history and would make the product refuse exactly the old files
+    it exists to absorb (D7). So the cell's own text is taken instead, and
+    the confirm screen is where the manager reconciles it.
+
+    This is not the hardcoding D9 forbids: nothing is *invented* here. A name
+    is either the workplace's declared one or the one written in the
+    manager's own file. What never happens is guessing a name from neither.
     """
     text = _normalise(value)
     if not text:
         return ""
-    if not vocabulary:
-        # Nothing to match against. A date or a weekday is certainly not a
-        # shift name, so those are still excluded.
-        if _parse_date(value) or _normalise(value) in _HEBREW_WEEKDAYS:
-            return ""
-        return value.strip()
-    for name in vocabulary:
-        declared = _normalise(name)
-        if not declared:
-            continue
-        if text == declared or declared in text:
-            return name
-    return ""
+    # A date or a weekday heads a different axis, and is never a shift.
+    if _parse_date(value) or text in _HEBREW_WEEKDAYS:
+        return ""
+
+    # Declared name, or the declared shift whose hours these are: a column
+    # headed `07:00-15:00` is the same shift as the one running those hours,
+    # so it folds into it rather than being stored again under a different
+    # label -- otherwise one shift appears twice in the vocabulary and every
+    # hours-per-person tally splits across the two.
+    declared = _declared_shift(value, vocabulary)
+    if declared:
+        return declared
+
+    # Nothing matched. The sheet's own label stands for itself.
+    return value.strip()
+
+
+_HOURS = re.compile(
+    r"^(\d{1,2})[:.](\d{2})\s*(?:-|\u2013|\u2014|עד)\s*(\d{1,2})[:.](\d{2})$"
+)
+
+
+def _parse_hours(value: str) -> str:
+    """`07:00-15:00` normalised, or empty when the cell is not a time range.
+
+    Normalised rather than compared literally because the same range gets
+    written `7:00-15:00`, `07.00-15.00` and `07:00 - 15:00` across files by
+    the same person in the same year.
+    """
+    match = _HOURS.match(_normalise(value))
+    if not match:
+        return ""
+    start_h, start_m, end_h, end_m = (int(part) for part in match.groups())
+    if start_h > 23 or end_h > 23 or start_m > 59 or end_m > 59:
+        return ""
+    return "%02d:%02d-%02d:%02d" % (start_h, start_m, end_h, end_m)
 
 
 def _is_unavailable(value: str) -> bool:
@@ -640,18 +677,28 @@ def _warnings(dates: List[tuple]) -> List[str]:
 
 # -- helpers ---------------------------------------------------------------
 
-def _vocabulary(profile: Optional[dict]) -> List[str]:
-    """The workplace's declared shift names, from the interview (D9)."""
+def _vocabulary(profile: Optional[dict]) -> List[dict]:
+    """The declared shifts, with their hours (D9).
+
+    Carries `start_time`/`end_time` as well as the name because a real sheet
+    often heads its columns with hours rather than names, and the hours are
+    what identifies the shift then.
+    """
     shifts = (profile or {}).get("shifts") or []
-    names = []
+    found: List[dict] = []
+    seen = set()
     for shift in shifts:
         if isinstance(shift, dict):
             name = _text(shift.get("name"))
+            start = _text(shift.get("start_time"))
+            end = _text(shift.get("end_time"))
         else:
-            name = _text(shift)
-        if name and name not in names:
-            names.append(name)
-    return names
+            name, start, end = _text(shift), "", ""
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        found.append({"name": name, "start_time": start, "end_time": end})
+    return found
 
 
 def _bounded(grid: List[List[str]]) -> List[List[str]]:
@@ -698,13 +745,19 @@ def _lane_from_cells(row: List[str], data_columns: List[int]) -> str:
 
 
 def _mostly_shifts(
-    row: List[str], dates: List[tuple], vocabulary: List[str]
+    row: List[str], dates: List[tuple], vocabulary: List[dict]
 ) -> bool:
     """Whether a row's data cells are shift names rather than people.
 
     Evidence that a row is a second header line: Sample B's nested header
     puts a shift name in every column, and a reader expecting people there
     would otherwise invent one person per shift name.
+
+    Tested against the **declared** names only, never `_match_shift`'s
+    fallback. That fallback deliberately accepts any unmatched text so a file
+    can name shifts the interview never heard of -- which means it accepts
+    people's names too, and using it here would classify every ordinary data
+    row as a header and read nothing at all.
     """
     if not vocabulary:
         return False
@@ -713,9 +766,34 @@ def _mostly_shifts(
         if column >= len(row) or not row[column]:
             continue
         filled += 1
-        if _match_shift(row[column], vocabulary):
+        if _declared_shift(row[column], vocabulary):
             matched += 1
     return filled > 0 and matched == filled
+
+
+def _declared_shift(value: str, vocabulary: List[dict]) -> str:
+    """A header cell matched strictly against the declared vocabulary.
+
+    The strict half of `_match_shift`, without its "take the sheet's own
+    word" fallback. Callers that need to know whether a cell is *recognised*
+    -- rather than what to call it -- must use this one.
+    """
+    text = _normalise(value)
+    if not text or _parse_date(value) or text in _HEBREW_WEEKDAYS:
+        return ""
+    for shift in vocabulary:
+        declared = _normalise(shift.get("name"))
+        if declared and (text == declared or declared in text):
+            return shift.get("name")
+    hours = _parse_hours(text)
+    if hours:
+        for shift in vocabulary:
+            declared_hours = _parse_hours("%s-%s" % (
+                shift.get("start_time") or "", shift.get("end_time") or "",
+            ))
+            if declared_hours and declared_hours == hours:
+                return shift.get("name")
+    return ""
 
 
 def _normalise(value: Any) -> str:
