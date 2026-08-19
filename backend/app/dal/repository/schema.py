@@ -316,4 +316,24 @@ ALTER TABLE employee_identities
     ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMPTZ;
 
 COMMIT;
+
+-- Guarded migration: where an assignment came from (D18).
+--
+-- The boss may author a schedule as well as generate one (D6), and until now
+-- only the generated half existed. A manually placed assignment has no agent
+-- judgment behind it, so `reason` alone could not distinguish "the agent
+-- decided this" from "the manager put it here" -- both are just prose.
+--
+-- This is `availability.source` (D13) applied to the other table, and it
+-- means the same thing: **where the information came from, not who typed
+-- it**. 'agent' is the default so every row that predates this column keeps
+-- the meaning it was written with -- everything before D18 was generated.
+--
+-- `reason` stays NOT NULL. A manual assignment carries the manager's own
+-- sentence, or a plain statement that they placed it; D8 is not relaxed,
+-- it is answered by a different voice.
+ALTER TABLE assignments
+    ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'agent';
+
+COMMIT;
 """

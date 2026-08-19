@@ -37,6 +37,19 @@ _SOURCES = (
     SOURCE_MANAGER, SOURCE_AGENT, SOURCE_EMPLOYEE_REPORTED, SOURCE_INTERVIEW,
 )
 
+# Where an *assignment* came from (D18). A narrower set than the constraint
+# sources above and deliberately a separate tuple: a schedule row can only
+# have been generated, placed by the manager, or read out of a file, and
+# widening this to the constraint vocabulary would admit values that mean
+# nothing here. Like `availability.source`, it records where the row came
+# from -- not who typed it.
+ASSIGNED_BY_AGENT = "agent"
+ASSIGNED_BY_MANAGER = "manager"
+ASSIGNED_BY_IMPORT = "imported"
+_ASSIGNMENT_SOURCES = (
+    ASSIGNED_BY_AGENT, ASSIGNED_BY_MANAGER, ASSIGNED_BY_IMPORT,
+)
+
 
 class ScheduleRepository(RepositoryBase):
 
@@ -181,7 +194,8 @@ class ScheduleRepository(RepositoryBase):
         -- so the audit does not have to re-join what SQL already knows.
         """
         return self._all("""
-            SELECT a.id, a.employee, a.reason, a.slot_id, a.created_at,
+            SELECT a.id, a.employee, a.reason, a.slot_id, a.source,
+                   a.created_at,
                    s.shift_name AS shift, s.slot_date AS date,
                    s.start_time, s.end_time, s.is_on_call
             FROM assignments a
