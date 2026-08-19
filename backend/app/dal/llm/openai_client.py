@@ -48,10 +48,36 @@ _LOCAL_SERVER_KEY_PLACEHOLDER = "null"
 _DEFAULT_BASE_URL = "https://api.openai.com/v1"
 _MODELS_PROBE_TIMEOUT_SECONDS = 30
 
-# The local model server is a shared finite resource, and a single generation
-# can occupy it for a minute. Bound concurrent HTTP completions process-wide
-# so a burst of requests queues here instead of thrashing the server.
-_LLM_SLOTS = threading.BoundedSemaphore(_llm_slot_count())
+_DEFAULT_MAX_CONCURRENCY = 4
+# The model server is a shared finite resource, and a single generation can
+# occupy it for a minute. Bound concurrent HTTP completions process-wide so a
+# burst of requests queues here instead of thrashing the server.
+#
+# Built on first use rather than at import, from the settings the first call
+# reads: a semaphore cannot be resized once created, so this is fixed for the
+# life of the process even though every other LLM setting is live. That is
+# honest about what a semaphore can do — the alternative is a UI control that
+# silently does nothing.
+#
+# The right value depends entirely on the server. One that batches
+# continuously (vLLM, TGI) does its own scheduling and is *starved* by a low
+# limit, because a request held back here is a request it cannot put in a
+# batch. One that serves a single request at a time (Ollama's default) is only
+# thrashed by a high one.
+_LLM_SLOTS = None
+_LLM_SLOTS_LOCK = threading.Lock()
+
+
+def _slots(settings):
+    global _LLM_SLOTS
+    if _LLM_SLOTS is None:
+        with _LLM_SLOTS_LOCK:
+            if _LLM_SLOTS is None:
+                limit = getattr(
+                    settings, "llm_max_concurrency", _DEFAULT_MAX_CONCURRENCY
+                )
+                _LLM_SLOTS = threading.BoundedSemaphore(max(1, int(limit or 1)))
+    return _LLM_SLOTS
 
 # Ceiling on one logical `complete_json` call. `llm_timeout_seconds` bounds a
 # single HTTP round-trip, but the ladder can run four of them and each retries
@@ -113,7 +139,7 @@ class OpenAIJsonClient:
         for _attempt in range(_MAX_JSON_ATTEMPTS):
             content, current = self._complete(
                 client, settings.llm_model, messages, max_tokens, schema,
-                settings.llm_repetition_penalty,
+                settings.llm_repetition_penalty, _slots(settings),
             )
             # Tokens spent on a rejected reply were still spent — accumulate
             # across the retry rather than reporting only the last attempt.
@@ -184,7 +210,7 @@ class OpenAIJsonClient:
         return self._cached_client
 
     @staticmethod
-    def _complete(client, model, messages, max_tokens, schema, penalty):
+    def _complete(client, model, messages, max_tokens, schema, penalty, slots):
         # Degradation ladder for OpenAI-compatible servers:
         # schema → JSON mode → plain → plain with the system prompt merged
         # into the user turn (some local deployments reject a system role).
@@ -193,7 +219,7 @@ class OpenAIJsonClient:
         # a real failure and becomes an AgentError immediately.
         last_bad_request = None
         deadline = time.monotonic() + _TOTAL_BUDGET_SECONDS
-        with _LLM_SLOTS:
+        with slots:
             for kwargs in OpenAIJsonClient._attempts(
                 messages, max_tokens, schema, penalty,
             ):

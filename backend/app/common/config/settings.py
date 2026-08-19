@@ -51,6 +51,22 @@ class Settings(BaseSettings):
     a multiple of this. It exists to stop a hung model server from holding a
     worker for the SDK's 600-second default."""
 
+    llm_max_concurrency: int = 4
+    """How many HTTP completions may be in flight at once, process-wide.
+
+    Env-only rather than a live runtime setting: the semaphore is built once
+    at import, so a value saved in the UI could not resize it and would read
+    as a control that does nothing.
+
+    The right number depends entirely on what is serving the model. A server
+    that batches continuously — vLLM, TGI — does its own scheduling and is
+    *starved* by a low limit here, because requests this process is holding
+    back are requests it cannot put in a batch; 16 or more suits those. A
+    server that processes one request at a time, which is Ollama's default,
+    is only thrashed by concurrency, and 1-2 keeps latency honest. 4 is the
+    middle that assumes neither.
+    """
+
     llm_repetition_penalty: float = 0.0
     """Penalty applied to already-emitted tokens, discouraging loops.
 
