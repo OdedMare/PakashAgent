@@ -25,9 +25,31 @@ closed, or may mean the sheet only covered weekdays. So this returns
 *candidates* carrying their evidence, and D7's confirm step is where they
 become rules. That is also why this module gets no repository.
 
+**There is a second source, and it is the better one.** Uploaded files say
+what the workplace *did*; the change log says what the manager **corrected**.
+Every row in it is a moment somebody looked at the agent's answer, disagreed,
+and wrote down why (D8 requires the reason, which is what makes the log worth
+counting at all). `observe_corrections()` tallies those, and the candidates
+that come out of them carry the manager's own stated reasons as evidence.
+
+That difference matters for how strongly a candidate may be worded. A pattern
+counted from a file is an absence — nobody worked Saturday, and nobody knows
+whether that was a rule or a gap in the sheets. A correction is a *decision*:
+the manager moved Yossi off Friday evening and said why, three times. The
+first is weak evidence about the world; the second is direct evidence about
+what this manager wants, and it is already in their words.
+
+It is still only a candidate. Three corrections may be one recurring rule or
+three unrelated weeks, and which of those it is remains the manager's call —
+`propose_from_corrections()` returns proposals exactly as `propose()` does,
+and nothing is approved by having been counted.
+
 The imported files are the least trusted input the product handles — they are
 arbitrary spreadsheets, and a cell can contain any text at all. Cell contents
-reach the model as data to summarise, never as instruction.
+reach the model as data to summarise, never as instruction. **The change log
+is more trusted but not differently handled**: the reasons in it were typed
+by the manager, and they reach the model as reported speech, never as
+instruction.
 """
 
 import datetime
@@ -54,6 +76,19 @@ _MIN_OBSERVATIONS = 4
 _DOMINANT = 0.9
 # The mirror: a shift someone has essentially never worked.
 _ABSENT = 0.02
+
+# How many times the manager must have made the same correction before it is
+# offered as a candidate. Two is deliberately low -- unlike a counted absence
+# in a file, a correction is a decision somebody made on purpose, and the
+# second time they make the same one is exactly when they would say "yes,
+# that is a rule". One is not a pattern; it is a Tuesday.
+_MIN_CORRECTIONS = 2
+
+# The change-log actions that represent the manager overriding a placement.
+# `assigned` is deliberately absent: filling an empty cell takes nothing away
+# from anybody (D18) and corrects nothing, so counting it would turn ordinary
+# manual scheduling into evidence of a rule.
+_CORRECTING_ACTIONS = ("moved", "removed", "swapped")
 
 _HEBREW_WEEKDAYS = (
     "יום שני", "יום שלישי", "יום רביעי", "יום חמישי",
@@ -136,6 +171,106 @@ def observe(
             }),
         },
     }
+
+
+def observe_corrections(changes: List[dict]) -> dict:
+    """What the manager kept overriding, counted. No model call.
+
+    The change log is the record of every time somebody disagreed with what
+    was on the schedule and said why. Counting it answers a question the
+    uploaded files cannot: not "what does this workplace do" but "what does
+    this manager keep having to fix".
+
+    Only *corrections* are counted -- see `_CORRECTING_ACTIONS` for why
+    filling an empty cell is not one. Each tally carries the manager's own
+    stated reasons verbatim, because those are what make a candidate rule
+    checkable: "you moved Yossi off Friday evening three times, saying
+    'לימודים' twice" is a claim the manager can confirm or dismiss at a
+    glance, and a bare count is not.
+
+    Reasons are collected, never summarised, and never merged. Two different
+    sentences meaning roughly the same thing is a judgment the model makes
+    later with both in front of it -- deciding it here would be arithmetic
+    doing a language job, which is the D3 line run backwards.
+    """
+    rows = _bounded_rows(changes, _MAX_ASSIGNMENTS)
+
+    # Keyed on what a rule would actually be about: this person, off this
+    # shift, on this weekday. The date itself is deliberately not in the key
+    # -- a rule is about Fridays, not about the 3rd of March.
+    tallies: Dict[tuple, Dict[str, Any]] = {}
+    by_employee: Dict[str, int] = {}
+    for row in rows:
+        action = _text(row.get("action"))
+        if action not in _CORRECTING_ACTIONS:
+            continue
+        # On a move or a swap the person taken *off* the shift is the one the
+        # correction is about. `replaced_employee` carries them where the log
+        # recorded one; otherwise the row's own employee is the subject.
+        employee = (
+            _text(row.get("replaced_employee")) or _text(row.get("employee"))
+        )
+        if not employee:
+            continue
+        by_employee[employee] = by_employee.get(employee, 0) + 1
+        date = _date(row.get("slot_date"))
+        weekday = _HEBREW_WEEKDAYS[date.weekday()] if date else ""
+        shift_name = _text(row.get("shift_name"))
+        key = (employee, shift_name, weekday)
+        entry = tallies.setdefault(key, {
+            "employee": employee,
+            "shift": shift_name,
+            "weekday": weekday,
+            "count": 0,
+            "reasons": [],
+            "first_seen": date,
+            "last_seen": date,
+        })
+        entry["count"] += 1
+        reason = _bounded(row.get("reason"), 200)
+        if reason and reason not in entry["reasons"]:
+            entry["reasons"].append(reason)
+        if date is not None:
+            first, last = entry["first_seen"], entry["last_seen"]
+            entry["first_seen"] = date if first is None else min(first, date)
+            entry["last_seen"] = date if last is None else max(last, date)
+
+    repeated = [
+        {
+            "employee": entry["employee"],
+            "shift": entry["shift"],
+            "weekday": entry["weekday"],
+            "count": entry["count"],
+            "reasons": entry["reasons"],
+            "first_seen": _iso_or_blank(entry["first_seen"]),
+            "last_seen": _iso_or_blank(entry["last_seen"]),
+        }
+        for entry in tallies.values()
+        if entry["count"] >= _MIN_CORRECTIONS
+    ]
+    # Most-corrected first: the manager reads these in order and the strongest
+    # evidence is what deserves their attention first.
+    repeated.sort(key=lambda item: (-item["count"], item["employee"]))
+
+    return {
+        "repeated": repeated,
+        "totals": {
+            "changes": len(rows),
+            "corrections": sum(by_employee.values()),
+            "people": len(by_employee),
+        },
+        # Below the floor nothing is claimed, but the count is still reported
+        # so the model can say "not enough yet" rather than inventing a
+        # reason for the silence.
+        "single_corrections": sum(
+            1 for entry in tallies.values()
+            if entry["count"] < _MIN_CORRECTIONS
+        ),
+    }
+
+
+def _iso_or_blank(value: Optional[datetime.date]) -> str:
+    return value.isoformat() if value is not None else ""
 
 
 def _per_person(
