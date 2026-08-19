@@ -984,3 +984,228 @@ def test_one_workspace_cannot_download_anothers_period():
     assert other.get(
         "/api/schedule/export/%s" % schedule["id"]
     ).status_code == 404
+
+
+# -- import (D7) -----------------------------------------------------------
+
+def _upload(book, name="schedule.xlsx"):
+    import io
+
+    stream = io.BytesIO()
+    book.save(stream)
+    return (
+        "files",
+        (name, stream.getvalue(),
+         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    )
+
+
+def _preview(client, books, learn_rules=False):
+    return client.post(
+        "/api/schedule/import/preview?learn_rules=%s"
+        % ("true" if learn_rules else "false"),
+        files=[_upload(book, "file-%d.xlsx" % index)
+               for index, book in enumerate(books)],
+    )
+
+
+def test_previewing_an_import_reads_the_file():
+    from tests.fixtures.build import sample_a
+
+    app, repo = _build_app([])
+    response = _preview(_client(app), [sample_a()])
+    assert response.status_code == 200
+    body = response.json()
+    assert body["periods"][0]["layout"] == "shift_major"
+    # `PROFILE` declares only `בוקר`, so only that row of the sheet is read.
+    # The evening row is left alone rather than invented, which is D9 doing
+    # its job -- see `test_a_shift_the_workplace_never_declared_is_not_read`.
+    assert len(body["periods"][0]["assignments"]) == 5
+
+
+def test_a_shift_the_workplace_never_declared_is_not_read():
+    """D9: shift names come from the interview, never from the sheet.
+
+    Sample A has a `צהריים` row. This workplace never declared one, so
+    reading it would be inventing vocabulary the manager did not give.
+    """
+    from tests.fixtures.build import sample_a
+
+    app, repo = _build_app([])
+    body = _preview(_client(app), [sample_a()]).json()
+    assert body["periods"][0]["shifts"] == [MORNING]
+
+
+def test_declaring_the_shift_is_what_makes_it_readable():
+    """The same file, read whole, once the vocabulary contains both."""
+    from tests.fixtures.build import sample_a
+
+    app, repo = _build_app([])
+    repo.profiles[TEAM] = dict(PROFILE, shifts=[
+        {"name": MORNING}, {"name": EVENING},
+    ])
+    body = _preview(_client(app), [sample_a()]).json()
+    assert len(body["periods"][0]["assignments"]) == 10
+
+
+def test_previewing_an_import_stores_nothing():
+    """D7's whole point: inference is not a write.
+
+    The confirmation is only real if the preview has not already committed.
+    """
+    from tests.fixtures.build import sample_a
+
+    app, repo = _build_app([])
+    _preview(_client(app), [sample_a()])
+    assert repo.schedules == {}
+    assert repo.availability_rows == []
+    assert repo.changes == []
+
+
+def test_confirming_an_import_stores_the_approved_rows():
+    app, repo = _build_app([])
+    response = _client(app).post("/api/schedule/import/confirm", json={
+        "assignments": [
+            {"employee": "דנה", "shift": MORNING, "date": "2026-08-17"},
+            {"employee": "יוסי", "shift": MORNING, "date": "2026-08-18"},
+        ],
+    })
+    assert response.status_code == 200
+    assert len(response.json()["assignments"]) == 2
+    assert len(repo.schedules) == 1
+
+
+def test_an_imported_row_says_it_was_imported():
+    """`assignments.source` distinguishes a recorded past from a decision."""
+    app, repo = _build_app([])
+    _client(app).post("/api/schedule/import/confirm", json={
+        "assignments": [
+            {"employee": "דנה", "shift": MORNING, "date": "2026-08-17"},
+        ],
+    })
+    rows = list(repo.assignment_rows.values())[0]
+    assert rows[0]["source"] == "imported"
+
+
+def test_an_imported_row_carries_a_reason_without_inventing_one():
+    """D8 is answered by a different voice, not relaxed."""
+    app, repo = _build_app([])
+    _client(app).post("/api/schedule/import/confirm", json={
+        "assignments": [
+            {"employee": "דנה", "shift": MORNING, "date": "2026-08-17"},
+        ],
+    })
+    rows = list(repo.assignment_rows.values())[0]
+    assert rows[0]["reason"]
+
+
+def test_a_stated_constraint_is_stored_as_the_managers_own():
+    """Nobody submitted it, so `employee_reported` would be a lie (D13)."""
+    app, repo = _build_app([])
+    _client(app).post("/api/schedule/import/confirm", json={
+        "assignments": [
+            {"employee": "דנה", "shift": MORNING, "date": "2026-08-17"},
+        ],
+        "unavailability": [
+            {"employee": "יוסי", "date": "2026-08-18", "shift": EVENING,
+             "reason": "לא זמין"},
+        ],
+    })
+    assert repo.availability_rows[0]["source"] == "manager"
+    assert repo.availability_rows[0]["available"] is False
+
+
+def test_the_grid_comes_from_the_file_not_from_todays_vocabulary():
+    """A past schedule ran the shifts it ran.
+
+    `EVENING` is not in `PROFILE`'s shift list, so rebuilding the grid with
+    `build_slots` would silently drop it and reshape history.
+    """
+    app, repo = _build_app([])
+    _client(app).post("/api/schedule/import/confirm", json={
+        "assignments": [
+            {"employee": "יוסי", "shift": EVENING, "date": "2026-08-17"},
+        ],
+    })
+    slots = list(repo.slots.values())[0]
+    assert [slot["shift_name"] for slot in slots] == [EVENING]
+
+
+def test_an_unreadable_file_does_not_sink_the_batch():
+    """A folder of a year's sheets will contain one stray document."""
+    from tests.fixtures.build import sample_a
+
+    app, repo = _build_app([])
+    response = _client(app).post(
+        "/api/schedule/import/preview?learn_rules=false",
+        files=[
+            _upload(sample_a(), "good.xlsx"),
+            ("files", ("junk.xlsx", b"not a spreadsheet",
+                       "application/octet-stream")),
+        ],
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["periods"]) == 1
+    assert body["failures"][0]["filename"] == "junk.xlsx"
+
+
+def test_no_readable_file_at_all_is_an_error():
+    app, repo = _build_app([])
+    response = _client(app).post(
+        "/api/schedule/import/preview?learn_rules=false",
+        files=[("files", ("junk.xlsx", b"nope", "application/octet-stream"))],
+    )
+    assert response.status_code >= 400
+
+
+def test_learned_rules_are_never_returned_pre_approved():
+    """A candidate becomes a rule only when the manager says so (D7)."""
+    from tests.fixtures.build import sample_a
+
+    app, repo = _build_app([{
+        "rules": [{"text": "אלמוג עובד בעיקר בוקר", "kind": "soft",
+                   "evidence": "2 מתוך 3", "confidence": "medium"}],
+        "notes": [],
+    }])
+    response = _preview(_client(app), [sample_a()], learn_rules=True)
+    assert response.status_code == 200
+    rules = response.json()["candidate_rules"]
+    assert rules and rules[0]["approved"] is False
+
+
+def test_patterns_are_counted_across_all_the_uploaded_files():
+    """A pattern is by definition what one period cannot show."""
+    from tests.fixtures.build import sample_a, sample_b
+
+    app, repo = _build_app([])
+    repo.profiles[TEAM] = dict(PROFILE, shifts=[
+        {"name": MORNING}, {"name": EVENING},
+    ])
+    single = _preview(_client(app), [sample_a()]).json()
+    both = _preview(_client(app), [sample_a(), sample_b()]).json()
+    # The tally spans the batch: Sample B's rows are counted alongside
+    # Sample A's, which is the only way a cross-period pattern is visible.
+    assert (both["observations"]["totals"]["assignments"]
+            > single["observations"]["totals"]["assignments"])
+    assert len(both["periods"]) == 2
+
+
+def test_a_member_cannot_preview_an_import():
+    from tests.fixtures.build import sample_a
+
+    app, repo = _build_app([])
+    response = _preview(_client(app, role=ROLE_MEMBER), [sample_a()])
+    assert response.status_code in (401, 403)
+
+
+def test_a_member_cannot_confirm_an_import():
+    app, repo = _build_app([])
+    response = _client(app, role=ROLE_MEMBER).post(
+        "/api/schedule/import/confirm", json={
+            "assignments": [
+                {"employee": "דנה", "shift": MORNING, "date": "2026-08-17"},
+            ],
+        })
+    assert response.status_code in (401, 403)
+    assert repo.schedules == {}

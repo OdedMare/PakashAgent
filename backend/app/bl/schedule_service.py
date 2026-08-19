@@ -83,6 +83,7 @@ class ScheduleService:
         self._scheduler = Scheduler(llm)
         self._changes = ChangeAgent(llm)
         self._briefing = BriefingAgent(llm)
+        self._learner = RuleLearner(llm)
 
     # -- reading -----------------------------------------------------------
 
@@ -353,7 +354,7 @@ class ScheduleService:
         rules = {"rules": [], "notes": []}
         if learn_rules:
             try:
-                rules = RuleLearner(self._llm).propose(observations, profile)
+                rules = self._learner.propose(observations, profile)
             except AgentError as error:
                 # The schedules were read successfully; only the rule
                 # suggestions failed. Losing the import over an unavailable
