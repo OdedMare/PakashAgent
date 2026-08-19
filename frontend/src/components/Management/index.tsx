@@ -30,6 +30,7 @@ import { ConfirmMove } from "./ConfirmMove";
 import { History } from "./History";
 import { ImportSchedule } from "./ImportSchedule";
 import { RequestInbox } from "./RequestInbox";
+import { SwapInbox } from "./SwapInbox";
 import { Stats } from "./Stats";
 import { TeamPanel } from "./TeamPanel";
 import { Warnings } from "./Warnings";
@@ -341,6 +342,10 @@ export function Management({
               panel because a pending request is a thing to act on, while the
               panel below it is reference. */}
           <RequestInbox onDecided={state.refresh} />
+          {/* Beside the constraint inbox, not merged into it: one
+              records a fact and the other moves two assignments, so
+              they carry different requirements at the button. */}
+          <SwapInbox onDecided={state.refresh} />
           <TeamPanel
             employees={overview?.employees ?? []}
             shifts={overview?.shifts ?? []}

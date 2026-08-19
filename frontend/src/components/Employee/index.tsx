@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowLeftRight,
   BellRing,
   CalendarClock,
   Check,
@@ -17,6 +18,7 @@ import type { EmployeeView } from "@/types";
 import { ConstraintForm } from "./ConstraintForm";
 import { HoursPanel } from "./HoursPanel";
 import { IdentityGate } from "./IdentityGate";
+import { SwapPanel } from "./SwapPanel";
 import { useEmployee } from "./useEmployee";
 
 /** The employee's personal area.
@@ -102,6 +104,11 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
           unseen={view.unseen}
           onAcknowledge={() => void state.acknowledge()}
         />
+        {/* A colleague waiting on an answer is its own alert, not part of
+            the change count: one says "something moved", the other says
+            "somebody is waiting on you", and only the second has a person
+            on the other end of it. */}
+        <SwapAlert waiting={view.swaps_awaiting_me ?? 0} />
         {view.schedule ? (
           <>
             <HoursPanel summary={view.summary} fairness={view.fairness} />
@@ -112,6 +119,17 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
               busy={state.busy}
               onSubmit={state.submit}
               onWithdraw={state.withdraw}
+            />
+            {/* Swaps sit below the constraint form because they are the
+                narrower ask: a constraint is "I cannot work this", a swap is
+                "I cannot work this *and* I already found cover". Both are
+                requests, and neither changes the schedule on its own. */}
+            <SwapPanel
+              view={view}
+              busy={state.busy}
+              onOffer={state.offerSwap}
+              onAnswer={(id, agreed) => void state.answer(id, agreed)}
+              onCancel={(id) => void state.cancelSwap(id)}
             />
             <MyChanges view={view} />
             <section className="employee-panel">
@@ -276,6 +294,31 @@ function ChangeAlert({
         <Check size={14} />
         ראיתי
       </button>
+    </section>
+  );
+}
+
+/** The banner that says a colleague is waiting on an answer.
+ *
+ *  Deliberately not acknowledgeable, unlike `ChangeAlert`: there is nothing
+ *  to mark as read here, only something to answer. It clears when the
+ *  employee accepts or declines, which is the action it exists to prompt. */
+function SwapAlert({ waiting }: { waiting: number }) {
+  if (waiting <= 0) return null;
+
+  return (
+    <section className="change-alert" role="status">
+      <span className="brand-mark" aria-hidden="true">
+        <ArrowLeftRight size={16} />
+      </span>
+      <div className="change-alert-body">
+        <strong>
+          {waiting === 1
+            ? "יש בקשת החלפה שממתינה לתשובה שלך"
+            : `יש ${waiting} בקשות החלפה שממתינות לתשובה שלך`}
+        </strong>
+        <p>הפירוט למטה, תחת &rdquo;החלפות משמרות&rdquo;.</p>
+      </div>
     </section>
   );
 }

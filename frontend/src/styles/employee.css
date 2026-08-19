@@ -619,3 +619,155 @@
   color: var(--primary);
   font-size: 0.74rem;
 }
+
+/* -- swaps, the employee's side -------------------------------------------- */
+
+/* Offers waiting on this person read as something to answer, not as history:
+   a left border in the accent colour, the same device the change alert uses,
+   so "somebody is waiting on you" looks different from "here is what
+   happened". */
+.swap-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.swap-incoming li {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--primary);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.swap-offer {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.swap-reason {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-soft);
+}
+
+/* The sentence that keeps the feature honest: two employees agreeing is not
+   a schedule change, and the screen has to say so at the moment of the
+   click rather than leave it to be discovered. */
+.swap-note {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-soft);
+  line-height: 1.45;
+}
+
+.swap-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-start: 10px;
+}
+
+.swap-actions button {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.swap-actions button.approve:hover:not(:disabled) {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.swap-actions button.reject:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.swap-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.swap-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-block-start: 12px;
+}
+
+.swap-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--text-soft);
+}
+
+.swap-form select,
+.swap-form input {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.swap-form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Settled swaps stay in the list rather than disappearing: the manager's
+   reason on a refusal is the part the employee needs to read, and a row that
+   vanishes takes it with it. Muted, because they are history. */
+.swap-history li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-block-start: 1px solid var(--border);
+  font-size: 0.82rem;
+  color: var(--text-soft);
+}
+
+.swap-who {
+  color: var(--text-soft);
+}
+
+.swap-status {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--surface-soft, var(--surface));
+  font-size: 0.74rem;
+}
+
+.swap-status.is-awaiting_counterparty,
+.swap-status.is-pending {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.swap-status.is-approved {
+  color: var(--success);
+}
+
+/* A manager's refusal and a colleague's decline are coloured the same but
+   worded differently in the component — the distinction that matters is
+   *who* said no, and the label carries it. */
+.swap-status.is-rejected,
+.swap-status.is-declined {
+  color: var(--danger);
+}
