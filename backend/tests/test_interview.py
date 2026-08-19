@@ -21,7 +21,7 @@ class _FakeLlm:
         self.response = response
         self.calls = []
 
-    def complete_json(self, system, user, schema=None):
+    def complete_json(self, system, user, schema=None, flow=""):
         self.calls.append({"system": system, "user": user, "schema": schema})
         return self.response
 

@@ -24,6 +24,7 @@ be hallucinated (D3).
 """
 
 import json
+import logging
 import threading
 import time
 from typing import List, Optional
@@ -47,6 +48,8 @@ _NEUTRAL_PENALTY = 0.0
 _LOCAL_SERVER_KEY_PLACEHOLDER = "null"
 _DEFAULT_BASE_URL = "https://api.openai.com/v1"
 _MODELS_PROBE_TIMEOUT_SECONDS = 30
+
+_log = logging.getLogger("pakash.llm")
 
 _DEFAULT_MAX_CONCURRENCY = 4
 # The model server is a shared finite resource, and a single generation can
@@ -99,6 +102,37 @@ _CONTEXT_OVERFLOW_MARKERS = (
 )
 
 
+def _log_call(flow, model, usage, started, attempt, failed=False):
+    """One line per logical model call: what it cost and how long it took.
+
+    This exists because nothing recorded it. `_usage` was returned from here
+    and only `bl/interview.py` ever read it, and even that dropped it — so
+    "how many tokens does a schedule cost" and "which flow is the slow one"
+    had no answer, and every performance decision was an estimate.
+
+    **Counts and timings only — never the prompt, the reply, or any part of
+    either.** Those carry employee names, stated reasons for absence, and the
+    manager's own sentences about their staff (backend/CLAUDE.md). Token
+    counts describe the call without describing anybody.
+
+    `retries` is broken out because a call that silently took two attempts
+    costs double and looks identical to one that did not, in every metric
+    except this one.
+    """
+    duration = time.monotonic() - started
+    _log.info(
+        "llm flow=%s model=%s prompt=%d completion=%d total=%d "
+        "retries=%d duration=%.1fs%s",
+        flow or "unknown", model,
+        usage.get("prompt_tokens", 0),
+        usage.get("completion_tokens", 0),
+        usage.get("total_tokens", 0),
+        attempt,
+        duration,
+        " FAILED" if failed else "",
+    )
+
+
 def _is_context_overflow(error) -> bool:
     """Whether a 400 means "prompt too long" rather than "bad request shape"."""
     return any(
@@ -114,12 +148,21 @@ class OpenAIJsonClient:
         self._cached_client = None
         self._cached_key = None
 
-    def complete_json(self, system: str, user: str, schema=None) -> dict:
+    def complete_json(
+        self, system: str, user: str, schema=None, flow: str = "",
+    ) -> dict:
         """Return the model's reply parsed as a JSON object.
 
         Adds a `_usage` key with token counts when the server reports them.
         Raises `AgentError` (Hebrew) if the reply is not valid JSON twice.
+
+        `flow` names the caller for the telemetry line — `scheduler`,
+        `interview`, `changes`, `briefing`. It is the only reason this
+        parameter exists: without it every measurement reads "some model
+        call", and the first question anyone asks of the numbers is which
+        feature is the expensive one.
         """
+        started = time.monotonic()
         settings = self._store.get()
         if not settings.openai_api_key and not settings.llm_base_url:
             raise AgentError("לא הוגדר מפתח API או שרת תואם OpenAI")
@@ -149,6 +192,7 @@ class OpenAIJsonClient:
                 result = extract_json(content)
                 if usage["total_tokens"]:
                     result["_usage"] = usage
+                _log_call(flow, settings.llm_model, usage, started, _attempt)
                 return result
             except json.JSONDecodeError as exc:
                 last_error = str(exc)
@@ -159,6 +203,10 @@ class OpenAIJsonClient:
                         "Return only one JSON object."
                     )},
                 ]
+        _log_call(
+            flow, settings.llm_model, usage, started,
+            _MAX_JSON_ATTEMPTS - 1, failed=True,
+        )
         raise AgentError("המודל החזיר JSON לא תקין פעמיים: " + last_error)
 
     def list_models(

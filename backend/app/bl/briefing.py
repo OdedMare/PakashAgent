@@ -126,6 +126,7 @@ class BriefingAgent:
             load("briefing"),
             json.dumps(payload, ensure_ascii=False),
             schema=BRIEFING_RESPONSE_SCHEMA,
+            flow="briefing",
         )
         if not isinstance(answer, dict):
             raise AgentError("המודל החזיר תדריך לא תקין")

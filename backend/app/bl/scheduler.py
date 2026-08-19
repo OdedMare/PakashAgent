@@ -169,6 +169,7 @@ class Scheduler:
             load("scheduler"),
             json.dumps(payload, ensure_ascii=False),
             schema=SCHEDULE_RESPONSE_SCHEMA,
+            flow="scheduler",
         )
         if not isinstance(answer, dict):
             raise AgentError("המודל החזיר סידור לא תקין")

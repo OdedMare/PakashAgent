@@ -30,9 +30,12 @@ from app.bl.briefing import (
 )
 from app.bl.changes import ChangeAgent, OP_ASSIGN, OP_REMOVE, OP_SWAP
 from app.bl.export import as_workbook, filename
+from app.bl.importer import infer, read_grid
+from app.bl.learn import RuleLearner, observe
 from app.bl.scheduler import Scheduler, build_slots
 from app.common.errors import AgentError, NotFoundError
 from app.dal.repository.schedules import (
+    ASSIGNED_BY_IMPORT,
     ASSIGNED_BY_MANAGER,
     SOURCE_AGENT,
     SOURCE_MANAGER,
@@ -53,6 +56,11 @@ ACTION_CONSTRAINT = "constraint"
 # in D6 happened, and both producing a schedule is exactly what makes them
 # worth telling apart later.
 ACTION_OPENED = "opened"
+# A period read out of a file the workplace already had (D7). Distinct from
+# both `generated` and `opened` for the same reason those are distinct from
+# each other: the history should say where a schedule came from, and
+# "imported from the manager's own spreadsheet" is a third origin.
+ACTION_IMPORTED = "imported"
 
 # What a manually placed row says for itself when the manager gave no
 # sentence of their own. `assignments.reason` is NOT NULL and D8 is not
@@ -60,6 +68,13 @@ ACTION_OPENED = "opened"
 # manufacturing a judgment the agent never made. It is the same honesty
 # `_moved_from` applies to a dragged shift.
 MANUAL_REASON = "שובץ ידנית על ידי המנהל"
+
+# What an imported row says for itself. The agent made no judgment about it
+# -- it is a record of what the workplace already did -- so claiming a reason
+# here would be inventing one. `assignments.reason` stays NOT NULL and D8 is
+# answered the same way the manual path answers it: by a different voice
+# saying plainly where the row came from.
+IMPORTED_REASON = "יובא מקובץ סידור קיים"
 
 
 class ScheduleService:

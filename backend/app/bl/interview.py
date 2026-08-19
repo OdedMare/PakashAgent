@@ -366,6 +366,7 @@ class IntroInterview:
             load("interview"),
             json.dumps(payload, ensure_ascii=False),
             schema=INTERVIEW_RESPONSE_SCHEMA,
+            flow="interview",
         )
         if not isinstance(answer, dict):
             raise AgentError("המודל החזיר תוצאת ראיון לא תקינה")

@@ -1,6 +1,7 @@
 """FastAPI composition root."""
 
 import logging
+import os
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -27,6 +28,25 @@ from app.dal.repository import Repository
 configure_logging()
 _log = logging.getLogger("pakash.api")
 
+def _worker_count() -> int:
+    """How many workers this process is one of, as the server was told.
+
+    Read from the environment rather than from uvicorn: by the time this
+    module is imported the worker is already forked and has no handle on the
+    parent's arguments. Both spellings are checked because `WEB_CONCURRENCY`
+    is what uvicorn and gunicorn both honour, while `UVICORN_WORKERS` is what
+    a compose file is likely to say.
+    """
+    for name in ("WEB_CONCURRENCY", "UVICORN_WORKERS", "GUNICORN_WORKERS"):
+        try:
+            count = int(os.getenv(name, ""))
+        except ValueError:
+            continue
+        if count > 0:
+            return count
+    return 1
+
+
 env = Settings()
 store = RuntimeSettingsStore(env)
 repository = Repository(store)
@@ -46,6 +66,20 @@ employee_service = EmployeeService(repository, schedule_service)
 # secret is the version of this that fails silently and forever.
 session_secret = env.session_secret or generate_secret()
 if not env.session_secret:
+    # Refused rather than warned about when there is more than one worker.
+    # The symptom is bosses being logged out at random with every request
+    # that happens to land on a different worker — which reads as a session
+    # bug, not as a missing environment variable, and costs hours to trace
+    # back to here. A start-up that fails with the variable's name in the
+    # message costs seconds.
+    if _worker_count() > 1:
+        raise RuntimeError(
+            "PAKASH_SESSION_SECRET must be set when running more than one "
+            "worker: each worker would sign session cookies with its own "
+            "generated key and reject every cookie signed by the others. "
+            "Generate one with: "
+            "python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+        )
     _log.warning(
         "PAKASH_SESSION_SECRET is not set; generated one for this process. "
         "Sessions will not survive a restart and will break across workers."

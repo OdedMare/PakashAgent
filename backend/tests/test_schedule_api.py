@@ -262,7 +262,7 @@ class _ScriptedLlm:
     def __init__(self, answers=None):
         self._answers = list(answers or [])
 
-    def complete_json(self, system, user, schema=None):
+    def complete_json(self, system, user, schema=None, flow=""):
         if not self._answers:
             raise AssertionError("model called more times than scripted")
         return self._answers.pop(0)

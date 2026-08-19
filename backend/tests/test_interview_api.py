@@ -88,7 +88,7 @@ class _ScriptedLlm:
         self.responses = list(responses)
         self.calls = []
 
-    def complete_json(self, system, user, schema=None):
+    def complete_json(self, system, user, schema=None, flow=""):
         self.calls.append(user)
         if len(self.responses) > 1:
             return self.responses.pop(0)

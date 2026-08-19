@@ -125,6 +125,7 @@ class ChangeAgent:
             load("changes"),
             json.dumps(payload, ensure_ascii=False),
             schema=CHANGE_RESPONSE_SCHEMA,
+            flow="changes",
         )
         if not isinstance(answer, dict):
             raise AgentError("המודל החזיר הצעת שינוי לא תקינה")
