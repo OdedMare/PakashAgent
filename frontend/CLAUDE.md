@@ -13,13 +13,31 @@ and there is no CORS setup.
 Chat-first. The boss talks to the agent in a conversation pane; the schedule
 renders beside it as a grid.
 
-There is no schedule *editor*. The calendar does let the manager **drag** an
-assignment, but the drop writes nothing — it opens a confirmation that collects
-their reason, and that dialog is what applies the move
-([D12](../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
-Dragging is a faster way to say what you want, not a way around saying why
-([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-),
-[D8](../docs/DECISIONS.md#d8--two-reasons-both-required)).
+The calendar is editable, but the two gestures on it behave differently on
+purpose:
+
+- **Dragging an assignment writes nothing.** The drop opens a confirmation
+  that collects the manager's reason, and that dialog is what applies the move
+  ([D12](../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
+  Dragging is a faster way to say what you want, not a way around saying why
+  ([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-),
+  [D8](../docs/DECISIONS.md#d8--two-reasons-both-required)).
+- **Filling an empty cell writes immediately** — the `+` on a cell opens an
+  employee picker and the choice is saved
+  ([D18](../docs/DECISIONS.md#d18--the-boss-can-place-a-shift-without-the-agent-️-completes-d6)).
+  A drag moves somebody who is already placed; filling a gap takes nothing
+  away from anybody, so nothing is owed an explanation. This is what lets the
+  boss build a week without the agent at all.
+
+**Every person has a colour**, assigned from the roster's own order and
+computed in `Management/palette.ts`. It is a rendering of a name, not a stored
+fact: nothing persists it, and there is no colour picker. Hues come from
+position in the roster rather than a hash of the name, because ten names
+hashed into ten buckets collide about two thirds of the time — a better hash
+does not fix that, a different index does. A name the roster no longer carries
+falls back to a hashed hue so a departed employee's past shifts stay coloured.
+Every hue clears 4.5:1 in both themes and avoids the warning and danger
+colours, which mean something specific on this grid.
 
 Built so far: the workspace gate, the interview, and the management area. Only
 the import screens remain.
@@ -48,6 +66,15 @@ durable result and exactly the thing the area needs to run on.
   changes nothing itself. `ConfirmMove` collects the manager's reason and its
   confirm button stays disabled until there is one, so the requirement is
   visible rather than enforced by a server error afterwards.
+- **The manual writes are deliberately quiet.** `assign` and `unassign` pass
+  `{ quiet: true }` to `run()`, which skips the briefing a write normally
+  triggers. A manager placing twenty people into an empty week would otherwise
+  fire twenty model calls, on a deployment whose model is small and
+  rate-limited — and the agent would be remarking on a grid it is watching
+  being typed. The audit still runs on every one of those writes, because it
+  is pure arithmetic and costs nothing, so the warnings under the calendar
+  stay live throughout. Opening a blank period is *not* quiet: it happens once
+  and is worth a remark.
 - **The agent chat is two-step.** A proposal renders the agent's reasoning in
   full, plus the warnings the change *would* cause, and nothing is applied until
   the manager confirms. A proposal that comes back `needs_reason` carries no
