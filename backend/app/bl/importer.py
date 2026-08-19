@@ -157,7 +157,7 @@ def infer(grid: List[List[str]], profile: Optional[dict] = None) -> Interpretati
 
     vocabulary = _vocabulary(profile)
     candidates = []
-    for reader in (_read_person_major, _read_shift_major):
+    for reader in (_read_person_major, _read_shift_major, _read_dateonly):
         try:
             found = reader(grid, vocabulary)
         except AgentError:
@@ -170,10 +170,15 @@ def infer(grid: List[List[str]], profile: Optional[dict] = None) -> Interpretati
             "לא הצלחתי לזהות את מבנה הקובץ. "
             "ודא שיש בו שורת תאריכים ושמות משמרות"
         )
-    # More explained cells wins. A tie goes to the earlier reader, which is
-    # person-major -- the nested header it requires is strong evidence on its
-    # own, and a sheet that satisfies it is very unlikely to be shift-major.
-    best = max(candidates, key=lambda found: found[0])
+    # More explained cells wins, but a layout that found a real shift axis
+    # always beats one that did not: `_read_dateonly` explains every filled
+    # cell by construction, so scoring it against the others would let it
+    # win whenever it applies and flatten a shift axis that was really
+    # there. It is a fallback, and fallbacks go last.
+    structured = [
+        found for found in candidates if found[1].layout != "date_only"
+    ]
+    best = max(structured or candidates, key=lambda found: found[0])
     return best[1]
 
 
@@ -424,6 +429,83 @@ def _read_person_major(
         shifts=shifts,
         people=sorted(people),
         dates=sorted(dates),
+        assignments=assignments,
+        unavailability=unavailability,
+        warnings=notes,
+    )
+
+
+def _read_dateonly(
+    grid: List[List[str]], vocabulary: List[dict]
+) -> Optional[Tuple[int, Interpretation]]:
+    """Dates and the people under them, with no shift axis at all.
+
+    The plainest thing a manager keeps: a column per day, names beneath it,
+    and nothing naming a shift anywhere -- because the workplace runs one
+    shift, or because whoever wrote the sheet did not think it needed saying.
+    Refusing this would mean the product only reads files that already look
+    like its own export, which is the opposite of D7.
+
+    Tried last, and it claims a sheet only when no row carries a lane label
+    at all. A file that *does* label its rows is one of the other two
+    layouts, and reading it here would flatten a real shift axis into
+    nothing.
+
+    The shift is left **empty** rather than named. There is genuinely no
+    shift information in the file, and inventing a name -- `"בוקר"`, or
+    anything else -- would be exactly the hardcoding D9 forbids. The confirm
+    screen is where the manager says which shift this was, and an empty name
+    is what makes the question visible instead of silently answered.
+    """
+    header = _find_date_row(grid)
+    if header is None:
+        return None
+    row_index, dates = header
+
+    first_data = row_index + 1
+    if first_data < len(grid) and _is_weekday_row(grid[first_data], dates):
+        first_data += 1
+
+    columns = [column for column, _iso in dates]
+    assignments: List[dict] = []
+    unavailability: List[dict] = []
+    people: List[str] = []
+    explained = 0
+
+    for row in grid[first_data:_MAX_ROWS]:
+        # Any labelled row means this sheet has an axis this reader would
+        # discard, so it is not ours to read.
+        if _lane_label(row, columns):
+            return None
+        for column, iso in dates:
+            if column >= len(row) or not row[column]:
+                continue
+            explained += 1
+            for name in _split_names(row[column]):
+                if _is_unavailable(name):
+                    unavailability.append({
+                        "employee": "", "date": iso,
+                        "shift": "", "reason": name,
+                    })
+                    continue
+                assignments.append({
+                    "employee": name, "shift": "", "date": iso,
+                })
+                if name not in people:
+                    people.append(name)
+
+    if not assignments:
+        return None
+    notes = _warnings(dates)
+    notes.append(
+        "בקובץ אין שמות משמרות — כל השיבוצים יובאו ללא משמרת. "
+        "בחר את המשמרת לפני האישור"
+    )
+    return explained, Interpretation(
+        layout="date_only",
+        shifts=[],
+        people=sorted(people),
+        dates=[iso for _column, iso in dates],
         assignments=assignments,
         unavailability=unavailability,
         warnings=notes,

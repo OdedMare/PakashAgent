@@ -195,10 +195,79 @@ def test_a_sheet_with_no_dates_is_refused():
 
 # -- D9: shift names come from the interview, never from a guess -----------
 
-def test_a_shift_outside_the_declared_vocabulary_is_not_invented():
-    """A vocabulary of one means only that one is recognised."""
+def test_a_shift_the_interview_never_heard_of_is_still_read():
+    """A file may name a shift the vocabulary does not have.
+
+    The sheet records something the workplace really ran -- an old name, a
+    one-off, a column headed only by hours. Dropping it would silently lose
+    history and would make the product refuse exactly the old files it
+    exists to absorb (D7). Nothing is invented: the name comes from the
+    manager's own file.
+    """
     found = infer(_grid(sample_a()), {"shifts": [{"name": MORNING}]})
+    assert found.shifts == [MORNING, EVENING]
+
+
+def test_a_declared_shift_still_wins_over_the_sheets_wording():
+    """D9 is unchanged where it applies: declared names are matched first."""
+    grid = [
+        ["משמרות", "1/6/25"],
+        ["משמרת בוקר", "דנה"],
+    ]
+    found = infer(grid, {"shifts": [{"name": MORNING}]})
     assert found.shifts == [MORNING]
+
+
+# -- a file with no shift vocabulary at all --------------------------------
+
+def test_a_sheet_of_only_dates_and_people_is_read():
+    """The case with no shift column at all: dates, and who worked them.
+
+    A single unnamed lane is still a schedule. Refusing it would mean the
+    product only reads files that already look like its own export.
+    """
+    grid = [
+        ["", "1/6/25", "2/6/25", "3/6/25"],
+        ["משמרת", "דנה", "יוסי", "דנה"],
+    ]
+    found = infer(grid, {})
+    assert len(found.assignments) == 3
+    assert sorted(found.people) == ["דנה", "יוסי"]
+
+
+def test_hours_in_the_header_are_matched_to_the_declared_shift():
+    """`07:00-15:00` is the morning shift, not a second shift called that."""
+    grid = [
+        ["", "1/6/25", "2/6/25"],
+        ["07:00-15:00", "דנה", "יוסי"],
+    ]
+    found = infer(grid, {"shifts": [
+        {"name": MORNING, "start_time": "07:00", "end_time": "15:00"},
+    ]})
+    assert found.shifts == [MORNING]
+
+
+def test_hours_matching_no_declared_shift_stand_for_themselves():
+    grid = [
+        ["", "1/6/25", "2/6/25"],
+        ["22:00-06:00", "דנה", "יוסי"],
+    ]
+    found = infer(grid, {"shifts": [
+        {"name": MORNING, "start_time": "07:00", "end_time": "15:00"},
+    ]})
+    assert found.shifts == ["22:00-06:00"]
+
+
+def test_the_same_hours_written_differently_still_match():
+    """One person writes the same range three ways in the same year."""
+    for header in ("7:00-15:00", "07.00-15.00", "07:00 - 15:00"):
+        found = infer(
+            [["", "1/6/25"], [header, "דנה"]],
+            {"shifts": [{
+                "name": MORNING, "start_time": "07:00", "end_time": "15:00",
+            }]},
+        )
+        assert found.shifts == [MORNING], header
 
 
 def test_the_declared_spelling_wins_over_the_sheets():
