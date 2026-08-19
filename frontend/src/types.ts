@@ -164,7 +164,15 @@ export interface Assignment {
   date: string;
   reason: string;
   slot_id: string;
+  /** Where the row came from (D18) — the agent generated it, the manager
+   *  placed it by hand, or it was read out of an imported file. Provenance,
+   *  not authorship: it records where the information came from, exactly as
+   *  `Constraint.source` does. */
+  source: AssignmentSource;
 }
+
+/** How an assignment got into the schedule (D18). */
+export type AssignmentSource = "agent" | "manager" | "imported";
 
 /** One living period (D4) — edited in place, never versioned. */
 export interface Schedule {
@@ -177,6 +185,10 @@ export interface Schedule {
   warnings: ScheduleWarning[];
   notes: string[];
   summary: string;
+  /** The id a manual assignment landed on. Empty on every other response.
+   *  Placing the same person on the same slot twice conflicts silently, so
+   *  this is how the client tells "placed" from "was already there". */
+  assigned?: string;
 }
 
 export interface SchedulePeriod {

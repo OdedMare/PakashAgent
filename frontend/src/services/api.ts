@@ -199,6 +199,51 @@ export function generateSchedule(
   });
 }
 
+/** Open an empty period the manager fills in themselves (D18).
+ *
+ *  The authoring half of D6, and the one schedule-building path that calls
+ *  no model at all: which dates fall in a period and which shifts run on
+ *  them is arithmetic. The cells arrive empty. */
+export function blankSchedule(
+  body: { starts_on?: string; ends_on?: string } = {},
+): Promise<Schedule> {
+  return request<Schedule>("/api/schedule/blank", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Place one person on one slot, by hand. Writes immediately (D18).
+ *
+ *  Unlike a drag, this does not go through a confirmation. A drag moves
+ *  somebody who is already placed, which changes a person's week and is what
+ *  the reason dialog exists to account for; filling an empty cell takes
+ *  nothing away from anybody. `reason` is optional and stored when given. */
+export function assignEmployee(body: {
+  shift_name: string;
+  slot_date: string;
+  employee: string;
+  reason?: string;
+  schedule_id?: string;
+}): Promise<Schedule> {
+  return request<Schedule>("/api/schedule/assign", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Take one person off a slot, by hand (D18). */
+export function unassignEmployee(body: {
+  assignment_id: string;
+  reason?: string;
+  schedule_id?: string;
+}): Promise<Schedule> {
+  return request<Schedule>("/api/schedule/unassign", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 export function publishSchedule(scheduleId: string): Promise<Schedule> {
   return request<Schedule>(`/api/schedule/${scheduleId}/publish`, {
     method: "POST",
