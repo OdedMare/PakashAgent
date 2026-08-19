@@ -19,5 +19,6 @@ class RuntimeSettings:
     llm_diet_mode: bool
     llm_repetition_penalty: float
     llm_timeout_seconds: int
+    llm_max_concurrency: int
     llm_base_url: Optional[str]
     openai_api_key: str

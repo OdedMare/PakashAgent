@@ -14,6 +14,7 @@ import pytest
 
 from app.bl.audit import (
     CONSECUTIVE,
+    load_history,
     DOUBLE_BOOKED,
     OVERSTAFFED,
     OVER_HOURS,
@@ -406,3 +407,104 @@ def test_without_a_grid_the_audit_still_checks_what_it_can_see():
         [_assign("דנה", MORNING, "2026-08-17")], SHIFTS, EMPLOYEES,
     )
     assert len(_by_code(warnings, UNFILLED)) == 1
+
+
+# --- load_history: the fairness tally the scheduler reasons from -----------
+
+_LOAD_SHIFTS = [
+    {"name": "בוקר", "start_time": "07:00", "end_time": "15:00"},
+    {"name": "לילה", "start_time": "23:00", "end_time": "07:00",
+     "is_night": True},
+    {"name": "כונן לילה", "start_time": "23:00", "end_time": "07:00",
+     "is_on_call": True},
+]
+_LOAD_EMPLOYEES = [{"name": "רון"}, {"name": "דנה"}, {"name": "יוסי"}]
+
+
+def _load(assignments):
+    rows = load_history(assignments, _LOAD_SHIFTS, _LOAD_EMPLOYEES)
+    return {row["employee"]: row for row in rows}
+
+
+def test_load_history_keeps_everyone_including_people_with_no_shifts():
+    """A zero is the most useful row in the table — it is who the next night
+    should go to. An absent row reads as missing data instead."""
+    by_name = _load([{"employee": "רון", "shift": "בוקר", "date": "2026-08-03"}])
+    assert set(by_name) == {"רון", "דנה", "יוסי"}
+    assert by_name["יוסי"]["shifts"] == 0
+    assert by_name["יוסי"]["nights"] == 0
+    assert by_name["יוסי"]["last_worked"] == ""
+
+
+def test_load_history_counts_nights_from_the_shift_flag():
+    by_name = _load([
+        {"employee": "רון", "shift": "לילה", "date": "2026-08-03"},
+        {"employee": "רון", "shift": "בוקר", "date": "2026-08-04"},
+    ])
+    assert by_name["רון"]["shifts"] == 2
+    assert by_name["רון"]["nights"] == 1
+
+
+def test_on_call_counts_as_a_night():
+    """`כונן לילה` is a night the person carries, whatever it weighs toward
+    hours (D9)."""
+    by_name = _load([
+        {"employee": "דנה", "shift": "כונן לילה", "date": "2026-08-03"},
+    ])
+    assert by_name["דנה"]["nights"] == 1
+
+
+def test_a_shift_the_vocabulary_does_not_mark_is_not_guessed_into_a_night():
+    """Never inferred from the name or the start time — the vocabulary is
+    per-workplace, and guessing is the hardcoding D9 forbids."""
+    by_name = _load([
+        {"employee": "רון", "shift": "בוקר", "date": "2026-08-03"},
+    ])
+    assert by_name["רון"]["nights"] == 0
+
+
+def test_load_history_counts_weekends():
+    """2026-08-07 is a Friday and 08-08 a Saturday."""
+    by_name = _load([
+        {"employee": "רון", "shift": "בוקר", "date": "2026-08-07"},
+        {"employee": "רון", "shift": "בוקר", "date": "2026-08-08"},
+        {"employee": "רון", "shift": "בוקר", "date": "2026-08-10"},
+    ])
+    assert by_name["רון"]["weekends"] == 2
+    assert by_name["רון"]["shifts"] == 3
+
+
+def test_load_history_tracks_the_most_recent_date():
+    by_name = _load([
+        {"employee": "רון", "shift": "בוקר", "date": "2026-08-03"},
+        {"employee": "רון", "shift": "בוקר", "date": "2026-08-11"},
+        {"employee": "רון", "shift": "בוקר", "date": "2026-08-07"},
+    ])
+    assert by_name["רון"]["last_worked"] == "2026-08-11"
+
+
+def test_a_name_no_longer_on_the_roster_is_still_counted():
+    """Dropping them would understate how much of the load the people still
+    here actually carried."""
+    by_name = _load([
+        {"employee": "מי שעזב", "shift": "לילה", "date": "2026-08-03"},
+    ])
+    assert by_name["מי שעזב"]["nights"] == 1
+
+
+def test_load_history_is_ordered_by_who_carried_the_most():
+    rows = load_history([
+        {"employee": "דנה", "shift": "לילה", "date": "2026-08-03"},
+        {"employee": "דנה", "shift": "לילה", "date": "2026-08-04"},
+        {"employee": "רון", "shift": "לילה", "date": "2026-08-05"},
+    ], _LOAD_SHIFTS, _LOAD_EMPLOYEES)
+    assert [row["employee"] for row in rows] == ["דנה", "רון", "יוסי"]
+
+
+def test_load_history_survives_junk_rows():
+    rows = load_history(
+        [None, "not a dict", {}, {"employee": "רון"}],
+        _LOAD_SHIFTS, _LOAD_EMPLOYEES,
+    )
+    assert {row["employee"] for row in rows} == {"רון", "דנה", "יוסי"}
+    assert all(row["shifts"] == 0 for row in rows)

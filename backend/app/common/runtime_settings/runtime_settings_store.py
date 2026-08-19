@@ -27,7 +27,10 @@ _NULLABLE = ("database_port", "llm_base_url")
 
 # Positive integers, clamped on the way in so a 0 or a negative from the UI
 # cannot produce a timeout that fires instantly.
-_POSITIVE_INTS = ("llm_timeout_seconds",)
+# `llm_max_concurrency` is clamped here like any other positive int, but
+# unlike the rest it only takes effect on the next process start: the
+# semaphore in `dal/llm/` is built once and cannot be resized.
+_POSITIVE_INTS = ("llm_timeout_seconds", "llm_max_concurrency")
 
 
 class RuntimeSettingsStore:
@@ -49,6 +52,7 @@ class RuntimeSettingsStore:
             llm_diet_mode=env.llm_diet_mode,
             llm_repetition_penalty=_clamp_penalty(env.llm_repetition_penalty),
             llm_timeout_seconds=env.llm_timeout_seconds,
+            llm_max_concurrency=env.llm_max_concurrency,
             llm_base_url=env.llm_base_url,
             openai_api_key=env.openai_api_key,
         )

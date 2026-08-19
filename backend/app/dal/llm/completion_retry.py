@@ -77,6 +77,13 @@ def create_with_retry(client, model: str, kwargs: dict, deadline=None):
             if _out_of_time(deadline, delay):
                 break
             time.sleep(delay)
+    if last_error is None:
+        # The deadline was already spent before the first attempt, so no call
+        # was ever made and there is no server error to re-raise. Saying so is
+        # the point: without this the bare `raise None` became a TypeError,
+        # which reads as a bug in this file rather than as the budget doing
+        # exactly what it exists to do.
+        raise APITimeoutError(request=None)
     raise last_error
 
 

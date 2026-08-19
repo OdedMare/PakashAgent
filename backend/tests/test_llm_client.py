@@ -271,3 +271,45 @@ def test_model_ids_are_read_from_every_envelope_servers_use(payload):
 
 def test_model_ids_of_an_unexpected_payload_is_empty_not_an_error():
     assert extract_model_ids({"unexpected": True}) == []
+
+
+# --- context overflow is not a shape rejection -----------------------------
+
+def _overflow(message):
+    """A 400 of the kind a server returns for a prompt past its context."""
+    request = httpx.Request("POST", "http://localhost:11434/v1/chat/completions")
+    response = httpx.Response(400, request=request)
+    return BadRequestError(message, response=response, body=None)
+
+
+def test_context_overflow_stops_the_ladder_instead_of_walking_it():
+    """Every rung sends the same oversized messages, so stepping down cannot
+    help — it only buries the real cause behind whichever rung ran last."""
+    llm, fake = _client([
+        _overflow("This model's maximum context length is 8192 tokens"),
+        _Response('{"ok": true}'),
+    ])
+    with pytest.raises(AgentError) as error:
+        llm.complete_json("sys", "usr", schema={"type": "object"})
+    assert "חלון ההקשר" in str(error.value)
+    # Stopped on the first rung rather than trying all four.
+    assert len(fake.completions.calls) == 1
+
+
+def test_a_shape_rejection_still_advances_the_ladder():
+    llm, fake = _client([_bad_request("response_format is unsupported")])
+    assert llm.complete_json("sys", "usr", schema={"type": "object"})["ok"]
+    assert len(fake.completions.calls) == 2
+
+
+@pytest.mark.parametrize("message", [
+    "maximum context length is 4096",
+    "Requested tokens exceed context window",
+    "input is too long for this model",
+    "n_ctx is too small",
+])
+def test_the_overflow_markers_the_local_servers_actually_use(message):
+    llm, _ = _client([_overflow(message)])
+    with pytest.raises(AgentError) as error:
+        llm.complete_json("sys", "usr")
+    assert "חלון ההקשר" in str(error.value)
