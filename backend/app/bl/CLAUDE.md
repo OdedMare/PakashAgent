@@ -18,7 +18,7 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | `changes.py` | Conversational edits and the change log |
 | `briefing.py` | **The agent speaking first.** Observes; proposes nothing that lands |
 | `schedule_service.py` | Persistence and orchestration around all three: propose, confirm, apply |
-| `audit.py` | **Pure-Python advisory checks. No LLM.** |
+| `audit.py` | **Pure-Python advisory checks. No LLM.** Also the fairness arithmetic the scheduler and the employee area read |
 | `export.py` | **A period out as `.xlsx`.** Pure functions, no model, no repository |
 | `importer.py` | Excel/doc ingest with layout inference |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
@@ -96,13 +96,28 @@ stale client copy cannot rewrite what was already agreed.
 
 ## `scheduler.py`
 
-Feeds the profile, rules, availability, and recent history to `complete_json`;
-gets back assignments **each with its own `reason`**. The reason is not optional
+Feeds the profile, rules, availability, and the **fairness tally** to
+`complete_json`; gets back assignments **each with its own `reason`**. The reason is not optional
 decoration — it is shown to the boss at confirmation time and is the mechanism by
 which a bad call gets caught while it's still cheap ([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)).
 
 Handles both generation and schedules the boss authored or imported — they share
 one representation ([D6](../../../docs/DECISIONS.md#d6--the-boss-can-author-or-generate)).
+
+**Past assignments are counted, not sent.** The scheduler used to hand the
+model several hundred raw history rows and let it work out who had been taking
+the nights. That was wrong twice: on a two-week period those rows were roughly
+60% of the entire prompt — crowding out the period actually being built, on
+models whose context is the binding constraint — and counting them is code's
+job under [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-).
+`audit.load_history()` now does the arithmetic and the model receives the
+tally: ~9,100 tokens of rows become ~470 of counts.
+
+This is the same move `briefing.py` already makes with `warnings` and
+`fairness`. Reducing the prompt is the side benefit; the reason it belongs on
+this side of the line is that a model asked "who worked the most nights" is
+doing arithmetic by generation, and a wrong answer looks exactly like a right
+one.
 
 ## `changes.py`
 
@@ -166,6 +181,20 @@ boss chose this shape knowingly, including its tradeoff with D1.
 
 On-call shifts may weight differently — read the weighting from the interview's
 shift vocabulary rather than assuming.
+
+`fairness()` and `load_history()` answer two different questions from the same
+arithmetic. `fairness()` compares hours inside the period on screen;
+`load_history()` looks *backwards* across past periods at who has carried the
+nights and the weekends, and is what `scheduler.py` reasons from when deciding
+whose turn the next one is. Both keep people with nothing on the roster — a
+zero is the most useful row in either table, and an absent row reads as missing
+data. Neither decides anything.
+
+**A night comes off the shift's own flag** (`is_night` / `is_on_call`), never
+from its name or its start time. The vocabulary is per-workplace
+([D9](../../../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)), so
+matching against a list of names nobody declared is exactly the hardcoding that
+decision forbids. A workplace that flags no nights honestly reports zero.
 
 **Pass `slots` when you have them.** `audit()` takes the schedule's slot grid as
 well as the assignments. A slot with nobody on it leaves no row among the

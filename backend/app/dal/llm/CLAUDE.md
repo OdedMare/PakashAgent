@@ -12,7 +12,7 @@ call**, so a change saved in the UI applies immediately without a restart.
 | File | Role |
 |---|---|
 | `openai_client.py` | `OpenAIJsonClient` — the only class callers use |
-| `completion_retry.py` | Transient-failure retry around one API call |
+| `completion_retry.py` | Transient-failure retry with exponential backoff |
 | `json_response_parser.py` | `extract_json` — strips fences, finds the object |
 | `message_merger.py` | Folds the system prompt into the user turn |
 | `model_id_extractor.py` | Pulls model IDs out of a `/models` response |
@@ -39,11 +39,68 @@ on `BadRequestError`:
 Only a `BadRequestError` advances the ladder; any other exception becomes an
 `AgentError` immediately.
 
+**A context-overflow 400 does not advance it.** A prompt longer than the
+server's context window is also a `BadRequestError`, and no rung can shorten
+it — every remaining one sends the same oversized messages, fails identically,
+and buries the real cause behind whichever rung ran last. `_is_context_overflow`
+matches it on the error text (vLLM, Ollama and llama.cpp all answer 400 with
+prose, none with a distinct code) and raises a Hebrew error naming the actual
+problem. This matters more than it looks: on vLLM the context window is fixed
+at server start by `--max-model-len` and there is no per-request override, so
+"the prompt is too long" is a real and unfixable-from-here condition.
+
 **2. The parse retry** — if the reply is not valid JSON, the bad reply and a
 correction instruction are appended and the ladder runs once more. Two failures
 raise an `AgentError` in Hebrew.
 
 `llm_diet_mode` caps completion tokens.
+
+**3. The total budget** — `_TOTAL_BUDGET_SECONDS` bounds one logical
+`complete_json`. `llm_timeout_seconds` bounds a single HTTP round-trip, but
+the ladder can run four of them and each retries up to three times; multiplied
+out, one request could hold a worker for the better part of an hour. The
+deadline is passed into `create_with_retry`, which starts no attempt (and
+takes no sleep) that would cross it.
+
+## Retry and backoff
+
+`completion_retry.py` retries `RateLimitError`, `APIConnectionError`,
+`APITimeoutError` and `InternalServerError` — the last because a local server
+out of KV cache or mid-model-load answers 5xx, which is transient in exactly
+the way this retry is for. `BadRequestError` is never retried; that is the
+ladder's job.
+
+The delay is geometric with full jitter, capped at 8s. The original flat 0.3s
+came from a hosted API, where a 429 means "too many per minute" and a short
+pause genuinely clears it. **The local servers this actually runs against
+behave differently:** a busy vLLM or Ollama does not reject a request, it
+*queues* it, and the failure surfaces as `APITimeoutError` only after the full
+timeout has already elapsed. Retrying 0.3s later hits a server still working
+through the same queue. The jitter matters because several workers waiting on
+one model server tend to time out together — one long generation blocks
+everybody — and without it they would retry in lockstep and rebuild the pileup.
+
+A `Retry-After` header is obeyed over the curve: the server knows when it will
+be ready and the backoff is a guess.
+
+## Concurrency
+
+`_LLM_SLOTS` bounds in-flight completions process-wide, sized from
+`llm_max_concurrency` on first use. It is built once and **cannot be resized**,
+so unlike every other LLM setting this one takes effect at process start
+rather than on save — the alternative is a UI control that silently does
+nothing.
+
+The right value depends entirely on the server, which is why there is no good
+default:
+
+- **A continuously-batching server (vLLM, TGI)** does its own scheduling and is
+  *starved* by a low limit — a request held back here is a request it cannot
+  put in a batch. 16+ suits those.
+- **A one-request-at-a-time server (Ollama's default)** is only thrashed by a
+  high one. 1-2 keeps latency honest.
+
+4 is the middle that assumes neither.
 
 ## Connection reuse
 
