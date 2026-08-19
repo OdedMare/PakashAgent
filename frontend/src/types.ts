@@ -511,3 +511,95 @@ export interface EmployeeIdentity {
   created_at: string | null;
   last_seen_at: string | null;
 }
+
+/** One assignment as the importer read it, before anything is confirmed.
+ *
+ *  `shift` may be empty: a sheet of dates and people carries no shift
+ *  information at all, and an empty name is how that absence stays visible
+ *  rather than being answered with an invented one (D9). The confirm screen
+ *  is where the manager supplies it. */
+export interface ReadAssignment {
+  employee: string;
+  shift: string;
+  date: string;
+  reason?: string;
+}
+
+/** An unavailability the sheet stated outright (`לא זמינה` in a cell).
+ *
+ *  `employee` may be empty when the file never attributed the marker to
+ *  anybody — reported as such rather than guessed at. */
+export interface ImportedConstraint {
+  employee: string;
+  date: string;
+  shift: string;
+  reason: string;
+}
+
+/** A rule the history suggests, which the manager has not yet accepted.
+ *
+ *  `approved` is always false from the server — a candidate becomes a rule
+ *  only by the manager saying so, never by having been proposed (D7). */
+export interface CandidateRule {
+  text: string;
+  kind: "hard" | "soft";
+  evidence: string;
+  confidence: "high" | "medium" | "low";
+  approved: boolean;
+}
+
+/** What one uploaded file was understood to say. */
+export interface ImportedPeriod {
+  filename: string;
+  /** `shift_major`, `person_major`, or `date_only` — which axes the sheet
+   *  turned out to use. Shown to the manager because a misread layout is the
+   *  one error that makes everything else wrong. */
+  layout: string;
+  shifts: string[];
+  people: string[];
+  dates: string[];
+  starts_on: string;
+  ends_on: string;
+  assignments: ReadAssignment[];
+  unavailability: ImportedConstraint[];
+  warnings: string[];
+  summary: string;
+}
+
+/** A file that could not be read, reported beside the ones that could. */
+export interface ImportFailure {
+  filename: string;
+  error: string;
+}
+
+/** The interpretation the manager confirms before anything is stored (D7).
+ *
+ *  Producing this writes nothing. `confirmImport` is the only call that
+ *  persists, which is what makes the confirmation structural rather than a
+ *  dialog in front of a write that already happened. */
+export interface ImportPreview {
+  periods: ImportedPeriod[];
+  failures: ImportFailure[];
+  observations: {
+    periods?: { starts_on: string; ends_on: string; days: number };
+    people?: {
+      employee: string;
+      assignments: number;
+      by_shift: Record<string, number>;
+      by_weekday: Record<string, number>;
+      always: string[];
+      never: string[];
+      first_seen: string;
+      last_seen: string;
+      enough_data: boolean;
+    }[];
+    coverage?: {
+      by_weekday: Record<string, number>;
+      by_shift: Record<string, number>;
+      weekdays_never_seen: string[];
+    };
+    totals?: { assignments: number; people: number; shifts: string[] };
+  };
+  candidate_rules: CandidateRule[];
+  notes: string[];
+}
