@@ -225,12 +225,14 @@ class ScheduleRepository(RepositoryBase):
             for item in assignments:
                 connection.execute("""
                     INSERT INTO assignments (
-                        id, team_id, schedule_id, slot_id, employee, reason
-                    ) VALUES (%s,%s,%s,%s,%s,%s)
+                        id, team_id, schedule_id, slot_id, employee, reason,
+                        source
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (slot_id, employee) DO NOTHING
                 """, (
                     new_id(), team_id, schedule_id, item["slot_id"],
                     item["employee"], item["reason"].strip(),
+                    item.get("source") or ASSIGNED_BY_AGENT,
                 ))
             connection.execute(
                 "UPDATE schedules SET updated_at=NOW() WHERE id=%s",
@@ -282,6 +284,7 @@ class ScheduleRepository(RepositoryBase):
             connection.commit()
         return self._one("""
             SELECT a.id, a.employee, a.reason, a.slot_id, a.schedule_id,
+                   a.source,
                    s.shift_name AS shift, s.slot_date AS date
             FROM assignments a
             JOIN shift_slots s ON s.id = a.slot_id
@@ -290,21 +293,33 @@ class ScheduleRepository(RepositoryBase):
 
     def add_assignment(
         self, schedule_id: str, team_id: str, slot_id: str,
-        employee: str, reason: str,
+        employee: str, reason: str, source: str = ASSIGNED_BY_AGENT,
     ) -> dict:
+        """Place one person on one slot.
+
+        `source` says where the row came from (D18) and defaults to `agent`,
+        so every existing caller keeps writing exactly what it wrote before.
+        The manual path passes `manager`; the importer will pass `imported`.
+
+        `reason` is required whatever the source. A manually placed row
+        carries the manager's own sentence rather than the agent's, which is
+        a different voice answering D8 -- not an exemption from it.
+        """
         if not (reason or "").strip():
             raise AgentError("כל שיבוץ חייב לשאת נימוק של הסוכן")
+        if source not in _ASSIGNMENT_SOURCES:
+            raise AgentError("מקור שיבוץ לא מוכר")
         self._require_schedule(schedule_id, team_id)
         assignment_id = new_id()
         self._execute("""
             INSERT INTO assignments (
-                id, team_id, schedule_id, slot_id, employee, reason
-            ) VALUES (%s,%s,%s,%s,%s,%s)
+                id, team_id, schedule_id, slot_id, employee, reason, source
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (slot_id, employee) DO NOTHING
         """, (assignment_id, team_id, schedule_id, slot_id,
-              employee, reason.strip()))
+              employee, reason.strip(), source))
         return self._one("""
-            SELECT a.id, a.employee, a.reason, a.slot_id,
+            SELECT a.id, a.employee, a.reason, a.slot_id, a.source,
                    s.shift_name AS shift, s.slot_date AS date
             FROM assignments a
             JOIN shift_slots s ON s.id = a.slot_id

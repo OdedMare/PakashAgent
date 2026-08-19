@@ -176,6 +176,10 @@ class Assignment(BaseModel):
     date: str
     reason: str
     slot_id: str
+    # Where the row came from (D18): 'agent', 'manager' or 'imported'.
+    # Defaulted rather than required so a schedule read from a database that
+    # predates the column still parses -- everything before D18 was generated.
+    source: str = "agent"
 
 
 class Schedule(BaseModel):
@@ -190,6 +194,11 @@ class Schedule(BaseModel):
     warnings: List[Warning] = []
     notes: List[str] = []
     summary: str = ""
+    # The id a manual assignment landed on, echoed back so the client can
+    # tell "placed" from "was already there" -- the insert conflicts silently
+    # on (slot, employee), so a double click is a success that changed
+    # nothing. Empty on every other response.
+    assigned: str = ""
 
 
 class SchedulePeriod(BaseModel):
@@ -449,6 +458,42 @@ class ApplyRequest(BaseModel):
     operations: List[Operation]
     reason: str = Field(min_length=1, max_length=1000)
     agent_reason: str = Field(default="", max_length=2000)
+
+
+class BlankRequest(BaseModel):
+    """Open an empty period for the manager to fill in by hand (D18).
+
+    Same date arguments as `GenerateRequest` and deliberately no
+    `instructions`: there is no model on this path to instruct.
+    """
+
+    starts_on: Optional[str] = None
+    ends_on: Optional[str] = None
+
+
+class AssignRequest(BaseModel):
+    """Place one person on one slot, by hand (D18).
+
+    `reason` is optional here, unlike on a change: filling an empty cell
+    takes nothing away from anybody, and requiring a justification per cell
+    would make authoring a week by hand cost a dialog per shift. When the
+    manager gives one it is stored as the row's reason; when they do not, the
+    row still says plainly that a person placed it.
+    """
+
+    shift_name: str = Field(min_length=1, max_length=120)
+    slot_date: str = Field(min_length=1, max_length=40)
+    employee: str = Field(min_length=1, max_length=120)
+    reason: str = Field(default="", max_length=1000)
+    schedule_id: Optional[str] = None
+
+
+class UnassignRequest(BaseModel):
+    """Take one person off a slot, by hand (D18)."""
+
+    assignment_id: str = Field(min_length=1)
+    reason: str = Field(default="", max_length=1000)
+    schedule_id: Optional[str] = None
 
 
 class MoveRequest(BaseModel):

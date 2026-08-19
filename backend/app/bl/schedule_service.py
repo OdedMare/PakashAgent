@@ -30,9 +30,10 @@ from app.bl.briefing import (
 )
 from app.bl.changes import ChangeAgent, OP_ASSIGN, OP_REMOVE, OP_SWAP
 from app.bl.export import as_workbook, filename
-from app.bl.scheduler import Scheduler
+from app.bl.scheduler import Scheduler, build_slots
 from app.common.errors import AgentError, NotFoundError
 from app.dal.repository.schedules import (
+    ASSIGNED_BY_MANAGER,
     SOURCE_AGENT,
     SOURCE_MANAGER,
     week_bounds,
@@ -47,6 +48,18 @@ ACTION_ASSIGNED = "assigned"
 ACTION_REMOVED = "removed"
 ACTION_SWAPPED = "swapped"
 ACTION_CONSTRAINT = "constraint"
+# A period opened empty for the manager to fill in themselves (D18). Distinct
+# from `generated` on purpose: the history should say which of the two things
+# in D6 happened, and both producing a schedule is exactly what makes them
+# worth telling apart later.
+ACTION_OPENED = "opened"
+
+# What a manually placed row says for itself when the manager gave no
+# sentence of their own. `assignments.reason` is NOT NULL and D8 is not
+# relaxed here -- this states plainly that a person placed it, rather than
+# manufacturing a judgment the agent never made. It is the same honesty
+# `_moved_from` applies to a dragged shift.
+MANUAL_REASON = "שובץ ידנית על ידי המנהל"
 
 
 class ScheduleService:
@@ -223,6 +236,139 @@ class ScheduleService:
         view["notes"] = result["notes"]
         view["summary"] = result["summary"]
         return view
+
+    def create_blank(
+        self,
+        team_id: str,
+        starts_on: Optional[str] = None,
+        ends_on: Optional[str] = None,
+    ) -> dict:
+        """An empty period the manager fills in themselves (D18).
+
+        The other half of [D6](../../../docs/DECISIONS.md#d6--the-boss-can-author-or-generate) —
+        the boss authoring rather than generating. No model is called: which
+        dates fall in a period and which shifts run on them is arithmetic,
+        and `build_slots` has always been pure Python. The grid arrives
+        staffed by nobody and the manager places people into it.
+
+        The profile is still required. Without the shift vocabulary there is
+        no grid to build, and inventing one would be exactly the hardcoding
+        [D9](../../../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)
+        forbids — the manual path skips the agent, not the interview.
+        """
+        profile = self._repository.team_profile(team_id)
+        if not profile:
+            raise AgentError(
+                "צריך להשלים את ראיון ההיכרות לפני בניית סידור"
+            )
+        if not starts_on or not ends_on:
+            starts_on, ends_on = week_bounds()
+
+        slots = build_slots(profile, starts_on, ends_on)
+        if not slots:
+            raise AgentError(
+                "לא ניתן לבנות סידור: לא הוגדרו משמרות לתקופה הזו"
+            )
+        schedule = self._repository.create_schedule(
+            team_id, starts_on, ends_on
+        )
+        self._repository.replace_slots(schedule["id"], team_id, slots)
+        self._repository.append_change(
+            team_id, ACTION_OPENED, schedule_id=schedule["id"],
+            agent_reason="הסידור נפתח ריק לשיבוץ ידני",
+        )
+        return self._view(
+            self._repository.get_schedule(schedule["id"], team_id), team_id
+        )
+
+    def assign(
+        self,
+        team_id: str,
+        shift_name: str,
+        slot_date: str,
+        employee: str,
+        reason: str = "",
+        schedule_id: Optional[str] = None,
+    ) -> dict:
+        """Place one person on one slot, by hand. No model call (D18).
+
+        This writes immediately rather than proposing. It is not a reversal
+        of [D12](../../../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit):
+        a drag *moves someone who is already placed*, which changes a
+        person's week and is what the confirmation exists to account for.
+        Filling an empty cell takes nothing away from anybody — it is
+        authoring, and asking for a justification of every cell would make
+        building a week by hand cost twenty dialogs.
+
+        `reason` is the manager's own sentence when they gave one. When they
+        did not, the row still carries a true statement of where it came
+        from rather than a judgment the agent never made — the same honesty
+        `move()` applies to a dragged shift.
+        """
+        employee = (employee or "").strip()
+        if not employee:
+            raise AgentError("צריך לבחור עובד לשיבוץ")
+        schedule = self._require_schedule(team_id, schedule_id)
+        slot = self._repository.find_slot(
+            schedule["id"], team_id, shift_name, slot_date
+        )
+        if slot is None:
+            raise NotFoundError("המשמרת לא נמצאה בסידור")
+
+        stated = (reason or "").strip()
+        row = self._repository.add_assignment(
+            schedule["id"], team_id, slot["id"], employee,
+            stated or MANUAL_REASON,
+            source=ASSIGNED_BY_MANAGER,
+        )
+        self._repository.append_change(
+            team_id, ACTION_ASSIGNED, schedule_id=schedule["id"],
+            employee=employee, slot_date=slot_date, shift_name=shift_name,
+            reason=stated,
+            agent_reason=MANUAL_REASON,
+        )
+        view = self._view(
+            self._repository.get_schedule(schedule["id"], team_id), team_id
+        )
+        # `add_assignment` conflicts silently on (slot, employee), so a
+        # double click returns the row that was already there. Saying so
+        # lets the UI stay quiet instead of reporting a change it did not
+        # make.
+        view["assigned"] = (row or {}).get("id", "")
+        return view
+
+    def unassign(
+        self,
+        team_id: str,
+        assignment_id: str,
+        reason: str = "",
+        schedule_id: Optional[str] = None,
+    ) -> dict:
+        """Take one person off a slot, by hand (D18).
+
+        Removing somebody *does* take a shift away from a person, so unlike
+        `assign` this is a change in the sense D8 means. The manager's reason
+        is asked for by the UI and recorded when given; it is not enforced
+        here, because a cell cleared seconds after being filled by mistake is
+        a correction rather than a decision, and refusing it would strand the
+        manual path halfway through.
+        """
+        schedule = self._require_schedule(team_id, schedule_id)
+        existing = _find_assignment(schedule, assignment_id)
+        if existing is None:
+            raise NotFoundError("השיבוץ לא נמצא")
+        self._repository.remove_assignment(assignment_id, team_id)
+        self._repository.append_change(
+            team_id, ACTION_REMOVED, schedule_id=schedule["id"],
+            employee=existing.get("employee") or "",
+            slot_date=_iso(existing.get("date")),
+            shift_name=existing.get("shift") or "",
+            reason=(reason or "").strip(),
+            agent_reason=MANUAL_REASON,
+        )
+        return self._view(
+            self._repository.get_schedule(schedule["id"], team_id), team_id
+        )
 
     def publish(self, schedule_id: str, team_id: str) -> dict:
         """Make a draft the team's. Members read only published periods."""

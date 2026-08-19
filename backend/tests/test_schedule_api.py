@@ -135,6 +135,7 @@ class _FakeScheduleRepo:
                 start_time=slot.get("start_time", ""),
                 end_time=slot.get("end_time", ""),
                 is_on_call=slot.get("is_on_call", False),
+                source=row.get("source", "agent"),
             ))
         return rows
 
@@ -145,17 +146,28 @@ class _FakeScheduleRepo:
         self.assignment_rows[schedule_id] = [
             {"id": self._id("asg"), "slot_id": item["slot_id"],
              "employee": item["employee"], "reason": item["reason"],
-             "schedule_id": schedule_id}
+             "schedule_id": schedule_id,
+             "source": item.get("source") or "agent"}
             for item in assignments
         ]
         return self.assignments(schedule_id, team_id)
 
-    def add_assignment(self, schedule_id, team_id, slot_id, employee, reason):
+    def add_assignment(self, schedule_id, team_id, slot_id, employee, reason,
+                       source="agent"):
         assert reason.strip(), "reason is required (D8)"
+        assert source in ("agent", "manager", "imported"), source
         self.get_schedule(schedule_id, team_id)
+        # The real table is UNIQUE (slot_id, employee) and the insert says
+        # DO NOTHING, so placing the same person on the same slot twice is a
+        # success that changes nothing. Mirrored here because the manual path
+        # depends on that being the behaviour rather than a duplicate row.
+        for existing in self.assignment_rows[schedule_id]:
+            if (existing["slot_id"] == slot_id
+                    and existing["employee"] == employee):
+                return dict(existing)
         row = {"id": self._id("asg"), "slot_id": slot_id,
                "employee": employee, "reason": reason,
-               "schedule_id": schedule_id}
+               "schedule_id": schedule_id, "source": source}
         self.assignment_rows[schedule_id].append(row)
         return row
 
@@ -400,10 +412,204 @@ def test_a_member_sees_only_published_periods():
     assert member.get("/api/schedule/overview").json()["schedule"] is not None
 
 
+# -- D18: the manual path -------------------------------------------------
+
+def test_opening_a_blank_period_calls_no_model():
+    """The authoring half of D6. `_ScriptedLlm` raises if it is called at
+    all, so an empty answer list is the assertion: building a grid is
+    arithmetic over the declared vocabulary, not a generation."""
+    app, _ = _build_app([])
+    response = _client(app).post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "draft"
+    # The grid exists; nobody is on it yet.
+    assert body["slots"], "a blank period still has its slots"
+    assert body["assignments"] == []
+
+
+def test_a_blank_period_without_a_finished_interview_is_refused():
+    """Skipping the agent does not mean skipping the interview: without the
+    shift vocabulary there is no grid to build (D9)."""
+    app, repo = _build_app([])
+    repo.profiles[TEAM] = None
+    response = _client(app).post("/api/schedule/blank", json={})
+    assert response.status_code == 502
+    assert "ראיון" in response.json()["detail"]
+
+
+def test_a_manual_assignment_is_marked_as_the_managers_and_calls_no_model():
+    app, repo = _build_app([])
+    client = _client(app)
+    client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+    response = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "reason": "דנה ביקשה את הבוקר הזה",
+    })
+    assert response.status_code == 200
+    rows = response.json()["assignments"]
+    assert len(rows) == 1
+    assert rows[0]["employee"] == "דנה"
+    # D18: provenance is recorded, so the agent and the manager are
+    # distinguishable later rather than only by how their prose reads.
+    assert rows[0]["source"] == "manager"
+    assert rows[0]["reason"] == "דנה ביקשה את הבוקר הזה"
+
+
+def test_a_manual_assignment_without_a_reason_still_carries_one():
+    """D8 is answered by a different voice, not relaxed. The row says a
+    person placed it rather than inventing a judgment the agent never made."""
+    app, _ = _build_app([])
+    client = _client(app)
+    client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+    response = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17", "employee": "דנה",
+    })
+    assert response.status_code == 200
+    assert response.json()["assignments"][0]["reason"].strip()
+
+
+def test_a_manual_assignment_is_recorded_in_the_change_log():
+    app, repo = _build_app([])
+    client = _client(app)
+    client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+    client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "reason": "כיסוי בוקר",
+    })
+    actions = [row["action"] for row in repo.changes]
+    assert "opened" in actions
+    assert "assigned" in actions
+    placed = [row for row in repo.changes if row["action"] == "assigned"][0]
+    assert placed["employee"] == "דנה"
+    assert placed["reason"] == "כיסוי בוקר"
+
+
+def test_assigning_the_same_person_twice_changes_nothing():
+    """The table is UNIQUE (slot_id, employee) and the insert does nothing on
+    conflict, so a double click is a success that added no duplicate."""
+    app, _ = _build_app([])
+    client = _client(app)
+    client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+    body = {"shift_name": MORNING, "slot_date": "2026-08-17",
+            "employee": "דנה"}
+    first = client.post("/api/schedule/assign", json=body).json()
+    second = client.post("/api/schedule/assign", json=body).json()
+    assert len(second["assignments"]) == 1
+    assert first["assigned"] == second["assigned"]
+
+
+def test_assigning_onto_a_shift_that_does_not_run_is_a_404():
+    app, _ = _build_app([])
+    client = _client(app)
+    client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+    response = client.post("/api/schedule/assign", json={
+        "shift_name": EVENING, "slot_date": "2026-08-17", "employee": "דנה",
+    })
+    assert response.status_code == 404
+
+
+def test_a_manual_schedule_still_carries_its_warnings():
+    """D3 holds on the manual path too: the audit reports, and a hand-built
+    week that breaks a rule still returns 200 and still renders."""
+    app, _ = _build_app([])
+    client = _client(app)
+    client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-24",
+    })
+    for day in range(17, 25):
+        client.post("/api/schedule/assign", json={
+            "shift_name": MORNING, "slot_date": "2026-08-%02d" % day,
+            "employee": "דנה",
+        })
+    response = client.get("/api/schedule/overview")
+    assert response.status_code == 200
+    schedule = response.json()["schedule"]
+    codes = {warning["code"] for warning in schedule["warnings"]}
+    assert "consecutive" in codes
+    # Reported, never withheld.
+    assert len(schedule["assignments"]) == 8
+
+
+def test_unassigning_removes_the_row_and_logs_it():
+    app, repo = _build_app([])
+    client = _client(app)
+    client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+    placed = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17", "employee": "דנה",
+    }).json()
+    assignment_id = placed["assignments"][0]["id"]
+
+    response = client.post("/api/schedule/unassign", json={
+        "assignment_id": assignment_id, "reason": "דנה התחלפה",
+    })
+    assert response.status_code == 200
+    assert response.json()["assignments"] == []
+    removed = [row for row in repo.changes if row["action"] == "removed"][0]
+    assert removed["employee"] == "דנה"
+    assert removed["reason"] == "דנה התחלפה"
+
+
+def test_unassigning_something_that_is_not_there_is_a_404():
+    app, _ = _build_app([])
+    client = _client(app)
+    client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+    response = client.post("/api/schedule/unassign", json={
+        "assignment_id": "nope",
+    })
+    assert response.status_code == 404
+
+
+def test_a_generated_assignment_is_marked_as_the_agents():
+    """The other side of D18: nothing about the manual path changes what a
+    generated row says about itself."""
+    app, _ = _build_app([_generation([
+        {"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+         "reason": "דנה מוסמכת לבוקר"},
+    ])])
+    response = _client(app).post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+    assert response.json()["assignments"][0]["source"] == "agent"
+
+
+def test_one_workspace_cannot_assign_into_anothers_schedule():
+    app, _ = _build_app([])
+    created = _client(app).post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    intruder = _client(app, team=OTHER_TEAM)
+    response = intruder.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "schedule_id": created["id"],
+    })
+    assert response.status_code == 404
+
+
 # -- D5: employees are read-only ------------------------------------------
 
 @pytest.mark.parametrize("method,path,body", [
     ("post", "/api/schedule/generate", {}),
+    ("post", "/api/schedule/blank", {}),
+    ("post", "/api/schedule/assign",
+     {"shift_name": MORNING, "slot_date": "2026-08-17", "employee": "דנה"}),
+    ("post", "/api/schedule/unassign", {"assignment_id": "a"}),
     ("post", "/api/schedule/propose", {"request": "דנה חולה"}),
     ("post", "/api/schedule/apply",
      {"schedule_id": "s", "operations": [], "reason": "מחלה"}),

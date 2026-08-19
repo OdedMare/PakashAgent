@@ -25,6 +25,8 @@ from fastapi.responses import Response
 
 from app.api.contracts import (
     ApplyRequest,
+    AssignRequest,
+    BlankRequest,
     Briefing,
     BriefingRequest,
     ConstraintRequest,
@@ -34,6 +36,7 @@ from app.api.contracts import (
     ProposeRequest,
     Proposal,
     Schedule,
+    UnassignRequest,
 )
 
 
@@ -68,6 +71,53 @@ def build_router(service, guards) -> APIRouter:
             starts_on=request.starts_on,
             ends_on=request.ends_on,
             instructions=request.instructions,
+        )
+
+    @router.post("/blank", response_model=Schedule)
+    def blank(
+        request: BlankRequest, session: dict = Depends(boss)
+    ) -> dict:
+        """Open an empty period the manager fills in themselves (D18).
+
+        The authoring half of [D6](../../../docs/DECISIONS.md#d6--the-boss-can-author-or-generate).
+        No model is called on this path at all — the grid is arithmetic over
+        the declared shift vocabulary, and the cells arrive empty.
+        """
+        return service.create_blank(
+            session["team_id"],
+            starts_on=request.starts_on,
+            ends_on=request.ends_on,
+        )
+
+    @router.post("/assign", response_model=Schedule)
+    def assign(
+        request: AssignRequest, session: dict = Depends(boss)
+    ) -> dict:
+        """Place one person on one slot, by hand. Writes immediately.
+
+        Not a reversal of [D12](../../../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit):
+        a drag moves somebody who is already placed, which changes a person's
+        week. Filling an empty cell takes nothing from anybody.
+        """
+        return service.assign(
+            session["team_id"],
+            shift_name=request.shift_name,
+            slot_date=request.slot_date,
+            employee=request.employee,
+            reason=request.reason,
+            schedule_id=request.schedule_id,
+        )
+
+    @router.post("/unassign", response_model=Schedule)
+    def unassign(
+        request: UnassignRequest, session: dict = Depends(boss)
+    ) -> dict:
+        """Take one person off a slot, by hand."""
+        return service.unassign(
+            session["team_id"],
+            assignment_id=request.assignment_id,
+            reason=request.reason,
+            schedule_id=request.schedule_id,
         )
 
     @router.post("/brief", response_model=Briefing)
