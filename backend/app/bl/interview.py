@@ -382,7 +382,7 @@ def _result(answer: dict, previous) -> dict:
     # An open question means the interview is still running, whatever the
     # model claimed, so it cannot also be awaiting confirmation.
     awaiting = bool(answer.get("awaiting_confirmation")) and question is None
-    missing = _missing_topics(merged)
+    missing = missing_topics(merged)
     open_points = open_points + missing
     if missing:
         # A profile still owing a required field is not a summary the manager
@@ -506,8 +506,17 @@ _REQUIRED_TOPICS = (
 )
 
 
-def _missing_topics(draft: dict) -> List[str]:
-    """One line per required field the draft still owes."""
+def missing_topics(draft: dict) -> List[str]:
+    """One line per required field the draft still owes.
+
+    Public because two callers now need the same answer and there must not be
+    two definitions of it. The readiness gate uses it to refuse a profile the
+    scheduler could not run on; `interview_service.end` uses it to record what
+    a deliberately-ended interview still owes, and `bl/tools.py` reads that
+    record back when the manager asks the agent what it is missing. A second
+    copy of these rules would drift, and the drift would show up as an agent
+    describing a gap the gate does not see.
+    """
     missing = []
     for section, field, message in _REQUIRED_TOPICS:
         if not _bounded(_as_dict(draft.get(section)).get(field)):
@@ -579,5 +588,5 @@ def empty_draft() -> dict:
 
 __all__ = [
     "INTERVIEW_RESPONSE_SCHEMA", "INTERVIEW_TOPICS", "IntroInterview",
-    "empty_draft",
+    "empty_draft", "missing_topics",
 ]

@@ -18,7 +18,7 @@ request body — it comes from the signed session cookie, so a boss cannot
 reach another workspace's interview by naming it.
 """
 
-from app.bl.interview import IntroInterview, empty_draft
+from app.bl.interview import IntroInterview, empty_draft, missing_topics
 from app.common.errors import AgentError, ConflictError
 
 # What a turn stores and serves. Named once because the payload written to
@@ -76,6 +76,39 @@ class InterviewService:
         self._repository.append_turn(session_id, "user", text)
         return self._advance(session_id, team_id)
 
+    def end(self, session_id: str, team_id: str) -> dict:
+        """Close the interview now, with whatever has been collected.
+
+        The manager's own act, not the agent's conclusion. `_is_ready` still
+        governs what the *model* may declare finished; this is the other
+        door, and the two are deliberately separate — an agent that could
+        reach this would be deciding it had asked enough, which is the
+        judgement the confirmation turn exists to keep with the manager.
+
+        **No model call.** Ending is the escape hatch from an interview that
+        is too long, and an escape hatch that can fail on a slow or
+        rate-limited model is not one. The draft already on the session is
+        what gets written, so ending costs nothing and cannot half-happen.
+
+        What is still owed is recorded on the profile rather than discarded.
+        The scheduler runs on a partial profile and produces a partial
+        answer; the gaps are what explains why, so they travel with the
+        profile they belong to and `bl/tools.py` reads them back when the
+        manager asks the agent what it is missing.
+        """
+        session = self._repository.get_session(session_id, team_id)
+        if session["status"] == "complete":
+            # Already closed, by this door or by confirmation. Serving the
+            # finished session is what a double-clicked button deserves —
+            # `complete` would raise, and there is nothing here to conflict
+            # over, since ending twice ends the same interview.
+            return _completed(session)
+        pending = session["pending"] or {}
+        draft = pending.get("draft") or empty_draft()
+        profile = dict(draft, completeness=_completeness(pending, draft))
+        session = self._repository.complete(session_id, team_id, profile)
+        return _completed(session)
+
     def _advance(self, session_id: str, team_id: str) -> dict:
         """One model turn: replay the history, merge, store, return.
 
@@ -111,6 +144,27 @@ class InterviewService:
             return _completed(session)
         self._repository.save_pending(session_id, pending)
         return _turn(session_id, pending, self._repository.history(session_id))
+
+
+def _completeness(pending: dict, draft: dict) -> dict:
+    """What an ended interview still owes, recorded on its own profile.
+
+    Two lists, kept apart because they answer different questions. The
+    required topics come from `bl/interview.py` and are what the *scheduler*
+    cannot run without — no shift vocabulary means no grid, and D9 forbids
+    inventing one. The open points are the agent's own running list of what
+    it has not settled: real gaps, but ones a manager can schedule around.
+
+    `complete: False` is what marks a profile as ended early. A profile
+    confirmed the ordinary way carries no such key at all, so its absence
+    reads as "finished" without anything having to be backfilled.
+    """
+    return {
+        "complete": False,
+        "missing_topics": missing_topics(draft),
+        "open_points": list(pending.get("open_points") or []),
+        "resolved": list(pending.get("resolved") or []),
+    }
 
 
 def _fallback_content(result: dict) -> str:

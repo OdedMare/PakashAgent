@@ -35,4 +35,14 @@ def build_router(service, guards) -> APIRouter:
         """Record an answer and return the next question, or the profile."""
         return service.answer(session_id, session["team_id"], request.content)
 
+    @router.post("/{session_id}/end", response_model=InterviewTurn)
+    def end(session_id: str, session: dict = Depends(boss)) -> dict:
+        """Close the interview now and keep what was collected.
+
+        The manager's escape hatch from an interview that is longer than the
+        afternoon they have for it. Costs no model call, so it works when the
+        model is what made them want to leave.
+        """
+        return service.end(session_id, session["team_id"])
+
     return router
