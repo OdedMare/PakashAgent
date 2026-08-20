@@ -268,6 +268,16 @@ export function Management({
           onPublish={state.publish}
           onExport={state.exportSchedule}
           onOpenAgent={() => setView("room")}
+          // What the agent is currently saying, so the board can show
+          // *where* on the week it applies. The same state the cards in the
+          // control room render — one source, so the two screens can never
+          // point at different cells. Read-only: the board produces no
+          // operations and there is no path from a highlight to a write.
+          agent={{
+            simulation: state.simulation,
+            proposal: state.proposal,
+            answer: state.answer,
+          }}
         />
       ) : null}
 

@@ -94,6 +94,12 @@ export interface RuntimeSettings {
   database_name: string;
   database_schema: string;
   llm_model: string;
+  /** Per-role model ids, all served by the same `llm_base_url`. Empty means
+   *  the role is unset and falls back to `llm_model`, which is what keeps a
+   *  single-model deployment behaving as it did before roles existed. */
+  llm_model_fast: string;
+  llm_model_default: string;
+  llm_model_advanced: string;
   llm_diet_mode: boolean;
   llm_repetition_penalty: number;
   llm_timeout_seconds: number;

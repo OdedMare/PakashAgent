@@ -100,3 +100,31 @@ def test_an_explicit_model_overrides_the_role():
 def test_an_empty_role_resolves_as_default():
     settings = _Settings(llm_model_default="chat-model")
     assert resolve_model(settings, "") == "chat-model"
+
+
+# --- the mapping against the real call sites -------------------------------
+
+def test_every_flow_the_backend_actually_passes_is_mapped():
+    """Guards the table against the code drifting away from it.
+
+    `role_for_flow` answers DEFAULT for anything unmapped, which is the safe
+    behaviour but also a silent one: a new flow would route sensibly and
+    nobody would notice it was never considered. Reading the real call sites
+    makes adding one a decision rather than an accident.
+    """
+    import pathlib
+    import re
+
+    bl = pathlib.Path(__file__).resolve().parent.parent / "app" / "bl"
+    used = set()
+    for path in bl.glob("*.py"):
+        used.update(re.findall(r'flow="([^"]+)"', path.read_text("utf-8")))
+
+    assert used, "no flow= arguments found — did the call sites move?"
+    unmapped = {flow for flow in used if flow not in _MAPPED}
+    assert not unmapped, "unmapped flows: %s" % sorted(unmapped)
+
+
+_MAPPED = {
+    "scheduler", "interview", "changes", "planner", "learn", "briefing",
+}

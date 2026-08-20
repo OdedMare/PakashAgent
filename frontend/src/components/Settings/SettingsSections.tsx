@@ -108,14 +108,38 @@ function AgentSettings({ settings }: { settings: SettingsController }) {
   );
 }
 
-/** The model field carries its own refresh button, so a base URL typed above
- *  can be probed without saving it first. */
+/** The roles a task can be routed to. Mirrors `_FLOW_ROLES` in
+ *  `backend/app/dal/llm/model_roles.py` — the backend does the routing, this
+ *  only says which model each role uses.
+ *
+ *  No model name appears here, or anywhere else in the panel: which models
+ *  exist is the server's answer, read from `/v1/models`. */
+const MODEL_ROLES = [
+  {
+    name: "llm_model_fast",
+    label: "מודל מהיר",
+    optional: "משימות קצרות — תדריך יומי",
+  },
+  {
+    name: "llm_model_default",
+    label: "מודל ברירת מחדל",
+    optional: "ראיון, שיחה, הצעות שינוי ולמידה",
+  },
+  {
+    name: "llm_model_advanced",
+    label: "מודל מתקדם",
+    optional: "בניית סידור וחשיבה מורכבת",
+  },
+];
+
+/** The model fields carry one shared refresh button, so a base URL typed
+ *  above can be probed without saving it first. */
 function ModelField({ settings }: { settings: SettingsController }) {
   return (
     <>
       <div className="model-field-header">
         <label className="field-label" htmlFor="set-llm_model">
-          מודל
+          מודל ברירת מחדל כללי
         </label>
         <button
           type="button"
@@ -127,24 +151,52 @@ function ModelField({ settings }: { settings: SettingsController }) {
           {settings.loadingModels ? "טוען…" : "רענון מודלים"}
         </button>
       </div>
-      <input
-        id="set-llm_model"
-        className="settings-input"
-        dir="ltr"
-        list="available-models"
-        placeholder="gemma3:27b"
-        value={settings.text("llm_model")}
-        onChange={(event) => settings.set("llm_model", event.target.value)}
-      />
+      <ModelInput settings={settings} name="llm_model" />
+      <p className="field-optional">
+        המודל שישמש לכל תפקיד שלא הוגדר לו מודל משלו
+      </p>
       {/* A datalist, not a select: a model the server does not list is still
-          a legitimate thing to type. */}
+          a legitimate thing to type. Shared by every model field — they all
+          address the same endpoint, so they all offer the same ids. */}
       <datalist id="available-models">
         {settings.models.map((model) => (
           <option key={model} value={model} />
         ))}
       </datalist>
       <ModelStatus settings={settings} />
+      {MODEL_ROLES.map((role) => (
+        <div key={role.name} className="settings-role-field">
+          <label className="field-label" htmlFor={`set-${role.name}`}>
+            {role.label}
+          </label>
+          <ModelInput settings={settings} name={role.name} />
+          <p className="field-optional">
+            {role.optional} — ריק: שימוש במודל ברירת המחדל
+          </p>
+        </div>
+      ))}
     </>
+  );
+}
+
+/** One model input. Empty is meaningful — it is how a role is left unset —
+ *  so there is no placeholder naming a model to fall back on. */
+function ModelInput({
+  settings,
+  name,
+}: {
+  settings: SettingsController;
+  name: string;
+}) {
+  return (
+    <input
+      id={`set-${name}`}
+      className="settings-input"
+      dir="ltr"
+      list="available-models"
+      value={settings.text(name)}
+      onChange={(event) => settings.set(name, event.target.value)}
+    />
   );
 }
 
