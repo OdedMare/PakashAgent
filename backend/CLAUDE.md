@@ -42,6 +42,9 @@ uvicorn app.main:app --reload
   (ported from AiSummryIO). Collects the workplace profile, employees, rules
   (tagged hard/soft), and the **shift vocabulary**. Every turn returns the
   draft profile so far; `ready` is gated in code, never trusted to the prompt.
+  The manager may also **end it early** (`interview_service.end`), which
+  writes the partial draft with a `completeness` record of what it still owes
+  ([D22](../docs/DECISIONS.md#d22--the-interview-can-be-ended-early-and-the-profile-says-what-it-owes-️-amends-d18)).
 - `bl/scheduler.py` — generates a schedule; every assignment carries a reason.
   Builds the slot grid in code (which dates fall in a period is arithmetic) and
   asks the model only to assign people into it.
@@ -81,10 +84,10 @@ uvicorn app.main:app --reload
   words (D2) with the evidence attached. Proposes only — nothing is approved
   by having been proposed.
 - `bl/tools.py` — **the named questions the agent may ask, answered in pure
-  Python.** Six read-only operations (`read_period`, `employee_state`,
+  Python.** Seven read-only operations (`read_period`, `employee_state`,
   `coverage_gaps`, `validate_placement`, `find_replacements`,
-  `publish_readiness`). No LLM call anywhere in the file, and no write: it
-  holds a repository and uses it for reads only (D19).
+  `publish_readiness`, `profile_gaps`). No LLM call anywhere in the file, and
+  no write: it holds a repository and uses it for reads only (D19).
 - `bl/planner.py` — the loop that runs them. The model picks tools, the
   tools answer with arithmetic, the results go back. Falls back to
   `bl/intent.py` when no model is reachable, so the same questions are
@@ -205,6 +208,16 @@ one concern; split rather than append.
   session cookie** and never from the request ([D10](../docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)).
 - **`PAKASH_SESSION_SECRET` must be set in any real deployment.** Unset, each
   worker signs with its own key and rejects the others' cookies.
+- **The interview has two doors, and only a person opens the second one.**
+  `_is_ready` governs what the *model* may declare finished and still refuses
+  a profile owing a required field; `interview_service.end` is the manager's
+  own act and calls no model at all (D22). An agent able to reach `end` would
+  be deciding it had asked enough — the judgement the confirmation turn keeps
+  with the manager.
+- **A partial profile reports its gaps; it never blocks.** `completeness` is
+  read by `profile_gaps` and rendered on the board. The scheduler runs on a
+  thin profile and returns a thin schedule — refusing would be the audit
+  becoming a gate through a side door (D3/D22).
 - **The tool layer never writes** ([D19](../docs/DECISIONS.md#d19--the-agent-answers-with-tools-asking-and-changing-stay-separate)).
   `bl/tools.py` is handed a repository and reads from it; the write path
   stays `schedule_service.apply()` behind the manager's confirmation. A tool

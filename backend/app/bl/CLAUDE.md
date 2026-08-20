@@ -64,6 +64,15 @@ A draft still missing a required topic is not ready either — the gap resurface
 in `open_points` instead of the boss discovering it after the session closed.
 `ready` is what closes the session and writes the profile.
 
+**There is a second door, and only the manager opens it.** `end()` closes the
+interview with whatever has been collected, records what it still owes on the
+profile as `completeness`, and **calls no model**
+([D22](../../../docs/DECISIONS.md#d22--the-interview-can-be-ended-early-and-the-profile-says-what-it-owes-️-amends-d18)).
+The gate above is unchanged — it governs what the *model* may declare
+finished. Keeping them separate is the decision: an agent that could reach
+`end` would be deciding it had asked enough. `missing_topics()` is public so
+both doors and `tools.profile_gaps` share one definition of "missing".
+
 Collects:
 - the workplace profile (what the job is, the mission) — free text
 - the employees
@@ -206,7 +215,7 @@ what D3 already assigns to code.
 
 So the questions are **named**, and each is answered by arithmetic:
 `read_period`, `employee_state`, `coverage_gaps`, `validate_placement`,
-`find_replacements`, `publish_readiness`. The model picks which to call and
+`find_replacements`, `publish_readiness`, `profile_gaps`. The model picks which to call and
 writes the Hebrew around the result; it never supplies a number, a name or a
 verdict.
 

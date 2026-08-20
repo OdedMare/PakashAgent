@@ -473,6 +473,12 @@ profile: without the declared shift vocabulary there is no grid to build, and
 inventing one is exactly the hardcoding
 [D9](#d9--shift-vocabulary-is-per-workplace) forbids.
 
+**⚠️ Narrowed by [D22](#d22--the-interview-can-be-ended-early-and-the-profile-says-what-it-owes-️-amends-d18):**
+the interview may now be *ended early*, and a partial profile is enough to
+open the board. What survives unchanged is the sentence above it — a profile
+with no shift vocabulary still yields no grid, by hand or otherwise, and D22
+says so on screen rather than working around it.
+
 ## D19 — The agent answers with tools; asking and changing stay separate
 
 Multi-step questions — *"מי יכול להחליף את יוסי בסופ״ש"*, *"מה חסר לפני
@@ -560,6 +566,65 @@ draws between a request and a constraint, applied here.
 **Everything stored is listed, editable, and deletable.** There is no hidden
 half of this memory, because a stored preference the manager cannot see is a
 rule they never agreed to.
+
+## D22 — The interview can be ended early, and the profile says what it owes ⚠️ *(amends D18)*
+
+**This narrows [D18](#d18--the-boss-can-place-a-shift-without-the-agent-️-completes-d6)'s
+closing line — "the interview is still required" — at the boss's request.**
+
+The manager may close the intro interview at any point. Whatever has been
+collected is written as the profile, and the management area opens on it. The
+interview is no longer a room with one exit that only the agent can open.
+
+*Why:* The interview is roughly twenty topics, and the manager who most needs
+this product is the one who does not have an uninterrupted hour for it. The
+old shape had `_is_ready` as the only door: the agent declared the profile
+finished, or nobody left. On a first interview `onDone` was deliberately
+withheld so nobody could reach the board with nothing to schedule against —
+which meant a manager out of time had to abandon the *app*, not just the
+conversation. That is a worse failure than an incomplete profile, and it was
+the common one.
+
+**The readiness gate is untouched.** `_is_ready` still governs what the
+*model* may declare finished, and still refuses a profile owing a required
+field. Ending is a separate door that only a person can open — an agent able
+to reach it would be deciding it had asked enough, which is exactly the
+judgement the confirmation turn exists to keep with the manager. Two doors,
+one for each party, is the whole shape of this decision.
+
+**Ending costs no model call.** It writes the draft already on the session.
+An escape hatch from an interview that has become slow or expensive cannot
+itself depend on the model that made it so.
+
+**A partial profile records its own gaps.** `completeness` carries
+`missing_topics` (what the scheduler cannot run without) and `open_points`
+(what the agent flagged as unsettled). Its *absence* means the interview was
+confirmed the ordinary way, so nothing had to be backfilled onto profiles
+that already existed.
+
+**The gaps are readable by the agent, through a tool.** `profile_gaps` is the
+seventh entry in `bl/tools.py` — pure Python, read-only, in the menu beside
+`publish_readiness`, which answers the same shape of question about a period
+([D19](#d19--the-agent-answers-with-tools-asking-and-changing-stay-separate)).
+So *"מה אתה עוד לא יודע"* is answered from the record rather than from the
+model's impression of the conversation. **Naming a gap does not fill it:**
+the interview remains the only thing that writes a profile, and the tool can
+only point back at it.
+
+**One gap genuinely blocks, and it is not a policy choice.** With no shift
+vocabulary there is no grid — not even a hand-built one — because the rows of
+the board *are* the workplace's shifts and inventing them is what
+[D9](#d9--shift-vocabulary-is-per-workplace) forbids. The board says so
+plainly instead of rendering empty. Every other gap degrades the result
+rather than preventing it, which is why they are different sentences on
+screen rather than one warning.
+
+**D3 is untouched, and this is the reason the rest holds.** Nothing here
+blocks: the board opens, the scheduler runs on a thin profile and returns a
+thin schedule, and the audit warns exactly as it always did
+([D3](#d3--the-agent-decides-code-only-audits-)). The gaps are *reported*.
+A partial profile that refused to schedule would be the audit becoming a
+gate, arriving through a side door.
 
 ## Open
 

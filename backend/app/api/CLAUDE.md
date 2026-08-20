@@ -25,6 +25,9 @@ the team scoping.
 `POST /api/interview` opens a session and returns its first question.
 `POST /api/interview/{id}/answer` records an answer and returns the next
 question — or `status: "complete"` with the confirmed profile.
+`POST /api/interview/{id}/end` closes the interview with what has been
+collected and returns the same completed shape — the manager's own way out,
+and it **costs no model call** either (D22).
 `GET /api/interview/{id}` re-serves the pending question and **costs no model
 call**: a refresh must not re-ask the model, because the same conversation
 would come back differently worded and the boss would see their answered
