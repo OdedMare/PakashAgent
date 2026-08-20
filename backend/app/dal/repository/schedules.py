@@ -50,6 +50,31 @@ _ASSIGNMENT_SOURCES = (
     ASSIGNED_BY_AGENT, ASSIGNED_BY_MANAGER, ASSIGNED_BY_IMPORT,
 )
 
+# What a stored preference is about. Presentation only -- the management
+# screen groups on it and nothing in code branches on it, exactly as
+# `briefing.KIND_*` works. Validated on write so the set stays a known one
+# rather than whatever a caller happened to send.
+PREFERENCE_STAFFING = "staffing"
+PREFERENCE_NOTIFICATION = "notification"
+PREFERENCE_EMPLOYEE = "employee"
+PREFERENCE_SHIFT = "shift"
+PREFERENCE_GENERAL = "general"
+_PREFERENCE_KINDS = (
+    PREFERENCE_STAFFING, PREFERENCE_NOTIFICATION, PREFERENCE_EMPLOYEE,
+    PREFERENCE_SHIFT, PREFERENCE_GENERAL,
+)
+
+# `suggested` is a proposal that changes nothing; `active` is in force;
+# `archived` is turned off without losing the record that it was once true.
+# Deleting is also possible -- archiving is for a preference the manager may
+# want back, deleting for one that was a mistake.
+PREFERENCE_SUGGESTED = "suggested"
+PREFERENCE_ACTIVE = "active"
+PREFERENCE_ARCHIVED = "archived"
+_PREFERENCE_STATUSES = (
+    PREFERENCE_SUGGESTED, PREFERENCE_ACTIVE, PREFERENCE_ARCHIVED,
+)
+
 
 class ScheduleRepository(RepositoryBase):
 
@@ -397,6 +422,102 @@ class ScheduleRepository(RepositoryBase):
     def delete_availability(self, row_id: str, team_id: str) -> None:
         self._execute(
             "DELETE FROM availability WHERE id=%s AND team_id=%s",
+            (row_id, team_id),
+        )
+
+    # -- preferences -------------------------------------------------------
+
+    def create_preference(
+        self,
+        team_id: str,
+        text: str,
+        kind: str = PREFERENCE_GENERAL,
+        subject: str = "",
+        evidence: str = "",
+        status: str = PREFERENCE_ACTIVE,
+        source: str = SOURCE_MANAGER,
+    ) -> dict:
+        """Store one operational preference for a team.
+
+        `status` is what separates a suggestion from a standing preference:
+        an agent-proposed row lands `suggested` and changes nothing until the
+        manager approves it. That is the `constraint_requests` shape (D14)
+        applied to preferences, and for the same reason -- a proposal has to
+        be visible and refusable rather than quietly in force.
+        """
+        if not (text or "").strip():
+            raise AgentError("ההעדפה אינה יכולה להיות ריקה")
+        if status not in _PREFERENCE_STATUSES:
+            raise AgentError("סטטוס ההעדפה אינו תקין")
+        if kind not in _PREFERENCE_KINDS:
+            raise AgentError("סוג ההעדפה אינו תקין")
+        row_id = new_id()
+        self._execute("""
+            INSERT INTO agent_preferences (
+                id, team_id, kind, subject, text, evidence, status, source
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (row_id, team_id, kind, (subject or "").strip(),
+              text.strip(), (evidence or "").strip(), status, source))
+        return self.get_preference(row_id, team_id)
+
+    def get_preference(self, row_id: str, team_id: str) -> dict:
+        row = self._one(
+            "SELECT * FROM agent_preferences WHERE id=%s AND team_id=%s",
+            (row_id, team_id),
+        )
+        if row is None:
+            raise NotFoundError("ההעדפה לא נמצאה")
+        return row
+
+    def preferences(
+        self, team_id: str, status: Optional[str] = None
+    ) -> List[dict]:
+        """A team's preferences, newest first.
+
+        No status filter returns everything including archived ones, because
+        the management screen shows all three states -- what is in force,
+        what is waiting to be approved, and what was turned off.
+        """
+        query = "SELECT * FROM agent_preferences WHERE team_id=%s"
+        params: List[object] = [team_id]
+        if status:
+            query += " AND status=%s"
+            params.append(status)
+        query += " ORDER BY created_at DESC"
+        return self._all(query, tuple(params))
+
+    def update_preference(
+        self,
+        row_id: str,
+        team_id: str,
+        text: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> dict:
+        """Edit a preference's wording, its status, or both.
+
+        Editable on purpose: a stored preference the manager cannot change is
+        a rule they did not agree to. Approving a suggestion is this call
+        with `status='active'`, which is why approval needs no separate
+        method.
+        """
+        if status is not None and status not in _PREFERENCE_STATUSES:
+            raise AgentError("סטטוס ההעדפה אינו תקין")
+        if text is not None and not text.strip():
+            raise AgentError("ההעדפה אינה יכולה להיות ריקה")
+        self.get_preference(row_id, team_id)
+        self._execute("""
+            UPDATE agent_preferences
+               SET text = COALESCE(%s, text),
+                   status = COALESCE(%s, status),
+                   updated_at = NOW()
+             WHERE id=%s AND team_id=%s
+        """, (text.strip() if text is not None else None, status,
+              row_id, team_id))
+        return self.get_preference(row_id, team_id)
+
+    def delete_preference(self, row_id: str, team_id: str) -> None:
+        self._execute(
+            "DELETE FROM agent_preferences WHERE id=%s AND team_id=%s",
             (row_id, team_id),
         )
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { Download, Eye, EyeOff, PencilLine, Sparkles } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import type {
   Assignment,
@@ -167,23 +167,43 @@ export function Board({
     [board, schedule?.id],
   );
 
-  // The drop's check runs once, when the dialog opens.
-  useEffect(() => {
-    if (!pendingMove) {
+  /** Open the confirmation for a proposed move, and check it.
+   *
+   *  Both halves happen here rather than in an effect watching `pendingMove`:
+   *  a check is a *consequence of the gesture*, not a synchronisation with
+   *  something outside React, and clearing the stale verdict is part of
+   *  opening the dialog rather than a second render's job. */
+  const openMove = useCallback(
+    (move: {
+      assignment: Assignment;
+      shift_name: string;
+      slot_date: string;
+    }) => {
+      setPendingMove(move);
       setCheck(null);
-      return;
-    }
-    void runCheck({
-      employee: pendingMove.assignment.employee,
-      shift_name: pendingMove.shift_name,
-      slot_date: pendingMove.slot_date,
-      moving_assignment_id: pendingMove.assignment.id,
-    });
-  }, [pendingMove, runCheck]);
+      void runCheck({
+        employee: move.assignment.employee,
+        shift_name: move.shift_name,
+        slot_date: move.slot_date,
+        moving_assignment_id: move.assignment.id,
+      });
+    },
+    [runCheck],
+  );
 
-  useEffect(() => {
-    if (!editor) setCheck(null);
-  }, [editor]);
+  /** Close whichever dialog is open, and drop its verdict with it.
+   *
+   *  One function for both because a verdict outliving the dialog that
+   *  produced it is the bug: reopening the editor on a different cell would
+   *  flash the previous cell's warning before the new check answers. The
+   *  token bump makes any in-flight check land as stale. */
+  const closeDialogs = useCallback(() => {
+    checkToken.current += 1;
+    setPendingMove(null);
+    setEditor(null);
+    setCheck(null);
+    setChecking(false);
+  }, []);
 
   const stats = overview?.stats ?? EMPTY_STATS;
   const constraints: Constraint[] = overview?.availability ?? [];
@@ -312,17 +332,19 @@ export function Board({
               roles={roles}
               filters={board.filters}
               dark={dark}
-              onDropCard={setPendingMove}
-              onOpenCard={(assignment) =>
-                setEditor({ mode: "edit", assignment })
-              }
-              onAddShift={(input) =>
+              onDropCard={openMove}
+              onOpenCard={(assignment) => {
+                setCheck(null);
+                setEditor({ mode: "edit", assignment });
+              }}
+              onAddShift={(input) => {
+                setCheck(null);
                 setEditor({
                   mode: "create",
                   shift_name: input.shift_name,
                   slot_date: input.slot_date,
-                })
-              }
+                });
+              }}
             />
           )}
         </>
@@ -349,9 +371,9 @@ export function Board({
           check={check}
           checking={checking}
           busy={busy}
-          onCancel={() => setPendingMove(null)}
+          onCancel={closeDialogs}
           onPickAlternativeSlot={(picked) =>
-            setPendingMove({
+            openMove({
               assignment: pendingMove.assignment,
               shift_name: picked.shift_name,
               slot_date: picked.slot_date,
@@ -364,7 +386,7 @@ export function Board({
               slot_date: pendingMove.slot_date,
               reason,
             });
-            setPendingMove(null);
+            closeDialogs();
           }}
         />
       ) : null}
@@ -386,20 +408,20 @@ export function Board({
               employee: input.employee,
               reason: input.reason,
             });
-            setEditor(null);
+            closeDialogs();
           }}
           onMove={(input) => {
             // Handed to the same dialog a drag opens: the editor is a
             // different gesture, not a different rule (D12).
             setEditor(null);
-            setPendingMove(input);
+            openMove(input);
           }}
           onUnassign={(input) => {
             void onUnassign({
               assignment_id: input.assignment.id,
               reason: input.reason,
             });
-            setEditor(null);
+            closeDialogs();
           }}
           onDuplicate={(input) => {
             void onAssign({
@@ -408,9 +430,9 @@ export function Board({
               employee: input.employee,
               reason: "שוכפל משיבוץ קיים",
             });
-            setEditor(null);
+            closeDialogs();
           }}
-          onClose={() => setEditor(null)}
+          onClose={closeDialogs}
         />
       ) : null}
     </div>

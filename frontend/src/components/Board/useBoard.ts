@@ -96,8 +96,16 @@ export function useBoard(scheduleId?: string): BoardState {
     return remembered ?? sundayOf(today);
   });
   const [filters, setFiltersState] = useState<BoardFilters>(EMPTY_FILTERS);
-  const [weekSchedule, setWeekSchedule] = useState<Schedule | null>(null);
-  const [weekBusy, setWeekBusy] = useState(false);
+  // The fetched week and whether a fetch is outstanding, as one value. Held
+  // together rather than as two `useState`s because they change together and
+  // always in the same direction: setting them separately inside an effect
+  // is what produces the cascading render the compiler warns about, and
+  // splitting them also allows a moment where a stale schedule is shown as
+  // settled.
+  const [week, setWeek] = useState<{
+    for: string | null;
+    schedule: Schedule | null;
+  }>({ for: null, schedule: null });
 
   const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
 
@@ -130,24 +138,16 @@ export function useBoard(scheduleId?: string): BoardState {
    *  the *current* period, so the common case — a manager on this week —
    *  costs no extra request, and paging away is what fetches. */
   const reloadWeek = useCallback(async () => {
-    setWeekBusy(true);
-    try {
-      const found = await scheduleAt(weekStart).catch(() => null);
-      setWeekSchedule(found);
-    } finally {
-      setWeekBusy(false);
-    }
+    const found = await scheduleAt(weekStart).catch(() => null);
+    setWeek({ for: weekStart, schedule: found });
   }, [weekStart]);
 
   useEffect(() => {
     let cancelled = false;
-    setWeekBusy(true);
     scheduleAt(weekStart)
       .catch(() => null)
       .then((found) => {
-        if (cancelled) return;
-        setWeekSchedule(found);
-        setWeekBusy(false);
+        if (!cancelled) setWeek({ for: weekStart, schedule: found });
       });
     return () => {
       cancelled = true;
@@ -212,8 +212,11 @@ export function useBoard(scheduleId?: string): BoardState {
     setFilters,
     clearFilters,
     filtersActive,
-    weekSchedule,
-    weekBusy,
+    // Derived rather than stored: the week is loading exactly while the
+    // answer on hand is for a different week than the one on screen. One
+    // source of truth, and no flag to get out of step with the data.
+    weekSchedule: week.for === weekStart ? week.schedule : null,
+    weekBusy: week.for !== weekStart,
     reloadWeek,
     check,
   };

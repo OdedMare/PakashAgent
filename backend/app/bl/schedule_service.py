@@ -33,11 +33,17 @@ from app.bl.export import as_workbook, filename
 from app.bl.importer import infer, read_grid
 from app.bl.learn import RuleLearner, observe, observe_corrections
 from app.bl.placement import check as check_placement
+from app.bl.planner import PlanningAgent
+from app.bl.simulate import simulate as simulate_operations
+from app.bl.tools import ScheduleTools
 from app.bl.scheduler import Scheduler, build_slots
 from app.common.errors import AgentError, NotFoundError
 from app.dal.repository.schedules import (
     ASSIGNED_BY_IMPORT,
     ASSIGNED_BY_MANAGER,
+    PREFERENCE_ACTIVE,
+    PREFERENCE_GENERAL,
+    PREFERENCE_SUGGESTED,
     SOURCE_AGENT,
     SOURCE_MANAGER,
     week_bounds,
@@ -92,6 +98,11 @@ class ScheduleService:
         self._changes = ChangeAgent(llm)
         self._briefing = BriefingAgent(llm)
         self._learner = RuleLearner(llm)
+        # Read-only tools, and the loop that runs them. `PlanningAgent` is
+        # handed the tools rather than the repository, so the answering path
+        # has no route to a write even by accident.
+        self._tools = ScheduleTools(repository)
+        self._planner = PlanningAgent(llm, self._tools)
 
     # -- reading -----------------------------------------------------------
 
@@ -959,6 +970,169 @@ class ScheduleService:
             "candidate_rules": proposed["rules"],
             "notes": proposed["notes"],
         }
+
+    # -- answering ---------------------------------------------------------
+
+    def ask(
+        self,
+        team_id: str,
+        request: str,
+        schedule_id: Optional[str] = None,
+    ) -> dict:
+        """Answer a question about the schedule by running read-only tools.
+
+        The multi-step half of the agent: *"מי יכול להחליף את יוסי בסופ״ש"*
+        needs several countable things worked out in order, and
+        `bl/planner.py` runs them through `bl/tools.py` rather than asking a
+        model to do arithmetic over a wall of JSON (D3).
+
+        **Nothing here writes.** The planner holds the tools, not the
+        repository, and its response schema contains no operation — there is
+        nothing an `apply()` could read out of an answer. A question that
+        turns out to want a change is answered with what the agent *would*
+        propose, and the manager sends it through `propose()` and confirms
+        it with their reason, exactly as before
+        ([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)).
+
+        **It works with no model configured.** The planner falls back to
+        `bl/intent.py` and the same tools, which is what makes this feature
+        part of the product rather than a feature of the deployment
+        (`README.md`).
+        """
+        schedule = self._repository.get_schedule(schedule_id, team_id) \
+            if schedule_id else self._repository.current_schedule(team_id)
+        answer = self._planner.answer(
+            team_id,
+            request,
+            profile=self._repository.team_profile(team_id) or {},
+            period=schedule,
+            preferences=self._repository.preferences(
+                team_id, status=PREFERENCE_ACTIVE
+            ) if hasattr(self._repository, "preferences") else [],
+        )
+        answer["schedule_id"] = _text((schedule or {}).get("id"))
+        return answer
+
+    def run_tool(
+        self, team_id: str, name: str, arguments: Optional[dict] = None
+    ) -> dict:
+        """One named tool, run directly. Reads only.
+
+        Exposed so the board can ask the same questions the agent asks —
+        "who could take this slot" is a useful button whether or not anybody
+        is having a conversation, and routing it through the same tool is
+        what keeps the button and the agent from ever giving different
+        answers.
+        """
+        return self._tools.run(team_id, name, arguments)
+
+    # -- simulating --------------------------------------------------------
+
+    def simulate(
+        self,
+        team_id: str,
+        operations: List[dict],
+        schedule_id: Optional[str] = None,
+    ) -> dict:
+        """What a set of changes would do. **Persists nothing.**
+
+        The safe way to ask *"מה יקרה אם אעביר את דנה לחמישי בערב"*. It is
+        deliberately not `propose()`: a proposal is an answer with a confirm
+        button attached, and a manager thinking out loud has not asked for
+        one. This returns an impact report — what would break, what would
+        clear, how coverage and hours would move, and who is touched.
+
+        `bl/simulate.py` is handed no repository at all, so "the simulation
+        did not persist" is a property of the wiring rather than a rule
+        somebody has to remember — the same shape `bl/changes.py` and
+        `bl/importer.py` have.
+
+        Approving a simulation is an ordinary `apply()` with the manager's
+        reason. There is no shortcut from here to a write, and adding one
+        would make simulation the way around the confirmation step (D8/D12).
+        """
+        schedule = self._require_schedule(team_id, schedule_id)
+        profile = self._repository.team_profile(team_id) or {}
+        window = _window(schedule)
+        result = simulate_operations(
+            schedule,
+            profile,
+            operations or [],
+            availability=[
+                {
+                    "employee": row.get("employee"),
+                    "date": _iso(row.get("constraint_date")),
+                    "shift": row.get("shift_name") or "",
+                    "available": row.get("available"),
+                    "reason": row.get("reason") or "",
+                }
+                for row in self._repository.availability(
+                    team_id, window[0], window[1]
+                )
+            ],
+        )
+        result["schedule_id"] = schedule["id"]
+        return result
+
+    # -- preferences -------------------------------------------------------
+
+    def preferences(
+        self, team_id: str, status: Optional[str] = None
+    ) -> List[dict]:
+        """What this workplace has taught the agent, beyond one-off decisions."""
+        return self._repository.preferences(team_id, status=status)
+
+    def add_preference(
+        self,
+        team_id: str,
+        text: str,
+        kind: str = PREFERENCE_GENERAL,
+        subject: str = "",
+        evidence: str = "",
+        suggested: bool = False,
+        source: str = SOURCE_MANAGER,
+    ) -> dict:
+        """Remember an operational preference for this team.
+
+        `suggested` is what separates the agent noticing something from the
+        manager deciding it. A suggested row is inert: `ask()` reads only
+        `active` ones, so a proposal changes nothing until it is approved.
+        One decision is a decision — it becomes a standing preference when
+        the manager says it is one, which is the same line
+        [D14](../../../docs/DECISIONS.md#d14--employees-get-real-identities-and-may-submit-constraints-️-reverses-d5-amends-d10)
+        draws between a request and a constraint.
+        """
+        if not (text or "").strip():
+            raise AgentError("צריך לכתוב את ההעדפה")
+        return self._repository.create_preference(
+            team_id,
+            text=text,
+            kind=kind,
+            subject=subject,
+            evidence=evidence,
+            status=PREFERENCE_SUGGESTED if suggested else PREFERENCE_ACTIVE,
+            source=source,
+        )
+
+    def update_preference(
+        self,
+        team_id: str,
+        row_id: str,
+        text: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> dict:
+        """Reword a preference, approve a suggested one, or archive it.
+
+        Editable because a stored preference the manager cannot change is a
+        rule they never agreed to. Approving is this call with
+        `status='active'`, which is why approval needs no separate method.
+        """
+        return self._repository.update_preference(
+            row_id, team_id, text=text, status=status
+        )
+
+    def delete_preference(self, team_id: str, row_id: str) -> None:
+        self._repository.delete_preference(row_id, team_id)
 
     # -- leaving the app ---------------------------------------------------
 

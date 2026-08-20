@@ -80,18 +80,18 @@ export function BoardGrid({
   // Shift rows keep the vocabulary's own order — a workplace's shifts run
   // morning, then evening, then on-call, and alphabetising would scramble a
   // sequence that means something (D9).
+  const slots = schedule?.slots;
+  const shiftFilter = filters.shift;
   const shifts = useMemo(() => {
     const seen = new Set<string>();
     const ordered: string[] = [];
-    for (const slot of schedule?.slots ?? []) {
+    for (const slot of slots ?? []) {
       if (seen.has(slot.shift_name)) continue;
       seen.add(slot.shift_name);
       ordered.push(slot.shift_name);
     }
-    return ordered.filter(
-      (name) => !filters.shift || name === filters.shift,
-    );
-  }, [schedule, filters.shift]);
+    return ordered.filter((name) => !shiftFilter || name === shiftFilter);
+  }, [slots, shiftFilter]);
 
   if (!schedule || !shifts.length) {
     return null;
