@@ -189,3 +189,78 @@ def test_probe_failure_reaches_the_panel_as_hebrew(store):
 
     assert response.status_code == 502
     assert "לא ניתן לטעון מודלים" in response.json()["detail"]
+
+
+# --- per-role models -------------------------------------------------------
+
+def test_get_exposes_the_three_role_fields_unset(client):
+    """The panel needs the keys present to render the selectors, and empty
+    so it can show "use the default model" rather than inventing a name."""
+    body = client.get("/api/settings").json()
+
+    for field in (
+        "llm_model_fast", "llm_model_default", "llm_model_advanced",
+    ):
+        assert body[field] == ""
+
+
+def test_put_saves_a_model_for_each_role(client, store):
+    body = client.put("/api/settings", json={
+        "llm_model_fast": "small-model",
+        "llm_model_default": "chat-model",
+        "llm_model_advanced": "big-model",
+    }).json()
+
+    assert body["llm_model_advanced"] == "big-model"
+    assert store.get().llm_model_fast == "small-model"
+    assert store.get().llm_model_default == "chat-model"
+
+
+def test_the_roles_are_selected_from_what_the_endpoint_reported(client, llm):
+    """The panel offers the ids `/v1/models` returned and saves one verbatim
+    — a vLLM alias must reach the request exactly as the server spells it."""
+    available = client.get("/api/models").json()["models"]
+
+    client.put("/api/settings", json={"llm_model_advanced": available[0]})
+
+    assert client.get("/api/settings").json()["llm_model_advanced"] == (
+        available[0]
+    )
+
+
+def test_saving_roles_leaves_the_connection_and_key_alone(client, store):
+    """Roles name models on the same endpoint — selecting one must not touch
+    the base URL, and the mask must not overwrite the stored key."""
+    store.update({"openai_api_key": "sk-real-secret"})
+
+    client.put("/api/settings", json={
+        "llm_model_advanced": "big-model",
+        "openai_api_key": MASKED_SECRET,
+    })
+
+    assert store.get().openai_api_key == "sk-real-secret"
+    assert store.get().llm_base_url == "http://localhost:11434/v1"
+
+
+def test_an_old_settings_file_gains_the_roles_unset(tmp_path, monkeypatch):
+    """Backward compatibility across an upgrade: a file written before roles
+    existed keeps its model and reports the roles as unset."""
+    for name in list(os.environ):
+        if name.startswith("PAKASH_") or name == "OPENAI_API_KEY":
+            monkeypatch.delenv(name, raising=False)
+    path = tmp_path / "runtime-settings.json"
+    path.write_text('{"llm_model": "old-model"}', "utf-8")
+
+    old = RuntimeSettingsStore(
+        Settings(_env_file=None, runtime_settings_file=str(path))
+    )
+    app = FastAPI()
+    app.include_router(
+        settings_router.build_router(old, FakeLLM(), Guards(SECRET))
+    )
+    upgraded = TestClient(app, raise_server_exceptions=False)
+    upgraded.cookies.set(COOKIE_NAME, issue(SECRET, "team-1", ROLE_BOSS, 1))
+
+    body = upgraded.get("/api/settings").json()
+    assert body["llm_model"] == "old-model"
+    assert body["llm_model_default"] == ""
