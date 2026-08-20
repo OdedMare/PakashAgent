@@ -520,7 +520,17 @@ def _missing_topics(draft: dict) -> List[str]:
 
 
 def _validated_history(history) -> List[Dict[str, str]]:
-    """The conversation, bounded, with only the two roles the prompt names."""
+    """The conversation, bounded, with only the two roles the prompt names.
+
+    An empty message is skipped rather than rejected. The manager's own
+    blank submission is already refused a layer up, where it can be reported
+    as a mistake they can fix; anything empty reaching here came out of the
+    store — a turn the model returned without prose, which is legitimate
+    when the question carries the turn on its own. Raising over it would
+    wedge the session permanently, since every later turn replays the same
+    row and would fail the same way, leaving the boss an interview that can
+    no longer be answered, resumed, or completed.
+    """
     if not isinstance(history, list):
         raise AgentError("היסטוריית הראיון אינה תקינה")
     clean = []
@@ -533,7 +543,7 @@ def _validated_history(history) -> List[Dict[str, str]]:
             raise AgentError("הודעה בראיון אינה תקינה")
         content = content.strip()
         if not content:
-            raise AgentError("הודעה בראיון אינה יכולה להיות ריקה")
+            continue
         clean.append({"role": role, "content": content[:_MAX_MESSAGE_CHARS]})
     return clean[-_MAX_MESSAGES:]
 

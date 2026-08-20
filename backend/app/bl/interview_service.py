@@ -94,8 +94,15 @@ class InterviewService:
         # The reply is the turn's content; the question, the draft, and the
         # rest ride along as payload so the UI can re-render the buttons a
         # past turn offered instead of inferring them from prose.
+        #
+        # A turn whose prose is empty still has to be stored — the question
+        # and its options live in the payload, and dropping the row would
+        # lose the buttons the boss is looking at. The question text stands
+        # in as the content so the thread has something to show and the
+        # replayed history has something for the model to read.
+        content = result["reply"] or _fallback_content(result)
         self._repository.append_turn(
-            session_id, "assistant", result["reply"], pending
+            session_id, "assistant", content, pending
         )
         if result["ready"]:
             # `ready` means the boss confirmed the summary on the previous
@@ -107,6 +114,17 @@ class InterviewService:
             return _completed(session)
         self._repository.save_pending(session_id, pending)
         return _turn(session_id, pending, self._repository.history(session_id))
+
+
+def _fallback_content(result: dict) -> str:
+    """What an assistant turn says when the model returned no prose.
+
+    `reply` is only ever empty because the model left it so; the turn is
+    still real, so it is stored under the question it asks rather than as a
+    blank row that renders as a gap in the thread.
+    """
+    question = result.get("question") or {}
+    return question.get("question") or ""
 
 
 def _turn(session_id: str, pending: dict, turns) -> dict:
