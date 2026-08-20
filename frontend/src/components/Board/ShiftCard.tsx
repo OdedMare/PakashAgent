@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, GripVertical, Hand } from "lucide-react";
+import { AlertTriangle, GripVertical, Hand, Move } from "lucide-react";
 
 import { colorStyle } from "@/components/Management/palette";
 import type { Assignment, ScheduleWarning, Slot } from "@/types";
@@ -37,8 +37,10 @@ export function ShiftCard({
   draggable,
   touched = null,
   dimmed = false,
+  picked = false,
   onDragStart,
   onDragEnd,
+  onPick,
   onOpen,
 }: {
   assignment: Assignment;
@@ -59,8 +61,15 @@ export function ShiftCard({
   /** The card currently being dragged, faded in place so its origin stays
    *  visible while the manager looks for somewhere to drop it. */
   dimmed?: boolean;
+  /** Picked up by the keyboard or touch path, waiting for a destination.
+   *  Distinct from `dimmed`: a dragged card is being carried by a pointer
+   *  that will land in a moment, while a picked one is parked and stays
+   *  visible until the manager chooses a cell. */
+  picked?: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
+  /** Start a move without a mouse. Absent on a read-only board. */
+  onPick?: () => void;
   onOpen: () => void;
 }) {
   const alarming = blocked || warnings.some((row) => row.severity === "warning");

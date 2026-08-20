@@ -1,7 +1,7 @@
 "use client";
 
-import { AlertTriangle, Moon, Plus, Sparkles } from "lucide-react";
-import { useMemo, useState } from "react";
+import { AlertTriangle, Check, Moon, Plus, Sparkles, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import { hebrewWeekday, isWeekend } from "@/components/Management/Calendar";
 import { buildPalette } from "@/components/Management/palette";
@@ -15,9 +15,13 @@ import type {
 
 import type { AgentTouch } from "./agentTouch";
 import { touchKey } from "./agentTouch";
+import type { ScheduleIndex } from "./scheduleIndex";
+import { buildScheduleIndex } from "./scheduleIndex";
 import { ShiftCard } from "./ShiftCard";
 import type { BoardFilters } from "./useBoard";
 import { weekDates } from "./useBoard";
+import type { MoveMode } from "./useMoveMode";
+import { useMoveMode } from "./useMoveMode";
 
 /** The week as a board: days across, shifts down, cards inside.
  *
@@ -81,58 +85,100 @@ export function BoardGrid({
 }) {
   const [dragging, setDragging] = useState<Assignment | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  // The keyboard and touch path to the same move. Beside the drag rather
+  // than replacing it: a mouse still drags, and both gestures end in the
+  // same confirmation (D12).
+  const move = useMoveMode();
 
   const dates = useMemo(() => weekDates(weekStart), [weekStart]);
   const hueOf = useMemo(() => buildPalette(employees), [employees]);
 
+  // The week bucketed by cell, once. Every lookup below reads from this
+  // instead of walking the assignment, slot and warning lists per cell.
+  const index = useMemo(() => buildScheduleIndex(schedule), [schedule]);
+
   // Shift rows keep the vocabulary's own order — a workplace's shifts run
   // morning, then evening, then on-call, and alphabetising would scramble a
   // sequence that means something (D9).
-  const slots = schedule?.slots;
   const shiftFilter = filters.shift;
-  const shifts = useMemo(() => {
-    const seen = new Set<string>();
-    const ordered: string[] = [];
-    for (const slot of slots ?? []) {
-      if (seen.has(slot.shift_name)) continue;
-      seen.add(slot.shift_name);
-      ordered.push(slot.shift_name);
-    }
-    return ordered.filter((name) => !shiftFilter || name === shiftFilter);
-  }, [slots, shiftFilter]);
+  const shifts = useMemo(
+    () => index.shifts.filter((name) => !shiftFilter || name === shiftFilter),
+    [index, shiftFilter],
+  );
+
+  // Escape puts a picked card back down. Bound on the window because the
+  // manager may have tabbed anywhere on the board between picking and
+  // changing their mind, and a cancel that only works while one particular
+  // card holds focus is one they cannot find.
+  const picked = move.picked;
+  const cancelMove = move.cancel;
+  useEffect(() => {
+    if (!picked) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") cancelMove();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [picked, cancelMove]);
 
   if (!schedule || !shifts.length) {
     return null;
   }
 
-  const slotFor = (shift: string, date: string): Slot | undefined =>
-    schedule.slots.find(
-      (slot) => slot.shift_name === shift && slot.slot_date === date,
-    );
-
-  const warningsFor = (shift: string, date: string): ScheduleWarning[] =>
-    schedule.warnings.filter(
-      (row) => row.date === date && (row.shift === shift || row.shift === ""),
-    );
-
   /** Who is on this cell, after the filters.
    *
    *  The filters hide rows and change nothing: the returned cards are a
    *  view, and `slot.headcount` — what the cell is measured against — is
-   *  read from the unfiltered grid. A cell filtered down to one person must
+   *  read from the unfiltered index. A cell filtered down to one person must
    *  not start claiming it is short of the other two. */
-  const cardsFor = (shift: string, date: string): Assignment[] =>
-    schedule.assignments.filter((row) => {
-      if (row.shift !== shift || row.date !== date) return false;
+  const cardsFor = (shift: string, date: string): Assignment[] => {
+    const rows = index.assignments(shift, date);
+    if (!filters.employee && !filters.role) return rows;
+    return rows.filter((row) => {
       if (filters.employee && row.employee !== filters.employee) return false;
       if (filters.role && (roles[row.employee] ?? "") !== filters.role) {
         return false;
       }
       return true;
     });
+  };
+
+  /** Put the picked card down on this cell.
+   *
+   *  The same call a drop makes, so the confirmation, the check and the
+   *  reason are identical whichever gesture got here. Landing it back where
+   *  it started is a no-op rather than a change to account for — the same
+   *  rule the drop path applies. */
+  const placeOn = (shift: string, date: string) => {
+    const card = move.picked;
+    if (!card) return;
+    move.cancel();
+    if (card.shift === shift && card.date === date) return;
+    onDropCard?.({ assignment: card, shift_name: shift, slot_date: date });
+  };
 
   return (
     <div className="board-grid-scroll">
+      {/* What a picked-up card is waiting for, said rather than left to be
+          inferred from an outline. It carries no confirm: placing still
+          opens the dialog that collects the reason (D12). */}
+      {move.picked ? (
+        <div className="board-move-bar" role="status">
+          <Check size={14} />
+          <span className="board-move-bar-text">
+            {move.picked.employee} מוכן/ה למעבר — יש לבחור תא יעד.
+          </span>
+          <button
+            type="button"
+            className="board-move-cancel"
+            onClick={move.cancel}
+          >
+            <X size={13} />
+            ביטול
+          </button>
+        </div>
+      ) : null}
+
       <div
         className="board-grid"
         dir="rtl"
@@ -147,7 +193,7 @@ export function BoardGrid({
             key={date}
             date={date}
             isToday={date === today}
-            schedule={schedule}
+            coverage={index.dayCoverage(date)}
           />
         ))}
 
@@ -158,9 +204,8 @@ export function BoardGrid({
             dates={dates}
             today={today}
             schedule={schedule}
-            slotFor={slotFor}
+            index={index}
             cardsFor={cardsFor}
-            warningsFor={warningsFor}
             constraints={constraints}
             roles={roles}
             hueOf={hueOf}
@@ -172,6 +217,8 @@ export function BoardGrid({
             over={over}
             setOver={setOver}
             setDragging={setDragging}
+            move={move}
+            onPlace={placeOn}
             onDropCard={onDropCard}
             onOpenCard={onOpenCard}
             onAddShift={onAddShift}
@@ -191,20 +238,14 @@ export function BoardGrid({
 function DayHead({
   date,
   isToday,
-  schedule,
+  coverage,
 }: {
   date: string;
   isToday: boolean;
-  schedule: Schedule;
+  /** Assigned and required for this day, counted once by the index. */
+  coverage: { assigned: number; required: number };
 }) {
-  const slots = schedule.slots.filter((slot) => slot.slot_date === date);
-  const required = slots.reduce(
-    (total, slot) => total + (slot.headcount || 0),
-    0,
-  );
-  const assigned = schedule.assignments.filter(
-    (row) => row.date === date,
-  ).length;
+  const { assigned, required } = coverage;
 
   return (
     <div
@@ -241,9 +282,8 @@ function BoardRow({
   dates,
   today,
   schedule,
-  slotFor,
+  index,
   cardsFor,
-  warningsFor,
   constraints,
   roles,
   hueOf,
@@ -255,6 +295,8 @@ function BoardRow({
   over,
   setOver,
   setDragging,
+  move,
+  onPlace,
   onDropCard,
   onOpenCard,
   onAddShift,
@@ -263,9 +305,8 @@ function BoardRow({
   dates: string[];
   today: string;
   schedule: Schedule;
-  slotFor: (shift: string, date: string) => Slot | undefined;
+  index: ScheduleIndex;
   cardsFor: (shift: string, date: string) => Assignment[];
-  warningsFor: (shift: string, date: string) => ScheduleWarning[];
   constraints: Constraint[];
   roles: Record<string, string>;
   hueOf: (name: string) => number;
@@ -277,6 +318,8 @@ function BoardRow({
   over: string | null;
   setOver: (key: string | null) => void;
   setDragging: (row: Assignment | null) => void;
+  move: MoveMode;
+  onPlace: (shift: string, date: string) => void;
   onDropCard?: (move: {
     assignment: Assignment;
     shift_name: string;
@@ -314,10 +357,10 @@ function BoardRow({
       </div>
 
       {dates.map((date) => {
-        const slot = slotFor(shift, date);
-        const key = `${shift}|${date}`;
+        const slot = index.slot(shift, date);
+        const key = touchKey(shift, date);
         const cards = cardsFor(shift, date);
-        const warnings = warningsFor(shift, date);
+        const warnings = index.warnings(shift, date);
         const short = slot ? cards.length < slot.headcount : false;
         // What the agent has said about this cell, if anything. A cell may
         // be touched by more than one source at once -- a simulation and
@@ -339,15 +382,21 @@ function BoardRow({
         // חוסרים" exists to make a short week scannable, and a board still
         // showing every full cell at 40% opacity is not scannable.
         const shortOfHeadcount =
-          schedule.assignments.filter(
-            (row) => row.shift === shift && row.date === date,
-          ).length < slot.headcount;
+          index.assignedCount(shift, date) < slot.headcount;
         if (filters.unassignedOnly && !shortOfHeadcount) {
           return <div key={key} className="board-cell is-filtered" />;
         }
         if (filters.conflictsOnly && !warnings.length) {
           return <div key={key} className="board-cell is-filtered" />;
         }
+
+        // A cell the picked-up card could land on. Its own cell is not one:
+        // putting a card back where it came from changes nothing, so it is
+        // not offered as a destination.
+        const isTarget =
+          !readOnly &&
+          Boolean(move.picked) &&
+          !(move.picked?.shift === shift && move.picked?.date === date);
 
         return (
           <div
@@ -360,6 +409,7 @@ function BoardRow({
               touch ? `is-touched is-touched-${touch.origin}` : "",
               isWeekend(date) ? "is-weekend" : "",
               date === today ? "is-today" : "",
+              isTarget ? "is-target" : "",
             ]
               .filter(Boolean)
               .join(" ")}
@@ -412,11 +462,13 @@ function BoardRow({
                   )?.origin ?? null
                 }
                 dimmed={Boolean(dragging) && dragging?.id === row.id}
+                picked={move.isPicked(row)}
                 onDragStart={() => setDragging(row)}
                 onDragEnd={() => {
                   setDragging(null);
                   setOver(null);
                 }}
+                onPick={readOnly ? undefined : () => move.pick(row)}
                 onOpen={() => onOpenCard?.(row)}
               />
             ))}
@@ -441,6 +493,27 @@ function BoardRow({
                 <AlertTriangle size={11} />
                 חסרים {slot.headcount - cards.length}
               </span>
+            ) : null}
+
+            {/* The destination half of the keyboard and touch move. It is
+                a real button covering the cell, so it is tabbable, has an
+                accessible name, and answers to a tap — none of which the
+                drop handler above does. It reports upward exactly as a drop
+                does, so the confirmation and the reason are unchanged
+                (D12). Rendered only while a card is actually picked up, so
+                it never sits over an idle cell intercepting clicks. */}
+            {isTarget ? (
+              <button
+                type="button"
+                className="board-drop-target"
+                onClick={() => onPlace(shift, date)}
+                aria-label={`העברת ${move.picked?.employee} ל${shift} ב-${shortDate(date)}`}
+                title="העברה לכאן"
+              >
+                <span className="board-drop-target-mark" aria-hidden="true">
+                  <Check size={14} />
+                </span>
+              </button>
             ) : null}
 
             {/* Creating a shift by clicking an empty cell. The picker and
