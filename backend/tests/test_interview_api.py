@@ -5,6 +5,8 @@ assert is that a turn is *remembered* — a real database would test psycopg,
 not the contract.
 """
 
+import json
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -298,6 +300,55 @@ def test_resuming_a_completed_interview_returns_the_profile():
 
     assert body["status"] == "complete"
     assert body["profile"]["summary"] == "צוות תפעול, שלוש משמרות"
+
+
+def test_a_turn_with_no_prose_does_not_wedge_the_interview():
+    """A model turn whose `reply` is empty must still be answerable.
+
+    The empty reply is stored as a thread row and replayed on every later
+    turn, so a history validator that rejected it would fail identically
+    forever — the interview would be unanswerable from the second question
+    on, with no way for the manager to recover it.
+    """
+    llm = _ScriptedLlm([_question(reply=""), _question(reply="")])
+    client, _ = _client(llm)
+    session_id = client.post("/api/interview").json()["session_id"]
+
+    first = client.post(
+        "/api/interview/%s/answer" % session_id, json={"content": "מענה"}
+    )
+    second = client.post(
+        "/api/interview/%s/answer" % session_id, json={"content": "עוד מענה"}
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    # The turn is kept, standing under the question it asked rather than
+    # rendering as a blank row in the thread.
+    assert all(
+        message["content"] for message in second.json()["turns"]
+    )
+
+
+def test_a_blank_stored_turn_is_replayed_from_its_question():
+    """A row written blank before the fix still reaches the model.
+
+    Such a row carries its question in the payload, so the turn is recovered
+    from there rather than replayed empty — dropping it would take the
+    question with it and the model would re-ask something already answered.
+    """
+    llm = _ScriptedLlm([_question()])
+    client, repository = _client(llm)
+    session_id = client.post("/api/interview").json()["session_id"]
+    # A row exactly as the old code stored it: no content, question in payload.
+    repository.turns[session_id][0]["content"] = ""
+
+    client.post("/api/interview/%s/answer" % session_id, json={"content": "מענה"})
+
+    replayed = json.loads(llm.calls[-1])["conversation"]
+    assert replayed[0] == {
+        "role": "assistant", "content": "על מה המשמרת אחראית?"
+    }
 
 
 @pytest.mark.parametrize("content", ["", "   "])

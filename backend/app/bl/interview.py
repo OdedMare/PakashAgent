@@ -522,14 +522,19 @@ def _missing_topics(draft: dict) -> List[str]:
 def _validated_history(history) -> List[Dict[str, str]]:
     """The conversation, bounded, with only the two roles the prompt names.
 
-    An empty message is skipped rather than rejected. The manager's own
+    An empty message is dropped rather than rejected. The manager's own
     blank submission is already refused a layer up, where it can be reported
-    as a mistake they can fix; anything empty reaching here came out of the
-    store — a turn the model returned without prose, which is legitimate
-    when the question carries the turn on its own. Raising over it would
-    wedge the session permanently, since every later turn replays the same
-    row and would fail the same way, leaving the boss an interview that can
-    no longer be answered, resumed, or completed.
+    as a mistake they can fix, so anything empty arriving here came out of
+    the store — a turn the model returned without prose, which is legitimate
+    when the question carries the turn on its own. The service recovers such
+    a turn from the question in its payload before replaying it, so reaching
+    this line means the row has no content anywhere and there is nothing to
+    replay but a blank.
+
+    Raising instead would wedge the session permanently: the same row is
+    replayed on every later turn and would fail identically each time,
+    leaving an interview that can no longer be answered, resumed, or
+    completed, with no way for the manager to recover it.
     """
     if not isinstance(history, list):
         raise AgentError("היסטוריית הראיון אינה תקינה")

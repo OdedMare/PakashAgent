@@ -122,13 +122,35 @@ def test_the_draft_so_far_is_handed_back_to_the_model():
 
 
 @pytest.mark.parametrize(
-    "history", [None, {}, [{"role": "user", "content": " "}]]
+    "history",
+    [None, {}, [{"role": "user", "content": 7}], [{"role": "system", "content": "x"}]],
 )
 def test_invalid_history_is_rejected_before_calling_the_model(history):
     llm = _FakeLlm(_question_response())
     with pytest.raises(AgentError):
         IntroInterview(llm).next_turn(history)
     assert llm.calls == []
+
+
+def test_an_empty_stored_message_is_skipped_rather_than_wedging_the_interview():
+    """A turn the model returned without prose must not end the interview.
+
+    The manager's own blank submission is refused by the service, so anything
+    empty arriving here came out of the store — and raising over it would fail
+    identically on every later turn, leaving a session that can never be
+    answered again.
+    """
+    llm = _FakeLlm(_question_response())
+    history = [
+        {"role": "assistant", "content": ""},
+        {"role": "user", "content": "דנה ורון"},
+        {"role": "assistant", "content": "   "},
+    ]
+
+    IntroInterview(llm).next_turn(history)
+
+    payload = json.loads(llm.calls[0]["user"])
+    assert payload["conversation"] == [{"role": "user", "content": "דנה ורון"}]
 
 
 # --- the draft merge -------------------------------------------------------

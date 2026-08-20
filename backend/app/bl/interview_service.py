@@ -84,10 +84,7 @@ class InterviewService:
         or edited client copy can never rewrite what was already agreed.
         """
         session = self._repository.get_session(session_id, team_id)
-        history = [
-            {"role": row["role"], "content": row["content"]}
-            for row in session["turns"]
-        ]
+        history = [_replayed(row) for row in session["turns"]]
         draft = (session["pending"] or {}).get("draft")
         result = self._interview.next_turn(history, draft)
         pending = {key: result[key] for key in _TURN_FIELDS}
@@ -125,6 +122,23 @@ def _fallback_content(result: dict) -> str:
     """
     question = result.get("question") or {}
     return question.get("question") or ""
+
+
+def _replayed(row: dict) -> dict:
+    """One stored row as the model reads it back.
+
+    Rows written before an empty `reply` was stored under its question are
+    blank in `content` while still carrying that question in their payload,
+    so the turn is recovered from there rather than replayed empty. The
+    interview is a function of its history: a turn that vanishes takes its
+    question with it, and the model re-asks something already answered.
+    """
+    content = row["content"]
+    if not (content or "").strip():
+        payload = row.get("payload") or {}
+        question = payload.get("question") or {}
+        content = question.get("question") or ""
+    return {"role": row["role"], "content": content}
 
 
 def _turn(session_id: str, pending: dict, turns) -> dict:
