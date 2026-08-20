@@ -1695,3 +1695,493 @@
   background: var(--primary-soft);
   color: var(--primary);
 }
+
+/* ── The agent's answer to a question ──────────────────────────────────────
+   A fifth card state on this screen, and it must not read as any of the
+   other four. An insight (`.briefing`) is something the agent volunteered, a
+   proposal (`.proposal`) is awaiting a decision, a confirmed change is on
+   the grid, and an error is red. This is an *answer*: the agent read the
+   schedule and is reporting. It carries no confirm button, because there is
+   nothing here to confirm — the response type has no operations in it. */
+.agent-answer {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--success);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+}
+
+/* Not understood is a different thing from not found, and reads differently:
+   amber rather than green, because the manager has to rephrase. */
+.agent-answer.is-unsure {
+  border-inline-start-color: var(--warning);
+}
+
+.agent-answer.is-busy {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  border-inline-start-color: var(--border-strong);
+}
+
+.agent-answer-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.agent-answer-header h3 {
+  margin: 0;
+  font-size: 0.92rem;
+  flex: 1;
+}
+
+.agent-answer-mark {
+  display: inline-flex;
+  color: var(--success);
+}
+
+.agent-answer.is-unsure .agent-answer-mark {
+  color: var(--warning);
+}
+
+.agent-answer-close {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.2rem;
+}
+
+.agent-answer-body p {
+  margin: 0 0 0.35rem;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+/* "Nothing has happened yet", said outright rather than implied by the
+   absence of a button (D8/D12). */
+.agent-answer-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0.6rem 0 0;
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.agent-answer-steps {
+  margin-top: 0.6rem;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.agent-answer-steps summary {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.agent-answer-steps ul {
+  margin: 0.4rem 0 0;
+  padding-inline-start: 1.1rem;
+}
+
+.agent-answer-steps li.is-failed {
+  color: var(--danger);
+}
+
+.agent-answer-mode {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.5rem 0 0;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+/* ── A simulation ─────────────────────────────────────────────────────────
+   Dashed on purpose, and in its own colour. Everything else on this screen
+   is either something that happened or something being decided; this is
+   something being *imagined*, and it must never be mistaken for a change
+   that landed. `bl/simulate.py` holds no repository, so nothing here has
+   touched the database. */
+.simulation {
+  background: var(--surface-2);
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+}
+
+.simulation-header {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  margin-bottom: 0.7rem;
+}
+
+.simulation-header h3 {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.simulation-header p {
+  margin: 0.15rem 0 0;
+  font-size: 0.77rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.simulation-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--primary-soft);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.simulation-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 0.7rem;
+}
+
+.simulation-metric {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.55rem;
+}
+
+.simulation-metric.is-good {
+  border-color: var(--success);
+}
+
+.simulation-metric.is-bad {
+  border-color: var(--warning);
+}
+
+.simulation-metric-label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.simulation-metric-value {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0.1rem 0;
+}
+
+.simulation-metric-delta {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.simulation-metric-delta.is-up,
+.simulation-delta.is-up {
+  color: var(--success);
+}
+
+.simulation-metric-delta.is-down,
+.simulation-delta.is-down {
+  color: var(--danger);
+}
+
+.simulation-metric-hint {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.simulation-people h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-soft);
+}
+
+.simulation-people ul {
+  margin: 0 0 0.7rem;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.simulation-people li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.5rem;
+}
+
+.simulation-person {
+  font-weight: 600;
+  flex: 1;
+}
+
+.simulation-hours {
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.simulation-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  min-width: 3.2rem;
+  justify-content: flex-end;
+}
+
+.simulation-warnings,
+.simulation-resolved,
+.simulation-skipped {
+  margin: 0 0 0.6rem;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.simulation-warnings li,
+.simulation-resolved li,
+.simulation-skipped li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.simulation-warnings li {
+  background: var(--warning-soft);
+  color: var(--text-soft);
+}
+
+.simulation-resolved li {
+  background: var(--success-soft);
+  color: var(--text-soft);
+}
+
+.simulation-skipped li {
+  background: var(--danger-soft);
+  color: var(--text-soft);
+}
+
+.simulation-empty {
+  margin: 0 0 0.6rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.simulation-approve label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--text-soft);
+  margin-bottom: 0.55rem;
+}
+
+.simulation-approve input {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.simulation-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+/* ── Stored preferences ───────────────────────────────────────────────────
+   Everything the agent remembers, visible and editable. A preference the
+   manager cannot see is a rule they never agreed to, so there is no hidden
+   half of this list. */
+.preferences {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+}
+
+.preferences-header {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  margin-bottom: 0.7rem;
+}
+
+.preferences-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.preferences-header p {
+  margin: 0.15rem 0 0;
+  font-size: 0.77rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.preferences-error {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  color: var(--danger);
+}
+
+.preferences-add {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.7rem;
+}
+
+.preferences-add input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.83rem;
+  padding: 0.42rem 0.55rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.preferences-add select {
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.42rem 0.4rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.preferences-group {
+  margin-bottom: 0.6rem;
+}
+
+.preferences-group h4,
+.preferences-group summary {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.preferences-group.is-archived summary {
+  cursor: pointer;
+}
+
+/* A suggestion is inert until approved, and looks it: dashed, like a
+   simulation, because both are things the agent is offering rather than
+   things that are in force. */
+.preferences-group.is-suggested ul li {
+  border-style: dashed;
+  border-color: var(--accent);
+}
+
+.preferences-group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.preferences-group li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.preferences-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.preferences-kind,
+.preferences-evidence {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.preferences-row-actions {
+  display: flex;
+  gap: 0.15rem;
+  flex-shrink: 0;
+}
+
+.preferences-edit {
+  display: flex;
+  gap: 0.3rem;
+  width: 100%;
+  align-items: center;
+}
+
+.preferences-edit input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.preferences-empty {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
