@@ -64,9 +64,26 @@ export function Preferences({ busy = false }: { busy?: boolean }) {
     }
   }, []);
 
+  // The first read, with the unmount guard `useManagement` uses: React's
+  // development double-mount makes "gone before the answer arrives" routine
+  // rather than theoretical. Nothing is set synchronously in the effect body
+  // — every `setState` here happens in the promise callback, once the server
+  // has actually answered.
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    listPreferences()
+      .then((found) => {
+        if (!cancelled) setRows(found);
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) {
+          setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const run = useCallback(
     async (action: () => Promise<unknown>) => {
