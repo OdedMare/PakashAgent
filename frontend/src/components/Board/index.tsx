@@ -25,6 +25,7 @@ import { FilterBar } from "./FilterBar";
 import { EditorTarget, ShiftEditor } from "./ShiftEditor";
 import { WeekNav } from "./WeekNav";
 import { useBoard } from "./useBoard";
+import { useBoardKeys } from "./useBoardKeys";
 
 /** The manager's operational home screen.
  *
@@ -238,6 +239,25 @@ export function Board({
   const stats = overview?.stats ?? EMPTY_STATS;
   const constraints: Constraint[] = overview?.availability ?? [];
 
+  // Arrow keys page the week; `T` returns to today. Disabled while a dialog
+  // is open — the confirmation owns the keyboard then, and paging underneath
+  // it would leave it describing a cell no longer on screen.
+  useBoardKeys({
+    onPrevious: board.previousWeek,
+    onNext: board.nextWeek,
+    onToday: board.goToToday,
+    enabled: !pendingMove && !editor,
+  });
+
+  // The figures for the week on screen. The overview computed them for the
+  // *current* period; a week the manager paged to counts itself. Memoised
+  // because that count walks the slot and assignment lists, and it has no
+  // reason to run again while neither changed.
+  const shownStats = useMemo(
+    () => (schedule && schedule.id !== current?.id ? statsFor(schedule) : stats),
+    [schedule, current?.id, stats],
+  );
+
   return (
     <div className="board">
       <div className="board-head">
@@ -319,13 +339,11 @@ export function Board({
       {schedule ? (
         <>
           <CoverageBar
-            stats={
-              // The figures describe the *current* period, which is what the
-              // overview computed. A week the manager paged to carries its
-              // own warnings on the schedule itself, so the tiles fall back
-              // to counting that rather than reporting another week's totals.
-              schedule.id === current?.id ? stats : statsFor(schedule)
-            }
+            // The figures describe the *current* period, which is what the
+            // overview computed. A week the manager paged to carries its own
+            // warnings on the schedule itself, so the tiles fall back to
+            // counting that rather than reporting another week's totals.
+            stats={shownStats}
             warnings={schedule.warnings}
             conflictsActive={board.filters.conflictsOnly}
             unassignedActive={board.filters.unassignedOnly}

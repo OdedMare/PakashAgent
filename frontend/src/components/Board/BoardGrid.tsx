@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, Check, Moon, Plus, Sparkles, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { hebrewWeekday, isWeekend } from "@/components/Management/Calendar";
 import { buildPalette } from "@/components/Management/palette";
@@ -93,6 +93,37 @@ export function BoardGrid({
   const dates = useMemo(() => weekDates(weekStart), [weekStart]);
   const hueOf = useMemo(() => buildPalette(employees), [employees]);
 
+  // Bringing today into view on a board wider than the screen.
+  //
+  // The grid scrolls horizontally on a narrow viewport, and it opens at the
+  // start of the week — which on a phone can leave today several columns off
+  // screen, on the one week the manager is most likely looking at *because*
+  // today is in it. Scrolled rather than laid out differently: the week stays
+  // seven days, as the CSS note on the narrow breakpoint intends.
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const todayColumn = useRef<HTMLDivElement | null>(null);
+  const showsToday = dates.includes(today);
+  useEffect(() => {
+    if (!showsToday) return;
+    const box = scroller.current;
+    const column = todayColumn.current;
+    if (!box || !column) return;
+    // Nothing to do when the whole week already fits — scrolling a board
+    // that is not scrollable just fights the browser for no gain.
+    if (box.scrollWidth <= box.clientWidth) return;
+    // `block: "nearest"` so bringing a column into view horizontally never
+    // scrolls the page vertically as a side effect.
+    column.scrollIntoView({
+      inline: "center",
+      block: "nearest",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+    });
+    // Re-run when the week changes: paging back to this week should land on
+    // today again rather than wherever the previous week was scrolled to.
+  }, [showsToday, weekStart]);
+
   // The week bucketed by cell, once. Every lookup below reads from this
   // instead of walking the assignment, slot and warning lists per cell.
   const index = useMemo(() => buildScheduleIndex(schedule), [schedule]);
@@ -158,7 +189,7 @@ export function BoardGrid({
   };
 
   return (
-    <div className="board-grid-scroll">
+    <div className="board-grid-scroll" ref={scroller}>
       {/* What a picked-up card is waiting for, said rather than left to be
           inferred from an outline. It carries no confirm: placing still
           opens the dialog that collects the reason (D12). */}
@@ -194,6 +225,7 @@ export function BoardGrid({
             date={date}
             isToday={date === today}
             coverage={index.dayCoverage(date)}
+            columnRef={date === today ? todayColumn : undefined}
           />
         ))}
 
@@ -239,16 +271,20 @@ function DayHead({
   date,
   isToday,
   coverage,
+  columnRef,
 }: {
   date: string;
   isToday: boolean;
   /** Assigned and required for this day, counted once by the index. */
   coverage: { assigned: number; required: number };
+  /** Set on today's head only, so the scroller can bring it into view. */
+  columnRef?: React.Ref<HTMLDivElement>;
 }) {
   const { assigned, required } = coverage;
 
   return (
     <div
+      ref={columnRef}
       className={[
         "board-dayhead",
         isToday ? "is-today" : "",

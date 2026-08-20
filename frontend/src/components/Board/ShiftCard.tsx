@@ -85,6 +85,7 @@ export function ShiftCard({
         status === "draft" ? "is-draft" : "is-published",
         touched ? `is-touched is-touched-${touched}` : "",
         dimmed ? "is-dragging" : "",
+        picked ? "is-picked" : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -108,11 +109,22 @@ export function ShiftCard({
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onOpen();
+          return;
+        }
+        // `M` picks the card up for a move. A letter rather than a modifier
+        // chord because the board is Hebrew and a chord on a Hebrew layout
+        // is a different key on every machine; a bare letter is the same
+        // physical key everywhere, and the card is not a text field so
+        // nothing else wants it.
+        if (onPick && (event.key === "m" || event.key === "M" || event.key === "צ")) {
+          event.preventDefault();
+          onPick();
         }
       }}
       role="button"
       tabIndex={0}
       aria-label={`${assignment.employee}, ${slot.shift_name}. עריכה`}
+      aria-grabbed={onPick ? picked : undefined}
     >
       <div className="board-card-main">
         <span className="board-card-name">{assignment.employee}</span>
@@ -146,6 +158,31 @@ export function ShiftCard({
           </span>
         ) : null}
       </div>
+
+      {/* The move handle, as a real button.
+          The grip beside it is decoration for a gesture only a mouse can
+          make; this is the same move for a finger or a keyboard. It stops
+          the click from reaching the card, because the card opens the
+          editor and picking up is not editing. */}
+      {onPick ? (
+        <button
+          type="button"
+          className="board-card-pick"
+          onClick={(event) => {
+            event.stopPropagation();
+            onPick();
+          }}
+          aria-label={
+            picked
+              ? `ביטול העברת ${assignment.employee}`
+              : `העברת ${assignment.employee} למשמרת אחרת`
+          }
+          aria-pressed={picked}
+          title={picked ? "ביטול ההעברה" : "העברה למשמרת אחרת"}
+        >
+          <Move size={12} />
+        </button>
+      ) : null}
 
       {draggable ? (
         <span className="board-card-grip" aria-hidden="true">
