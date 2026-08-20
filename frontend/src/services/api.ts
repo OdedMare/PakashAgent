@@ -731,3 +731,97 @@ export function confirmImport(body: {
     body: JSON.stringify(body),
   });
 }
+
+/** Ask the agent a question about the schedule. **Writes nothing.**
+ *
+ *  The multi-step half of the agent: the planner picks read-only tools, the
+ *  backend answers each with arithmetic, and the reply is assembled from
+ *  what they returned. There is no operation in the response, so nothing an
+ *  answer says can be applied — a question that wants a change comes back
+ *  with `needs_confirmation` and still goes through propose-then-confirm.
+ *
+ *  It answers with no model configured, via the deterministic reader, and
+ *  says so in `used_model`. */
+export function askAgent(body: {
+  request: string;
+  schedule_id?: string;
+}): Promise<AgentAnswer> {
+  return request<AgentAnswer>("/api/schedule/ask", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Run one named read-only tool directly. **Writes nothing.**
+ *
+ *  The same tools the agent uses, reachable without a conversation — which
+ *  is what stops a board button and the agent from ever giving different
+ *  answers to the same question. */
+export function runAgentTool(body: {
+  tool: string;
+  arguments?: Record<string, unknown>;
+}): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>("/api/schedule/tool", {
+    method: "POST",
+    body: JSON.stringify({ arguments: {}, ...body }),
+  });
+}
+
+/** What a set of operations would do. **Persists nothing.**
+ *
+ *  Deliberately not `proposeChange`: a proposal is an answer with a confirm
+ *  button attached, and a manager asking "what happens if" has not asked for
+ *  one. Approving a simulation is an ordinary `applyChange` with their
+ *  reason (D8). */
+export function simulateChange(body: {
+  operations: Operation[];
+  schedule_id?: string;
+}): Promise<Simulation> {
+  return request<Simulation>("/api/schedule/simulate", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** What this workplace has taught the agent.
+ *
+ *  Visible by design: a stored preference the manager cannot see is a rule
+ *  they never agreed to. */
+export function listPreferences(status?: PreferenceStatus): Promise<Preference[]> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return request<Preference[]>(`/api/schedule/preferences/list${query}`);
+}
+
+/** Record a preference, or propose one for the manager to approve.
+ *
+ *  `suggested: true` stores it inert — the agent reads only active ones, so
+ *  a proposal changes nothing until it is approved. */
+export function addPreference(body: {
+  text: string;
+  kind?: PreferenceKind;
+  subject?: string;
+  evidence?: string;
+  suggested?: boolean;
+}): Promise<Preference> {
+  return request<Preference>("/api/schedule/preferences", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Reword a preference, approve a suggested one, or archive it. */
+export function updatePreference(
+  rowId: string,
+  body: { text?: string; status?: PreferenceStatus },
+): Promise<Preference> {
+  return request<Preference>(`/api/schedule/preferences/${rowId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deletePreference(rowId: string): Promise<{ status: string }> {
+  return request<{ status: string }>(`/api/schedule/preferences/${rowId}`, {
+    method: "DELETE",
+  });
+}

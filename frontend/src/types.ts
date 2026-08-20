@@ -726,3 +726,105 @@ export interface ImportPreview {
   candidate_rules: CandidateRule[];
   notes: string[];
 }
+
+/** One tool the agent ran while working out an answer.
+ *
+ *  Rendered under the answer so the manager can see which facts it rests on.
+ *  Transparency is the requirement here, not debugging output: an answer
+ *  whose checks are invisible has to be taken on faith, and the whole point
+ *  of deterministic tools is that it does not. */
+export interface AgentStep {
+  tool: string;
+  arguments: Record<string, unknown>;
+  ok: boolean;
+}
+
+/** What the agent made of a question. **Carries no operations.**
+ *
+ *  There is no field here that `apply` could read — the same property
+ *  `Briefing` has, and for the same reason (D15). A question that turns out
+ *  to want a change comes back with `needs_confirmation`, and the manager
+ *  still sends it through propose-then-confirm.
+ *
+ *  `used_model` says whether this came from the model or from the
+ *  deterministic reader. Surfaced rather than hidden: the fallback answers a
+ *  narrower set of questions, and saying so is what keeps that honest. */
+export interface AgentAnswer {
+  answer: string;
+  steps: AgentStep[];
+  needs_confirmation: boolean;
+  used_model: boolean;
+  understood: boolean;
+  schedule_id: string;
+}
+
+/** Required against assigned, before and after a simulated change. */
+export interface CoverageImpact {
+  required: number;
+  assigned_before: number;
+  assigned_after: number;
+  delta: number;
+  percent_before: number;
+  percent_after: number;
+}
+
+/** One affected person's hours, before and after. */
+export interface WorkloadImpact {
+  employee: string;
+  hours_before: number;
+  hours_after: number;
+  delta: number;
+}
+
+/** An operation the simulation could not apply, and why. */
+export interface SkippedOperation {
+  action: string;
+  employee: string;
+  shift: string;
+  date: string;
+  why: string;
+}
+
+/** The period as a set of operations would leave it, computed in memory.
+ *
+ *  **`simulated` is always true**, and the UI colours off it: a simulation
+ *  must never render as something that landed. Approving one is an ordinary
+ *  `applyChange` with the manager's reason — there is no shortcut from here
+ *  to a write (D8/D12). */
+export interface Simulation {
+  simulated: boolean;
+  applied: boolean;
+  operations: Operation[];
+  skipped: SkippedOperation[];
+  introduced: ScheduleWarning[];
+  resolved: ScheduleWarning[];
+  warnings_after: ScheduleWarning[];
+  coverage: CoverageImpact;
+  workload: WorkloadImpact[];
+  affected: string[];
+  schedule_id: string;
+}
+
+export type PreferenceKind =
+  | "staffing"
+  | "notification"
+  | "employee"
+  | "shift"
+  | "general";
+
+export type PreferenceStatus = "suggested" | "active" | "archived";
+
+/** One standing operational preference this workplace has taught the agent.
+ *
+ *  Not a rule (D1/D2 govern those) and not a constraint (`availability` is
+ *  what the audit counts). Standing context the agent reads before it
+ *  proposes — and a `suggested` one is inert until the manager approves it. */
+export interface Preference {
+  id: string;
+  kind: PreferenceKind;
+  subject: string;
+  text: string;
+  evidence: string;
+  status: PreferenceStatus;
+  source: string;
+}

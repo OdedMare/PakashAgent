@@ -218,11 +218,22 @@ class ScheduleService:
             "employees": _employees(profile),
             "shifts": _shifts(profile),
             "schedule": schedule,
-            "periods": self._repository.list_schedules(team_id),
-            "availability": self._repository.availability(
-                team_id, window[0], window[1]
-            ),
-            "changes": self._repository.change_log(team_id, limit=40),
+            # Dates out of SQL are `datetime.date`; the contract declares
+            # strings. Normalised on the way out for the reason `_dated`
+            # gives -- these three lists are read straight from the
+            # repository rather than through `_view`, so they need it here.
+            "periods": [_period(row) for row in
+                        self._repository.list_schedules(team_id)],
+            "availability": [
+                dict(row, constraint_date=_iso(row.get("constraint_date")))
+                for row in self._repository.availability(
+                    team_id, window[0], window[1]
+                )
+            ],
+            "changes": [
+                _change(row)
+                for row in self._repository.change_log(team_id, limit=40)
+            ],
             # The period in numbers, for the control room's charts. Computed
             # here by `audit.py` rather than in the browser, for the same
             # reason `personal_summary` is: a chart drawn from a second
@@ -1237,7 +1248,7 @@ class ScheduleService:
         schedule["warnings"] = self._audit_rows(
             team_id, schedule.get("assignments") or [], schedule
         )
-        return schedule
+        return _dated(schedule)
 
     def _audit_rows(
         self, team_id: str, assignments: List[dict], schedule: dict
@@ -1324,6 +1335,55 @@ def _quiet() -> dict:
     could not be produced never surfaces as an error beside the calendar.
     """
     return {"headline": "", "items": [], "quiet": True}
+
+
+def _period(row: dict) -> dict:
+    """One row of the period list, with its dates as strings."""
+    return dict(
+        row,
+        starts_on=_iso(row.get("starts_on")),
+        ends_on=_iso(row.get("ends_on")),
+    )
+
+
+def _change(row: dict) -> dict:
+    """One change-log row, with its date and timestamp as strings.
+
+    `created_at` is a `datetime`, not a `date`, and `_iso` handles both --
+    anything carrying `isoformat` comes back as text.
+    """
+    return dict(
+        row,
+        slot_date=_iso(row.get("slot_date")) or None,
+        created_at=_iso(row.get("created_at")) or None,
+    )
+
+
+def _dated(schedule: dict) -> dict:
+    """Every date in a schedule as an ISO string.
+
+    The repository returns real `DATE` columns, so a schedule read straight
+    back out carries `datetime.date` objects while the HTTP contract declares
+    strings. Pydantic refuses those on the way out, which turns an otherwise
+    successful write into a 500 -- and only on the routes that re-read what
+    they just stored, which is why the fake-repository tests (storing strings
+    throughout) never saw it.
+
+    Normalised here rather than at each route because `_view` is the one
+    place every schedule-carrying response passes through: a route added
+    later gets this for free instead of rediscovering the bug.
+    """
+    schedule["starts_on"] = _iso(schedule.get("starts_on"))
+    schedule["ends_on"] = _iso(schedule.get("ends_on"))
+    schedule["slots"] = [
+        dict(slot, slot_date=_iso(slot.get("slot_date")))
+        for slot in schedule.get("slots") or []
+    ]
+    schedule["assignments"] = [
+        dict(row, date=_iso(row.get("date")))
+        for row in schedule.get("assignments") or []
+    ]
+    return schedule
 
 
 def _window(schedule: Optional[dict]) -> tuple:
