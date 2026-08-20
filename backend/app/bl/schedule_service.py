@@ -32,6 +32,7 @@ from app.bl.changes import ChangeAgent, OP_ASSIGN, OP_REMOVE, OP_SWAP
 from app.bl.export import as_workbook, filename
 from app.bl.importer import infer, read_grid
 from app.bl.learn import RuleLearner, observe, observe_corrections
+from app.bl.placement import check as check_placement
 from app.bl.scheduler import Scheduler, build_slots
 from app.common.errors import AgentError, NotFoundError
 from app.dal.repository.schedules import (
@@ -115,6 +116,80 @@ class ScheduleService:
 
     def list_periods(self, team_id: str) -> List[dict]:
         return self._repository.list_schedules(team_id)
+
+    def period_at(
+        self, team_id: str, day: str, role: str = "boss"
+    ) -> Optional[dict]:
+        """The stored period containing `day`, or None when none does.
+
+        What the board opens on. The manager's operational home screen shows
+        the week they are actually in, and "which stored period covers today"
+        is a comparison of two dates -- arithmetic, so it is answered here
+        rather than by asking the client to guess from `list_periods`.
+
+        A member gets published periods only, exactly as `current()` does:
+        the board is reachable from the read-only side and a draft is still
+        the manager's working state until they publish it (D5).
+        """
+        wanted = _iso(day)
+        if not wanted:
+            raise AgentError("התאריך אינו תקין")
+        for period in self._repository.list_schedules(team_id):
+            if role != "boss" and period.get("status") != "published":
+                continue
+            if _iso(period["starts_on"]) <= wanted <= _iso(period["ends_on"]):
+                return self._view(
+                    self._repository.get_schedule(period["id"], team_id),
+                    team_id,
+                )
+        return None
+
+    def check_placement(
+        self,
+        team_id: str,
+        employee: str,
+        shift_name: str,
+        slot_date: str,
+        schedule_id: Optional[str] = None,
+        moving_assignment_id: str = "",
+    ) -> dict:
+        """What a placement would cost, before it is made. Writes nothing.
+
+        **No model call.** This is `bl/placement.py` handed the stored
+        schedule, and it is what makes the board work with the agent
+        unavailable: a drag is validated, explained in Hebrew, and offered
+        deterministic alternatives without a single token being generated.
+
+        It does not gate the write that follows. The manager may place
+        somebody this reports on, and `assign`/`move` will store it —
+        the audit advises and never blocks
+        ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+        Checking first only moves the same information to before the click,
+        where it is cheaper to act on.
+        """
+        schedule = self._require_schedule(team_id, schedule_id)
+        profile = self._repository.team_profile(team_id) or {}
+        window = _window(schedule)
+        return check_placement(
+            schedule,
+            profile,
+            employee=employee,
+            shift_name=shift_name,
+            slot_date=slot_date,
+            availability=[
+                {
+                    "employee": row.get("employee"),
+                    "date": _iso(row.get("constraint_date")),
+                    "shift": row.get("shift_name") or "",
+                    "available": row.get("available"),
+                    "reason": row.get("reason") or "",
+                }
+                for row in self._repository.availability(
+                    team_id, window[0], window[1]
+                )
+            ],
+            moving_assignment_id=moving_assignment_id,
+        )
 
     def overview(self, team_id: str, role: str = "boss") -> dict:
         """Everything the management area opens with, in one call.

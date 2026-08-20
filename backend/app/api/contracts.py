@@ -471,6 +471,65 @@ class BlankRequest(BaseModel):
     ends_on: Optional[str] = None
 
 
+class CheckRequest(BaseModel):
+    """Ask what a placement would cost, before making it. Writes nothing.
+
+    `moving_assignment_id` is set when the manager is dragging an existing
+    row rather than filling an empty cell: the row comes out of the
+    hypothetical before the new one goes in, so a move is checked as a move
+    and not as one person in two places at once.
+    """
+
+    employee: str = Field(min_length=1, max_length=120)
+    shift_name: str = Field(min_length=1, max_length=120)
+    slot_date: str = Field(min_length=1, max_length=40)
+    schedule_id: Optional[str] = None
+    moving_assignment_id: str = Field(default="", max_length=64)
+
+
+class AlternativeEmployee(BaseModel):
+    """Somebody else who could take this slot cleanly."""
+
+    employee: str
+    hours: float = 0.0
+    why: str = ""
+
+
+class AlternativeSlot(BaseModel):
+    """Somewhere else this same person could go, near the wanted date."""
+
+    shift_name: str
+    slot_date: str
+    distance: int = 0
+    why: str = ""
+
+
+class Alternatives(BaseModel):
+    """Deterministic ways out of a placement that warns. No model."""
+
+    employees: List[AlternativeEmployee] = []
+    slots: List[AlternativeSlot] = []
+
+
+class PlacementCheck(BaseModel):
+    """What `bl/placement.py` makes of a proposed placement.
+
+    **`blocking` is always false**, and it is stated rather than omitted so
+    the contract itself says that refusing is not on the table: the audit
+    advises and never gates
+    ([D3](../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+    A manager may place somebody this reports on, and the write that follows
+    will store it.
+    """
+
+    ok: bool = True
+    blocking: bool = False
+    reasons: List[str] = []
+    warnings: List[Warning] = []
+    eligible: bool = True
+    alternatives: Alternatives = Alternatives()
+
+
 class AssignRequest(BaseModel):
     """Place one person on one slot, by hand (D18).
 

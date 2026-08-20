@@ -29,12 +29,14 @@ from app.api.contracts import (
     BlankRequest,
     Briefing,
     BriefingRequest,
+    CheckRequest,
     ConstraintRequest,
     GenerateRequest,
     ImportConfirmRequest,
     ImportPreview,
     ManagementOverview,
     MoveRequest,
+    PlacementCheck,
     ProposeRequest,
     Proposal,
     Schedule,
@@ -121,6 +123,45 @@ def build_router(service, guards) -> APIRouter:
             reason=request.reason,
             schedule_id=request.schedule_id,
         )
+
+    @router.post("/check", response_model=PlacementCheck)
+    def check(
+        request: CheckRequest, session: dict = Depends(boss)
+    ) -> dict:
+        """What a placement would cost, before it is made. **Writes nothing.**
+
+        **No model is called on this path.** It is `bl/placement.py` — the
+        same pure arithmetic `bl/audit.py` does, asked about a schedule that
+        does not exist yet. That is what lets the board validate a drag, say
+        why in Hebrew, and offer alternatives with the agent unavailable
+        ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+
+        It is advice, not a gate. `blocking` is always false and the write
+        that follows is free to ignore every word of this — the manager
+        decides, and `assign`/`move` will store what they chose. Checking
+        first only moves the warning to before the click.
+        """
+        return service.check_placement(
+            session["team_id"],
+            employee=request.employee,
+            shift_name=request.shift_name,
+            slot_date=request.slot_date,
+            schedule_id=request.schedule_id,
+            moving_assignment_id=request.moving_assignment_id,
+        )
+
+    @router.get("/at")
+    def at(day: str, session: dict = Depends(visitor)):
+        """The stored period containing a date, or null when none does.
+
+        What the board opens on: the manager's home screen shows the week
+        they are in, and which period covers today is a date comparison
+        rather than something the client should infer from the period list.
+
+        `visitor` and not `boss`: the role is passed down, so a member
+        reaches only published periods exactly as `/current` gives them.
+        """
+        return service.period_at(session["team_id"], day, session["role"])
 
     @router.post("/brief", response_model=Briefing)
     def brief(
