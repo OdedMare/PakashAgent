@@ -1,9 +1,17 @@
 "use client";
 
-import { Check, HelpCircle, Send, Sparkles, X } from "lucide-react";
+import {
+  Check,
+  FlaskConical,
+  HelpCircle,
+  Search,
+  Send,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { useState } from "react";
 
-import type { Proposal } from "@/types";
+import type { AgentAnswer, Operation, Proposal, Simulation } from "@/types";
 
 import { formatDate } from "./Calendar";
 
@@ -27,6 +35,8 @@ export function AgentChat({
   draft,
   draftKey,
   onPropose,
+  onAsk,
+  onSimulate,
   onConfirm,
   onDismiss,
 }: {
@@ -44,6 +54,18 @@ export function AgentChat({
    *  effect below would not re-run on an identical `draft`. */
   draftKey?: number;
   onPropose: (request: string, reason?: string) => void;
+  /** Ask about the schedule without asking for a change.
+   *
+   *  A separate verb because it is a separate act. "מי יכול להחליף את יוסי
+   *  בשבת" is a question; answering it with a proposal would commit the
+   *  manager to something they did not ask for, and the two-step contract
+   *  exists precisely so a change is deliberate. */
+  onAsk?: (request: string) => void;
+  /** Turn the pending proposal into a simulation instead of applying it.
+   *
+   *  The manager reads the agent's reasoning and wants to see the
+   *  consequences before committing. Nothing is written either way. */
+  onSimulate?: (operations: Operation[]) => void;
   onConfirm: (reason: string) => void;
   onDismiss: () => void;
 }) {
@@ -164,6 +186,21 @@ export function AgentChat({
               <X size={14} />
               ביטול
             </button>
+            {/* See the consequences before committing to them. Writes
+                nothing, exactly as the proposal itself has written nothing —
+                this is a way to look harder, not a third path to a change. */}
+            {proposal.operations.length && onSimulate ? (
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => onSimulate(proposal.operations as Operation[])}
+                disabled={busy}
+                title="לראות מה השינוי היה עושה, בלי לבצע"
+              >
+                <FlaskConical size={14} />
+                סימולציה
+              </button>
+            ) : null}
             {proposal.operations.length ? (
               <button
                 type="button"
@@ -198,11 +235,33 @@ export function AgentChat({
           placeholder="למשל: דנה חולה ביום חמישי"
           disabled={busy}
         />
+        {/* Asking and requesting are two buttons because they are two
+            different acts. The magnifier reads the schedule and answers;
+            send asks the agent to propose a change. Collapsing them would
+            make every question produce a confirm button for something the
+            manager did not ask for. */}
+        {onAsk ? (
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => {
+              const text = request.trim();
+              if (!text || busy) return;
+              onAsk(text);
+            }}
+            disabled={busy || !request.trim()}
+            aria-label="שאלה על הסידור"
+            title="שאלה — קריאה בלבד, בלי לשנות כלום"
+          >
+            <Search size={15} />
+          </button>
+        ) : null}
         <button
           type="submit"
           className="primary-button"
           disabled={busy || !request.trim()}
           aria-label="שליחה"
+          title="בקשת שינוי — הסוכן יציע ואתם תאשרו"
         >
           <Send size={15} />
         </button>

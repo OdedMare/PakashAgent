@@ -26,6 +26,7 @@ import { SettingsPanel } from "@/components/Settings";
 import { ShareLink } from "@/components/Workspace/ShareLink";
 import type { Assignment, ShiftStats, TeamView } from "@/types";
 
+import { AgentAnswer } from "./AgentAnswer";
 import { AgentChat } from "./AgentChat";
 import { Briefing } from "./Briefing";
 import { Calendar, formatDate } from "./Calendar";
@@ -33,7 +34,9 @@ import { ConfirmMove } from "./ConfirmMove";
 import { History } from "./History";
 import { LearnedFromChanges } from "./LearnedFromChanges";
 import { ImportSchedule } from "./ImportSchedule";
+import { Preferences } from "./Preferences";
 import { RequestInbox } from "./RequestInbox";
+import { SimulationPanel } from "./SimulationPanel";
 import { SwapInbox } from "./SwapInbox";
 import { Stats } from "./Stats";
 import { TeamPanel } from "./TeamPanel";
@@ -401,12 +404,33 @@ export function Management({
             }
             onDismiss={state.dismissBriefing}
           />
+          {/* What the agent found when *asked*. A fifth card state, distinct
+              from the proposal below it: an answer carries no operations and
+              has no confirm button, because reading the schedule is not the
+              same act as changing it. */}
+          <AgentAnswer
+            answer={state.answer}
+            busy={state.answer_busy}
+            onDismiss={state.dismissAnswer}
+          />
+          {/* A change being considered rather than requested. Rendered in
+              its own colour above the proposal so the two can never be
+              confused — nothing here has been written, and approving runs
+              the ordinary apply path with the manager's reason (D8). */}
+          <SimulationPanel
+            simulation={state.simulation}
+            busy={state.busy}
+            onApprove={state.approveSimulation}
+            onDiscard={state.dismissSimulation}
+          />
           <AgentChat
             proposal={state.proposal}
             busy={state.busy}
             draft={suggested.text}
             draftKey={suggested.n}
             onPropose={state.propose}
+            onAsk={state.ask}
+            onSimulate={state.simulate}
             onConfirm={state.confirm}
             onDismiss={state.dismissProposal}
           />
@@ -418,6 +442,12 @@ export function Management({
               records a fact and the other moves two assignments, so
               they carry different requirements at the button. */}
           <SwapInbox onDecided={state.refresh} />
+          {/* What the workplace has taught the agent. Beside the roster
+              because both are reference the agent reads before it proposes —
+              and everything in it is visible and editable, because a stored
+              preference the manager cannot see is a rule they never agreed
+              to. */}
+          <Preferences busy={state.busy} />
           <TeamPanel
             employees={overview?.employees ?? []}
             shifts={overview?.shifts ?? []}

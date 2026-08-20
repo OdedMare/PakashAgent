@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   applyChange,
+  askAgent,
   assignEmployee,
   blankSchedule,
   briefManager,
@@ -15,15 +16,18 @@ import {
   publishSchedule,
   scheduleOverview,
   setConstraint,
+  simulateChange,
   unassignEmployee,
   unpublishSchedule,
 } from "@/services/api";
 import type {
+  AgentAnswer,
   Briefing,
   BriefingTrigger,
   ManagementOverview,
   Operation,
   Proposal,
+  Simulation,
 } from "@/types";
 
 /** The management area's server state.
@@ -80,6 +84,19 @@ export interface ManagementState {
   propose: (request: string, reason?: string) => Promise<Proposal | null>;
   confirm: (reason: string) => Promise<void>;
   dismissProposal: () => void;
+  /** What the agent found when asked a question. Carries no operations, so
+   *  there is nothing here that could be applied (D15). */
+  answer: AgentAnswer | null;
+  answer_busy: boolean;
+  /** Ask the agent about the schedule. Reads only; writes nothing. */
+  ask: (request: string) => Promise<AgentAnswer | null>;
+  dismissAnswer: () => void;
+  /** A change the manager is only considering. Persists nothing until it is
+   *  approved, and approving runs the ordinary `apply` path with a reason. */
+  simulation: Simulation | null;
+  simulate: (operations: Operation[]) => Promise<Simulation | null>;
+  approveSimulation: (reason: string) => Promise<void>;
+  dismissSimulation: () => void;
   move: (input: {
     assignment_id: string;
     shift_name: string;
@@ -109,6 +126,9 @@ export function useManagement(): ManagementState {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [briefingBusy, setBriefingBusy] = useState(false);
+  const [answer, setAnswer] = useState<AgentAnswer | null>(null);
+  const [answerBusy, setAnswerBusy] = useState(false);
+  const [simulation, setSimulation] = useState<Simulation | null>(null);
   // The headlines already shown this sitting, sent back so the agent does not
   // open with something the manager just read. Deliberately a ref and not
   // state: it is remembered, never rendered, and putting it in state would
@@ -318,6 +338,85 @@ export function useManagement(): ManagementState {
 
   const dismissProposal = useCallback(() => setProposal(null), []);
 
+  /** Ask the agent about the schedule. **Reads only.**
+   *
+   *  Separate from `propose` on purpose: a proposal is an answer with a
+   *  confirm button attached, and offering one in reply to "who could cover
+   *  Saturday" answers something the manager did not ask. The response
+   *  carries no operations, so there is nothing here that could be applied.
+   *
+   *  It does not go through `run()` — nothing was written, so there is
+   *  nothing for a refetch or a briefing to react to, and re-reading the
+   *  world after a question would make asking cost more than acting. */
+  const ask = useCallback(
+    async (request: string) => {
+      setAnswerBusy(true);
+      setError(null);
+      try {
+        const found = await askAgent({ request, schedule_id: scheduleId });
+        setAnswer(found);
+        return found;
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
+        return null;
+      } finally {
+        setAnswerBusy(false);
+      }
+    },
+    [scheduleId],
+  );
+
+  const dismissAnswer = useCallback(() => setAnswer(null), []);
+
+  /** What a set of operations would do. **Persists nothing.**
+   *
+   *  Also outside `run()`, and for a stronger reason than `ask`: a
+   *  simulation must not refetch, because refetching after a call that
+   *  changed nothing would make the screen behave as though it had. */
+  const simulate = useCallback(
+    async (operations: Operation[]) => {
+      setBusy(true);
+      setError(null);
+      try {
+        const result = await simulateChange({
+          operations,
+          schedule_id: scheduleId,
+        });
+        setSimulation(result);
+        return result;
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
+        return null;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [scheduleId],
+  );
+
+  /** Approve a simulation — the ordinary apply path, with a reason.
+   *
+   *  Deliberately the *same* call `confirm` makes. There is no dedicated
+   *  "apply simulation" endpoint, because a second write path is exactly how
+   *  a confirmation step gets routed around (D8/D12). */
+  const approveSimulation = useCallback(
+    async (reason: string) => {
+      if (!simulation) return;
+      const applied = await run(() =>
+        applyChange({
+          schedule_id: simulation.schedule_id,
+          operations: simulation.operations,
+          reason,
+          agent_reason: "אושר מתוך סימולציה",
+        }),
+      );
+      if (applied) setSimulation(null);
+    },
+    [simulation, run],
+  );
+
+  const dismissSimulation = useCallback(() => setSimulation(null), []);
+
   const move = useCallback(
     async (input: {
       assignment_id: string;
@@ -405,6 +504,14 @@ export function useManagement(): ManagementState {
     propose,
     confirm,
     dismissProposal,
+    answer,
+    answer_busy: answerBusy,
+    ask,
+    dismissAnswer,
+    simulation,
+    simulate,
+    approveSimulation,
+    dismissSimulation,
     move,
     addConstraint,
     removeConstraint,
