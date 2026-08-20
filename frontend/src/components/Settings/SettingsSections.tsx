@@ -118,17 +118,17 @@ const MODEL_ROLES = [
   {
     name: "llm_model_fast",
     label: "מודל מהיר",
-    optional: "משימות קצרות — תדריך יומי",
+    optional: "משימות קצרות — תדריך; ריק = המודל הכללי",
   },
   {
     name: "llm_model_default",
-    label: "מודל ברירת מחדל",
-    optional: "ראיון, שיחה, הצעות שינוי ולמידה",
+    label: "מודל רגיל",
+    optional: "ראיון, שיחה, שינויים ולמידה; ריק = המודל הכללי",
   },
   {
     name: "llm_model_advanced",
     label: "מודל מתקדם",
-    optional: "בניית סידור וחשיבה מורכבת",
+    optional: "בניית סידור וחשיבה מורכבת; ריק = המודל הכללי",
   },
 ];
 
@@ -139,7 +139,8 @@ function ModelField({ settings }: { settings: SettingsController }) {
     <>
       <div className="model-field-header">
         <label className="field-label" htmlFor="set-llm_model">
-          מודל ברירת מחדל כללי
+          מודל כללי
+          <span className="optional"> (משמש לכל תפקיד שלא הוגדר לו מודל)</span>
         </label>
         <button
           type="button"
@@ -152,9 +153,6 @@ function ModelField({ settings }: { settings: SettingsController }) {
         </button>
       </div>
       <ModelInput settings={settings} name="llm_model" />
-      <p className="field-optional">
-        המודל שישמש לכל תפקיד שלא הוגדר לו מודל משלו
-      </p>
       {/* A datalist, not a select: a model the server does not list is still
           a legitimate thing to type. Shared by every model field — they all
           address the same endpoint, so they all offer the same ids. */}
@@ -165,22 +163,24 @@ function ModelField({ settings }: { settings: SettingsController }) {
       </datalist>
       <ModelStatus settings={settings} />
       {MODEL_ROLES.map((role) => (
-        <div key={role.name} className="settings-role-field">
+        <div key={role.name}>
           <label className="field-label" htmlFor={`set-${role.name}`}>
             {role.label}
+            <span className="optional"> ({role.optional})</span>
           </label>
           <ModelInput settings={settings} name={role.name} />
-          <p className="field-optional">
-            {role.optional} — ריק: שימוש במודל ברירת המחדל
-          </p>
         </div>
       ))}
     </>
   );
 }
 
-/** One model input. Empty is meaningful — it is how a role is left unset —
- *  so there is no placeholder naming a model to fall back on. */
+/** One model input, offering whatever `/v1/models` reported.
+ *
+ *  Empty is meaningful — it is how a role is left unset, falling back to the
+ *  general model — so there is no placeholder naming a model. The value is
+ *  saved verbatim, because a vLLM alias must reach the request exactly as the
+ *  server spelled it. */
 function ModelInput({
   settings,
   name,
