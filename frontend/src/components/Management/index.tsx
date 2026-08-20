@@ -7,7 +7,9 @@ import {
   Eye,
   EyeOff,
   LogOut,
+  LayoutGrid,
   Moon,
+  MessagesSquare,
   PencilLine,
   Settings2,
   Share2,
@@ -18,6 +20,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import { Board } from "@/components/Board";
 import { useTheme } from "@/components/Interview/useTheme";
 import { SettingsPanel } from "@/components/Settings";
 import { ShareLink } from "@/components/Workspace/ShareLink";
@@ -39,12 +42,24 @@ import { useManagement } from "./useManagement";
 
 /** The manager's control room, opened once the intro interview is done.
  *
- *  Holds the shift calendar, the roster and its constraints, and the
- *  conversation with the agent about the current and future schedule. The
- *  three are one screen on purpose: a change discussed in the chat lands on
- *  the calendar beside it, and the warnings under it update with both.
+ *  **Two surfaces over one state.** `useManagement` is called once here and
+ *  both views render from it, so a shift moved on the board and a shift
+ *  moved by talking to the agent are the same write against the same
+ *  refetched world — there is no second copy of the schedule to drift.
  *
- *  Two decisions shape every interaction here:
+ *  - **The board is what opens.** It is the manager's operational home: the
+ *    week they are in, its coverage, and every gesture for editing it. It
+ *    needs no model for any of that.
+ *  - **The control room is one click away**, unchanged: the conversation
+ *    with the agent, its briefing, the roster and its constraints, the
+ *    request and swap inboxes, the change log, the import screen and the
+ *    stats. This is where the *agent* lives, and the agent is the product —
+ *    the board just does not make you go through it to move a shift.
+ *
+ *  Both are always reachable from the same switch in the header, in the same
+ *  place, so neither is a mode the manager can get stranded in.
+ *
+ *  The decisions shaping every interaction are unchanged on both:
  *
  *  - **Changes are proposed, then confirmed.** Whether the manager drags a
  *    shift or types a sentence, the same two steps run and the same two
@@ -67,6 +82,11 @@ export function Management({
 }) {
   const state = useManagement();
   const { theme, toggle } = useTheme();
+  // Which surface is showing. The board is the default because it is the
+  // operational home screen (and the one that works with no model); the
+  // control room is where the manager goes to talk to the agent about what
+  // they are looking at.
+  const [view, setView] = useState<"board" | "room">("board");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   // The import flow. Opening it writes nothing; the screen's own confirm
@@ -107,6 +127,30 @@ export function Management({
             <span className="brand-sub"> · איזור ניהול</span>
           </span>
         </div>
+        {/* The persistent navigation. Always in the header, always both
+            entries, so neither surface is somewhere the manager can end up
+            without a way back. */}
+        <nav className="management-nav" aria-label="ניווט ראשי">
+          <button
+            type="button"
+            className={`management-nav-item${view === "board" ? " is-active" : ""}`}
+            onClick={() => setView("board")}
+            aria-current={view === "board" ? "page" : undefined}
+          >
+            <LayoutGrid size={15} />
+            לוח המשמרות
+          </button>
+          <button
+            type="button"
+            className={`management-nav-item${view === "room" ? " is-active" : ""}`}
+            onClick={() => setView("room")}
+            aria-current={view === "room" ? "page" : undefined}
+          >
+            <MessagesSquare size={15} />
+            חדר הבקרה
+          </button>
+        </nav>
+
         <div className="header-actions">
           {onOpenInterview ? (
             <button
@@ -180,7 +224,29 @@ export function Management({
         </div>
       ) : null}
 
-      <main className="management-body">
+      {/* The board: the manager's home screen. Renders from the same
+          `useManagement` state the control room does, so a write from
+          either lands in one place and both re-read together. */}
+      {view === "board" ? (
+        <Board
+          overview={overview}
+          busy={state.busy}
+          dark={theme === "dark"}
+          onGenerate={state.generate}
+          onOpenBlank={state.openBlank}
+          onAssign={state.assign}
+          onUnassign={state.unassign}
+          onMove={state.move}
+          onPublish={state.publish}
+          onExport={state.exportSchedule}
+          onOpenAgent={() => setView("room")}
+        />
+      ) : null}
+
+      <main
+        className="management-body"
+        hidden={view !== "room"}
+      >
         <div className="management-main">
           <div className="management-toolbar">
             <div className="period">
