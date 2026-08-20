@@ -60,6 +60,10 @@ export interface InterviewTurn {
   /** The confirmed result. Null until the interview is complete — `draft` is
    *  a proposal, this is the durable answer. */
   profile: WorkplaceProfile | null;
+  /** What still blocks a schedule from being built out of `draft` — not
+   *  everything the interview would still like to ask, only what the
+   *  scheduler cannot work around. Empty means the boss may stop here. */
+  gaps: string[];
 }
 
 /** Mirrors `RuntimeSettings` in `backend/app/common/runtime_settings/`.
@@ -320,6 +324,10 @@ export interface ManagementOverview {
   profile: WorkplaceProfile | null;
   employees: Record<string, unknown>[];
   shifts: Record<string, unknown>[];
+  /** What the profile still owes before a period can be built out of it.
+   *  An interview may be ended early on purpose, so this is expected to be
+   *  non-empty sometimes — it is a to-do, not an error. */
+  gaps: string[];
   schedule: Schedule | null;
   periods: SchedulePeriod[];
   availability: Constraint[];

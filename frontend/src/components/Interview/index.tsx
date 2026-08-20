@@ -3,10 +3,13 @@
 import {
   AlertCircle,
   CalendarDays,
+  CircleAlert,
+  FlagTriangleRight,
   LayoutGrid,
   LogOut,
   MessagesSquare,
   Moon,
+  Plus,
   RotateCcw,
   Settings2,
   Share2,
@@ -51,7 +54,9 @@ export function Interview({
    *  interview has no exit that would strand the manager without a profile. */
   onDone?: () => void;
 } = {}) {
-  const { turn, busy, error, start, answer, reset, retry } = useInterview();
+  const {
+    turn, busy, error, blocked, start, answer, finish, extend, reset, retry,
+  } = useInterview();
   const { theme, toggle } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -187,13 +192,38 @@ export function Interview({
                 draft={turn.draft}
                 resolved={turn.resolved}
                 openPoints={turn.open_points}
+                gaps={blocked ? turn.gaps : []}
               />
             ) : null}
           </>
         ) : (
-          <Welcome busy={busy} onStart={start} />
+          <Welcome
+            busy={busy}
+            taught={Boolean(workspace?.profile)}
+            onStart={start}
+            onContinue={extend}
+          />
         )}
       </main>
+
+      {/* The refusal to stop, stated once above the composer. `blocked` is
+          what raises it — the same list rides on every turn, and showing it
+          on the second question of a twenty-one-question interview would
+          read as a complaint about one that has barely started. */}
+      {turn && !complete && blocked && turn.gaps.length > 0 ? (
+        <div className="gaps-notice" role="status">
+          <CircleAlert size={16} />
+          <div>
+            <strong>עוד לא ניתן לבנות סידור מהמידע שנאסף.</strong>
+            <ul>
+              {turn.gaps.map((gap) => (
+                <li key={gap}>{gap}</li>
+              ))}
+            </ul>
+            <span>נסגור את זה ואפשר יהיה לשבץ — כל השאר יכול לחכות.</span>
+          </div>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="error" role="alert">
@@ -206,7 +236,27 @@ export function Interview({
       ) : null}
 
       {turn && !complete ? (
-        <Composer disabled={busy} onSend={answer} />
+        <>
+          <Composer disabled={busy} onSend={answer} />
+          {/* The way out of the topic list. Twenty-one topics is the
+              thorough version of this conversation, not the only one — a
+              manager who wants a schedule this afternoon stops here, and
+              whether that is possible yet is the server's answer, not this
+              button's. */}
+          <div className="interview-finish">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={finish}
+              disabled={busy}
+              title="סיום הראיון ומעבר לשיבוץ עם המידע שנאסף עד כה"
+            >
+              <FlagTriangleRight size={14} />
+              סיום ומעבר לשיבוץ
+            </button>
+            <span>אפשר להשלים פרטים גם אחר כך.</span>
+          </div>
+        </>
       ) : null}
 
       {/* The interview's result is the profile the management area runs on,
@@ -221,6 +271,20 @@ export function Interview({
             onClick={() => (onDone ? onDone() : window.location.reload())}
           >
             מעבר לאיזור הניהול
+          </button>
+          {/* The profile is the last thing the manager agreed to, never a
+              final answer. This continues the same conversation rather than
+              starting a second one, so the agent still knows everything
+              already settled and only what is new gets asked. */}
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={extend}
+            disabled={busy}
+            title="חזרה לראיון כדי להוסיף מידע על מקום העבודה"
+          >
+            <Plus size={14} />
+            השלמת מידע נוסף
           </button>
         </div>
       ) : null}
@@ -291,26 +355,55 @@ function Thread({
   );
 }
 
-function Welcome({ busy, onStart }: { busy: boolean; onStart: () => void }) {
+/** The opening screen.
+ *
+ *  `taught` means this workspace already has a profile, which changes what
+ *  the button should do: continuing the interview it already had keeps
+ *  everything settled and asks only what is new, while starting over asks
+ *  for all of it again and replaces the profile everything downstream reads.
+ *  Reached this way only when the browser has no session id to resume —
+ *  a second machine, or cleared storage. */
+function Welcome({
+  busy,
+  taught,
+  onStart,
+  onContinue,
+}: {
+  busy: boolean;
+  taught: boolean;
+  onStart: () => void;
+  onContinue: () => void;
+}) {
   return (
     <div className="center">
       <span className="brand-mark" aria-hidden="true">
         <MessagesSquare size={17} />
       </span>
-      <h1>נעים להכיר</h1>
+      <h1>{taught ? "נמשיך מאיפה שהפסקנו" : "נעים להכיר"}</h1>
       <p>
-        לפני שאפשר לבנות סידור, כדאי שאכיר את מקום העבודה: המשמרות, העובדים
-        והכללים שלכם. זה ראיון קצר — שאלה אחת בכל פעם, ואפשר לבחור תשובה או
-        לכתוב משלכם.
+        {taught
+          ? "כבר הכרתי את מקום העבודה שלכם. אפשר להמשיך את אותה שיחה ולהוסיף מה שחסר, או להתחיל ראיון חדש — ראיון חדש מחליף את הפרופיל הקיים."
+          : "לפני שאפשר לבנות סידור, כדאי שאכיר את מקום העבודה: המשמרות, העובדים והכללים שלכם. זה ראיון קצר — שאלה אחת בכל פעם, ואפשר לבחור תשובה או לכתוב משלכם."}
       </p>
       <button
         type="button"
         className="start-button"
-        onClick={onStart}
+        onClick={taught ? onContinue : onStart}
         disabled={busy}
       >
-        {busy ? "רגע…" : "בואו נתחיל"}
+        {busy ? "רגע…" : taught ? "המשך הראיון" : "בואו נתחיל"}
       </button>
+      {taught ? (
+        <button
+          type="button"
+          className="ghost-button"
+          onClick={onStart}
+          disabled={busy}
+        >
+          <RotateCcw size={14} />
+          ראיון חדש מההתחלה
+        </button>
+      ) : null}
     </div>
   );
 }

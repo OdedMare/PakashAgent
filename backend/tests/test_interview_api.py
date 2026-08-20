@@ -5,6 +5,8 @@ assert is that a turn is *remembered* — a real database would test psycopg,
 not the contract.
 """
 
+import json
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -57,6 +59,21 @@ class _FakeRepository:
             if session["team_id"] == team_id and session["status"] == "active":
                 return self.get_session(session["id"], team_id)
         return None
+
+    def latest_session(self, team_id):
+        found = [
+            session for session in self.sessions.values()
+            if session["team_id"] == team_id
+        ]
+        if not found:
+            return None
+        return self.get_session(found[-1]["id"], team_id)
+
+    def reopen(self, session_id, team_id, pending):
+        # The profile is deliberately left where it is: the management area
+        # goes on reading it while the interview is open again.
+        self.sessions[session_id].update(status="active", pending=pending)
+        return self.get_session(session_id, team_id)
 
     def history(self, session_id):
         return [dict(row) for row in self.turns.get(session_id, [])]
@@ -323,3 +340,178 @@ def test_health_reports_ok():
 
     assert client.get("/api/health").json() == {"status": "ok"}
     assert client.get("/api/health/database").json() == {"database": "ok"}
+
+
+# -- ending early, and coming back to add more ------------------------------
+#
+# Two doors out of the topic list: `finish` writes the profile from what has
+# been said so far, and `continue` reopens the same conversation to add to
+# it. What guards the first is `scheduling_gaps` — a profile a schedule
+# cannot be built from is not finished, it is a session that now asks about
+# exactly what is missing.
+
+
+def _schedulable():
+    """The profile of a workplace that can actually be scheduled."""
+    return dict(_profile(), shifts=[
+        {"name": "בוקר", "start_time": "08:00", "end_time": "16:00"},
+    ])
+
+
+def _gathered(draft):
+    """A turn that has settled `draft` and is still asking questions."""
+    return _question("ומי עוד עובד?", draft=draft)
+
+
+def test_finishing_early_stores_what_was_gathered_without_another_model_call():
+    llm = _ScriptedLlm([_gathered(_schedulable())])
+    client, repository = _client(llm)
+    session_id = client.post("/api/interview").json()["session_id"]
+    calls_before = len(llm.calls)
+
+    body = client.post("/api/interview/%s/finish" % session_id).json()
+
+    assert body["status"] == "complete"
+    assert body["profile"]["workplace"]["name"] == "צוות תפעול"
+    assert body["gaps"] == []
+    assert repository.sessions[session_id]["status"] == "complete"
+    # Nothing to generate: the draft is already the answer, and a closing
+    # turn from the model could only restate it — or decide to keep asking.
+    assert len(llm.calls) == calls_before
+
+
+def test_finishing_early_leaves_the_decision_in_the_thread():
+    client, repository = _client(_ScriptedLlm([_gathered(_schedulable())]))
+    session_id = client.post("/api/interview").json()["session_id"]
+
+    client.post("/api/interview/%s/finish" % session_id)
+
+    turns = repository.history(session_id)
+    assert [row["role"] for row in turns] == ["assistant", "user", "assistant"]
+    # The manager's own sentence, so the conversation still reads as one
+    # thing if it is ever reopened.
+    assert "לסיים" in turns[1]["content"]
+    assert turns[2]["content"]
+
+
+def test_finishing_with_nothing_gathered_asks_for_the_gaps_instead():
+    llm = _ScriptedLlm([_question(), _question("אילו משמרות יש?")])
+    client, repository = _client(llm)
+    session_id = client.post("/api/interview").json()["session_id"]
+
+    body = client.post("/api/interview/%s/finish" % session_id).json()
+
+    assert body["status"] == "question"
+    assert body["question"]["question"] == "אילו משמרות יש?"
+    assert len(body["gaps"]) == 2
+    # Not completed, and no profile written from a draft nothing can be
+    # built out of.
+    assert repository.sessions[session_id]["status"] == "active"
+    assert repository.sessions[session_id]["profile"] is None
+
+
+def test_the_gaps_are_the_only_thing_the_closing_turn_asks_about():
+    llm = _ScriptedLlm([_question(), _question("אילו משמרות יש?")])
+    client, _ = _client(llm)
+    session_id = client.post("/api/interview").json()["session_id"]
+
+    client.post("/api/interview/%s/finish" % session_id)
+
+    payload = json.loads(llm.calls[-1])
+    assert len(payload["closing_gaps"]) == 2
+    assert any("משמרת" in line for line in payload["closing_gaps"])
+
+
+def test_a_turn_carries_what_still_blocks_a_schedule():
+    client, _ = _client(_ScriptedLlm([_question()]))
+
+    body = client.post("/api/interview").json()
+
+    assert len(body["gaps"]) == 2
+
+
+def test_finishing_an_already_finished_interview_serves_the_profile():
+    client, _ = _client(_ScriptedLlm([_question(), _complete()]))
+    session_id = client.post("/api/interview").json()["session_id"]
+    client.post("/api/interview/%s/answer" % session_id, json={"content": "כן"})
+
+    body = client.post("/api/interview/%s/finish" % session_id)
+
+    assert body.status_code == 200
+    assert body.json()["status"] == "complete"
+
+
+def test_continuing_reopens_the_finished_interview_with_its_history():
+    llm = _ScriptedLlm([_gathered(_schedulable())])
+    client, repository = _client(llm)
+    session_id = client.post("/api/interview").json()["session_id"]
+    client.post("/api/interview/%s/finish" % session_id)
+
+    body = client.post("/api/interview/continue").json()
+
+    assert body["session_id"] == session_id
+    assert body["status"] == "question"
+    assert repository.sessions[session_id]["status"] == "active"
+    # The whole conversation is still there — the agent knows everything
+    # already settled, so the manager answers only what is new.
+    assert len(body["turns"]) > 3
+    assert "להשלים" in body["turns"][-2]["content"]
+
+
+def test_continuing_hands_the_agreed_profile_back_as_the_draft():
+    llm = _ScriptedLlm([_gathered(_schedulable())])
+    client, _ = _client(llm)
+    session_id = client.post("/api/interview").json()["session_id"]
+    client.post("/api/interview/%s/finish" % session_id)
+
+    client.post("/api/interview/continue")
+
+    payload = json.loads(llm.calls[-1])
+    assert payload["draft_so_far"]["workplace"]["name"] == "צוות תפעול"
+
+
+def test_continuing_keeps_the_profile_readable_while_the_interview_is_open():
+    llm = _ScriptedLlm([_gathered(_schedulable())])
+    client, repository = _client(llm)
+    session_id = client.post("/api/interview").json()["session_id"]
+    client.post("/api/interview/%s/finish" % session_id)
+
+    client.post("/api/interview/continue")
+
+    # Adding one fact to a workplace must not take its schedule away for as
+    # long as the manager is answering.
+    assert repository.sessions[session_id]["profile"] is not None
+
+
+def test_continuing_an_open_interview_resumes_it_without_a_model_call():
+    llm = _ScriptedLlm([_question()])
+    client, _ = _client(llm)
+    client.post("/api/interview")
+    calls_before = len(llm.calls)
+
+    body = client.post("/api/interview/continue").json()
+
+    assert body["status"] == "question"
+    assert len(llm.calls) == calls_before
+
+
+def test_continuing_with_no_interview_at_all_starts_one():
+    client, _ = _client(_ScriptedLlm([_question()]))
+
+    body = client.post("/api/interview/continue").json()
+
+    assert body["status"] == "question"
+    assert body["session_id"]
+
+
+def test_a_member_can_neither_end_nor_reopen_the_boss_s_interview():
+    client, _ = _client(_ScriptedLlm([_question()]), role=ROLE_BOSS)
+    session_id = client.post("/api/interview").json()["session_id"]
+    client.cookies.set(COOKIE_NAME, issue(SECRET, TEAM, ROLE_MEMBER, 1))
+
+    # The interview is authoring, and D5 keeps employees on the reading side
+    # of the product — the two new doors are guarded exactly like the rest.
+    assert client.post(
+        "/api/interview/%s/finish" % session_id
+    ).status_code == 401
+    assert client.post("/api/interview/continue").status_code == 401

@@ -11,6 +11,12 @@ The interview never acts on its own conclusion. A turn that still asks
 something — or that is only now presenting its summary for approval — is not
 ready, and `_is_ready` enforces that here rather than trusting the prompt to.
 
+The manager may also end it early, on whatever has been gathered.
+`scheduling_gaps` is what that costs: the narrow set of facts the scheduler
+cannot work around, named in the manager's language so the interview can ask
+for exactly those and nothing else. Everything else missing produces a thinner
+schedule, not an impossible one, and is theirs to leave out.
+
 This module stays a pure function of the conversation. `interview_service`
 owns the session and replays the history on every turn, which is what lets
 this be tested against a fake model with no database.
@@ -348,13 +354,23 @@ class IntroInterview:
         self._llm = llm
 
     def next_turn(
-        self, history: List[Dict[str, str]], draft: Optional[dict] = None,
+        self,
+        history: List[Dict[str, str]],
+        draft: Optional[dict] = None,
+        focus: Optional[List[str]] = None,
     ) -> dict:
-        """One turn: gather context, ask the model once, shape the answer."""
+        """One turn: gather context, ask the model once, shape the answer.
+
+        `focus` is non-empty only when the manager asked to stop early and
+        the draft still cannot produce a schedule. It carries those gaps and
+        nothing else, so the interview narrows to closing them instead of
+        resuming a topic list the manager has just said they are done with.
+        """
         payload = {
             "topics": INTERVIEW_TOPICS,
             "conversation": _validated_history(history),
             "draft_so_far": _as_dict(draft),
+            "closing_gaps": _lines(focus),
         }
         answer = self._ask(payload)
         return _result(answer, draft)
@@ -519,6 +535,71 @@ def _missing_topics(draft: dict) -> List[str]:
     return missing
 
 
+# How many shift names one gap line will spell out before it stops. A profile
+# with thirty half-declared shifts produces a sentence nobody reads; the count
+# that follows says how many more there are.
+_MAX_NAMED_IN_GAP = 6
+
+
+def scheduling_gaps(profile) -> List[str]:
+    """What still blocks a schedule from being built out of this profile.
+
+    Narrower than `_REQUIRED_TOPICS` on purpose. That list is what the
+    *interview* owes before it may call itself finished; this is what the
+    *scheduler* cannot work around, and the difference is what makes ending
+    the interview early possible at all:
+
+    - **No named shift.** `build_slots` produces an empty grid, and
+      `Scheduler.generate` refuses it — there is nothing to assign into.
+    - **No named employee.** `_assignments` drops every row naming a person
+      the profile never declared, so a run would return an empty week.
+    - **A shift with no hours.** The slot carries empty times into the model,
+      the export and the audit alike: a schedule nobody can read off, and
+      the rest rules have no numbers to work with.
+
+    Everything else the interview would still have asked — a fairness policy,
+    a deadline, who may approve — makes the schedule thinner, not impossible.
+    That is the manager's call to defer, and `open_points` keeps carrying it.
+
+    Returned as sentences rather than field names because they are read by
+    the manager, in the conversation, and handed back to the model as the
+    only thing left to ask about.
+    """
+    profile = _as_dict(profile)
+    shifts = [
+        shift for shift in profile.get("shifts") or []
+        if isinstance(shift, dict) and _bounded(shift.get("name"))
+    ]
+    people = [
+        person for person in profile.get("employees") or []
+        if isinstance(person, dict) and _bounded(person.get("name"))
+    ]
+    gaps = []
+    if not shifts:
+        gaps.append(
+            "לא הוגדר אף סוג משמרת בשם — בלי זה אין לוח משמרות לשבץ אליו."
+        )
+    if not people:
+        gaps.append("לא נרשם אף עובד בשם — אין את מי לשבץ.")
+    timeless = [
+        _bounded(shift.get("name")) for shift in shifts
+        if not _bounded(shift.get("start_time"))
+        or not _bounded(shift.get("end_time"))
+    ]
+    if timeless:
+        gaps.append(
+            "חסרות שעות התחלה וסיום למשמרות: " + _listed(timeless) + "."
+        )
+    return gaps
+
+
+def _listed(names: List[str]) -> str:
+    """Names as one readable clause, bounded, saying how many were left out."""
+    shown = ", ".join(names[:_MAX_NAMED_IN_GAP])
+    remaining = len(names) - _MAX_NAMED_IN_GAP
+    return shown if remaining <= 0 else "%s ועוד %d" % (shown, remaining)
+
+
 def _validated_history(history) -> List[Dict[str, str]]:
     """The conversation, bounded, with only the two roles the prompt names."""
     if not isinstance(history, list):
@@ -564,5 +645,5 @@ def empty_draft() -> dict:
 
 __all__ = [
     "INTERVIEW_RESPONSE_SCHEMA", "INTERVIEW_TOPICS", "IntroInterview",
-    "empty_draft",
+    "empty_draft", "scheduling_gaps",
 ]

@@ -641,6 +641,19 @@
   color: var(--text-muted);
 }
 
+/* The few points standing between the draft and a schedule. Marked apart
+   from `open` — everything there is worth knowing, these are the ones the
+   manager was just told they cannot finish without. */
+.draft-blocking {
+  color: var(--warning);
+}
+
+.draft-list.gaps li {
+  color: var(--text);
+  padding-inline-start: 9px;
+  border-inline-start: 2px solid var(--warning);
+}
+
 /* The question, set apart from the reply above it so the ask does not get
    buried in the agent's reaction to the last answer. */
 .turn-question {

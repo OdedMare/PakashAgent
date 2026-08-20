@@ -63,7 +63,7 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | Table | Holds |
 |---|---|
 | `teams` | One workspace: name, the boss's password hash, the member share token |
-| `interview_sessions` | One intro interview: its **team**, status, the confirmed profile, the pending question |
+| `interview_sessions` | One intro interview: its **team**, status, the confirmed profile, the pending question. `reopen()` puts a completed one back in progress **keeping its profile** ([D19](../../../docs/DECISIONS.md#d19--the-interview-can-be-ended-early-and-reopened-later--amends-d9)) |
 | `interview_turns` | Each turn; assistant turns keep the options they offered as `payload` |
 | `schedules` | One living schedule per period, `draft` or `published` |
 | `shift_slots` | One shift on one date — the thing an assignment points into |
@@ -86,6 +86,12 @@ the interview owns its shape.
   to guess, but "hard to guess" is not an access control — one workspace's boss
   holding another's session id must still get a 404. `InterviewRepository` is
   the worked example: the team is a required argument, not an optional filter.
+- **`team_profile()` filters on the profile existing, not on the session
+  being closed.** A session reopened to add more keeps the profile it was
+  completed with, and the management area must go on scheduling against that
+  version while the boss answers ([D19](../../../docs/DECISIONS.md#d19--the-interview-can-be-ended-early-and-reopened-later--amends-d9)).
+  Re-adding `status='complete'` here makes adding one fact to a workplace an
+  outage for as long as the interview is open.
 - **A cross-team miss is a `NotFoundError`, never a distinct "wrong team".**
   Distinguishing them turns any id-taking endpoint into an oracle for which
   rows exist in workspaces the caller cannot see.

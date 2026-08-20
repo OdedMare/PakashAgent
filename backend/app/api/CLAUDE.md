@@ -30,6 +30,14 @@ call**: a refresh must not re-ask the model, because the same conversation
 would come back differently worded and the boss would see their answered
 question replaced by a near-duplicate.
 
+`POST /api/interview/{id}/finish` ends the interview on what has been
+gathered so far, and `POST /api/interview/continue` reopens the finished one
+to add to it ([D19](../../../docs/DECISIONS.md#d19--the-interview-can-be-ended-early-and-reopened-later--amends-d9)).
+Both are boss-only like the rest of the router. `finish` returns either the
+completed profile or the next question — whether stopping here is possible is
+decided in `bl/` from the draft, never asserted by the caller — and every turn
+carries `gaps`, the few things a schedule cannot be built without.
+
 The answer body carries the option's **label**, never its index. A bare number
 is ambiguous by design — it may be a choice or a real value like a headcount —
 and `bl/prompts/interview.md` instructs the model to ask rather than guess.

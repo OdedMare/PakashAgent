@@ -3,6 +3,7 @@
 import {
   AlertCircle,
   CalendarDays,
+  CircleAlert,
   Download,
   Eye,
   EyeOff,
@@ -177,6 +178,34 @@ export function Management({
           <button type="button" onClick={state.clearError}>
             סגירה
           </button>
+        </div>
+      ) : null}
+
+      {/* An interview may be ended early on purpose, so what the profile
+          still owes is said here rather than waiting to surface as a failure
+          when "build" is pressed — with the door back into the interview
+          beside it, since that is where it gets fixed. */}
+      {overview?.gaps?.length ? (
+        <div className="gaps-notice" role="status">
+          <CircleAlert size={16} />
+          <div>
+            <strong>כדי שאפשר יהיה לבנות סידור חסר עוד מידע:</strong>
+            <ul>
+              {overview.gaps.map((gap) => (
+                <li key={gap}>{gap}</li>
+              ))}
+            </ul>
+          </div>
+          {onOpenInterview ? (
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={onOpenInterview}
+            >
+              <Sparkles size={14} />
+              השלמה בראיון
+            </button>
+          ) : null}
         </div>
       ) : null}
 

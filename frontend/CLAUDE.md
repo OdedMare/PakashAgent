@@ -124,6 +124,12 @@ durable result and exactly the thing the area needs to run on.
   tab ([D17](../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
   It is the one management action that does *not* go through `run()` — a
   download changes nothing for a refetch or a briefing to react to.
+- **What the profile still owes is stated, not withheld until it fails.**
+  `overview.gaps` renders as a notice above the toolbar, in the warning
+  palette rather than the danger one — ending the interview early is a
+  supported way to use this product, so the list is a to-do the manager works
+  through, with the door back into the interview beside it
+  ([D19](../docs/DECISIONS.md#d19--the-interview-can-be-ended-early-and-reopened-later--amends-d9)).
 - **Everything re-reads after a write.** `useManagement` refetches the overview
   rather than patching locally: the schedule, its warnings, the constraints and
   the log all move together, and a locally patched grid beside a stale audit is
@@ -188,6 +194,19 @@ answers beneath it.
   be answered twice.
 - **The session id is the only client state**, held in `localStorage`. A
   refresh resumes server-side and costs no model call.
+- **The interview can be left before it is done** ([D19](../docs/DECISIONS.md#d19--the-interview-can-be-ended-early-and-reopened-later--amends-d9)).
+  "סיום ומעבר לשיבוץ" under the composer sends what has been gathered; the
+  server decides whether that is possible yet, and a turn that comes back
+  still asking is what raises `blocked` and puts `turn.gaps` on screen. The
+  gaps ride on *every* turn, so `blocked` is the flag that matters — listing
+  what is missing on the second question of a twenty-one-question interview
+  reads as a complaint about an interview that has barely started.
+- **Finishing is not final.** The completion screen offers "השלמת מידע נוסף",
+  which reopens the same conversation rather than starting a second one, and
+  the welcome screen offers the same when a profile already exists but this
+  browser has no session to resume. Starting over is the other button, and it
+  says what it costs — a new interview replaces the profile everything
+  downstream reads.
 
 ## Audit warnings
 

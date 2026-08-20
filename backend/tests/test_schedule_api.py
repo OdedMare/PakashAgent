@@ -323,6 +323,31 @@ def test_generating_without_a_finished_interview_is_refused():
     assert "ראיון" in response.json()["detail"]
 
 
+def test_generating_from_a_profile_ended_early_names_what_is_missing():
+    """The interview may be stopped before it is done, so this refusal has
+    to say *what* to go back and tell the agent — not merely that there was
+    not enough."""
+    app, repo = _build_app([])
+    repo.profiles[TEAM] = dict(PROFILE, employees=[])
+    response = _client(app).post("/api/schedule/generate", json={})
+    assert response.status_code == 502
+    detail = response.json()["detail"]
+    assert "עובד" in detail
+    assert "ראיון" in detail
+
+
+def test_the_overview_says_what_the_profile_still_owes():
+    app, repo = _build_app([])
+    repo.profiles[TEAM] = dict(PROFILE, shifts=[])
+    body = _client(app).get("/api/schedule/overview").json()
+    assert len(body["gaps"]) == 1
+
+
+def test_a_complete_profile_leaves_the_overview_with_no_gaps():
+    app, _ = _build_app([])
+    assert _client(app).get("/api/schedule/overview").json()["gaps"] == []
+
+
 def _days(first, last):
     return [
         {"employee": "דנה", "shift": MORNING, "date": "2026-08-%02d" % day,

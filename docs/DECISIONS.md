@@ -473,6 +473,58 @@ profile: without the declared shift vocabulary there is no grid to build, and
 inventing one is exactly the hardcoding
 [D9](#d9--shift-vocabulary-is-per-workplace) forbids.
 
+## D19 — The interview can be ended early, and reopened later ⚠️ *(amends D9)*
+
+The intro interview asks about twenty-one topics. That is the thorough
+version of the conversation, and it was also the only version: nothing
+existed until `ready` turned true, so a manager who wanted a schedule this
+afternoon had to answer all of it first — or answer none of it, since a
+half-finished interview produced exactly nothing.
+
+**What is now true:**
+
+- **The manager may stop at any point.** `POST /api/interview/{id}/finish`
+  writes what has been gathered as the profile and the management area opens
+  against it. No model call: the draft is already the answer, and a closing
+  generation could only restate it — or decide to keep interviewing, which is
+  not the model's call to make.
+- **What a schedule cannot be built without is named, never guessed.**
+  `bl/interview.scheduling_gaps()` is that list — a named shift, a named
+  employee, hours on every shift — and while any of it stands, finishing
+  **does not complete the session**. The interview narrows to those gaps and
+  asks about them, one question per turn like any other.
+- **The gaps are said before the button that needs them.** They ride on every
+  interview turn and on `/api/schedule/overview`, so the control room states
+  what is missing next to the door back into the interview rather than
+  waiting to fail when "build" is pressed. `generate` names them too.
+- **A finished interview can be reopened.** `POST /api/interview/continue`
+  puts the same session back in progress, with its whole conversation: the
+  agent still knows everything settled and the manager answers only what is
+  new. Starting a second interview would ask for all of it again.
+- **Reopening takes nothing away.** The profile stays on the row while the
+  session is open, and `team_profile()` filters on the profile existing
+  rather than on the session being closed. Adding one fact to a workplace
+  must not cost it its schedule for as long as the boss is answering.
+
+**⚠️ This narrows what "taught" means, and that is the trade.** A profile
+finished early is missing things the scheduler would have used — a fairness
+policy, a rest rule, a deadline. The schedule it produces is thinner, and the
+audit will have less to check against. That is the manager's call to make: the
+alternative was a product that gave them nothing until they answered
+twenty-one questions in one sitting, and a manager who abandons the interview
+halfway has taught the workplace nothing at all.
+
+**Nothing is invented to fill a gap.** [D9](#d9--shift-vocabulary-is-per-workplace)
+is untouched — the shift vocabulary still comes from this manager, which is
+exactly why "no shift type" is a gap the interview asks about rather than a
+default the code supplies. Ending early skips the *questions*, never the
+answers.
+
+**`ready` is unchanged.** The confirmed path still runs exactly as it did:
+the agent presents its summary, the manager confirms, and `_is_ready` gates
+it in code. Finishing early is a second door, not a relaxation of the first
+one — a model that decides on its own to stop still cannot.
+
 ## Open
 
 - **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment

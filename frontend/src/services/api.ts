@@ -93,6 +93,27 @@ export function answerInterview(
   });
 }
 
+/** End the interview on what has been gathered so far.
+ *
+ *  Returns the completed profile, or — when the draft still cannot produce a
+ *  schedule — the next question about exactly what is missing, with those
+ *  gaps in `gaps`. Which of the two comes back is the backend's decision,
+ *  taken from the draft it holds. */
+export function finishInterview(sessionId: string): Promise<InterviewTurn> {
+  return request<InterviewTurn>(`/api/interview/${sessionId}/finish`, {
+    method: "POST",
+  });
+}
+
+/** Reopen the finished interview to add more to it.
+ *
+ *  The same conversation continues, so the boss answers only what is new,
+ *  and the profile the management area reads stays in place until a new one
+ *  is confirmed. */
+export function continueInterview(): Promise<InterviewTurn> {
+  return request<InterviewTurn>("/api/interview/continue", { method: "POST" });
+}
+
 /** Current settings, with every secret already masked by the backend. */
 export function getSettings(): Promise<RuntimeSettings> {
   return request<RuntimeSettings>("/api/settings");

@@ -151,13 +151,20 @@ class TeamRepository(RepositoryBase):
     def team_profile(self, team_id: str) -> Optional[dict]:
         """The workplace profile from this team's finished interview.
 
-        The newest completed one wins. Re-running the interview is how a
+        The newest one written wins. Re-running the interview is how a
         workplace gets re-taught, and the most recent answer is the one the
         boss meant.
+
+        Filtered on the profile being there rather than on the session being
+        closed. A session reopened to add more (`InterviewRepository.reopen`)
+        keeps the profile it was completed with, and the management area must
+        go on scheduling against that version while the boss answers — losing
+        the schedule for as long as the interview is open would make adding
+        one fact to a workplace an outage.
         """
         rows = self._all("""
             SELECT profile FROM interview_sessions
-            WHERE team_id=%s AND status='complete' AND profile IS NOT NULL
+            WHERE team_id=%s AND profile IS NOT NULL
             ORDER BY updated_at DESC
             LIMIT 1
         """, (team_id,))

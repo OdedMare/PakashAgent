@@ -919,7 +919,74 @@
 .interview-done {
   display: flex;
   justify-content: center;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
   padding: 0 1.25rem 1.5rem;
+}
+
+/* What the profile still owes before a schedule can be built out of it.
+ *
+ * Deliberately not `.error`: ending the interview early is a supported way to
+ * use this product, so the list of what that cost is a to-do the manager
+ * works through, not a failure the app is reporting. The warning palette says
+ * "unfinished", the danger palette would say "broken", and dressing a normal
+ * state as a fault is how a notice gets dismissed unread. It carries the way
+ * to fix it rather than only the diagnosis. */
+.gaps-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  width: min(768px, 100%);
+  margin: 0 auto 1rem;
+  padding: 0.75rem 0.9rem;
+  color: var(--text);
+  background: var(--warning-soft);
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+}
+
+.gaps-notice > svg {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+  color: var(--warning);
+}
+
+.gaps-notice strong {
+  display: block;
+  font-size: 0.85rem;
+}
+
+.gaps-notice ul {
+  margin: 0.35rem 0 0;
+  padding-inline-start: 1.1rem;
+  line-height: 1.6;
+}
+
+.gaps-notice span {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.gaps-notice .ghost-button {
+  margin-inline-start: auto;
+  flex-shrink: 0;
+  background: var(--surface);
+}
+
+/* The way out of the topic list, under the composer. A quiet control on
+ * purpose: it sits beside answering the question, never in place of it. */
+.interview-finish {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0 1.25rem 1.25rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
 }
 
 .visually-hidden {

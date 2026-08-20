@@ -20,6 +20,15 @@ markers, and errors are all Hebrew. See [`backend/app/bl/CLAUDE.md`](backend/app
 question per turn (a selectable answer or their own words), and reaches a
 confirmed workplace profile stored in Postgres.
 
+**And it can be left before it is done.** The boss may stop at any point and
+go build a schedule with what they have already said. If a schedule cannot be
+built from it yet, the agent says exactly what is missing and asks about that
+and nothing else — a named shift, a named employee, hours on a shift — rather
+than guessing a default. A finished interview reopens on the same
+conversation whenever there is more to add, so the profile is something the
+workplace grows rather than a gate it has to clear in one sitting
+([D19](docs/DECISIONS.md#d19--the-interview-can-be-ended-early-and-reopened-later--amends-d9)).
+
 **Workspaces work end to end.** A boss opens a team, gets a share link for the
 employees, and everything they author is scoped to that team.
 

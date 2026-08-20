@@ -12,7 +12,7 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | File | Owns |
 |---|---|
 | `interview.py` | The intro interview — workplace profile, employees, rules, shift vocabulary |
-| `interview_service.py` | Persistence around it: sessions, turns, resume, completion |
+| `interview_service.py` | Persistence around it: sessions, turns, resume, completion, ending early and reopening |
 | `workspace_service.py` | Workspace rules: entering a team, roles, the share link |
 | `scheduler.py` | Generating a schedule; every assignment carries a reason |
 | `changes.py` | Conversational edits and the change log |
@@ -59,6 +59,20 @@ something, or that is only now presenting its summary for approval
 A draft still missing a required topic is not ready either — the gap resurfaces
 in `open_points` instead of the boss discovering it after the session closed.
 `ready` is what closes the session and writes the profile.
+
+**The interview can also be ended early** ([D19](../../../docs/DECISIONS.md#d19--the-interview-can-be-ended-early-and-reopened-later--amends-d9)).
+`scheduling_gaps()` is the second gate, and it is deliberately *narrower*
+than `_REQUIRED_TOPICS`: that list is what the interview owes before calling
+itself finished, this is what the **scheduler** cannot work around — a named
+shift, a named employee, hours on every shift. While a gap stands, finishing
+does not complete the session; the gaps go back to the model as
+`closing_gaps` and it asks about exactly those, one per turn. Everything else
+missing makes the schedule thinner, not impossible, and stays an
+`open_point` the manager may leave for later.
+
+A gap is always answered with a question. Filling one in with a default shift
+or an invented hour is the hardcoding [D9](../../../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)
+forbids — ending early skips the questions, never the answers.
 
 Collects:
 - the workplace profile (what the job is, the mission) — free text

@@ -71,6 +71,11 @@ class InterviewTurn(BaseModel):
     draft: Optional[Dict[str, Any]] = None
     turns: List[Message] = []
     profile: Optional[Dict[str, Any]] = None
+    # What still blocks a schedule from being built out of `draft` — the few
+    # facts the scheduler cannot work around, not everything the interview
+    # would still like to ask. Empty means the boss may finish here and go
+    # straight to building a period.
+    gaps: List[str] = []
 
 
 class ModelsProbeRequest(BaseModel):
@@ -350,6 +355,11 @@ class ManagementOverview(BaseModel):
     profile: Optional[Dict[str, Any]] = None
     employees: List[Dict[str, Any]] = []
     shifts: List[Dict[str, Any]] = []
+    # What the profile still owes before a period can be built out of it.
+    # Present here because an interview may be ended early on purpose: the
+    # control room is where the manager finds out what that cost them, and
+    # the door back into the interview is beside it.
+    gaps: List[str] = []
     schedule: Optional[Schedule] = None
     periods: List[SchedulePeriod] = []
     availability: List[Constraint] = []

@@ -42,6 +42,9 @@ uvicorn app.main:app --reload
   (ported from AiSummryIO). Collects the workplace profile, employees, rules
   (tagged hard/soft), and the **shift vocabulary**. Every turn returns the
   draft profile so far; `ready` is gated in code, never trusted to the prompt.
+  `scheduling_gaps()` is the other gate: the few facts a schedule cannot be
+  built without, which is what lets the interview be ended early
+  ([D19](../docs/DECISIONS.md#d19--the-interview-can-be-ended-early-and-reopened-later--amends-d9)).
 - `bl/scheduler.py` — generates a schedule; every assignment carries a reason.
   Builds the slot grid in code (which dates fall in a period is arithmetic) and
   asks the model only to assign people into it.
@@ -107,6 +110,21 @@ one concern; split rather than append.
   either the workplace's or the manager's file's. A sheet naming no shift at
   all (`date_only`) imports with the name **empty**, and the confirm screen
   asks; filling it in with a guess is the bug D9 is about.
+- **A gap is asked about, never filled in.** `scheduling_gaps()` is what
+  stands between a half-finished interview and a schedule, and the answer to
+  one is always another question ([D19](../docs/DECISIONS.md#d19--the-interview-can-be-ended-early-and-reopened-later--amends-d9)).
+  A default shift, a placeholder employee, or invented hours would be exactly
+  the hardcoding [D9](../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)
+  forbids — ending the interview early skips the *questions*, never the
+  answers. Keep the list narrow, too: it is what the scheduler cannot work
+  around, not everything the interview would still like to know. A field that
+  merely makes the schedule better belongs in `open_points`, and putting it
+  here turns "finish early" back into "answer all twenty-one topics".
+- **Reopening an interview takes nothing away.** A session put back in
+  progress keeps the profile it was completed with, and `team_profile()`
+  filters on the profile existing rather than on the session being closed.
+  Adding one fact to a workplace must not cost it its schedule while the boss
+  is answering.
 - **No structured rule vocabulary.** Rules are the boss's own sentences ([D2](../docs/DECISIONS.md#d2--rules-stay-natural-language)).
 - **Every assignment carries the agent's reason**; every change carries the boss's
   reason too. Neither is optional — they serve different purposes ([D8](../docs/DECISIONS.md#d8--two-reasons-both-required)).

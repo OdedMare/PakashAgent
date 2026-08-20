@@ -21,6 +21,17 @@ def build_router(service, guards) -> APIRouter:
         """Open a new interview and return its first question."""
         return service.start(session["team_id"])
 
+    @router.post("/continue", response_model=InterviewTurn)
+    def extend(session: dict = Depends(boss)) -> dict:
+        """Reopen the finished interview to add to it.
+
+        The same conversation continues, so the boss answers only what is
+        new. Declared above `/{session_id}` even though the methods differ,
+        following the rule that keeps `schedules.py` readable: a literal path
+        sitting under a path parameter is one method away from unreachable.
+        """
+        return service.extend(session["team_id"])
+
     @router.get("/{session_id}", response_model=InterviewTurn)
     def resume(session_id: str, session: dict = Depends(boss)) -> dict:
         """Re-serve the pending question. Costs no model call."""
@@ -34,5 +45,16 @@ def build_router(service, guards) -> APIRouter:
     ) -> dict:
         """Record an answer and return the next question, or the profile."""
         return service.answer(session_id, session["team_id"], request.content)
+
+    @router.post("/{session_id}/finish", response_model=InterviewTurn)
+    def finish(session_id: str, session: dict = Depends(boss)) -> dict:
+        """End the interview on what has been gathered so far.
+
+        Returns the completed profile, or — when the draft still cannot
+        produce a schedule — the next question about exactly what is missing,
+        with those gaps named in `gaps`. Whether finishing is allowed is
+        decided in `bl/`, from the draft, never by the caller asserting it.
+        """
+        return service.finish(session_id, session["team_id"])
 
     return router

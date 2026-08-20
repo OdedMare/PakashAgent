@@ -59,6 +59,40 @@ class InterviewRepository(RepositoryBase):
             return None
         return self.get_session(rows[0]["id"], team_id)
 
+    def latest_session(self, team_id: str) -> Optional[dict]:
+        """This team's most recent interview, finished or not.
+
+        `active_session` answers "is one open"; this answers "is there one at
+        all", which is what reopening needs — the session worth continuing is
+        precisely the completed one, and that is the row the other method
+        filters out.
+        """
+        rows = self._all("""
+            SELECT id FROM interview_sessions
+            WHERE team_id=%s
+            ORDER BY updated_at DESC
+            LIMIT 1
+        """, (team_id,))
+        if not rows:
+            return None
+        return self.get_session(rows[0]["id"], team_id)
+
+    def reopen(self, session_id: str, team_id: str, pending: dict) -> dict:
+        """Put a completed session back in progress, keeping its profile.
+
+        The profile column is deliberately left alone. It is the last version
+        the boss agreed to, and the management area goes on reading it while
+        the interview is open — adding to a workplace must not take the
+        schedule away from it in the meantime. Completing again is what
+        replaces it.
+        """
+        self._execute("""
+            UPDATE interview_sessions
+            SET status='active', pending=%s, updated_at=NOW()
+            WHERE id=%s AND team_id=%s
+        """, (Jsonb(pending), session_id, team_id))
+        return self.get_session(session_id, team_id)
+
     def history(self, session_id: str) -> List[dict]:
         """Every turn, oldest first — the conversation `IntroInterview` wants.
 

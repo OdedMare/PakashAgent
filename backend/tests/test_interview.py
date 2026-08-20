@@ -12,7 +12,9 @@ import json
 
 import pytest
 
-from app.bl.interview import INTERVIEW_TOPICS, IntroInterview, empty_draft
+from app.bl.interview import (
+    INTERVIEW_TOPICS, IntroInterview, empty_draft, scheduling_gaps,
+)
 from app.common.errors import AgentError
 
 
@@ -304,3 +306,94 @@ def test_a_blank_question_reads_as_no_question():
 def test_a_non_dict_model_reply_is_rejected():
     with pytest.raises(AgentError):
         IntroInterview(_FakeLlm("not json")).next_turn([])
+
+
+# -- ending the interview early --------------------------------------------
+#
+# `scheduling_gaps` is the price of stopping before the topic list is done:
+# the few facts a schedule cannot be built without. It is deliberately
+# narrower than `_REQUIRED_TOPICS`, and these assert that difference —
+# a profile with no fairness policy may be finished, one with no shifts
+# may not.
+
+
+def _schedulable():
+    return dict(empty_draft(), **{
+        "employees": [{"name": "דנה", "role": "נציגה"}],
+        "shifts": [
+            {"name": "בוקר", "start_time": "08:00", "end_time": "16:00"},
+        ],
+    })
+
+
+def test_a_profile_with_a_named_shift_an_employee_and_hours_has_no_gaps():
+    assert scheduling_gaps(_schedulable()) == []
+
+
+def test_the_topics_the_scheduler_can_live_without_are_not_gaps():
+    # No fairness policy, no deadline, no mission, no rules. The interview
+    # would still ask; the scheduler runs regardless, so stopping here is
+    # the manager's call to make.
+    assert scheduling_gaps(_schedulable()) == []
+
+
+@pytest.mark.parametrize("field", ["shifts", "employees"])
+def test_a_profile_with_nothing_to_schedule_reports_a_gap(field):
+    profile = dict(_schedulable(), **{field: []})
+
+    assert len(scheduling_gaps(profile)) == 1
+
+
+def test_an_unnamed_shift_counts_as_no_shift():
+    profile = dict(_schedulable(), shifts=[{"start_time": "08:00"}])
+
+    gaps = scheduling_gaps(profile)
+
+    assert any("משמרת" in line for line in gaps)
+
+
+def test_a_shift_missing_its_hours_is_named_in_the_gap():
+    profile = dict(_schedulable(), shifts=[
+        {"name": "בוקר", "start_time": "08:00", "end_time": "16:00"},
+        {"name": "לילה", "start_time": "", "end_time": ""},
+    ])
+
+    gaps = scheduling_gaps(profile)
+
+    assert len(gaps) == 1
+    assert "לילה" in gaps[0]
+    assert "בוקר" not in gaps[0]
+
+
+def test_the_gap_line_stops_naming_shifts_and_says_how_many_are_left():
+    profile = dict(_schedulable(), shifts=[
+        {"name": "משמרת %d" % index} for index in range(9)
+    ])
+
+    line = [gap for gap in scheduling_gaps(profile) if "שעות" in gap][0]
+
+    assert "משמרת 5" in line
+    assert "משמרת 6" not in line
+    assert "ועוד 3" in line
+
+
+@pytest.mark.parametrize("profile", [None, {}, "not a profile", []])
+def test_a_missing_profile_is_all_gaps_rather_than_a_crash(profile):
+    assert len(scheduling_gaps(profile)) == 2
+
+
+def test_closing_gaps_are_handed_to_the_model_as_the_only_thing_left_to_ask():
+    llm = _FakeLlm(_question_response())
+
+    IntroInterview(llm).next_turn([], focus=["לא נרשם אף עובד בשם."])
+
+    payload = json.loads(llm.calls[0]["user"])
+    assert payload["closing_gaps"] == ["לא נרשם אף עובד בשם."]
+
+
+def test_an_ordinary_turn_carries_no_closing_gaps():
+    llm = _FakeLlm(_question_response())
+
+    IntroInterview(llm).next_turn([])
+
+    assert json.loads(llm.calls[0]["user"])["closing_gaps"] == []

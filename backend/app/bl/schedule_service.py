@@ -31,6 +31,7 @@ from app.bl.briefing import (
 from app.bl.changes import ChangeAgent, OP_ASSIGN, OP_REMOVE, OP_SWAP
 from app.bl.export import as_workbook, filename
 from app.bl.importer import infer, read_grid
+from app.bl.interview import scheduling_gaps
 from app.bl.learn import RuleLearner, observe, observe_corrections
 from app.bl.scheduler import Scheduler, build_slots
 from app.common.errors import AgentError, NotFoundError
@@ -131,6 +132,12 @@ class ScheduleService:
             "profile": profile,
             "employees": _employees(profile),
             "shifts": _shifts(profile),
+            # What the profile still owes before a period can be built. The
+            # interview may be ended early on purpose, so this is not a
+            # failure state to hide until the manager presses "build" — it is
+            # said on the screen that offers the button, next to the way back
+            # into the interview.
+            "gaps": scheduling_gaps(profile),
             "schedule": schedule,
             "periods": self._repository.list_schedules(team_id),
             "availability": self._repository.availability(
@@ -206,11 +213,22 @@ class ScheduleService:
         The interview must have produced a profile first: without the shift
         vocabulary there is nothing to build a grid out of, and guessing one
         would be exactly the hardcoding D9 forbids.
+
+        A profile ended early may still be short of what a schedule needs, so
+        the refusal names the gaps rather than saying "not enough". The
+        manager reads what to go back and say, which is the whole point of
+        being allowed to stop the interview early in the first place.
         """
         profile = self._repository.team_profile(team_id)
         if not profile:
             raise AgentError(
                 "צריך להשלים את ראיון ההיכרות לפני בניית סידור"
+            )
+        gaps = scheduling_gaps(profile)
+        if gaps:
+            raise AgentError(
+                "אי אפשר לבנות סידור מהמידע שנאסף. " + " ".join(gaps)
+                + " אפשר להשלים את החסר בראיון ההיכרות."
             )
         if not starts_on or not ends_on:
             starts_on, ends_on = week_bounds()
