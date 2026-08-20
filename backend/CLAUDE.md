@@ -80,6 +80,20 @@ uvicorn app.main:app --reload
   `RuleLearner` turns those counts into candidate rules in the manager's own
   words (D2) with the evidence attached. Proposes only — nothing is approved
   by having been proposed.
+- `bl/tools.py` — **the named questions the agent may ask, answered in pure
+  Python.** Six read-only operations (`read_period`, `employee_state`,
+  `coverage_gaps`, `validate_placement`, `find_replacements`,
+  `publish_readiness`). No LLM call anywhere in the file, and no write: it
+  holds a repository and uses it for reads only (D19).
+- `bl/planner.py` — the loop that runs them. The model picks tools, the
+  tools answer with arithmetic, the results go back. Falls back to
+  `bl/intent.py` when no model is reachable, so the same questions are
+  answered with nothing configured.
+- `bl/intent.py` — **reading a Hebrew sentence with no model.** Keyword
+  matching against the workspace's own roster and shift vocabulary, six
+  question shapes, and `unknown` for anything else. It never guesses.
+- `bl/simulate.py` — what a change *would* do, computed in memory. Handed no
+  repository, so persisting nothing is a property of the wiring (D20).
 - `bl/prompts/` — prompt text as markdown, loaded by `prompts.load(name)`.
   Shared fragments compose via `<!-- include: shared/name.md -->`.
 - `api/` — Pydantic HTTP contracts and routers.
@@ -191,6 +205,37 @@ one concern; split rather than append.
   session cookie** and never from the request ([D10](../docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)).
 - **`PAKASH_SESSION_SECRET` must be set in any real deployment.** Unset, each
   worker signs with its own key and rejects the others' cookies.
+- **The tool layer never writes** ([D19](../docs/DECISIONS.md#d19--the-agent-answers-with-tools-asking-and-changing-stay-separate)).
+  `bl/tools.py` is handed a repository and reads from it; the write path
+  stays `schedule_service.apply()` behind the manager's confirmation. A tool
+  that could write would be a second way to change a schedule, and the
+  product deliberately has one.
+- **An answer carries no operations.** `POST /api/schedule/ask` returns
+  `answer`, `steps`, `needs_confirmation` — and nothing `apply` could read,
+  the same guard `bl/briefing.py` has (D15). Asking and changing are
+  separate acts, separate endpoints, and separate cards on the screen.
+- **The agent may not claim a placement is valid unless a tool said so.**
+  `find_replacements` re-validates every candidate through `bl/placement.py`
+  and keeps only the clean ones. This is *not* the audit becoming a gate:
+  `validate_placement` still returns `blocking: False` and
+  `publish_readiness.ready` is descriptive — nothing branches on it before a
+  publish (D3).
+- **A simulation persists nothing, structurally.** `bl/simulate.py` is
+  handed no repository at all ([D20](../docs/DECISIONS.md#d20--a-simulation-is-not-a-proposal)),
+  like `changes.py` and `importer.py`. Approving one is an ordinary
+  `apply()` with the manager's reason — there is no dedicated endpoint for
+  it, because a second write path is how a confirmation step gets routed
+  around.
+- **The product answers without a model.** `bl/planner.py` falls back to
+  `bl/intent.py` over the same tools and reports `used_model: false`. The
+  fallback covers six question shapes and says plainly when it did not
+  understand — it never guesses, because an agent acting on a misread
+  sentence with no model to blame is worse than one that asks.
+- **A preference is not a rule and never authorises a write**
+  ([D21](../docs/DECISIONS.md#d21--the-agent-remembers-preferences-and-every-one-of-them-is-visible)).
+  It reaches the model as reported speech. An agent-proposed one lands
+  `suggested` and is inert until the manager approves it, and everything
+  stored is listed, editable and deletable.
 - **The change log is append-only.** The schedule is edited in place; its history
   lives only in the log ([D4](../docs/DECISIONS.md#d4--living-schedule-not-versioned)).
 - Errors leaving the backend are `AgentError` in Hebrew.

@@ -473,6 +473,94 @@ profile: without the declared shift vocabulary there is no grid to build, and
 inventing one is exactly the hardcoding
 [D9](#d9--shift-vocabulary-is-per-workplace) forbids.
 
+## D19 — The agent answers with tools; asking and changing stay separate
+
+Multi-step questions — *"מי יכול להחליף את יוסי בסופ״ש"*, *"מה חסר לפני
+פרסום"* — are answered by the model **choosing named tools**, each of which
+is answered in pure Python. `bl/tools.py` holds six read-only operations
+(`read_period`, `employee_state`, `coverage_gaps`, `validate_placement`,
+`find_replacements`, `publish_readiness`); `bl/planner.py` runs the loop.
+
+**Asking is a different act from requesting a change**, and they are
+different endpoints, different response types, and different cards on the
+screen. `POST /api/schedule/ask` returns an *answer* and **carries no
+operations at all** — the same property a briefing has
+([D15](#d15--the-agent-speaks-first-but-still-never-writes)), so there is
+nothing an `apply` could read out of one. A question whose answer implies a
+change comes back with `needs_confirmation`, and the manager acts on it
+through the unchanged propose-then-confirm path.
+
+*Why tools rather than a bigger prompt:* `ChangeAgent` hands the model the
+whole period and asks for operations, which works for a single absence and
+stops working the moment a question needs four countable things resolved in
+order. Each of those is what
+[D3](#d3--the-agent-decides-code-only-audits-) already assigns to code —
+arithmetic over a roster is what a model gets subtly wrong in a way that
+reads exactly like getting it right. Naming the questions moves each one to
+the side of the line D3 already drew, rather than drawing a new one.
+
+**The agent may not claim a placement is valid unless a tool said so.** This
+is the one genuinely new guarantee. `find_replacements` re-validates every
+candidate through `bl/placement.py` and keeps only those that introduce no
+warning, so an option offered as a way out of a problem has been checked
+against the same arithmetic that would complain about it.
+
+**⚠️ This does not make the audit a gate, and must not be read as one.**
+`validate_placement` returns `blocking: False` like everything else, and
+`publish_readiness` returns a `ready` flag that is *descriptive* — nothing
+branches on it before a publish, and the publish button stays live over
+every warning. What changed is that the agent can no longer *assert*
+validity it did not check; the manager's authority to overrule the check is
+exactly what it was (D1/D3).
+
+## D20 — A simulation is not a proposal
+
+`POST /api/schedule/simulate` answers *"מה יקרה אם…"* with an impact report:
+the warnings a change would introduce and resolve, how coverage and hours
+would move, and every person affected — including the one a change takes a
+shift *away* from. It persists nothing, and `bl/simulate.py` is handed **no
+repository**, so that is a property of the wiring rather than a rule
+somebody has to remember — the same shape `bl/changes.py` and
+`bl/importer.py` already have.
+
+*Why not just use `propose()`:* proposing already audits a hypothetical, but
+it does so as a footnote to a change the manager is being asked to accept. A
+manager thinking out loud has not asked for a commitment, and answering them
+with a confirm button answers a question they did not ask. The two are
+deliberately different shapes in the API and visually distinct on screen —
+a simulation renders dashed and in its own colour, because a simulation that
+looked like a proposal would be one.
+
+**Approving a simulation is an ordinary `apply()` with the manager's
+reason.** There is no dedicated endpoint for it and there must not be: a
+second write path is precisely how a confirmation step gets routed around
+([D8](#d8--two-reasons-both-required),
+[D12](#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
+
+## D21 — The agent remembers preferences, and every one of them is visible
+
+`agent_preferences` stores standing operational context in the manager's own
+words — *"עדיף לשאול את יוסי לפני רון לסופ״ש"*, *"מאיה מעדיפה בקרים"*.
+Scoped to one team like everything else (D10), with `subject` narrowing it to
+one employee or shift.
+
+These are **not rules** — rules are the boss's sentences on the profile and
+stay natural language ([D2](#d2--rules-stay-natural-language)) — and **not
+constraints**, which are what `bl/audit.py` counts. A preference is context
+the agent reads before it proposes, and it **never authorises a write**: it
+reaches the model as reported speech, and the confirmation step is unchanged
+by anything in the table.
+
+**A single decision does not become a standing rule by having been made.** A
+preference the agent proposes lands as `suggested` and is inert — `ask()`
+reads only `active` rows — until the manager approves it. That is the line
+[D14](#d14--employees-get-real-identities-and-may-submit-constraints-️-reverses-d5-amends-d10)
+draws between a request and a constraint, applied here.
+
+**Everything stored is listed, editable, and deletable.** There is no hidden
+half of this memory, because a stored preference the manager cannot see is a
+rule they never agreed to.
+
 ## Open
 
 - **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment
