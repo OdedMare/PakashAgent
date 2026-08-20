@@ -16,11 +16,12 @@ call**, so a change saved in the UI applies immediately without a restart.
 | `json_response_parser.py` | `extract_json` — strips fences, finds the object |
 | `message_merger.py` | Folds the system prompt into the user turn |
 | `model_id_extractor.py` | Pulls model IDs out of a `/models` response |
+| `model_roles.py` | Flow → role → model id, and the fallback |
 
 Each helper is separate because each handles a different failure of
 "OpenAI-compatible" servers that are only approximately compatible.
 
-## `complete_json(system, user, schema=None) -> dict`
+## `complete_json(system, user, schema=None, flow="", role="", model="") -> dict`
 
 The one method that matters. Returns a parsed JSON object, adding a `_usage` key
 with token counts when the server reports them.
@@ -61,6 +62,46 @@ the ladder can run four of them and each retries up to three times; multiplied
 out, one request could hold a worker for the better part of an hour. The
 deadline is passed into `create_with_retry`, which starts no attempt (and
 takes no sleep) that would cross it.
+
+## Task-based model routing
+
+Three roles, **one server**. A role names a model id in the runtime settings;
+every one of them is served by the same `llm_base_url`, so switching model is
+a different `model` field on the request and nothing else. That is why there
+is still one `OpenAI` client and one connection pool — a client per model
+would throw the pool away for no reason.
+
+| Role | Setting | Flows |
+|---|---|---|
+| `advanced` | `llm_model_advanced` | `scheduler` |
+| `default` | `llm_model_default` | `interview`, `changes`, `planner`, `learn`, and anything unmapped |
+| `fast` | `llm_model_fast` | `briefing` |
+
+**`flow` routes.** The argument every caller already passed for telemetry is
+what picks the role, so a caller names itself once. A second argument would be
+a second thing to keep in step with the first. `role=` and `model=` override
+it for a one-off; nothing in `bl/` needs either.
+
+`scheduler` is the one advanced flow — it reasons over a whole period of
+slots, people and rules at once, and it is the call the product is judged on.
+`briefing` is a few sentences over facts `audit.py` already computed.
+
+**An unset role falls back to `llm_model`.** That single `or` is the whole
+backward-compatibility story: a deployment that never opens the new settings
+sends exactly what it sent before, and a `runtime-settings.json` written
+before these fields existed loads unchanged. Roles ship empty for the same
+reason `_attempts` sends no `repetition_penalty` at 0 — a default here would
+be a hardcoded model name, and which models exist is the server's business.
+
+**The model is resolved per call**, immediately before the request, so a
+selection saved in the settings panel applies to the next call without a
+restart — the property the base URL and key already had.
+
+**No automatic failover.** A timeout, a 5xx, or an invalid reply never
+switches model. The retry curve and the ladder both stay on the resolved
+model: a generation that timed out may still be running on the server, and
+re-sending it to a second model duplicates the work and makes the outcome
+depend on which one answers first.
 
 ## Retry and backoff
 
@@ -105,7 +146,13 @@ default:
 ## Telemetry
 
 `complete_json` logs one line per logical call to the `pakash.llm` logger:
-flow, model, prompt/completion/total tokens, retries and wall duration.
+flow, **role**, model, prompt/completion/total tokens, retries and wall
+duration.
+
+`role` sits beside `model` rather than replacing it: the role says which
+setting was consulted, the model says what actually ran. Either alone cannot
+tell a misrouted flow from a misconfigured role, which is the question these
+lines get asked once more than one model is in play.
 
 `flow` is what the `flow=` argument on `complete_json` exists for —
 `scheduler`, `interview`, `changes`, `briefing`. Without it every measurement
@@ -132,7 +179,9 @@ one in every other metric.
 `_client_for(api_key, base_url)` caches one `OpenAI` client keyed by
 `(api_key, base_url)`. A fresh client per call paid a TCP/TLS handshake on every
 round-trip. The cache re-keys automatically when settings change mid-session,
-because the store is still read per call.
+because the store is still read per call. **The model is not part of the key**
+— all three roles address the same endpoint, so they share one client and one
+pool.
 
 ## Local-server accommodations
 
@@ -150,5 +199,10 @@ because the store is still read per call.
 - Never log API keys, or full prompts containing employee personal details.
 - Adding a rung to the ladder means adding it to `_attempts` — do not scatter
   fallback logic through `_complete`.
+- Routing is `model_roles.py` and nowhere else. A flow gets a model by being
+  in the table, not by a branch at the call site.
+- **A role is a model, never a connection.** Giving one its own base URL or
+  key would mean a client per role and the end of the shared pool.
+- **Never fail over to another model.** See the routing section.
 - **Nothing in `bl/audit.py` may call this.** The audit is arithmetic precisely so
   it cannot be hallucinated ([D3](../../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
