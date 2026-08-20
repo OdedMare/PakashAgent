@@ -65,6 +65,7 @@ TOOL_COVERAGE_GAPS = "coverage_gaps"
 TOOL_VALIDATE_PLACEMENT = "validate_placement"
 TOOL_FIND_REPLACEMENTS = "find_replacements"
 TOOL_PUBLISH_READINESS = "publish_readiness"
+TOOL_PROFILE_GAPS = "profile_gaps"
 
 TOOL_NAMES = (
     TOOL_READ_PERIOD,
@@ -73,6 +74,7 @@ TOOL_NAMES = (
     TOOL_VALIDATE_PLACEMENT,
     TOOL_FIND_REPLACEMENTS,
     TOOL_PUBLISH_READINESS,
+    TOOL_PROFILE_GAPS,
 )
 
 # What each tool is for, in the manager's language rather than the code's.
@@ -85,6 +87,7 @@ TOOL_DESCRIPTIONS = {
     TOOL_VALIDATE_PLACEMENT: "בדיקה מה יקרה אם משבצים מישהו למשמרת",
     TOOL_FIND_REPLACEMENTS: "מי יכול לקחת משמרת במקום מישהו אחר",
     TOOL_PUBLISH_READINESS: "מה חסר לפני פרסום התקופה לצוות",
+    TOOL_PROFILE_GAPS: "מה הסוכן עדיין לא יודע על מקום העבודה",
 }
 
 # How many candidates a replacement search returns. The same bound
@@ -128,6 +131,7 @@ class ScheduleTools:
             TOOL_VALIDATE_PLACEMENT: self.validate_placement,
             TOOL_FIND_REPLACEMENTS: self.find_replacements,
             TOOL_PUBLISH_READINESS: self.publish_readiness,
+            TOOL_PROFILE_GAPS: self.profile_gaps,
         }.get(_text(name))
         if handler is None:
             return {
@@ -556,6 +560,63 @@ class ScheduleTools:
 
         return self._repository.current_schedule(team_id)
 
+    def profile_gaps(self, team_id: str) -> dict:
+        """What the interview never taught, and what each gap costs.
+
+        The answer to *"מה אתה עוד לא יודע"* — the question a manager asks
+        after ending the interview early. The profile carries its own
+        `completeness` record (written by `interview_service.end`), so this
+        reports what was already decided rather than re-deriving it: one
+        definition of "missing" lives in `bl/interview.py`, and a tool that
+        recomputed it would eventually disagree with the gate.
+
+        **Read-only, like every tool here.** Naming a gap does not fill it —
+        the interview is the only thing that writes a profile, and pointing
+        the manager back at it is the whole of what this can do. An agent
+        that could record the answer would be conducting the interview from
+        the control room, which is the surface the confirmation turn exists
+        on (D19).
+
+        `blocks` is the part worth saying out loud: a missing shift
+        vocabulary means there is no grid at all — not even a hand-built one,
+        since inventing shift names is what D9 forbids — while missing rules
+        only mean the agent schedules without knowing the constraints. Those
+        are very different sentences for the agent to write, and the
+        difference is not something a model should be left to infer.
+        """
+        profile = self._profile(team_id)
+        if not profile:
+            return {
+                "found": False,
+                "complete": False,
+                "reason": "לא נערך ראיון היכרות עדיין",
+            }
+
+        completeness = profile.get("completeness")
+        if not isinstance(completeness, dict):
+            # No record means the interview was confirmed the ordinary way:
+            # the gate in `bl/interview.py` refused to let it finish owing a
+            # required field, so there is nothing outstanding to report.
+            return {"found": True, "complete": True, "gaps": [], "blocks": []}
+
+        missing = [_text(line) for line in completeness.get("missing_topics") or []]
+        missing = [line for line in missing if line]
+        open_points = [_text(line) for line in completeness.get("open_points") or []]
+        open_points = [line for line in open_points if line]
+
+        return {
+            "found": True,
+            "complete": bool(completeness.get("complete")),
+            # What the scheduler cannot run without.
+            "gaps": missing,
+            # What the agent itself flagged as unsettled — real, but a
+            # manager can schedule around these.
+            "open_points": [line for line in open_points if line not in missing],
+            "blocks": _blocked_by(profile),
+            "has_shifts": bool(_shifts(profile)),
+            "has_employees": bool(_employees(profile)),
+        }
+
     def _profile(self, team_id: str) -> dict:
         return self._repository.team_profile(team_id) or {}
 
@@ -608,6 +669,28 @@ class ScheduleTools:
 
 
 # -- helpers ---------------------------------------------------------------
+
+
+def _blocked_by(profile: dict) -> List[str]:
+    """What a partial profile actually prevents, in the manager's terms.
+
+    Ordered worst first. No shift vocabulary is the only true stop: the grid
+    is rows of shifts, and D9 forbids inventing them, so neither the agent
+    nor the manager can build a week. Everything else degrades rather than
+    blocks — which is why they are separate lines rather than one warning.
+    """
+    blocks = []
+    if not _shifts(profile):
+        blocks.append(
+            "בלי סוגי משמרות אין לוח לבנות — לא לסוכן ולא ידנית."
+        )
+    if not _employees(profile):
+        blocks.append("בלי עובדים אין את מי לשבץ.")
+    if not profile.get("rules"):
+        blocks.append(
+            "בלי כללים הסוכן ישבץ בלי להכיר את המגבלות שלכם."
+        )
+    return blocks
 
 
 def _arguments_for(handler, arguments: dict) -> dict:
