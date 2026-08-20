@@ -94,8 +94,10 @@
   font-size: 0.6rem;
   font-weight: 600;
   line-height: 1;
-  color: var(--on-accent, #fff);
-  background: var(--accent);
+  /* White on the brand colour, the same pairing `.primary-button` uses in
+     both themes rather than a token invented for one badge. */
+  color: #fff;
+  background: var(--primary);
   border-radius: 7px;
 }
 
