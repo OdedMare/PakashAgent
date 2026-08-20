@@ -88,7 +88,18 @@ chosen, never by having been proposed.
 
 `Management/index.tsx` is where the manager lands once the interview has produced
 a profile — `workspace.profile` is the switch, since it is the interview's
-durable result and exactly the thing the area needs to run on.
+durable result and exactly the thing the area needs to run on. That profile
+may be **partial** (D22), and the area says so rather than hiding it: a badge
+on the interview button counts the open topics, and the empty-week card
+explains that the agent is working from what it managed to learn. The manager
+can ask the agent directly — `profile_gaps` is a tool like any other, so
+*"מה עוד חסר לך"* is answered from the record rather than the model's
+impression.
+
+- **One gap stops the board, and it is not a policy choice.** With no shift
+  vocabulary there are no rows to build from, by hand or otherwise, because
+  inventing shift names is what D9 forbids. `EmptyWeek` says that instead of
+  rendering an empty grid with a disabled button.
 
 - **Drag proposes; the dialog writes.** `Calendar` reports a drop upward and
   changes nothing itself. `ConfirmMove` collects the manager's reason and its
@@ -204,6 +215,15 @@ Never assume a Latin-script fallback.
 One question per turn, rendered as a Claude-style conversation column: the
 agent's question, its recommendation in a marked-off card, and 2–5 selectable
 answers beneath it.
+
+- **The interview can always be left.** The door icon ends it early, behind a
+  confirmation that states what is being left unfinished and never disables
+  its own button ([D22](../docs/DECISIONS.md#d22--the-interview-can-be-ended-early-and-the-profile-says-what-it-owes-️-amends-d18)).
+  This is supplied on a *first* interview too — it used to be withheld so
+  nobody reached the board with nothing to schedule against, which made the
+  first interview a room with no door. Ending awaits the write and then
+  refreshes the workspace, because the profile it writes is what the router
+  switches on; navigating first would race it.
 
 - **Answers send the option's label, not a number.** A bare number is
   ambiguous — choice or headcount — and the prompt makes the model ask rather
