@@ -142,6 +142,16 @@ class ScheduleTools:
             # use. Surfaced in Hebrew because everything leaving the backend
             # is (`bl/CLAUDE.md`).
             return {"tool": _text(name), "ok": False, "error": str(failure)}
+        except TypeError:
+            # A call missing an argument the tool requires. The model names
+            # both the tool and its arguments, so this is an ordinary way for
+            # a turn to be slightly wrong -- and a crash here would end a turn
+            # that could otherwise recover by calling it properly.
+            return {
+                "tool": _text(name),
+                "ok": False,
+                "error": "חסרים פרטים לקריאה לכלי הזה",
+            }
         return dict(result, tool=_text(name), ok=result.get("ok", True))
 
     # -- reading -----------------------------------------------------------
