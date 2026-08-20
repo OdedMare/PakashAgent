@@ -24,7 +24,9 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import Response
 
 from app.api.contracts import (
+    AgentAnswer,
     ApplyRequest,
+    AskRequest,
     AssignRequest,
     BlankRequest,
     Briefing,
@@ -37,9 +39,15 @@ from app.api.contracts import (
     ManagementOverview,
     MoveRequest,
     PlacementCheck,
+    Preference,
+    PreferenceRequest,
+    PreferenceUpdate,
     ProposeRequest,
     Proposal,
     Schedule,
+    SimulateRequest,
+    Simulation,
+    ToolRequest,
     UnassignRequest,
 )
 
@@ -361,6 +369,130 @@ def build_router(service, guards) -> APIRouter:
         read "history" as a schedule id.
         """
         return service.learn_from_changes(session["team_id"])
+
+    @router.post("/ask", response_model=AgentAnswer)
+    def ask(request: AskRequest, session: dict = Depends(boss)) -> dict:
+        """Answer a question about the schedule. **Writes nothing.**
+
+        The multi-step half of the agent. `bl/planner.py` chooses which
+        read-only tools to run, `bl/tools.py` answers each with arithmetic,
+        and the reply is assembled from what they returned — so the agent
+        cannot claim a placement is valid unless the deterministic check said
+        so ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+
+        **There is no operation in the response**, so nothing an answer says
+        can be applied. A question that turns out to want a change comes back
+        with `needs_confirmation`, and the manager sends it through
+        `/propose` and confirms it with their reason exactly as before — the
+        same property `/brief` has (D15).
+
+        **It answers with no model configured.** The planner falls back to
+        `bl/intent.py` over the same tools and says so in `used_model`,
+        because the fallback covers a narrower set of questions and hiding
+        that would make the narrower coverage dishonest.
+
+        Boss-only, like every other agent route: an answer reads drafts and
+        other people's stated reasons.
+        """
+        return service.ask(
+            session["team_id"],
+            request=request.request,
+            schedule_id=request.schedule_id,
+        )
+
+    @router.post("/tool")
+    def tool(request: ToolRequest, session: dict = Depends(boss)) -> dict:
+        """Run one named read-only tool directly. **Writes nothing.**
+
+        The same tools the agent uses, reachable without a conversation —
+        "who could take this slot" is a useful button on the board whether or
+        not anybody is talking, and sharing the tool is what stops the button
+        and the agent from ever giving different answers.
+
+        A tool name that does not exist comes back `ok: false` rather than as
+        an error: the caller is a UI that has to render something, and an
+        unknown tool is information rather than a failure of the request.
+        """
+        return service.run_tool(
+            session["team_id"], request.tool, request.arguments
+        )
+
+    @router.post("/simulate", response_model=Simulation)
+    def simulate(
+        request: SimulateRequest, session: dict = Depends(boss)
+    ) -> dict:
+        """What a set of operations would do. **Persists nothing.**
+
+        Deliberately not `/propose`: a proposal is an answer with a confirm
+        button attached, and a manager asking *"what happens if"* has not
+        asked for one. This returns an impact report — the warnings the
+        change would introduce and resolve, how coverage and hours would
+        move, and who is affected.
+
+        `bl/simulate.py` is handed no repository, so nothing on this path can
+        write even by mistake. Approving a simulation is an ordinary
+        `POST /api/schedule/apply` with the manager's reason: there is no
+        shortcut from here to a change, and adding one would make simulation
+        the way around the confirmation step (D8/D12).
+        """
+        return service.simulate(
+            session["team_id"],
+            operations=[
+                operation.model_dump() for operation in request.operations
+            ],
+            schedule_id=request.schedule_id,
+        )
+
+    @router.get("/preferences/list", response_model=List[Preference])
+    def preferences(
+        status: Optional[str] = None, session: dict = Depends(boss)
+    ):
+        """What this workplace has taught the agent.
+
+        Boss-only and visible by design: a stored preference the manager
+        cannot see is a rule they never agreed to. Declared under a literal
+        segment for the ordering reason the module docstring gives.
+        """
+        return service.preferences(session["team_id"], status=status)
+
+    @router.post("/preferences", response_model=Preference)
+    def add_preference(
+        request: PreferenceRequest, session: dict = Depends(boss)
+    ) -> dict:
+        """Record a preference, or propose one for approval.
+
+        `suggested: true` stores it inert — `ask()` reads only active ones,
+        so a proposal changes nothing until the manager approves it. One
+        decision is a decision; it becomes a standing preference when the
+        manager says it is one.
+        """
+        return service.add_preference(
+            session["team_id"],
+            text=request.text,
+            kind=request.kind,
+            subject=request.subject,
+            evidence=request.evidence,
+            suggested=request.suggested,
+        )
+
+    @router.patch("/preferences/{row_id}", response_model=Preference)
+    def update_preference(
+        row_id: str,
+        request: PreferenceUpdate,
+        session: dict = Depends(boss),
+    ) -> dict:
+        """Reword a preference, approve a suggested one, or archive it."""
+        return service.update_preference(
+            session["team_id"], row_id,
+            text=request.text, status=request.status,
+        )
+
+    @router.delete("/preferences/{row_id}")
+    def delete_preference(
+        row_id: str, session: dict = Depends(boss)
+    ) -> dict:
+        service.delete_preference(session["team_id"], row_id)
+        return {"status": "ok"}
 
     @router.post("/{schedule_id}/publish", response_model=Schedule)
     def publish(schedule_id: str, session: dict = Depends(boss)) -> dict:
