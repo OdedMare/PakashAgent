@@ -55,6 +55,9 @@ class RuntimeSettingsStore:
             llm_max_concurrency=env.llm_max_concurrency,
             llm_base_url=env.llm_base_url,
             openai_api_key=env.openai_api_key,
+            llm_model_fast=env.llm_model_fast,
+            llm_model_default=env.llm_model_default,
+            llm_model_advanced=env.llm_model_advanced,
         )
         if self._path.exists():
             self._apply(json.loads(self._path.read_text("utf-8")), False)

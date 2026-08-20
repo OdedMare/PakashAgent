@@ -38,7 +38,27 @@ class Settings(BaseSettings):
     (normally `public`). Also settable as `?currentSchema=` in the URL."""
 
     llm_model: str = "gemma3:27b"
-    """The model id. Default targets a local Ollama tag."""
+    """The model id. Default targets a local Ollama tag.
+
+    Still the model every flow uses unless a role below names another one,
+    and the fallback for every role that does not."""
+
+    llm_model_fast: str = ""
+    """Model for short, lightweight work (the briefing). Empty = use
+    `llm_model`."""
+
+    llm_model_default: str = ""
+    """Model for conversation-shaped work — interview, changes, planner,
+    learn — and for any call naming no role. Empty = use `llm_model`."""
+
+    llm_model_advanced: str = ""
+    """Model for schedule generation and other heavy reasoning. Empty = use
+    `llm_model`.
+
+    All three name a model on the SAME server as `llm_model`: one vLLM
+    endpoint serving several models, addressed by the id `/v1/models`
+    reports. They are empty by default because naming one here would be
+    hardcoding a model this deployment may not serve."""
 
     llm_diet_mode: bool = False
     """Use compact prompts and bounded completion output."""

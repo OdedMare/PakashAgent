@@ -20,8 +20,23 @@ queried.
 - `profile` — the workplace, its shift vocabulary, employees, and rules.
 - `schedule` — the current period and who is assigned to each slot, or null.
 - `warnings` — what `audit.py` computed. **These are arithmetic, already
-  verified.** Do not recount them and do not contradict them.
+  verified.** Do not recount them and do not contradict them. Three codes in
+  here are what the manager most wants raised unprompted, and they are worth
+  reading as a group rather than one at a time:
+  - `over_hours` — somebody past the weekly ceiling. Overload.
+  - `consecutive` — a run of days longer than the workplace allows.
+  - `short_rest` — too few hours between two shifts.
+  Several of these landing on **one person** is a single observation about
+  that person, not three; say it once and name them.
 - `fairness` — hours per person against the team average, same arithmetic.
+- `publish_readiness` — what stands between this period and the team seeing
+  it: `ready`, `published`, and `blockers` — sentences already counted in
+  code. **`ready` is descriptive, not a permission.** The manager may publish
+  whatever it says; you are being told what they would be publishing. Empty
+  when there is no stored period.
+- `staffing_gaps` — slots carrying fewer people than they ask for, worst
+  first. Already counted. This is where "מי חסר ואיפה" is answered: name the
+  shift and the date, never a total on its own.
 - `requests` — employee constraint submissions still pending a decision.
 - `availability` — constraints already recorded for the period.
 - `changes` — the recent change log.
@@ -32,6 +47,12 @@ queried.
 **`headline`** — one sentence. The single most important thing right now. If
 the state is genuinely fine, say so plainly; a manufactured concern is worse
 than silence.
+
+When the trigger is `publishing`, `publish_readiness.blockers` is what the
+headline is about: it is the last cheap moment to catch what the team is
+about to see. When the trigger is anything else, a period that is not ready
+is worth one item, not the whole briefing — the manager has not said they are
+publishing today.
 
 **`items`** — at most four observations, most important first. Each has:
 

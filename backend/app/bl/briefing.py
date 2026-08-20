@@ -105,6 +105,8 @@ class BriefingAgent:
         availability: Optional[List[dict]] = None,
         changes: Optional[List[dict]] = None,
         last_said: Optional[List[str]] = None,
+        readiness: Optional[dict] = None,
+        gaps: Optional[List[dict]] = None,
     ) -> dict:
         """One briefing. Persists nothing and changes nothing."""
         payload = {
@@ -114,6 +116,19 @@ class BriefingAgent:
             # Handed over as computed facts, not as something to check.
             "warnings": _rows(warnings, 60),
             "fairness": fairness if isinstance(fairness, dict) else {},
+            # What stands between this period and the team seeing it, and
+            # the unstaffed slots behind it. Both already counted by
+            # `tools.py` -- the model is told the state, never asked to
+            # work it out, which is the same D3 line every other number
+            # here sits on.
+            #
+            # They travel as two facts rather than one because they answer
+            # different questions: readiness is "may this be published",
+            # gaps are "who is missing where". A briefing that folded them
+            # together could say a period is not ready without ever saying
+            # which shift is empty.
+            "publish_readiness": _readiness_for_model(readiness),
+            "staffing_gaps": _rows(gaps, 40),
             "requests": _rows(requests, 40),
             "availability": _rows(availability, 120),
             "changes": _rows(changes, 60),
@@ -227,6 +242,30 @@ def _schedule_for_model(schedule: Optional[dict]) -> Optional[dict]:
             }
             for row in schedule.get("assignments") or []
         ],
+    }
+
+
+def _readiness_for_model(readiness: Optional[dict]) -> dict:
+    """What publishing is waiting on, trimmed to the claim itself.
+
+    Only the verdict and its reasons travel: the warnings and requests
+    behind it are already in the payload under their own keys, and sending
+    them twice would let the model describe the same three warnings as two
+    separate findings.
+
+    **`ready` is descriptive here exactly as it is at the tool.** Nothing
+    gates on it, the publish button is live regardless (D3), and the model
+    is being told what the manager would be publishing -- not asked whether
+    they may.
+    """
+    if not isinstance(readiness, dict) or not readiness.get("found"):
+        return {}
+    return {
+        "ready": bool(readiness.get("ready")),
+        "published": bool(readiness.get("published")),
+        "blockers": [
+            _bounded(line) for line in readiness.get("blockers") or []
+        ][:6],
     }
 
 

@@ -22,3 +22,13 @@ class RuntimeSettings:
     llm_max_concurrency: int
     llm_base_url: Optional[str]
     openai_api_key: str
+    # Per-role model ids, all served by the SAME endpoint (`llm_base_url`) —
+    # these name a model, never a connection. Empty means "unset", and an
+    # unset role falls back to `llm_model`, which is why they default to ""
+    # rather than to a model id: a default here would be a hardcoded model
+    # name, and which models exist is a property of the server, not of this
+    # code. A deployment serving one model can leave all three empty and
+    # behave exactly as it did before they existed.
+    llm_model_fast: str = ""
+    llm_model_default: str = ""
+    llm_model_advanced: str = ""

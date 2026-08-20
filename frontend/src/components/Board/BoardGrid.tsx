@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Moon, Plus } from "lucide-react";
+import { AlertTriangle, Moon, Plus, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { hebrewWeekday, isWeekend } from "@/components/Management/Calendar";
@@ -13,6 +13,8 @@ import type {
   Slot,
 } from "@/types";
 
+import type { AgentTouch } from "./agentTouch";
+import { touchKey } from "./agentTouch";
 import { ShiftCard } from "./ShiftCard";
 import type { BoardFilters } from "./useBoard";
 import { weekDates } from "./useBoard";
@@ -49,6 +51,7 @@ export function BoardGrid({
   filters,
   dark,
   readOnly = false,
+  touches,
   onDropCard,
   onOpenCard,
   onAddShift,
@@ -63,6 +66,11 @@ export function BoardGrid({
   filters: BoardFilters;
   dark: boolean;
   readOnly?: boolean;
+  /** Cells the agent is currently pointing at, keyed by `shift|date`. The
+   *  board reads this and renders it; it never produces one, which is what
+   *  keeps a highlight a description of the side column rather than a
+   *  second channel the agent could act through. */
+  touches?: Map<string, AgentTouch[]>;
   onDropCard?: (move: {
     assignment: Assignment;
     shift_name: string;
@@ -159,6 +167,7 @@ export function BoardGrid({
             dark={dark}
             filters={filters}
             readOnly={readOnly}
+            touches={touches}
             dragging={dragging}
             over={over}
             setOver={setOver}
@@ -241,6 +250,7 @@ function BoardRow({
   dark,
   filters,
   readOnly,
+  touches,
   dragging,
   over,
   setOver,
@@ -262,6 +272,7 @@ function BoardRow({
   dark: boolean;
   filters: BoardFilters;
   readOnly: boolean;
+  touches?: Map<string, AgentTouch[]>;
   dragging: Assignment | null;
   over: string | null;
   setOver: (key: string | null) => void;
@@ -308,6 +319,12 @@ function BoardRow({
         const cards = cardsFor(shift, date);
         const warnings = warningsFor(shift, date);
         const short = slot ? cards.length < slot.headcount : false;
+        // What the agent has said about this cell, if anything. A cell may
+        // be touched by more than one source at once -- a simulation and
+        // the answer that led to it -- and the strongest wins the outline,
+        // which `collectTouches` has already ordered.
+        const touched = touches?.get(key) ?? [];
+        const touch = touched.length ? touched[touched.length - 1] : null;
 
         // The shift does not run this day. Not a gap — nothing is missing.
         if (!slot) {
@@ -340,6 +357,7 @@ function BoardRow({
               short ? "is-short" : "",
               over === key ? "is-over" : "",
               warnings.length ? "has-warning" : "",
+              touch ? `is-touched is-touched-${touch.origin}` : "",
               isWeekend(date) ? "is-weekend" : "",
               date === today ? "is-today" : "",
             ]
@@ -387,6 +405,12 @@ function BoardRow({
                     !warning.employee || warning.employee === row.employee,
                 )}
                 draggable={!readOnly}
+                touched={
+                  touched.find(
+                    (item) =>
+                      !item.employee || item.employee === row.employee,
+                  )?.origin ?? null
+                }
                 dimmed={Boolean(dragging) && dragging?.id === row.id}
                 onDragStart={() => setDragging(row)}
                 onDragEnd={() => {
@@ -396,6 +420,21 @@ function BoardRow({
                 onOpen={() => onOpenCard?.(row)}
               />
             ))}
+
+            {/* Why this cell is lit, in words. The outline says the agent
+                touched it; this says what it said — a highlight the manager
+                cannot interpret is decoration. Nothing here is clickable:
+                acting on it is still done in the side column, through the
+                ordinary propose-then-confirm path (D8/D12). */}
+            {touch ? (
+              <span
+                className={`board-touch is-${touch.origin}`}
+                title={touched.map((row) => row.note).join("\n")}
+              >
+                <Sparkles size={10} />
+                {touchLabel(touch.origin)}
+              </span>
+            ) : null}
 
             {short ? (
               <span className="board-gap">
@@ -431,6 +470,17 @@ function BoardRow({
  *
  *  An empty `shift_name` covers the whole day — the convention the interview
  *  collects and `audit.py` reads. */
+/** What the badge on a touched cell says.
+ *
+ *  Three words, because the badge sits inside a cell that already carries
+ *  cards and a gap count. The full sentence is on the hover; this only has
+ *  to say which of the three kinds of agent attention this is. */
+function touchLabel(origin: AgentTouch["origin"]): string {
+  if (origin === "proposal") return "הצעה";
+  if (origin === "simulation") return "סימולציה";
+  return "נבדק";
+}
+
 function isBlocked(
   constraints: Constraint[],
   employee: string,

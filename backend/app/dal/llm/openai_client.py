@@ -2,7 +2,14 @@
 
 Model, API key, base URL, and timeout come from the runtime settings store on
 EVERY call, so changes saved in the UI settings panel apply immediately
-without a restart. Works against OpenAI itself and OpenAI-compatible servers
+without a restart.
+
+Which model is a per-call question: `flow` picks one of three roles (see
+`model_roles.py`) and the role names a model id in the runtime settings.
+All roles are served by the SAME endpoint — one vLLM server publishing
+several models — so they share one `OpenAI` client and one connection pool,
+and switching model is a different `model` field on the request, not a
+different connection. An unset role falls back to `llm_model`. Works against OpenAI itself and OpenAI-compatible servers
 (Ollama, vLLM, Groq...); the default target is a local model through Ollama.
 
 Robustness policy:
@@ -37,6 +44,7 @@ from app.dal.llm.completion_retry import create_with_retry
 from app.dal.llm.json_response_parser import extract_json
 from app.dal.llm.message_merger import merge_system_into_user
 from app.dal.llm.model_id_extractor import extract_model_ids
+from app.dal.llm.model_roles import DEFAULT, resolve_model, role_for_flow
 
 # One initial attempt + one retry with the parse error appended.
 _MAX_JSON_ATTEMPTS = 2
@@ -102,7 +110,7 @@ _CONTEXT_OVERFLOW_MARKERS = (
 )
 
 
-def _log_call(flow, model, usage, started, attempt, failed=False):
+def _log_call(flow, model, usage, started, attempt, failed=False, role=""):
     """One line per logical model call: what it cost and how long it took.
 
     This exists because nothing recorded it. `_usage` was returned from here
@@ -120,10 +128,14 @@ def _log_call(flow, model, usage, started, attempt, failed=False):
     except this one.
     """
     duration = time.monotonic() - started
+    # `role` sits beside `model` rather than replacing it: the role says which
+    # setting was consulted, the model says what actually ran. Reading one
+    # without the other cannot tell a misrouted flow from a misconfigured
+    # role — which is the whole question these lines get asked.
     _log.info(
-        "llm flow=%s model=%s prompt=%d completion=%d total=%d "
+        "llm flow=%s role=%s model=%s prompt=%d completion=%d total=%d "
         "retries=%d duration=%.1fs%s",
-        flow or "unknown", model,
+        flow or "unknown", role or DEFAULT, model,
         usage.get("prompt_tokens", 0),
         usage.get("completion_tokens", 0),
         usage.get("total_tokens", 0),
@@ -150,6 +162,7 @@ class OpenAIJsonClient:
 
     def complete_json(
         self, system: str, user: str, schema=None, flow: str = "",
+        role: str = "", model: str = "",
     ) -> dict:
         """Return the model's reply parsed as a JSON object.
 
@@ -157,13 +170,28 @@ class OpenAIJsonClient:
         Raises `AgentError` (Hebrew) if the reply is not valid JSON twice.
 
         `flow` names the caller for the telemetry line — `scheduler`,
-        `interview`, `changes`, `briefing`. It is the only reason this
-        parameter exists: without it every measurement reads "some model
+        `interview`, `changes`, `briefing`. It is the only reason that
+        parameter existed: without it every measurement reads "some model
         call", and the first question anyone asks of the numbers is which
-        feature is the expensive one.
+        feature is the expensive one. It now also *routes*: `flow` picks the
+        role, so a caller already naming itself for telemetry gets the right
+        model without repeating the choice in a second argument that could
+        drift out of step with the first.
+
+        `role` overrides that mapping and `model` overrides both, for a
+        caller that knows better than the table. Neither is needed by
+        anything in `bl/` today; they exist so a one-off does not have to
+        edit the mapping to get a different model.
+
+        The model is resolved from the store HERE, per call, immediately
+        before the request — so a selection saved in the settings panel
+        applies to the very next call with no restart, exactly as the base
+        URL and API key already did.
         """
         started = time.monotonic()
         settings = self._store.get()
+        chosen_role = role or role_for_flow(flow)
+        chosen_model = resolve_model(settings, chosen_role, model)
         if not settings.openai_api_key and not settings.llm_base_url:
             raise AgentError("לא הוגדר מפתח API או שרת תואם OpenAI")
         client = self._client_for(
@@ -181,7 +209,7 @@ class OpenAIJsonClient:
         )
         for _attempt in range(_MAX_JSON_ATTEMPTS):
             content, current = self._complete(
-                client, settings.llm_model, messages, max_tokens, schema,
+                client, chosen_model, messages, max_tokens, schema,
                 settings.llm_repetition_penalty, _slots(settings),
             )
             # Tokens spent on a rejected reply were still spent — accumulate
@@ -192,7 +220,10 @@ class OpenAIJsonClient:
                 result = extract_json(content)
                 if usage["total_tokens"]:
                     result["_usage"] = usage
-                _log_call(flow, settings.llm_model, usage, started, _attempt)
+                _log_call(
+                    flow, chosen_model, usage, started, _attempt,
+                    role=chosen_role,
+                )
                 return result
             except json.JSONDecodeError as exc:
                 last_error = str(exc)
@@ -204,8 +235,8 @@ class OpenAIJsonClient:
                     )},
                 ]
         _log_call(
-            flow, settings.llm_model, usage, started,
-            _MAX_JSON_ATTEMPTS - 1, failed=True,
+            flow, chosen_model, usage, started,
+            _MAX_JSON_ATTEMPTS - 1, failed=True, role=chosen_role,
         )
         raise AgentError("המודל החזיר JSON לא תקין פעמיים: " + last_error)
 

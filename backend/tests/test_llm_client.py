@@ -19,6 +19,9 @@ from app.dal.llm.openai_client import OpenAIJsonClient
 class _Settings:
     def __init__(self, **overrides):
         self.llm_model = "test-model"
+        self.llm_model_fast = ""
+        self.llm_model_default = ""
+        self.llm_model_advanced = ""
         self.llm_diet_mode = False
         self.llm_repetition_penalty = 0.0
         self.llm_timeout_seconds = 120
@@ -64,9 +67,11 @@ class _FakeCompletions:
     def __init__(self, script):
         self.script = list(script)
         self.calls = []
+        self.models = []
 
     def create(self, model, temperature, **kwargs):
         self.calls.append(kwargs)
+        self.models.append(model)
         item = self.script.pop(0) if self.script else _Response('{"ok": true}')
         if isinstance(item, Exception):
             raise item
@@ -313,3 +318,101 @@ def test_the_overflow_markers_the_local_servers_actually_use(message):
     with pytest.raises(AgentError) as error:
         llm.complete_json("sys", "usr")
     assert "חלון ההקשר" in str(error.value)
+
+
+# --- task-based model routing ----------------------------------------------
+
+def test_the_flow_picks_the_model_the_request_actually_sends():
+    settings = _Settings(
+        llm_model_advanced="big-model", llm_model_fast="small-model",
+    )
+    llm, fake = _client([_Response('{"ok": true}')], settings)
+    llm.complete_json("sys", "usr", flow="scheduler")
+    assert fake.completions.models == ["big-model"]
+
+
+def test_the_briefing_runs_on_the_fast_model():
+    settings = _Settings(
+        llm_model_advanced="big-model", llm_model_fast="small-model",
+    )
+    llm, fake = _client([_Response('{"ok": true}')], settings)
+    llm.complete_json("sys", "usr", flow="briefing")
+    assert fake.completions.models == ["small-model"]
+
+
+def test_an_unset_role_sends_the_existing_default_model():
+    # The backward-compatibility path: nothing configured, nothing changes.
+    llm, fake = _client([_Response('{"ok": true}')], _Settings())
+    llm.complete_json("sys", "usr", flow="scheduler")
+    assert fake.completions.models == ["test-model"]
+
+
+def test_an_explicit_model_argument_wins_over_the_flow():
+    settings = _Settings(llm_model_advanced="big-model")
+    llm, fake = _client([_Response('{"ok": true}')], settings)
+    llm.complete_json("sys", "usr", flow="scheduler", model="pinned")
+    assert fake.completions.models == ["pinned"]
+
+
+def test_a_model_saved_mid_session_applies_to_the_next_call():
+    # Resolved from the store per call, so a settings save needs no restart.
+    settings = _Settings()
+    llm, fake = _client([
+        _Response('{"ok": true}'), _Response('{"ok": true}'),
+    ], settings)
+    llm.complete_json("sys", "usr", flow="scheduler")
+    settings.llm_model_advanced = "big-model"
+    llm.complete_json("sys", "usr", flow="scheduler")
+    assert fake.completions.models == ["test-model", "big-model"]
+
+
+def test_every_role_goes_through_one_client_on_one_endpoint():
+    """The roles name models on the SAME vLLM server, so they must not each
+    build a client — that would drop the shared connection pool and pay a
+    fresh handshake per role."""
+    settings = _Settings(
+        llm_model_fast="small-model",
+        llm_model_default="chat-model",
+        llm_model_advanced="big-model",
+    )
+    llm = OpenAIJsonClient(_Store(settings))
+    fake = _FakeClient([_Response('{"ok": true}')] * 3)
+    built = []
+
+    def record(api_key, base_url, timeout):
+        built.append((api_key, base_url, timeout))
+        return fake
+
+    llm._client_for = record
+    for flow in ("briefing", "interview", "scheduler"):
+        llm.complete_json("sys", "usr", flow=flow)
+
+    assert fake.completions.models == ["small-model", "chat-model", "big-model"]
+    # Same connection arguments every time — one pool, three models.
+    assert len(set(built)) == 1
+    assert built[0][1] == "http://localhost:11434/v1"
+
+
+def test_the_ladder_still_runs_per_call_on_the_routed_model():
+    # Routing must not disturb the degradation ladder: every rung is the same
+    # model, and a rejected rung does not switch to another one.
+    settings = _Settings(llm_model_advanced="big-model")
+    llm, fake = _client([
+        _bad_request(), _bad_request(), _bad_request(),
+        _Response('{"ok": true}'),
+    ], settings)
+    llm.complete_json("sys", "usr", schema={"type": "object"}, flow="scheduler")
+    assert fake.completions.models == ["big-model"] * 4
+
+
+def test_a_failing_model_is_never_swapped_for_another_one():
+    """No automatic failover. Retrying a timed-out generation on a second
+    model can duplicate work that the first one is still finishing."""
+    settings = _Settings(llm_model_advanced="big-model")
+    llm, fake = _client([
+        _Response("not json"), _Response("still not json"),
+    ], settings)
+    with pytest.raises(AgentError):
+        llm.complete_json("sys", "usr", flow="scheduler")
+    # Both attempts, including the parse retry, stayed on the routed model.
+    assert set(fake.completions.models) == {"big-model"}

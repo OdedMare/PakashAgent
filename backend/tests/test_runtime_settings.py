@@ -133,3 +133,75 @@ def test_a_bad_value_in_a_saved_file_does_not_stop_startup(tmp_path):
 def test_unknown_keys_in_a_patch_are_ignored(store):
     store.update({"not_a_setting": "x"})
     assert not hasattr(store.get(), "not_a_setting")
+
+
+# --- per-role models -------------------------------------------------------
+
+def test_role_models_start_unset_so_one_model_deployments_are_unchanged(store):
+    settings = store.get()
+    assert settings.llm_model_fast == ""
+    assert settings.llm_model_default == ""
+    assert settings.llm_model_advanced == ""
+
+
+def test_role_models_are_saved_and_survive_a_restart(tmp_path):
+    path = str(tmp_path / "runtime-settings.json")
+    first = RuntimeSettingsStore(
+        Settings(_env_file=None, runtime_settings_file=path)
+    )
+    first.update({
+        "llm_model_fast": "small-model",
+        "llm_model_default": "chat-model",
+        "llm_model_advanced": "big-model",
+    })
+
+    reloaded = RuntimeSettingsStore(
+        Settings(_env_file=None, runtime_settings_file=path)
+    ).get()
+    assert reloaded.llm_model_fast == "small-model"
+    assert reloaded.llm_model_default == "chat-model"
+    assert reloaded.llm_model_advanced == "big-model"
+
+
+def test_a_settings_file_predating_roles_still_loads(tmp_path):
+    """The backward-compatibility case: a file written before the role
+    fields existed must load, keep its model, and leave the roles unset so
+    every flow keeps using it."""
+    path = tmp_path / "runtime-settings.json"
+    path.write_text(json.dumps({"llm_model": "old-model"}), "utf-8")
+
+    settings = RuntimeSettingsStore(
+        Settings(_env_file=None, runtime_settings_file=str(path))
+    ).get()
+    assert settings.llm_model == "old-model"
+    assert settings.llm_model_fast == ""
+    assert settings.llm_model_advanced == ""
+
+
+def test_a_role_can_be_cleared_back_to_the_default_model(store):
+    # Emptying a role must unset it, not keep the previous selection —
+    # otherwise a chosen model could never be undone from the UI.
+    store.update({"llm_model_advanced": "big-model"})
+    store.update({"llm_model_advanced": ""})
+    assert store.get().llm_model_advanced == ""
+
+
+def test_the_roles_never_carry_a_hardcoded_model_name(store):
+    # Which models exist is the server's business. Anything shipped here as
+    # a default would be a model this deployment may not serve.
+    public = store.public()
+    for field in (
+        "llm_model_fast", "llm_model_default", "llm_model_advanced",
+    ):
+        assert public[field] == ""
+
+
+def test_saving_a_role_model_leaves_the_stored_api_key_alone(store):
+    # The panel round-trips the mask for a key the boss did not retype.
+    store.update({"openai_api_key": "sk-real-secret"})
+    store.update({
+        "llm_model_advanced": "big-model",
+        "openai_api_key": MASKED_SECRET,
+    })
+    assert store.get().openai_api_key == "sk-real-secret"
+    assert store.get().llm_model_advanced == "big-model"

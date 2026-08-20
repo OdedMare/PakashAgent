@@ -35,6 +35,7 @@ export function ShiftCard({
   blocked,
   warnings,
   draggable,
+  touched = null,
   dimmed = false,
   onDragStart,
   onDragEnd,
@@ -50,6 +51,11 @@ export function ShiftCard({
   blocked: boolean;
   warnings: ScheduleWarning[];
   draggable: boolean;
+  /** Set when the agent is currently pointing at this person in this cell.
+   *  A ring, never a fill: the fill is the person's hue or the warning
+   *  colour, and both of those are older claims on the card than the
+   *  agent's attention is. */
+  touched?: "proposal" | "simulation" | "answer" | null;
   /** The card currently being dragged, faded in place so its origin stays
    *  visible while the manager looks for somewhere to drop it. */
   dimmed?: boolean;
@@ -68,6 +74,7 @@ export function ShiftCard({
         blocked ? "is-blocked" : "",
         manual ? "is-manual" : "",
         status === "draft" ? "is-draft" : "is-published",
+        touched ? `is-touched is-touched-${touched}` : "",
         dimmed ? "is-dragging" : "",
       ]
         .filter(Boolean)

@@ -4,15 +4,19 @@ import { Download, Eye, EyeOff, PencilLine, Sparkles } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import type {
+  AgentAnswer,
   Assignment,
   Constraint,
   ManagementOverview,
   PlacementCheck,
+  Proposal,
   Schedule,
   ShiftStats,
+  Simulation,
   WorkplaceProfile,
 } from "@/types";
 
+import { collectTouches } from "./agentTouch";
 import { BoardGrid } from "./BoardGrid";
 import { ConfirmDrop } from "./ConfirmDrop";
 import { CoverageBar } from "./CoverageBar";
@@ -61,6 +65,7 @@ export function Board({
   onPublish,
   onExport,
   onOpenAgent,
+  agent,
   dark,
 }: {
   overview: ManagementOverview | undefined;
@@ -87,6 +92,15 @@ export function Board({
   onExport: (scheduleId: string) => void;
   /** Open the conversation with the agent — the control room beside this. */
   onOpenAgent?: () => void;
+  /** What the agent is currently saying, so the week can show *where* it
+   *  applies. Read-only: the board renders these and produces none of them,
+   *  which is what keeps a highlight a description of the conversation
+   *  rather than a second way to change a schedule. */
+  agent?: {
+    simulation: Simulation | null;
+    proposal: Proposal | null;
+    answer: AgentAnswer | null;
+  };
   dark: boolean;
 }) {
   const current = overview?.schedule ?? null;
@@ -101,6 +115,20 @@ export function Board({
     }
     return board.weekSchedule;
   }, [current, board.weekSchedule, board.weekStart, board.weekEnd]);
+
+  // Where on the week what the agent is saying actually applies. Derived
+  // from the panels' own state rather than from anything new on the wire:
+  // there is no field here `apply` could read, which is the same guard the
+  // briefing and the answer already carry (D15/D19).
+  const touches = useMemo(
+    () =>
+      collectTouches({
+        simulation: agent?.simulation ?? null,
+        proposal: agent?.proposal ?? null,
+        answer: agent?.answer ?? null,
+      }),
+    [agent?.simulation, agent?.proposal, agent?.answer],
+  );
 
   const roster = useMemo(
     () =>
@@ -231,12 +259,23 @@ export function Board({
           {onOpenAgent ? (
             <button
               type="button"
-              className="ghost-button"
+              className={`ghost-button${touches.size ? " is-live" : ""}`}
               onClick={onOpenAgent}
-              title="שיחה עם הסוכן על הסידור"
+              title={
+                touches.size
+                  ? `הסוכן מתייחס ל-${touches.size} משמרות בשבוע הזה`
+                  : "שיחה עם הסוכן על הסידור"
+              }
             >
               <Sparkles size={14} />
               הסוכן
+              {/* The count is what connects the two screens. The panels
+                  themselves live in the control room, so without it a
+                  manager on the board can see cells lit and have no idea
+                  where the sentence explaining them is. */}
+              {touches.size ? (
+                <span className="board-agent-count">{touches.size}</span>
+              ) : null}
             </button>
           ) : null}
           {schedule ? (
@@ -333,6 +372,7 @@ export function Board({
               roles={roles}
               filters={board.filters}
               dark={dark}
+              touches={touches}
               onDropCard={openMove}
               onOpenCard={(assignment) => {
                 setCheck(null);

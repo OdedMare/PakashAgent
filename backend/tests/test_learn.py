@@ -29,8 +29,8 @@ class _ScriptedLlm:
         self._answers = list(answers)
         self.calls = []
 
-    def complete_json(self, system, user, schema=None):
-        self.calls.append({"system": system, "user": user})
+    def complete_json(self, system, user, schema=None, flow=""):
+        self.calls.append({"system": system, "user": user, "flow": flow})
         if not self._answers:
             raise AssertionError("model called more times than scripted")
         return self._answers.pop(0)

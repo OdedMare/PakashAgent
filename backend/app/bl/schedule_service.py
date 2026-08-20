@@ -42,6 +42,7 @@ from app.dal.repository.schedules import (
     ASSIGNED_BY_IMPORT,
     ASSIGNED_BY_MANAGER,
     PREFERENCE_ACTIVE,
+    PREFERENCE_EMPLOYEE,
     PREFERENCE_GENERAL,
     PREFERENCE_SUGGESTED,
     SOURCE_AGENT,
@@ -969,6 +970,7 @@ class ScheduleService:
                 "corrections": corrections,
                 "candidate_rules": [],
                 "notes": [],
+                "remembered": [],
             }
         try:
             proposed = self._learner.propose_from_corrections(
@@ -980,7 +982,102 @@ class ScheduleService:
             "corrections": corrections,
             "candidate_rules": proposed["rules"],
             "notes": proposed["notes"],
+            # What was written down as a suggestion, so the caller can say
+            # "the agent noticed something" without re-reading the table.
+            "remembered": self._remember_patterns(
+                team_id, corrections, proposed["rules"]
+            ),
         }
+
+    def observe_quietly(self, team_id: str) -> List[dict]:
+        """Count the corrections and record what repeats. No model call.
+
+        The background half of `learn_from_changes`: the manager never asks
+        for this and never waits on it. It runs off the back of an ordinary
+        read, counts the change log, and writes anything that has repeated
+        as a `suggested` preference.
+
+        **No model is called here on purpose.** Wording a candidate rule is
+        a model's job and that is what `learn_from_changes` is for, but the
+        *pattern* is arithmetic (D3) and arithmetic is what may run
+        unattended. A background path that called a model would put a
+        latency and a failure mode behind a screen nobody asked to wait for,
+        and would put the model's sentences into the table without anybody
+        having read them.
+
+        Everything it writes is inert and visible: `suggested` rows are not
+        read by `ask()` and the manager approves, rewords or deletes each one
+        ([D21](../../../docs/DECISIONS.md#d21--the-agent-remembers-preferences-and-every-one-of-them-is-visible)).
+        Learning in the background changes when the agent notices, never what
+        noticing is allowed to do.
+
+        Never raises. It is a side effect of a screen that must render
+        regardless, exactly as `brief()` is.
+        """
+        try:
+            corrections = observe_corrections(
+                self._repository.change_log(team_id, limit=_LEARN_HISTORY)
+            )
+            return self._remember_patterns(team_id, corrections, [])
+        except Exception:
+            return []
+
+    def _remember_patterns(
+        self, team_id: str, corrections: dict, rules: List[dict]
+    ) -> List[dict]:
+        """Write repeated corrections down as suggestions, once each.
+
+        The gap this closes: `observe_corrections` has always counted what
+        the manager keeps fixing, and `agent_preferences` has always been
+        able to hold a `suggested` row, but nothing joined them -- the agent
+        noticed patterns and then forgot them the moment the response was
+        rendered.
+
+        **Deduplicated on the pattern, not on the wording.** The key is the
+        same triple the tally is keyed on -- this person, this shift, this
+        weekday -- because the same pattern observed again is the same
+        observation, and a second row for it would be the agent nagging. A
+        pattern the manager already archived stays archived for the same
+        reason: `preferences()` with no status filter returns every state,
+        and a dismissed suggestion that came back would be a decision
+        overruled by a cron.
+
+        The `evidence` is the count and the manager's own stated reasons,
+        never a paraphrase. It is what makes the suggestion checkable at a
+        glance, which is the whole of why D21 requires one.
+        """
+        repeated = (corrections or {}).get("repeated") or []
+        if not repeated:
+            return []
+
+        # Every state, so an archived suggestion is not proposed again.
+        seen = {
+            _text(row.get("subject"))
+            for row in self._repository.preferences(team_id)
+            if _text(row.get("source")) == SOURCE_AGENT
+        }
+        # The model's wording where there is one for this pattern, the
+        # counted sentence otherwise. Either way the manager reads it and
+        # decides -- the sentence is a proposal, not a rule.
+        worded = _worded_by_subject(rules, repeated)
+
+        remembered = []
+        for entry in repeated:
+            subject = _pattern_key(entry)
+            if not subject or subject in seen:
+                continue
+            seen.add(subject)
+            remembered.append(self._repository.create_preference(
+                team_id,
+                text=worded.get(subject) or _pattern_sentence(entry),
+                kind=PREFERENCE_EMPLOYEE if entry.get("employee")
+                else PREFERENCE_GENERAL,
+                subject=subject,
+                evidence=_pattern_evidence(entry),
+                status=PREFERENCE_SUGGESTED,
+                source=SOURCE_AGENT,
+            ))
+        return remembered
 
     # -- answering ---------------------------------------------------------
 
@@ -1202,9 +1299,23 @@ class ScheduleService:
             # would be invented rather than observed.
             return _quiet()
 
+        # Learning happens off the back of the agent's own unprompted read,
+        # which is the only moment in the product that is already not the
+        # manager waiting on something. Counted, never modelled, and every
+        # row it writes is `suggested` and inert -- see `observe_quietly`.
+        # Before the briefing rather than after, so a pattern noticed now is
+        # in the table the briefing is about to describe.
+        self.observe_quietly(team_id)
+
         schedule = self.current(team_id)
         window = _window(schedule)
         warnings = (schedule or {}).get("warnings") or []
+        # Publishing state and the unstaffed slots, counted by the same
+        # read-only tools the answering path uses (D19). Read here rather
+        # than left for the model to ask about: a briefing gets one call and
+        # no tool loop, so anything it is to reason about has to be in front
+        # of it. Both are arithmetic, so this moves no part of the D3 line.
+        readiness, gaps = self._publishing_state(team_id, schedule)
         try:
             return self._briefing.brief(
                 trigger,
@@ -1231,9 +1342,37 @@ class ScheduleService:
                 ),
                 changes=self._repository.change_log(team_id, limit=40),
                 last_said=last_said,
+                readiness=readiness,
+                gaps=gaps,
             )
         except Exception:
             return _quiet()
+
+    def _publishing_state(
+        self, team_id: str, schedule: Optional[dict]
+    ) -> tuple:
+        """What publishing is waiting on, and which slots are short.
+
+        Both come from `bl/tools.py`, which is the same arithmetic the
+        manager gets when they ask outright -- so the briefing and the answer
+        to *"מה חסר לפני פרסום"* can never disagree. Reusing the tool is the
+        point; a second implementation of "what is missing" is how two
+        screens start telling the manager different things.
+
+        Returns empties rather than raising when there is no period: the
+        briefing is decoration on a screen that must render, and a workspace
+        before its first schedule is the most ordinary case there is.
+        """
+        if not schedule:
+            return {}, []
+        schedule_id = _text(schedule.get("id"))
+        try:
+            readiness = self._tools.publish_readiness(
+                team_id, schedule_id=schedule_id
+            )
+            return readiness, readiness.get("gaps") or []
+        except Exception:
+            return {}, []
 
     # -- helpers -----------------------------------------------------------
 
@@ -1490,6 +1629,92 @@ def _iso(value: Any) -> str:
 
 def _text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
+
+
+def _pattern_key(entry: dict) -> str:
+    """The identity of a counted pattern: this person, shift and weekday.
+
+    Stored in `subject` and used to deduplicate, so the same pattern seen
+    again is recognised as the same observation however it ends up worded.
+    The tally is keyed on exactly this triple, which is what makes it a
+    stable name rather than a hash of a sentence that may change.
+    """
+    parts = [
+        _text(entry.get("employee")),
+        _text(entry.get("shift")),
+        _text(entry.get("weekday")),
+    ]
+    if not parts[0]:
+        return ""
+    return "|".join(parts)
+
+
+def _pattern_sentence(entry: dict) -> str:
+    """The counted pattern as a sentence, with no model involved.
+
+    Deliberately flat and slightly clumsy: it describes what was counted and
+    claims nothing beyond it. The background path has no model (see
+    `observe_quietly`), and a template that tried to sound like the manager
+    would be putting words in their mouth that nobody wrote. When
+    `learn_from_changes` does run, the model's wording replaces this.
+    """
+    employee = _text(entry.get("employee"))
+    shift = _text(entry.get("shift"))
+    weekday = _text(entry.get("weekday"))
+    where = " ".join(part for part in (shift, weekday) if part)
+    if where:
+        return "נראה ש%s לא משובץ/ת ל%s" % (employee, where)
+    return "נראה שיש תיקונים חוזרים בשיבוץ של %s" % employee
+
+
+def _pattern_evidence(entry: dict) -> str:
+    """The count and the manager's own reasons, verbatim.
+
+    Never a paraphrase: "הועבר/ה 3 פעמים, מהנימוקים: לימודים" is a claim the
+    manager can check in a second, and a checkable claim is what makes a
+    suggestion something they can meaningfully approve (D21). A summary of
+    their reasons would be the agent asking them to trust its reading of
+    what they wrote.
+    """
+    count = entry.get("count") or 0
+    said = [_text(reason) for reason in entry.get("reasons") or []]
+    said = [reason for reason in said if reason]
+    evidence = "תוקן %d פעמים" % count
+    window = " ".join(
+        part for part in (
+            _text(entry.get("first_seen")), _text(entry.get("last_seen"))
+        ) if part
+    )
+    if window:
+        evidence += " (%s)" % window.replace(" ", " – ")
+    if said:
+        evidence += ", מהנימוקים שנרשמו: " + "; ".join(said[:3])
+    return evidence
+
+
+def _worded_by_subject(
+    rules: List[dict], repeated: List[dict]
+) -> Dict[str, str]:
+    """Match the model's candidate sentences back onto counted patterns.
+
+    Matched by the person's name appearing in the rule's text, which is
+    loose on purpose. A miss costs nothing -- the pattern is still recorded
+    with its counted sentence -- while a strict join would need the model to
+    echo a key back, and a model asked to carry an identifier around is a
+    model given a way to get one wrong.
+    """
+    worded: Dict[str, str] = {}
+    for entry in repeated:
+        employee = _text(entry.get("employee"))
+        subject = _pattern_key(entry)
+        if not subject:
+            continue
+        for rule in rules or []:
+            text = _text(rule.get("text"))
+            if text and employee and employee in text:
+                worded[subject] = text
+                break
+    return worded
 
 
 __all__ = ["ScheduleService"]

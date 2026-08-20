@@ -411,6 +411,7 @@ class RuleLearner(object):
                 "instructions": _bounded(instructions),
             }, ensure_ascii=False),
             schema=CANDIDATE_SCHEMA,
+            flow="learn",
         )
         return _candidates(answer)
 
@@ -443,6 +444,7 @@ class RuleLearner(object):
                 "profile": _profile_for_model(profile),
             }, ensure_ascii=False),
             schema=CANDIDATE_SCHEMA,
+            flow="learn",
         )
         return _candidates(answer)
 
