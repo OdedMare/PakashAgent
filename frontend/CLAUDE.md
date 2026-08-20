@@ -51,6 +51,9 @@ import screen. All surfaces exist.
 | Schedule | The living grid for a period, RTL — `Management/Calendar.tsx` |
 | Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `ConfirmMove.tsx` |
 | Briefing | What the agent noticed unprompted — `Management/Briefing.tsx` |
+| Agent answer | What the agent found when *asked* — `Management/AgentAnswer.tsx` |
+| Simulation | A change being considered, never one that landed — `Management/SimulationPanel.tsx` |
+| Preferences | What the agent remembers, all of it visible — `Management/Preferences.tsx` |
 | Import confirm | Inferred interpretation, confirmed before anything is stored — `Management/ImportSchedule.tsx` |
 | Employee view | **Read-only** schedule — `MemberArea` renders the same `Calendar` with `readOnly` |
 | Personal area | One employee's own hours, shifts and constraint requests — `src/components/Employee/` |
@@ -128,6 +131,33 @@ durable result and exactly the thing the area needs to run on.
   rather than patching locally: the schedule, its warnings, the constraints and
   the log all move together, and a locally patched grid beside a stale audit is
   worse than a brief spinner.
+- **Five card states, and they never look alike.** The side column
+  distinguishes an *insight* (`Briefing`, the agent volunteered it), an
+  *answer* (`AgentAnswer`, the agent read the schedule and reported), a
+  *simulation* (`SimulationPanel`, dashed and in its own colour — nothing
+  has been written), a *proposal awaiting approval* (`AgentChat`, with a
+  confirm button and a required reason), and an *error*. A simulation that
+  looked like a proposal would be one.
+- **Asking and requesting a change are two buttons.** The magnifier calls
+  `/ask` — read-only, and the card it produces has no confirm button because
+  the response carries no operations (D19). Send asks the agent to propose.
+  Collapsing them would make every question produce a confirm button for
+  something the manager did not ask for.
+- **An answer says which checks it rests on.** `AgentAnswer` lists the tools
+  that ran, and states when it was produced without a model. Both are
+  product requirements rather than debugging output: an answer whose checks
+  are invisible has to be taken on faith, and a manager who cannot tell they
+  are on the deterministic path would read "לא הבנתי" as the product being
+  broken rather than the model being unconfigured.
+- **Approving a simulation is the ordinary apply call.** `SimulationPanel`
+  keeps its button disabled until there is a reason, mirroring `ConfirmMove`
+  — and it sends the same `applyChange` a typed sentence does. There is no
+  shortcut, because a second write path is how the confirmation step gets
+  routed around (D8/D12).
+- **Every stored preference is on screen.** `Preferences` lists suggested,
+  active and archived rows and lets the manager reword, approve, archive or
+  delete any of them — a preference they cannot see is a rule they never
+  agreed to (D21).
 - **Constraints show their source.** `source` says whether the manager decided
   it, the agent recorded it, or it came from the employee — an approved
   submission is stored as `employee_reported`, keeping "Dana said she cannot

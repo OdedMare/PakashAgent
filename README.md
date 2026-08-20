@@ -38,6 +38,32 @@ nothing: the manager sends the sentence, the agent proposes, the manager
 confirms with their reason
 ([D15](docs/DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)).
 
+**The agent answers questions, not only requests.** The manager can ask
+*"מי יכול להחליף את יוסי בסופ״ש"* or *"מה חסר לפני פרסום"* and get an
+answer assembled from deterministic tools — who is free, who is qualified,
+what is unstaffed, what stands before publishing. The model picks which
+questions to ask; `bl/tools.py` answers each with arithmetic, so the agent
+cannot claim a placement is valid unless the check said so
+([D19](docs/DECISIONS.md#d19--the-agent-answers-with-tools-asking-and-changing-stay-separate)).
+An answer carries no operations: asking is not changing.
+
+**A change can be simulated before it is made.** *"מה יקרה אם אעביר את דנה
+לחמישי בערב"* returns what would break, what would clear, how coverage and
+hours would move, and everyone affected — computed in memory, persisting
+nothing. Approving it runs the ordinary confirm-with-a-reason path
+([D20](docs/DECISIONS.md#d20--a-simulation-is-not-a-proposal)).
+
+**All of that works with no model configured.** The same tools run, driven
+by a deterministic reader of the manager's Hebrew instead of by the model.
+It covers six question shapes and says plainly when it did not understand
+one, rather than guessing.
+
+**The agent remembers what it is told to.** Standing operational preferences
+— *"עדיף לשאול את יוסי לפני רון לסופ״ש"* — are stored per team, visible,
+editable, and never authorise a write. One the agent proposes stays inert
+until the manager approves it
+([D21](docs/DECISIONS.md#d21--the-agent-remembers-preferences-and-every-one-of-them-is-visible)).
+
 **Employees are told what changed.** Someone with a claimed identity opens
 their personal area and sees, first, what moved since they last looked — with
 the manager's reason attached. Pressing "ראיתי" is what marks it read
@@ -52,8 +78,9 @@ and imported back. A message for the group chat is asked of the agent instead
 Built: the ported `dal/llm` client, settings and runtime settings, the interview
 and its prompt, the workspace layer (teams, boss login, member share links, route
 guards), `bl/audit.py` and its table-driven tests, `bl/scheduler.py`,
-`bl/changes.py`, `bl/briefing.py`, `bl/export.py`, the schedule tables, the management HTTP
-layer, and the RTL UI for all of it.
+`bl/changes.py`, `bl/briefing.py`, `bl/export.py`, `bl/placement.py`, the agent's
+tool layer (`bl/tools.py`, `bl/planner.py`, `bl/intent.py`, `bl/simulate.py`),
+the schedule tables, the management HTTP layer, and the RTL UI for all of it.
 
 Not built yet: `bl/importer.py` and the import-confirmation screens — see
 [`docs/BUILD_ORDER.md`](docs/BUILD_ORDER.md) step 6.

@@ -14,7 +14,7 @@ the team scoping.
 |---|---|
 | `workspace.py` | Create/enter a workspace, the member share link, logout |
 | `interview.py` | The intro interview, one turn at a time |
-| `schedules.py` | The management area: read/generate a period, open one blank and fill it by hand (D18), propose and apply changes, constraints, history |
+| `schedules.py` | The management area: read/generate a period, open one blank and fill it by hand (D18), propose and apply changes, constraints, history, plus asking (`/ask`, `/tool`), simulating (`/simulate`) and preferences (D19–D21) |
 | `imports.py` | Upload a file, return the inferred interpretation, commit on confirm |
 | `employees.py` | Roster management |
 | `health.py` | Liveness |
@@ -90,6 +90,33 @@ route that lets one workspace name another.
 `/api/settings` is boss-only and process-wide — it holds the database
 credentials and the model key. See [D10](../../../docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)
 for why it is not per-team yet.
+
+## Asking, simulating, remembering
+
+Three route groups added with D19–D21, all `guards.boss()` and all reading
+the team from the signed cookie:
+
+- **`POST /ask` and `POST /tool` write nothing**, and `/ask`'s response type
+  has **no operations field at all** — there is nothing an `apply` could read
+  out of an answer, the same property `/brief` has (D15). Asking about the
+  schedule and asking to change it are separate endpoints because they are
+  separate acts; a question whose answer implies a change comes back with
+  `needs_confirmation` and still goes through propose-then-confirm.
+- **`POST /simulate` persists nothing** and returns an impact report rather
+  than something confirmable. Approving one is an ordinary `POST /apply`
+  with the manager's reason — there is deliberately **no** "apply
+  simulation" endpoint, because a second write path is how the confirmation
+  step gets routed around (D8/D12).
+- **`/preferences*` are boss-only and fully visible.** A suggested preference
+  is inert until a `PATCH` sets it active.
+
+An unknown tool name on `/tool` answers `200` with `ok: false` rather than
+raising: the caller is a UI that has to render something, and "there is no
+such tool" is information rather than a failed request.
+
+**These are declared before `/{schedule_id}`** like every other literal path
+under this prefix — `/preferences/list` read as a schedule id is exactly the
+bug the ordering note above exists to prevent.
 
 ## Rules
 

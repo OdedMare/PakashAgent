@@ -21,6 +21,10 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | `audit.py` | **Pure-Python advisory checks. No LLM.** Also the fairness arithmetic the scheduler and the employee area read |
 | `export.py` | **A period out as `.xlsx`.** Pure functions, no model, no repository |
 | `importer.py` | Excel/doc ingest with layout inference |
+| `tools.py` | **The named questions the agent may ask. Pure Python, no LLM, no write** |
+| `planner.py` | The tool loop, with a deterministic fallback when no model is reachable |
+| `intent.py` | **Reading a Hebrew sentence with no model.** Six shapes; never guesses |
+| `simulate.py` | **What a change would do.** No model, no repository, persists nothing |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
 
 ## The division that defines this layer
@@ -191,6 +195,57 @@ feature actually fails.
 `schedule_service.brief()` swallows failures and returns quiet. This sits
 beside a calendar that must render regardless of what the model is doing.
 
+## `tools.py`, `planner.py`, `intent.py` — answering a question
+
+The multi-step half of the agent
+([D19](../../../docs/DECISIONS.md#d19--the-agent-answers-with-tools-asking-and-changing-stay-separate)).
+`ChangeAgent` puts the whole period in front of the model and asks for
+operations, which works for one absence and stops working for *"מי יכול
+להחליף את יוסי בסופ״ש"* — four countable things resolved in order, which is
+what D3 already assigns to code.
+
+So the questions are **named**, and each is answered by arithmetic:
+`read_period`, `employee_state`, `coverage_gaps`, `validate_placement`,
+`find_replacements`, `publish_readiness`. The model picks which to call and
+writes the Hebrew around the result; it never supplies a number, a name or a
+verdict.
+
+**Nothing in this path writes.** `tools.py` holds a repository and reads from
+it. `planner.py` holds the *tools*, not the repository. The response schema
+has no operation in it, so there is nothing `apply` could consume — the same
+guard `briefing.py` has.
+
+**The agent may not claim a placement is valid unless a tool said so.**
+`find_replacements` re-validates every candidate through `placement.py` and
+keeps only the clean ones. That is a constraint on *assertion*, not a veto:
+`validate_placement` still returns `blocking: False`, and the manager may
+still place somebody it warns about (D3).
+
+`intent.py` is the floor. With no model configured — the deployment default
+here — it reads the sentence by matching against the workspace's own roster
+and shift vocabulary, runs the same tools, and renders Hebrew templates.
+Anything it cannot place comes back `unknown` with a list of what it *can*
+answer. **It never guesses**: an agent acting on a misread sentence with no
+model to blame is worse than one that asks.
+
+## `simulate.py` — what a change would do
+
+Answers *"מה יקרה אם…"* with an impact report: warnings introduced and
+resolved, coverage before and after, hours per affected person, and everyone
+touched — including the person a change takes a shift *away* from
+([D20](../../../docs/DECISIONS.md#d20--a-simulation-is-not-a-proposal)).
+
+Handed **no repository**, so persisting nothing is structural rather than a
+rule to remember — the same shape `changes.py` and `importer.py` have. The
+warning diff keys on code/person/date/shift rather than on the message,
+because `_over_hours` writes its running total into the sentence and a
+warning that merely got worse would otherwise read as a new one.
+
+Deliberately not `propose()`: a proposal is an answer with a confirm button,
+and a manager thinking out loud has not asked for one. Approving a simulation
+is an ordinary `apply()` with their reason — there is no dedicated endpoint,
+because a second write path is how a confirmation step gets routed around.
+
 ## `audit.py` — the advisory checker
 
 **Pure functions. No LLM call. Never blocks.**
@@ -299,6 +354,11 @@ confirmation** ([D7](../../../docs/DECISIONS.md#d7--import-infers-layout-boss-co
 
 - `audit.py` warns; it never blocks, rewrites, or vetoes.
 - `audit.py` contains no LLM call, ever.
+- `tools.py`, `intent.py` and `simulate.py` contain no LLM call, ever.
+- Nothing on the answering or simulating path writes. `tools.py` reads;
+  `planner.py` and `simulate.py` are handed no repository to write with.
+- An answer carries no operations, and a simulation is approved through the
+  ordinary `apply()` with the manager's reason — never through a shortcut.
 - Shift names come from the interview — never hardcoded.
 - Rules stay natural language.
 - Every assignment carries the agent's reason; every change also carries the
