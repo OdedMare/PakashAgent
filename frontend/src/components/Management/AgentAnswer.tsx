@@ -139,4 +139,5 @@ const TOOL_LABELS: Record<string, string> = {
   validate_placement: "בדיקת תקינות שיבוץ",
   find_replacements: "חיפוש מחליפים",
   publish_readiness: "בדיקה לפני פרסום",
+  profile_gaps: "מה עוד חסר לסוכן על מקום העבודה",
 };

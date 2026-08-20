@@ -99,6 +99,17 @@ export function answerInterview(
   });
 }
 
+/** Close the interview now, keeping whatever has been collected.
+ *
+ *  Costs no model call on the server — this is the way out of an interview
+ *  the manager does not have time to finish, and a way out that needs the
+ *  model is not one. What the profile still owes is recorded on it. */
+export function endInterview(sessionId: string): Promise<InterviewTurn> {
+  return request<InterviewTurn>(`/api/interview/${sessionId}/end`, {
+    method: "POST",
+  });
+}
+
 /** Current settings, with every secret already masked by the backend. */
 export function getSettings(): Promise<RuntimeSettings> {
   return request<RuntimeSettings>("/api/settings");

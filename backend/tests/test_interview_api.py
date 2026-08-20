@@ -363,6 +363,93 @@ def test_an_empty_answer_is_rejected(content):
     assert response.status_code in (400, 422, 502)
 
 
+# -- ending the interview early --------------------------------------------
+
+
+def test_ending_stores_the_draft_so_far_as_the_profile():
+    """The manager's escape hatch: close now, keep what was collected."""
+    partial = dict(_empty(), **{
+        "workplace": {"name": "צוות תפעול", "mission": "רציפות"},
+        "shifts": [{"name": "בוקר", "start_time": "08:00"}],
+    })
+    client, repository = _client(
+        _ScriptedLlm([_question(draft=partial)])
+    )
+    session_id = client.post("/api/interview").json()["session_id"]
+
+    body = client.post("/api/interview/%s/end" % session_id).json()
+
+    assert body["status"] == "complete"
+    stored = repository.sessions[session_id]
+    assert stored["status"] == "complete"
+    assert stored["profile"]["workplace"]["name"] == "צוות תפעול"
+    assert stored["profile"]["shifts"][0]["name"] == "בוקר"
+
+
+def test_ending_costs_no_model_call():
+    """The escape hatch from a slow model must not need that model."""
+    llm = _ScriptedLlm([_question()])
+    client, _ = _client(llm)
+    session_id = client.post("/api/interview").json()["session_id"]
+    before = len(llm.calls)
+
+    client.post("/api/interview/%s/end" % session_id)
+
+    assert len(llm.calls) == before
+
+
+def test_ending_records_what_the_profile_still_owes():
+    """The gaps travel with the profile — `bl/tools.py` reads them back."""
+    client, repository = _client(_ScriptedLlm([_question()]))
+    session_id = client.post("/api/interview").json()["session_id"]
+
+    client.post("/api/interview/%s/end" % session_id)
+
+    completeness = repository.sessions[session_id]["profile"]["completeness"]
+    assert completeness["complete"] is False
+    # The first turn's draft is empty, so every required topic is owed.
+    assert any("משמרת" in line for line in completeness["missing_topics"])
+
+
+def test_a_confirmed_interview_records_no_completeness_block():
+    """Absence is what marks a profile finished; nothing is backfilled."""
+    client, repository = _client(
+        _ScriptedLlm([_question(), _confirming(), _complete()])
+    )
+    session_id = client.post("/api/interview").json()["session_id"]
+    for _ in range(2):
+        client.post(
+            "/api/interview/%s/answer" % session_id, json={"content": "כן"}
+        )
+
+    profile = repository.sessions[session_id]["profile"]
+    assert profile is not None
+    assert "completeness" not in profile
+
+
+def test_ending_twice_serves_the_same_finished_interview():
+    """A double-clicked button ends the same interview, not a conflict."""
+    client, _ = _client(_ScriptedLlm([_question()]))
+    session_id = client.post("/api/interview").json()["session_id"]
+
+    first = client.post("/api/interview/%s/end" % session_id)
+    second = client.post("/api/interview/%s/end" % session_id)
+
+    assert first.status_code == 200 and second.status_code == 200
+    assert second.json()["status"] == "complete"
+
+
+def test_a_member_cannot_end_an_interview():
+    """Ending writes the profile, which is authoring (D5/D10).
+
+    Refused by the guard before the session id is ever looked at, which is
+    why an id that does not exist still answers 401 rather than 404.
+    """
+    client, _ = _client(_ScriptedLlm([_question()]), role=ROLE_MEMBER)
+
+    assert client.post("/api/interview/whatever/end").status_code == 401
+
+
 def test_an_unknown_session_is_a_404():
     client, _ = _client(_ScriptedLlm([_question()]))
 

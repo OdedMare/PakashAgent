@@ -10,6 +10,7 @@ import type {
   PlacementCheck,
   Schedule,
   ShiftStats,
+  WorkplaceProfile,
 } from "@/types";
 
 import { BoardGrid } from "./BoardGrid";
@@ -351,7 +352,7 @@ export function Board({
       ) : (
         <EmptyWeek
           busy={busy || board.weekBusy}
-          hasProfile={Boolean(overview?.profile)}
+          profile={overview?.profile ?? null}
           weekStart={board.weekStart}
           weekEnd={board.weekEnd}
           onGenerate={() =>
@@ -504,26 +505,45 @@ const EMPTY_STATS: ShiftStats = {
  *  "build" builds *that* week rather than today's. */
 function EmptyWeek({
   busy,
-  hasProfile,
+  profile,
   weekStart,
   weekEnd,
   onGenerate,
   onOpenBlank,
 }: {
   busy: boolean;
-  hasProfile: boolean;
+  profile: WorkplaceProfile | null;
   weekStart: string;
   weekEnd: string;
   onGenerate: () => void;
   onOpenBlank: () => void;
 }) {
-  if (!hasProfile) {
+  if (!profile) {
     return (
       <div className="board-empty">
         <h2>צריך להשלים את ראיון ההיכרות</h2>
         <p>
           הראיון הוא מה שמלמד את הסוכן את המשמרות, העובדים והכללים. בלעדיו אין
           ממה לבנות סידור — גם לא ידנית, כי המשמרות עצמן מגיעות משם.
+        </p>
+      </div>
+    );
+  }
+
+  // A profile exists but its interview was ended early. The distinction that
+  // matters is the shift vocabulary: without it there is no grid at all, not
+  // even one built by hand, because inventing shift names is what D9
+  // forbids. Everything else missing degrades the result rather than
+  // preventing it, so the week still opens and the gaps are stated.
+  const gaps = profile.completeness;
+  if (gaps && !gaps.complete && !profile.shifts?.length) {
+    return (
+      <div className="board-empty">
+        <h2>עוד לא הוגדרו סוגי משמרות</h2>
+        <p>
+          הראיון נסגר לפני שהוגדרו המשמרות, ובלי סוגי המשמרות אין שורות לבנות
+          מהן לוח — גם לא ידנית. אפשר לחזור לראיון מהכפתור בסרגל העליון
+          ולהשלים אותן.
         </p>
       </div>
     );
@@ -536,6 +556,12 @@ function EmptyWeek({
         אפשר לבקש מהסוכן לבנות את השבוע, או לפתוח שבוע ריק ולשבץ ידנית — בלי
         הסוכן בכלל.
       </p>
+      {gaps && !gaps.complete ? (
+        <p className="board-empty-partial">
+          הראיון עוד לא הושלם, כך שהסוכן בונה על סמך מה שהספיק ללמוד. אפשר
+          לשאול אותו בחדר הבקרה מה עוד חסר לו.
+        </p>
+      ) : null}
       <div className="board-empty-actions">
         <button
           type="button"

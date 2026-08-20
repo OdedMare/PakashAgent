@@ -23,6 +23,7 @@ from app.bl.tools import (
     TOOL_EMPLOYEE_STATE,
     TOOL_FIND_REPLACEMENTS,
     TOOL_NAMES,
+    TOOL_PROFILE_GAPS,
     TOOL_PUBLISH_READINESS,
     TOOL_READ_PERIOD,
     TOOL_VALIDATE_PLACEMENT,
@@ -467,3 +468,58 @@ def test_unknown_arguments_are_dropped_rather_than_crashing(repo, tools):
         "day": "2026-08-17", "מה": "זה", "limit": 5,
     })
     assert answer["ok"] and answer["found"]
+
+
+# -- what the interview never taught ---------------------------------------
+
+
+def test_a_confirmed_profile_reports_nothing_outstanding(repo, tools):
+    """No `completeness` key means the gate let it finish, so nothing is owed."""
+    answer = tools.run(TEAM, TOOL_PROFILE_GAPS, {})
+    assert answer["ok"] and answer["found"]
+    assert answer["complete"] is True
+    assert answer["gaps"] == []
+
+
+def test_an_ended_interview_reports_what_it_still_owes(repo, tools):
+    repo.profiles[TEAM] = dict(PROFILE, completeness={
+        "complete": False,
+        "missing_topics": ["חסרה תקופת התכנון של הסידור."],
+        "open_points": ["לא נמסרו האילוצים הקבועים."],
+    })
+    answer = tools.run(TEAM, TOOL_PROFILE_GAPS, {})
+    assert answer["complete"] is False
+    assert answer["gaps"] == ["חסרה תקופת התכנון של הסידור."]
+    assert answer["open_points"] == ["לא נמסרו האילוצים הקבועים."]
+
+
+def test_a_gap_is_not_listed_twice(repo, tools):
+    """`open_points` carries the missing topics too — the interview appends
+    them there so the manager sees them mid-conversation. Reported once."""
+    line = "לא נרשם אף עובד."
+    repo.profiles[TEAM] = dict(PROFILE, completeness={
+        "complete": False,
+        "missing_topics": [line],
+        "open_points": [line, "משהו אחר."],
+    })
+    answer = tools.run(TEAM, TOOL_PROFILE_GAPS, {})
+    assert answer["gaps"] == [line]
+    assert answer["open_points"] == ["משהו אחר."]
+
+
+def test_a_missing_shift_vocabulary_blocks_even_manual_building(repo, tools):
+    """The one gap that stops everything: D9 forbids inventing shift names,
+    so with none declared there are no rows to fill by hand either."""
+    repo.profiles[TEAM] = {
+        "workplace": {"name": "מוקד"}, "shifts": [], "employees": [],
+        "completeness": {"complete": False, "missing_topics": []},
+    }
+    answer = tools.run(TEAM, TOOL_PROFILE_GAPS, {})
+    assert answer["has_shifts"] is False
+    assert any("ידנית" in line for line in answer["blocks"])
+
+
+def test_no_interview_at_all_is_an_answer_not_a_crash(repo, tools):
+    repo.profiles.pop(TEAM)
+    answer = tools.run(TEAM, TOOL_PROFILE_GAPS, {})
+    assert answer["ok"] and answer["found"] is False

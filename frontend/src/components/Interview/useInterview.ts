@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   answerInterview,
+  endInterview,
   resumeInterview,
   startInterview,
 } from "@/services/api";
@@ -20,6 +21,10 @@ export interface InterviewState {
   error: string | null;
   start: () => void;
   answer: (content: string) => void;
+  /** Close the interview with what has been collected so far. Resolves once
+   *  the profile is stored, so the caller can leave for the management area
+   *  knowing there is something there to render. */
+  end: () => Promise<void>;
   reset: () => void;
   retry: () => void;
 }
@@ -84,6 +89,16 @@ export function useInterview(): InterviewState {
     [run, turn?.session_id],
   );
 
+  const end = useCallback(async () => {
+    const sessionId = turn?.session_id;
+    if (!sessionId) return;
+    // Awaited rather than fired and forgotten: the caller navigates to the
+    // management area on the strength of this, and that area reads the
+    // profile this call is what writes. Leaving first would race it and
+    // land on the interview again.
+    await run(() => endInterview(sessionId));
+  }, [run, turn?.session_id]);
+
   const reset = useCallback(() => {
     window.localStorage.removeItem(STORAGE_KEY);
     setTurn(null);
@@ -121,5 +136,5 @@ export function useInterview(): InterviewState {
     };
   }, []);
 
-  return { turn, busy, error, start, answer, reset, retry };
+  return { turn, busy, error, start, answer, end, reset, retry };
 }

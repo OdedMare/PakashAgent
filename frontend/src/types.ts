@@ -36,7 +36,25 @@ export interface WorkplaceProfile {
   shifts?: unknown[];
   rules?: unknown[];
   summary?: string;
+  /** Present only on a profile whose interview was ended early. Its absence
+   *  means the interview was confirmed the ordinary way, so nothing is
+   *  outstanding — written by `interview_service.end`, read here and by
+   *  `bl/tools.py`'s `profile_gaps`. */
+  completeness?: ProfileCompleteness;
   [key: string]: unknown;
+}
+
+/** What an interview ended early still owes.
+ *
+ *  Two lists because they answer different questions. `missing_topics` is
+ *  what the scheduler cannot run without; `open_points` is what the agent
+ *  itself flagged as unsettled — real, but a manager can schedule around
+ *  them. */
+export interface ProfileCompleteness {
+  complete: boolean;
+  missing_topics: string[];
+  open_points: string[];
+  resolved?: string[];
 }
 
 export interface InterviewTurn {

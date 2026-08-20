@@ -29,6 +29,10 @@ export interface WorkspaceState {
   enterWithToken: (token: string) => Promise<void>;
   logout: () => Promise<void>;
   rotateLink: () => Promise<void>;
+  /** Re-read `/api/workspace/me`. Exposed so a surface that wrote something
+   *  the router switches on — the interview writing a profile — can have the
+   *  answer refreshed before it hands control back. */
+  refresh: () => Promise<void>;
   clearError: () => void;
 }
 
@@ -126,6 +130,7 @@ export function useWorkspace(): WorkspaceState {
     enterWithToken,
     logout,
     rotateLink,
+    refresh,
     clearError,
   };
 }

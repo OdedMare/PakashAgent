@@ -74,6 +74,31 @@
   background: var(--surface-3);
 }
 
+/* A count on a header icon — used for the topics an ended interview left
+   open. Positioned rather than inline so the icon stays centred in its
+   34px box and the row's rhythm is unchanged whether or not it is there. */
+.icon-button.has-badge {
+  position: relative;
+  color: var(--text);
+}
+
+.icon-badge {
+  position: absolute;
+  top: 1px;
+  inset-inline-end: 1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  display: grid;
+  place-items: center;
+  font-size: 0.6rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--on-accent, #fff);
+  background: var(--accent);
+  border-radius: 7px;
+}
+
 /* --- progress ---------------------------------------------------------- */
 
 .progress {
@@ -669,4 +694,30 @@
     width: min(768px, 100%);
     margin: 0 auto 24px;
   }
+}
+
+/* --- ending the interview early ---------------------------------------- */
+
+/* What the interview has not settled, listed in the confirmation. Shown so
+   the manager leaves knowing what they are leaving — never as something
+   that has to be cleared before the button works. */
+.end-open-points {
+  margin: 0 0 4px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-radius: 10px;
+}
+
+.end-open-points ul {
+  margin: 6px 0 0;
+  padding-inline-start: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.end-open-points li {
+  font-size: 0.8rem;
+  color: var(--text-soft);
+  line-height: 1.5;
 }

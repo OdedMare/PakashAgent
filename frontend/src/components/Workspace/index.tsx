@@ -85,13 +85,21 @@ function BossSurface({
     );
   }
 
+  // Always supplied now, taught or not. `refresh` re-reads the profile the
+  // interview just wrote, so a first interview ended early lands on a
+  // management area that already knows what it was given — without it,
+  // `taught` is still false from the last fetch and the router sends the
+  // manager straight back into the interview they just left.
   return (
     <Interview
       workspace={workspace}
       busy={state.busy}
       onLogout={state.logout}
       onRotateLink={state.rotateLink}
-      onDone={taught ? () => setReinterview(false) : undefined}
+      onDone={async () => {
+        setReinterview(false);
+        await state.refresh();
+      }}
     />
   );
 }

@@ -111,6 +111,16 @@ export function Management({
   });
 
   const overview = state.overview;
+  // How many topics the interview left unsettled. Counted from the profile's
+  // own record rather than re-derived, so the badge, the board's notice and
+  // what the agent says when asked are all reading one answer. Zero — and no
+  // badge — is the ordinary case: a confirmed interview carries no record at
+  // all, because the gate refused to let it finish owing anything.
+  const completeness = overview?.profile?.completeness;
+  const openTopics =
+    completeness && !completeness.complete
+      ? completeness.missing_topics.length + completeness.open_points.length
+      : 0;
   const schedule = overview?.schedule ?? null;
   // The roster in profile order. It is what the calendar assigns colours
   // from, so the order matters: position is the hue (see `palette.ts`).
@@ -158,12 +168,27 @@ export function Management({
           {onOpenInterview ? (
             <button
               type="button"
-              className="icon-button"
+              className={
+                openTopics ? "icon-button has-badge" : "icon-button"
+              }
               onClick={onOpenInterview}
-              aria-label="ראיון היכרות"
-              title="ראיון היכרות"
+              aria-label={
+                openTopics
+                  ? `ראיון היכרות — ${openTopics} נושאים פתוחים`
+                  : "ראיון היכרות"
+              }
+              title={
+                openTopics
+                  ? `הראיון לא הושלם — ${openTopics} נושאים עוד לא סוכמו`
+                  : "ראיון היכרות"
+              }
             >
               <Sparkles size={17} />
+              {openTopics ? (
+                <span className="icon-badge" aria-hidden="true">
+                  {openTopics > 9 ? "9+" : openTopics}
+                </span>
+              ) : null}
             </button>
           ) : null}
           {workspace.member_token ? (

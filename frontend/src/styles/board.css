@@ -843,6 +843,18 @@
   line-height: 1.65;
 }
 
+/* Said under the ordinary empty-week copy when the interview was ended
+   early. Muted rather than a warning: a partial profile is a state the
+   manager chose, not a problem the board found. */
+.board-empty-partial {
+  max-width: 34rem;
+  font-size: 0.8rem !important;
+  color: var(--text-muted) !important;
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+  margin-top: 0.2rem !important;
+}
+
 .board-empty-actions {
   display: flex;
   gap: 0.5rem;

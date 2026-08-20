@@ -3,6 +3,7 @@
 import {
   AlertCircle,
   CalendarDays,
+  DoorOpen,
   LayoutGrid,
   LogOut,
   MessagesSquare,
@@ -19,6 +20,7 @@ import { ShareLink } from "@/components/Workspace/ShareLink";
 import type { TeamView } from "@/types";
 
 import { Composer } from "./Composer";
+import { ConfirmEnd } from "./ConfirmEnd";
 import { DraftPanel } from "./DraftPanel";
 import { ProfileSummary } from "./ProfileSummary";
 import { Turn } from "./Turn";
@@ -46,15 +48,40 @@ export function Interview({
   busy?: boolean;
   onLogout?: () => void;
   onRotateLink?: () => void;
-  /** Leave the interview for the management area. Supplied only when there
-   *  is one to go back to — a workplace already taught — so a first-time
-   *  interview has no exit that would strand the manager without a profile. */
+  /** Leave the interview for the management area.
+   *
+   *  Supplied whether or not a profile already exists. It used to be
+   *  withheld on a first interview so nobody could arrive at the management
+   *  area with nothing to schedule against — but that made the first
+   *  interview a room with no door, which is worse: a manager who runs out
+   *  of time has to abandon the app rather than the conversation. Ending
+   *  early writes a partial profile instead, and the board says what is
+   *  missing. */
   onDone?: () => void;
 } = {}) {
-  const { turn, busy, error, start, answer, reset, retry } = useInterview();
+  const { turn, busy, error, start, answer, end, reset, retry } =
+    useInterview();
   const { theme, toggle } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  // The confirmation in front of ending early. Closing writes the profile
+  // the whole management area reads, so it is not something a mis-click
+  // should do — but it is also not a decision worth a whole screen.
+  const [endingOpen, setEndingOpen] = useState(false);
+
+  /** Close the interview, then leave for the management area.
+   *
+   *  Sequenced rather than fired together: the management area renders from
+   *  `workspace.profile`, and that profile is what `end` writes. Navigating
+   *  first would race the write and land back on the interview. Reloading is
+   *  the fallback when there is no router callback — it is what re-reads
+   *  `/api/workspace/me`, whose `profile` is the switch. */
+  const leave = async () => {
+    await end();
+    setEndingOpen(false);
+    if (onDone) onDone();
+    else window.location.reload();
+  };
   const bottom = useRef<HTMLDivElement>(null);
 
   const complete = turn?.status === "complete";
@@ -115,6 +142,17 @@ export function Interview({
           >
             {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
           </button>
+          {turn && !complete ? (
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setEndingOpen(true)}
+              aria-label="סיום הראיון"
+              title="סיום הראיון ומעבר לאיזור הניהול"
+            >
+              <DoorOpen size={17} />
+            </button>
+          ) : null}
           {turn ? (
             <button
               type="button"
@@ -223,6 +261,16 @@ export function Interview({
             מעבר לאיזור הניהול
           </button>
         </div>
+      ) : null}
+
+      {endingOpen && turn ? (
+        <ConfirmEnd
+          draft={turn.draft}
+          openPoints={turn.open_points}
+          busy={busy}
+          onConfirm={leave}
+          onCancel={() => setEndingOpen(false)}
+        />
       ) : null}
 
       {settingsOpen ? (
