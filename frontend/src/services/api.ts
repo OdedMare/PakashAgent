@@ -12,6 +12,7 @@ import type {
   InterviewTurn,
   ManagementOverview,
   Operation,
+  PlacementCheck,
   Proposal,
   RosterName,
   RuntimeSettings,
@@ -234,6 +235,42 @@ export function assignEmployee(body: {
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+/** What a placement would cost, before it is made. Writes nothing.
+ *
+ *  **No model is called on this path.** It is `bl/placement.py` — the same
+ *  arithmetic `bl/audit.py` does, asked about a schedule that does not exist
+ *  yet. That is what makes the board usable with the agent unavailable: a
+ *  drag is validated, explained in Hebrew, and offered deterministic
+ *  alternatives without a token being generated.
+ *
+ *  It advises and never gates. The caller is free to write anyway, and the
+ *  board does exactly that when the manager confirms (D3). */
+export function checkPlacement(body: {
+  employee: string;
+  shift_name: string;
+  slot_date: string;
+  schedule_id?: string;
+  /** The row being dragged, when this is a move rather than a fill. It comes
+   *  out of the hypothetical before the new one goes in, so a move is
+   *  checked as a move and not as one person in two places at once. */
+  moving_assignment_id?: string;
+}): Promise<PlacementCheck> {
+  return request<PlacementCheck>("/api/schedule/check", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** The stored period containing a date, or null when none does.
+ *
+ *  What the board opens on. Null is a normal answer — "no schedule that
+ *  week" is a state the board renders as an empty week, not an error. */
+export function scheduleAt(day: string): Promise<Schedule | null> {
+  return request<Schedule | null>(
+    `/api/schedule/at?day=${encodeURIComponent(day)}`,
+  );
 }
 
 /** Take one person off a slot, by hand (D18). */

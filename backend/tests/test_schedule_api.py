@@ -628,6 +628,8 @@ def test_one_workspace_cannot_assign_into_anothers_schedule():
     ("post", "/api/schedule/move",
      {"assignment_id": "a", "shift_name": MORNING,
       "slot_date": "2026-08-17", "reason": "מחלה"}),
+    ("post", "/api/schedule/check",
+     {"employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-17"}),
     ("post", "/api/schedule/constraints",
      {"employee": "דנה", "constraint_date": "2026-08-17"}),
     ("delete", "/api/schedule/constraints/x", None),
@@ -1256,3 +1258,135 @@ def test_a_member_cannot_confirm_an_import():
         })
     assert response.status_code in (401, 403)
     assert repo.schedules == {}
+
+
+# -- the board: checking a placement before making it ----------------------
+
+def test_checking_a_placement_calls_no_model():
+    """The board's validation runs with the agent unavailable.
+
+    `_ScriptedLlm` raises the moment it is called with nothing scripted, so
+    an empty script is the assertion: if `/check` ever grew a model call,
+    this test fails rather than quietly getting slower. That property is the
+    whole reason `bl/placement.py` exists separately from `changes.py`.
+    """
+    app, repo = _build_app([])
+    client = _client(app)
+    client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+    response = client.post("/api/schedule/check", json={
+        "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-17",
+    })
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+
+def test_a_check_that_warns_still_returns_200_and_never_blocks():
+    """Warnings inform; they do not become a 4xx (D3).
+
+    The same rule the audit follows everywhere else in this router, asserted
+    on the one route whose entire job is reporting problems — the most
+    tempting place to turn a warning into a rejection.
+    """
+    app, repo = _build_app([])
+    client = _client(app)
+    client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+    client.post("/api/schedule/constraints", json={
+        "employee": "דנה", "constraint_date": "2026-08-17", "reason": "חופשה",
+    })
+    response = client.post("/api/schedule/check", json={
+        "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-17",
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False
+    assert body["blocking"] is False
+    assert body["reasons"], "a refusal-shaped answer with no reason given"
+
+
+def test_a_check_that_warns_offers_alternatives():
+    """A reason without a way out leaves the manager reading the grid."""
+    app, repo = _build_app([])
+    client = _client(app)
+    client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+    client.post("/api/schedule/constraints", json={
+        "employee": "דנה", "constraint_date": "2026-08-17", "reason": "חופשה",
+    })
+    body = client.post("/api/schedule/check", json={
+        "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-17",
+    }).json()
+    alternatives = body["alternatives"]
+    assert alternatives["employees"] or alternatives["slots"]
+
+
+def test_checking_does_not_write():
+    """`/check` is a read. Nothing it says lands until the manager acts."""
+    app, repo = _build_app([])
+    client = _client(app)
+    client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+    before = len(repo.changes)
+    client.post("/api/schedule/check", json={
+        "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-17",
+    })
+    assert len(repo.changes) == before
+
+
+# -- the board: the week containing a date ---------------------------------
+
+def test_the_period_containing_a_date_is_served():
+    """What the board opens on — the week the manager is actually in."""
+    app, repo = _build_app([])
+    client = _client(app)
+    client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+    })
+    body = client.get("/api/schedule/at", params={"day": "2026-08-19"}).json()
+    assert body is not None
+    assert body["starts_on"] == "2026-08-16"
+
+
+def test_a_date_outside_every_period_answers_null():
+    """Null rather than 404: "no schedule that week" is a normal state the
+    board renders as an empty week, not an error."""
+    app, repo = _build_app([])
+    client = _client(app)
+    client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+    })
+    assert client.get(
+        "/api/schedule/at", params={"day": "2026-10-01"}
+    ).json() is None
+
+
+def test_a_member_reaches_only_published_periods_by_date():
+    """The board is reachable from the read-only side, and a draft is still
+    the manager's working state until they publish it (D5)."""
+    app, repo = _build_app([])
+    boss = _client(app)
+    boss.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+    })
+    member = _client(app, role=ROLE_MEMBER)
+    assert member.get(
+        "/api/schedule/at", params={"day": "2026-08-19"}
+    ).json() is None
+
+
+def test_one_workspace_cannot_read_another_by_date():
+    """D10: the team comes off the cookie, so another team's week is simply
+    not there rather than forbidden."""
+    app, repo = _build_app([])
+    _client(app).post("/api/schedule/blank", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+    })
+    other = _client(app, team=OTHER_TEAM)
+    assert other.get(
+        "/api/schedule/at", params={"day": "2026-08-19"}
+    ).json() is None

@@ -198,6 +198,51 @@ export interface SchedulePeriod {
   status: "draft" | "published";
 }
 
+/** Somebody else who could take the slot the manager was aiming at.
+ *
+ *  `hours` is what they already carry in this period, which is why the list
+ *  arrives sorted by it: the lightest week is offered first. `why` is the
+ *  Hebrew sentence the backend wrote — assembling it here from fragments is
+ *  the one place a Latin-script assumption creeps back into an RTL product. */
+export interface AlternativeEmployee {
+  employee: string;
+  hours: number;
+  why: string;
+}
+
+/** Somewhere else this same person could go, near the date that was wanted. */
+export interface AlternativeSlot {
+  shift_name: string;
+  slot_date: string;
+  distance: number;
+  why: string;
+}
+
+/** Deterministic ways out of a placement that warns. */
+export interface Alternatives {
+  employees: AlternativeEmployee[];
+  slots: AlternativeSlot[];
+}
+
+/** What `bl/placement.py` makes of a placement the manager has not made yet.
+ *
+ *  Computed by pure Python arithmetic with **no model call**, which is what
+ *  lets the board validate a drag, explain it in Hebrew, and offer a way out
+ *  while the agent is slow or unavailable.
+ *
+ *  `blocking` is always false and the field exists to say so: the audit
+ *  advises and never gates (D3). A manager may place somebody this reports
+ *  on, and the write that follows will store it — checking first only moves
+ *  the warning to before the click, where it is cheaper to act on. */
+export interface PlacementCheck {
+  ok: boolean;
+  blocking: boolean;
+  reasons: string[];
+  warnings: ScheduleWarning[];
+  eligible: boolean;
+  alternatives: Alternatives;
+}
+
 /** A recorded availability constraint.
  *
  *  An empty `shift_name` covers the whole day. `source` says where the
