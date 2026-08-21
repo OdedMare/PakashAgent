@@ -98,6 +98,7 @@ class Scheduler:
         availability: Optional[List[dict]] = None,
         history: Optional[List[dict]] = None,
         instructions: str = "",
+        required_assignments: Optional[List[dict]] = None,
     ) -> dict:
         """Slots for the period plus the model's assignments into them.
 
@@ -115,7 +116,8 @@ class Scheduler:
         trimmed = _profile_for_model(profile)
         rows = _bounded_rows(availability)
 
-        assignments: List[dict] = []
+        required = _required_assignments(required_assignments, slots, profile)
+        assignments: List[dict] = list(required)
         notes: List[str] = []
         summaries: List[str] = []
         for chunk in _chunks(slots):
@@ -139,6 +141,7 @@ class Scheduler:
                 # the tally, not the rows.
                 "fairness": fairness,
                 "already_scheduled": _committed_for_model(assignments),
+                "required_assignments": _committed_for_model(required),
                 "instructions": _bounded(instructions),
             })
             # Bounded against the whole grid, not just this chunk: a model
@@ -369,6 +372,42 @@ def _assignments(
             "date": date, "reason": reason,
         })
     return assignments
+
+
+def _required_assignments(
+    offered: Any, slots: List[dict], profile: dict
+) -> List[dict]:
+    """Validate and pin the placements explicitly chosen by the manager."""
+    if not offered:
+        return []
+    known_slots = {
+        (slot["shift_name"], slot["slot_date"]) for slot in slots
+    }
+    known_people = {
+        _bounded(person.get("name"))
+        for person in (profile or {}).get("employees") or []
+        if isinstance(person, dict)
+    }
+    required, seen = [], set()
+    for item in offered:
+        employee = _bounded(item.get("employee")) if isinstance(item, dict) else ""
+        shift = _bounded(item.get("shift")) if isinstance(item, dict) else ""
+        date = _bounded(item.get("date")) if isinstance(item, dict) else ""
+        if employee not in known_people:
+            raise AgentError("העובד שנבחר לשיבוץ החובה אינו קיים בצוות")
+        if (shift, date) not in known_slots:
+            raise AgentError("המשמרת שנבחרה לשיבוץ החובה אינה קיימת בשבוע הזה")
+        key = (employee, shift, date)
+        if key in seen:
+            continue
+        seen.add(key)
+        required.append({
+            "employee": employee,
+            "shift": shift,
+            "date": date,
+            "reason": "שיבוץ חובה שנבחר על ידי המנהל בעת בניית הסידור",
+        })
+    return required
 
 
 def _profile_for_model(profile: dict) -> dict:

@@ -83,6 +83,9 @@ def build_router(service, guards) -> APIRouter:
             starts_on=request.starts_on,
             ends_on=request.ends_on,
             instructions=request.instructions,
+            required_assignments=[
+                item.model_dump() for item in request.required_assignments
+            ],
         )
 
     @router.post("/blank", response_model=Schedule)

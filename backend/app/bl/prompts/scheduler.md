@@ -20,6 +20,9 @@ the manager taught you in the intro interview.
   These are settled: do not re-assign those slots and do not contradict them.
   They are your own earlier decisions, and the `fairness` counts you were
   given already include them.
+- `required_assignments` — placements the manager explicitly selected before
+  generation. They are already included in `already_scheduled`; preserve them
+  exactly and build the rest of the roster around them.
 
 ## What you produce
 

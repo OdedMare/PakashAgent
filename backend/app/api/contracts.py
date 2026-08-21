@@ -402,12 +402,23 @@ class BriefingRequest(BaseModel):
     last_said: List[str] = Field(default=[], max_length=8)
 
 
+class RequiredAssignment(BaseModel):
+    """One manager-pinned placement that generation must preserve."""
+
+    employee: str = Field(min_length=1, max_length=200)
+    shift: str = Field(min_length=1, max_length=200)
+    date: str = Field(min_length=1, max_length=20)
+
+
 class GenerateRequest(BaseModel):
     """Build a period. Omitted dates mean the current week."""
 
     starts_on: Optional[str] = None
     ends_on: Optional[str] = None
     instructions: str = Field(default="", max_length=2000)
+    required_assignments: List[RequiredAssignment] = Field(
+        default=[], max_length=100
+    )
 
 
 class ProposeRequest(BaseModel):

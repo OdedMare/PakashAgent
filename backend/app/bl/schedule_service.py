@@ -353,6 +353,7 @@ class ScheduleService:
         starts_on: Optional[str] = None,
         ends_on: Optional[str] = None,
         instructions: str = "",
+        required_assignments: Optional[List[dict]] = None,
     ) -> dict:
         """Build a period and store it as a draft.
 
@@ -373,6 +374,7 @@ class ScheduleService:
             ),
             history=self._recent_assignments(team_id, starts_on),
             instructions=instructions,
+            required_assignments=required_assignments,
         )
 
         schedule = self._repository.create_schedule(
