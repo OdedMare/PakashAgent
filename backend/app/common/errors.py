@@ -65,3 +65,24 @@ class UnavailableError(AppError):
     """
 
     status_code = 503
+
+
+def error_payload(exc: AppError) -> dict:
+    """The JSON body an `AppError` leaves as.
+
+    Lives here rather than in the handler because it is not only the handler
+    that builds it: the test harness mounts its own routers and its own
+    handler, and when the two shaped the response separately a field added to
+    one was invisible to the other -- which is precisely how a refusal can
+    look, under test, like it carries nothing to act on.
+
+    `detail` is always present and always the Hebrew sentence, so a client
+    reading only that field is unaffected by anything added beside it.
+    """
+    payload = {"detail": str(exc)}
+    if isinstance(exc, ProfileIncompleteError):
+        # The one failure a caller can act on rather than only report.
+        payload["gaps"] = exc.gaps
+        payload["blocks"] = exc.blocks
+        payload["can_resume_interview"] = True
+    return payload

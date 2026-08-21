@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from app.api.dependencies import Guards
 from app.api.routers import schedules
 from app.bl.schedule_service import ScheduleService
-from app.common.errors import AppError, NotFoundError
+from app.common.errors import AppError, NotFoundError, error_payload
 from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 
 TEAM = "team-a"
@@ -282,10 +282,14 @@ def _build_app(answers=None):
         schedules.build_router(ScheduleService(repository, llm), guards)
     )
 
+    # The real handler's body builder, not a copy of it. A second shaping of
+    # the same response is how a field the API actually returns goes missing
+    # under test -- the tests would agree with themselves and disagree with
+    # `app/main.py`.
     @app.exception_handler(AppError)
     async def handler(request, exc):
         return JSONResponse(
-            status_code=exc.status_code, content={"detail": str(exc)}
+            status_code=exc.status_code, content=error_payload(exc)
         )
 
     return app, repository
