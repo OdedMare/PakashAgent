@@ -58,7 +58,7 @@ export function CopilotInbox({
   useEffect(() => {
     const first = window.setTimeout(
       () => void load().catch((reason) =>
-        setMessage(reason instanceof Error ? reason.message : "טעינת הקופיילוט נכשלה"),
+        setMessage(reason instanceof Error ? reason.message : "טעינת הסוכן נכשלה"),
       ),
       0,
     );
@@ -97,8 +97,8 @@ export function CopilotInbox({
     <section className="copilot-inbox" aria-busy={Boolean(busy)}>
       <header className="copilot-header">
         <div>
-          <h3><Sparkles size={15} /> קופיילוט</h3>
-          <p>עובד גם כשהמסך סגור. כל פעולה נשמרת וניתנת לבדיקה.</p>
+          <h3><Sparkles size={15} /> הסוכן ברקע</h3>
+          <p>אותו סוכן מהשיחה ממשיך לבדוק גם כשהמסך סגור. כל פעולה נשמרת וניתנת לבדיקה.</p>
         </div>
         <button
           type="button"

@@ -253,6 +253,8 @@
   font-size: 0.72rem;
   color: var(--text-muted);
   font-weight: 400;
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 
 .calendar-cell {
@@ -582,6 +584,54 @@
   margin: 0.15rem 0 0;
   font-size: 0.78rem;
   color: var(--text-muted);
+}
+
+.agent-quick-questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: -0.1rem 0 0.85rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.agent-quick-questions > span {
+  flex-basis: 100%;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.agent-quick-questions button,
+.agent-answer-continue {
+  min-height: 44px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-soft);
+  padding: 0.45rem 0.75rem;
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: border-color 180ms ease, background 180ms ease, color 180ms ease;
+}
+
+.agent-quick-questions button:hover,
+.agent-answer-continue:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.agent-quick-questions button:focus-visible,
+.agent-answer-continue:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.agent-quick-questions button:disabled {
+  opacity: 0.48;
+  cursor: wait;
 }
 
 .proposal {
@@ -1908,6 +1958,10 @@
   font-size: 0.86rem;
   line-height: 1.55;
   white-space: pre-wrap;
+}
+
+.agent-answer-continue {
+  margin-top: 0.45rem;
 }
 
 /* "Nothing has happened yet", said outright rather than implied by the

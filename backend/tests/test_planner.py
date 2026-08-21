@@ -330,8 +330,10 @@ def test_an_unreadable_sentence_says_so_and_lists_what_it_can_do(repo, tools):
                           period=repo.schedules["sched-1"])
     assert answer["understood"] is False
     assert answer["used_model"] is False
-    # Names the shapes it *can* answer rather than only apologising.
-    assert "מי יכול להחליף" in answer["answer"]
+    # It asks one focused question rather than ending the conversation with a
+    # capability dump or guessing what the manager meant.
+    assert answer["needs_input"] is True
+    assert answer["answer"].endswith("?")
 
 
 def test_an_unknown_person_is_not_invented_in_the_fallback(repo, tools):

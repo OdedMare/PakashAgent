@@ -78,6 +78,30 @@ def test_a_shift_restricted_to_a_weekday_only_appears_on_it():
     assert [slot["slot_date"] for slot in evening] == ["2026-08-23"]
 
 
+def test_weekdays_work_with_or_without_the_day_prefix():
+    """Natural interview answers usually say ``ראשון``, not ``יום ראשון``.
+
+    Both spellings are profile data for the same weekday. שבת previously
+    appeared to work only because it is conventionally written without the
+    prefix in both places.
+    """
+    shifts = [{
+        "name": MORNING, "start_time": "07:00", "end_time": "15:00",
+        "days": ["ראשון", "שני"],
+        "staffing": [
+            {"days": [], "headcount": 1},
+            {"days": ["שני"], "headcount": 2},
+        ],
+    }]
+
+    slots = build_slots({"shifts": shifts}, "2026-08-23", "2026-08-25")
+
+    assert [(row["slot_date"], row["headcount"]) for row in slots] == [
+        ("2026-08-23", 1),
+        ("2026-08-24", 2),
+    ]
+
+
 def test_headcount_follows_the_matching_day_group():
     shifts = [{
         "name": MORNING, "start_time": "07:00", "end_time": "15:00",

@@ -44,7 +44,8 @@ export function useEmployee() {
   }, []);
 
   useEffect(() => {
-    void load();
+    const first = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(first);
   }, [load]);
 
   // The roster is only needed while signed out, so it is fetched when the
@@ -101,13 +102,27 @@ export function useEmployee() {
       reason?: string;
     }) => {
       const done = await run(() => submitConstraintRequest(body));
-      // Reload rather than pushing the returned row into local state: the
-      // submission may have superseded an earlier pending request, and the
-      // server is the only thing that knows which.
-      if (done) await load();
+      if (done) {
+        // The endpoint returns the stored row specifically so the request can
+        // settle in place. Re-reading the entire employee view here visibly
+        // redrew the schedule, hours and request form for a one-row change.
+        setView((current) => current ? {
+          ...current,
+          requests: [
+            done,
+            ...current.requests.map((row) =>
+              row.status === "pending"
+                && row.constraint_date === done.constraint_date
+                && (row.shift_name ?? "") === (done.shift_name ?? "")
+                ? { ...row, status: "withdrawn" as const }
+                : row,
+            ),
+          ],
+        } : current);
+      }
       return Boolean(done);
     },
-    [run, load],
+    [run],
   );
 
   /** Mark the changes on screen as read (D16).
@@ -143,9 +158,16 @@ export function useEmployee() {
   const withdraw = useCallback(
     async (requestId: string) => {
       const done = await run(() => withdrawConstraintRequest(requestId));
-      if (done) await load();
+      if (done) {
+        setView((current) => current ? {
+          ...current,
+          requests: current.requests.map((row) =>
+            row.id === done.id ? done : row,
+          ),
+        } : current);
+      }
     },
-    [run, load],
+    [run],
   );
 
   /** Offer a colleague a trade of shifts.

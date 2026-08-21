@@ -3,13 +3,17 @@
 import {
   ArrowLeftRight,
   BellRing,
+  CalendarDays,
   CalendarClock,
   Check,
+  ClipboardList,
+  LayoutGrid,
   LogOut,
   Moon,
   Sun,
   UserCircle,
 } from "lucide-react";
+import { useState } from "react";
 
 import { useTheme } from "@/components/Interview/useTheme";
 import { Calendar } from "@/components/Management/Calendar";
@@ -37,6 +41,7 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
   const { theme, toggle } = useTheme();
   const state = useEmployee();
   const { view } = state;
+  const [section, setSection] = useState<EmployeeSection>("mine");
 
   // Not asked yet. Rendering the gate here would flash a claim screen at
   // someone who is already signed in.
@@ -109,67 +114,140 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
             "somebody is waiting on you", and only the second has a person
             on the other end of it. */}
         <SwapAlert waiting={view.swaps_awaiting_me ?? 0} />
-        {view.schedule ? (
-          <>
-            <HoursPanel summary={view.summary} fairness={view.fairness} />
-            <MyShifts view={view} />
-            <ConstraintForm
-              shiftNames={shiftNames}
-              requests={view.requests}
-              busy={state.busy}
-              onSubmit={state.submit}
-              onWithdraw={state.withdraw}
-            />
-            {/* Swaps sit below the constraint form because they are the
-                narrower ask: a constraint is "I cannot work this", a swap is
-                "I cannot work this *and* I already found cover". Both are
-                requests, and neither changes the schedule on its own. */}
-            <SwapPanel
-              view={view}
-              busy={state.busy}
-              onOffer={state.offerSwap}
-              onAnswer={(id, agreed) => void state.answer(id, agreed)}
-              onCancel={(id) => void state.cancelSwap(id)}
-            />
-            <MyChanges view={view} />
-            <section className="employee-panel">
-              <h2>הסידור המלא</h2>
-              {/* `readOnly`, no `onDrop`: there is no gesture here that could
-                  change anything. The same component the manager uses, so the
-                  team never sees a second rendering that could drift. */}
-              {/* No roster is loaded once signed in — it is fetched only
-                  for the identity gate — so colours fall back to the hashed
-                  hue here. Stable per name, which is what this view needs:
-                  the employee is looking for themselves in the grid. */}
-              <Calendar
-                schedule={view.schedule}
-                constraints={view.summary.constraints}
-                dark={theme === "dark"}
-                readOnly
+
+        <nav className="employee-tabs" role="tablist" aria-label="האזור שלי">
+          <EmployeeTab
+            active={section === "mine"}
+            icon={<CalendarDays size={16} />}
+            label="המשמרות שלי"
+            onClick={() => setSection("mine")}
+          />
+          <EmployeeTab
+            active={section === "requests"}
+            icon={<ClipboardList size={16} />}
+            label="בקשות והחלפות"
+            badge={pendingCount(view)}
+            onClick={() => setSection("requests")}
+          />
+          <EmployeeTab
+            active={section === "schedule"}
+            icon={<LayoutGrid size={16} />}
+            label="הלוח המלא"
+            onClick={() => setSection("schedule")}
+          />
+        </nav>
+
+        <div className="employee-tab-panel" role="tabpanel">
+          {section === "mine" ? (
+            view.schedule ? (
+              <>
+                <HoursPanel summary={view.summary} fairness={view.fairness} />
+                <MyShifts view={view} />
+                <MyChanges view={view} />
+              </>
+            ) : (
+              <NoPublishedSchedule />
+            )
+          ) : null}
+
+          {section === "requests" ? (
+            <>
+              <ConstraintForm
+                shiftNames={shiftNames}
+                requests={view.requests}
+                busy={state.busy}
+                onSubmit={state.submit}
+                onWithdraw={state.withdraw}
               />
-            </section>
-          </>
-        ) : (
-          <div className="center">
-            <span className="brand-mark" aria-hidden="true">
-              <CalendarClock size={17} />
-            </span>
-            <h1>הסידור עוד לא פורסם</h1>
-            <p>
-              ברגע שהמנהל יפרסם את הסידור יופיעו כאן השעות והמשמרות שלך.
-              אפשר לשלוח בקשות אילוץ כבר עכשיו.
-            </p>
-            <ConstraintForm
-              shiftNames={shiftNames}
-              requests={view.requests}
-              busy={state.busy}
-              onSubmit={state.submit}
-              onWithdraw={state.withdraw}
-            />
-          </div>
-        )}
+              {view.schedule ? (
+                <SwapPanel
+                  view={view}
+                  busy={state.busy}
+                  onOffer={state.offerSwap}
+                  onAnswer={(id, agreed) => void state.answer(id, agreed)}
+                  onCancel={(id) => void state.cancelSwap(id)}
+                />
+              ) : null}
+            </>
+          ) : null}
+
+          {section === "schedule" ? (
+            view.schedule ? (
+              <section className="employee-panel">
+                <h2>הסידור המלא</h2>
+                {/* `readOnly`, no `onDrop`: there is no gesture here that could
+                    change anything. The same component the manager uses, so the
+                    team never sees a second rendering that could drift. */}
+                {/* No roster is loaded once signed in — it is fetched only
+                    for the identity gate — so colours fall back to the hashed
+                    hue here. Stable per name, which is what this view needs:
+                    the employee is looking for themselves in the grid. */}
+                <Calendar
+                  schedule={view.schedule}
+                  constraints={view.summary.constraints}
+                  dark={theme === "dark"}
+                  readOnly
+                />
+              </section>
+            ) : (
+              <NoPublishedSchedule />
+            )
+          ) : null}
+        </div>
       </main>
     </div>
+  );
+}
+
+type EmployeeSection = "mine" | "requests" | "schedule";
+
+function EmployeeTab({
+  active,
+  icon,
+  label,
+  badge = 0,
+  onClick,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  badge?: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      className={active ? "is-active" : undefined}
+      onClick={onClick}
+    >
+      {icon}
+      <span>{label}</span>
+      {badge > 0 ? <strong>{badge > 9 ? "9+" : badge}</strong> : null}
+    </button>
+  );
+}
+
+function pendingCount(view: EmployeeView): number {
+  return view.requests.filter((row) => row.status === "pending").length
+    + (view.swaps_awaiting_me ?? 0);
+}
+
+function NoPublishedSchedule() {
+  return (
+    <section className="employee-panel employee-empty-schedule">
+      <span className="brand-mark" aria-hidden="true">
+        <CalendarClock size={17} />
+      </span>
+      <div>
+        <h2>הסידור עוד לא פורסם</h2>
+        <p>
+          כשהמנהל יפרסם אותו, המשמרות והשעות יופיעו כאן. אפשר לשלוח בקשות
+          כבר עכשיו מהטאב “בקשות והחלפות”.
+        </p>
+      </div>
+    </section>
   );
 }
 

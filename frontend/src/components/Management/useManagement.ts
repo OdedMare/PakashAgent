@@ -256,6 +256,18 @@ export function useManagement(): ManagementState {
       instructions?: string;
       required_assignments?: import("@/types").RequiredAssignment[];
     }) => {
+      const totalDays = inclusiveDays(input.starts_on, input.ends_on) ?? 7;
+      // Show progress from the click, including the short request that opens
+      // the persisted job. Waiting for that response left the board looking
+      // idle even though generation had already started.
+      setGeneration({
+        status: "running",
+        current_date: input.starts_on ?? "",
+        total_days: totalDays,
+        completed_days: 0,
+        failed_days: 0,
+        days: [],
+      });
       const result = await run(() =>
         generateSchedule(input, (schedule) => {
           setGeneration(schedule.generation);
@@ -592,4 +604,14 @@ export function useManagement(): ManagementState {
     gaps,
     dismissGaps,
   };
+}
+
+function inclusiveDays(first?: string, last?: string): number | null {
+  if (!first || !last) return null;
+  const start = new Date(`${first}T00:00:00`);
+  const end = new Date(`${last}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+    return null;
+  }
+  return Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
 }

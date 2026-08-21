@@ -200,6 +200,8 @@ def test_model_schema_accepts_a_sparse_draft_update():
     update = llm.calls[0]["schema"]["properties"]["draft_update"]
     assert "required" not in update
     assert "required" not in update["properties"]["workplace"]
+    assert "required" not in update["properties"]["employees"]["items"]
+    assert "required" not in update["properties"]["shifts"]["items"]
 
 
 def test_the_draft_so_far_is_handed_back_to_the_model():
@@ -432,6 +434,35 @@ def test_a_reply_promising_an_update_that_records_nothing_is_flagged():
     result = IntroInterview(_FakeLlm(response)).next_turn([], empty_draft())
 
     assert any("לא נשמרה" in line for line in result["open_points"])
+    assert result["reply"].startswith("לא הצלחתי לשמור")
+
+
+def test_a_past_tense_claim_that_records_nothing_is_flagged():
+    """The exact misleading wording seen in the interview UI."""
+    response = _question_response(
+        reply="רשמתי את רשימת העובדים ואת ימי הפעילות (ראשון עד חמישי).",
+        draft_update={},
+    )
+
+    result = IntroInterview(_FakeLlm(response)).next_turn([], empty_draft())
+
+    assert any("לא נשמרה" in line for line in result["open_points"])
+    assert "רשמתי" not in result["reply"]
+
+
+def test_a_claim_that_only_partly_lands_is_flagged():
+    """Recording operating days must not hide a dropped employee list."""
+    response = _question_response(
+        reply="רשמתי את רשימת העובדים ואת ימי הפעילות.",
+        draft_update={
+            "workplace": {"operating_days": ["ראשון", "שני"]},
+        },
+    )
+
+    result = IntroInterview(_FakeLlm(response)).next_turn([], empty_draft())
+
+    assert result["draft"]["workplace"]["operating_days"] == ["ראשון", "שני"]
+    assert any("לא נשמרה" in line for line in result["open_points"])
 
 
 def test_a_promise_that_actually_records_is_not_flagged():
@@ -486,7 +517,7 @@ def test_an_option_without_a_sendable_answer_is_dropped():
     ]
 
 
-def test_a_lone_option_is_dropped_because_one_option_is_not_a_choice():
+def test_a_lone_usable_option_stays_clickable():
     response = _question_response()
     response["question"]["options"] = [
         {"label": "כן", "answer": "כן, זה נכון."},
@@ -494,7 +525,9 @@ def test_a_lone_option_is_dropped_because_one_option_is_not_a_choice():
 
     result = IntroInterview(_FakeLlm(response)).next_turn([])
 
-    assert result["question"]["options"] == []
+    assert result["question"]["options"] == [
+        {"label": "כן", "answer": "כן, זה נכון."},
+    ]
 
 
 def test_options_are_capped_and_deduplicated():
@@ -520,7 +553,17 @@ def test_a_blank_question_reads_as_no_question():
 
     result = IntroInterview(_FakeLlm(response)).next_turn([])
 
-    assert result["question"] is None
+    assert result["question"]["question"] == INTERVIEW_TOPICS[0]["question"]
+
+
+def test_a_turn_that_forgets_to_ask_gets_the_next_canonical_question():
+    response = _question_response()
+    response["question"] = None
+    result = IntroInterview(_FakeLlm(response)).next_turn(
+        [{"role": "assistant", "content": INTERVIEW_TOPICS[0]["question"]}],
+    )
+
+    assert result["question"]["question"] == INTERVIEW_TOPICS[1]["question"]
 
 
 def test_a_non_dict_model_reply_is_rejected():

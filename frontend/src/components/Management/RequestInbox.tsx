@@ -23,39 +23,47 @@ import type { ConstraintRequestRow } from "@/types";
  *  the reason is captured at the only moment it is cheap — while the manager
  *  still has it in mind ([D8](../../../../docs/DECISIONS.md)).
  *
- *  `onDecided` re-reads the whole overview rather than patching locally: an
- *  approval changes the constraints *and* the audit, and a locally patched
- *  panel beside a stale set of warnings is worse than a brief spinner. */
+ *  The decided row settles locally so the inbox does not flash. `onDecided`
+ *  refreshes the wider overview independently because approval also changes
+ *  constraints and audit warnings. */
 export function RequestInbox({ onDecided }: { onDecided: () => void }) {
   const [rows, setRows] = useState<ConstraintRequestRow[]>([]);
   const [reasons, setReasons] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState("");
 
-  const load = useCallback(() => {
-    pendingRequests()
-      .then(setRows)
-      .catch(() => setRows([]));
+  const load = useCallback(async () => {
+    const next = await pendingRequests().catch(() => []);
+    setRows(next);
   }, []);
 
   useEffect(() => {
-    load();
+    const first = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(first);
   }, [load]);
 
   const decide = async (
     row: ConstraintRequestRow,
     approve: boolean,
   ) => {
-    setBusy(true);
+    setBusy(row.id);
     try {
       if (approve) await approveRequest(row.id, reasons[row.id] ?? "");
       else await rejectRequest(row.id, reasons[row.id] ?? "");
-      load();
+      // The write succeeded, so this row is no longer pending. Settle it in
+      // place instead of blanking and reloading the whole inbox — the
+      // overview can refresh independently without making the card flash.
+      setRows((current) => current.filter((item) => item.id !== row.id));
+      setReasons((current) => {
+        const next = { ...current };
+        delete next[row.id];
+        return next;
+      });
       onDecided();
     } catch {
       // The error surfaces through the shared API logging; the row simply
       // stays pending, which is the honest state when a decision did not land.
     } finally {
-      setBusy(false);
+      setBusy("");
     }
   };
 
@@ -65,7 +73,10 @@ export function RequestInbox({ onDecided }: { onDecided: () => void }) {
   if (rows.length === 0) return null;
 
   return (
-    <section className="management-panel request-inbox">
+    <section
+      className="management-panel request-inbox"
+      aria-busy={Boolean(busy)}
+    >
       <h2>
         <Inbox size={15} /> בקשות אילוץ
         <span className="inbox-count">{rows.length}</span>
@@ -98,13 +109,13 @@ export function RequestInbox({ onDecided }: { onDecided: () => void }) {
                     [row.id]: event.target.value,
                   }))
                 }
-                disabled={busy}
+                disabled={Boolean(busy)}
               />
               <button
                 type="button"
                 className="approve"
                 onClick={() => decide(row, true)}
-                disabled={busy}
+                disabled={Boolean(busy)}
               >
                 <Check size={13} /> אישור
               </button>
@@ -114,7 +125,7 @@ export function RequestInbox({ onDecided }: { onDecided: () => void }) {
                 onClick={() => decide(row, false)}
                 // Disabled without a reason, so the requirement is visible
                 // rather than enforced by a 502 after the click.
-                disabled={busy || !(reasons[row.id] ?? "").trim()}
+                disabled={Boolean(busy) || !(reasons[row.id] ?? "").trim()}
               >
                 <X size={13} /> דחייה
               </button>

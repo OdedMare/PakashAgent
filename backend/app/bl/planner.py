@@ -100,7 +100,9 @@ _TOOL_CALL_SCHEMA = {
 PLANNER_RESPONSE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["done", "answer", "tool_calls", "needs_confirmation"],
+    "required": [
+        "done", "answer", "tool_calls", "needs_confirmation", "needs_input",
+    ],
     "properties": {
         # The model's own statement that it has what it needs. Bounded in
         # code by `_MAX_TURNS` regardless, so a model that never sets it
@@ -117,6 +119,9 @@ PLANNER_RESPONSE_SCHEMA = {
         # label on a sentence, not a queued operation -- there is no
         # operation anywhere in this schema.
         "needs_confirmation": {"type": "boolean"},
+        # An ambiguous request is not a failed answer. It is one focused
+        # question that keeps the conversation moving without guessing.
+        "needs_input": {"type": "boolean"},
     },
 }
 
@@ -171,6 +176,7 @@ class PlanningAgent:
         steps: List[dict] = []
         answer = ""
         needs_confirmation = False
+        needs_input = False
 
         for _ in range(_MAX_TURNS):
             turn = self._ask({
@@ -187,6 +193,7 @@ class PlanningAgent:
 
             answer = _bounded(turn.get("answer")) or answer
             needs_confirmation = bool(turn.get("needs_confirmation"))
+            needs_input = bool(turn.get("needs_input"))
             calls = _calls(turn.get("tool_calls"))
 
             if not calls or turn.get("done"):
@@ -210,6 +217,7 @@ class PlanningAgent:
             "steps": steps,
             "results": results,
             "needs_confirmation": needs_confirmation,
+            "needs_input": needs_input,
             "used_model": True,
             "understood": True,
         }
@@ -266,6 +274,7 @@ class PlanningAgent:
                 "steps": [],
                 "results": [],
                 "needs_confirmation": False,
+                "needs_input": True,
                 "used_model": False,
                 "understood": False,
                 "intent": read["intent"],
@@ -277,6 +286,7 @@ class PlanningAgent:
             "steps": steps,
             "results": results,
             "needs_confirmation": needs_confirmation,
+            "needs_input": _is_question(answer),
             "used_model": False,
             "understood": True,
             "intent": read["intent"],
@@ -464,13 +474,13 @@ class PlanningAgent:
 # Lists what it *can* do rather than apologising: a manager told only "I did
 # not understand" has no way to find the sentence that would have worked.
 _NOT_UNDERSTOOD = (
-    "לא הבנתי את הבקשה. בלי מודל מחובר אני יכול לענות על:\n"
-    "· מי יכול להחליף עובד/ת ביום מסוים\n"
-    "· מה חסר בסידור\n"
-    "· כמה שעות ומשמרות יש לעובד/ת\n"
-    "· מה פתוח לפני פרסום\n"
-    "· איך נראית התקופה הנוכחית"
+    "אני רוצה לדייק ולא לנחש. מה תרצו לברר קודם — מחליף לעובד/ת, "
+    "חוסרים בסידור, שעות של עובד/ת, או מוכנות לפרסום?"
 )
+
+
+def _is_question(value: str) -> bool:
+    return _text(value).endswith(("?", "؟"))
 
 
 def _calls(offered: Any) -> List[dict]:

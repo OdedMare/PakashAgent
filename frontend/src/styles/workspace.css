@@ -217,6 +217,24 @@
   background: var(--surface);
 }
 
+/* The personal identity gate reuses the login card without the product-story
+   column. Give that single task a deliberate centre rather than leaving the
+   second login column as unexplained empty space. */
+.workspace-gate.identity-gate {
+  grid-template-columns: minmax(0, 32rem);
+  place-content: center;
+  padding: 1.25rem;
+  background: var(--bg);
+}
+
+.identity-gate .gate-card {
+  max-width: 32rem;
+  padding: clamp(1.75rem, 5vw, 3rem);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 24px 70px color-mix(in srgb, #0b1220 10%, transparent);
+}
+
 .gate-form-head > span {
   color: var(--primary);
   font-size: 0.72rem;

@@ -65,7 +65,7 @@ export function MemberArea({
           </span>
           <span>
             {workspace.name}
-            <span className="brand-sub"> · תצוגת עובד</span>
+            <span className="brand-sub"> · תצוגת צוות</span>
           </span>
         </div>
         <div className="header-actions">

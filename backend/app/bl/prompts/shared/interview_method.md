@@ -40,10 +40,9 @@ non-answer like "I don't know", "other", or "whatever you recommend" — the
 recommendation already covers that, and the free-text box already covers the
 rest.
 
-Omit `options` only when you genuinely cannot name two distinct answers that
-are worth a click. That should be rare; a question you cannot enumerate any
-plausible answer for is usually a question too broad to ask, and splitting it
-is the better fix.
+Never omit `options`. If you cannot name two distinct answers worth a click,
+the question is too broad: split it into a narrower question first. The
+free-text box remains available for an answer you did not anticipate.
 
 **Look up facts; ask only about decisions.** Anything the conversation already
 answers you read, you never ask. Re-asking something already answered wastes

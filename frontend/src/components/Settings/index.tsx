@@ -91,7 +91,11 @@ function PanelContent({ settings }: { settings: SettingsController }) {
 
 function SettingsWorkspace({ settings }: { settings: SettingsController }) {
   return (
-    <form className="settings-workspace" onSubmit={settings.save}>
+    <form
+      className="settings-workspace"
+      onSubmit={settings.save}
+      autoComplete="off"
+    >
       <div className="settings-workspace-layout">
         <SettingsNavigation
           active={settings.activeSection}

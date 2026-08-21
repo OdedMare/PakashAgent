@@ -323,7 +323,8 @@ _QUESTION_SCHEMA = {
         "recommendation": {"type": "string"},
         "why": {"type": "string"},
         "options": {
-            "type": "array", "items": _OPTION_SCHEMA, "maxItems": _MAX_OPTIONS,
+            "type": "array", "items": _OPTION_SCHEMA,
+            "minItems": 2, "maxItems": _MAX_OPTIONS,
         },
     },
 }
@@ -352,14 +353,17 @@ INTERVIEW_RESPONSE_SCHEMA = {
 def _draft_update_schema() -> dict:
     """A sparse profile: omitted fields keep their previous value.
 
-    Array items remain strict complete objects. Only the profile itself and
-    its two object-valued sections become partial, which is exactly what one
-    interview answer can update without making the schema permissive.
+    Employee and shift items are partial too: the manager commonly gives the
+    names before roles, hours, or eligibility. Requiring every later detail
+    on that first turn makes the model claim it recorded the list while being
+    unable to put it in ``draft_update`` without guessing.
     """
     schema = copy.deepcopy(_PROFILE_SCHEMA)
     schema.pop("required", None)
     for field in _OBJECT_FIELDS:
         schema["properties"][field].pop("required", None)
+    for field in ("employees", "shifts"):
+        schema["properties"][field]["items"].pop("required", None)
     return schema
 
 
@@ -395,13 +399,31 @@ class IntroInterview:
             "recent_conversation": clean[-_RECENT_TURNS:],
             # Every question asked so far, including ones scrolled out of the
             # window above. This is the anti-repetition list.
-            "questions_already_asked": _asked_questions(clean),
+            "questions_already_asked": (
+                _lines(state.get("questions_already_asked"))
+                or _asked_questions(clean)
+            ),
             "draft_so_far": _as_dict(draft),
             "resolved_so_far": _lines(state.get("resolved")),
             "open_points_so_far": _lines(state.get("open_points")),
         }
         answer = self._ask(payload)
-        return _result(answer, draft)
+        result = _result(answer, draft)
+        # A model can legally satisfy the JSON schema with `question: null`
+        # while also saying the interview is neither confirming nor done.
+        # That leaves a live composer under no question and the conversation
+        # appears to stop. Keep the interview moving with the next canonical
+        # topic; ordinary model turns still provide the richer recommendation
+        # and clickable answers.
+        if (
+            result["question"] is None
+            and not result["awaiting_confirmation"]
+            and not result["ready"]
+        ):
+            result["question"] = _next_topic_question(
+                payload["questions_already_asked"]
+            )
+        return result
 
     def _ask(self, payload: dict) -> dict:
         # Loaded per turn rather than at import, so editing the markdown
@@ -444,7 +466,8 @@ def _result(answer: dict, previous) -> dict:
     # point so the loss is visible in the panel and the model reads it back
     # next turn, rather than the fact vanishing between a promise and a draft
     # that never received it.
-    if _promised_unkept(answer, merged, previous):
+    unkept = _promised_unkept(answer, merged, previous)
+    if unkept:
         open_points = _unique(
             open_points + [_UNRECORDED_ANSWER]
         )
@@ -454,7 +477,10 @@ def _result(answer: dict, previous) -> dict:
         # rather than shown over an incomplete draft.
         awaiting = False
     result = {
-        "reply": _bounded(answer.get("reply")),
+        "reply": (
+            "לא הצלחתי לשמור את התשובה במלואה; השארתי אותה כנקודה פתוחה."
+            if unkept else _bounded(answer.get("reply"))
+        ),
         "question": question,
         # Deduplicated for the same reason: `resolved_so_far` is replayed to
         # the model each turn and comes back carried forward, so a line the
@@ -481,10 +507,22 @@ def _result(answer: dict, previous) -> dict:
 _PROMISE_MARKERS = (
     "אעדכן", "נעדכן", "אשמור", "נשמור", "ארשום", "נרשום",
     "אני מעדכן", "אני שומר", "אני רושם",
+    # Past-tense claims are the most misleading form: they say the write is
+    # already done. Keep the exact common variants here rather than trying to
+    # parse Hebrew morphology.
+    "עדכנתי", "עדכנו", "שמרתי", "שמרנו", "רשמתי", "רשמנו",
 )
 
 _UNRECORDED_ANSWER = (
-    "התשובה האחרונה לא נשמרה בפרופיל — כדאי לחזור עליה."
+    "התשובה האחרונה לא נשמרה במלואה בפרופיל — כדאי לחזור עליה."
+)
+
+# Claims we can verify without interpreting prose. This catches the common
+# partial failure where the model records the operating days but says it also
+# recorded the employee list (or vice versa).
+_CLAIMED_FIELDS = (
+    (("רשימת העובדים", "העובדים"), ("employees",)),
+    (("ימי הפעילות", "ימי העבודה"), ("workplace", "operating_days")),
 )
 
 
@@ -507,7 +545,18 @@ def _promised_unkept(answer: dict, merged: dict, previous) -> bool:
         return False
     if not any(marker in reply for marker in _PROMISE_MARKERS):
         return False
-    return merged == _as_dict(previous)
+    previous = _as_dict(previous)
+    if merged == previous:
+        return True
+    for phrases, path in _CLAIMED_FIELDS:
+        if any(phrase in reply for phrase in phrases):
+            before, after = previous, merged
+            for key in path:
+                before = _as_dict(before).get(key)
+                after = _as_dict(after).get(key)
+            if before == after:
+                return True
+    return False
 
 
 def _is_ready(answer: dict, question, awaiting: bool) -> bool:
@@ -536,6 +585,21 @@ def _question(value) -> Optional[dict]:
     }
 
 
+def _next_topic_question(asked) -> dict:
+    """A deterministic escape hatch when a model forgets to ask anything."""
+    seen = {_bounded(item) for item in asked or [] if _bounded(item)}
+    topic = next(
+        (item for item in INTERVIEW_TOPICS if item["question"] not in seen),
+        INTERVIEW_TOPICS[-1],
+    )
+    return {
+        "question": topic["question"],
+        "recommendation": "",
+        "why": "",
+        "options": [],
+    }
+
+
 def _options(question: dict) -> List[dict]:
     """Clickable answers, bounded and deduplicated.
 
@@ -544,16 +608,15 @@ def _options(question: dict) -> List[dict]:
     than falling back to the label — the label is a button caption, and
     sending it would put a fragment in the thread where a sentence belongs.
 
-    One option is not a choice: the manager would be reading a menu with a
-    single item next to the recommendation that already says the same thing.
-    Below two, the recommendation carries the turn on its own.
+    A single usable option is still kept. Some OpenAI-compatible servers lose
+    one item while degrading structured output; dropping the remaining valid
+    answer turns a clickable question into free text for no user benefit.
 
     The prompt now asks for options on every question, including the
     open-ended ones, since the free-text composer stays available beside them
     and a concrete sentence to correct beats an empty field. This function is
-    unchanged by that: it bounds what arrives, and a turn that still comes
-    back with fewer than two usable options renders without buttons rather
-    than with a menu of one.
+    unchanged by that: it bounds what arrives and preserves every usable
+    answer it can safely send.
     """
     offered = question.get("options")
     if not isinstance(offered, list):
@@ -569,7 +632,7 @@ def _options(question: dict) -> List[dict]:
         options.append({"label": label, "answer": answer})
         if len(options) == _MAX_OPTIONS:
             break
-    return options if len(options) > 1 else []
+    return options
 
 
 def _merged_draft(offered, previous) -> dict:

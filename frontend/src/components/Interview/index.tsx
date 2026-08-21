@@ -413,23 +413,50 @@ function useThinkingPhase(): string {
 function Welcome({ busy, onStart }: { busy: boolean; onStart: () => void }) {
   return (
     <div className="center">
-      <span className="brand-mark" aria-hidden="true">
-        <MessagesSquare size={17} />
-      </span>
-      <h1>נעים להכיר</h1>
-      <p>
-        לפני שאפשר לבנות סידור, כדאי שאכיר את מקום העבודה: המשמרות, העובדים
-        והכללים שלכם. זה ראיון קצר — שאלה אחת בכל פעם, ואפשר לבחור תשובה או
-        לכתוב משלכם.
-      </p>
-      <button
-        type="button"
-        className="start-button"
-        onClick={onStart}
-        disabled={busy}
-      >
-        {busy ? "רגע…" : "בואו נתחיל"}
-      </button>
+      <section className="welcome-panel" aria-labelledby="welcome-title">
+        <div className="welcome-kicker">
+          <span className="brand-mark" aria-hidden="true">
+            <MessagesSquare size={17} />
+          </span>
+          <span>הקמה ראשונית · כ־10 דקות</span>
+        </div>
+
+        <h1 id="welcome-title">מלמדים את פקש איך הצוות באמת עובד</h1>
+        <p>
+          נעבור יחד על המשמרות, האנשים וכללי העבודה. שאלה אחת בכל פעם,
+          עם תשובה מומלצת שאפשר לקבל בלחיצה או לתקן במילים שלכם.
+        </p>
+
+        <ol className="welcome-map" aria-label="מה נגדיר בראיון">
+          <li>
+            <span>01</span>
+            <strong>מבנה המשמרות</strong>
+            <small>שעות, ימים ותקינה</small>
+          </li>
+          <li>
+            <span>02</span>
+            <strong>הצוות</strong>
+            <small>תפקידים והסמכות</small>
+          </li>
+          <li>
+            <span>03</span>
+            <strong>כללי העבודה</strong>
+            <small>אילוצים והוגנות</small>
+          </li>
+        </ol>
+
+        <div className="welcome-action">
+          <button
+            type="button"
+            className="start-button"
+            onClick={onStart}
+            disabled={busy}
+          >
+            {busy ? "מכין את השאלה הראשונה…" : "מתחילים את ההיכרות"}
+          </button>
+          <small>אפשר לעצור ולחזור בכל שלב</small>
+        </div>
+      </section>
     </div>
   );
 }

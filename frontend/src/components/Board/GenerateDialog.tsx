@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarPlus, Plus, Trash2, X } from "lucide-react";
+import { CalendarPlus, CalendarRange, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { formatDate, hebrewWeekday } from "@/components/Management/Calendar";
@@ -67,6 +67,10 @@ export function GenerateDialog({
     (row) => row.employee && dates.includes(row.date) && row.shift,
   );
 
+  const chooseLength = (days: number) => {
+    setEndsOn(addDays(startsOn, days - 1));
+  };
+
   return (
     <div className="modal-backdrop" role="presentation" onClick={onCancel}>
       <div
@@ -101,37 +105,76 @@ export function GenerateDialog({
             });
           }
         }}>
-          <fieldset className="generate-required-row">
-            <legend>טווח התכנון</legend>
-            <label>
-              <span>מתאריך</span>
-              <input
-                type="date"
-                value={startsOn}
-                onChange={(event) => setStartsOn(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              <span>עד תאריך</span>
-              <input
-                type="date"
-                min={startsOn}
-                value={endsOn}
-                onChange={(event) => setEndsOn(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              <span>כללים נוספים לבנייה הזאת</span>
-              <textarea
-                value={instructions}
-                maxLength={2000}
-                placeholder="לדוגמה: השבוע להעדיף את דנה בבקרים"
-                onChange={(event) => setInstructions(event.target.value)}
-              />
-            </label>
-          </fieldset>
+          <section className="generate-period" aria-labelledby="generate-period-title">
+            <div className="generate-period-head">
+              <span className="generate-period-mark" aria-hidden="true">
+                <CalendarRange size={18} />
+              </span>
+              <div>
+                <h3 id="generate-period-title">לאיזו תקופה לבנות?</h3>
+                <p>אפשר לבחור קיצור דרך ואז לדייק את התאריכים.</p>
+              </div>
+            </div>
+
+            <div className="generate-range-presets" aria-label="אורך התקופה">
+              {[{ days: 1, label: "יום אחד" }, { days: 7, label: "שבוע" }, { days: 14, label: "שבועיים" }].map((preset) => (
+                <button
+                  key={preset.days}
+                  type="button"
+                  className={dates.length === preset.days ? "is-active" : ""}
+                  aria-pressed={dates.length === preset.days}
+                  onClick={() => chooseLength(preset.days)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="generate-date-fields">
+              <label>
+                <span>מתאריך</span>
+                <input
+                  type="date"
+                  value={startsOn}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setStartsOn(next);
+                    if (endsOn < next) setEndsOn(next);
+                  }}
+                  required
+                />
+              </label>
+              <span className="generate-date-connector" aria-hidden="true">עד</span>
+              <label>
+                <span>עד תאריך</span>
+                <input
+                  type="date"
+                  min={startsOn}
+                  value={endsOn}
+                  onChange={(event) => setEndsOn(event.target.value)}
+                  required
+                />
+              </label>
+            </div>
+
+            <div className="generate-range-summary" aria-live="polite">
+              <strong>{dates.length === 1 ? "יום אחד" : `${dates.length} ימים`}</strong>
+              <span>
+                {hebrewWeekday(startsOn)} {formatDate(startsOn)}
+                {dates.length > 1 ? ` — ${hebrewWeekday(endsOn)} ${formatDate(endsOn)}` : ""}
+              </span>
+            </div>
+          </section>
+
+          <label className="generate-instructions">
+            <span>הנחיות מיוחדות לתקופה הזאת <small>לא חובה</small></span>
+            <textarea
+              value={instructions}
+              maxLength={2000}
+              placeholder="לדוגמה: השבוע להעדיף את דנה בבקרים"
+              onChange={(event) => setInstructions(event.target.value)}
+            />
+          </label>
           <div className="generate-required-list">
             {rows.map((row, index) => {
               const availableShifts = shiftsForDate(options, row.date);
@@ -252,6 +295,17 @@ function dateRange(first: string, last: string): string[] {
     cursor.setDate(cursor.getDate() + 1);
   }
   return dates;
+}
+
+function addDays(iso: string, days: number): string {
+  const date = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return iso;
+  date.setDate(date.getDate() + days);
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
 }
 
 function newRow(

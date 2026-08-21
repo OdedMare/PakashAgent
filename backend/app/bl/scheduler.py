@@ -454,7 +454,9 @@ def build_slots(profile: dict, starts_on: str, ends_on: str) -> List[dict]:
             days = shift.get("days")
             runs = (
                 not isinstance(days, list) or not days
-                or weekday in [_bounded(item) for item in days]
+                or _weekday_key(weekday) in {
+                    _weekday_key(item) for item in days
+                }
             )
             if not runs:
                 continue
@@ -491,9 +493,20 @@ def _headcount(shift: dict, weekday: str) -> int:
         days = group.get("days")
         if not isinstance(days, list) or not days:
             fallback = headcount
-        elif weekday in [_bounded(item) for item in days]:
+        elif _weekday_key(weekday) in {_weekday_key(item) for item in days}:
             return headcount
     return fallback
+
+
+def _weekday_key(value: Any) -> str:
+    """The weekday independent of the optional Hebrew ``יום`` prefix.
+
+    Interview answers naturally contain both ``ראשון`` and ``יום ראשון``.
+    They name the same day, and treating them as different silently removed
+    every prefixed weekday except שבת from generated schedules.
+    """
+    value = _bounded(value)
+    return value[4:].strip() if value.startswith("יום ") else value
 
 
 def _assignments(

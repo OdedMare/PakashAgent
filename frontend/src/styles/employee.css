@@ -118,6 +118,93 @@
   padding: 20px 16px 48px;
 }
 
+.employee-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.employee-tabs button {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.employee-tabs button:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.employee-tabs button.is-active {
+  color: var(--primary);
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.employee-tabs button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.employee-tabs button strong {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding-inline: 0.3rem;
+  border-radius: 999px;
+  background: var(--danger);
+  color: white;
+  font-size: 0.68rem;
+}
+
+.employee-tab-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.employee-empty-schedule {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+}
+
+.employee-empty-schedule h2,
+.employee-empty-schedule p {
+  margin: 0;
+}
+
+.employee-empty-schedule p {
+  margin-top: 0.2rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+@media (max-width: 620px) {
+  .employee-tabs button {
+    flex-direction: column;
+    gap: 0.2rem;
+    font-size: 0.72rem;
+  }
+}
+
 .employee-panel {
   padding: 18px;
   border: 1px solid var(--border);

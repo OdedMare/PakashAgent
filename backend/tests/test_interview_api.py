@@ -314,6 +314,11 @@ def test_an_answer_is_recorded_and_passed_back_to_the_model():
         "assistant", "user", "assistant"
     ]
     assert "רציפות תפעולית" in llm.calls[-1]
+    payload = json.loads(llm.calls[-1])
+    assert payload["questions_already_asked"] == [
+        "על מה המשמרת אחראית?"
+    ]
+    assert "על מה המשמרת אחראית?" in payload["recent_conversation"][0]["content"]
 
 
 def test_resuming_replays_the_pending_question_without_calling_the_model():

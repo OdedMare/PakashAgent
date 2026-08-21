@@ -40,10 +40,12 @@ export function AgentAnswer({
   answer,
   busy,
   onDismiss,
+  onContinue,
 }: {
   answer: AgentAnswerRow | null;
   busy: boolean;
   onDismiss: () => void;
+  onContinue?: () => void;
 }) {
   if (busy && !answer) {
     return (
@@ -58,18 +60,24 @@ export function AgentAnswer({
 
   return (
     <section
-      className={`agent-answer${answer.understood ? "" : " is-unsure"}`}
+      className={`agent-answer${answer.understood ? "" : " is-unsure"}${answer.needs_input ? " needs-input" : ""}`}
       aria-label="תשובת הסוכן"
     >
       <header className="agent-answer-header">
         <span className="agent-answer-mark" aria-hidden="true">
-          {answer.understood ? (
+          {answer.needs_input ? (
+            <CircleHelp size={15} />
+          ) : answer.understood ? (
             <CheckCircle2 size={15} />
           ) : (
             <CircleHelp size={15} />
           )}
         </span>
-        <h3>{answer.understood ? "מה שמצאתי" : "לא הבנתי את הבקשה"}</h3>
+        <h3>
+          {answer.needs_input
+            ? "שאלת המשך"
+            : answer.understood ? "מה שמצאתי" : "לא הבנתי את הבקשה"}
+        </h3>
         <button
           type="button"
           className="agent-answer-close"
@@ -88,6 +96,16 @@ export function AgentAnswer({
           <p key={index}>{line}</p>
         ))}
       </div>
+
+      {answer.needs_input && onContinue ? (
+        <button
+          type="button"
+          className="agent-answer-continue"
+          onClick={onContinue}
+        >
+          כתיבת תשובה
+        </button>
+      ) : null}
 
       {/* Nothing has happened. Said outright rather than implied by the
           absence of a confirm button (D8/D12). */}

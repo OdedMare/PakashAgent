@@ -41,6 +41,12 @@ export function SettingsField({
         min={props.min}
         max={props.max}
         step={props.step}
+        // API keys are credentials for a service, not the manager's login
+        // password. Password managers otherwise offer (and sometimes inject)
+        // the password used on the workspace screen into this field.
+        autoComplete={secret ? "new-password" : "off"}
+        data-1p-ignore={secret ? "true" : undefined}
+        data-lpignore={secret ? "true" : undefined}
         // A stored secret renders as an empty field, never as the mask: the
         // mask is a protocol value, and showing it invites the boss to edit
         // asterisks into a new key.

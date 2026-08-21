@@ -32,6 +32,7 @@ import { formatDate } from "./Calendar";
 export function AgentChat({
   proposal,
   busy,
+  hasSchedule = true,
   writeLocked = false,
   draft,
   draftKey,
@@ -43,6 +44,9 @@ export function AgentChat({
 }: {
   proposal: Proposal | null;
   busy: boolean;
+  /** Without a period there is nothing to change, but the agent can still
+   *  answer questions about the workplace and help decide what to build. */
+  hasSchedule?: boolean;
   /** Published periods are read-only until the manager returns them to draft. */
   writeLocked?: boolean;
   /** A sentence the briefing offered, seeded into the composer.
@@ -102,9 +106,29 @@ export function AgentChat({
         </span>
         <div>
           <h3>שיחה על הסידור</h3>
-          <p>אפשר לבקש שינוי, לשאול על השיבוץ, או לתכנן קדימה.</p>
+          <p>
+            {hasSchedule
+              ? "אפשר לבקש שינוי, לשאול על השיבוץ, או לתכנן קדימה."
+              : "אפשר לדבר ולתכנן גם לפני שנבנה הסידור הראשון."}
+          </p>
         </div>
       </header>
+
+      {onAsk ? (
+        <div className="agent-quick-questions" aria-label="שאלות מהירות">
+          <span>אפשר לשאול</span>
+          {(hasSchedule ? SCHEDULE_QUESTIONS : PROFILE_QUESTIONS).map((question) => (
+            <button
+              type="button"
+              key={question}
+              disabled={busy}
+              onClick={() => onAsk(question)}
+            >
+              {question}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {proposal ? (
         <div className="proposal">
@@ -224,18 +248,27 @@ export function AgentChat({
         onSubmit={(event) => {
           event.preventDefault();
           const text = request.trim();
-          if (!text || busy || writeLocked) return;
+          if (!text || busy) return;
+          if (!hasSchedule && onAsk) {
+            onAsk(text);
+            setRequest("");
+            return;
+          }
+          if (writeLocked) return;
           onPropose(text);
           setRequest("");
           setReason("");
         }}
       >
         <input
+          id="agent-composer-input"
           type="text"
           value={request}
           maxLength={500}
           onChange={(event) => setRequest(event.target.value)}
-          placeholder="למשל: דנה חולה ביום חמישי"
+          placeholder={hasSchedule
+            ? "למשל: דנה חולה ביום חמישי"
+            : "למשל: מה כדאי להגדיר לפני שבונים סידור?"}
           disabled={busy}
         />
         {/* Asking and requesting are two buttons because they are two
@@ -243,7 +276,7 @@ export function AgentChat({
             send asks the agent to propose a change. Collapsing them would
             make every question produce a confirm button for something the
             manager did not ask for. */}
-        {onAsk ? (
+        {onAsk && hasSchedule ? (
           <button
             type="button"
             className="ghost-button"
@@ -262,9 +295,11 @@ export function AgentChat({
         <button
           type="submit"
           className="primary-button"
-          disabled={busy || writeLocked || !request.trim()}
+          disabled={busy || (hasSchedule && writeLocked) || !request.trim()}
           aria-label="שליחה"
-          title="בקשת שינוי — הסוכן יציע ואתם תאשרו"
+          title={hasSchedule
+            ? "בקשת שינוי — הסוכן יציע ואתם תאשרו"
+            : "שליחת שאלה לסוכן"}
         >
           <Send size={15} />
         </button>
@@ -278,3 +313,15 @@ const ACTION_LABELS: Record<string, string> = {
   remove: "הסרה",
   swap: "החלפה",
 };
+
+const SCHEDULE_QUESTIONS = [
+  "מה חסר לפני פרסום?",
+  "איפה יש חוסרים בסידור?",
+  "איך נראה השבוע?",
+] as const;
+
+const PROFILE_QUESTIONS = [
+  "מה עדיין חסר בפרופיל?",
+  "מה כדאי להגדיר לפני הסידור הראשון?",
+  "איזה טווח כדאי לבנות קודם?",
+] as const;

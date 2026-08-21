@@ -1,11 +1,16 @@
 {
-  "generated_at": "2026-08-21T08:04:33.961852+00:00",
+  "generated_at": "2026-08-21T20:16:18.754142+00:00",
   "nodes": {
     "backend_app_bl_claude_agent_decides_code_audits": {
-      "code_fingerprint": "37568a9b158a5e82ae7190036ebffb708cd6967d24c1baf2353d7fd5c28638fe",
+      "code_fingerprint": "92790c25b2d2c2f045d008b0e275d142c6218904e44eef4c9e869a8297152d37",
       "label": "Agent Decides; Code Audits",
-      "last": "2026-08-21T08:02:17.271238+00:00",
+      "last": "2026-08-21T08:14:12.433730+00:00",
       "provenance": [
+        {
+          "date": "2026-08-21T08:14:12.433730+00:00",
+          "outcome": "useful",
+          "q": "תממש את זה ואני רוצה שזה יהיה בpolling ולא בstream כמו שעכשוי"
+        },
         {
           "date": "2026-08-21T08:02:17.271238+00:00",
           "outcome": "useful",
@@ -22,16 +27,26 @@
           "q": "in the pakash agent app"
         }
       ],
-      "score": 2.989048015,
+      "score": 3.942639664,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
-      "uses": 3
+      "uses": 4
     },
     "backend_app_bl_claude_interview_workflow": {
-      "code_fingerprint": "37568a9b158a5e82ae7190036ebffb708cd6967d24c1baf2353d7fd5c28638fe",
+      "code_fingerprint": "92790c25b2d2c2f045d008b0e275d142c6218904e44eef4c9e869a8297152d37",
       "label": "Interview Workflow",
-      "last": "2026-08-21T08:02:17.271238+00:00",
+      "last": "2026-08-21T20:07:57.637896+00:00",
       "provenance": [
+        {
+          "date": "2026-08-21T20:07:57.637896+00:00",
+          "outcome": "useful",
+          "q": "i want cllckable questions and theres alweys place that he say somthing like רשמתי את רשימת העובדים ואת ימי הפעילות (ראשון עד חמישי). but does nothing"
+        },
+        {
+          "date": "2026-08-21T08:14:12.433730+00:00",
+          "outcome": "useful",
+          "q": "תממש את זה ואני רוצה שזה יהיה בpolling ולא בstream כמו שעכשוי"
+        },
         {
           "date": "2026-08-21T08:02:17.271238+00:00",
           "outcome": "useful",
@@ -46,44 +61,44 @@
           "date": "2026-08-21T07:57:40.333736+00:00",
           "outcome": "useful",
           "q": "איך לייעל את כמות הטוקנים שאני מעביר בראיון זה מגיע לכמויות גדולות שגודל המידע"
-        },
-        {
-          "date": "2026-08-20T20:46:01.724923+00:00",
-          "outcome": "useful",
-          "q": "in the pakash agent app"
-        },
-        {
-          "date": "2026-08-13T09:04:01.593234+00:00",
-          "outcome": "useful",
-          "q": "hey i want to start work the agent init interview here some qusetions that give as the base the do interview from that mock the missing question that you miss then we implament this part"
         }
       ],
-      "score": 4.820968725,
+      "score": 6.7530437,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
-      "uses": 5
+      "uses": 7
     },
     "backend_app_dal_claude_persistence_schema": {
       "code_fingerprint": "21e546f15e14af1992d469bedfa4fa3a21167e68d153b00b052fc445f4710e94",
       "label": "Scheduling Persistence Schema",
-      "last": "2026-08-21T08:02:17.271238+00:00",
+      "last": "2026-08-21T08:14:12.433730+00:00",
       "provenance": [
+        {
+          "date": "2026-08-21T08:14:12.433730+00:00",
+          "outcome": "useful",
+          "q": "תממש את זה ואני רוצה שזה יהיה בpolling ולא בstream כמו שעכשוי"
+        },
         {
           "date": "2026-08-21T08:02:17.271238+00:00",
           "outcome": "useful",
           "q": "בוא נתכנן איך לממש את זה"
         }
       ],
-      "score": 0.999963447,
+      "score": 1.976772231,
       "source_file": "backend/app/dal/CLAUDE.md",
-      "status": "tentative",
-      "uses": 1
+      "status": "preferred",
+      "uses": 2
     },
     "backend_app_dal_llm_claude_openai_compatible_json_client": {
-      "code_fingerprint": "2e069bb4e434ab770c256609286e71cabedfbb9bbbac3fea6ba8a44e7a058dca",
+      "code_fingerprint": "fd5dc0be2963d56c6d8b4bdab4f33fea551536e9288d2e1dbca39c0e6a6174f1",
       "label": "OpenAI-Compatible JSON Client",
-      "last": "2026-08-21T08:02:17.271238+00:00",
+      "last": "2026-08-21T08:14:12.433730+00:00",
       "provenance": [
+        {
+          "date": "2026-08-21T08:14:12.433730+00:00",
+          "outcome": "useful",
+          "q": "תממש את זה ואני רוצה שזה יהיה בpolling ולא בstream כמו שעכשוי"
+        },
         {
           "date": "2026-08-21T08:02:17.271238+00:00",
           "outcome": "useful",
@@ -103,20 +118,15 @@
           "date": "2026-08-20T20:46:01.724923+00:00",
           "outcome": "useful",
           "q": "in the pakash agent app"
-        },
-        {
-          "date": "2026-08-13T09:04:01.593234+00:00",
-          "outcome": "useful",
-          "q": "hey i want to start work the agent init interview here some qusetions that give as the base the do interview from that mock the missing question that you miss then we implament this part"
         }
       ],
-      "score": 4.820968725,
+      "score": 5.753177699,
       "source_file": "backend/app/dal/llm/CLAUDE.md",
       "status": "preferred",
-      "uses": 5
+      "uses": 6
     },
     "backend_claude_per_workplace_shift_vocabulary": {
-      "code_fingerprint": "046e0c4291e8d5988073dd3140a38edcffae04cdbf516c54d9d1dfc860b8ffe0",
+      "code_fingerprint": "941876e35080ed27d421d5b2795c70c6c98c4a4ea804ff13686086982b7614e1",
       "label": "Per-Workplace Shift Vocabulary",
       "last": "2026-08-13T09:04:01.593234+00:00",
       "provenance": [
@@ -126,13 +136,13 @@
           "q": "hey i want to start work the agent init interview here some qusetions that give as the base the do interview from that mock the missing question that you miss then we implament this part"
         }
       ],
-      "score": 0.832031316,
+      "score": 0.822319621,
       "source_file": "backend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
     },
     "backend_claude_runtime_settings": {
-      "code_fingerprint": "046e0c4291e8d5988073dd3140a38edcffae04cdbf516c54d9d1dfc860b8ffe0",
+      "code_fingerprint": "941876e35080ed27d421d5b2795c70c6c98c4a4ea804ff13686086982b7614e1",
       "label": "Live Runtime Settings",
       "last": "2026-08-20T20:46:01.724923+00:00",
       "provenance": [
@@ -142,8 +152,24 @@
           "q": "in the pakash agent app"
         }
       ],
-      "score": 0.98917187,
+      "score": 0.977625988,
       "source_file": "backend/CLAUDE.md",
+      "status": "tentative",
+      "uses": 1
+    },
+    "frontend_claude_chat_first_frontend": {
+      "code_fingerprint": "6751b6d578ee081fb66d342747a61c57586889cdcdeba29b3f43c0c9e08ebc72",
+      "label": "Chat-First Frontend",
+      "last": "2026-08-21T20:07:57.637896+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-21T20:07:57.637896+00:00",
+          "outcome": "useful",
+          "q": "i want cllckable questions and theres alweys place that he say somthing like רשמתי את רשימת העובדים ואת ימי הפעילות (ראשון עד חמישי). but does nothing"
+        }
+      ],
+      "score": 0.999866002,
+      "source_file": "frontend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
     }

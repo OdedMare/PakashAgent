@@ -50,7 +50,7 @@ export function IdentityGate({
   };
 
   return (
-    <div className="workspace-gate">
+    <div className="workspace-gate identity-gate">
       <div className="gate-card">
         <span className="brand-mark" aria-hidden="true">
           <UserCheck size={17} />

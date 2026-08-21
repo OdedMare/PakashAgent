@@ -3,7 +3,6 @@
 import {
   AlertCircle,
   BarChart3,
-  Bot,
   CalendarDays,
   Inbox,
   LogOut,
@@ -368,12 +367,6 @@ export function Management({
               onClick={() => setSection("agent")}
             />
             <ManagerTab
-              active={section === "copilot"}
-              icon={<Bot size={15} />}
-              label="קופיילוט"
-              onClick={() => setSection("copilot")}
-            />
-            <ManagerTab
               active={section === "requests"}
               icon={<Inbox size={15} />}
               label="בקשות"
@@ -417,6 +410,9 @@ export function Management({
             answer={state.answer}
             busy={state.answer_busy}
             onDismiss={state.dismissAnswer}
+            onContinue={() =>
+              document.getElementById("agent-composer-input")?.focus()
+            }
           />
           {/* A change being considered rather than requested. Rendered in
               its own colour above the proposal so the two can never be
@@ -432,6 +428,7 @@ export function Management({
           <AgentChat
             proposal={state.proposal}
             busy={state.busy}
+            hasSchedule={Boolean(schedule)}
             writeLocked={schedule?.status === "published"}
             draft={suggested.text}
             draftKey={suggested.n}
@@ -441,17 +438,13 @@ export function Management({
             onConfirm={state.confirm}
             onDismiss={state.dismissProposal}
           />
+          <CopilotInbox
+            onOpenInterview={onOpenInterview}
+            onAct={(text) => {
+              setSuggested((previous) => ({ text, n: previous.n + 1 }));
+            }}
+          />
           </> : null}
-
-          {section === "copilot" ? (
-            <CopilotInbox
-              onOpenInterview={onOpenInterview}
-              onAct={(text) => {
-                setSuggested((previous) => ({ text, n: previous.n + 1 }));
-                setSection("agent");
-              }}
-            />
-          ) : null}
 
           {section === "requests" ? <>
           {schedule?.status === "published" ? (
@@ -518,7 +511,7 @@ export function Management({
   );
 }
 
-type ManagerSection = "agent" | "copilot" | "requests" | "team" | "overview";
+type ManagerSection = "agent" | "requests" | "team" | "overview";
 
 function ManagerTab({
   active,

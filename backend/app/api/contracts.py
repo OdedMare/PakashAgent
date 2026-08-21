@@ -879,6 +879,9 @@ class AgentAnswer(BaseModel):
     # sentence, not a queued change: the manager still sends it through
     # propose-then-confirm.
     needs_confirmation: bool = False
+    # True when the agent is asking one focused follow-up rather than closing
+    # the conversation with an answer.
+    needs_input: bool = False
     used_model: bool = True
     understood: bool = True
     schedule_id: str = ""

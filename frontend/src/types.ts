@@ -813,6 +813,8 @@ export interface AgentAnswer {
   answer: string;
   steps: AgentStep[];
   needs_confirmation: boolean;
+  /** The answer is a focused question and the conversation should continue. */
+  needs_input: boolean;
   used_model: boolean;
   understood: boolean;
   schedule_id: string;

@@ -97,6 +97,15 @@ class InterviewService:
             return _processing(session_id, pending, session["turns"])
         if pending.get("_error"):
             return _failed(session_id, pending, session["turns"])
+        if (
+            pending.get("question") is None
+            and not pending.get("awaiting_confirmation")
+            and not pending.get("ready")
+        ):
+            # Repair sessions created before the missing-question guard.
+            # They otherwise resume forever on a reply with nothing to
+            # answer, which looks exactly like the agent stopped listening.
+            return self._queue(session_id, team_id, pending)
         return _turn(session_id, pending, session["turns"])
 
     def answer(self, session_id: str, team_id: str, content: str) -> dict:
@@ -169,7 +178,14 @@ class InterviewService:
         """
         session = self._repository.get_session(session_id, team_id)
         history = [_replayed(row) for row in session["turns"]]
-        state = session["pending"] or {}
+        state = dict(session["pending"] or {})
+        # Questions live in the assistant turn payload, not in its reply.
+        # Carry the exact wording separately so the model can move forward
+        # instead of re-asking a question whose answer it already received.
+        state["questions_already_asked"] = [
+            question for row in session["turns"]
+            if (question := _stored_question(row))
+        ]
         draft = state.get("draft")
         result = self._interview.next_turn(history, draft, state)
         # Ending the interview is deliberately allowed while the model is
@@ -276,12 +292,19 @@ def _replayed(row: dict) -> dict:
     interview is a function of its history: a turn that vanishes takes its
     question with it, and the model re-asks something already answered.
     """
-    content = row["content"]
-    if not (content or "").strip():
-        payload = row.get("payload") or {}
-        question = payload.get("question") or {}
-        content = question.get("question") or ""
+    content = (row["content"] or "").strip()
+    question = _stored_question(row)
+    if question and question not in content:
+        content = "%s\nשאלה: %s" % (content, question) if content else question
     return {"role": row["role"], "content": content}
+
+
+def _stored_question(row: dict) -> str:
+    """The exact question attached to one stored assistant turn."""
+    payload = row.get("payload") or {}
+    question = payload.get("question") or {}
+    value = question.get("question")
+    return value.strip() if isinstance(value, str) else ""
 
 
 def _turn(session_id: str, pending: dict, turns) -> dict:

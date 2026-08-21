@@ -3,7 +3,9 @@
 // validator on this version.
 import next from "eslint-config-next";
 
-export default [
+const config = [
   ...next,
   { ignores: [".next/**", "node_modules/**"] },
 ];
+
+export default config;

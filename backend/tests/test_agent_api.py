@@ -170,6 +170,17 @@ def test_asking_answers_with_no_model_configured():
     assert body["answer"]
 
 
+def test_the_agent_can_talk_before_any_schedule_exists():
+    app, _ = _build_app()
+
+    response = _client(app).post(
+        "/api/schedule/ask", json={"request": "מה חסר בסידור"},
+    )
+
+    assert response.status_code == 200
+    assert "אין סידור" in response.json()["answer"]
+
+
 def test_an_answer_carries_no_operations():
     """There is no field here `apply` could read (the D15 property)."""
     app, repo = _build_app()

@@ -31,10 +31,9 @@ import type { ChangeLearning } from "@/types";
  *  the agent or added in the interview, which is where rules are authored. */
 export function LearnedFromChanges() {
   const [data, setData] = useState<ChangeLearning | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
 
   const load = useCallback(() => {
-    setBusy(true);
     learnFromChanges()
       .then(setData)
       .catch(() => setData(null))
@@ -63,7 +62,10 @@ export function LearnedFromChanges() {
         <button
           type="button"
           className="icon-button"
-          onClick={load}
+          onClick={() => {
+            setBusy(true);
+            load();
+          }}
           disabled={busy}
           aria-label="רענון"
           title="רענון"
