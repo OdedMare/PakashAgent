@@ -15,7 +15,7 @@ from app.bl.interview_service import InterviewService
 from app.bl.schedule_service import ScheduleService
 from app.bl.workspace_service import WorkspaceService
 from app.common.config.settings import Settings
-from app.common.errors import AppError
+from app.common.errors import AppError, ProfileIncompleteError
 from app.common.logging_setup import configure_logging
 from app.common.sessions import generate_secret
 from app.common.runtime_settings.runtime_settings_store import (
@@ -149,6 +149,13 @@ async def app_error_handler(request, exc: AppError) -> JSONResponse:
         "AppError %s %s -> %s: %s",
         request.method, request.url.path, exc.status_code, exc,
     )
-    return JSONResponse(
-        status_code=exc.status_code, content={"detail": str(exc)}
-    )
+    content = {"detail": str(exc)}
+    if isinstance(exc, ProfileIncompleteError):
+        # The one failure a client can act on rather than only report. The
+        # gaps ride out with it so the UI can open the interview on exactly
+        # what is missing; `detail` still carries the sentence, so a client
+        # that ignores these fields behaves exactly as before.
+        content["gaps"] = exc.gaps
+        content["blocks"] = exc.blocks
+        content["can_resume_interview"] = True
+    return JSONResponse(status_code=exc.status_code, content=content)

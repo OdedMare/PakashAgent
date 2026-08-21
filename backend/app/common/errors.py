@@ -18,6 +18,33 @@ class AgentError(AppError):
     status_code = 502
 
 
+class ProfileIncompleteError(AgentError):
+    """The interview finished, but not with enough to build a grid.
+
+    Its own type rather than a bare `AgentError` because the caller can *do*
+    something about this one: the profile names exactly which required topics
+    are still owed, so the failure carries them and the UI opens the
+    interview on them instead of showing a dead end. Everything else in
+    `bl/` failing is genuinely terminal for the request; this is a fork in
+    the flow, and collapsing the two into one type is what made the manual
+    path look broken rather than unfinished.
+
+    `gaps` are the lines `bl/interview.py` produced -- the same definition
+    the readiness gate uses, never a second copy. `blocks` says what each
+    gap costs in the manager's terms.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        gaps: list | None = None,
+        blocks: list | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.gaps = list(gaps or [])
+        self.blocks = list(blocks or [])
+
+
 class NotFoundError(AppError):
     status_code = 404
 

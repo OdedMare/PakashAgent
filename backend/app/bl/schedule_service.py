@@ -37,7 +37,9 @@ from app.bl.planner import PlanningAgent
 from app.bl.simulate import simulate as simulate_operations
 from app.bl.tools import ScheduleTools
 from app.bl.scheduler import Scheduler, build_slots
-from app.common.errors import AgentError, NotFoundError
+from app.common.errors import (
+    AgentError, NotFoundError, ProfileIncompleteError,
+)
 from app.dal.repository.schedules import (
     ASSIGNED_BY_IMPORT,
     ASSIGNED_BY_MANAGER,
@@ -292,6 +294,54 @@ class ScheduleService:
 
     # -- generating --------------------------------------------------------
 
+    def _buildable_profile(self, team_id: str) -> dict:
+        """The profile, or a refusal that says what is still missing.
+
+        Both building paths ask this one question, so there is one answer to
+        it. `generate` and `create_blank` differ in whether a model runs;
+        they do not differ in what a profile has to contain before a grid
+        exists, and when they each checked separately the manual path grew a
+        second, vaguer definition of "not enough".
+
+        Two distinct failures, deliberately not merged:
+
+        - **No profile at all.** The interview was never run. There is
+          nothing to resume, so this stays a plain `AgentError`.
+        - **A profile that cannot carry a grid.** The interview *was* run and
+          ended early through `interview_service.end`, which is allowed to
+          write a partial profile and records what it still owes on
+          `completeness`. That record is read back here rather than
+          recomputed, so the gate and the agent's own answer to *"what are
+          you missing"* can never drift apart.
+
+        The second case used to fail identically to a broken backend: the
+        profile passed a `if not profile` check, `build_slots` returned an
+        empty list, and both buttons answered 502 with no way forward. It is
+        a `ProfileIncompleteError` now because the manager can fix it -- the
+        missing topics travel with the error and the interview is where they
+        get filled in.
+
+        Shift vocabulary is the only true stop. Missing rules or employees
+        degrade the result, and refusing over them would be worse than
+        building a thin week: D9 forbids inventing shift names, but nothing
+        forbids scheduling a roster the agent knows little about.
+        """
+        profile = self._repository.team_profile(team_id)
+        if not profile:
+            raise AgentError(
+                "צריך להשלים את ראיון ההיכרות לפני בניית סידור"
+            )
+        gaps = self._tools.profile_gaps(team_id)
+        if not gaps.get("has_shifts"):
+            raise ProfileIncompleteError(
+                "לא ניתן לבנות סידור: לא הוגדרו סוגי משמרות בראיון ההיכרות. "
+                "אפשר להשלים את החסר בשיחה עם הסוכן.",
+                gaps=gaps.get("gaps") or [],
+                blocks=gaps.get("blocks") or [],
+            )
+        return profile
+
+
     def generate(
         self,
         team_id: str,
@@ -305,11 +355,7 @@ class ScheduleService:
         vocabulary there is nothing to build a grid out of, and guessing one
         would be exactly the hardcoding D9 forbids.
         """
-        profile = self._repository.team_profile(team_id)
-        if not profile:
-            raise AgentError(
-                "צריך להשלים את ראיון ההיכרות לפני בניית סידור"
-            )
+        profile = self._buildable_profile(team_id)
         if not starts_on or not ends_on:
             starts_on, ends_on = week_bounds()
 
@@ -377,18 +423,19 @@ class ScheduleService:
         [D9](../../../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)
         forbids — the manual path skips the agent, not the interview.
         """
-        profile = self._repository.team_profile(team_id)
-        if not profile:
-            raise AgentError(
-                "צריך להשלים את ראיון ההיכרות לפני בניית סידור"
-            )
+        profile = self._buildable_profile(team_id)
         if not starts_on or not ends_on:
             starts_on, ends_on = week_bounds()
 
         slots = build_slots(profile, starts_on, ends_on)
         if not slots:
+            # The vocabulary exists but none of it runs in this window --
+            # every shift is restricted to weekdays the period misses. A
+            # different failure from an empty vocabulary, and a different
+            # sentence: the interview is finished and re-opening it would
+            # teach nothing, so this points at the dates instead.
             raise AgentError(
-                "לא ניתן לבנות סידור: לא הוגדרו משמרות לתקופה הזו"
+                "לא ניתן לבנות סידור: אף משמרת מוגדרת לא חלה בתאריכים האלה"
             )
         schedule = self._repository.create_schedule(
             team_id, starts_on, ends_on
