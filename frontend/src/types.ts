@@ -59,7 +59,7 @@ export interface ProfileCompleteness {
 
 export interface InterviewTurn {
   session_id: string;
-  status: "question" | "complete";
+  status: "processing" | "question" | "complete" | "error";
   /** What the agent says this turn, above the question. */
   reply: string;
   question: Question | null;
@@ -78,6 +78,7 @@ export interface InterviewTurn {
   /** The confirmed result. Null until the interview is complete — `draft` is
    *  a proposal, this is the durable answer. */
   profile: WorkplaceProfile | null;
+  error?: string | null;
 }
 
 /** Mirrors `RuntimeSettings` in `backend/app/common/runtime_settings/`.

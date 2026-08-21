@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   answerInterview,
   endInterview,
+  retryInterview,
   resumeInterview,
   startInterview,
 } from "@/services/api";
@@ -14,6 +15,11 @@ import type { InterviewTurn } from "@/types";
  *  refresh resumes the same conversation rather than starting a second one.
  *  Resuming replays the stored question and costs no model call. */
 const STORAGE_KEY = "pakash.interview.session";
+const POLL_INTERVAL_MS = 750;
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
 
 export interface InterviewState {
   turn: InterviewTurn | null;
@@ -33,26 +39,42 @@ export function useInterview(): InterviewState {
   const [turn, setTurn] = useState<InterviewTurn | null>(null);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // What to re-run when the boss presses "retry" on a failed turn.
-  const lastAction = useRef<(() => Promise<void>) | null>(null);
+  const operation = useRef(0);
+  // The request to issue when the boss presses retry. After a background
+  // failure this becomes `/retry`, never the original answer POST: that
+  // answer is already stored and sending it twice would corrupt the thread.
+  const lastAction = useRef<(() => Promise<InterviewTurn>) | null>(null);
 
   const run = useCallback(async (action: () => Promise<InterviewTurn>) => {
+    const currentOperation = ++operation.current;
     setBusy(true);
     setError(null);
     try {
-      const next = await action();
-      setTurn(next);
+      let next = await action();
+      if (operation.current !== currentOperation) return;
       window.localStorage.setItem(STORAGE_KEY, next.session_id);
+      setTurn(next);
+      while (next.status === "processing") {
+        await wait(POLL_INTERVAL_MS);
+        if (operation.current !== currentOperation) return;
+        next = await resumeInterview(next.session_id);
+        setTurn(next);
+      }
+      if (next.status === "error") {
+        lastAction.current = () => retryInterview(next.session_id);
+        throw new Error(next.error || "יצירת השאלה נכשלה. אפשר לנסות שוב.");
+      }
     } catch (reason) {
+      if (operation.current !== currentOperation) return;
       setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
     } finally {
-      setBusy(false);
+      if (operation.current === currentOperation) setBusy(false);
     }
   }, []);
 
   const start = useCallback(() => {
-    lastAction.current = () => run(startInterview);
-    void lastAction.current();
+    lastAction.current = startInterview;
+    void run(lastAction.current);
   }, [run]);
 
   const answer = useCallback(
@@ -83,8 +105,8 @@ export function useInterview(): InterviewState {
             }
           : current,
       );
-      lastAction.current = () => run(() => answerInterview(sessionId, content));
-      void lastAction.current();
+      lastAction.current = () => answerInterview(sessionId, content);
+      void run(lastAction.current);
     },
     [run, turn?.session_id],
   );
@@ -100,6 +122,7 @@ export function useInterview(): InterviewState {
   }, [run, turn?.session_id]);
 
   const reset = useCallback(() => {
+    operation.current += 1;
     window.localStorage.removeItem(STORAGE_KEY);
     setTurn(null);
     setError(null);
@@ -107,34 +130,21 @@ export function useInterview(): InterviewState {
   }, []);
 
   const retry = useCallback(() => {
-    void lastAction.current?.();
-  }, []);
+    if (lastAction.current) void run(lastAction.current);
+  }, [run]);
 
   // On load, resume the stored session so a refresh continues the interview.
   useEffect(() => {
-    let cancelled = false;
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    // Resolved rather than returned early even when there is nothing stored,
-    // so `busy` is always cleared from a callback. Clearing it synchronously
-    // in the effect body cascades an extra render on every first paint.
-    const resumed = stored
-      ? resumeInterview(stored).then((next) => {
-          if (!cancelled) setTurn(next);
-        })
-      : Promise.resolve();
-    resumed
-      .catch(() => {
-        // A session the server no longer has (a dropped database, a cleared
-        // schema) must not strand the boss on an error screen forever.
-        window.localStorage.removeItem(STORAGE_KEY);
-      })
-      .finally(() => {
-        if (!cancelled) setBusy(false);
-      });
+    const timer = window.setTimeout(() => {
+      if (stored) void run(() => resumeInterview(stored));
+      else setBusy(false);
+    }, 0);
     return () => {
-      cancelled = true;
+      window.clearTimeout(timer);
+      operation.current += 1;
     };
-  }, []);
+  }, [run]);
 
   return { turn, busy, error, start, answer, end, reset, retry };
 }

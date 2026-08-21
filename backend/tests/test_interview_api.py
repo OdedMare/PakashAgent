@@ -15,7 +15,7 @@ from app.api.dependencies import Guards
 from app.api.routers import health, interview
 from app.bl.interview import empty_draft
 from app.bl.interview_service import InterviewService
-from app.common.errors import AppError, ConflictError, NotFoundError
+from app.common.errors import AgentError, AppError, ConflictError, NotFoundError
 from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 
 # The team every test authenticates into. Its value is arbitrary; what matters
@@ -93,8 +93,12 @@ class _ScriptedLlm:
     def complete_json(self, system, user, schema=None, flow=""):
         self.calls.append(user)
         if len(self.responses) > 1:
-            return self.responses.pop(0)
-        return self.responses[0]
+            response = self.responses.pop(0)
+        else:
+            response = self.responses[0]
+        if isinstance(response, Exception):
+            raise response
+        return response
 
 
 def _question(question="על מה המשמרת אחראית?", **overrides):
@@ -116,7 +120,7 @@ def _question(question="על מה המשמרת אחראית?", **overrides):
         "open_points": ["עדיין לא הוגדרו סוגי המשמרות."],
         "awaiting_confirmation": False,
         "ready": False,
-        "draft": _empty(),
+        "draft_update": {},
     }
     response.update(overrides)
     return response
@@ -155,7 +159,7 @@ def _confirming():
     not confirmed it."""
     return _question(
         question=None, awaiting_confirmation=True, ready=False,
-        reply="זה מה שסיכמנו. נכון?", draft=_profile(),
+        reply="זה מה שסיכמנו. נכון?", draft_update=_profile(),
     )
 
 
@@ -163,11 +167,11 @@ def _complete():
     """The turn after the manager confirms."""
     return _question(
         question=None, awaiting_confirmation=False, ready=True,
-        reply="מצוין, סיימנו.", draft=_profile(),
+        reply="מצוין, סיימנו.", draft_update=_profile(),
     )
 
 
-def _client(llm, role=ROLE_BOSS, team=TEAM):
+def _client(llm, role=ROLE_BOSS, team=TEAM, launch=None):
     """A client already holding a session cookie for `team`.
 
     Authenticated by default: every test here predates workspaces and asserts
@@ -175,7 +179,9 @@ def _client(llm, role=ROLE_BOSS, team=TEAM):
     below, which pass a member role or no cookie at all.
     """
     repository = _FakeRepository()
-    service = InterviewService(repository, llm)
+    service = InterviewService(repository, llm, launch=launch or (
+        lambda target, *args: target(*args)
+    ))
     app = FastAPI()
     app.include_router(health.build_router(repository))
     app.include_router(interview.build_router(service, Guards(SECRET)))
@@ -191,6 +197,65 @@ def _client(llm, role=ROLE_BOSS, team=TEAM):
     if role is not None:
         client.cookies.set(COOKIE_NAME, issue(SECRET, team, role, 1))
     return client, repository
+
+
+class _DeferredLauncher:
+    def __init__(self):
+        self.jobs = []
+
+    def __call__(self, target, *args):
+        self.jobs.append((target, args))
+
+    def run_next(self):
+        target, args = self.jobs.pop(0)
+        target(*args)
+
+
+def test_interview_generation_is_polled_instead_of_blocking_the_post():
+    launcher = _DeferredLauncher()
+    llm = _ScriptedLlm([_question()])
+    client, _ = _client(llm, launch=launcher)
+
+    queued = client.post("/api/interview").json()
+
+    assert queued["status"] == "processing"
+    assert llm.calls == []
+
+    launcher.run_next()
+    completed = client.get("/api/interview/%s" % queued["session_id"]).json()
+
+    assert completed["status"] == "question"
+    assert completed["question"]["question"] == "על מה המשמרת אחראית?"
+
+
+def test_retry_does_not_record_the_same_answer_twice():
+    launcher = _DeferredLauncher()
+    llm = _ScriptedLlm([
+        _question(), AgentError("המודל לא זמין"), _question("איך יודעים?"),
+    ])
+    client, repository = _client(llm, launch=launcher)
+
+    started = client.post("/api/interview").json()
+    launcher.run_next()
+    session_id = started["session_id"]
+    client.post(
+        "/api/interview/%s/answer" % session_id,
+        json={"content": "רציפות תפעולית"},
+    )
+    launcher.run_next()
+
+    failed = client.get("/api/interview/%s" % session_id).json()
+    assert failed["status"] == "error"
+
+    queued = client.post("/api/interview/%s/retry" % session_id).json()
+    assert queued["status"] == "processing"
+    launcher.run_next()
+
+    completed = client.get("/api/interview/%s" % session_id).json()
+    assert completed["status"] == "question"
+    assert [row["role"] for row in repository.history(session_id)].count(
+        "user"
+    ) == 1
 
 
 def test_starting_an_interview_returns_the_first_question_with_options():
@@ -345,7 +410,7 @@ def test_a_blank_stored_turn_is_replayed_from_its_question():
 
     client.post("/api/interview/%s/answer" % session_id, json={"content": "מענה"})
 
-    replayed = json.loads(llm.calls[-1])["conversation"]
+    replayed = json.loads(llm.calls[-1])["recent_conversation"]
     assert replayed[0] == {
         "role": "assistant", "content": "על מה המשמרת אחראית?"
     }
@@ -373,7 +438,7 @@ def test_ending_stores_the_draft_so_far_as_the_profile():
         "shifts": [{"name": "בוקר", "start_time": "08:00"}],
     })
     client, repository = _client(
-        _ScriptedLlm([_question(draft=partial)])
+        _ScriptedLlm([_question(draft_update=partial)])
     )
     session_id = client.post("/api/interview").json()["session_id"]
 

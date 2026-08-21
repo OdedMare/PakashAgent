@@ -48,7 +48,7 @@ def _question_response(**overrides):
         "open_points": ["עדיין לא הוגדרו סוגי המשמרות."],
         "awaiting_confirmation": False,
         "ready": False,
-        "draft": empty_draft(),
+        "draft_update": {},
     }
     response.update(overrides)
     return response
@@ -85,7 +85,7 @@ def test_first_turn_sends_the_topics_and_returns_one_question():
     assert result["question"]["why"]
     assert len(result["question"]["options"]) == 2
     payload = json.loads(llm.calls[0]["user"])
-    assert payload["conversation"] == []
+    assert payload["recent_conversation"] == []
     assert payload["draft_so_far"] == {}
     assert payload["topics"] == [dict(item) for item in INTERVIEW_TOPICS]
     topic_ids = {item["id"] for item in payload["topics"]}
@@ -95,9 +95,11 @@ def test_first_turn_sends_the_topics_and_returns_one_question():
     }.issubset(topic_ids)
 
 
-def test_conversation_is_trimmed_and_passed_to_the_next_turn():
+def test_only_the_latest_exchange_is_passed_to_the_next_turn():
     llm = _FakeLlm(_question_response())
     history = [
+        {"role": "assistant", "content": "מה שם המקום?"},
+        {"role": "user", "content": "מוקד"},
         {"role": "assistant", "content": "  מי העובדים?  "},
         {"role": "user", "content": "  דנה ורון  "},
     ]
@@ -105,10 +107,33 @@ def test_conversation_is_trimmed_and_passed_to_the_next_turn():
     IntroInterview(llm).next_turn(history)
 
     payload = json.loads(llm.calls[0]["user"])
-    assert payload["conversation"] == [
+    assert payload["recent_conversation"] == [
         {"role": "assistant", "content": "מי העובדים?"},
         {"role": "user", "content": "דנה ורון"},
     ]
+
+
+def test_structured_state_replaces_the_old_conversation_context():
+    llm = _FakeLlm(_question_response())
+
+    IntroInterview(llm).next_turn([], {}, {
+        "resolved": ["שם מקום העבודה: מוקד"],
+        "open_points": ["חסרים עובדים"],
+    })
+
+    payload = json.loads(llm.calls[0]["user"])
+    assert payload["resolved_so_far"] == ["שם מקום העבודה: מוקד"]
+    assert payload["open_points_so_far"] == ["חסרים עובדים"]
+
+
+def test_model_schema_accepts_a_sparse_draft_update():
+    llm = _FakeLlm(_question_response())
+
+    IntroInterview(llm).next_turn([])
+
+    update = llm.calls[0]["schema"]["properties"]["draft_update"]
+    assert "required" not in update
+    assert "required" not in update["properties"]["workplace"]
 
 
 def test_the_draft_so_far_is_handed_back_to_the_model():
@@ -150,7 +175,9 @@ def test_an_empty_stored_message_is_skipped_rather_than_wedging_the_interview():
     IntroInterview(llm).next_turn(history)
 
     payload = json.loads(llm.calls[0]["user"])
-    assert payload["conversation"] == [{"role": "user", "content": "דנה ורון"}]
+    assert payload["recent_conversation"] == [
+        {"role": "user", "content": "דנה ורון"}
+    ]
 
 
 # --- the draft merge -------------------------------------------------------
@@ -164,7 +191,7 @@ def test_a_field_settled_earlier_survives_a_turn_that_omits_it():
         "employees": [{"name": "דנה"}],
         "summary": "מוקד שבועי",
     })
-    response = _question_response(draft=empty_draft())
+    response = _question_response(draft_update={})
 
     result = IntroInterview(_FakeLlm(response)).next_turn([], previous)
 
@@ -177,7 +204,7 @@ def test_a_restated_field_overrides_what_was_agreed_before():
     """Carrying forward must not freeze a value: a correction is exactly the
     case where the manager restates a field."""
     previous = dict(empty_draft(), summary="ישן")
-    response = _question_response(draft=dict(empty_draft(), summary="חדש"))
+    response = _question_response(draft_update={"summary": "חדש"})
 
     result = IntroInterview(_FakeLlm(response)).next_turn([], previous)
 
@@ -189,7 +216,7 @@ def test_workplace_is_merged_per_key_not_as_one_blob():
     last turn to mention it must not be the only one that counts."""
     previous = dict(empty_draft(), workplace={"name": "מוקד", "mission": "מענה"})
     response = _question_response(
-        draft=dict(empty_draft(), workplace={"planning_horizon": "שבוע"})
+        draft_update={"workplace": {"planning_horizon": "שבוע"}}
     )
 
     result = IntroInterview(_FakeLlm(response)).next_turn([], previous)
@@ -205,7 +232,7 @@ def test_workplace_is_merged_per_key_not_as_one_blob():
 def test_a_turn_that_still_asks_is_never_ready():
     """`ready` unlocks writing the profile, so a model that mislabels an open
     question must not be believed."""
-    response = _question_response(ready=True, draft=_complete_profile())
+    response = _question_response(ready=True, draft_update=_complete_profile())
 
     result = IntroInterview(_FakeLlm(response)).next_turn([])
 
@@ -217,7 +244,7 @@ def test_the_confirmation_turn_is_not_yet_ready():
     the manager confirms it."""
     response = _question_response(
         question=None, awaiting_confirmation=True, ready=True,
-        draft=_complete_profile(),
+        draft_update=_complete_profile(),
     )
 
     result = IntroInterview(_FakeLlm(response)).next_turn([])
@@ -237,7 +264,7 @@ def test_an_open_question_withdraws_the_confirmation_flag():
 def test_a_confirmed_complete_profile_is_ready():
     response = _question_response(
         question=None, awaiting_confirmation=False, ready=True,
-        draft=_complete_profile(), reply="מצוין, סיימנו.",
+        draft_update=_complete_profile(), reply="מצוין, סיימנו.",
     )
 
     result = IntroInterview(_FakeLlm(response)).next_turn([
@@ -253,7 +280,8 @@ def test_a_profile_missing_a_required_topic_is_not_ready():
     shiftless profile finished is overruled and the gap resurfaces."""
     partial = dict(_complete_profile(), shifts=[])
     response = _question_response(
-        question=None, awaiting_confirmation=False, ready=True, draft=partial,
+        question=None, awaiting_confirmation=False, ready=True,
+        draft_update=partial,
     )
 
     result = IntroInterview(_FakeLlm(response)).next_turn([])

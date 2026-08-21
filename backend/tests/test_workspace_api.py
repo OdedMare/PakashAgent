@@ -40,7 +40,11 @@ def app_and_repo():
         WorkspaceService(repository), guards, SECRET, 30
     ))
     app.include_router(interview.build_router(
-        InterviewService(repository, _ScriptedLlm([_question()])), guards
+        InterviewService(
+            repository, _ScriptedLlm([_question()]),
+            launch=lambda target, *args: target(*args),
+        ),
+        guards,
     ))
 
     @app.exception_handler(AppError)

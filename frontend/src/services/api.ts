@@ -146,6 +146,12 @@ export function answerInterview(
   });
 }
 
+export function retryInterview(sessionId: string): Promise<InterviewTurn> {
+  return request<InterviewTurn>(`/api/interview/${sessionId}/retry`, {
+    method: "POST",
+  });
+}
+
 /** Close the interview now, keeping whatever has been collected.
  *
  *  Costs no model call on the server — this is the way out of an interview

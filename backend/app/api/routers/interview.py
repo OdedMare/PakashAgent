@@ -35,6 +35,11 @@ def build_router(service, guards) -> APIRouter:
         """Record an answer and return the next question, or the profile."""
         return service.answer(session_id, session["team_id"], request.content)
 
+    @router.post("/{session_id}/retry", response_model=InterviewTurn)
+    def retry(session_id: str, session: dict = Depends(boss)) -> dict:
+        """Retry the current background generation without duplicating input."""
+        return service.retry(session_id, session["team_id"])
+
     @router.post("/{session_id}/end", response_model=InterviewTurn)
     def end(session_id: str, session: dict = Depends(boss)) -> dict:
         """Close the interview now and keep what was collected.

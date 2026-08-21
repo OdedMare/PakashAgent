@@ -71,6 +71,7 @@ class InterviewTurn(BaseModel):
     draft: Optional[Dict[str, Any]] = None
     turns: List[Message] = []
     profile: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
 
 
 class ModelsProbeRequest(BaseModel):

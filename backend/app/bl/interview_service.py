@@ -189,9 +189,9 @@ class InterviewService:
         pending = _processing_pending(state)
         self._repository.save_pending(session_id, pending)
         self._launch(self._advance_safely, session_id, team_id)
-        return _processing(
-            session_id, pending, self._repository.history(session_id)
-        )
+        # An injected inline launcher keeps unit tests deterministic; the
+        # production thread normally leaves this in `processing` here.
+        return self.resume(session_id, team_id)
 
     def _advance_safely(self, session_id: str, team_id: str) -> None:
         try:
@@ -275,6 +275,45 @@ def _turn(session_id: str, pending: dict, turns) -> dict:
     }
 
 
+def _processing_pending(previous) -> dict:
+    previous = previous or {}
+    return {
+        "reply": previous.get("reply", ""),
+        "question": None,
+        "resolved": list(previous.get("resolved") or []),
+        "open_points": list(previous.get("open_points") or []),
+        "awaiting_confirmation": False,
+        "ready": False,
+        "draft": previous.get("draft"),
+        "_processing": True,
+        "_error": None,
+    }
+
+
+def _processing(session_id: str, pending: dict, turns) -> dict:
+    return {
+        "session_id": session_id,
+        "status": "processing",
+        "reply": pending.get("reply", ""),
+        "question": None,
+        "resolved": pending.get("resolved", []),
+        "open_points": pending.get("open_points", []),
+        "awaiting_confirmation": False,
+        "ready": False,
+        "draft": pending.get("draft") or empty_draft(),
+        "turns": [_message(row) for row in turns],
+        "profile": None,
+        "error": None,
+    }
+
+
+def _failed(session_id: str, pending: dict, turns) -> dict:
+    result = _processing(session_id, pending, turns)
+    result["status"] = "error"
+    result["error"] = pending.get("_error")
+    return result
+
+
 def _completed(session: dict) -> dict:
     profile = session["profile"]
     return {
@@ -291,6 +330,7 @@ def _completed(session: dict) -> dict:
         "draft": profile or empty_draft(),
         "turns": [_message(row) for row in session["turns"]],
         "profile": profile,
+        "error": None,
     }
 
 
