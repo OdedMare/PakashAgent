@@ -287,6 +287,18 @@ def test_the_question_is_persisted_as_an_assistant_turn():
     assert payload["draft"] is not None
 
 
+def test_token_usage_is_persisted_with_the_assistant_turn():
+    client, repository = _client(_ScriptedLlm([
+        _question(_usage={"prompt_tokens": 100, "completion_tokens": 20}),
+    ]))
+
+    session_id = client.post("/api/interview").json()["session_id"]
+
+    assert repository.history(session_id)[0]["payload"]["_usage"] == {
+        "prompt_tokens": 100, "completion_tokens": 20,
+    }
+
+
 def test_an_answer_is_recorded_and_passed_back_to_the_model():
     llm = _ScriptedLlm([_question(), _question("איך יודעים?")])
     client, repository = _client(llm)

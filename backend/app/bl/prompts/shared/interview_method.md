@@ -48,6 +48,10 @@ short line each. `open_points` lists what remains — including risks the
 manager has not raised. An empty `open_points` while real unknowns exist is a
 failure.
 
+Return both lists as the complete current state. Carry forward still-valid
+lines from `resolved_so_far` and `open_points_so_far`, remove an open point
+when it is settled, and replace a resolved line when the manager corrects it.
+
 ## How the interview ends
 
 Do not finish before the manager confirms. When nothing blocking remains, stop

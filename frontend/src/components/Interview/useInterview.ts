@@ -15,7 +15,7 @@ import type { InterviewTurn } from "@/types";
  *  refresh resumes the same conversation rather than starting a second one.
  *  Resuming replays the stored question and costs no model call. */
 const STORAGE_KEY = "pakash.interview.session";
-const POLL_INTERVAL_MS = 750;
+const POLL_INTERVAL_MS = 1_000;
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -137,7 +137,16 @@ export function useInterview(): InterviewState {
   useEffect(() => {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     const timer = window.setTimeout(() => {
-      if (stored) void run(() => resumeInterview(stored));
+      if (stored) {
+        void run(async () => {
+          try {
+            return await resumeInterview(stored);
+          } catch (reason) {
+            window.localStorage.removeItem(STORAGE_KEY);
+            throw reason;
+          }
+        });
+      }
       else setBusy(false);
     }, 0);
     return () => {
