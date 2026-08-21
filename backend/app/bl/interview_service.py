@@ -18,6 +18,9 @@ request body — it comes from the signed session cookie, so a boss cannot
 reach another workspace's interview by naming it.
 """
 
+import logging
+from threading import Thread
+
 from app.bl.interview import IntroInterview, empty_draft, missing_topics
 from app.common.errors import AgentError, ConflictError
 
@@ -28,11 +31,20 @@ _TURN_FIELDS = (
     "ready", "draft",
 )
 
+_log = logging.getLogger("pakash.interview")
+
+
+def _launch_thread(target, *args) -> None:
+    # ponytail: process-local jobs do not survive a server restart; move this
+    # to a durable queue only if interrupted interviews become common.
+    Thread(target=target, args=args, daemon=True).start()
+
 
 class InterviewService:
-    def __init__(self, repository, llm):
+    def __init__(self, repository, llm, launch=None):
         self._repository = repository
         self._interview = IntroInterview(llm)
+        self._launch = launch or _launch_thread
 
     def start(self, team_id: str) -> dict:
         """Open a session and ask the first question.
@@ -47,7 +59,7 @@ class InterviewService:
         if active is not None:
             return self.resume(active["id"], team_id)
         session = self._repository.create_session(team_id)
-        return self._advance(session["id"], team_id)
+        return self._queue(session["id"], team_id, None)
 
     def resume(self, session_id: str, team_id: str) -> dict:
         """Return the session as it stands, without spending a model call.
@@ -62,7 +74,11 @@ class InterviewService:
             return _completed(session)
         pending = session["pending"]
         if pending is None:
-            return self._advance(session_id, team_id)
+            return self._queue(session_id, team_id, None)
+        if pending.get("_processing"):
+            return _processing(session_id, pending, session["turns"])
+        if pending.get("_error"):
+            return _failed(session_id, pending, session["turns"])
         return _turn(session_id, pending, session["turns"])
 
     def answer(self, session_id: str, team_id: str, content: str) -> dict:
@@ -70,11 +86,28 @@ class InterviewService:
         session = self._repository.get_session(session_id, team_id)
         if session["status"] == "complete":
             raise ConflictError("הראיון כבר הושלם")
+        pending = session.get("pending") or {}
+        if pending.get("_processing"):
+            raise ConflictError("הסוכן עדיין מעבד את התשובה הקודמת")
+        if pending.get("_error"):
+            raise ConflictError("יש לנסות שוב את התשובה הקודמת")
         text = (content or "").strip()
         if not text:
             raise AgentError("התשובה אינה יכולה להיות ריקה")
         self._repository.append_turn(session_id, "user", text)
-        return self._advance(session_id, team_id)
+        return self._queue(session_id, team_id, pending)
+
+    def retry(self, session_id: str, team_id: str) -> dict:
+        """Retry a failed generation without recording the answer twice."""
+        session = self._repository.get_session(session_id, team_id)
+        pending = session.get("pending") or {}
+        if session["status"] == "complete":
+            return _completed(session)
+        if pending.get("_processing"):
+            return _processing(session_id, pending, session["turns"])
+        if not pending.get("_error"):
+            raise ConflictError("אין פעולת ראיון שנכשלה")
+        return self._queue(session_id, team_id, pending)
 
     def end(self, session_id: str, team_id: str) -> dict:
         """Close the interview now, with whatever has been collected.
@@ -118,9 +151,16 @@ class InterviewService:
         """
         session = self._repository.get_session(session_id, team_id)
         history = [_replayed(row) for row in session["turns"]]
-        draft = (session["pending"] or {}).get("draft")
-        result = self._interview.next_turn(history, draft)
+        state = session["pending"] or {}
+        draft = state.get("draft")
+        result = self._interview.next_turn(history, draft, state)
+        # Ending the interview is deliberately allowed while the model is
+        # working. Its result must not resurrect or overwrite that profile.
+        if self._repository.get_session(session_id, team_id)["status"] == "complete":
+            return {}
         pending = {key: result[key] for key in _TURN_FIELDS}
+        if result.get("_usage"):
+            pending["_usage"] = result["_usage"]
         # The reply is the turn's content; the question, the draft, and the
         # rest ride along as payload so the UI can re-render the buttons a
         # past turn offered instead of inferring them from prose.
@@ -144,6 +184,36 @@ class InterviewService:
             return _completed(session)
         self._repository.save_pending(session_id, pending)
         return _turn(session_id, pending, self._repository.history(session_id))
+
+    def _queue(self, session_id: str, team_id: str, state) -> dict:
+        pending = _processing_pending(state)
+        self._repository.save_pending(session_id, pending)
+        self._launch(self._advance_safely, session_id, team_id)
+        return _processing(
+            session_id, pending, self._repository.history(session_id)
+        )
+
+    def _advance_safely(self, session_id: str, team_id: str) -> None:
+        try:
+            self._advance(session_id, team_id)
+        except Exception as exc:
+            _log.exception("interview generation failed session=%s", session_id)
+            try:
+                session = self._repository.get_session(session_id, team_id)
+                if session["status"] == "complete":
+                    return
+                pending = dict(session.get("pending") or {})
+                pending["_processing"] = False
+                pending["_error"] = (
+                    str(exc) if isinstance(exc, AgentError)
+                    else "יצירת השאלה נכשלה. אפשר לנסות שוב."
+                )
+                self._repository.save_pending(session_id, pending)
+            except Exception:
+                _log.exception(
+                    "could not persist interview failure session=%s",
+                    session_id,
+                )
 
 
 def _completeness(pending: dict, draft: dict) -> dict:
