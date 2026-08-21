@@ -626,6 +626,23 @@ thin schedule, and the audit warns exactly as it always did
 A partial profile that refused to schedule would be the audit becoming a
 gate, arriving through a side door.
 
+**Where the refusal lives, and why it is not that gate.** The one blocking
+gap is checked in `schedule_service._buildable_profile`, which both
+`generate` and `create_blank` call. It refuses on *absent shift vocabulary
+only* — never on missing rules, employees, or open points, which still
+produce a thin schedule exactly as the paragraph above requires. This is not
+the audit becoming a gate: the audit reports on a grid that exists, and this
+says there is no grid to report on. The test is the one `build_slots` itself
+applies, so the gate and the builder cannot disagree — when they did, the
+profile passed a looser check, the builder returned no rows, and both
+buttons answered `502` with nothing the manager could act on. That was the
+board *not* saying so plainly, which is what this decision asked for.
+
+The refusal is a `ProfileIncompleteError` carrying the `completeness` lines,
+so the client can open the interview on exactly what is owed or take the
+question to the agent first. **It still writes nothing and fills no gap**
+(D19): the interview remains the only thing that writes a profile.
+
 ## Open
 
 - **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment
