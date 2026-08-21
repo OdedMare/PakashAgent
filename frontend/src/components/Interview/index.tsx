@@ -390,8 +390,10 @@ const THINKING_PHASES = [
 function useThinkingPhase(): string {
   const [index, setIndex] = useState(0);
 
+  // `Thinking` is mounted only while a turn is generating and unmounts when
+  // it lands, so each wait gets a fresh hook and the phase starts at the
+  // first label without needing to be reset.
   useEffect(() => {
-    setIndex(0);
     const timers = [
       window.setTimeout(() => setIndex(1), 1_600),
       window.setTimeout(() => setIndex(2), 4_000),

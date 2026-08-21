@@ -397,6 +397,35 @@
   }
 }
 
+/* The dots plus what the agent is working on. The label carries the meaning,
+   so it sits on the baseline with them rather than under them. */
+.thinking-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.thinking-row .thinking {
+  padding-top: 0;
+}
+
+.thinking-label {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  /* Each phase is a different length, so a hard cut between them reads as a
+     flicker. */
+  animation: fade-in 0.35s ease;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .error {
   display: flex;
   align-items: center;
@@ -591,11 +620,46 @@
   border-radius: var(--radius);
 }
 
+.draft-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
 .draft-name {
-  margin: 0 0 14px;
+  margin: 0;
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.01em;
+}
+
+/* Before the workplace is named the panel still has numbers worth showing,
+   so it carries a neutral heading rather than an empty slot. */
+.draft-name-pending {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.draft-working {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.draft-spin {
+  animation: draft-spin 0.9s linear infinite;
+}
+
+@keyframes draft-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .draft-grid {
@@ -624,6 +688,68 @@
   font-size: 18px;
   font-weight: 700;
   letter-spacing: -0.02em;
+  /* The digits change on nearly every turn; a fixed-width figure stops the
+     tile resizing under them. */
+  font-variant-numeric: tabular-nums;
+}
+
+.draft-card dt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+/* Trainees beside a headcount, hard rules beside a rule count: a qualifier
+   the number would otherwise overstate. */
+.draft-note {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* The derived row — what the drafted shifts demand, rather than what was
+   counted. Set apart so it does not read as more of the same tally. */
+.draft-derived {
+  margin-top: 8px;
+}
+
+.draft-derived .draft-card {
+  background: transparent;
+  border-style: dashed;
+}
+
+/* Which figure just moved. Held briefly, then cleared: a cue that stays on
+   accumulates until every tile is lit and it means nothing. */
+.draft-card-changed {
+  border-color: var(--accent, var(--text-muted));
+  animation: draft-bump 1.8s ease;
+}
+
+@keyframes draft-bump {
+  0% {
+    transform: scale(1);
+  }
+  18% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Motion here is decoration on a number that is already legible, so it is
+   the first thing to drop when the reader has asked for less of it. */
+@media (prefers-reduced-motion: reduce) {
+  .draft-card-changed,
+  .draft-spin,
+  .thinking-label,
+  .thinking span {
+    animation: none;
+  }
 }
 
 .draft-section {
