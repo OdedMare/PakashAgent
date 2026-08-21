@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Eye, EyeOff, PencilLine, Sparkles } from "lucide-react";
+import { Download, Eye, EyeOff, LockKeyhole, PencilLine, Sparkles } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import type {
@@ -361,6 +361,24 @@ export function Board({
             }
           />
 
+          {schedule.status === "published" ? (
+            <div className="board-published-lock" role="status">
+              <LockKeyhole size={16} />
+              <span>
+                הסידור שמור לצוות. כדי לערוך שיבוצים, יש להחזיר אותו לטיוטה.
+              </span>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => onPublish(schedule.id, false)}
+                disabled={busy}
+              >
+                <EyeOff size={14} />
+                החזרה לטיוטה
+              </button>
+            </div>
+          ) : null}
+
           {/* What the agent is currently pointing at, named. The cells
               carry the outline; this says which of the three kinds of
               attention lit them and where the sentence itself is. It
@@ -382,18 +400,7 @@ export function Board({
             onClear={board.clearFilters}
           />
 
-          {/* Status is a property of the period, so filtering by it either
-              shows the whole board or none of it. Said rather than silently
-              rendering an empty grid. */}
-          {board.filters.status !== "all" &&
-          board.filters.status !== schedule.status ? (
-            <p className="board-empty-filtered">
-              הסידור בשבוע הזה הוא{" "}
-              {schedule.status === "published" ? "מפורסם" : "טיוטה"}, והסינון
-              מבקש {board.filters.status === "published" ? "מפורסם" : "טיוטה"}.
-            </p>
-          ) : (
-            <BoardGrid
+          <BoardGrid
               schedule={schedule}
               weekStart={board.weekStart}
               today={board.today}
@@ -402,6 +409,7 @@ export function Board({
               roles={roles}
               filters={board.filters}
               dark={dark}
+              readOnly={schedule.status === "published"}
               touches={touches}
               onDropCard={openMove}
               onOpenCard={(assignment) => {
@@ -416,8 +424,7 @@ export function Board({
                   slot_date: input.slot_date,
                 });
               }}
-            />
-          )}
+          />
         </>
       ) : (
         <EmptyWeek

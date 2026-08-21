@@ -26,7 +26,13 @@ import type { SwapRow } from "@/types";
  *  gives: an approval changes the grid, the fairness tally and the audit
  *  together, and a locally patched panel beside stale warnings is worse than
  *  a brief spinner. */
-export function SwapInbox({ onDecided }: { onDecided: () => void }) {
+export function SwapInbox({
+  onDecided,
+  writeLocked = false,
+}: {
+  onDecided: () => void;
+  writeLocked?: boolean;
+}) {
   const [rows, setRows] = useState<SwapRow[]>([]);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -111,7 +117,9 @@ export function SwapInbox({ onDecided }: { onDecided: () => void }) {
                 // Disabled without a reason: approving here moves two
                 // assignments, and the change log must not take one without
                 // the manager's own sentence (D8).
-                disabled={busy || !(reasons[row.id] ?? "").trim()}
+                disabled={
+                  busy || writeLocked || !(reasons[row.id] ?? "").trim()
+                }
               >
                 <Check size={13} /> אישור
               </button>

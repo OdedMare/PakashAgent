@@ -505,7 +505,7 @@ function BoardRow({
                   setOver(null);
                 }}
                 onPick={readOnly ? undefined : () => move.pick(row)}
-                onOpen={() => onOpenCard?.(row)}
+                onOpen={readOnly ? undefined : () => onOpenCard?.(row)}
               />
             ))}
 

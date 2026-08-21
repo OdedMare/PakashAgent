@@ -70,7 +70,7 @@ export function ShiftCard({
   onDragEnd: () => void;
   /** Start a move without a mouse. Absent on a read-only board. */
   onPick?: () => void;
-  onOpen: () => void;
+  onOpen?: () => void;
 }) {
   const alarming = blocked || warnings.some((row) => row.severity === "warning");
   const manual = assignment.source === "manager";
@@ -106,7 +106,7 @@ export function ShiftCard({
         // The card is a div because it is also a drag source; a button
         // inside a draggable is fought over by both behaviours. Keyboard
         // access is given back explicitly rather than lost.
-        if (event.key === "Enter" || event.key === " ") {
+        if (onOpen && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault();
           onOpen();
           return;
@@ -121,9 +121,13 @@ export function ShiftCard({
           onPick();
         }
       }}
-      role="button"
-      tabIndex={0}
-      aria-label={`${assignment.employee}, ${slot.shift_name}. עריכה`}
+      role={onOpen ? "button" : undefined}
+      tabIndex={onOpen ? 0 : undefined}
+      aria-label={
+        onOpen
+          ? `${assignment.employee}, ${slot.shift_name}. עריכה`
+          : undefined
+      }
       aria-grabbed={onPick ? picked : undefined}
     >
       <div className="board-card-main">

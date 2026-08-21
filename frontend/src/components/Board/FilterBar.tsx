@@ -68,21 +68,6 @@ export function FilterBar({
         onChange={(shift) => onChange({ shift })}
       />
 
-      <label className="board-filter-field">
-        <span className="board-filter-label">סטטוס</span>
-        <select
-          className="board-filter-select"
-          value={filters.status}
-          onChange={(event) =>
-            onChange({ status: event.target.value as BoardFilters["status"] })
-          }
-        >
-          <option value="all">הכול</option>
-          <option value="draft">טיוטה</option>
-          <option value="published">פורסם</option>
-        </select>
-      </label>
-
       <div className="board-filter-toggles">
         <Toggle
           on={filters.conflictsOnly}

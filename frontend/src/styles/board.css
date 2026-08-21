@@ -49,8 +49,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.1rem;
-  height: 2.1rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface);
@@ -111,6 +111,7 @@
   font-size: 0.8rem;
   font-family: inherit;
   cursor: pointer;
+  min-height: 2.75rem;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -292,6 +293,7 @@
   font-size: 0.76rem;
   font-family: inherit;
   cursor: pointer;
+  min-height: 2.4rem;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -520,8 +522,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 2rem;
+  height: 2rem;
   border-radius: var(--radius-sm);
   border: 1px dashed var(--border-strong);
   background: transparent;
@@ -562,6 +564,10 @@
 
 .board-card:active {
   cursor: grabbing;
+}
+
+.board-card.is-published {
+  cursor: default;
 }
 
 .board-card.is-dragging {
@@ -931,6 +937,145 @@
   display: none;
 }
 
+/* The board is the stable workspace. Management tools live in a contextual
+   drawer, so opening the agent never replaces the week being discussed. */
+.management-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 0;
+  flex: 1;
+  min-width: 0;
+  transition: grid-template-columns 0.18s ease;
+}
+
+.management-workspace.has-drawer {
+  grid-template-columns: minmax(0, 1fr) minmax(22rem, 26rem);
+}
+
+.manager-drawer {
+  position: sticky;
+  top: 73px;
+  height: calc(100vh - 73px);
+  min-width: 0;
+  overflow: hidden;
+  background: var(--bg);
+  border-inline-start: 1px solid var(--border);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.manager-drawer.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.manager-drawer-head {
+  min-height: 4.25rem;
+  padding: 0.7rem 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.manager-drawer-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.manager-drawer-head strong {
+  font-size: 0.95rem;
+}
+
+.manager-drawer-head span {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.manager-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.25rem;
+  padding: 0.55rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.manager-tab {
+  min-height: 2.75rem;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 0.35rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.manager-tab:hover,
+.manager-tab.is-active {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.manager-tab:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.manager-drawer-content {
+  height: calc(100% - 7.8rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0.85rem;
+}
+
+.manager-drawer-backdrop {
+  display: none;
+}
+
+.manager-published-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--success) 32%, var(--border));
+  border-radius: var(--radius-sm);
+  background: var(--success-soft);
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.manager-published-notice .ghost-button {
+  align-self: flex-start;
+}
+
+.board-published-lock {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--success) 32%, var(--border));
+  border-radius: var(--radius-sm);
+  background: var(--success-soft);
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.board-published-lock > span {
+  flex: 1;
+}
+
 
 /* ── Moving a shift without a mouse ───────────────────────────────────────
    The keyboard and touch half of the drag. Drag-and-drop answers only to a
@@ -949,8 +1094,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.35rem;
-  height: 1.35rem;
+  width: 2rem;
+  height: 2rem;
   flex: none;
   padding: 0;
   border: none;
@@ -1105,10 +1250,74 @@
     width: 100%;
   }
 
+  .board-toggle,
+  .board-filter-select,
+  .board-filter-clear,
+  .board-add,
+  .board-card-pick,
+  .board-move-cancel {
+    min-height: 2.75rem;
+  }
+
+  .board-add,
+  .board-card-pick {
+    width: 2.75rem;
+  }
+
+  .board-published-lock {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
   .management-nav {
     order: 3;
     width: 100%;
     justify-content: center;
+  }
+}
+
+@media (max-width: 1100px) {
+  .management-workspace,
+  .management-workspace.has-drawer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .manager-drawer {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 31;
+    width: 100%;
+    height: min(78dvh, 44rem);
+    border: 1px solid var(--border-strong);
+    border-bottom: none;
+    border-radius: var(--radius) var(--radius) 0 0;
+    box-shadow: 0 -18px 50px color-mix(in srgb, #000 18%, transparent);
+    transform: translateY(100%);
+    transition: transform 0.18s ease;
+  }
+
+  .manager-drawer.is-open {
+    transform: translateY(0);
+  }
+
+  .manager-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: block;
+    border: none;
+    background: color-mix(in srgb, #000 34%, transparent);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .management-workspace.has-drawer .manager-drawer-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .manager-drawer-content {
+    padding-bottom: calc(0.85rem + env(safe-area-inset-bottom));
   }
 }
 
@@ -1123,6 +1332,11 @@
   .board-toggle,
   .board-alternative,
   .management-nav-item {
+    transition: none;
+  }
+
+  .management-workspace,
+  .manager-drawer {
     transition: none;
   }
 

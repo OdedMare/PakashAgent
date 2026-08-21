@@ -32,6 +32,7 @@ import { formatDate } from "./Calendar";
 export function AgentChat({
   proposal,
   busy,
+  writeLocked = false,
   draft,
   draftKey,
   onPropose,
@@ -42,6 +43,8 @@ export function AgentChat({
 }: {
   proposal: Proposal | null;
   busy: boolean;
+  /** Published periods are read-only until the manager returns them to draft. */
+  writeLocked?: boolean;
   /** A sentence the briefing offered, seeded into the composer.
    *
    *  Seeded, never sent: the manager still presses send, which is what keeps
@@ -115,7 +118,7 @@ export function AgentChat({
               className="proposal-reason"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (!reason.trim()) return;
+                if (!reason.trim() || writeLocked) return;
                 onPropose(request || proposal.reply, reason.trim());
               }}
             >
@@ -134,7 +137,7 @@ export function AgentChat({
               <button
                 type="submit"
                 className="primary-button"
-                disabled={busy || !reason.trim()}
+                disabled={busy || writeLocked || !reason.trim()}
               >
                 שליחה
               </button>
@@ -206,7 +209,7 @@ export function AgentChat({
                 type="button"
                 className="primary-button"
                 onClick={() => onConfirm(confirmReason)}
-                disabled={busy || !confirmReason}
+                disabled={busy || writeLocked || !confirmReason}
               >
                 <Check size={14} />
                 {busy ? "מחיל…" : "אישור השינוי"}
@@ -221,7 +224,7 @@ export function AgentChat({
         onSubmit={(event) => {
           event.preventDefault();
           const text = request.trim();
-          if (!text || busy) return;
+          if (!text || busy || writeLocked) return;
           onPropose(text);
           setRequest("");
           setReason("");
@@ -259,7 +262,7 @@ export function AgentChat({
         <button
           type="submit"
           className="primary-button"
-          disabled={busy || !request.trim()}
+          disabled={busy || writeLocked || !request.trim()}
           aria-label="שליחה"
           title="בקשת שינוי — הסוכן יציע ואתם תאשרו"
         >

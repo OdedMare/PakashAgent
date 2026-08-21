@@ -16,8 +16,18 @@ not change on this turn. When the manager corrects a value, include its new
 value. Leave what is genuinely unknown omitted — never guess.
 
 `resolved_so_far` and `open_points_so_far` are the state carried from earlier
-turns. `recent_conversation` contains only the last question and answer; older
+turns. `recent_conversation` holds the recent stretch of the thread; older
 facts have already been incorporated into `draft_so_far` and those two lists.
+
+`questions_already_asked` lists every question you have already put to this
+manager. **Read it before writing your question, and never ask anything on it
+again** — not the same question, and not a reworded version of one. If one of
+those questions was answered thinly, you may ask a *sharper follow-up* that
+names exactly what was missing from their answer; that is a new question, not
+a repeat. If it was answered, move on to a topic that has not been asked at
+all. Running out of unasked topics is not a reason to loop back to the top: it
+means you are done asking, so present the summary for confirmation as
+described below.
 
 For `employees`, `shifts`, `dependencies`, and `rules`, an update replaces the
 whole list. Whenever one of those lists changes, return its complete updated

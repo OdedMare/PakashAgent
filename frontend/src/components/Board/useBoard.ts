@@ -27,7 +27,6 @@ export interface BoardFilters {
   employee: string;
   role: string;
   shift: string;
-  status: "all" | "draft" | "published";
   /** Show only cells carrying a warning. */
   conflictsOnly: boolean;
   /** Show only slots short of their headcount. */
@@ -38,7 +37,6 @@ export const EMPTY_FILTERS: BoardFilters = {
   employee: "",
   role: "",
   shift: "",
-  status: "all",
   conflictsOnly: false,
   unassignedOnly: false,
 };
@@ -168,7 +166,6 @@ export function useBoard(scheduleId?: string): BoardState {
       filters.employee !== "" ||
       filters.role !== "" ||
       filters.shift !== "" ||
-      filters.status !== "all" ||
       filters.conflictsOnly ||
       filters.unassignedOnly,
     [filters],

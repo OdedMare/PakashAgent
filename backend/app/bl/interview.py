@@ -34,6 +34,18 @@ _MAX_TEXT_CHARS = 20000
 _MAX_OPTIONS = 4
 # A label is a button caption; the full sentence lives in `answer`.
 _MAX_OPTION_CHARS = 120
+# How much of the conversation the model reads back. The draft and the two
+# state lists carry the settled *facts*, but neither records which questions
+# were already put to the manager — a phrasing they rejected, a follow-up
+# they deflected, and an answer that settled nothing all leave no trace
+# there. A model handed only the last exchange has no way to tell a topic it
+# already raised from one it has not, so it re-asks, and the interview
+# circles instead of advancing. This is the window that stops that.
+_RECENT_TURNS = 12
+# The questions already put to the manager, listed separately from the
+# transcript so the instruction not to repeat one has something exact to
+# point at rather than requiring the model to re-read the thread for it.
+_MAX_ASKED = 40
 
 
 INTERVIEW_TOPICS = (
@@ -373,12 +385,17 @@ class IntroInterview:
     ) -> dict:
         """One turn: gather context, ask the model once, shape the answer."""
         state = _as_dict(state)
+        clean = _validated_history(history)
         payload = {
             "topics": INTERVIEW_TOPICS,
             # The complete transcript remains in storage and in the UI. The
-            # model needs only the question it just asked and the answer it
-            # is processing; settled facts live in the structured state.
-            "recent_conversation": _validated_history(history)[-2:],
+            # model gets the recent stretch of it — enough to see what it has
+            # already asked, which the draft and the state lists do not
+            # record — while settled facts still travel as structure.
+            "recent_conversation": clean[-_RECENT_TURNS:],
+            # Every question asked so far, including ones scrolled out of the
+            # window above. This is the anti-repetition list.
+            "questions_already_asked": _asked_questions(clean),
             "draft_so_far": _as_dict(draft),
             "resolved_so_far": _lines(state.get("resolved")),
             "open_points_so_far": _lines(state.get("open_points")),
@@ -590,6 +607,23 @@ def _validated_history(history) -> List[Dict[str, str]]:
             continue
         clean.append({"role": role, "content": content[:_MAX_MESSAGE_CHARS]})
     return clean[-_MAX_MESSAGES:]
+
+
+def _asked_questions(history: List[Dict[str, str]]) -> List[str]:
+    """Every question already put to the manager, oldest first.
+
+    Read off the assistant turns rather than kept as separate state, so it
+    cannot drift from the thread the manager actually saw. `resolved` records
+    what was *settled*; this records what was *asked*, and the difference is
+    the whole point — a question the manager answered vaguely, deflected, or
+    refused settles nothing and so never reaches `resolved`, which is exactly
+    the question a model working from settled facts alone will ask again.
+    """
+    asked = [
+        message["content"] for message in history
+        if message["role"] == "assistant"
+    ]
+    return asked[-_MAX_ASKED:]
 
 
 def _lines(value) -> List[str]:

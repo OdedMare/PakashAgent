@@ -46,11 +46,13 @@ import { formatDate } from "./Calendar";
 export function SimulationPanel({
   simulation,
   busy,
+  writeLocked = false,
   onApprove,
   onDiscard,
 }: {
   simulation: Simulation | null;
   busy: boolean;
+  writeLocked?: boolean;
   onApprove: (reason: string) => void;
   onDiscard: () => void;
 }) {
@@ -198,7 +200,7 @@ export function SimulationPanel({
           className="simulation-approve"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!reason.trim() || busy) return;
+            if (!reason.trim() || busy || writeLocked) return;
             onApprove(reason.trim());
           }}
         >
@@ -210,6 +212,7 @@ export function SimulationPanel({
               maxLength={200}
               onChange={(event) => setReason(event.target.value)}
               placeholder="מחלה, חופשה, בקשת העובד…"
+              disabled={writeLocked}
             />
           </label>
           <div className="simulation-actions">
@@ -225,7 +228,7 @@ export function SimulationPanel({
             <button
               type="submit"
               className="primary-button"
-              disabled={busy || !reason.trim()}
+              disabled={busy || writeLocked || !reason.trim()}
             >
               <Check size={14} />
               {busy ? "מחיל…" : "אישור וביצוע"}
