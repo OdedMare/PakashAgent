@@ -1,4 +1,4 @@
-FROM node:20-alpine AS build
+FROM node:24.1.0-slim AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -10,7 +10,7 @@ ENV BACKEND_URL=$BACKEND_URL
 RUN npm run build
 RUN npm prune --omit=dev
 
-FROM node:20-alpine
+FROM node:24.1.0-slim
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app ./

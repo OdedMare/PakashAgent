@@ -1,40 +1,66 @@
 {
-  "generated_at": "2026-08-13T09:29:21.390956+00:00",
+  "generated_at": "2026-08-21T07:56:46.093174+00:00",
   "nodes": {
-    "backend_app_bl_claude_interview_workflow": {
-      "code_fingerprint": "ba94e69be59a243d86f50af9921994eacb0776bc33829746f993107cca49014e",
-      "label": "Interview Workflow",
-      "last": "2026-08-13T09:04:01.593234+00:00",
+    "backend_app_bl_claude_agent_decides_code_audits": {
+      "code_fingerprint": "37568a9b158a5e82ae7190036ebffb708cd6967d24c1baf2353d7fd5c28638fe",
+      "label": "Agent Decides; Code Audits",
+      "last": "2026-08-20T20:46:01.724923+00:00",
       "provenance": [
         {
-          "date": "2026-08-13T09:04:01.593234+00:00",
+          "date": "2026-08-20T20:46:01.724923+00:00",
           "outcome": "useful",
-          "q": "hey i want to start work the agent init interview here some qusetions that give as the base the do interview from that mock the missing question that you miss then we implament this part"
+          "q": "in the pakash agent app"
         }
       ],
-      "score": 0.999593661,
+      "score": 0.98929564,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "tentative",
       "uses": 1
     },
-    "backend_app_dal_llm_claude_openai_compatible_json_client": {
-      "code_fingerprint": "ef8dd4c1e908ce313407bef442a92229c8753ea60b5240eb7869c6b84dbd18f5",
-      "label": "OpenAI-Compatible JSON Client",
-      "last": "2026-08-13T09:04:01.593234+00:00",
+    "backend_app_bl_claude_interview_workflow": {
+      "code_fingerprint": "37568a9b158a5e82ae7190036ebffb708cd6967d24c1baf2353d7fd5c28638fe",
+      "label": "Interview Workflow",
+      "last": "2026-08-20T20:46:01.724923+00:00",
       "provenance": [
+        {
+          "date": "2026-08-20T20:46:01.724923+00:00",
+          "outcome": "useful",
+          "q": "in the pakash agent app"
+        },
         {
           "date": "2026-08-13T09:04:01.593234+00:00",
           "outcome": "useful",
           "q": "hey i want to start work the agent init interview here some qusetions that give as the base the do interview from that mock the missing question that you miss then we implament this part"
         }
       ],
-      "score": 0.999593661,
+      "score": 1.821431063,
+      "source_file": "backend/app/bl/CLAUDE.md",
+      "status": "preferred",
+      "uses": 2
+    },
+    "backend_app_dal_llm_claude_openai_compatible_json_client": {
+      "code_fingerprint": "2e069bb4e434ab770c256609286e71cabedfbb9bbbac3fea6ba8a44e7a058dca",
+      "label": "OpenAI-Compatible JSON Client",
+      "last": "2026-08-20T20:46:01.724923+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-20T20:46:01.724923+00:00",
+          "outcome": "useful",
+          "q": "in the pakash agent app"
+        },
+        {
+          "date": "2026-08-13T09:04:01.593234+00:00",
+          "outcome": "useful",
+          "q": "hey i want to start work the agent init interview here some qusetions that give as the base the do interview from that mock the missing question that you miss then we implament this part"
+        }
+      ],
+      "score": 1.821431063,
       "source_file": "backend/app/dal/llm/CLAUDE.md",
-      "status": "tentative",
-      "uses": 1
+      "status": "preferred",
+      "uses": 2
     },
     "backend_claude_per_workplace_shift_vocabulary": {
-      "code_fingerprint": "372caf2152e002274849b42040cc674368a42b8f40ef4033f0f554c731981d51",
+      "code_fingerprint": "046e0c4291e8d5988073dd3140a38edcffae04cdbf516c54d9d1dfc860b8ffe0",
       "label": "Per-Workplace Shift Vocabulary",
       "last": "2026-08-13T09:04:01.593234+00:00",
       "provenance": [
@@ -44,7 +70,23 @@
           "q": "hey i want to start work the agent init interview here some qusetions that give as the base the do interview from that mock the missing question that you miss then we implament this part"
         }
       ],
-      "score": 0.999593661,
+      "score": 0.832135423,
+      "source_file": "backend/CLAUDE.md",
+      "status": "tentative",
+      "uses": 1
+    },
+    "backend_claude_runtime_settings": {
+      "code_fingerprint": "046e0c4291e8d5988073dd3140a38edcffae04cdbf516c54d9d1dfc860b8ffe0",
+      "label": "Live Runtime Settings",
+      "last": "2026-08-20T20:46:01.724923+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-20T20:46:01.724923+00:00",
+          "outcome": "useful",
+          "q": "in the pakash agent app"
+        }
+      ],
+      "score": 0.98929564,
       "source_file": "backend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
