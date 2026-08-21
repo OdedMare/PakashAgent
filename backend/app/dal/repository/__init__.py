@@ -3,13 +3,15 @@
 from app.dal.database.postgres import connect, require_schema
 from app.dal.repository.identities import IdentityRepository
 from app.dal.repository.interviews import InterviewRepository
+from app.dal.repository.copilot import CopilotRepository
 from app.dal.repository.schedules import ScheduleRepository
 from app.dal.repository.schema import SCHEMA
 from app.dal.repository.teams import TeamRepository
 
 
 class Repository(
-    InterviewRepository, TeamRepository, ScheduleRepository, IdentityRepository
+    InterviewRepository, TeamRepository, ScheduleRepository, IdentityRepository,
+    CopilotRepository,
 ):
     """One repository object composed of the per-concern mixins.
 
@@ -38,5 +40,5 @@ class Repository(
 
 __all__ = [
     "Repository", "InterviewRepository", "TeamRepository",
-    "ScheduleRepository", "IdentityRepository", "SCHEMA",
+    "ScheduleRepository", "IdentityRepository", "CopilotRepository", "SCHEMA",
 ]

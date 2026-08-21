@@ -60,6 +60,25 @@ class InterviewService:
         session = self._repository.create_session(team_id)
         return self._queue(session["id"], team_id, None)
 
+    def start_follow_up(self, team_id: str, question: str) -> dict:
+        """Open a resumable interview seeded with the current profile.
+
+        The copilot may notice the gap, but it never answers it. The existing
+        profile is the draft so a follow-up adds knowledge instead of asking
+        the manager to rebuild the workplace from an empty form.
+        """
+        active = self._repository.active_session(team_id)
+        if active is not None:
+            return self.resume(active["id"], team_id)
+        session = self._repository.create_session(team_id)
+        state = {
+            "draft": self._repository.team_profile(team_id) or empty_draft(),
+            "resolved": [],
+            "open_points": [question],
+            "reply": "",
+        }
+        return self._queue(session["id"], team_id, state)
+
     def resume(self, session_id: str, team_id: str) -> dict:
         """Return the session as it stands, without spending a model call.
 
