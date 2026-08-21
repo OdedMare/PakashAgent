@@ -12,6 +12,7 @@ import {
   downloadSchedule,
   generateSchedule,
   moveAssignment,
+  ProfileIncompleteError,
   proposeChange,
   publishSchedule,
   scheduleOverview,
@@ -41,6 +42,18 @@ import type {
  *  `undefined` means "not asked yet" and `null` would mean "nothing there";
  *  the distinction keeps the empty state from flashing during the first load.
  */
+/** A refused build, as the UI renders it.
+ *
+ *  `gaps` are the interview's own required-topic lines and `blocks` says what
+ *  each one costs. Both come from the backend rather than being written here:
+ *  one definition of "missing" lives in `bl/interview.py`, and a second copy
+ *  in the client would drift from the gate that actually refuses. */
+export interface ProfileGaps {
+  message: string;
+  gaps: string[];
+  blocks: string[];
+}
+
 export interface ManagementState {
   overview: ManagementOverview | undefined;
   busy: boolean;
