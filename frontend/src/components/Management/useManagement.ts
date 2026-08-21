@@ -45,6 +45,15 @@ export interface ManagementState {
   overview: ManagementOverview | undefined;
   busy: boolean;
   error: string | null;
+  /** Set when a build was refused because the interview never taught the
+   *  shift vocabulary, and cleared by any later success.
+   *
+   *  Kept apart from `error` because it is not the same kind of thing. An
+   *  error is read and dismissed; this names what is missing and has a way
+   *  forward attached, and rendering it as one more red line would hide the
+   *  only part the manager can act on. */
+  gaps: ProfileGaps | null;
+  dismissGaps: () => void;
   /** The agent's pending proposal, awaiting the manager's confirmation.
    *  Nothing has been applied while this is set — that is the whole point of
    *  the two-step contract (D8). */
@@ -123,6 +132,7 @@ export function useManagement(): ManagementState {
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gaps, setGaps] = useState<ProfileGaps | null>(null);
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [briefing, setBriefing] = useState<Briefing | null>(null);
   const [briefingBusy, setBriefingBusy] = useState(false);
@@ -188,6 +198,9 @@ export function useManagement(): ManagementState {
       setError(null);
       try {
         const result = await action();
+        // A build that succeeded answers the refusal, whatever filled the
+        // gap in the meantime.
+        setGaps(null);
         await refresh();
         // Every write funnels through here, so this one line is what makes
         // the agent react to a generated week, an applied change, a recorded
@@ -197,6 +210,17 @@ export function useManagement(): ManagementState {
         if (!options?.quiet) void brief("changed");
         return result;
       } catch (reason) {
+        // Every write funnels through here, so both building buttons get the
+        // resumable refusal handled once rather than each growing its own
+        // copy of the same branch.
+        if (reason instanceof ProfileIncompleteError) {
+          setGaps({
+            message: reason.message,
+            gaps: reason.gaps,
+            blocks: reason.blocks,
+          });
+          return null;
+        }
         setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
         return null;
       } finally {
@@ -450,6 +474,7 @@ export function useManagement(): ManagementState {
   );
 
   const clearError = useCallback(() => setError(null), []);
+  const dismissGaps = useCallback(() => setGaps(null), []);
 
   // `cancelled` guards the unmount race: React's development double-mount
   // makes a component gone before the first answer arrives routine rather
@@ -516,5 +541,7 @@ export function useManagement(): ManagementState {
     addConstraint,
     removeConstraint,
     clearError,
+    gaps,
+    dismissGaps,
   };
 }
