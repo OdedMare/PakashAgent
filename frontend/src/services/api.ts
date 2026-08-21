@@ -6,6 +6,10 @@ import type {
   ChangeLearning,
   Constraint,
   ConstraintRequestRow,
+  CopilotAuditEvent,
+  CopilotInboxData,
+  CopilotItem,
+  CopilotMode,
   EmployeeIdentity,
   EmployeeView,
   ImportedConstraint,
@@ -897,5 +901,47 @@ export function updatePreference(
 export function deletePreference(rowId: string): Promise<{ status: string }> {
   return request<{ status: string }>(`/api/schedule/preferences/${rowId}`, {
     method: "DELETE",
+  });
+}
+
+export function getCopilotInbox(): Promise<CopilotInboxData> {
+  return request<CopilotInboxData>("/api/copilot/inbox");
+}
+
+export function getCopilotAudit(): Promise<{ events: CopilotAuditEvent[] }> {
+  return request<{ events: CopilotAuditEvent[] }>("/api/copilot/audit");
+}
+
+export function runCopilotNow(): Promise<{ status: string; job_id: string }> {
+  return request<{ status: string; job_id: string }>("/api/copilot/run", {
+    method: "POST",
+  });
+}
+
+export function setCopilotPermission(
+  actionType: string,
+  mode: CopilotMode,
+): Promise<{ action_type: string; mode: CopilotMode }> {
+  return request<{ action_type: string; mode: CopilotMode }>(
+    `/api/copilot/permissions/${encodeURIComponent(actionType)}`,
+    { method: "PATCH", body: JSON.stringify({ mode }) },
+  );
+}
+
+export function approveCopilotItem(itemId: string): Promise<CopilotItem> {
+  return request<CopilotItem>(`/api/copilot/items/${itemId}/approve`, {
+    method: "POST",
+  });
+}
+
+export function dismissCopilotItem(itemId: string): Promise<CopilotItem> {
+  return request<CopilotItem>(`/api/copilot/items/${itemId}/dismiss`, {
+    method: "POST",
+  });
+}
+
+export function rollbackCopilotItem(itemId: string): Promise<CopilotItem> {
+  return request<CopilotItem>(`/api/copilot/items/${itemId}/rollback`, {
+    method: "POST",
   });
 }

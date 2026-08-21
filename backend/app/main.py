@@ -8,8 +8,9 @@ from fastapi.responses import JSONResponse
 
 from app.api.dependencies import Guards
 from app.api.routers import (
-    employee, health, interview, schedules, settings, workspace,
+    copilot, employee, health, interview, schedules, settings, workspace,
 )
+from app.bl.copilot import CopilotService
 from app.bl.employee_service import EmployeeService
 from app.bl.interview_service import InterviewService
 from app.bl.schedule_service import ScheduleService
@@ -55,6 +56,9 @@ llm = OpenAIJsonClient(store)
 interview_service = InterviewService(repository, llm)
 workspace_service = WorkspaceService(repository)
 schedule_service = ScheduleService(repository, llm)
+copilot_service = CopilotService(
+    repository, schedule_service, interview_service
+)
 # Takes the schedule service, not just the repository: the personal view needs
 # an audited schedule, and recomputing the audit for the employee would be a
 # second implementation of the arithmetic the manager sees (D14).
@@ -102,6 +106,7 @@ app.include_router(
 app.include_router(interview.build_router(interview_service, guards))
 app.include_router(schedules.build_router(schedule_service, guards))
 app.include_router(settings.build_router(store, llm, guards))
+app.include_router(copilot.build_router(copilot_service, repository, guards))
 app.include_router(
     employee.build_router(
         employee_service, guards, session_secret, env.session_days

@@ -402,6 +402,12 @@ class BriefingRequest(BaseModel):
     last_said: List[str] = Field(default=[], max_length=8)
 
 
+class CopilotPermissionUpdate(BaseModel):
+    """How independently one class of copilot action may operate."""
+
+    mode: str = Field(pattern="^(observe|suggest|auto)$")
+
+
 class RequiredAssignment(BaseModel):
     """One manager-pinned placement that generation must preserve."""
 

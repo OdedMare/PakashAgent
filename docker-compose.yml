@@ -38,6 +38,27 @@ services:
       db:
         condition: service_healthy
 
+  copilot:
+    build: ./backend
+    command: ["python", "-m", "app.worker"]
+    restart: unless-stopped
+    environment:
+      PAKASH_DATABASE_URL: ${PAKASH_DATABASE_URL:-postgresql://pakash:pakash@db:5432/pakash}
+      PAKASH_DATABASE_SCHEMA: ${PAKASH_DATABASE_SCHEMA:-pakash}
+      PAKASH_DATABASE_HOST: db
+      PAKASH_RUNTIME_SETTINGS_FILE: /data/runtime-settings.json
+      PAKASH_LLM_BASE_URL: ${PAKASH_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      PAKASH_LLM_MODEL: ${PAKASH_LLM_MODEL:-gemma3:27b}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      PAKASH_COPILOT_SCAN_SECONDS: ${PAKASH_COPILOT_SCAN_SECONDS:-1800}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - pakash-settings:/data
+    depends_on:
+      db:
+        condition: service_healthy
+
   frontend:
     build:
       context: ./frontend

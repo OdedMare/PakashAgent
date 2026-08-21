@@ -3,6 +3,7 @@
 import {
   AlertCircle,
   BarChart3,
+  Bot,
   CalendarDays,
   Inbox,
   LogOut,
@@ -29,6 +30,7 @@ import { AgentAnswer } from "./AgentAnswer";
 import { AgentChat } from "./AgentChat";
 import { ProfileGapsNotice } from "./ProfileGapsNotice";
 import { Briefing } from "./Briefing";
+import { CopilotInbox } from "./CopilotInbox";
 import { History } from "./History";
 import { LearnedFromChanges } from "./LearnedFromChanges";
 import { ImportSchedule } from "./ImportSchedule";
@@ -334,6 +336,12 @@ export function Management({
               onClick={() => setSection("agent")}
             />
             <ManagerTab
+              active={section === "copilot"}
+              icon={<Bot size={15} />}
+              label="קופיילוט"
+              onClick={() => setSection("copilot")}
+            />
+            <ManagerTab
               active={section === "requests"}
               icon={<Inbox size={15} />}
               label="בקשות"
@@ -403,6 +411,16 @@ export function Management({
           />
           </> : null}
 
+          {section === "copilot" ? (
+            <CopilotInbox
+              onOpenInterview={onOpenInterview}
+              onAct={(text) => {
+                setSuggested((previous) => ({ text, n: previous.n + 1 }));
+                setSection("agent");
+              }}
+            />
+          ) : null}
+
           {section === "requests" ? <>
           {schedule?.status === "published" ? (
             <PublishedNotice
@@ -468,7 +486,7 @@ export function Management({
   );
 }
 
-type ManagerSection = "agent" | "requests" | "team" | "overview";
+type ManagerSection = "agent" | "copilot" | "requests" | "team" | "overview";
 
 function ManagerTab({
   active,

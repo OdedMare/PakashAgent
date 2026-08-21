@@ -2331,6 +2331,182 @@
   color: var(--text-muted);
 }
 
+/* -- durable copilot ----------------------------------------------------- */
+
+.copilot-inbox,
+.copilot-permissions,
+.copilot-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.copilot-inbox {
+  padding: 0.9rem;
+}
+
+.copilot-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.copilot-header h3,
+.copilot-permissions h4,
+.copilot-items h4 {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.copilot-header p,
+.copilot-message,
+.copilot-empty {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.copilot-message {
+  padding: 0.45rem 0.55rem;
+  background: var(--primary-soft);
+  border-radius: var(--radius-sm);
+}
+
+.copilot-permissions {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.8rem;
+  padding: 0.7rem;
+  background: var(--surface-2);
+}
+
+.copilot-permissions label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+}
+
+.copilot-permissions select {
+  min-width: 8rem;
+  padding: 0.3rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.copilot-permissions small {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.copilot-items {
+  margin-top: 0.9rem;
+}
+
+.copilot-item {
+  margin-top: 0.55rem;
+  padding: 0.7rem;
+  border-inline-start: 3px solid var(--primary);
+}
+
+.copilot-item.is-failure {
+  border-inline-start-color: var(--danger);
+}
+
+.copilot-item.is-observation {
+  border-inline-start-color: var(--text-muted);
+}
+
+.copilot-kind {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--primary);
+  font-size: 0.7rem;
+}
+
+.copilot-item strong {
+  font-size: 0.84rem;
+}
+
+.copilot-item p {
+  margin: 0.3rem 0 0;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.copilot-actions {
+  display: flex;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+}
+
+.copilot-handled {
+  margin-top: 0.8rem;
+  font-size: 0.8rem;
+}
+
+.copilot-handled summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.copilot-handled-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.copilot-handled-row small {
+  color: var(--text-muted);
+}
+
+.copilot-audit-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.9rem;
+  padding: 0;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.copilot-audit {
+  list-style: none;
+  margin: 0.55rem 0 0;
+  padding: 0;
+}
+
+.copilot-audit li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 0.45rem;
+  padding: 0.4rem 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+}
+
+.copilot-audit time {
+  grid-column: 2;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
 /* --- a build refused for a reason the manager can close ----------------- */
 
 /* Deliberately the warning palette rather than the danger one used by
