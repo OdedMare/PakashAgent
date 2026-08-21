@@ -4,6 +4,8 @@ Messages are Hebrew: they reach a Hebrew-speaking boss directly, so the text
 carried here is user-facing copy, not a developer string.
 """
 
+from typing import List, Optional
+
 
 class AppError(Exception):
     status_code = 400
@@ -37,8 +39,8 @@ class ProfileIncompleteError(AgentError):
     def __init__(
         self,
         message: str,
-        gaps: list | None = None,
-        blocks: list | None = None,
+        gaps: Optional[List[str]] = None,
+        blocks: Optional[List[str]] = None,
     ) -> None:
         super().__init__(message)
         self.gaps = list(gaps or [])
