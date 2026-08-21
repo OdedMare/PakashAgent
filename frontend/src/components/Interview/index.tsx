@@ -43,6 +43,7 @@ export function Interview({
   onLogout,
   onRotateLink,
   onDone,
+  onBuild,
 }: {
   workspace?: TeamView;
   busy?: boolean;
@@ -58,6 +59,8 @@ export function Interview({
    *  early writes a partial profile instead, and the board says what is
    *  missing. */
   onDone?: () => void;
+  /** Open the shift board and generate its first schedule. */
+  onBuild?: () => void;
 } = {}) {
   const { turn, busy, error, start, answer, end, reset, retry } =
     useInterview();
@@ -257,9 +260,11 @@ export function Interview({
           <button
             type="button"
             className="primary-button"
-            onClick={() => (onDone ? onDone() : window.location.reload())}
+            onClick={() =>
+              onBuild ? onBuild() : onDone ? onDone() : window.location.reload()
+            }
           >
-            מעבר לאיזור הניהול
+            בניית סידור המשמרות שלנו
           </button>
         </div>
       ) : null}

@@ -10,6 +10,7 @@ import type {
   ManagementOverview,
   PlacementCheck,
   Proposal,
+  RequiredAssignment,
   Schedule,
   ShiftStats,
   Simulation,
@@ -22,6 +23,7 @@ import { BoardGrid } from "./BoardGrid";
 import { ConfirmDrop } from "./ConfirmDrop";
 import { CoverageBar } from "./CoverageBar";
 import { FilterBar } from "./FilterBar";
+import { GenerateDialog } from "./GenerateDialog";
 import { EditorTarget, ShiftEditor } from "./ShiftEditor";
 import { WeekNav } from "./WeekNav";
 import { useBoard } from "./useBoard";
@@ -72,7 +74,11 @@ export function Board({
 }: {
   overview: ManagementOverview | undefined;
   busy: boolean;
-  onGenerate: (input: { starts_on?: string; ends_on?: string }) => void;
+  onGenerate: (input: {
+    starts_on?: string;
+    ends_on?: string;
+    required_assignments?: RequiredAssignment[];
+  }) => void;
   onOpenBlank: (input: { starts_on?: string; ends_on?: string }) => void;
   onAssign: (input: {
     shift_name: string;
@@ -171,6 +177,7 @@ export function Board({
   const [editor, setEditor] = useState<EditorTarget | null>(null);
   const [check, setCheck] = useState<PlacementCheck | null>(null);
   const [checking, setChecking] = useState(false);
+  const [generationOpen, setGenerationOpen] = useState(false);
 
   // Every check is answered against the request that is still the newest.
   // Without this, a manager clicking through a dropdown gets whichever
@@ -246,7 +253,7 @@ export function Board({
     onPrevious: board.previousWeek,
     onNext: board.nextWeek,
     onToday: board.goToToday,
-    enabled: !pendingMove && !editor,
+    enabled: !pendingMove && !editor && !generationOpen,
   });
 
   // The figures for the week on screen. The overview computed them for the
@@ -412,6 +419,7 @@ export function Board({
               readOnly={schedule.status === "published"}
               touches={touches}
               onDropCard={openMove}
+              onDropEmployee={(input) => void onAssign(input)}
               onOpenCard={(assignment) => {
                 setCheck(null);
                 setEditor({ mode: "edit", assignment });
@@ -432,9 +440,7 @@ export function Board({
           profile={overview?.profile ?? null}
           weekStart={board.weekStart}
           weekEnd={board.weekEnd}
-          onGenerate={() =>
-            onGenerate({ starts_on: board.weekStart, ends_on: board.weekEnd })
-          }
+          onGenerate={() => setGenerationOpen(true)}
           onOpenBlank={() =>
             onOpenBlank({ starts_on: board.weekStart, ends_on: board.weekEnd })
           }
@@ -511,6 +517,25 @@ export function Board({
             closeDialogs();
           }}
           onClose={closeDialogs}
+        />
+      ) : null}
+
+      {generationOpen ? (
+        <GenerateDialog
+          employees={roster}
+          shifts={overview?.shifts ?? []}
+          weekStart={board.weekStart}
+          weekEnd={board.weekEnd}
+          busy={busy}
+          onCancel={() => setGenerationOpen(false)}
+          onConfirm={(required) => {
+            onGenerate({
+              starts_on: board.weekStart,
+              ends_on: board.weekEnd,
+              required_assignments: required,
+            });
+            setGenerationOpen(false);
+          }}
         />
       ) : null}
     </div>

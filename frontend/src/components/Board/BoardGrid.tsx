@@ -15,6 +15,7 @@ import type {
 
 import type { AgentTouch } from "./agentTouch";
 import { touchKey } from "./agentTouch";
+import { EMPLOYEE_DRAG_TYPE } from "./dragData";
 import type { ScheduleIndex } from "./scheduleIndex";
 import { buildScheduleIndex } from "./scheduleIndex";
 import { ShiftCard } from "./ShiftCard";
@@ -57,6 +58,7 @@ export function BoardGrid({
   readOnly = false,
   touches,
   onDropCard,
+  onDropEmployee,
   onOpenCard,
   onAddShift,
 }: {
@@ -77,6 +79,12 @@ export function BoardGrid({
   touches?: Map<string, AgentTouch[]>;
   onDropCard?: (move: {
     assignment: Assignment;
+    shift_name: string;
+    slot_date: string;
+  }) => void;
+  /** Assign a roster employee dropped from the team drawer. */
+  onDropEmployee?: (input: {
+    employee: string;
     shift_name: string;
     slot_date: string;
   }) => void;
@@ -252,6 +260,7 @@ export function BoardGrid({
             move={move}
             onPlace={placeOn}
             onDropCard={onDropCard}
+            onDropEmployee={onDropEmployee}
             onOpenCard={onOpenCard}
             onAddShift={onAddShift}
           />
@@ -334,6 +343,7 @@ function BoardRow({
   move,
   onPlace,
   onDropCard,
+  onDropEmployee,
   onOpenCard,
   onAddShift,
 }: {
@@ -358,6 +368,11 @@ function BoardRow({
   onPlace: (shift: string, date: string) => void;
   onDropCard?: (move: {
     assignment: Assignment;
+    shift_name: string;
+    slot_date: string;
+  }) => void;
+  onDropEmployee?: (input: {
+    employee: string;
     shift_name: string;
     slot_date: string;
   }) => void;
@@ -450,18 +465,33 @@ function BoardRow({
               .filter(Boolean)
               .join(" ")}
             onDragOver={(event) => {
-              if (readOnly || !dragging) return;
+              const rosterDrag = event.dataTransfer.types.includes(
+                EMPLOYEE_DRAG_TYPE,
+              );
+              if (readOnly || (!dragging && !rosterDrag)) return;
               // Preventing default is what marks a valid drop target;
               // without it the browser refuses the drop entirely.
               event.preventDefault();
-              event.dataTransfer.dropEffect = "move";
+              event.dataTransfer.dropEffect = rosterDrag ? "copy" : "move";
               setOver(key);
             }}
             onDragLeave={() => setOver(over === key ? null : over)}
             onDrop={(event) => {
               event.preventDefault();
               setOver(null);
-              if (readOnly || !dragging) return;
+              if (readOnly) return;
+              const employee = event.dataTransfer
+                .getData(EMPLOYEE_DRAG_TYPE)
+                .trim();
+              if (employee) {
+                onDropEmployee?.({
+                  employee,
+                  shift_name: shift,
+                  slot_date: date,
+                });
+                return;
+              }
+              if (!dragging) return;
               // Dropping where it came from is a no-op, not a change worth
               // asking the manager to account for.
               if (dragging.shift === shift && dragging.date === date) {

@@ -71,6 +71,7 @@ function BossSurface({
   workspace: NonNullable<ReturnType<typeof useWorkspace>["workspace"]>;
 }) {
   const [reinterview, setReinterview] = useState(false);
+  const [buildAfterInterview, setBuildAfterInterview] = useState(false);
   const taught = Boolean(workspace.profile);
 
   if (taught && !reinterview) {
@@ -81,6 +82,8 @@ function BossSurface({
         onLogout={state.logout}
         onRotateLink={state.rotateLink}
         onOpenInterview={() => setReinterview(true)}
+        autoGenerate={buildAfterInterview}
+        onAutoGenerateStarted={() => setBuildAfterInterview(false)}
       />
     );
   }
@@ -97,6 +100,11 @@ function BossSurface({
       onLogout={state.logout}
       onRotateLink={state.rotateLink}
       onDone={async () => {
+        setReinterview(false);
+        await state.refresh();
+      }}
+      onBuild={async () => {
+        setBuildAfterInterview(true);
         setReinterview(false);
         await state.refresh();
       }}

@@ -17,7 +17,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Board } from "@/components/Board";
 import { useTheme } from "@/components/Interview/useTheme";
@@ -61,14 +61,19 @@ export function Management({
   onLogout,
   onRotateLink,
   onOpenInterview,
+  autoGenerate = false,
+  onAutoGenerateStarted,
 }: {
   workspace: TeamView;
   busy?: boolean;
   onLogout?: () => void;
   onRotateLink?: () => void;
   onOpenInterview?: () => void;
+  autoGenerate?: boolean;
+  onAutoGenerateStarted?: () => void;
 }) {
   const state = useManagement();
+  const generate = state.generate;
   const { theme, toggle } = useTheme();
   // The board stays put. Management tools open beside it, so the manager
   // never has to remember which cell they were discussing with the agent.
@@ -79,6 +84,8 @@ export function Management({
   // The import flow. Opening it writes nothing; the screen's own confirm
   // button is what persists (D7).
   const [importOpen, setImportOpen] = useState(false);
+  const [autoGenerating, setAutoGenerating] = useState(false);
+  const autoGenerationStarted = useRef(false);
   // A sentence the briefing offered, on its way to the composer. Held as a
   // counter alongside the text so clicking the same suggestion again re-seeds
   // the box after the manager has edited it.
@@ -99,6 +106,14 @@ export function Management({
       ? completeness.missing_topics.length + completeness.open_points.length
       : 0;
   const schedule = overview?.schedule ?? null;
+
+  useEffect(() => {
+    if (!autoGenerate || autoGenerationStarted.current) return;
+    autoGenerationStarted.current = true;
+    onAutoGenerateStarted?.();
+    setAutoGenerating(true);
+    void generate({}).finally(() => setAutoGenerating(false));
+  }, [autoGenerate, generate, onAutoGenerateStarted]);
 
   return (
     <div className="management">
@@ -210,6 +225,23 @@ export function Management({
           busy={workspaceBusy}
           onRotate={() => onRotateLink?.()}
         />
+      ) : null}
+
+      {autoGenerating ? (
+        <div className="schedule-generation" role="status" aria-live="polite">
+          <div className="schedule-generation-copy">
+            <strong>בונים את סידור המשמרות שלכם</strong>
+            <span>הסוכן מתאים את הצוות, הכללים והמשמרות לשבוע הקרוב.</span>
+          </div>
+          <div
+            className="schedule-generation-track"
+            role="progressbar"
+            aria-label="בניית סידור המשמרות"
+            aria-valuetext="בתהליך"
+          >
+            <span />
+          </div>
+        </div>
       ) : null}
 
       {state.error ? (
@@ -391,6 +423,9 @@ export function Management({
             employees={overview?.employees ?? []}
             shifts={overview?.shifts ?? []}
             constraints={overview?.availability ?? []}
+            stats={overview?.stats}
+            dark={theme === "dark"}
+            draggable={schedule?.status === "draft" && !state.busy}
             onAdd={state.addConstraint}
             onRemove={state.removeConstraint}
           />

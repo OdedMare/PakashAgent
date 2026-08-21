@@ -1,11 +1,13 @@
 "use client";
 
-import { CalendarOff, Plus, Trash2, UserRound } from "lucide-react";
-import { useState } from "react";
+import { CalendarOff, Clock3, GripVertical, Plus, Trash2, UserRound } from "lucide-react";
+import { useMemo, useState } from "react";
 
-import type { Constraint } from "@/types";
+import { EMPLOYEE_DRAG_TYPE } from "@/components/Board/dragData";
+import type { Constraint, ShiftStats } from "@/types";
 
 import { formatDate } from "./Calendar";
+import { buildPalette, colorStyle } from "./palette";
 
 /** The roster and the constraints recorded against it.
  *
@@ -22,6 +24,9 @@ export function TeamPanel({
   employees,
   shifts,
   constraints,
+  stats,
+  dark = false,
+  draggable = false,
   readOnly = false,
   onAdd,
   onRemove,
@@ -29,6 +34,10 @@ export function TeamPanel({
   employees: Record<string, unknown>[];
   shifts: Record<string, unknown>[];
   constraints: Constraint[];
+  stats?: ShiftStats;
+  dark?: boolean;
+  /** A roster drag creates a new assignment; moving an existing card remains separate. */
+  draggable?: boolean;
   readOnly?: boolean;
   onAdd?: (input: {
     employee: string;
@@ -46,6 +55,11 @@ export function TeamPanel({
   const shiftNames = shifts
     .map((row) => text(row.name))
     .filter((name) => name !== "");
+  const hueOf = useMemo(() => buildPalette(names), [names]);
+  const loadByName = useMemo(
+    () => new Map((stats?.by_employee ?? []).map((row) => [row.employee, row])),
+    [stats?.by_employee],
+  );
 
   return (
     <aside className="team-panel" aria-label="הצוות והאילוצים">
@@ -55,23 +69,58 @@ export function TeamPanel({
           הצוות
           <span className="panel-count">{names.length}</span>
         </h3>
+        {draggable && names.length ? (
+          <p className="roster-help">
+            גררו עובד או עובדת אל משמרת פנויה בלוח.
+          </p>
+        ) : null}
         <ul className="roster">
           {names.map((name) => {
             const person = employees.find((row) => text(row.name) === name);
             const blocked = constraints.filter(
               (row) => row.employee === name && !row.available,
             ).length;
+            const load = loadByName.get(name);
             return (
-              <li key={name}>
-                <span className="roster-name">{name}</span>
-                <span className="roster-meta">
-                  {text(person?.role)}
+              <li
+                key={name}
+                className={`roster-card${draggable ? " is-draggable" : ""}`}
+                draggable={draggable}
+                onDragStart={(event) => {
+                  if (!draggable) return;
+                  event.dataTransfer.setData(EMPLOYEE_DRAG_TYPE, name);
+                  event.dataTransfer.setData("text/plain", name);
+                  event.dataTransfer.effectAllowed = "copy";
+                }}
+                title={draggable ? `גרירת ${name} למשמרת` : undefined}
+              >
+                <span
+                  className="roster-avatar"
+                  style={colorStyle(hueOf(name), dark)}
+                  aria-hidden="true"
+                >
+                  {name.slice(0, 1)}
+                </span>
+                <span className="roster-person">
+                  <span className="roster-name">{name}</span>
+                  <span className="roster-role">
+                    {text(person?.role) || "ללא תפקיד מוגדר"}
+                  </span>
+                </span>
+                <span className="roster-load" aria-label="עומס בסידור הנוכחי">
+                  <span title="מספר משמרות">{load?.shifts ?? 0} משמרות</span>
+                  <span title="מספר שעות">
+                    <Clock3 size={11} /> {formatHours(load?.hours ?? 0)}
+                  </span>
                   {blocked ? (
                     <span className="roster-blocked" title="אילוצים רשומים">
                       <CalendarOff size={12} /> {blocked}
                     </span>
                   ) : null}
                 </span>
+                {draggable ? (
+                  <GripVertical className="roster-grip" size={17} aria-hidden="true" />
+                ) : null}
               </li>
             );
           })}
@@ -148,6 +197,10 @@ export function TeamPanel({
       </section>
     </aside>
   );
+}
+
+function formatHours(hours: number): string {
+  return Number.isInteger(hours) ? `${hours} ש׳` : `${hours.toFixed(1)} ש׳`;
 }
 
 /** Recording one constraint.

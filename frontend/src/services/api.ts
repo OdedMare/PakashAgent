@@ -265,7 +265,12 @@ export function scheduleOverview(): Promise<ManagementOverview> {
 /** Build a period. Omitted dates mean the current week. Stored as a draft —
  *  publishing is a separate, deliberate act. */
 export function generateSchedule(
-  body: { starts_on?: string; ends_on?: string; instructions?: string } = {},
+  body: {
+    starts_on?: string;
+    ends_on?: string;
+    instructions?: string;
+    required_assignments?: import("@/types").RequiredAssignment[];
+  } = {},
 ): Promise<Schedule> {
   return request<Schedule>("/api/schedule/generate", {
     method: "POST",

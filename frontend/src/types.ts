@@ -196,6 +196,13 @@ export interface Assignment {
   source: AssignmentSource;
 }
 
+/** A manager-selected placement that schedule generation must preserve. */
+export interface RequiredAssignment {
+  employee: string;
+  shift: string;
+  date: string;
+}
+
 /** How an assignment got into the schedule (D18). */
 export type AssignmentSource = "agent" | "manager" | "imported";
 

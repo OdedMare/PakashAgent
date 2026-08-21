@@ -85,6 +85,7 @@ export interface ManagementState {
     starts_on?: string;
     ends_on?: string;
     instructions?: string;
+    required_assignments?: import("@/types").RequiredAssignment[];
   }) => Promise<void>;
   /** Open an empty period to fill in by hand (D18). Calls no model. */
   openBlank: (input: { starts_on?: string; ends_on?: string }) => Promise<void>;
@@ -248,6 +249,7 @@ export function useManagement(): ManagementState {
       starts_on?: string;
       ends_on?: string;
       instructions?: string;
+      required_assignments?: import("@/types").RequiredAssignment[];
     }) => {
       await run(() => generateSchedule(input));
     },

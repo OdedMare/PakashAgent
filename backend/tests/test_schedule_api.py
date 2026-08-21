@@ -317,6 +317,21 @@ def test_generating_stores_a_draft_with_reasons():
     assert body["assignments"][0]["reason"] == "דנה מוסמכת לבוקר"
 
 
+def test_generating_enforces_the_managers_required_assignment():
+    app, _ = _build_app([_generation([])])
+    response = _client(app).post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17",
+        "ends_on": "2026-08-18",
+        "required_assignments": [{
+            "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        }],
+    })
+
+    assert response.status_code == 200
+    assert response.json()["assignments"][0]["employee"] == "דנה"
+    assert "שיבוץ חובה" in response.json()["assignments"][0]["reason"]
+
+
 def test_generating_without_a_finished_interview_is_refused():
     """No profile means no shift vocabulary, and guessing one is exactly
     the hardcoding D9 forbids."""

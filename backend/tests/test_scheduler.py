@@ -127,6 +127,42 @@ def test_assignments_come_back_with_their_reasons():
     assert result["assignments"][0]["reason"].startswith("דנה מוסמכת")
 
 
+def test_manager_required_assignment_is_kept_when_model_omits_it():
+    llm = _ScriptedLlm([_reply([])])
+    result = Scheduler(llm).generate(
+        PROFILE,
+        "2026-08-17",
+        "2026-08-18",
+        required_assignments=[{
+            "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        }],
+    )
+
+    assert result["assignments"] == [{
+        "employee": "דנה",
+        "shift": MORNING,
+        "date": "2026-08-17",
+        "reason": "שיבוץ חובה שנבחר על ידי המנהל בעת בניית הסידור",
+    }]
+    payload = json.loads(llm.calls[0]["user"])
+    assert payload["required_assignments"] == [{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+    }]
+
+
+def test_required_assignment_must_name_a_real_slot_and_employee():
+    with pytest.raises(AgentError):
+        Scheduler(_ScriptedLlm([])).generate(
+            PROFILE,
+            "2026-08-17",
+            "2026-08-18",
+            required_assignments=[{
+                "employee": "לא קיים", "shift": MORNING,
+                "date": "2026-08-17",
+            }],
+        )
+
+
 def test_an_assignment_without_a_reason_is_dropped():
     """D8 enforced in code, not left to the prompt.
 
