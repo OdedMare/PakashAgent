@@ -95,7 +95,7 @@ def test_first_turn_sends_the_topics_and_returns_one_question():
     }.issubset(topic_ids)
 
 
-def test_only_the_latest_exchange_is_passed_to_the_next_turn():
+def test_the_recent_conversation_is_passed_to_the_next_turn():
     llm = _FakeLlm(_question_response())
     history = [
         {"role": "assistant", "content": "מה שם המקום?"},
@@ -108,9 +108,75 @@ def test_only_the_latest_exchange_is_passed_to_the_next_turn():
 
     payload = json.loads(llm.calls[0]["user"])
     assert payload["recent_conversation"] == [
+        {"role": "assistant", "content": "מה שם המקום?"},
+        {"role": "user", "content": "מוקד"},
         {"role": "assistant", "content": "מי העובדים?"},
         {"role": "user", "content": "דנה ורון"},
     ]
+
+
+def test_the_conversation_window_is_bounded():
+    """Bounded, but wide enough that the model can see what it already asked.
+
+    A single exchange is what made the interview circle: the draft records
+    settled facts and never records which questions were put, so a model
+    reading only the last answer cannot tell a fresh topic from one it just
+    covered.
+    """
+    llm = _FakeLlm(_question_response())
+    history = [
+        {"role": "assistant" if index % 2 == 0 else "user",
+         "content": "הודעה {}".format(index)}
+        for index in range(40)
+    ]
+
+    IntroInterview(llm).next_turn(history)
+
+    conversation = json.loads(llm.calls[0]["user"])["recent_conversation"]
+    assert len(conversation) == 12
+    assert conversation[-1] == {"role": "user", "content": "הודעה 39"}
+
+
+def test_every_question_already_asked_is_listed_for_the_model():
+    """The anti-repetition list: what was *asked*, not what was settled.
+
+    `resolved` records answers. A question the manager deflected settles
+    nothing and so never lands there — which is precisely the question a
+    model working from settled facts alone asks a second time.
+    """
+    llm = _FakeLlm(_question_response())
+    history = [
+        {"role": "assistant", "content": "מה שם המקום?"},
+        {"role": "user", "content": "מוקד"},
+        {"role": "assistant", "content": "מי העובדים?"},
+        {"role": "user", "content": "אחר כך"},
+    ]
+
+    IntroInterview(llm).next_turn(history)
+
+    payload = json.loads(llm.calls[0]["user"])
+    assert payload["questions_already_asked"] == [
+        "מה שם המקום?", "מי העובדים?",
+    ]
+
+
+def test_questions_already_asked_survive_falling_out_of_the_window():
+    """A topic covered thirty turns ago must still not be re-asked."""
+    llm = _FakeLlm(_question_response())
+    history = [{"role": "assistant", "content": "מה שם המקום?"}]
+    history += [
+        {"role": "assistant" if index % 2 == 0 else "user",
+         "content": "הודעה {}".format(index)}
+        for index in range(40)
+    ]
+
+    IntroInterview(llm).next_turn(history)
+
+    payload = json.loads(llm.calls[0]["user"])
+    assert "מה שם המקום?" not in [
+        message["content"] for message in payload["recent_conversation"]
+    ]
+    assert payload["questions_already_asked"][0] == "מה שם המקום?"
 
 
 def test_structured_state_replaces_the_old_conversation_context():

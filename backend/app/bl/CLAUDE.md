@@ -41,12 +41,25 @@ and a wrong answer looks identical to a right one.
 
 The turn shape is ported from the `plan-chat` planners in AiSummryIO
 (`bl/workflow_engine_pkg/conversational_planning.py`). One question per turn,
-each carrying the agent's own `recommendation`, a `why`, and up to four
+each carrying the agent's own `recommendation`, a `why`, and two to four
 clickable `options`. An option's `answer` is a full sentence sent verbatim as
 the boss's own message — never a label, never an index, because a bare number
 may be either a selection or a real value and the interview must clarify
 rather than guess. Below two options the list is dropped: one option is not a
 choice.
+
+**Options are asked for on every question, including open-ended ones.** The
+free-text composer sits beside the buttons and never goes away, so offering a
+concrete sentence to correct costs the boss nothing and beats handing them an
+empty field. `_options` is the bound, not the policy — the policy is in
+`prompts/shared/interview_method.md`.
+
+**The model is shown what it already asked.** `recent_conversation` carries
+the recent stretch of the thread and `questions_already_asked` carries every
+question put so far, including ones scrolled out of that window. Neither the
+draft nor `resolved` records *questions* — only settled facts — so a model
+given the last exchange alone cannot tell a fresh topic from one it just
+covered, and re-asks until the interview circles instead of ending.
 
 Every turn also returns `draft` — the profile so far — plus `resolved` and
 `open_points`, the agent's own account of what is settled and what is not. The

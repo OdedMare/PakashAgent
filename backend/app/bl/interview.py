@@ -487,6 +487,13 @@ def _options(question: dict) -> List[dict]:
     One option is not a choice: the manager would be reading a menu with a
     single item next to the recommendation that already says the same thing.
     Below two, the recommendation carries the turn on its own.
+
+    The prompt now asks for options on every question, including the
+    open-ended ones, since the free-text composer stays available beside them
+    and a concrete sentence to correct beats an empty field. This function is
+    unchanged by that: it bounds what arrives, and a turn that still comes
+    back with fewer than two usable options renders without buttons rather
+    than with a menu of one.
     """
     offered = question.get("options")
     if not isinstance(offered, list):
