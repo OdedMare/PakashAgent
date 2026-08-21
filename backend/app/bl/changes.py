@@ -20,6 +20,7 @@ proposal the manager has confirmed, which is what keeps "the agent decided"
 and "the manager agreed" as two separate, auditable events.
 """
 
+import datetime
 import json
 from typing import Any, Dict, List, Optional
 
@@ -123,7 +124,7 @@ class ChangeAgent:
     def _ask(self, payload: dict) -> dict:
         answer = self._llm.complete_json(
             load("changes"),
-            json.dumps(payload, ensure_ascii=False),
+            json.dumps(payload, ensure_ascii=False, default=_json_default),
             schema=CHANGE_RESPONSE_SCHEMA,
             flow="changes",
         )
@@ -290,6 +291,16 @@ def _date(value: Any) -> str:
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return _bounded(value)
+
+
+def _json_default(value: Any) -> str:
+    """SQL temporal values as JSON strings in raw availability/history rows."""
+    if isinstance(value, (datetime.date, datetime.time)):
+        return value.isoformat()
+    raise TypeError(
+        "Object of type %s is not JSON serializable"
+        % value.__class__.__name__
+    )
 
 
 def _bounded(value: Any, limit: int = _MAX_TEXT_CHARS) -> str:

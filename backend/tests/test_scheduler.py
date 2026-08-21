@@ -7,6 +7,7 @@ the slot grid, which is arithmetic, and the two reason gates, which are
 decisions the product cannot afford to leave to a prompt.
 """
 
+import datetime
 import json
 
 import pytest
@@ -342,6 +343,30 @@ def test_the_proposal_never_applies_anything():
         PROFILE, SCHEDULE, "דנה חולה", stated_reason="מחלה",
     )
     assert SCHEDULE["assignments"] == before
+
+
+def test_change_context_serializes_database_dates_and_timestamps():
+    llm = _ScriptedLlm([_change()])
+    ChangeAgent(llm).propose(
+        PROFILE,
+        SCHEDULE,
+        "מה כדאי לשנות?",
+        availability=[{
+            "constraint_date": datetime.date(2026, 8, 20),
+            "created_at": datetime.datetime(2026, 8, 18, 9, 30),
+        }],
+        history=[{
+            "slot_date": datetime.date(2026, 8, 19),
+            "created_at": datetime.datetime(
+                2026, 8, 18, 10, 0, tzinfo=datetime.timezone.utc,
+            ),
+        }],
+    )
+
+    payload = json.loads(llm.calls[0]["user"])
+    assert payload["availability"][0]["constraint_date"] == "2026-08-20"
+    assert payload["availability"][0]["created_at"] == "2026-08-18T09:30:00"
+    assert payload["history"][0]["created_at"] == "2026-08-18T10:00:00+00:00"
 
 
 # -- chunking: a long period is built a week at a time ---------------------
