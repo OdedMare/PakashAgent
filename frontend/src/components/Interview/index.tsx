@@ -225,6 +225,7 @@ export function Interview({
                 draft={turn.draft}
                 resolved={turn.resolved}
                 openPoints={turn.open_points}
+                busy={busy}
               />
             ) : null}
           </>
@@ -312,20 +313,7 @@ function Thread({
         />
       ))}
 
-      {busy ? (
-        <div className="turn assistant">
-          <div className="avatar" aria-hidden="true">
-            פ
-          </div>
-          <div className="turn-body">
-            <div className="thinking" role="status" aria-label="הסוכן חושב">
-              <span />
-              <span />
-              <span />
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {busy ? <Thinking turn={turn} /> : null}
 
       {/* The draft is shown from the first turn, so the profile visibly fills
           in as the interview proceeds instead of appearing all at once at
@@ -338,6 +326,82 @@ function Thread({
     </div>
   );
 }
+
+/** What the agent is doing while a turn is generated.
+ *
+ *  This replaced three anonymous dots. A turn is a whole model generation and
+ *  can run for several seconds, during which the dots said only that
+ *  something was happening — not that the answer had been received, not what
+ *  was being worked on, and not that the wait was normal. The manager's own
+ *  answer is echoed into the thread immediately, so the honest reading of
+ *  this moment is "your answer is in, the agent is working through it", and
+ *  that is what this says.
+ *
+ *  The phases are **elapsed-time labels, not a progress report**: nothing is
+ *  streamed back mid-generation, so claiming to know the model is "now
+ *  drafting the profile" would be an invention. They are ordered to match
+ *  what a turn genuinely does — read the answer, update the draft, choose the
+ *  next question — and the last one holds rather than cycling, because a
+ *  label that loops forever reads as a hang.
+ */
+function Thinking({
+  turn,
+}: {
+  turn: NonNullable<ReturnType<typeof useInterview>["turn"]>;
+}) {
+  const phase = useThinkingPhase();
+  // Once there is a profile in progress the wait has a subject, so the label
+  // names it instead of speaking in the abstract.
+  const named = turn.draft?.workplace?.name;
+
+  return (
+    <div className="turn assistant">
+      <div className="avatar" aria-hidden="true">
+        פ
+      </div>
+      <div className="turn-body">
+        <div className="thinking-row" role="status" aria-live="polite">
+          <div className="thinking" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <span className="thinking-label">
+            {phase}
+            {named ? ` · ${named}` : ""}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The three stages of a turn, advanced on a timer.
+ *
+ *  Deliberately not a spinner percentage: there is no progress to report, and
+ *  a bar that fills at a rate unrelated to the work is a lie that gets caught
+ *  the first time a turn takes twice as long. */
+const THINKING_PHASES = [
+  "קורא את התשובה",
+  "מעדכן את הפרופיל",
+  "מנסח את השאלה הבאה",
+] as const;
+
+function useThinkingPhase(): string {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    setIndex(0);
+    const timers = [
+      window.setTimeout(() => setIndex(1), 1_600),
+      window.setTimeout(() => setIndex(2), 4_000),
+    ];
+    return () => timers.forEach(window.clearTimeout);
+  }, []);
+
+  return THINKING_PHASES[index];
+}
+
 
 function Welcome({ busy, onStart }: { busy: boolean; onStart: () => void }) {
   return (
