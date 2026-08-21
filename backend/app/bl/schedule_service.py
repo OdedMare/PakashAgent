@@ -331,15 +331,20 @@ class ScheduleService:
             raise AgentError(
                 "צריך להשלים את ראיון ההיכרות לפני בניית סידור"
             )
+        if _has_shifts(profile):
+            return profile
+        # Asked only once the answer is known to be a refusal. `profile_gaps`
+        # is the agent's own account of what the interview never taught, and
+        # it is read here to *explain* this failure rather than to detect it:
+        # its confirmed-interview shortcut reports no gaps at all, which is
+        # right for the question it answers and would be wrong for this one.
         gaps = self._tools.profile_gaps(team_id)
-        if not gaps.get("has_shifts"):
-            raise ProfileIncompleteError(
-                "לא ניתן לבנות סידור: לא הוגדרו סוגי משמרות בראיון ההיכרות. "
-                "אפשר להשלים את החסר בשיחה עם הסוכן.",
-                gaps=gaps.get("gaps") or [],
-                blocks=gaps.get("blocks") or [],
-            )
-        return profile
+        raise ProfileIncompleteError(
+            "לא ניתן לבנות סידור: לא הוגדרו סוגי משמרות בראיון ההיכרות. "
+            "אפשר להשלים את החסר בשיחה עם הסוכן.",
+            gaps=gaps.get("gaps") or [],
+            blocks=gaps.get("blocks") or [],
+        )
 
 
     def generate(
@@ -1570,6 +1575,22 @@ def _dated(schedule: dict) -> dict:
         for row in schedule.get("assignments") or []
     ]
     return schedule
+
+
+def _has_shifts(profile: dict) -> bool:
+    """Whether this profile can produce a grid at all.
+
+    Deliberately the same test `build_slots` applies -- a dict with a usable
+    name -- rather than merely `profile["shifts"]` being non-empty. A shift
+    the builder silently skips is, for the manager pressing the button,
+    identical to one that was never declared, and a gate that disagreed with
+    the builder would let exactly that case through to an empty grid and a
+    502 with nothing to act on. That was the original bug.
+    """
+    return any(
+        isinstance(shift, dict) and (shift.get("name") or "").strip()
+        for shift in (profile or {}).get("shifts") or []
+    )
 
 
 def _window(schedule: Optional[dict]) -> tuple:

@@ -1390,3 +1390,106 @@ def test_one_workspace_cannot_read_another_by_date():
     assert other.get(
         "/api/schedule/at", params={"day": "2026-08-19"}
     ).json() is None
+
+
+# -- a partial profile is a fork in the flow, not a dead end ---------------
+
+def _ended_early(repo, **overrides):
+    """A profile shaped like one `interview_service.end` wrote.
+
+    The escape hatch is allowed to complete an interview with whatever was
+    collected, recording the rest on `completeness`. That profile is real and
+    `team_profile()` serves it, so every "is the interview done" check passes
+    and only the shift vocabulary is actually absent.
+    """
+    profile = {
+        "workplace": {"name": "מוקד"},
+        "employees": [{"name": "דנה"}],
+        "shifts": [],
+        "rules": [],
+        "completeness": {
+            "complete": False,
+            "missing_topics": ["לא הוגדר אף סוג משמרת."],
+            "open_points": ["לא סוכם מי עובד בסופי שבוע."],
+        },
+    }
+    profile.update(overrides)
+    repo.profiles[TEAM] = profile
+    return profile
+
+
+def test_a_blank_period_over_a_profile_with_no_shifts_says_what_is_missing():
+    """The bug this guard exists for.
+
+    An interview ended early leaves a profile that exists but carries no
+    shift vocabulary. It used to pass the `if not profile` check, reach
+    `build_slots`, come back empty, and fail as an unexplained 502 -- the
+    manual path looking broken rather than unfinished. The refusal now names
+    the gap and says the interview can be resumed.
+    """
+    app, repo = _build_app([])
+    _ended_early(repo)
+    response = _client(app).post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+    assert response.status_code == 502
+    body = response.json()
+    assert "משמרות" in body["detail"]
+    # The part a client can act on: which topics, and that there is a door.
+    assert body["can_resume_interview"] is True
+    assert "לא הוגדר אף סוג משמרת." in body["gaps"]
+    assert body["blocks"], "a gap that blocks says what it costs"
+
+
+def test_generating_over_a_profile_with_no_shifts_fails_the_same_way():
+    """Both building paths ask one question, so they give one answer.
+
+    They differ in whether a model runs; they do not differ in what a profile
+    must contain before a grid exists, and a manager who hit the wall on one
+    button must not find the other reporting something else.
+    """
+    app, repo = _build_app([])
+    _ended_early(repo)
+    response = _client(app).post("/api/schedule/generate", json={})
+    assert response.status_code == 502
+    body = response.json()
+    assert body["can_resume_interview"] is True
+    assert "לא הוגדר אף סוג משמרת." in body["gaps"]
+
+
+def test_a_shift_the_grid_builder_would_skip_counts_as_no_vocabulary():
+    """The gate applies the builder's own test, not a laxer one.
+
+    `build_slots` needs a usable name. A nameless entry makes `shifts`
+    non-empty while producing no rows, so a gate checking only for a
+    non-empty list would pass it through to the empty grid this whole change
+    exists to stop.
+    """
+    app, repo = _build_app([])
+    _ended_early(repo, shifts=[{"start_time": "07:00", "end_time": "15:00"}])
+    response = _client(app).post("/api/schedule/blank", json={})
+    assert response.status_code == 502
+    assert response.json()["can_resume_interview"] is True
+
+
+def test_shifts_that_never_run_in_the_window_blame_the_dates_not_the_interview():
+    """A different failure deserves a different sentence.
+
+    The vocabulary is complete here -- the shift simply does not run on the
+    days asked for. Re-opening the interview would teach nothing, so this
+    stays an ordinary refusal with no resume offered.
+    """
+    app, repo = _build_app([])
+    repo.profiles[TEAM] = dict(PROFILE, shifts=[{
+        "name": MORNING, "start_time": "07:00", "end_time": "15:00",
+        # Sunday only; the window below is Monday-Tuesday.
+        "days": ["ראשון"], "is_on_call": False,
+        "staffing": [{"days": [], "headcount": 1, "required_roles": []}],
+    }])
+    response = _client(app).post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+    assert response.status_code == 502
+    body = response.json()
+    assert "תאריכים" in body["detail"]
+    assert "can_resume_interview" not in body
