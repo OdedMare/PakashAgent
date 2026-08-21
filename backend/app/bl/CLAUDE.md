@@ -61,6 +61,23 @@ draft nor `resolved` records *questions* — only settled facts — so a model
 given the last exchange alone cannot tell a fresh topic from one it just
 covered, and re-asks until the interview circles instead of ending.
 
+**`resolved` and `open_points` are deduplicated, not concatenated.** Both are
+replayed to the model as `*_so_far` every turn and come back carried forward,
+and `open_points` then has `missing_topics()` appended to it in code. A blind
+`+` therefore stacked the code-generated sentence beside the model's echo of
+that same sentence, once per turn, for as long as the gap stayed open — so
+"נשאר לסגור" grew a longer and longer list of one line. `_unique` preserves
+the agent's own ordering rather than sorting: the panel is read top to bottom.
+
+**A `reply` that promises an update it did not make is caught in code.**
+`reply` is prose the manager reads; `draft_update` is what is stored. A model
+answering "אני מעדכן את המדיניות" with an empty update has silently dropped
+what the manager just said. `_promised_unkept` requires *both* halves — an
+empty update alone is ordinary, since a clarifying question settles nothing —
+and records the loss as an open point so it is visible instead of vanishing.
+Compared against the merged draft, so re-sending a field's existing value
+counts as recording nothing too.
+
 Every turn also returns `draft` — the profile so far — plus `resolved` and
 `open_points`, the agent's own account of what is settled and what is not. The
 draft is **merged** across turns (`_merged_draft`): the model rebuilds it from

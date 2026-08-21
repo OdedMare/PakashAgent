@@ -430,7 +430,24 @@ def _result(answer: dict, previous) -> dict:
     # model claimed, so it cannot also be awaiting confirmation.
     awaiting = bool(answer.get("awaiting_confirmation")) and question is None
     missing = missing_topics(merged)
-    open_points = open_points + missing
+    # Deduplicated rather than concatenated. Two lists meet here and both can
+    # already contain the other's lines: the required-topic sentences are
+    # handed back to the model as `open_points_so_far` every turn, so a model
+    # doing exactly what it was told — carry forward what is still open —
+    # returns them, and a blind `+` then appends the code-generated copy
+    # beside the echo. That repeats every turn the gap stays open, which is
+    # every turn until it is filled, so the panel grows a longer and longer
+    # list of the same sentence.
+    open_points = _unique(open_points + missing)
+    # A turn that says it is updating something while updating nothing has
+    # silently dropped whatever the manager just said. Recorded as an open
+    # point so the loss is visible in the panel and the model reads it back
+    # next turn, rather than the fact vanishing between a promise and a draft
+    # that never received it.
+    if _promised_unkept(answer, merged, previous):
+        open_points = _unique(
+            open_points + [_UNRECORDED_ANSWER]
+        )
     if missing:
         # A profile still owing a required field is not a summary the manager
         # can meaningfully approve, so the confirmation turn is withdrawn
@@ -439,7 +456,10 @@ def _result(answer: dict, previous) -> dict:
     result = {
         "reply": _bounded(answer.get("reply")),
         "question": question,
-        "resolved": _lines(answer.get("resolved")),
+        # Deduplicated for the same reason: `resolved_so_far` is replayed to
+        # the model each turn and comes back carried forward, so a line the
+        # model restates verbatim would otherwise appear twice under "סוכם".
+        "resolved": _unique(_lines(answer.get("resolved"))),
         "open_points": open_points,
         "awaiting_confirmation": awaiting,
         "ready": _is_ready(answer, question, awaiting) and not missing,
@@ -448,6 +468,46 @@ def _result(answer: dict, previous) -> dict:
     if usage is not None:
         result["_usage"] = usage
     return result
+
+
+# Phrasings that announce an update rather than report one. The prompt
+# forbids these outright; this is the code-side net for a model that writes
+# one anyway, since `reply` is prose and cannot be schema-constrained.
+#
+# Matched as substrings on the verb, not on whole sentences, because the
+# model varies the wording around it every time. Kept deliberately short: a
+# longer list catches more phrasings and also more innocent ones, and a false
+# positive puts a line in the panel that the manager cannot act on.
+_PROMISE_MARKERS = (
+    "אעדכן", "נעדכן", "אשמור", "נשמור", "ארשום", "נרשום",
+    "אני מעדכן", "אני שומר", "אני רושם",
+)
+
+_UNRECORDED_ANSWER = (
+    "התשובה האחרונה לא נשמרה בפרופיל — כדאי לחזור עליה."
+)
+
+
+def _promised_unkept(answer: dict, merged: dict, previous) -> bool:
+    """Whether this turn claimed to record something and recorded nothing.
+
+    Both halves are required. An empty `draft_update` is perfectly ordinary
+    on its own — a turn that only asks a clarifying question settles no fact
+    and should change no field — so an empty update alone is not a fault and
+    must not be reported as one. It becomes a fault only when the prose told
+    the manager their answer was being written down.
+
+    Compared against the *merged* draft rather than the raw update, because
+    a model re-sending a field with the value it already had has also
+    recorded nothing new, and that is the same loss wearing a non-empty
+    update.
+    """
+    reply = _bounded(answer.get("reply"))
+    if not reply:
+        return False
+    if not any(marker in reply for marker in _PROMISE_MARKERS):
+        return False
+    return merged == _as_dict(previous)
 
 
 def _is_ready(answer: dict, question, awaiting: bool) -> bool:
@@ -638,6 +698,28 @@ def _lines(value) -> List[str]:
         return []
     lines = [_bounded(item) for item in value]
     return [line for line in lines if line]
+
+
+def _unique(lines: List[str]) -> List[str]:
+    """The same lines with later repeats dropped, first occurrence winning.
+
+    Order is preserved deliberately: these lists are read top to bottom in
+    the panel beside the conversation, and the agent's own ordering carries
+    its sense of what matters most. Sorting or set-ing them would scramble
+    that to remove a duplicate.
+
+    Compared case-sensitively on the exact string, since these are whole
+    Hebrew sentences from one writer — the duplicates being removed are
+    verbatim echoes, not paraphrases, and a looser match risks dropping two
+    genuinely different points that happen to start alike.
+    """
+    seen, unique = set(), []
+    for line in lines:
+        if line in seen:
+            continue
+        seen.add(line)
+        unique.append(line)
+    return unique
 
 
 def _bounded(value, limit: int = _MAX_MESSAGE_CHARS) -> str:

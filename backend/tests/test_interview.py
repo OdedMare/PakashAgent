@@ -364,6 +364,112 @@ def test_usage_rides_through_the_turn():
     assert result["_usage"]["total_tokens"] == 42
 
 
+# --- the open points and resolved lists ------------------------------------
+
+
+def test_an_echoed_missing_topic_is_not_listed_twice():
+    """The repetition the manager sees in "נשאר לסגור".
+
+    `missing_topics` sentences are handed to the model as `open_points_so_far`
+    every turn, so a model carrying forward what is still open returns them —
+    and the code-generated copy was then appended beside the echo. That
+    repeats for as long as the gap stays open, which is every turn until it
+    is filled.
+    """
+    response = _question_response(
+        open_points=["לא נרשם אף עובד.", "חסרה רשימת האילוצים"],
+    )
+
+    result = IntroInterview(_FakeLlm(response)).next_turn([])
+
+    points = result["open_points"]
+    assert points.count("לא נרשם אף עובד.") == 1
+    assert len(points) == len(set(points))
+
+
+def test_the_model_repeating_its_own_open_point_is_collapsed():
+    response = _question_response(
+        open_points=["חסרה רשימת האילוצים", "חסרה רשימת האילוצים  "],
+    )
+
+    result = IntroInterview(_FakeLlm(response)).next_turn([])
+
+    assert result["open_points"].count("חסרה רשימת האילוצים") == 1
+
+
+def test_a_repeated_resolved_line_is_collapsed():
+    response = _question_response(resolved=["שם: מוקד", "שם: מוקד"])
+
+    result = IntroInterview(_FakeLlm(response)).next_turn([])
+
+    assert result["resolved"] == ["שם: מוקד"]
+
+
+def test_open_points_keep_the_agents_own_order():
+    """Deduplicated in place, never sorted: the panel is read top to bottom
+    and the agent's ordering carries what it thinks matters most."""
+    response = _question_response(open_points=["ג", "א", "ב", "א"])
+
+    result = IntroInterview(_FakeLlm(response)).next_turn([])
+
+    assert result["open_points"][:3] == ["ג", "א", "ב"]
+
+
+# --- a promise that recorded nothing ---------------------------------------
+
+
+def test_a_reply_promising_an_update_that_records_nothing_is_flagged():
+    """"אני מעדכן את המדיניות" while `draft_update` is empty.
+
+    `reply` is prose and stores nothing; `draft_update` is what the server
+    keeps. A turn that announces an update it did not make has dropped what
+    the manager just said, and without this they have no way to see it.
+    """
+    response = _question_response(
+        reply="אני מעדכן את המדיניות", draft_update={},
+    )
+
+    result = IntroInterview(_FakeLlm(response)).next_turn([], empty_draft())
+
+    assert any("לא נשמרה" in line for line in result["open_points"])
+
+
+def test_a_promise_that_actually_records_is_not_flagged():
+    response = _question_response(
+        reply="אני מעדכן את המדיניות",
+        draft_update={"rest_policy": "שמונה שעות מנוחה"},
+    )
+
+    result = IntroInterview(_FakeLlm(response)).next_turn([], empty_draft())
+
+    assert not any("לא נשמרה" in line for line in result["open_points"])
+
+
+def test_an_ordinary_turn_that_settles_nothing_is_not_flagged():
+    """An empty `draft_update` is normal on its own.
+
+    A turn that only asks a clarifying question settles no fact and should
+    change no field, so the empty update alone must never be reported — only
+    an empty update underneath prose that claimed otherwise.
+    """
+    response = _question_response(reply="תודה. שאלה נוספת:", draft_update={})
+
+    result = IntroInterview(_FakeLlm(response)).next_turn([], empty_draft())
+
+    assert not any("לא נשמרה" in line for line in result["open_points"])
+
+
+def test_re_sending_an_unchanged_value_still_counts_as_recording_nothing():
+    draft = dict(empty_draft(), summary="קיים")
+    response = _question_response(
+        reply="אני שומר את זה", draft_update={"summary": "קיים"},
+    )
+
+    result = IntroInterview(_FakeLlm(response)).next_turn([], draft)
+
+    assert any("לא נשמרה" in line for line in result["open_points"])
+
+
 # --- option normalization --------------------------------------------------
 
 
