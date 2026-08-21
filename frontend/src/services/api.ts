@@ -266,20 +266,39 @@ export function scheduleOverview(): Promise<ManagementOverview> {
   return request<ManagementOverview>("/api/schedule/overview");
 }
 
-/** Build a period. Omitted dates mean the current week. Stored as a draft —
- *  publishing is a separate, deliberate act. */
-export function generateSchedule(
+/** Build a date range one checkpointed day per HTTP/model request. */
+export async function generateSchedule(
   body: {
     starts_on?: string;
     ends_on?: string;
     instructions?: string;
     required_assignments?: import("@/types").RequiredAssignment[];
   } = {},
+  onProgress?: (schedule: Schedule) => void,
 ): Promise<Schedule> {
-  return request<Schedule>("/api/schedule/generate", {
+  const schedule = await request<Schedule>("/api/schedule/generate/start", {
     method: "POST",
     body: JSON.stringify(body),
   });
+  onProgress?.(schedule);
+  return resumeScheduleGeneration(schedule.id, onProgress, schedule);
+}
+
+/** Continue a persisted range after a failed request or browser refresh. */
+export async function resumeScheduleGeneration(
+  scheduleId: string,
+  onProgress?: (schedule: Schedule) => void,
+  initial?: Schedule,
+): Promise<Schedule> {
+  let schedule = initial;
+  while (!schedule || schedule.generation.status !== "complete") {
+    schedule = await request<Schedule>(
+      `/api/schedule/generate/${scheduleId}/next`,
+      { method: "POST" },
+    );
+    onProgress?.(schedule);
+  }
+  return schedule;
 }
 
 /** Open an empty period the manager fills in themselves (D18).

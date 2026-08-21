@@ -122,6 +122,15 @@ CREATE INDEX IF NOT EXISTS schedules_team_idx
 
 COMMIT;
 
+-- Persistent progress for daily generation. JSON keeps the job beside the
+-- living schedule it builds: the range, instructions and per-day states are
+-- one small document, updated after every model call, and disappear with the
+-- schedule through the same ownership boundary.
+ALTER TABLE schedules
+    ADD COLUMN IF NOT EXISTS generation JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+COMMIT;
+
 -- A slot is one shift on one date: the thing a person is assigned INTO.
 -- Kept as rows rather than derived from the profile's shift vocabulary on
 -- read, because a schedule must stay readable exactly as it was built even

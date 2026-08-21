@@ -71,7 +71,9 @@ class Settings(BaseSettings):
     a multiple of this. It exists to stop a hung model server from holding a
     worker for the SDK's 600-second default."""
 
-    llm_max_concurrency: int = 4
+    # The shipped endpoint is Ollama, which serves one generation at a time.
+    # vLLM/TGI deployments should raise this explicitly for batching.
+    llm_max_concurrency: int = 1
     """How many HTTP completions may be in flight at once, process-wide.
 
     Env-only rather than a live runtime setting: the semaphore is built once

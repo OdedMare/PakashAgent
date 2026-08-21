@@ -132,6 +132,126 @@
   flex-wrap: wrap;
 }
 
+/* -- the week rail --------------------------------------------------------
+   One compact, data-bearing signature across the product. It describes the
+   same seven columns as the board below, so the structure is information,
+   not decoration. */
+
+.week-rail {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  min-height: 5.2rem;
+  overflow: hidden;
+  color: var(--text-on-dark);
+  background: var(--sidebar);
+  border: 1px solid color-mix(in srgb, #ffffff 9%, transparent);
+  border-radius: var(--radius);
+}
+
+.week-rail-label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.15rem;
+  padding: 0.8rem 1rem;
+  background: var(--sidebar-2);
+  border-inline-end: 1px solid color-mix(in srgb, #ffffff 10%, transparent);
+}
+
+.week-rail-label strong {
+  font-size: 0.8rem;
+}
+
+.week-rail-label span {
+  color: #9eabc0;
+  font-size: 0.65rem;
+}
+
+.week-rail-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.week-rail-day {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.38rem;
+  padding: 0.65rem 0.7rem;
+  border-inline-end: 1px solid color-mix(in srgb, #ffffff 8%, transparent);
+  position: relative;
+}
+
+.week-rail-day:last-child {
+  border-inline-end: none;
+}
+
+.week-rail-day.is-today::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: #7b9cff;
+}
+
+.week-rail-day-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+.week-rail-day-head strong {
+  overflow: hidden;
+  font-size: 0.73rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-rail-day-head span {
+  color: #9eabc0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.62rem;
+  direction: ltr;
+}
+
+.week-rail-track {
+  height: 0.34rem;
+  overflow: hidden;
+  background: color-mix(in srgb, #ffffff 12%, transparent);
+  border-radius: 2px;
+}
+
+.week-rail-track span {
+  display: block;
+  min-width: 2px;
+  height: 100%;
+  background: var(--success);
+}
+
+.week-rail-day.is-short .week-rail-track span,
+.week-rail-day.is-warning .week-rail-track span {
+  background: var(--warning);
+}
+
+.week-rail-day.is-quiet .week-rail-track span {
+  min-width: 0;
+}
+
+.week-rail-day small {
+  overflow: hidden;
+  color: #aebbd0;
+  font-size: 0.62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-rail-day.is-short small,
+.week-rail-day.is-warning small {
+  color: #f2be70;
+}
+
 /* Draft and published are the two states of a period, and they must be
    distinguishable without reading: a manager who thinks a draft is live has
    published nothing, and one who thinks a published week is a draft edits
@@ -162,22 +282,32 @@
 
 .board-coverage {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
-  gap: 0.6rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 
 .board-tile {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  padding: 0.7rem 0.85rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  box-shadow: var(--shadow-soft);
+  min-width: 0;
+  padding: 0.75rem 0.9rem;
+  border: 0;
+  border-inline-end: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   text-align: start;
   font-family: inherit;
   color: var(--text);
+}
+
+.board-tile:last-child {
+  border-inline-end: 0;
 }
 
 .board-tile.is-clickable {
@@ -194,7 +324,7 @@
    look at. It is not a grade: coverage below 100% is a fact about the week,
    not a verdict on it (D3). */
 .board-tile.is-attention {
-  border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
+  border-inline-end-color: var(--border);
   background: var(--warning-soft);
 }
 
@@ -330,7 +460,7 @@
   border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--surface);
-  box-shadow: var(--shadow-soft);
+  box-shadow: none;
 }
 
 .board-grid {
@@ -977,8 +1107,8 @@
   gap: 0.25rem;
   padding: 0.2rem;
   border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  background: var(--sidebar-2);
+  border: 1px solid color-mix(in srgb, #ffffff 10%, transparent);
 }
 
 .management-nav-item {
@@ -989,7 +1119,7 @@
   border-radius: calc(var(--radius-sm) - 3px);
   border: none;
   background: transparent;
-  color: var(--text-muted);
+  color: #aebbd0;
   font-size: 0.8rem;
   font-family: inherit;
   cursor: pointer;
@@ -997,13 +1127,13 @@
 }
 
 .management-nav-item:hover {
-  color: var(--text);
+  color: #ffffff;
 }
 
 .management-nav-item.is-active {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: var(--shadow-soft);
+  background: var(--primary);
+  color: #ffffff;
+  box-shadow: none;
 }
 
 .management-nav-item:focus-visible {
@@ -1039,7 +1169,7 @@
   height: calc(100vh - 73px);
   min-width: 0;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--surface-2);
   border-inline-start: 1px solid var(--border);
   opacity: 0;
   pointer-events: none;
@@ -1057,7 +1187,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  border-bottom: 1px solid var(--border);
+  color: var(--text-on-dark);
+  background: var(--sidebar);
+  border-bottom: 1px solid color-mix(in srgb, #ffffff 9%, transparent);
 }
 
 .manager-drawer-head > div {
@@ -1072,31 +1204,42 @@
 
 .manager-drawer-head span {
   font-size: 0.74rem;
-  color: var(--text-muted);
+  color: #9eabc0;
+}
+
+.manager-drawer-head .icon-button {
+  color: #aebbd0;
+}
+
+.manager-drawer-head .icon-button:hover {
+  color: #ffffff;
+  background: var(--sidebar-2);
 }
 
 .manager-tabs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.25rem;
-  padding: 0.55rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  padding: 0;
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
 .manager-tab {
-  min-height: 2.75rem;
+  min-height: 3.25rem;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 0.2rem;
   padding: 0.35rem;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border: 0;
+  border-inline-end: 1px solid var(--border);
+  border-radius: 0;
   background: transparent;
   color: var(--text-muted);
   font: inherit;
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   cursor: pointer;
 }
 
@@ -1104,6 +1247,14 @@
 .manager-tab.is-active {
   color: var(--primary);
   background: var(--primary-soft);
+}
+
+.manager-tab:last-child {
+  border-inline-end: 0;
+}
+
+.manager-tab.is-active {
+  box-shadow: inset 0 -3px 0 var(--primary);
 }
 
 .manager-tab:focus-visible {
@@ -1310,6 +1461,29 @@
     padding: 0.85rem 0.75rem 2rem;
   }
 
+  .week-rail {
+    grid-template-columns: 1fr;
+    min-height: 4.3rem;
+  }
+
+  .week-rail-label {
+    display: none;
+  }
+
+  .week-rail-day {
+    padding: 0.55rem 0.35rem;
+  }
+
+  .week-rail-day-head {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.08rem;
+  }
+
+  .week-rail-day small {
+    display: none;
+  }
+
   .board-head {
     justify-content: center;
   }
@@ -1355,6 +1529,24 @@
     order: 3;
     width: 100%;
     justify-content: center;
+  }
+}
+
+@media (max-width: 620px) {
+  .board-coverage {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .board-tile {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .board-tile:nth-child(2n) {
+    border-inline-end: 0;
+  }
+
+  .board-tile:nth-last-child(-n + 2) {
+    border-bottom: 0;
   }
 }
 

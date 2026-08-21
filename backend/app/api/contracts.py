@@ -183,6 +183,27 @@ class Assignment(BaseModel):
     source: str = "agent"
 
 
+class GenerationDay(BaseModel):
+    """One checkpoint in a resumable date-range generation."""
+
+    date: str
+    status: str = "pending"
+    attempts: int = 0
+    error: str = ""
+    metrics: Dict[str, Any] = {}
+
+
+class GenerationProgress(BaseModel):
+    """Persistent progress for a schedule produced one date at a time."""
+
+    status: str = ""
+    current_date: str = ""
+    total_days: int = 0
+    completed_days: int = 0
+    failed_days: int = 0
+    days: List[GenerationDay] = []
+
+
 class Schedule(BaseModel):
     """One living period (D4) — edited in place, never versioned."""
 
@@ -195,6 +216,7 @@ class Schedule(BaseModel):
     warnings: List[Warning] = []
     notes: List[str] = []
     summary: str = ""
+    generation: GenerationProgress = GenerationProgress()
     # The id a manual assignment landed on, echoed back so the client can
     # tell "placed" from "was already there" -- the insert conflicts silently
     # on (slot, employee), so a double click is a success that changed

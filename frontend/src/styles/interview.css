@@ -19,10 +19,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 24px;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border);
+  min-height: 4.5rem;
+  padding: 0.75rem 1.25rem;
+  color: var(--text-on-dark);
+  background: var(--sidebar);
+  border-bottom: 1px solid color-mix(in srgb, #ffffff 10%, transparent);
 }
 
 .brand {
@@ -40,14 +41,14 @@
   height: 30px;
   flex: none;
   place-items: center;
-  color: #fff;
+  color: var(--text-on-dark);
   background: var(--brand-gradient);
-  border-radius: 9px;
-  box-shadow: var(--brand-glow);
+  border: 1px solid color-mix(in srgb, #ffffff 18%, transparent);
+  border-radius: var(--radius-sm);
 }
 
-.brand-sub {
-  color: var(--text-muted);
+.interview-header .brand-sub {
+  color: #9eabc0;
   font-size: 12px;
   font-weight: 500;
 }
@@ -66,12 +67,21 @@
   color: var(--text-muted);
   background: none;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
 }
 
 .icon-button:hover {
   color: var(--text);
   background: var(--surface-3);
+}
+
+.interview-header .icon-button {
+  color: #aebbd0;
+}
+
+.interview-header .icon-button:hover {
+  color: #ffffff;
+  background: var(--sidebar-2);
 }
 
 /* A count on a header icon — used for the topics an ended interview left
@@ -596,7 +606,7 @@
    the breakpoint the panel drops under the conversation rather than
    squeezing both — on a phone the question is what matters, and the draft is
    still reachable by scrolling. */
-#interview.with-draft {
+#main-content.with-draft {
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -604,7 +614,7 @@
   width: 100%;
 }
 
-#interview.with-draft .thread {
+#main-content.with-draft .thread {
   margin: 0;
 }
 
@@ -812,7 +822,7 @@
 }
 
 @media (max-width: 1100px) {
-  #interview.with-draft {
+  #main-content.with-draft {
     flex-direction: column;
     align-items: center;
   }

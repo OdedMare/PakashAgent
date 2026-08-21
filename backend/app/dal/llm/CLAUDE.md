@@ -63,6 +63,10 @@ out, one request could hold a worker for the better part of an hour. The
 deadline is passed into `create_with_retry`, which starts no attempt (and
 takes no sleep) that would cross it.
 
+The `scheduler` flow uses a shorter 120-second logical budget. Its interactive
+path checkpoints one date per request, so retrying that date is cheaper and
+more honest than making the whole range look frozen for five minutes.
+
 ## Task-based model routing
 
 Three roles, **one server**. A role names a model id in the runtime settings;
@@ -141,7 +145,8 @@ default:
 - **A one-request-at-a-time server (Ollama's default)** is only thrashed by a
   high one. 1-2 keeps latency honest.
 
-4 is the middle that assumes neither.
+The shipped default is 1 because the shipped endpoint is Ollama. Deployments
+using a continuously-batching server should raise it explicitly.
 
 ## Telemetry
 

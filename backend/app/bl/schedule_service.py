@@ -411,6 +411,188 @@ class ScheduleService:
         view["summary"] = result["summary"]
         return view
 
+    def start_generation(
+        self,
+        team_id: str,
+        starts_on: Optional[str] = None,
+        ends_on: Optional[str] = None,
+        instructions: str = "",
+        required_assignments: Optional[List[dict]] = None,
+    ) -> dict:
+        """Open a persistent range job; each later request generates one day."""
+        profile = self._buildable_profile(team_id)
+        if not starts_on or not ends_on:
+            starts_on, ends_on = week_bounds()
+        slots = build_slots(profile, starts_on, ends_on)
+        if not slots:
+            raise AgentError(
+                "לא ניתן לבנות סידור: לא הוגדרו משמרות לתקופה הזו"
+            )
+
+        schedule = self._repository.create_schedule(
+            team_id, starts_on, ends_on
+        )
+        stored_slots = self._repository.replace_slots(
+            schedule["id"], team_id, slots
+        )
+        required = _generation_required_rows(
+            required_assignments or [], stored_slots, profile
+        )
+        if required:
+            self._repository.replace_assignments(
+                schedule["id"], team_id, required
+            )
+        dates = sorted({_iso(slot.get("slot_date")) for slot in stored_slots})
+        generation = {
+            "status": "running",
+            "current_date": dates[0] if dates else "",
+            "total_days": len(dates),
+            "completed_days": 0,
+            "failed_days": 0,
+            "instructions": _text(instructions)[:2000],
+            "required_assignments": required_assignments or [],
+            "notes": [],
+            "summaries": [],
+            "days": [
+                {
+                    "date": date,
+                    "status": "pending",
+                    "attempts": 0,
+                    "error": "",
+                    "metrics": {},
+                }
+                for date in dates
+            ],
+        }
+        schedule = self._repository.set_generation(
+            schedule["id"], team_id, generation
+        )
+        return self._view(schedule, team_id)
+
+    def generate_next(self, team_id: str, schedule_id: str) -> dict:
+        """Generate the next pending/failed date and checkpoint the result."""
+        schedule = self._repository.get_schedule(schedule_id, team_id)
+        generation = dict(schedule.get("generation") or {})
+        days = [dict(item) for item in generation.get("days") or []]
+        if not days:
+            raise AgentError("לסידור הזה אין תהליך יצירה שניתן להמשיך")
+        if generation.get("status") == "complete":
+            return self._view(schedule, team_id)
+
+        target = next(
+            (
+                item for item in days
+                if item.get("status") in ("failed", "running", "pending")
+            ),
+            None,
+        )
+        if target is None:
+            generation["status"] = "complete"
+            self._repository.set_generation(schedule_id, team_id, generation)
+            return self._view(
+                self._repository.get_schedule(schedule_id, team_id), team_id
+            )
+
+        day = _iso(target.get("date"))
+        target.update({
+            "status": "running",
+            "attempts": int(target.get("attempts") or 0) + 1,
+            "error": "",
+        })
+        generation.update({"status": "running", "current_date": day})
+        generation["days"] = days
+        self._repository.set_generation(schedule_id, team_id, generation)
+
+        profile = self._buildable_profile(team_id)
+        required = [
+            row for row in generation.get("required_assignments") or []
+            if _iso(row.get("date")) == day
+        ]
+        try:
+            result = self._scheduler.generate_day(
+                profile,
+                day,
+                availability=self._repository.availability(team_id, day, day),
+                history=self._recent_assignments(
+                    team_id, _iso(schedule.get("starts_on"))
+                ),
+                instructions=generation.get("instructions") or "",
+                required_assignments=required,
+                already_scheduled=[
+                    _model_assignment(row)
+                    for row in schedule.get("assignments") or []
+                ],
+            )
+            fresh = self._repository.get_schedule(schedule_id, team_id)
+            rows = _persisted_generation_rows(
+                fresh, result.get("assignments") or [], day
+            )
+            self._repository.replace_assignments(schedule_id, team_id, rows)
+            target.update({
+                "status": "complete",
+                "error": "",
+                "metrics": result.get("metrics") or {},
+            })
+            generation.setdefault("notes", []).extend(result.get("notes") or [])
+            summary = _text(result.get("summary"))
+            if summary:
+                generation.setdefault("summaries", []).append(summary)
+        except Exception as exc:
+            target.update({"status": "failed", "error": str(exc)[:1000]})
+            generation.update({
+                "status": "failed",
+                "current_date": day,
+                "completed_days": sum(
+                    item.get("status") == "complete" for item in days
+                ),
+                "failed_days": sum(
+                    item.get("status") == "failed" for item in days
+                ),
+                "days": days,
+            })
+            self._repository.set_generation(schedule_id, team_id, generation)
+            raise
+
+        generation.update({
+            "completed_days": sum(
+                item.get("status") == "complete" for item in days
+            ),
+            "failed_days": sum(
+                item.get("status") == "failed" for item in days
+            ),
+            "days": days,
+        })
+        remaining = next(
+            (item for item in days if item.get("status") != "complete"), None
+        )
+        if remaining is None:
+            generation.update({"status": "complete", "current_date": ""})
+            if not generation.get("logged"):
+                self._repository.append_change(
+                    team_id,
+                    ACTION_GENERATED,
+                    schedule_id=schedule_id,
+                    reason=generation.get("instructions") or "",
+                    agent_reason=_text(" ".join(
+                        generation.get("summaries") or []
+                    ))[:4000],
+                )
+                generation["logged"] = True
+        else:
+            generation.update({
+                "status": "running",
+                "current_date": _iso(remaining.get("date")),
+            })
+        schedule = self._repository.set_generation(
+            schedule_id, team_id, generation
+        )
+        view = self._view(schedule, team_id)
+        view["notes"] = generation.get("notes") or []
+        view["summary"] = _text(" ".join(
+            generation.get("summaries") or []
+        ))[:4000]
+        return view
+
     def create_blank(
         self,
         team_id: str,
@@ -1610,6 +1792,87 @@ def _employees(profile: dict) -> List[dict]:
 def _shifts(profile: dict) -> List[dict]:
     shifts = (profile or {}).get("shifts")
     return [row for row in shifts or [] if isinstance(row, dict)]
+
+
+def _generation_required_rows(
+    required: List[dict], slots: List[dict], profile: dict
+) -> List[dict]:
+    """Validate and persist manager-pinned rows before generation starts."""
+    people = {
+        _text(row.get("name")) for row in _employees(profile)
+        if _text(row.get("name"))
+    }
+    slot_index = {
+        (_text(row.get("shift_name")), _iso(row.get("slot_date"))): row
+        for row in slots
+    }
+    rows, seen = [], set()
+    for item in required:
+        employee = _text(item.get("employee"))
+        shift = _text(item.get("shift"))
+        date = _iso(item.get("date"))
+        if employee not in people:
+            raise AgentError("העובד שנבחר לשיבוץ החובה אינו קיים בצוות")
+        slot = slot_index.get((shift, date))
+        if slot is None:
+            raise AgentError("המשמרת שנבחרה לשיבוץ החובה אינה קיימת בטווח הזה")
+        key = (employee, shift, date)
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append({
+            "slot_id": slot["id"],
+            "employee": employee,
+            "reason": "שיבוץ חובה שנבחר על ידי המנהל בעת בניית הסידור",
+            "source": ASSIGNED_BY_MANAGER,
+        })
+    return rows
+
+
+def _model_assignment(row: dict) -> dict:
+    return {
+        "employee": _text(row.get("employee")),
+        "shift": _text(row.get("shift")),
+        "date": _iso(row.get("date")),
+        "reason": _text(row.get("reason")) or "שיבוץ קיים בסידור",
+    }
+
+
+def _persisted_generation_rows(
+    schedule: dict, generated: List[dict], day: str
+) -> List[dict]:
+    """Replace one generated date while preserving every other checkpoint."""
+    rows = [
+        {
+            "slot_id": row["slot_id"],
+            "employee": row["employee"],
+            "reason": row["reason"],
+            "source": row.get("source") or "agent",
+        }
+        for row in schedule.get("assignments") or []
+        if _iso(row.get("date")) != day
+    ]
+    existing_sources = {
+        (row.get("employee"), row.get("shift"), _iso(row.get("date"))):
+            row.get("source") or "agent"
+        for row in schedule.get("assignments") or []
+    }
+    slot_index = {
+        (_text(slot.get("shift_name")), _iso(slot.get("slot_date"))): slot["id"]
+        for slot in schedule.get("slots") or []
+    }
+    for item in generated:
+        slot_id = slot_index.get((item.get("shift"), _iso(item.get("date"))))
+        if slot_id is None:
+            continue
+        key = (item.get("employee"), item.get("shift"), _iso(item.get("date")))
+        rows.append({
+            "slot_id": slot_id,
+            "employee": item["employee"],
+            "reason": item["reason"],
+            "source": existing_sources.get(key, "agent"),
+        })
+    return rows
 
 
 def _match(

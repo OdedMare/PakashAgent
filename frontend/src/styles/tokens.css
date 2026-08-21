@@ -1,68 +1,67 @@
-/* Warm, paper-like theme: cream ground, terracotta accent, near-black warm
-   text — the Claude palette, ported from AiSummryIO's shell.css so the two
-   products read as one system. Depth comes from borders and generous space
-   rather than elevation and glow, so shadows stay quiet and the background
-   stays flat. */
+/* Pakash is an operations product, so its visual language comes from a
+   dispatch desk: cool paper, dark ink, precise rules and one blue action
+   colour. Warning and success colours are reserved for schedule meaning.
+   There are no decorative gradients or glows. */
 :root {
-  --bg: #f5f4ee;
+  --bg: #eef2f6;
   --surface: #ffffff;
-  --surface-2: #faf9f5;
-  --surface-3: #eeece3;
-  --sidebar: #262624;
-  --sidebar-2: #35342f;
-  --text: #1f1e1d;
-  --text-soft: #4a483f;
-  /* Light-mode ink runs darker than the terracotta brand fill: these carry
-     text and icons, so each clears 4.5:1 on both --bg and --surface. */
-  --text-muted: #726f66;
-  --text-on-dark: #f5f4ee;
-  --border: #e5e2d9;
-  --border-strong: #cfcabb;
-  --primary: #a94f32;
-  --primary-hover: #8f3f24;
-  --primary-soft: #f7ebe4;
-  --accent: #a94f32;
-  --success: #42704f;
-  --success-soft: #eaf1ea;
-  --warning: #946619;
-  --warning-soft: #faf0dc;
-  --danger: #b3402f;
-  --danger-soft: #fbeae6;
-  --shadow: 0 12px 32px rgba(31, 30, 29, 0.09);
-  --shadow-soft: 0 2px 8px rgba(31, 30, 29, 0.05);
-  --radius: 18px;
-  --radius-sm: 12px;
-  --focus: 0 0 0 3px rgba(217, 119, 87, 0.32);
-  --brand-gradient: linear-gradient(135deg, #d97757, #b8563c);
-  --brand-glow: 0 6px 18px rgba(217, 119, 87, 0.22);
+  --surface-2: #f7f9fb;
+  --surface-3: #e6ebf1;
+  --sidebar: #101828;
+  --sidebar-2: #1d2939;
+  --text: #101828;
+  --text-soft: #344054;
+  --text-muted: #667085;
+  --text-on-dark: #f8fafc;
+  --border: #d8e0e9;
+  --border-strong: #b9c5d3;
+  --primary: #2e5bd7;
+  --primary-hover: #2448b8;
+  --primary-soft: #eaf0ff;
+  --accent: #0f766e;
+  --success: #18794e;
+  --success-soft: #e8f5ee;
+  --warning: #9a5708;
+  --warning-soft: #fff3df;
+  --danger: #b42318;
+  --danger-soft: #feebe9;
+  --shadow: 0 18px 48px rgba(16, 24, 40, 0.12);
+  --shadow-soft: 0 1px 3px rgba(16, 24, 40, 0.08);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --focus: 0 0 0 3px rgba(46, 91, 215, 0.28);
+  /* Kept as compatibility tokens for existing components. Both intentionally
+     resolve to a flat operation colour rather than a decorative effect. */
+  --brand-gradient: #2e5bd7;
+  --brand-glow: none;
 }
 
 :root[data-theme="dark"] {
-  --bg: #1f1e1d;
-  --surface: #262624;
-  --surface-2: #2d2c2a;
-  --surface-3: #35342f;
-  --text: #f5f4ee;
-  --text-soft: #d4d1c7;
-  --text-muted: #a6a29a;
-  --sidebar: #1a1917;
-  --sidebar-2: #2d2c2a;
-  --border: #3a3937;
-  --border-strong: #524f4a;
-  --primary: #e08a6b;
-  --primary-hover: #eda087;
-  --primary-soft: #3a2c25;
-  --accent: #e08a6b;
-  --success: #7fae87;
-  --success-soft: #26332a;
-  --warning: #d9a94e;
-  --warning-soft: #3a2f1c;
-  --danger: #e07a63;
-  --danger-soft: #3d2520;
-  --shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
-  --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.18);
-  --brand-gradient: linear-gradient(135deg, #e08a6b, #c25f3f);
-  --brand-glow: 0 6px 20px rgba(217, 119, 87, 0.26);
+  --bg: #0f1724;
+  --surface: #172131;
+  --surface-2: #1d2939;
+  --surface-3: #29374a;
+  --text: #f8fafc;
+  --text-soft: #d6deea;
+  --text-muted: #98a6b9;
+  --sidebar: #0a101c;
+  --sidebar-2: #172131;
+  --border: #2d3b4f;
+  --border-strong: #47566b;
+  --primary: #7b9cff;
+  --primary-hover: #9ab2ff;
+  --primary-soft: #1e3268;
+  --accent: #5ed0c4;
+  --success: #6bc995;
+  --success-soft: #17392c;
+  --warning: #f0b45b;
+  --warning-soft: #3b2a12;
+  --danger: #ff8a80;
+  --danger-soft: #44211f;
+  --shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.24);
+  --brand-gradient: #5f82ef;
+  --brand-glow: none;
 }
 
 * {
@@ -83,7 +82,13 @@ input,
 textarea,
 select {
   font-family: "Noto Sans Hebrew", "Arial Hebrew", Arial, sans-serif;
-  font-size: 14px;
+  font-size: 16px;
+}
+
+body {
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 button,
@@ -114,9 +119,9 @@ button {
   z-index: 200;
   inset: 8px 8px auto auto;
   padding: 10px 14px;
-  color: #fff;
+  color: var(--text-on-dark);
   background: var(--primary);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   transform: translateY(-150%);
 }
 

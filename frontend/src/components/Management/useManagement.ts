@@ -15,6 +15,7 @@ import {
   ProfileIncompleteError,
   proposeChange,
   publishSchedule,
+  resumeScheduleGeneration,
   scheduleOverview,
   setConstraint,
   simulateChange,
@@ -25,6 +26,7 @@ import type {
   AgentAnswer,
   Briefing,
   BriefingTrigger,
+  GenerationProgress,
   ManagementOverview,
   Operation,
   Proposal,
@@ -58,6 +60,8 @@ export interface ManagementState {
   overview: ManagementOverview | undefined;
   busy: boolean;
   error: string | null;
+  generation: GenerationProgress | null;
+  resumeGeneration: (scheduleId: string) => Promise<void>;
   /** Set when a build was refused because the interview never taught the
    *  shift vocabulary, and cleared by any later success.
    *
@@ -146,6 +150,7 @@ export function useManagement(): ManagementState {
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [generation, setGeneration] = useState<GenerationProgress | null>(null);
   const [gaps, setGaps] = useState<ProfileGaps | null>(null);
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [briefing, setBriefing] = useState<Briefing | null>(null);
@@ -251,10 +256,36 @@ export function useManagement(): ManagementState {
       instructions?: string;
       required_assignments?: import("@/types").RequiredAssignment[];
     }) => {
-      await run(() => generateSchedule(input));
+      const result = await run(() =>
+        generateSchedule(input, (schedule) => {
+          setGeneration(schedule.generation);
+          setOverview((current) => current
+            ? { ...current, schedule }
+            : current);
+        }),
+      );
+      if (!result) {
+        setGeneration(null);
+        await refresh();
+      }
     },
-    [run],
+    [run, refresh],
   );
+
+  const resumeGeneration = useCallback(async (scheduleId: string) => {
+    const result = await run(() =>
+      resumeScheduleGeneration(scheduleId, (schedule) => {
+        setGeneration(schedule.generation);
+        setOverview((current) => current
+          ? { ...current, schedule }
+          : current);
+      }),
+    );
+    if (!result) {
+      setGeneration(null);
+      await refresh();
+    }
+  }, [run, refresh]);
 
   /** Open an empty period for the manager to fill in themselves (D18).
    *
@@ -529,6 +560,8 @@ export function useManagement(): ManagementState {
     overview,
     busy,
     error,
+    generation: generation ?? overview?.schedule?.generation ?? null,
+    resumeGeneration,
     proposal,
     briefing,
     briefing_busy: briefingBusy,

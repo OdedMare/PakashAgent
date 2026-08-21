@@ -26,7 +26,8 @@ employees, and everything they author is scoped to that team.
 **The management area works end to end.** Once the interview is done the manager
 lands in a control room holding the shift calendar, the roster and its
 constraints, and a conversation with the agent about the current and future
-schedule. They can generate a week, drag a shift (which asks why before it
+schedule. They can generate one date or any date range with persistent
+per-day progress, drag a shift (which asks why before it
 moves), talk to the agent about the assignment, record constraints against
 employees, and publish to the team.
 

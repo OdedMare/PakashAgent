@@ -88,6 +88,28 @@ def build_router(service, guards) -> APIRouter:
             ],
         )
 
+    @router.post("/generate/start", response_model=Schedule)
+    def start_generation(
+        request: GenerateRequest, session: dict = Depends(boss)
+    ) -> dict:
+        """Create a resumable range job. No model is called yet."""
+        return service.start_generation(
+            session["team_id"],
+            starts_on=request.starts_on,
+            ends_on=request.ends_on,
+            instructions=request.instructions,
+            required_assignments=[
+                item.model_dump() for item in request.required_assignments
+            ],
+        )
+
+    @router.post("/generate/{schedule_id}/next", response_model=Schedule)
+    def generate_next(
+        schedule_id: str, session: dict = Depends(boss)
+    ) -> dict:
+        """Generate and checkpoint one date; retry the failed date first."""
+        return service.generate_next(session["team_id"], schedule_id)
+
     @router.post("/blank", response_model=Schedule)
     def blank(
         request: BlankRequest, session: dict = Depends(boss)

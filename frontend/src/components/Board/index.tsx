@@ -26,6 +26,7 @@ import { FilterBar } from "./FilterBar";
 import { GenerateDialog } from "./GenerateDialog";
 import { EditorTarget, ShiftEditor } from "./ShiftEditor";
 import { WeekNav } from "./WeekNav";
+import { WeekRail } from "./WeekRail";
 import { useBoard } from "./useBoard";
 import { useBoardKeys } from "./useBoardKeys";
 
@@ -77,6 +78,7 @@ export function Board({
   onGenerate: (input: {
     starts_on?: string;
     ends_on?: string;
+    instructions?: string;
     required_assignments?: RequiredAssignment[];
   }) => void;
   onOpenBlank: (input: { starts_on?: string; ends_on?: string }) => void;
@@ -343,6 +345,12 @@ export function Board({
         </div>
       </div>
 
+      <WeekRail
+        weekStart={board.weekStart}
+        today={board.today}
+        schedule={schedule}
+      />
+
       {schedule ? (
         <>
           <CoverageBar
@@ -528,12 +536,8 @@ export function Board({
           weekEnd={board.weekEnd}
           busy={busy}
           onCancel={() => setGenerationOpen(false)}
-          onConfirm={(required) => {
-            onGenerate({
-              starts_on: board.weekStart,
-              ends_on: board.weekEnd,
-              required_assignments: required,
-            });
+          onConfirm={(input) => {
+            onGenerate(input);
             setGenerationOpen(false);
           }}
         />

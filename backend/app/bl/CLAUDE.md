@@ -14,7 +14,7 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | `interview.py` | The intro interview — workplace profile, employees, rules, shift vocabulary |
 | `interview_service.py` | Persistence around it: sessions, turns, resume, completion |
 | `workspace_service.py` | Workspace rules: entering a team, roles, the share link |
-| `scheduler.py` | Generating a schedule; every assignment carries a reason |
+| `scheduler.py` | Daily/checkpointed range generation; every assignment carries a reason |
 | `changes.py` | Conversational edits and the change log |
 | `briefing.py` | **The agent speaking first.** Observes; proposes nothing that lands |
 | `schedule_service.py` | Persistence and orchestration around all three: propose, confirm, apply |
@@ -162,12 +162,20 @@ this side of the line is that a model asked "who worked the most nights" is
 doing arithmetic by generation, and a wrong answer looks exactly like a right
 one.
 
-**A long period is built one week at a time.** Past `_CHUNK_DAYS` (7), the
-slot grid is split and the model is asked once per week. The binding
-constraint is the *output*, not the context: a fortnight of three daily
-shifts is ~126 assignments each carrying its own Hebrew sentence, and a small
-model asked for all of them in one reply loses consistency somewhere in the
-middle. It is an attention limit, not a context one.
+**Interactive generation is one date per request.**
+`ScheduleService.start_generation()` stores the whole slot grid and a JSON
+checkpoint on the draft; `/generate/{id}/next` calls `generate_day()` once.
+The browser repeats that request for a single date or an arbitrary range. A
+failed date is marked `failed` and the same endpoint retries it, so completed
+neighbours survive a timeout or refresh.
+
+Each daily payload carries legal candidate ids, the previous day's concrete
+assignments, and a fairness tally over the earlier range. Code audits the
+answer and may make one focused repair call. It never loops indefinitely; an
+unresolved problem remains an ordinary schedule warning.
+
+The original `generate()` chunked-period method remains for backward-compatible
+API consumers. The management UI uses only the checkpointed daily flow.
 
 Three properties make the split safe, and each has a test:
 
@@ -179,8 +187,8 @@ Three properties make the split safe, and each has a test:
   run has already placed. A scheduler blind to week one hands week two to the
   same people — turning the fairness feature into the unfairness it exists to
   prevent.
-- **A short period is still exactly one call.** The common case does not pay
-  for the long one.
+- **A date is exactly one primary call.** It gets at most one additional call
+  when deterministic validation supplies a concrete repair request.
 
 Assignments are bounded against the whole grid rather than the current chunk,
 so a model naming a date from next week is not penalised for answering early.

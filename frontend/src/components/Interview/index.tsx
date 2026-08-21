@@ -213,7 +213,7 @@ export function Interview({
         </div>
       ) : null}
 
-      <main id="interview" className={turn && !complete ? "with-draft" : ""}>
+      <main id="main-content" className={turn && !complete ? "with-draft" : ""}>
         {turn ? (
           <>
             <Thread

@@ -229,19 +229,51 @@ export function Management({
         />
       ) : null}
 
-      {autoGenerating ? (
+      {autoGenerating || state.generation?.status === "running" || state.generation?.status === "failed" ? (
         <div className="schedule-generation" role="status" aria-live="polite">
           <div className="schedule-generation-copy">
-            <strong>בונים את סידור המשמרות שלכם</strong>
-            <span>הסוכן מתאים את הצוות, הכללים והמשמרות לשבוע הקרוב.</span>
+            <strong>
+              {state.generation?.status === "failed"
+                ? `היצירה נעצרה בתאריך ${state.generation.current_date}`
+                : `בונים את הסידור — ${state.generation?.completed_days ?? 0} מתוך ${state.generation?.total_days ?? 7} ימים`}
+            </strong>
+            <span>
+              {state.generation?.status === "failed" && overview?.schedule?.id ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={state.busy}
+                  onClick={() => void state.resumeGeneration(overview.schedule!.id)}
+                >
+                  ניסיון חוזר מהיום שנכשל
+                </button>
+              ) : state.generation?.status === "running" && !state.busy && overview?.schedule?.id ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => void state.resumeGeneration(overview.schedule!.id)}
+                >
+                  המשך יצירה מהיום הבא
+                </button>
+              ) : `הסוכן בונה כל יום בנפרד ומתחשב במה שכבר שובץ.`}
+            </span>
           </div>
           <div
             className="schedule-generation-track"
             role="progressbar"
             aria-label="בניית סידור המשמרות"
-            aria-valuetext="בתהליך"
+            aria-valuemin={0}
+            aria-valuemax={state.generation?.total_days || 7}
+            aria-valuenow={state.generation?.completed_days || 0}
+            aria-valuetext={`${state.generation?.completed_days || 0} מתוך ${state.generation?.total_days || 7}`}
           >
-            <span />
+            <span
+              className={state.generation?.status === "failed" ? "is-failed" : ""}
+              style={state.generation?.total_days ? {
+                width: `${Math.max(4, state.generation.completed_days / state.generation.total_days * 100)}%`,
+                animation: "none",
+              } : undefined}
+            />
           </div>
         </div>
       ) : null}
@@ -280,7 +312,7 @@ export function Management({
         />
       ) : null}
 
-      <main className={`management-workspace${drawerOpen ? " has-drawer" : ""}`}>
+      <main id="main-content" className={`management-workspace${drawerOpen ? " has-drawer" : ""}`}>
         <Board
           overview={overview}
           busy={state.busy}

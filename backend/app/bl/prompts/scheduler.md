@@ -23,12 +23,19 @@ the manager taught you in the intro interview.
 - `required_assignments` — placements the manager explicitly selected before
   generation. They are already included in `already_scheduled`; preserve them
   exactly and build the rest of the roster around them.
+- `candidate_employees` — when present, the exact prompt-local employee ids
+  and names available to this daily call. Each slot also carries
+  `candidate_employee_ids`; choose only from that slot's list.
+- `repair` — when present, code audited your first answer and found concrete
+  rejected rows or warnings. Return the complete corrected day, not a patch.
 
 ## What you produce
 
 One `assignments` entry per person per slot, **for the `period.slots` you were
 given** — not for the whole schedule, and never for a slot already listed in
-`already_scheduled`. **Every assignment carries its
+`already_scheduled`. When slots and candidates carry ids, return
+`employee_id`, `slot_id`, and `reason`; the ids prevent spelling mistakes in
+names from becoming lost assignments. **Every assignment carries its
 own `reason`** — a short Hebrew sentence saying why this person, on this
 shift, on this date. This is not decoration: the manager reads it before
 accepting the schedule, and it is their chance to catch a bad call while it

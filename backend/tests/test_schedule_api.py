@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from app.api.dependencies import Guards
 from app.api.routers import schedules
 from app.bl.schedule_service import ScheduleService
-from app.common.errors import AppError, NotFoundError, error_payload
+from app.common.errors import AgentError, AppError, NotFoundError, error_payload
 from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 
 TEAM = "team-a"
@@ -67,7 +67,7 @@ class _FakeScheduleRepo:
         schedule_id = self._id("sched")
         self.schedules[schedule_id] = {
             "id": schedule_id, "team_id": team_id, "starts_on": starts_on,
-            "ends_on": ends_on, "status": "draft",
+            "ends_on": ends_on, "status": "draft", "generation": {},
         }
         self.slots[schedule_id] = []
         self.assignment_rows[schedule_id] = []
@@ -103,6 +103,11 @@ class _FakeScheduleRepo:
     def set_schedule_status(self, schedule_id, team_id, status):
         self.get_schedule(schedule_id, team_id)
         self.schedules[schedule_id]["status"] = status
+        return self.get_schedule(schedule_id, team_id)
+
+    def set_generation(self, schedule_id, team_id, generation):
+        self.get_schedule(schedule_id, team_id)
+        self.schedules[schedule_id]["generation"] = generation
         return self.get_schedule(schedule_id, team_id)
 
     def delete_schedule(self, schedule_id, team_id):
@@ -265,7 +270,10 @@ class _ScriptedLlm:
     def complete_json(self, system, user, schema=None, flow=""):
         if not self._answers:
             raise AssertionError("model called more times than scripted")
-        return self._answers.pop(0)
+        answer = self._answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
 
 
 def _generation(assignments, notes=None):
@@ -330,6 +338,84 @@ def test_generating_enforces_the_managers_required_assignment():
     assert response.status_code == 200
     assert response.json()["assignments"][0]["employee"] == "דנה"
     assert "שיבוץ חובה" in response.json()["assignments"][0]["reason"]
+
+
+def test_progressive_generation_supports_one_specific_date():
+    app, _ = _build_app([_generation([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "דנה מוסמכת לבוקר",
+    }])])
+    client = _client(app)
+
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+    assert started["generation"]["total_days"] == 1
+    assert started["assignments"] == []
+
+    finished = client.post(
+        "/api/schedule/generate/%s/next" % started["id"]
+    ).json()
+    assert finished["generation"]["status"] == "complete"
+    assert finished["generation"]["completed_days"] == 1
+    assert finished["assignments"][0]["employee"] == "דנה"
+
+
+def test_progressive_long_range_is_one_persisted_request_per_day():
+    app, _ = _build_app([
+        _generation([{
+            "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+            "reason": "כיסוי יום ראשון",
+        }]),
+        _generation([{
+            "employee": "יוסי", "shift": MORNING, "date": "2026-08-18",
+            "reason": "כיסוי יום שני",
+        }]),
+    ])
+    client = _client(app)
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+        "instructions": "לשמור על חלוקה הוגנת",
+    }).json()
+
+    first = client.post(
+        "/api/schedule/generate/%s/next" % started["id"]
+    ).json()
+    assert first["generation"]["completed_days"] == 1
+    assert first["generation"]["status"] == "running"
+
+    second = client.post(
+        "/api/schedule/generate/%s/next" % started["id"]
+    ).json()
+    assert second["generation"]["status"] == "complete"
+    assert second["generation"]["completed_days"] == 2
+    assert {row["date"] for row in second["assignments"]} == {
+        "2026-08-17", "2026-08-18",
+    }
+
+
+def test_a_failed_day_is_checkpointed_and_the_same_day_can_resume():
+    app, repo = _build_app([
+        AgentError("תקלה זמנית"),
+        _generation([{
+            "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+            "reason": "ניסיון חוזר הצליח",
+        }]),
+    ])
+    client = _client(app)
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+    path = "/api/schedule/generate/%s/next" % started["id"]
+
+    assert client.post(path).status_code == 502
+    assert repo.schedules[started["id"]]["generation"]["days"][0][
+        "status"
+    ] == "failed"
+
+    resumed = client.post(path).json()
+    assert resumed["generation"]["status"] == "complete"
+    assert resumed["generation"]["days"][0]["attempts"] == 2
 
 
 def test_generating_without_a_finished_interview_is_refused():

@@ -21,6 +21,8 @@ Two invariants are enforced here rather than left to callers:
 import datetime
 from typing import List, Optional
 
+from psycopg.types.json import Jsonb
+
 from app.common.errors import AgentError, NotFoundError
 from app.dal.database.postgres import connect
 from app.dal.repository.base import RepositoryBase, new_id
@@ -139,6 +141,18 @@ class ScheduleRepository(RepositoryBase):
             UPDATE schedules SET status=%s, updated_at=NOW()
             WHERE id=%s AND team_id=%s
         """, (status, schedule_id, team_id))
+        return self.get_schedule(schedule_id, team_id)
+
+    def set_generation(
+        self, schedule_id: str, team_id: str, generation: dict
+    ) -> dict:
+        """Persist resumable per-day generation progress on the schedule."""
+        self._require_schedule(schedule_id, team_id)
+        self._execute("""
+            UPDATE schedules
+               SET generation=%s, updated_at=NOW()
+             WHERE id=%s AND team_id=%s
+        """, (Jsonb(generation or {}), schedule_id, team_id))
         return self.get_schedule(schedule_id, team_id)
 
     def delete_schedule(self, schedule_id: str, team_id: str) -> None:

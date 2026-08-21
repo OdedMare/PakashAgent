@@ -100,7 +100,7 @@ export function MemberArea({
         </div>
       </header>
 
-      <main id="interview" className="member-main">
+      <main id="main-content" className="member-main">
         {schedule ? (
           <div className="member-schedule">
             <div className="management-toolbar">

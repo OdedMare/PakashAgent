@@ -96,7 +96,7 @@ def test_an_inverted_or_oversized_period_is_refused():
     with pytest.raises(AgentError):
         build_slots(PROFILE, "2026-08-20", "2026-08-17")
     with pytest.raises(AgentError):
-        build_slots(PROFILE, "2026-01-01", "2026-12-31")
+        build_slots(PROFILE, "2026-01-01", "2027-12-31")
 
 
 def test_generating_without_any_shift_is_an_error_not_an_empty_schedule():
@@ -125,6 +125,74 @@ def test_assignments_come_back_with_their_reasons():
     result = Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
     assert len(result["assignments"]) == 1
     assert result["assignments"][0]["reason"].startswith("דנה מוסמכת")
+
+
+def test_daily_generation_uses_ids_and_filters_unavailable_candidates():
+    llm = _ScriptedLlm([_reply([{
+        "employee_id": "employee-2",
+        "slot_id": "slot-1",
+        "reason": "יוסי זמין ומוסמך לבוקר",
+    }])])
+    result = Scheduler(llm).generate_day(
+        PROFILE,
+        "2026-08-17",
+        availability=[{
+            "employee": "דנה", "date": "2026-08-17", "shift": MORNING,
+            "available": False,
+        }],
+        instructions="להתחשב בכללים הקשיחים",
+    )
+
+    assert result["assignments"][0]["employee"] == "יוסי"
+    payload = json.loads(llm.calls[0]["user"])
+    assert payload["period"]["starts_on"] == payload["period"]["ends_on"]
+    assert payload["period"]["slots"][0]["candidate_employee_ids"] == [
+        "employee-2"
+    ]
+    assert payload["instructions"] == "להתחשב בכללים הקשיחים"
+    assert payload["profile"]["rules"] == PROFILE["rules"]
+
+
+def test_daily_generation_repairs_a_rejected_model_row_once():
+    llm = _ScriptedLlm([
+        _reply([{
+            "employee": "שם שלא קיים", "shift": MORNING,
+            "date": "2026-08-17", "reason": "טעות",
+        }]),
+        _reply([{
+            "employee_id": "employee-1", "slot_id": "slot-1",
+            "reason": "דנה מוסמכת וזמינה לבוקר",
+        }]),
+    ])
+
+    result = Scheduler(llm).generate_day(PROFILE, "2026-08-17")
+
+    assert len(llm.calls) == 2
+    assert result["assignments"][0]["employee"] == "דנה"
+    assert result["metrics"]["repaired"] is True
+    assert result["metrics"]["rejected"] == 1
+    repair = json.loads(llm.calls[1]["user"])["repair"]
+    assert repair["rejected_rows"]
+
+
+def test_next_daily_call_sees_yesterday_and_cumulative_fairness():
+    yesterday = [{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "כיסוי",
+    }]
+    llm = _ScriptedLlm([_reply([{
+        "employee_id": "employee-2", "slot_id": "slot-1",
+        "reason": "יוסי מאזן את העומס",
+    }])])
+
+    Scheduler(llm).generate_day(
+        PROFILE, "2026-08-18", already_scheduled=yesterday
+    )
+
+    payload = json.loads(llm.calls[0]["user"])
+    assert payload["already_scheduled"][0]["employee"] == "דנה"
+    fairness = {row["employee"]: row for row in payload["fairness"]}
+    assert fairness["דנה"]["shifts"] == 1
 
 
 def test_manager_required_assignment_is_kept_when_model_omits_it():

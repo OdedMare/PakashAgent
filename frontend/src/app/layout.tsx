@@ -12,8 +12,8 @@ export default function RootLayout({
   return (
     <html lang="he" dir="rtl">
       <body>
-        <a className="skip-link" href="#interview">
-          דלגו לראיון
+        <a className="skip-link" href="#main-content">
+          דלגו לתוכן הראשי
         </a>
         {children}
       </body>

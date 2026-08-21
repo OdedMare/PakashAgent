@@ -206,6 +206,33 @@ export interface RequiredAssignment {
 /** How an assignment got into the schedule (D18). */
 export type AssignmentSource = "agent" | "manager" | "imported";
 
+export interface GenerationDay {
+  date: string;
+  status: "pending" | "running" | "complete" | "failed";
+  attempts: number;
+  error: string;
+  metrics: {
+    duration_ms?: number;
+    returned?: number;
+    accepted?: number;
+    rejected?: number;
+    warnings?: number;
+    repaired?: boolean;
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
+}
+
+export interface GenerationProgress {
+  status: "" | "running" | "complete" | "failed";
+  current_date: string;
+  total_days: number;
+  completed_days: number;
+  failed_days: number;
+  days: GenerationDay[];
+}
+
 /** One living period (D4) — edited in place, never versioned. */
 export interface Schedule {
   id: string;
@@ -217,6 +244,7 @@ export interface Schedule {
   warnings: ScheduleWarning[];
   notes: string[];
   summary: string;
+  generation: GenerationProgress;
   /** The id a manual assignment landed on. Empty on every other response.
    *  Placing the same person on the same slot twice conflicts silently, so
    *  this is how the client tells "placed" from "was already there". */

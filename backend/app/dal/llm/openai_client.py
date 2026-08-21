@@ -59,7 +59,7 @@ _MODELS_PROBE_TIMEOUT_SECONDS = 30
 
 _log = logging.getLogger("pakash.llm")
 
-_DEFAULT_MAX_CONCURRENCY = 4
+_DEFAULT_MAX_CONCURRENCY = 1
 # The model server is a shared finite resource, and a single generation can
 # occupy it for a minute. Bound concurrent HTTP completions process-wide so a
 # burst of requests queues here instead of thrashing the server.
@@ -95,6 +95,10 @@ def _slots(settings):
 # up to three times — multiplied out, one request could hold a worker for the
 # better part of an hour. This is the number that actually stops that.
 _TOTAL_BUDGET_SECONDS = 300
+# Daily scheduling calls are deliberately small. Letting one hold the whole
+# range for five minutes defeats checkpointing and makes the UI look frozen;
+# a failed day can be retried without discarding its neighbours.
+_SCHEDULER_TOTAL_BUDGET_SECONDS = 120
 
 # Substrings local servers use when the prompt exceeds the context window.
 # Matched on text because none of them use a distinct status or error code:
@@ -211,6 +215,8 @@ class OpenAIJsonClient:
             content, current = self._complete(
                 client, chosen_model, messages, max_tokens, schema,
                 settings.llm_repetition_penalty, _slots(settings),
+                _SCHEDULER_TOTAL_BUDGET_SECONDS
+                if flow == "scheduler" else _TOTAL_BUDGET_SECONDS,
             )
             # Tokens spent on a rejected reply were still spent — accumulate
             # across the retry rather than reporting only the last attempt.
@@ -289,7 +295,10 @@ class OpenAIJsonClient:
         return self._cached_client
 
     @staticmethod
-    def _complete(client, model, messages, max_tokens, schema, penalty, slots):
+    def _complete(
+        client, model, messages, max_tokens, schema, penalty, slots,
+        total_budget_seconds=_TOTAL_BUDGET_SECONDS,
+    ):
         # Degradation ladder for OpenAI-compatible servers:
         # schema → JSON mode → plain → plain with the system prompt merged
         # into the user turn (some local deployments reject a system role).
@@ -297,7 +306,7 @@ class OpenAIJsonClient:
         # Only a BadRequestError advances the ladder; any other exception is
         # a real failure and becomes an AgentError immediately.
         last_bad_request = None
-        deadline = time.monotonic() + _TOTAL_BUDGET_SECONDS
+        deadline = time.monotonic() + total_budget_seconds
         with slots:
             for kwargs in OpenAIJsonClient._attempts(
                 messages, max_tokens, schema, penalty,

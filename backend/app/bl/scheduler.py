@@ -20,20 +20,50 @@ caught it.
 
 import datetime
 import json
+import logging
+import time
 from typing import Any, Dict, List, Optional
 
-from app.bl.audit import load_history
+from app.bl.audit import (
+    CONSECUTIVE,
+    DOUBLE_BOOKED,
+    OVER_HOURS,
+    OVERSTAFFED,
+    SHORT_REST,
+    UNAVAILABLE,
+    UNFILLED,
+    audit,
+    load_history,
+)
 from app.bl.prompts import load
 from app.common.errors import AgentError
 
 # A period bigger than this is not a shift schedule, it is an import. Bounded
 # because the slot grid is generated per day per shift and handed to the
 # model in one payload.
-_MAX_PERIOD_DAYS = 62
+# Checkpointed daily generation makes long planning horizons safe to resume.
+# One leap year is a useful product ceiling; beyond that belongs in a separate
+# forecast rather than one living operational schedule.
+_MAX_PERIOD_DAYS = 366
 _MAX_TEXT_CHARS = 4000
 # Past assignments read for the fairness tally. They are counted here and
 # never sent, so this bounds the arithmetic rather than the prompt.
 _MAX_HISTORY_ROWS = 400
+
+_log = logging.getLogger("pakash.scheduler")
+
+# Problems code can prove from the accumulated roster. The model gets one
+# focused chance to repair the current day; a second bad answer stays visible
+# as an audit warning instead of entering an unbounded model loop.
+_REPAIRABLE_WARNING_CODES = frozenset({
+    CONSECUTIVE,
+    DOUBLE_BOOKED,
+    OVER_HOURS,
+    OVERSTAFFED,
+    SHORT_REST,
+    UNAVAILABLE,
+    UNFILLED,
+})
 
 # A period is built in bounded chunks. Seven days is the calendar ceiling,
 # while staffing volume is the output ceiling: a busy week can require far
@@ -165,11 +195,146 @@ class Scheduler:
             "summary": _bounded(" ".join(summaries)),
         }
 
-    def _ask(self, payload: dict) -> dict:
+    def generate_day(
+        self,
+        profile: dict,
+        day: str,
+        availability: Optional[List[dict]] = None,
+        history: Optional[List[dict]] = None,
+        instructions: str = "",
+        required_assignments: Optional[List[dict]] = None,
+        already_scheduled: Optional[List[dict]] = None,
+    ) -> dict:
+        """Generate and verify exactly one date.
+
+        Long ranges call this once per date, in order. Earlier dates are
+        supplied through ``already_scheduled`` so rest and cumulative load do
+        not reset at midnight. One repair call is allowed when deterministic
+        checks find a contradiction or the model returned unusable rows.
+        """
+        started = time.monotonic()
+        slots = build_slots(profile, day, day)
+        if not slots:
+            return {
+                "slots": [], "assignments": [], "notes": [], "summary": "",
+                "metrics": _metrics(day, started, status="skipped"),
+            }
+
+        profile = profile if isinstance(profile, dict) else {}
+        shifts = profile.get("shifts") or []
+        employees = profile.get("employees") or []
+        availability = _availability_for_day(availability, day)
+        committed = _bounded_rows(already_scheduled)
+        required = _required_assignments(
+            required_assignments, slots, profile
+        )
+        candidates = _candidates(profile, slots, availability)
+        payload = {
+            "profile": _profile_for_model(profile),
+            "period": {
+                "starts_on": day,
+                "ends_on": day,
+                "slots": [
+                    _slot_for_model(slot, index, candidates)
+                    for index, slot in enumerate(slots, 1)
+                ],
+            },
+            "candidate_employees": candidates["employees"],
+            "availability": availability,
+            "fairness": load_history(
+                _bounded_rows(history, _MAX_HISTORY_ROWS)
+                + [row for row in committed if _bounded(row.get("date")) < day]
+                + required,
+                shifts,
+                employees,
+            ),
+            # Only yesterday is needed verbatim for cross-midnight rest. Load
+            # totals above carry the rest of the range without making this
+            # list grow on every day of a long schedule.
+            "already_scheduled": _merge(
+                _previous_day(committed, day),
+                _committed_for_model(required),
+            ),
+            "required_assignments": _committed_for_model(required),
+            "instructions": _bounded(instructions),
+        }
+        answer = self._ask(payload, schema=_day_schema(slots, candidates))
+        usage = _usage(answer)
+        accepted, rejected = _read_day_assignments(
+            answer.get("assignments"), slots, profile, candidates
+        )
+        current = _replace_day(committed, required + accepted, day)
+        warnings = _day_warnings(
+            current, slots, profile, availability, candidates, day
+        )
+        repaired = False
+
+        if rejected or warnings:
+            repair_payload = dict(payload)
+            repair_payload["repair"] = {
+                "rejected_rows": rejected,
+                "warnings": [item["message"] for item in warnings],
+                "instruction": (
+                    "החזר מחדש את כל השיבוצים ליום הזה בלבד. "
+                    "תקן את הבעיות המפורטות ואל תשנה ימים קודמים."
+                ),
+            }
+            repaired_answer = self._ask(
+                repair_payload, schema=_day_schema(slots, candidates)
+            )
+            usage = {
+                key: usage.get(key, 0) + _usage(repaired_answer).get(key, 0)
+                for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+            }
+            repaired_rows, repair_rejected = _read_day_assignments(
+                repaired_answer.get("assignments"), slots, profile, candidates
+            )
+            current = _replace_day(committed, required + repaired_rows, day)
+            rejected.extend(repair_rejected)
+            answer = repaired_answer
+            repaired = True
+
+        final_rows = [row for row in current if row.get("date") == day]
+        final_warnings = _audit_for_day(
+            current, slots, profile, availability, day
+        )
+        notes = _lines(answer.get("notes"))
+        if rejected:
+            notes.append(
+                "%d שיבוצים לא תקינים שהחזיר המודל לא נשמרו." % len(rejected)
+            )
+        metrics = _metrics(
+            day,
+            started,
+            status="complete",
+            returned=len(answer.get("assignments") or []),
+            accepted=len(final_rows),
+            rejected=len(rejected),
+            warnings=len(final_warnings),
+            repaired=repaired,
+            usage=usage,
+        )
+        _log.info(
+            "schedule day=%s status=%s assignments=%d rejected=%d "
+            "warnings=%d repaired=%s tokens=%d duration_ms=%d",
+            day, metrics["status"], metrics["accepted"], metrics["rejected"],
+            metrics["warnings"], metrics["repaired"], metrics["total_tokens"],
+            metrics["duration_ms"],
+        )
+        return {
+            "slots": slots,
+            "assignments": final_rows,
+            "notes": notes,
+            "summary": _bounded(answer.get("summary")),
+            "warnings": final_warnings,
+            "metrics": metrics,
+        }
+
+    def _ask(self, payload: dict, schema: Optional[dict] = None) -> dict:
         answer = self._llm.complete_json(
             load("scheduler"),
             json.dumps(payload, ensure_ascii=False),
-            schema=SCHEDULE_RESPONSE_SCHEMA,
+            schema=schema or SCHEDULE_RESPONSE_SCHEMA,
             flow="scheduler",
         )
         if not isinstance(answer, dict):
@@ -446,8 +611,12 @@ def _profile_for_model(profile: dict) -> dict:
     }
 
 
-def _slot_for_model(slot: dict) -> dict:
-    return {
+def _slot_for_model(
+    slot: dict,
+    index: Optional[int] = None,
+    candidates: Optional[dict] = None,
+) -> dict:
+    shaped = {
         "shift": slot["shift_name"],
         "date": slot["slot_date"],
         "weekday": slot["weekday"],
@@ -456,6 +625,254 @@ def _slot_for_model(slot: dict) -> dict:
         "headcount": slot["headcount"],
         "is_on_call": slot["is_on_call"],
     }
+    if index is not None:
+        slot_id = "slot-%d" % index
+        shaped["id"] = slot_id
+        shaped["candidate_employee_ids"] = (
+            candidates or {}
+        ).get("by_slot", {}).get(slot_id, [])
+    return shaped
+
+
+def _availability_for_day(rows: Any, day: str) -> List[dict]:
+    """Only constraints that can affect this model call."""
+    shaped = []
+    for row in _bounded_rows(rows):
+        date = _bounded(row.get("date") or row.get("constraint_date"))
+        if date != day:
+            continue
+        shaped.append({
+            "employee": _bounded(row.get("employee")),
+            "date": date,
+            "shift": _bounded(row.get("shift") or row.get("shift_name")),
+            "available": bool(row.get("available")),
+            "reason": _bounded(row.get("reason")),
+        })
+    return shaped
+
+
+def _candidates(profile: dict, slots: List[dict], availability: List[dict]) -> dict:
+    """Legal employee choices per slot, with small stable prompt-local ids."""
+    employees = []
+    id_by_name = {}
+    for index, person in enumerate((profile or {}).get("employees") or [], 1):
+        if not isinstance(person, dict):
+            continue
+        name = _bounded(person.get("name"))
+        if not name:
+            continue
+        employee_id = "employee-%d" % index
+        id_by_name[name] = employee_id
+        employees.append({
+            "id": employee_id,
+            "name": name,
+            "roles": person.get("roles") or [],
+            "eligible_shifts": person.get("eligible_shifts") or [],
+            "max_weekly_hours": person.get("max_weekly_hours") or 0,
+            "is_trainee": bool(person.get("is_trainee")),
+        })
+
+    blocked = set()
+    for item in availability:
+        if not isinstance(item, dict) or item.get("available"):
+            continue
+        name = _bounded(item.get("employee"))
+        date = _bounded(item.get("date") or item.get("constraint_date"))
+        shift = _bounded(item.get("shift") or item.get("shift_name"))
+        blocked.add((name, date, shift))
+
+    by_slot = {}
+    for index, slot in enumerate(slots, 1):
+        slot_id = "slot-%d" % index
+        eligible = []
+        for person in (profile or {}).get("employees") or []:
+            if not isinstance(person, dict):
+                continue
+            name = _bounded(person.get("name"))
+            allowed = person.get("eligible_shifts")
+            if isinstance(allowed, list) and allowed and slot["shift_name"] not in allowed:
+                continue
+            if (
+                (name, slot["slot_date"], "") in blocked
+                or (name, slot["slot_date"], slot["shift_name"]) in blocked
+            ):
+                continue
+            if name in id_by_name:
+                eligible.append(id_by_name[name])
+        by_slot[slot_id] = eligible
+    return {
+        "employees": employees,
+        "id_by_name": id_by_name,
+        "name_by_id": {value: key for key, value in id_by_name.items()},
+        "by_slot": by_slot,
+    }
+
+
+def _day_schema(slots: List[dict], candidates: dict) -> dict:
+    """A response schema whose ids can only name today's actual choices."""
+    slot_ids = ["slot-%d" % index for index in range(1, len(slots) + 1)]
+    employee_ids = [item["id"] for item in candidates["employees"]]
+    assignment = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["employee_id", "slot_id", "reason"],
+        "properties": {
+            "employee_id": (
+                {"type": "string", "enum": employee_ids}
+                if employee_ids else {"type": "string"}
+            ),
+            "slot_id": {"type": "string", "enum": slot_ids},
+            "reason": {"type": "string", "minLength": 4},
+        },
+    }
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["assignments", "notes", "summary"],
+        "properties": {
+            "assignments": {
+                "type": "array",
+                "maxItems": sum(
+                    max(1, int(slot.get("headcount", 1))) for slot in slots
+                ),
+                "items": assignment,
+            },
+            "notes": {"type": "array", "items": {"type": "string"}},
+            "summary": {"type": "string"},
+        },
+    }
+
+
+def _read_day_assignments(
+    offered: Any, slots: List[dict], profile: dict, candidates: dict
+) -> tuple:
+    """Translate prompt-local ids and retain an auditable rejection count."""
+    if not isinstance(offered, list):
+        return [], [{"reason": "assignments is not a list"}]
+    slot_by_id = {
+        "slot-%d" % index: slot for index, slot in enumerate(slots, 1)
+    }
+    translated = []
+    rejected = []
+    for item in offered:
+        if not isinstance(item, dict):
+            rejected.append({"reason": "row is not an object"})
+            continue
+        employee_id = _bounded(item.get("employee_id"))
+        slot_id = _bounded(item.get("slot_id"))
+        if employee_id or slot_id:
+            slot = slot_by_id.get(slot_id)
+            employee = candidates["name_by_id"].get(employee_id, "")
+            if (
+                slot is None
+                or employee_id not in candidates["by_slot"].get(slot_id, [])
+            ):
+                rejected.append({
+                    "employee_id": employee_id,
+                    "slot_id": slot_id,
+                    "reason": "unknown or ineligible candidate",
+                })
+                continue
+            translated.append({
+                "employee": employee,
+                "shift": slot["shift_name"],
+                "date": slot["slot_date"],
+                "reason": item.get("reason"),
+            })
+        else:
+            # Backward-compatible with older compatible servers and scripted
+            # tests while the prompt contract rolls forward to ids.
+            translated.append(item)
+    accepted = _assignments(translated, slots, profile)
+    if len(accepted) < len(translated):
+        rejected.extend(
+            {"reason": "missing reason, duplicate, or unknown slot/person"}
+            for _ in range(len(translated) - len(accepted))
+        )
+    return accepted, rejected
+
+
+def _replace_day(existing: List[dict], incoming: List[dict], day: str) -> List[dict]:
+    return _merge(
+        [row for row in existing if row.get("date") != day], incoming
+    )
+
+
+def _previous_day(assignments: List[dict], day: str) -> List[dict]:
+    parsed = _parse_date(day)
+    if parsed is None:
+        return []
+    yesterday = (parsed - datetime.timedelta(days=1)).isoformat()
+    return _committed_for_model([
+        row for row in assignments if row.get("date") == yesterday
+    ])
+
+
+def _audit_for_day(
+    assignments: List[dict], slots: List[dict], profile: dict,
+    availability: List[dict], day: str,
+) -> List[dict]:
+    warnings = audit(
+        assignments,
+        (profile or {}).get("shifts") or [],
+        (profile or {}).get("employees") or [],
+        availability=availability,
+        profile=profile,
+        slots=slots,
+    )
+    return [
+        item for item in warnings
+        if item.get("date") in ("", day, None)
+    ]
+
+
+def _day_warnings(
+    assignments: List[dict], slots: List[dict], profile: dict,
+    availability: List[dict], candidates: dict, day: str,
+) -> List[dict]:
+    warnings = [
+        item for item in _audit_for_day(
+            assignments, slots, profile, availability, day
+        )
+        if item.get("code") in _REPAIRABLE_WARNING_CODES
+    ]
+    # Do not spend a repair call asking for impossible coverage. If a slot has
+    # fewer legal candidates than seats, the honest outcome is an unfilled
+    # warning for the manager.
+    fillable = {
+        slot["shift_name"]: len(candidates["by_slot"].get("slot-%d" % index, []))
+        >= max(1, int(slot.get("headcount", 1)))
+        for index, slot in enumerate(slots, 1)
+    }
+    return [
+        item for item in warnings
+        if item.get("code") != UNFILLED or fillable.get(item.get("shift"), False)
+    ]
+
+
+def _metrics(
+    day: str, started: float, status: str, returned: int = 0,
+    accepted: int = 0, rejected: int = 0, warnings: int = 0,
+    repaired: bool = False, usage: Optional[dict] = None,
+) -> dict:
+    return {
+        "date": day,
+        "status": status,
+        "duration_ms": int((time.monotonic() - started) * 1000),
+        "returned": returned,
+        "accepted": accepted,
+        "rejected": rejected,
+        "warnings": warnings,
+        "repaired": repaired,
+        "prompt_tokens": int((usage or {}).get("prompt_tokens") or 0),
+        "completion_tokens": int((usage or {}).get("completion_tokens") or 0),
+        "total_tokens": int((usage or {}).get("total_tokens") or 0),
+    }
+
+
+def _usage(answer: Any) -> dict:
+    usage = answer.get("_usage") if isinstance(answer, dict) else None
+    return usage if isinstance(usage, dict) else {}
 
 
 def _bounded_rows(rows: Any, limit: int = 200) -> List[dict]:

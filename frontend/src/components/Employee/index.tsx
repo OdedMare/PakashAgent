@@ -95,7 +95,7 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
         </div>
       </header>
 
-      <main id="employee" className="employee-main">
+      <main id="main-content" className="employee-main">
         {/* What moved since this person last looked (D16). Above everything
             because it is the reason to open the app at all — an employee
             whose shift changed should not have to spot it by comparing the

@@ -1,43 +1,240 @@
-/* Workspace surfaces: the login gate, the share-link panel, and the member
-   area's few additions. Everything else is inherited from interview.css —
-   these screens are the same product, not a separate console. */
+/* Workspace surfaces. The entrance is a compact operations brief rather
+   than a card floating in empty space: the product shows its subject before
+   it asks for credentials. */
 
 .workspace-gate {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(21rem, 28rem);
+  align-items: stretch;
+  min-height: 100dvh;
+  background: var(--surface);
+}
+
+.gate-story {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: clamp(2rem, 6vh, 5rem);
+  padding: clamp(2rem, 5vw, 5rem);
+  color: var(--text-on-dark);
+  background: var(--sidebar);
+  overflow: hidden;
+  position: relative;
+}
+
+.gate-story::after {
+  content: "";
+  position: absolute;
+  inset: auto -8rem -11rem auto;
+  width: 26rem;
+  height: 26rem;
+  border: 4rem solid color-mix(in srgb, var(--primary) 20%, transparent);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.gate-story-brand {
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-height: 100dvh;
-  padding: 24px;
+  gap: 0.75rem;
+  position: relative;
+  z-index: 1;
+}
+
+.gate-story-brand > span:last-child {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.gate-story-brand strong {
+  font-size: 1rem;
+}
+
+.gate-story-brand small {
+  margin-top: 0.2rem;
+  color: #aebbd0;
+  font-size: 0.72rem;
+}
+
+.gate-story-copy {
+  max-width: 42rem;
+  position: relative;
+  z-index: 1;
+}
+
+.gate-eyebrow {
+  display: block;
+  margin-bottom: 0.9rem;
+  color: #9db4ff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.gate-story h1 {
+  max-width: 36rem;
+  margin: 0;
+  font-size: clamp(2.25rem, 5vw, 4.6rem);
+  font-weight: 760;
+  letter-spacing: -0.055em;
+  line-height: 1.04;
+}
+
+.gate-story-copy p {
+  max-width: 37rem;
+  margin: 1.25rem 0 0;
+  color: #c5cfdd;
+  font-size: clamp(1rem, 1.4vw, 1.18rem);
+  line-height: 1.75;
+}
+
+.gate-week-preview {
+  width: min(100%, 44rem);
+  padding: 1rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, #ffffff 20%, transparent);
+  border-radius: var(--radius);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.24);
+  position: relative;
+  z-index: 1;
+}
+
+.gate-week-head,
+.gate-week-summary,
+.gate-trust {
+  display: flex;
+  align-items: center;
+}
+
+.gate-week-head {
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.78rem;
+}
+
+.gate-week-head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-muted);
+}
+
+.gate-week-head > span i {
+  width: 0.45rem;
+  height: 0.45rem;
+  background: var(--success);
+  border-radius: 50%;
+}
+
+.gate-week-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.35rem;
+  padding: 0.85rem 0;
+}
+
+.gate-week-days span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.45rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.gate-week-days i {
+  display: block;
+  height: 0.38rem;
+  background: var(--success);
+  border-radius: 2px;
+}
+
+.gate-week-days .is-attention i {
+  width: 68%;
+  background: var(--warning);
+}
+
+.gate-week-days .is-quiet i {
+  width: 35%;
+  background: var(--border-strong);
+}
+
+.gate-week-summary {
+  gap: 1.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.gate-week-summary > span {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.gate-week-summary small {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.gate-week-summary strong {
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.gate-trust {
+  flex-wrap: wrap;
+  gap: 0.65rem 1.4rem;
+  color: #aebbd0;
+  font-size: 0.74rem;
+  position: relative;
+  z-index: 1;
+}
+
+.gate-trust span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.gate-trust svg {
+  color: #89a4ff;
 }
 
 .gate-card {
   display: flex;
-  flex-direction: column;
-  gap: 14px;
-  width: 100%;
-  max-width: 380px;
-  padding: 30px 28px;
-  text-align: center;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-}
-
-.gate-card h1 {
-  margin: 0;
-  font-size: 21px;
-}
-
-.gate-card .brand-mark {
   align-self: center;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+  max-width: 28rem;
+  padding: clamp(2rem, 5vw, 4rem);
+  text-align: start;
+  background: var(--surface);
+}
+
+.gate-form-head > span {
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.gate-card h2 {
+  margin: 0;
+  font-size: 1.75rem;
+  letter-spacing: -0.035em;
 }
 
 .gate-lede {
   margin: 0;
   color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 0.88rem;
+  line-height: 1.7;
 }
 
 .gate-field {
@@ -45,7 +242,7 @@
   flex-direction: column;
   gap: 6px;
   text-align: right;
-  font-size: 13px;
+  font-size: 0.82rem;
 }
 
 .gate-field > span {
@@ -55,16 +252,17 @@
 
 .gate-field input,
 .gate-field select {
-  padding: 10px 12px;
+  min-height: 2.9rem;
+  padding: 0.7rem 0.8rem;
   background: var(--surface-2);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  font-size: 14px;
+  font-size: 0.9rem;
 }
 
 .gate-hint {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 0.74rem;
 }
 
 .gate-error {
@@ -76,7 +274,7 @@
   background: var(--danger-soft);
   border-radius: var(--radius-sm);
   text-align: right;
-  font-size: 13px;
+  font-size: 0.8rem;
 }
 
 .gate-switch {
@@ -88,7 +286,8 @@
   color: var(--text-muted);
   background: none;
   border: none;
-  font-size: 13px;
+  min-height: 2.75rem;
+  font-size: 0.82rem;
 }
 
 .gate-switch:hover:not(:disabled) {
@@ -210,5 +409,36 @@
 @media (max-width: 560px) {
   .share-row {
     flex-direction: column;
+  }
+}
+
+@media (max-width: 900px) {
+  .workspace-gate {
+    grid-template-columns: 1fr;
+  }
+
+  .gate-story {
+    min-height: 22rem;
+    gap: 2rem;
+    padding: 1.5rem;
+  }
+
+  .gate-story h1 {
+    max-width: 28rem;
+    font-size: clamp(2rem, 10vw, 3.2rem);
+  }
+
+  .gate-story-copy p {
+    font-size: 0.94rem;
+  }
+
+  .gate-week-preview,
+  .gate-trust {
+    display: none;
+  }
+
+  .gate-card {
+    max-width: none;
+    padding: 2rem 1.5rem 3rem;
   }
 }

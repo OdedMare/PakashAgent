@@ -1,6 +1,13 @@
 "use client";
 
-import { AlertCircle, CalendarDays, Plus, Users } from "lucide-react";
+import {
+  AlertCircle,
+  CalendarDays,
+  CheckCircle2,
+  Plus,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { listTeams } from "@/services/api";
@@ -64,12 +71,59 @@ export function Login({
     : teamId.length > 0 && password.length > 0;
 
   return (
-    <div className="workspace-gate">
-      <form className="gate-card" onSubmit={submit}>
-        <span className="brand-mark" aria-hidden="true">
-          <CalendarDays size={17} />
-        </span>
-        <h1>{creating ? "צוות חדש" : "כניסת מנהל"}</h1>
+    <main id="main-content" className="workspace-gate">
+      <section className="gate-story" aria-labelledby="gate-story-title">
+        <div className="gate-story-brand">
+          <span className="brand-mark" aria-hidden="true">
+            <CalendarDays size={18} />
+          </span>
+          <span>
+            <strong>פקש</strong>
+            <small>ניהול סידורי עבודה</small>
+          </span>
+        </div>
+
+        <div className="gate-story-copy">
+          <span className="gate-eyebrow">חדר השיבוץ של הצוות</span>
+          <h1 id="gate-story-title">רואים את כל השבוע. מטפלים במה שחשוב.</h1>
+          <p>
+            בונים, בודקים ומפרסמים סידור אחד ברור — עם הסבר לכל שינוי ותמונה
+            מלאה של הכיסוי לפני שהצוות מקבל אותו.
+          </p>
+        </div>
+
+        <div className="gate-week-preview" aria-hidden="true">
+          <div className="gate-week-head">
+            <strong>מוכנות השבוע</strong>
+            <span><i /> מעודכן עכשיו</span>
+          </div>
+          <div className="gate-week-days">
+            <span><b>א׳</b><i /></span>
+            <span><b>ב׳</b><i /></span>
+            <span className="is-attention"><b>ג׳</b><i /></span>
+            <span><b>ד׳</b><i /></span>
+            <span><b>ה׳</b><i /></span>
+            <span><b>ו׳</b><i /></span>
+            <span className="is-quiet"><b>ש׳</b><i /></span>
+          </div>
+          <div className="gate-week-summary">
+            <span><small>כיסוי</small><strong>92%</strong></span>
+            <span><small>דורש טיפול</small><strong>2</strong></span>
+            <span><small>בקשות חדשות</small><strong>3</strong></span>
+          </div>
+        </div>
+
+        <div className="gate-trust">
+          <span><ShieldCheck size={14} /> כל שינוי נשאר לאישור</span>
+          <span><CheckCircle2 size={14} /> האזהרות מוצגות לפני הפרסום</span>
+        </div>
+      </section>
+
+      <form className="gate-card" onSubmit={submit} aria-labelledby="gate-form-title">
+        <div className="gate-form-head">
+          <span>{creating ? "סביבת עבודה חדשה" : "כניסה מאובטחת"}</span>
+          <h2 id="gate-form-title">{creating ? "פתיחת צוות" : "כניסת מנהל"}</h2>
+        </div>
         <p className="gate-lede">
           {creating
             ? "כל צוות מקבל מרחב עבודה נפרד — ראיון, סידור והגדרות משלו."
@@ -155,6 +209,6 @@ export function Login({
           )}
         </button>
       </form>
-    </div>
+    </main>
   );
 }
