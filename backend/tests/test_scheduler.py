@@ -405,7 +405,7 @@ def test_change_context_serializes_database_dates_and_timestamps():
     assert payload["history"][0]["created_at"] == "2026-08-18T10:00:00+00:00"
 
 
-# -- chunking: a long period is built a week at a time ---------------------
+# -- chunking: model output stays small enough to cover the whole period ---
 
 def _week_profile():
     """A one-shift workplace, so the slot count tracks the day count."""
@@ -435,6 +435,45 @@ def test_a_short_period_is_still_one_call():
     llm = _ScriptedLlm([_covering(17, 23)])
     Scheduler(llm).generate(_week_profile(), "2026-08-17", "2026-08-23")
     assert len(llm.calls) == 1
+
+
+def test_a_busy_week_is_split_by_staffing_volume_not_just_days():
+    profile = _week_profile()
+    profile["shifts"] = [
+        dict(
+            profile["shifts"][0],
+            name=name,
+            staffing=[{"days": [], "headcount": 2}],
+        )
+        for name in (MORNING, EVENING, "לילה")
+    ]
+    required = [
+        {"employee": "דנה", "shift": shift, "date": date}
+        for date, shift in (
+            ("2026-08-17", MORNING),
+            ("2026-08-19", EVENING),
+            ("2026-08-23", "לילה"),
+        )
+    ]
+    llm = _ScriptedLlm([_reply([]) for _ in range(4)])
+
+    result = Scheduler(llm).generate(
+        profile,
+        "2026-08-17",
+        "2026-08-23",
+        required_assignments=required,
+    )
+
+    assert len(llm.calls) == 4
+    assert [
+        {key: row[key] for key in ("employee", "shift", "date")}
+        for row in result["assignments"]
+    ] == required
+    for call in llm.calls:
+        payload = json.loads(call["user"])
+        assert sum(
+            slot["headcount"] for slot in payload["period"]["slots"]
+        ) <= 14
 
 
 def test_a_long_period_is_split_into_weeks():

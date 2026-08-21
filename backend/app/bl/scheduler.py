@@ -35,19 +35,17 @@ _MAX_TEXT_CHARS = 4000
 # never sent, so this bounds the arithmetic rather than the prompt.
 _MAX_HISTORY_ROWS = 400
 
-# A period longer than this is built one chunk at a time rather than in one
-# call. Seven days because a week is the unit the manager already thinks in,
-# so a chunk boundary falls where a person would have put one -- and because
-# the output is what actually binds: a fortnight of three daily shifts is
-# ~126 assignments, each carrying its own Hebrew sentence, and a small model
-# asked for all of them in one reply loses consistency somewhere in the
-# middle. It is not a context limit; it is an attention one.
+# A period is built in bounded chunks. Seven days is the calendar ceiling,
+# while staffing volume is the output ceiling: a busy week can require far
+# more JSON rows than a quiet fortnight, and small models otherwise tend to
+# answer only the first day while still returning valid JSON.
 #
 # Chunks are NOT independent. Each is told what the earlier ones decided
 # (`_committed_for_model`), because a scheduler that cannot see week one will
 # happily give week two to the same people -- turning a fairness feature into
 # the exact unfairness it exists to prevent.
 _CHUNK_DAYS = 7
+_MAX_ASSIGNMENTS_PER_CHUNK = 14
 
 # Hebrew weekdays, matching how the interview collects `days` on a shift and
 # how the source files write them. Hebrew is data here, not presentation.
@@ -180,26 +178,42 @@ class Scheduler:
 
 
 def _chunks(slots: List[dict]) -> List[List[dict]]:
-    """The slot grid split into runs of at most `_CHUNK_DAYS` distinct dates.
+    """Split the grid without dividing a day or overloading one model call.
 
     Split on dates rather than on slot count, so a day is never divided across
     two calls: half a Tuesday in one request and half in another is how the
     same person ends up on two shifts at once, and neither call would have the
     information to notice.
 
-    A period short enough to fit is returned as one chunk, which is the common
-    case -- a single week is built in exactly one model call, as it always was.
+    Staffing headcount, not slot count, estimates the rows the model must
+    return. A quiet week remains one call; a busy week is split even when it
+    spans only seven days.
     """
     dates = sorted({slot["slot_date"] for slot in slots})
-    if len(dates) <= _CHUNK_DAYS:
-        return [slots]
     by_date: Dict[str, List[dict]] = {}
     for slot in slots:
         by_date.setdefault(slot["slot_date"], []).append(slot)
-    chunks = []
-    for index in range(0, len(dates), _CHUNK_DAYS):
-        window = dates[index:index + _CHUNK_DAYS]
-        chunks.append([slot for date in window for slot in by_date[date]])
+
+    chunks: List[List[dict]] = []
+    chunk: List[dict] = []
+    demand = 0
+    days = 0
+    for date in dates:
+        day_slots = by_date[date]
+        day_demand = sum(max(1, slot.get("headcount", 1)) for slot in day_slots)
+        if chunk and (
+            days >= _CHUNK_DAYS
+            or demand + day_demand > _MAX_ASSIGNMENTS_PER_CHUNK
+        ):
+            chunks.append(chunk)
+            chunk = []
+            demand = 0
+            days = 0
+        chunk.extend(day_slots)
+        demand += day_demand
+        days += 1
+    if chunk:
+        chunks.append(chunk)
     return chunks
 
 
