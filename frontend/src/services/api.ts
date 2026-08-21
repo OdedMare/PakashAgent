@@ -62,10 +62,57 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     console.error(`[api] ✗ ${label} → ${response.status}`, data);
-    throw new Error(errorDetail(data, response.status));
+    throw apiError(data, response.status);
   }
   console.debug(`[api] ✓ ${label} (${elapsed.toFixed(0)}ms)`, data);
   return data as T;
+}
+
+/** A refusal the manager can act on rather than only read.
+ *
+ *  The backend raises this when the interview finished without a shift
+ *  vocabulary: there is no grid to build, but the fix is a conversation
+ *  rather than a bug report. It carries the missing topics so the UI can
+ *  name them and offer the way back in, which is the whole difference
+ *  between this and the dead-end 502 it replaced. */
+export class ProfileIncompleteError extends Error {
+  readonly gaps: string[];
+  readonly blocks: string[];
+
+  constructor(message: string, gaps: string[], blocks: string[]) {
+    super(message);
+    this.name = "ProfileIncompleteError";
+    this.gaps = gaps;
+    this.blocks = blocks;
+  }
+}
+
+/** The thrown value for a failed response.
+ *
+ *  Every caller catches `Error` and reads `.message`, so the ordinary case is
+ *  unchanged. Only the resumable refusal gets a richer type, and only the
+ *  screens that know what to do with it look for one. */
+function apiError(data: unknown, status: number): Error {
+  const message = errorDetail(data, status);
+  const body = data as {
+    can_resume_interview?: unknown;
+    gaps?: unknown;
+    blocks?: unknown;
+  };
+  if (body?.can_resume_interview === true) {
+    return new ProfileIncompleteError(
+      message,
+      lines(body.gaps),
+      lines(body.blocks),
+    );
+  }
+  return new Error(message);
+}
+
+function lines(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 /** The backend's `AppError` handler sends Hebrew copy in `detail`; a
