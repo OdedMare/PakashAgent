@@ -54,6 +54,9 @@ uvicorn app.main:app --reload
 - `bl/briefing.py` — **the agent speaking first.** Reads the current state and
   says what it noticed, unprompted. Returns exactly `headline`, `items`,
   `quiet` — no operations, so there is no path from a briefing to a write.
+- `bl/copilot.py` + `app/worker.py` — the durable observation loop. PostgreSQL
+  owns jobs, inbox items, per-action permissions and append-only audit events;
+  the separate worker survives browser and API restarts.
 - `bl/schedule_service.py` — persistence and ordering around those three plus
   the audit: propose, confirm, apply, publish, constraints, history.
 - `bl/audit.py` — **pure Python, no LLM.** Recomputes countable facts and returns

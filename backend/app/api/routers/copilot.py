@@ -1,6 +1,7 @@
 """Boss-only control surface for the durable copilot."""
 
 import time
+from typing import Optional
 
 from fastapi import APIRouter, Depends
 
@@ -12,7 +13,9 @@ def build_router(service, repository, guards) -> APIRouter:
     boss = guards.boss()
 
     @router.get("/inbox")
-    def inbox(status: str = None, session: dict = Depends(boss)) -> dict:
+    def inbox(
+        status: Optional[str] = None, session: dict = Depends(boss)
+    ) -> dict:
         return {
             "items": repository.copilot_items(session["team_id"], status),
             "permissions": repository.copilot_permissions(session["team_id"]),

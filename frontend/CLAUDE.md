@@ -51,6 +51,7 @@ import screen. All surfaces exist.
 | Schedule | The living grid for a period, RTL — `Management/Calendar.tsx` |
 | Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `ConfirmMove.tsx` |
 | Briefing | What the agent noticed unprompted — `Management/Briefing.tsx` |
+| Copilot inbox | Durable observations, proposals, failures, permissions and audit — `Management/CopilotInbox.tsx` |
 | Agent answer | What the agent found when *asked* — `Management/AgentAnswer.tsx` |
 | Simulation | A change being considered, never one that landed — `Management/SimulationPanel.tsx` |
 | Preferences | What the agent remembers, all of it visible — `Management/Preferences.tsx` |

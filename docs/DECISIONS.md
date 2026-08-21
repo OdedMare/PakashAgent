@@ -643,6 +643,38 @@ so the client can open the interview on exactly what is owed or take the
 question to the agent first. **It still writes nothing and fills no gap**
 (D19): the interview remains the only thing that writes a profile.
 
+## D23 — The copilot is durable, permissioned, and reversible
+
+The proactive agent now runs in a separate backend process. PostgreSQL owns
+its queue: jobs are deduplicated, claimed with row locking, retried, and
+recovered when a worker dies. Closing the browser therefore stops neither the
+observation loop nor its record of what happened.
+
+**The inbox is the action boundary.** A scan may create an observation, a
+proposal, or a failure. It cannot smuggle an operation into a briefing. The
+manager sees every item, its evidence, its status and the verification result
+in one place. Repeated findings have stable fingerprints, so an always-awake
+agent does not become an always-nagging one.
+
+**Permission is per action type:** `observe`, `suggest`, or `auto`. Automatic
+follow-up may open a resumable interview, because opening a question answers
+nothing and writes no workplace fact. Automatic schedule repair still stops
+at a proposal: [D8](#d8--two-reasons-both-required) requires a manager's own
+reason before any assignment changes, and a permission switch cannot invent
+one.
+
+**Follow-up interviews start from the current profile.** The copilot notices a
+recorded gap or a profile older than ninety days and opens one focused
+conversation. It never answers the question itself, and it does not make the
+manager rebuild the workplace from an empty draft.
+
+**Audit is append-only.** Creation, approval, dismissal, permission change,
+verification and rollback each add an event. Rollback adds history; it never
+deletes history. An untouched follow-up session can be removed safely. Once a
+person has answered it, rollback is refused because deleting their answer
+would be data loss. Schedule repair proposals remain on the ordinary
+propose-confirm path and therefore never need rollback before confirmation.
+
 ## Open
 
 - **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment

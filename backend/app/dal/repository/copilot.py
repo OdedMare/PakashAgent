@@ -235,13 +235,16 @@ class CopilotRepository(RepositoryBase):
         """Delete an untouched follow-up session; answered ones are history."""
         with connect(self._store) as connection:
             row = connection.execute("""
-                SELECT status, EXISTS (
+                SELECT status, pending, EXISTS (
                     SELECT 1 FROM interview_turns
                     WHERE session_id=%s AND role='user'
                 ) AS answered
                 FROM interview_sessions WHERE id=%s AND team_id=%s
                 FOR UPDATE
             """, (session_id, session_id, team_id)).fetchone()
+            processing = bool((row["pending"] or {}).get("_processing")) if row else False
+            if processing:
+                raise ConflictError("הראיון עדיין מכין שאלה; נסה שוב בעוד רגע")
             if not row or row["status"] != "active" or row["answered"]:
                 raise ConflictError(
                     "לא ניתן לבטל ראיון המשך שכבר נענה או הושלם"

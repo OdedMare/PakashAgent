@@ -56,11 +56,17 @@ export function CopilotInbox({
   }, []);
 
   useEffect(() => {
-    void load().catch((reason) =>
-      setMessage(reason instanceof Error ? reason.message : "טעינת הקופיילוט נכשלה"),
+    const first = window.setTimeout(
+      () => void load().catch((reason) =>
+        setMessage(reason instanceof Error ? reason.message : "טעינת הקופיילוט נכשלה"),
+      ),
+      0,
     );
     const timer = window.setInterval(() => void load().catch(() => undefined), 15000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(timer);
+    };
   }, [load]);
 
   const act = useCallback(

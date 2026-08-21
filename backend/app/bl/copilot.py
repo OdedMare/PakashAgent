@@ -23,6 +23,8 @@ class CopilotService:
         """Read one workspace and leave durable, deduplicated inbox items."""
         created = []
         profile = self._repository.team_profile(team_id) or {}
+        updated_at = self._repository.latest_profile_updated_at(team_id)
+        profile_stamp = updated_at.isoformat() if updated_at else "none"
         completeness = profile.get("completeness") or {}
         gaps = list(completeness.get("missing_topics") or [])
         gaps += list(completeness.get("open_points") or [])
@@ -31,7 +33,8 @@ class CopilotService:
             if not text:
                 continue
             item = self._create(
-                team_id, "follow-up:%s" % _key(text), ACTION_FOLLOW_UP,
+                team_id, "follow-up:%s:%s" % (profile_stamp, _key(text)),
+                ACTION_FOLLOW_UP,
                 "נדרש להשלים מידע בראיון",
                 text,
                 {"question": text, "suggestion": text},
@@ -40,7 +43,6 @@ class CopilotService:
             if item:
                 created.append(item)
 
-        updated_at = self._repository.latest_profile_updated_at(team_id)
         if updated_at and _older_than(updated_at, _PROFILE_REVIEW_DAYS):
             stamp = updated_at.date().isoformat()
             question = (

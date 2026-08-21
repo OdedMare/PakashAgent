@@ -38,6 +38,13 @@ nothing: the manager sends the sentence, the agent proposes, the manager
 confirms with their reason
 ([D15](docs/DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)).
 
+**The copilot stays awake when the browser closes.** A separate durable worker
+checks every workspace, records profile gaps and schedule problems in a
+manager inbox, retries failed work, and opens focused follow-up interviews.
+Permissions are set per action type; every decision, verification and rollback
+is recorded in an append-only audit trail
+([D23](docs/DECISIONS.md#d23--the-copilot-is-durable-permissioned-and-reversible)).
+
 **The agent answers questions, not only requests.** The manager can ask
 *"מי יכול להחליף את יוסי בסופ״ש"* or *"מה חסר לפני פרסום"* and get an
 answer assembled from deterministic tools — who is free, who is qualified,
@@ -122,7 +129,7 @@ and the repository base. See [`backend/CLAUDE.md`](backend/CLAUDE.md).
 ## Running it
 
 ```bash
-docker compose up          # backend, frontend, postgres
+docker compose up          # backend, copilot worker, frontend, postgres
 ```
 
 Running the two halves directly instead:

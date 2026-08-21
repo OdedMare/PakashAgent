@@ -42,6 +42,7 @@ class CopilotWorker:
         return count
 
     def run_once(self) -> int:
+        self._repository.recover_copilot_jobs()
         self.enqueue_due()
         processed = 0
         while True:
