@@ -28,6 +28,7 @@ import type { Assignment, ShiftStats, TeamView } from "@/types";
 
 import { AgentAnswer } from "./AgentAnswer";
 import { AgentChat } from "./AgentChat";
+import { ProfileGapsNotice } from "./ProfileGapsNotice";
 import { Briefing } from "./Briefing";
 import { Calendar, formatDate } from "./Calendar";
 import { ConfirmMove } from "./ConfirmMove";
@@ -250,6 +251,29 @@ export function Management({
             סגירה
           </button>
         </div>
+      ) : null}
+
+      {/* A build refused for a reason the manager can close. Above the board
+          because it is about the board they are looking at not existing, and
+          beside the error rather than inside it: nothing here is a fault. */}
+      {state.gaps ? (
+        <ProfileGapsNotice
+          gaps={state.gaps}
+          onOpenInterview={onOpenInterview}
+          onDiscuss={() => {
+            // Seed the composer and move to the room. The question is
+            // written for the manager rather than sent for them — the agent
+            // answers questions and writes nothing (D15), so the point of
+            // arriving here is to work out what the interview is owed
+            // before going and answering it.
+            setSuggested((previous) => ({
+              text: "אני רוצה לבנות סידור לשבוע הקרוב. מה חסר לך כדי לבנות אותו, ואיך נשלים את זה?",
+              n: previous.n + 1,
+            }));
+            setView("room");
+          }}
+          onDismiss={state.dismissGaps}
+        />
       ) : null}
 
       {/* The board: the manager's home screen. Renders from the same
