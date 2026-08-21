@@ -54,6 +54,12 @@ export function useInterview(): InterviewState {
       if (operation.current !== currentOperation) return;
       window.localStorage.setItem(STORAGE_KEY, next.session_id);
       setTurn(next);
+      if (next.status === "processing") {
+        // The write already succeeded. Any later network failure belongs to
+        // polling, so retry must resume the job instead of POSTing the same
+        // answer a second time.
+        lastAction.current = () => resumeInterview(next.session_id);
+      }
       while (next.status === "processing") {
         await wait(POLL_INTERVAL_MS);
         if (operation.current !== currentOperation) return;
