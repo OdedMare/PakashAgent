@@ -16,6 +16,7 @@ owns the session and replays the history on every turn, which is what lets
 this be tested against a fake model with no database.
 """
 
+import copy
 import json
 from typing import Any, Dict, List, Optional
 
@@ -320,7 +321,7 @@ INTERVIEW_RESPONSE_SCHEMA = {
     "additionalProperties": False,
     "required": [
         "reply", "question", "resolved", "open_points",
-        "awaiting_confirmation", "ready", "draft",
+        "awaiting_confirmation", "ready", "draft_update",
     ],
     "properties": {
         "reply": {"type": "string"},
@@ -331,9 +332,28 @@ INTERVIEW_RESPONSE_SCHEMA = {
         "open_points": {"type": "array", "items": {"type": "string"}},
         "awaiting_confirmation": {"type": "boolean"},
         "ready": {"type": "boolean"},
-        "draft": _PROFILE_SCHEMA,
+        "draft_update": {},
     },
 }
+
+
+def _draft_update_schema() -> dict:
+    """A sparse profile: omitted fields keep their previous value.
+
+    Array items remain strict complete objects. Only the profile itself and
+    its two object-valued sections become partial, which is exactly what one
+    interview answer can update without making the schema permissive.
+    """
+    schema = copy.deepcopy(_PROFILE_SCHEMA)
+    schema.pop("required", None)
+    for field in _OBJECT_FIELDS:
+        schema["properties"][field].pop("required", None)
+    return schema
+
+
+INTERVIEW_RESPONSE_SCHEMA["properties"]["draft_update"] = (
+    _draft_update_schema()
+)
 
 
 class IntroInterview:
@@ -349,12 +369,19 @@ class IntroInterview:
 
     def next_turn(
         self, history: List[Dict[str, str]], draft: Optional[dict] = None,
+        state: Optional[dict] = None,
     ) -> dict:
         """One turn: gather context, ask the model once, shape the answer."""
+        state = _as_dict(state)
         payload = {
             "topics": INTERVIEW_TOPICS,
-            "conversation": _validated_history(history),
+            # The complete transcript remains in storage and in the UI. The
+            # model needs only the question it just asked and the answer it
+            # is processing; settled facts live in the structured state.
+            "recent_conversation": _validated_history(history)[-2:],
             "draft_so_far": _as_dict(draft),
+            "resolved_so_far": _lines(state.get("resolved")),
+            "open_points_so_far": _lines(state.get("open_points")),
         }
         answer = self._ask(payload)
         return _result(answer, draft)
@@ -377,7 +404,10 @@ def _result(answer: dict, previous) -> dict:
     """The model's turn, bounded and normalized, plus the merged draft."""
     usage = answer.get("_usage")
     question = _question(answer.get("question"))
-    merged = _merged_draft(answer.get("draft"), previous)
+    # `draft` is accepted as a compatibility fallback for JSON-only local
+    # servers that may still follow a cached copy of the old prompt.
+    update = answer.get("draft_update", answer.get("draft"))
+    merged = _merged_draft(update, previous)
     open_points = _lines(answer.get("open_points"))
     # An open question means the interview is still running, whatever the
     # model claimed, so it cannot also be awaiting confirmation.

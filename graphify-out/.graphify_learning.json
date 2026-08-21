@@ -1,27 +1,52 @@
 {
-  "generated_at": "2026-08-21T07:56:46.093174+00:00",
+  "generated_at": "2026-08-21T08:04:33.961852+00:00",
   "nodes": {
     "backend_app_bl_claude_agent_decides_code_audits": {
       "code_fingerprint": "37568a9b158a5e82ae7190036ebffb708cd6967d24c1baf2353d7fd5c28638fe",
       "label": "Agent Decides; Code Audits",
-      "last": "2026-08-20T20:46:01.724923+00:00",
+      "last": "2026-08-21T08:02:17.271238+00:00",
       "provenance": [
+        {
+          "date": "2026-08-21T08:02:17.271238+00:00",
+          "outcome": "useful",
+          "q": "בוא נתכנן איך לממש את זה"
+        },
+        {
+          "date": "2026-08-21T07:59:07.483050+00:00",
+          "outcome": "useful",
+          "q": "זה לא יפגע באיכות?"
+        },
         {
           "date": "2026-08-20T20:46:01.724923+00:00",
           "outcome": "useful",
           "q": "in the pakash agent app"
         }
       ],
-      "score": 0.98929564,
+      "score": 2.989048015,
       "source_file": "backend/app/bl/CLAUDE.md",
-      "status": "tentative",
-      "uses": 1
+      "status": "preferred",
+      "uses": 3
     },
     "backend_app_bl_claude_interview_workflow": {
       "code_fingerprint": "37568a9b158a5e82ae7190036ebffb708cd6967d24c1baf2353d7fd5c28638fe",
       "label": "Interview Workflow",
-      "last": "2026-08-20T20:46:01.724923+00:00",
+      "last": "2026-08-21T08:02:17.271238+00:00",
       "provenance": [
+        {
+          "date": "2026-08-21T08:02:17.271238+00:00",
+          "outcome": "useful",
+          "q": "בוא נתכנן איך לממש את זה"
+        },
+        {
+          "date": "2026-08-21T07:59:07.483050+00:00",
+          "outcome": "useful",
+          "q": "זה לא יפגע באיכות?"
+        },
+        {
+          "date": "2026-08-21T07:57:40.333736+00:00",
+          "outcome": "useful",
+          "q": "איך לייעל את כמות הטוקנים שאני מעביר בראיון זה מגיע לכמויות גדולות שגודל המידע"
+        },
         {
           "date": "2026-08-20T20:46:01.724923+00:00",
           "outcome": "useful",
@@ -33,16 +58,47 @@
           "q": "hey i want to start work the agent init interview here some qusetions that give as the base the do interview from that mock the missing question that you miss then we implament this part"
         }
       ],
-      "score": 1.821431063,
+      "score": 4.820968725,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
-      "uses": 2
+      "uses": 5
+    },
+    "backend_app_dal_claude_persistence_schema": {
+      "code_fingerprint": "21e546f15e14af1992d469bedfa4fa3a21167e68d153b00b052fc445f4710e94",
+      "label": "Scheduling Persistence Schema",
+      "last": "2026-08-21T08:02:17.271238+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-21T08:02:17.271238+00:00",
+          "outcome": "useful",
+          "q": "בוא נתכנן איך לממש את זה"
+        }
+      ],
+      "score": 0.999963447,
+      "source_file": "backend/app/dal/CLAUDE.md",
+      "status": "tentative",
+      "uses": 1
     },
     "backend_app_dal_llm_claude_openai_compatible_json_client": {
       "code_fingerprint": "2e069bb4e434ab770c256609286e71cabedfbb9bbbac3fea6ba8a44e7a058dca",
       "label": "OpenAI-Compatible JSON Client",
-      "last": "2026-08-20T20:46:01.724923+00:00",
+      "last": "2026-08-21T08:02:17.271238+00:00",
       "provenance": [
+        {
+          "date": "2026-08-21T08:02:17.271238+00:00",
+          "outcome": "useful",
+          "q": "בוא נתכנן איך לממש את זה"
+        },
+        {
+          "date": "2026-08-21T07:59:07.483050+00:00",
+          "outcome": "useful",
+          "q": "זה לא יפגע באיכות?"
+        },
+        {
+          "date": "2026-08-21T07:57:40.333736+00:00",
+          "outcome": "useful",
+          "q": "איך לייעל את כמות הטוקנים שאני מעביר בראיון זה מגיע לכמויות גדולות שגודל המידע"
+        },
         {
           "date": "2026-08-20T20:46:01.724923+00:00",
           "outcome": "useful",
@@ -54,10 +110,10 @@
           "q": "hey i want to start work the agent init interview here some qusetions that give as the base the do interview from that mock the missing question that you miss then we implament this part"
         }
       ],
-      "score": 1.821431063,
+      "score": 4.820968725,
       "source_file": "backend/app/dal/llm/CLAUDE.md",
       "status": "preferred",
-      "uses": 2
+      "uses": 5
     },
     "backend_claude_per_workplace_shift_vocabulary": {
       "code_fingerprint": "046e0c4291e8d5988073dd3140a38edcffae04cdbf516c54d9d1dfc860b8ffe0",
@@ -70,7 +126,7 @@
           "q": "hey i want to start work the agent init interview here some qusetions that give as the base the do interview from that mock the missing question that you miss then we implament this part"
         }
       ],
-      "score": 0.832135423,
+      "score": 0.832031316,
       "source_file": "backend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -86,7 +142,7 @@
           "q": "in the pakash agent app"
         }
       ],
-      "score": 0.98929564,
+      "score": 0.98917187,
       "source_file": "backend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
