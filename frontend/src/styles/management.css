@@ -2185,3 +2185,72 @@
   font-size: 0.78rem;
   color: var(--text-muted);
 }
+
+/* --- a build refused for a reason the manager can close ----------------- */
+
+/* Deliberately the warning palette rather than the danger one used by
+   `.error`. Nothing failed here: the interview is unfinished, and painting a
+   skipped step in the colour of a fault tells the manager they hit a bug when
+   they hit a step. It also has to look like something with actions in it, so
+   it is a panel rather than the single-line strip an error gets. */
+.gaps-notice {
+  width: min(768px, 100%);
+  margin: 0 auto 16px;
+  padding: 13px 15px;
+  color: var(--text);
+  background: var(--warning-soft);
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
+  border-radius: var(--radius-sm);
+}
+
+.gaps-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+}
+
+.gaps-head p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.gaps-head .icon-button {
+  margin-inline-start: auto;
+}
+
+.gaps-head svg {
+  color: var(--warning);
+  flex-shrink: 0;
+}
+
+/* The interview's own lines. `list-style-position: inside` keeps the markers
+   inside the tinted panel in RTL, where an outside marker hangs into the
+   border. */
+.gaps-list,
+.gaps-blocks {
+  margin: 9px 0 0;
+  padding-inline-start: 24px;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+/* The consequence, not the fact — quieter than the gap it explains. */
+.gaps-blocks {
+  color: var(--text-muted);
+  list-style-type: none;
+  padding-inline-start: 25px;
+}
+
+.gaps-blocks li::before {
+  content: "←";
+  margin-inline-end: 6px;
+  color: var(--warning);
+}
+
+.gaps-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 13px;
+}
