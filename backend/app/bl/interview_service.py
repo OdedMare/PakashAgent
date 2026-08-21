@@ -6,11 +6,10 @@ conversation — the piece that made it testable against a fake model without a
 database.
 
 The turn shape is the `plan-chat` one ported from AiSummryIO: the model is
-handed the conversation plus the draft so far and returns the draft again,
-merged. The difference from the reference is who holds that draft between
-turns. There the client replays it; here the session does, so a boss who
-refreshes — or opens the app on a second machine — resumes the profile they
-had rather than the empty one their browser happened to keep.
+handed the latest exchange plus the structured state and returns a sparse
+draft update. The session merges and owns that state, so a boss who refreshes
+— or opens the app on a second machine — resumes the profile they had rather
+than the empty one their browser happened to keep.
 
 Every method takes the team the caller is authenticated into and passes it
 down to the repository, which filters on it. The team is never taken from the
@@ -156,7 +155,8 @@ class InterviewService:
         result = self._interview.next_turn(history, draft, state)
         # Ending the interview is deliberately allowed while the model is
         # working. Its result must not resurrect or overwrite that profile.
-        if self._repository.get_session(session_id, team_id)["status"] == "complete":
+        current = self._repository.get_session(session_id, team_id)
+        if current["status"] == "complete":
             return {}
         pending = {key: result[key] for key in _TURN_FIELDS}
         if result.get("_usage"):

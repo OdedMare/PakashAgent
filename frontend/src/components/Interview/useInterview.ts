@@ -146,8 +146,7 @@ export function useInterview(): InterviewState {
             throw reason;
           }
         });
-      }
-      else setBusy(false);
+      } else setBusy(false);
     }, 0);
     return () => {
       window.clearTimeout(timer);
