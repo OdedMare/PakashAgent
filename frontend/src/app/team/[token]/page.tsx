@@ -1,3 +1,6 @@
+import { CircleHelp } from "lucide-react";
+import Link from "next/link";
+
 import { MemberEntry } from "@/components/Workspace/MemberEntry";
 
 /** The share link a member follows: `/team/<token>`.
@@ -11,5 +14,13 @@ export default async function TeamPage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  return <MemberEntry token={token} />;
+  return (
+    <>
+      <MemberEntry token={token} />
+      <Link className="tutorial-fab" href="/tutorial" aria-label="מדריך למערכת">
+        <CircleHelp size={19} />
+        <span>מדריך</span>
+      </Link>
+    </>
+  );
 }
