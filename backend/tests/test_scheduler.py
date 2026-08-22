@@ -177,6 +177,36 @@ def test_daily_generation_uses_ids_and_filters_unavailable_candidates():
     assert payload["profile"]["rules"] == PROFILE["rules"]
 
 
+def test_daily_generation_filters_a_hard_time_window_but_keeps_a_soft_one():
+    hard_llm = _ScriptedLlm([_reply([{
+        "employee_id": "employee-2", "slot_id": "slot-1",
+        "reason": "יוסי יכול להתחיל בבוקר",
+    }])])
+    Scheduler(hard_llm).generate_day(
+        PROFILE, "2026-08-17", availability=[{
+            "employee": "דנה", "date": "2026-08-17", "available": True,
+            "start_time": "16:00", "is_hard": True,
+        }],
+    )
+    hard_slot = json.loads(hard_llm.calls[0]["user"])["period"]["slots"][0]
+    assert hard_slot["candidate_employee_ids"] == ["employee-2"]
+
+    soft_llm = _ScriptedLlm([_reply([{
+        "employee_id": "employee-1", "slot_id": "slot-1",
+        "reason": "נדרש לכיסוי למרות ההעדפה",
+    }])])
+    result = Scheduler(soft_llm).generate_day(
+        PROFILE, "2026-08-17", availability=[{
+            "employee": "דנה", "date": "2026-08-17", "available": True,
+            "start_time": "16:00", "is_hard": False,
+        }],
+    )
+    soft_slot = json.loads(soft_llm.calls[0]["user"])["period"]["slots"][0]
+    assert soft_slot["candidate_employee_ids"] == ["employee-1", "employee-2"]
+    assert result["warnings"][0]["severity"] == "notice"
+    assert len(soft_llm.calls) == 1
+
+
 def test_daily_generation_repairs_a_rejected_model_row_once():
     llm = _ScriptedLlm([
         _reply([{

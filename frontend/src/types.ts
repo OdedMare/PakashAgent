@@ -315,6 +315,9 @@ export interface Constraint {
   constraint_date: string;
   shift_name: string;
   available: boolean;
+  start_time: string;
+  end_time: string;
+  is_hard: boolean;
   reason: string;
   source: "manager" | "agent" | "employee_reported" | "interview";
 }

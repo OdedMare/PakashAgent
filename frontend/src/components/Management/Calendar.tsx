@@ -4,6 +4,7 @@ import { AlertTriangle, Moon, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { Assignment, Constraint, Schedule, Slot } from "@/types";
+import { constraintBlocksSlot } from "@/lib/constraints";
 
 import { buildPalette, colorStyle } from "./palette";
 
@@ -199,7 +200,9 @@ export function Calendar({
                             setDragging(null);
                             setOver(null);
                           }}
-                          blocked={isBlocked(constraints, row.employee, date, shift)}
+                          blocked={constraintBlocksSlot(
+                            constraints, row.employee, date, slot,
+                          )}
                         />
                       ))}
                       {short ? (
@@ -458,25 +461,6 @@ function ShiftTimes({
     <span className="calendar-hours">
       {withTimes.start_time}–{withTimes.end_time}
     </span>
-  );
-}
-
-/** Whether a recorded constraint contradicts this cell.
- *
- *  An empty `shift_name` on the constraint covers the whole day, which is the
- *  convention the interview collects and `audit.py` reads. */
-function isBlocked(
-  constraints: Constraint[],
-  employee: string,
-  date: string,
-  shift: string,
-): boolean {
-  return constraints.some(
-    (row) =>
-      !row.available &&
-      row.employee === employee &&
-      row.constraint_date === date &&
-      (row.shift_name === "" || row.shift_name === shift),
   );
 }
 

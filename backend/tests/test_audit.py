@@ -144,6 +144,35 @@ def test_availability_marked_available_is_not_a_conflict():
     assert _by_code(warnings, UNAVAILABLE) == []
 
 
+def test_available_from_a_time_rejects_an_earlier_shift():
+    warnings = audit(
+        [_assign("דנה", MORNING, "2026-08-17")],
+        SHIFTS, EMPLOYEES,
+        availability=[{
+            "employee": "דנה", "date": "2026-08-17", "shift": "",
+            "available": True, "start_time": "16:00", "is_hard": True,
+        }],
+    )
+    conflict = _by_code(warnings, UNAVAILABLE)[0]
+    assert conflict["severity"] == SEVERITY_WARNING
+    assert conflict["details"]["start_time"] == "16:00"
+
+
+def test_a_soft_time_window_is_a_notice_not_a_hard_warning():
+    warnings = audit(
+        [_assign("דנה", MORNING, "2026-08-17")],
+        SHIFTS, EMPLOYEES,
+        availability=[{
+            "employee": "דנה", "date": "2026-08-17", "shift": "",
+            "available": True, "start_time": "16:00", "is_hard": False,
+            "reason": "העדפה אישית",
+        }],
+    )
+    conflict = _by_code(warnings, UNAVAILABLE)[0]
+    assert conflict["severity"] == SEVERITY_NOTICE
+    assert "העדפה" in conflict["message"]
+
+
 def test_weekly_hours_over_the_ceiling_are_reported():
     """Six morning shifts is 48 hours, past the 45-hour default."""
     assignments = [

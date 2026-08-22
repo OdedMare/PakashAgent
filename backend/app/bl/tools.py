@@ -628,6 +628,9 @@ class ScheduleTools:
                 "date": _iso(row.get("constraint_date")),
                 "shift": _text(row.get("shift_name")),
                 "available": row.get("available"),
+                "start_time": _text(row.get("start_time")),
+                "end_time": _text(row.get("end_time")),
+                "is_hard": row.get("is_hard", True),
                 "reason": _text(row.get("reason")),
                 "source": _text(row.get("source")),
             }

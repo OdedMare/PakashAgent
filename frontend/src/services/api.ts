@@ -514,6 +514,9 @@ export function setConstraint(body: {
   constraint_date: string;
   shift_name?: string;
   available?: boolean;
+  start_time?: string;
+  end_time?: string;
+  is_hard?: boolean;
   reason?: string;
   source?: string;
 }): Promise<Constraint> {

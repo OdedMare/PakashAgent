@@ -34,34 +34,77 @@ import { formatDate } from "./Calendar";
  *  Collapsed by default. The calendar is what the manager came for, and a
  *  screenful of charts above it would push the actual schedule below the
  *  fold to answer a question nobody asked yet. */
-export function Stats({ stats }: { stats: ShiftStats }) {
+export function Stats({
+  stats,
+  expanded = false,
+}: {
+  stats: ShiftStats;
+  /** A dedicated analytics page shows the full report immediately. The
+   *  compact drawer keeps the existing disclosure so it does not bury the
+   *  schedule tools under charts. */
+  expanded?: boolean;
+}) {
   const [open, setOpen] = useState(false);
+  const showCharts = expanded || open;
 
   // Nothing built yet. An empty period returns well-formed zeros rather than
   // nothing, so this is a deliberate check and not a null guard.
-  if (!stats.total_shifts && !stats.coverage.required) return null;
+  if (!stats.total_shifts && !stats.coverage.required) {
+    return expanded ? (
+      <section
+        className="stats stats-page stats-empty"
+        aria-label="נתוני התקופה"
+      >
+        <BarChart3 size={20} aria-hidden="true" />
+        <div>
+          <h2>הנתונים יופיעו אחרי השיבוץ הראשון</h2>
+          <p>כשהתקופה תתמלא, יוצגו כאן איוש, עומס, חלוקה בצוות והתראות.</p>
+        </div>
+      </section>
+    ) : null;
+  }
 
   const pressure = stats.constraint_pressure;
 
   return (
-    <section className="stats" aria-label="בקרה וסטטיסטיקות">
-      <h3>
-        <BarChart3 size={15} />
-        בקרה על המשמרת
-        <button
-          type="button"
-          className="stats-toggle"
-          onClick={() => setOpen((value) => !value)}
-          aria-expanded={open}
-        >
-          {open ? "הסתרה" : "הצגה"}
-          <ChevronDown
-            size={14}
-            className={open ? "stats-chevron is-open" : "stats-chevron"}
-            aria-hidden="true"
-          />
-        </button>
-      </h3>
+    <section
+      className={`stats${expanded ? " stats-page" : ""}`}
+      aria-label="בקרה וסטטיסטיקות"
+    >
+      <div className="stats-heading">
+        <div>
+          {expanded ? <span className="stats-eyebrow">תמונת התקופה</span> : null}
+          {expanded ? (
+            <h2>המספרים שמאחורי הסידור</h2>
+          ) : (
+            <h3>
+              <BarChart3 size={15} /> בקרה על המשמרת
+            </h3>
+          )}
+          {expanded ? (
+            <p>איוש, עומס וחלוקה בצוות — מאותו חישוב שמזין את ההתראות.</p>
+          ) : null}
+        </div>
+        {!expanded ? (
+          <button
+            type="button"
+            className="stats-toggle"
+            onClick={() => setOpen((value) => !value)}
+            aria-expanded={open}
+          >
+            {open ? "הסתרה" : "הצגה"}
+            <ChevronDown
+              size={14}
+              className={open ? "stats-chevron is-open" : "stats-chevron"}
+              aria-hidden="true"
+            />
+          </button>
+        ) : (
+          <span className="stats-report-mark" aria-hidden="true">
+            <BarChart3 size={20} />
+          </span>
+        )}
+      </div>
 
       {/* The four headline numbers stay visible whether or not the charts
           are open: they are the glance, and the charts are the follow-up. */}
@@ -100,7 +143,7 @@ export function Stats({ stats }: { stats: ShiftStats }) {
         />
       </div>
 
-      {open ? (
+      {showCharts ? (
         <div className="stats-charts">
           <DayChart days={stats.by_day} />
           <EmployeeChart people={stats.by_employee} />

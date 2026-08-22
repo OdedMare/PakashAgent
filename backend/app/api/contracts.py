@@ -1,8 +1,10 @@
 """Pydantic HTTP contracts. No business logic — shapes only."""
 
+import datetime
+
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.common.runtime_settings.normalizers import MASKED_SECRET
 
@@ -247,6 +249,9 @@ class Constraint(BaseModel):
     constraint_date: str
     shift_name: str = ""
     available: bool = False
+    start_time: str = ""
+    end_time: str = ""
+    is_hard: bool = True
     reason: str = ""
     source: str = "manager"
 
@@ -623,8 +628,21 @@ class ConstraintRequest(BaseModel):
     constraint_date: str = Field(min_length=1)
     shift_name: str = Field(default="", max_length=120)
     available: bool = False
+    start_time: str = Field(default="", max_length=5)
+    end_time: str = Field(default="", max_length=5)
+    is_hard: bool = True
     reason: str = Field(default="", max_length=1000)
     source: str = "manager"
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def valid_time(cls, value: str) -> str:
+        if not value:
+            return ""
+        try:
+            return datetime.time.fromisoformat(value).strftime("%H:%M")
+        except ValueError:
+            raise ValueError("השעה חייבת להיות בפורמט HH:MM")
 
 
 # -- the employee's own area (D14) -----------------------------------------

@@ -196,6 +196,9 @@ class ScheduleService:
                     "date": _iso(row.get("constraint_date")),
                     "shift": row.get("shift_name") or "",
                     "available": row.get("available"),
+                    "start_time": row.get("start_time") or "",
+                    "end_time": row.get("end_time") or "",
+                    "is_hard": row.get("is_hard", True),
                     "reason": row.get("reason") or "",
                 }
                 for row in self._repository.availability(
@@ -285,6 +288,9 @@ class ScheduleService:
                     "date": _iso(row.get("constraint_date")),
                     "shift": row.get("shift_name") or "",
                     "available": row.get("available"),
+                    "start_time": row.get("start_time") or "",
+                    "end_time": row.get("end_time") or "",
+                    "is_hard": row.get("is_hard", True),
                 }
                 for row in self._repository.availability(
                     team_id, window[0], window[1]
@@ -1123,6 +1129,9 @@ class ScheduleService:
         constraint_date: str,
         shift_name: str = "",
         available: bool = False,
+        start_time: str = "",
+        end_time: str = "",
+        is_hard: bool = True,
         reason: str = "",
         source: str = SOURCE_MANAGER,
     ) -> dict:
@@ -1139,17 +1148,23 @@ class ScheduleService:
             raise AgentError("צריך לציין עובד")
         if not (constraint_date or "").strip():
             raise AgentError("צריך לציין תאריך")
+        start_time = _constraint_time(start_time)
+        end_time = _constraint_time(end_time)
         row = self._repository.set_availability(
             team_id, employee.strip(), constraint_date,
             shift_name=(shift_name or "").strip(),
-            available=available, reason=(reason or "").strip(), source=source,
+            available=available, start_time=start_time, end_time=end_time,
+            is_hard=is_hard, reason=(reason or "").strip(), source=source,
         )
         self._repository.append_change(
             team_id, ACTION_CONSTRAINT,
             employee=employee.strip(), slot_date=constraint_date,
             shift_name=(shift_name or "").strip(),
             reason=(reason or "").strip(),
-            agent_reason="זמין" if available else "אילוץ נרשם",
+            agent_reason=(
+                "העדפת זמינות נרשמה" if not is_hard
+                else "זמין" if available else "אילוץ נרשם"
+            ),
         )
         return row
 
@@ -1408,6 +1423,9 @@ class ScheduleService:
                     "date": _iso(row.get("constraint_date")),
                     "shift": row.get("shift_name") or "",
                     "available": row.get("available"),
+                    "start_time": row.get("start_time") or "",
+                    "end_time": row.get("end_time") or "",
+                    "is_hard": row.get("is_hard", True),
                     "reason": row.get("reason") or "",
                 }
                 for row in self._repository.availability(
@@ -1647,6 +1665,9 @@ class ScheduleService:
                     "date": _iso(row.get("constraint_date")),
                     "shift": row.get("shift_name") or "",
                     "available": row.get("available"),
+                    "start_time": row.get("start_time") or "",
+                    "end_time": row.get("end_time") or "",
+                    "is_hard": row.get("is_hard", True),
                     "reason": row.get("reason") or "",
                 }
                 for row in self._repository.availability(
@@ -1958,6 +1979,18 @@ def _iso(value: Any) -> str:
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return value.strip() if isinstance(value, str) else ""
+
+
+def _constraint_time(value: Any) -> str:
+    """Validate an optional wall-clock bound at the API/service boundary."""
+    text = _text(value)
+    if not text:
+        return ""
+    try:
+        parsed = datetime.time.fromisoformat(text)
+    except ValueError:
+        raise AgentError("שעת האילוץ אינה תקינה")
+    return parsed.strftime("%H:%M")
 
 
 def _text(value: Any) -> str:

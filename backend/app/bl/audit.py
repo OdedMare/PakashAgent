@@ -573,24 +573,26 @@ def _constraint_pressure(
     warning list cannot, because a constraint that was honored produces no
     warning and so leaves no trace there at all.
     """
-    assigned = set()
-    for row in rows:
-        assigned.add((row["employee"], row["date"], row["shift"]))
-        assigned.add((row["employee"], row["date"], ""))
-
     blocked = 0
     conflicts = 0
     people = set()
     for item in availability or []:
-        if not isinstance(item, dict) or item.get("available"):
+        if not isinstance(item, dict):
             continue
         employee = _text(item.get("employee"))
         date = _text(item.get("date"))
         if not employee or not date:
             continue
+        # A positive row with no window merely says "available" and does not
+        # narrow any choice. A positive time window does: for example, from
+        # 16:00 onward.
+        if item.get("available") and not (
+            _text(item.get("start_time")) or _text(item.get("end_time"))
+        ):
+            continue
         blocked += 1
         people.add(employee)
-        if (employee, date, _text(item.get("shift"))) in assigned:
+        if any(constraint_conflicts(row, item) for row in rows):
             conflicts += 1
 
     return {
@@ -715,43 +717,108 @@ def _double_booked(rows: List[dict]) -> List[dict]:
 
 
 def _unavailable(rows: List[dict], availability: List[dict]) -> List[dict]:
-    """An assignment that contradicts a recorded unavailability.
-
-    A row whose `shift` is empty blocks the whole day -- that is the daily
-    constraint the interview asks about explicitly ("does a daily constraint
-    rule out every shift that day?"), stored as a row with no shift name.
-    """
-    blocked = set()
-    reasons: Dict[tuple, str] = {}
-    for item in availability or []:
-        if not isinstance(item, dict) or item.get("available"):
-            continue
-        employee = _text(item.get("employee"))
-        date = _text(item.get("date"))
-        if not employee or not date:
-            continue
-        shift = _text(item.get("shift"))
-        blocked.add((employee, date, shift))
-        reasons[(employee, date, shift)] = _text(item.get("reason"))
-
+    """Assignments that contradict hard or soft availability windows."""
     warnings = []
     for row in rows:
-        for key in (
-            (row["employee"], row["date"], row["shift"]),
-            (row["employee"], row["date"], ""),
-        ):
-            if key not in blocked:
+        for item in availability or []:
+            if not constraint_conflicts(row, item):
                 continue
-            reason = reasons.get(key)
+            reason = _text(item.get("reason"))
+            hard = item.get("is_hard", True) is not False
+            window = _constraint_window(item)
             warnings.append(_warning(
-                UNAVAILABLE, SEVERITY_WARNING,
-                "%s משובץ ל%s בתאריך %s למרות אילוץ שנרשם%s."
+                UNAVAILABLE,
+                SEVERITY_WARNING if hard else SEVERITY_NOTICE,
+                "%s משובץ ל%s בתאריך %s בניגוד ל%s%s%s."
                 % (row["employee"], row["shift"], row["date"],
+                   "אילוץ" if hard else "העדפה",
+                   " (%s)" % window if window else "",
                    " (%s)" % reason if reason else ""),
                 employee=row["employee"], date=row["date"], shift=row["shift"],
+                details={
+                    "is_hard": hard,
+                    "start_time": _text(item.get("start_time")),
+                    "end_time": _text(item.get("end_time")),
+                },
             ))
             break
     return warnings
+
+
+def constraint_conflicts(assignment: dict, constraint: dict) -> bool:
+    """Whether one assignment falls outside one recorded availability.
+
+    The same arithmetic feeds candidate filtering and the advisory audit.
+    `available=True` plus times means the employee may work only inside that
+    window; `available=False` plus times means that window itself is blocked.
+    With no times, the old whole-day/whole-shift behaviour is preserved.
+    """
+    if not isinstance(assignment, dict) or not isinstance(constraint, dict):
+        return False
+    if _text(assignment.get("employee")) != _text(constraint.get("employee")):
+        return False
+    if _text(assignment.get("date")) != _text(
+        constraint.get("date") or constraint.get("constraint_date")
+    ):
+        return False
+    constrained_shift = _text(
+        constraint.get("shift") or constraint.get("shift_name")
+    )
+    if constrained_shift and constrained_shift != _text(assignment.get("shift")):
+        return False
+
+    start_bound = _minutes(constraint.get("start_time"))
+    end_bound = _minutes(constraint.get("end_time"))
+    if start_bound is None and end_bound is None:
+        return not bool(constraint.get("available"))
+
+    shift_start = _minutes(assignment.get("start") or assignment.get("start_time"))
+    shift_end = _minutes(assignment.get("end") or assignment.get("end_time"))
+    # A timed constraint cannot be evaluated against a shift whose hours the
+    # workplace never defined. Leave it visible to the model rather than
+    # pretending the unknown hours are a conflict.
+    if shift_start is None or shift_end is None:
+        return False
+    if shift_end <= shift_start:
+        shift_end += 24 * 60
+
+    if constraint.get("available"):
+        window_end = end_bound
+        if start_bound is not None and window_end is not None and window_end <= start_bound:
+            window_end += 24 * 60
+        return (
+            (start_bound is not None and shift_start < start_bound)
+            or (window_end is not None and shift_end > window_end)
+        )
+
+    blocked_start = start_bound if start_bound is not None else 0
+    blocked_end = end_bound if end_bound is not None else 24 * 60
+    if start_bound is not None and end_bound is not None and blocked_end <= blocked_start:
+        blocked_end += 24 * 60
+    return shift_start < blocked_end and blocked_start < shift_end
+
+
+def _constraint_window(item: dict) -> str:
+    start = _text(item.get("start_time"))
+    end = _text(item.get("end_time"))
+    if start and end:
+        return "%s–%s" % (start, end)
+    if start:
+        return "החל מ-%s" % start
+    if end:
+        return "עד %s" % end
+    return ""
+
+
+def _minutes(value: Any) -> Optional[int]:
+    if isinstance(value, datetime.datetime):
+        return value.hour * 60 + value.minute
+    if isinstance(value, datetime.time):
+        return value.hour * 60 + value.minute
+    parsed = _parse_time(value)
+    if parsed is None:
+        return None
+    return parsed.hour * 60 + parsed.minute
 
 
 def _over_hours(

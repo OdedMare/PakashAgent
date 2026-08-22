@@ -134,6 +134,10 @@ export interface ManagementState {
     employee: string;
     constraint_date: string;
     shift_name?: string;
+    available?: boolean;
+    start_time?: string;
+    end_time?: string;
+    is_hard?: boolean;
     reason?: string;
     source?: string;
   }) => Promise<void>;
@@ -516,6 +520,10 @@ export function useManagement(): ManagementState {
       employee: string;
       constraint_date: string;
       shift_name?: string;
+      available?: boolean;
+      start_time?: string;
+      end_time?: string;
+      is_hard?: boolean;
       reason?: string;
       source?: string;
     }) => {

@@ -33,6 +33,7 @@ from app.bl.audit import (
     UNAVAILABLE,
     UNFILLED,
     audit,
+    constraint_conflicts,
     load_history,
 )
 from app.bl.prompts import load
@@ -659,6 +660,9 @@ def _availability_for_day(rows: Any, day: str) -> List[dict]:
             "date": date,
             "shift": _bounded(row.get("shift") or row.get("shift_name")),
             "available": bool(row.get("available")),
+            "start_time": _bounded(row.get("start_time")),
+            "end_time": _bounded(row.get("end_time")),
+            "is_hard": row.get("is_hard", True) is not False,
             "reason": _bounded(row.get("reason")),
         })
     return shaped
@@ -685,15 +689,6 @@ def _candidates(profile: dict, slots: List[dict], availability: List[dict]) -> d
             "is_trainee": bool(person.get("is_trainee")),
         })
 
-    blocked = set()
-    for item in availability:
-        if not isinstance(item, dict) or item.get("available"):
-            continue
-        name = _bounded(item.get("employee"))
-        date = _bounded(item.get("date") or item.get("constraint_date"))
-        shift = _bounded(item.get("shift") or item.get("shift_name"))
-        blocked.add((name, date, shift))
-
     by_slot = {}
     for index, slot in enumerate(slots, 1):
         slot_id = "slot-%d" % index
@@ -705,9 +700,17 @@ def _candidates(profile: dict, slots: List[dict], availability: List[dict]) -> d
             allowed = person.get("eligible_shifts")
             if isinstance(allowed, list) and allowed and slot["shift_name"] not in allowed:
                 continue
-            if (
-                (name, slot["slot_date"], "") in blocked
-                or (name, slot["slot_date"], slot["shift_name"]) in blocked
+            assignment = {
+                "employee": name,
+                "date": slot["slot_date"],
+                "shift": slot["shift_name"],
+                "start_time": slot.get("start_time"),
+                "end_time": slot.get("end_time"),
+            }
+            if any(
+                item.get("is_hard", True) is not False
+                and constraint_conflicts(assignment, item)
+                for item in availability if isinstance(item, dict)
             ):
                 continue
             if name in id_by_name:
@@ -848,6 +851,7 @@ def _day_warnings(
             assignments, slots, profile, availability, day
         )
         if item.get("code") in _REPAIRABLE_WARNING_CODES
+        and item.get("severity") == "warning"
     ]
     # Do not spend a repair call asking for impossible coverage. If a slot has
     # fewer legal candidates than seats, the honest outcome is an unfilled

@@ -200,6 +200,14 @@ CREATE TABLE IF NOT EXISTS availability (
     -- every shift that day?"). `audit.py` reads it the same way.
     shift_name TEXT NOT NULL DEFAULT '',
     available BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Optional clock window. With `available=TRUE` it is the only window in
+    -- which the employee may work; with FALSE it is the window they cannot
+    -- work. Empty bounds preserve the original whole shift/day meaning.
+    start_time TEXT NOT NULL DEFAULT '',
+    end_time TEXT NOT NULL DEFAULT '',
+    -- Soft rows remain visible to the scheduler and audit but do not remove
+    -- the employee from a slot's candidate list.
+    is_hard BOOLEAN NOT NULL DEFAULT TRUE,
     reason TEXT NOT NULL DEFAULT '',
     source TEXT NOT NULL DEFAULT 'manager'
         CHECK (source IN ('manager','agent','employee_reported','interview')),
@@ -211,6 +219,14 @@ COMMIT;
 
 CREATE INDEX IF NOT EXISTS availability_team_date_idx
     ON availability (team_id, constraint_date);
+
+COMMIT;
+
+-- Guarded migration for availability windows and soft constraints.
+ALTER TABLE availability
+    ADD COLUMN IF NOT EXISTS start_time TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS end_time TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS is_hard BOOLEAN NOT NULL DEFAULT TRUE;
 
 COMMIT;
 

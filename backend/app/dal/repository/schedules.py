@@ -380,6 +380,9 @@ class ScheduleRepository(RepositoryBase):
         constraint_date: str,
         shift_name: str = "",
         available: bool = False,
+        start_time: str = "",
+        end_time: str = "",
+        is_hard: bool = True,
         reason: str = "",
         source: str = SOURCE_MANAGER,
     ) -> dict:
@@ -396,15 +399,19 @@ class ScheduleRepository(RepositoryBase):
         self._execute("""
             INSERT INTO availability (
                 id, team_id, employee, constraint_date, shift_name,
-                available, reason, source
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                available, start_time, end_time, is_hard, reason, source
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (team_id, employee, constraint_date, shift_name)
             DO UPDATE SET
                 available=EXCLUDED.available,
+                start_time=EXCLUDED.start_time,
+                end_time=EXCLUDED.end_time,
+                is_hard=EXCLUDED.is_hard,
                 reason=EXCLUDED.reason,
                 source=EXCLUDED.source
         """, (row_id, team_id, employee, constraint_date, shift_name or "",
-              bool(available), reason or "", source))
+              bool(available), start_time or "", end_time or "", bool(is_hard),
+              reason or "", source))
         return self._one("""
             SELECT * FROM availability
             WHERE team_id=%s AND employee=%s AND constraint_date=%s

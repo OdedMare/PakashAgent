@@ -361,6 +361,9 @@ def build_router(service, guards) -> APIRouter:
             request.constraint_date,
             shift_name=request.shift_name,
             available=request.available,
+            start_time=request.start_time,
+            end_time=request.end_time,
+            is_hard=request.is_hard,
             reason=request.reason,
             source=request.source,
         )

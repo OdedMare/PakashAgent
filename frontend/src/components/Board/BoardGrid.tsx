@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { hebrewWeekday, isWeekend } from "@/components/Management/Calendar";
 import { buildPalette } from "@/components/Management/palette";
+import { constraintBlocksSlot } from "@/lib/constraints";
 import type {
   Assignment,
   Constraint,
@@ -515,7 +516,9 @@ function BoardRow({
                 hue={hueOf(row.employee)}
                 dark={dark}
                 status={schedule.status}
-                blocked={isBlocked(constraints, row.employee, date, shift)}
+                blocked={constraintBlocksSlot(
+                  constraints, row.employee, date, slot,
+                )}
                 warnings={warnings.filter(
                   (warning) =>
                     !warning.employee || warning.employee === row.employee,
@@ -618,21 +621,6 @@ function touchLabel(origin: AgentTouch["origin"]): string {
   if (origin === "proposal") return "הצעה";
   if (origin === "simulation") return "סימולציה";
   return "נבדק";
-}
-
-function isBlocked(
-  constraints: Constraint[],
-  employee: string,
-  date: string,
-  shift: string,
-): boolean {
-  return constraints.some(
-    (row) =>
-      !row.available &&
-      row.employee === employee &&
-      row.constraint_date === date &&
-      (row.shift_name === "" || row.shift_name === shift),
-  );
 }
 
 function shortDate(iso: string): string {

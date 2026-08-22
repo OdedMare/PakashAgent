@@ -2,6 +2,7 @@
 
 import {
   ArrowLeftRight,
+  BarChart3,
   BellRing,
   CalendarDays,
   CalendarClock,
@@ -123,6 +124,12 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
             onClick={() => setSection("mine")}
           />
           <EmployeeTab
+            active={section === "analytics"}
+            icon={<BarChart3 size={16} />}
+            label="הנתונים שלי"
+            onClick={() => setSection("analytics")}
+          />
+          <EmployeeTab
             active={section === "requests"}
             icon={<ClipboardList size={16} />}
             label="בקשות והחלפות"
@@ -141,10 +148,17 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
           {section === "mine" ? (
             view.schedule ? (
               <>
-                <HoursPanel summary={view.summary} fairness={view.fairness} />
                 <MyShifts view={view} />
                 <MyChanges view={view} />
               </>
+            ) : (
+              <NoPublishedSchedule />
+            )
+          ) : null}
+
+          {section === "analytics" ? (
+            view.schedule ? (
+              <HoursPanel summary={view.summary} fairness={view.fairness} />
             ) : (
               <NoPublishedSchedule />
             )
@@ -199,7 +213,7 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
   );
 }
 
-type EmployeeSection = "mine" | "requests" | "schedule";
+type EmployeeSection = "mine" | "analytics" | "requests" | "schedule";
 
 function EmployeeTab({
   active,

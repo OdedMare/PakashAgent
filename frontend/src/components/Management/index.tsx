@@ -23,12 +23,13 @@ import { Board } from "@/components/Board";
 import { useTheme } from "@/components/Interview/useTheme";
 import { SettingsPanel } from "@/components/Settings";
 import { ShareLink } from "@/components/Workspace/ShareLink";
-import type { TeamView } from "@/types";
+import type { ManagementOverview, TeamView } from "@/types";
 
 import { AgentAnswer } from "./AgentAnswer";
 import { AgentChat } from "./AgentChat";
 import { ProfileGapsNotice } from "./ProfileGapsNotice";
 import { Briefing } from "./Briefing";
+import { formatDate } from "./Calendar";
 import { CopilotInbox } from "./CopilotInbox";
 import { History } from "./History";
 import { LearnedFromChanges } from "./LearnedFromChanges";
@@ -78,6 +79,7 @@ export function Management({
   const { theme, toggle } = useTheme();
   // The board stays put. Management tools open beside it, so the manager
   // never has to remember which cell they were discussing with the agent.
+  const [view, setView] = useState<ManagerView>("board");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [section, setSection] = useState<ManagerSection>("agent");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -132,17 +134,37 @@ export function Management({
         <nav className="management-nav" aria-label="ניווט ראשי">
           <button
             type="button"
-            className={`management-nav-item${!drawerOpen ? " is-active" : ""}`}
-            onClick={() => setDrawerOpen(false)}
-            aria-current={!drawerOpen ? "page" : undefined}
+            className={`management-nav-item${view === "board" && !drawerOpen ? " is-active" : ""}`}
+            onClick={() => {
+              setView("board");
+              setDrawerOpen(false);
+              window.scrollTo({ top: 0 });
+            }}
+            aria-current={view === "board" && !drawerOpen ? "page" : undefined}
           >
             <LayoutGrid size={15} />
             לוח המשמרות
           </button>
           <button
             type="button"
+            className={`management-nav-item${view === "analytics" ? " is-active" : ""}`}
+            onClick={() => {
+              setView("analytics");
+              setDrawerOpen(false);
+              window.scrollTo({ top: 0 });
+            }}
+            aria-current={view === "analytics" ? "page" : undefined}
+          >
+            <BarChart3 size={15} />
+            נתונים
+          </button>
+          <button
+            type="button"
             className={`management-nav-item${drawerOpen ? " is-active" : ""}`}
-            onClick={() => setDrawerOpen(true)}
+            onClick={() => {
+              setView("board");
+              setDrawerOpen(true);
+            }}
             aria-expanded={drawerOpen}
           >
             <MessagesSquare size={15} />
@@ -311,33 +333,40 @@ export function Management({
         />
       ) : null}
 
-      <main id="main-content" className={`management-workspace${drawerOpen ? " has-drawer" : ""}`}>
-        <Board
-          overview={overview}
-          busy={state.busy}
-          dark={theme === "dark"}
-          onGenerate={state.generate}
-          onOpenBlank={state.openBlank}
-          onAssign={state.assign}
-          onUnassign={state.unassign}
-          onMove={state.move}
-          onPublish={state.publish}
-          onExport={state.exportSchedule}
-          onOpenAgent={() => {
-            setSection("agent");
-            setDrawerOpen(true);
-          }}
-          // What the agent is currently saying, so the board can show
-          // *where* on the week it applies. The same state the cards in the
-          // control room render — one source, so the two screens can never
-          // point at different cells. Read-only: the board produces no
-          // operations and there is no path from a highlight to a write.
-          agent={{
-            simulation: state.simulation,
-            proposal: state.proposal,
-            answer: state.answer,
-          }}
-        />
+      <main
+        id="main-content"
+        className={`management-workspace${drawerOpen ? " has-drawer" : ""}${view === "analytics" ? " is-analytics" : ""}`}
+      >
+        {view === "analytics" ? (
+          <ManagerAnalytics overview={overview} />
+        ) : (
+          <Board
+            overview={overview}
+            busy={state.busy}
+            dark={theme === "dark"}
+            onGenerate={state.generate}
+            onOpenBlank={state.openBlank}
+            onAssign={state.assign}
+            onUnassign={state.unassign}
+            onMove={state.move}
+            onPublish={state.publish}
+            onExport={state.exportSchedule}
+            onOpenAgent={() => {
+              setSection("agent");
+              setDrawerOpen(true);
+            }}
+            // What the agent is currently saying, so the board can show
+            // *where* on the week it applies. The same state the cards in the
+            // control room render — one source, so the two screens can never
+            // point at different cells. Read-only: the board produces no
+            // operations and there is no path from a highlight to a write.
+            agent={{
+              simulation: state.simulation,
+              proposal: state.proposal,
+              answer: state.answer,
+            }}
+          />
+        )}
         <button
           type="button"
           className="manager-drawer-backdrop"
@@ -511,7 +540,56 @@ export function Management({
   );
 }
 
+type ManagerView = "board" | "analytics";
 type ManagerSection = "agent" | "requests" | "team" | "overview";
+
+function ManagerAnalytics({
+  overview,
+}: {
+  overview: ManagementOverview | undefined;
+}) {
+  const schedule = overview?.schedule;
+
+  return (
+    <section className="manager-analytics" aria-labelledby="manager-analytics-title">
+      <header className="manager-analytics-head">
+        <div>
+          <span className="manager-analytics-eyebrow">חדר הנתונים</span>
+          <h1 id="manager-analytics-title">תמונת מצב של הצוות</h1>
+          <p>
+            {schedule
+              ? `${formatDate(schedule.starts_on)}–${formatDate(schedule.ends_on)} · ${schedule.status === "published" ? "סידור מפורסם" : "טיוטה בעבודה"}`
+              : "כשתיפתח תקופת שיבוץ, הנתונים שלה יופיעו כאן."}
+          </p>
+        </div>
+        {schedule ? (
+          <span className={`manager-analytics-status ${schedule.status}`}>
+            {schedule.status === "published" ? "מפורסם" : "טיוטה"}
+          </span>
+        ) : null}
+      </header>
+
+      {overview ? <Stats stats={overview.stats} expanded /> : (
+        <div className="manager-analytics-loading" aria-busy="true">
+          טוען את נתוני התקופה…
+        </div>
+      )}
+
+      {schedule?.warnings.length ? (
+        <section className="manager-analytics-warnings">
+          <div className="manager-analytics-section-head">
+            <div>
+              <span>מה דורש מבט</span>
+              <h2>התראות התקופה</h2>
+            </div>
+            <strong>{schedule.warnings.length}</strong>
+          </div>
+          <Warnings warnings={schedule.warnings} />
+        </section>
+      ) : null}
+    </section>
+  );
+}
 
 function ManagerTab({
   active,

@@ -965,6 +965,29 @@
   color: var(--text-muted);
 }
 
+.constraint-time-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.constraint-time-grid small {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 520px) {
+  .constraint-time-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .constraint-time-grid small {
+    grid-column: auto;
+  }
+}
+
 .icon-button.subtle {
   color: var(--text-muted);
   margin-inline-start: auto;
@@ -1272,8 +1295,52 @@
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  margin: 0 0 0.7rem;
+  margin: 0;
   font-size: 0.92rem;
+}
+
+.stats-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.7rem;
+}
+
+.stats-heading h2,
+.stats-heading p {
+  margin: 0;
+}
+
+.stats-heading h2 {
+  margin-top: 0.15rem;
+  font-size: clamp(1.2rem, 2vw, 1.7rem);
+  line-height: 1.25;
+}
+
+.stats-heading p {
+  margin-top: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.stats-eyebrow {
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.stats-report-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 2.65rem;
+  height: 2.65rem;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 25%, var(--border));
+  border-radius: var(--radius-sm);
 }
 
 .stats-toggle {
@@ -1530,6 +1597,97 @@
   margin: 0;
   font-size: 0.76rem;
   color: var(--text-muted);
+}
+
+/* The same report gets a full-width reading mode on the dedicated data
+   surface. No second chart implementation and no second set of numbers. */
+.stats-page {
+  padding: clamp(1rem, 2vw, 1.4rem);
+  box-shadow: var(--shadow-soft);
+}
+
+.stats-page .stats-tiles {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.stats-page .stats-tile {
+  min-height: 7.2rem;
+  padding: 0.9rem;
+}
+
+.stats-page .stats-tile .stat-value {
+  margin-top: auto;
+  font-size: clamp(1.45rem, 3vw, 2rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-page .stats-charts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.35rem;
+  margin-top: 1.2rem;
+  padding-top: 1.2rem;
+}
+
+.stats-page .stats-chart {
+  min-height: 13rem;
+  padding: 1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.stats-page .stats-chart figcaption {
+  font-size: 0.9rem;
+}
+
+.stats-page .day-bars {
+  height: 9.5rem;
+}
+
+.stats-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  color: var(--text-muted);
+}
+
+.stats-empty > svg {
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+
+.stats-empty h2,
+.stats-empty p {
+  margin: 0;
+}
+
+.stats-empty h2 {
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.stats-empty p {
+  margin-top: 0.2rem;
+  font-size: 0.84rem;
+}
+
+@media (max-width: 760px) {
+  .stats-page .stats-tiles,
+  .stats-page .stats-charts {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-page .stats-tile {
+    min-height: auto;
+  }
+
+  .stats-page .stats-tile .stat-value {
+    margin-top: 0;
+  }
+
+  .stats-page .stats-chart {
+    min-height: 0;
+  }
 }
 
 /* -- import (D7) ---------------------------------------------------------

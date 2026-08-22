@@ -43,6 +43,10 @@ export function TeamPanel({
     employee: string;
     constraint_date: string;
     shift_name?: string;
+    available?: boolean;
+    start_time?: string;
+    end_time?: string;
+    is_hard?: boolean;
     reason?: string;
     source?: string;
   }) => void;
@@ -78,7 +82,10 @@ export function TeamPanel({
           {names.map((name) => {
             const person = employees.find((row) => text(row.name) === name);
             const blocked = constraints.filter(
-              (row) => row.employee === name && !row.available,
+              (row) =>
+                row.employee === name &&
+                row.is_hard &&
+                (!row.available || Boolean(row.start_time || row.end_time)),
             ).length;
             const load = loadByName.get(name);
             return (
@@ -145,6 +152,7 @@ export function TeamPanel({
                 <span className="constraint-when">
                   {formatDate(row.constraint_date)}
                   {row.shift_name ? ` · ${row.shift_name}` : " · כל היום"}
+                  {formatWindow(row) ? ` · ${formatWindow(row)}` : ""}
                 </span>
               </div>
               {row.reason ? (
@@ -152,6 +160,9 @@ export function TeamPanel({
               ) : null}
               <span className={`constraint-source source-${row.source}`}>
                 {SOURCE_LABELS[row.source] ?? row.source}
+              </span>
+              <span className="constraint-source">
+                {row.is_hard ? "קשיח" : "העדפה"}
               </span>
               {!readOnly && onRemove ? (
                 <button
@@ -221,6 +232,10 @@ function ConstraintForm({
     employee: string;
     constraint_date: string;
     shift_name?: string;
+    available?: boolean;
+    start_time?: string;
+    end_time?: string;
+    is_hard?: boolean;
     reason?: string;
     source?: string;
   }) => void;
@@ -228,10 +243,17 @@ function ConstraintForm({
   const [employee, setEmployee] = useState(names[0] ?? "");
   const [date, setDate] = useState("");
   const [shift, setShift] = useState("");
+  const [kind, setKind] = useState<"unavailable" | "window">("unavailable");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [isHard, setIsHard] = useState(true);
   const [reason, setReason] = useState("");
   const [source, setSource] = useState("manager");
 
-  const ready = employee.trim() !== "" && date !== "";
+  const ready =
+    employee.trim() !== "" &&
+    date !== "" &&
+    (kind === "unavailable" || startTime !== "" || endTime !== "");
 
   return (
     <form
@@ -243,6 +265,10 @@ function ConstraintForm({
           employee: employee.trim(),
           constraint_date: date,
           shift_name: shift,
+          available: kind === "window",
+          start_time: kind === "window" ? startTime : "",
+          end_time: kind === "window" ? endTime : "",
+          is_hard: isHard,
           reason: reason.trim(),
           source,
         });
@@ -298,6 +324,52 @@ function ConstraintForm({
       </label>
 
       <label>
+        <span>סוג זמינות</span>
+        <select
+          value={kind}
+          onChange={(event) =>
+            setKind(event.target.value as "unavailable" | "window")
+          }
+        >
+          <option value="unavailable">לא זמין/ה</option>
+          <option value="window">זמין/ה רק בחלון שעות</option>
+        </select>
+      </label>
+
+      {kind === "window" ? (
+        <div className="constraint-time-grid">
+          <label>
+            <span>יכול/ה להתחיל מ־</span>
+            <input
+              type="time"
+              value={startTime}
+              onChange={(event) => setStartTime(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>חייב/ת לסיים עד</span>
+            <input
+              type="time"
+              value={endTime}
+              onChange={(event) => setEndTime(event.target.value)}
+            />
+          </label>
+          <small>אפשר למלא רק אחד מהגבולות. למשל 16:00 בלבד.</small>
+        </div>
+      ) : null}
+
+      <label>
+        <span>עוצמת האילוץ</span>
+        <select
+          value={isHard ? "hard" : "soft"}
+          onChange={(event) => setIsHard(event.target.value === "hard")}
+        >
+          <option value="hard">קשיח — אין לשבץ בניגוד אליו</option>
+          <option value="soft">העדפה — אפשר לחרוג כשצריך</option>
+        </select>
+      </label>
+
+      <label>
         <span>סיבה</span>
         <input
           type="text"
@@ -339,6 +411,13 @@ const SOURCE_LABELS: Record<string, string> = {
   employee_reported: "העובד מסר",
   interview: "מהראיון",
 };
+
+function formatWindow(row: Constraint): string {
+  if (row.start_time && row.end_time) return `${row.start_time}–${row.end_time}`;
+  if (row.start_time) return `החל מ־${row.start_time}`;
+  if (row.end_time) return `עד ${row.end_time}`;
+  return "";
+}
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";

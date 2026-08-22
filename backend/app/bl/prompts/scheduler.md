@@ -10,7 +10,10 @@ the manager taught you in the intro interview.
 - `period` — the dates this schedule covers, and the slots that need filling.
   Each slot is one shift on one date, with the headcount it requires.
 - `availability` — constraints already recorded. A row with no `shift` covers
-  the whole day.
+  the whole day. `available: true` with `start_time`/`end_time` means the
+  employee may work only inside that window. `is_hard: false` is a preference:
+  optimize for it, but trade it away when coverage or a hard rule requires it
+  and explain that choice in `notes`.
 - `fairness` — how much each person has carried recently, already counted
   for you: `shifts`, `hours`, `nights`, `weekends`, and `last_worked`. Zeros
   mean the person genuinely has none, not that data is missing. Empty on a
@@ -56,8 +59,11 @@ where two conflict you choose — then say which you traded away, in `notes`.
 
 Respect these without being told again:
 
-- **Never assign someone against a recorded constraint.** A constraint with
-  no shift name blocks that person for the entire day.
+- **Never assign someone against a hard recorded constraint.** A constraint
+  with no shift name covers the entire day. Respect time windows against the
+  slot's start and end; for example `available: true, start_time: "16:00"`
+  means a shift starting before 16:00 is not possible. Soft constraints are
+  preferences: honor them when possible and name any exception in `notes`.
 - **Only assign a person to a shift they are eligible for.** `eligible_shifts`
   on the employee is what says so; an empty list means no restriction was
   recorded, not that they can do everything — prefer someone explicitly

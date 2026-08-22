@@ -201,11 +201,14 @@ class _FakeScheduleRepo:
 
     def set_availability(self, team_id, employee, constraint_date,
                          shift_name="", available=False, reason="",
+                         start_time="", end_time="", is_hard=True,
                          source="manager"):
         row = {
             "id": self._id("av"), "team_id": team_id, "employee": employee,
             "constraint_date": constraint_date, "shift_name": shift_name,
-            "available": available, "reason": reason, "source": source,
+            "available": available, "start_time": start_time,
+            "end_time": end_time, "is_hard": is_hard,
+            "reason": reason, "source": source,
         }
         self.availability_rows = [
             existing for existing in self.availability_rows
@@ -925,6 +928,28 @@ def test_a_constraint_is_recorded_with_its_source():
     })
     assert response.status_code == 200
     assert response.json()["source"] == "employee_reported"
+
+
+def test_a_timed_soft_constraint_is_recorded():
+    app, _ = _build_app([])
+    response = _client(app).post("/api/schedule/constraints", json={
+        "employee": "עודד", "constraint_date": "2026-08-20",
+        "available": True, "start_time": "16:00", "is_hard": False,
+        "reason": "לימודים",
+    })
+
+    assert response.status_code == 200
+    assert response.json()["start_time"] == "16:00"
+    assert response.json()["is_hard"] is False
+
+
+def test_an_invalid_constraint_time_is_rejected():
+    app, _ = _build_app([])
+    response = _client(app).post("/api/schedule/constraints", json={
+        "employee": "עודד", "constraint_date": "2026-08-20",
+        "available": True, "start_time": "29:00",
+    })
+    assert response.status_code == 422
 
 
 def test_a_recorded_constraint_shows_up_as_a_warning_when_contradicted():
