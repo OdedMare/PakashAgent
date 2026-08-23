@@ -9,7 +9,7 @@ import {
   resumeInterview,
   startInterview,
 } from "@/services/api";
-import type { InterviewTurn } from "@/types";
+import type { InterviewSeed, InterviewTurn } from "@/types";
 
 /** The interview lives server-side; this holds only the session id, so a
  *  refresh resumes the same conversation rather than starting a second one.
@@ -25,8 +25,9 @@ export interface InterviewState {
   turn: InterviewTurn | null;
   busy: boolean;
   error: string | null;
-  start: () => void;
+  start: (seed?: InterviewSeed) => void;
   answer: (content: string) => void;
+  correct: (content: string) => void;
   /** Close the interview with what has been collected so far. Resolves once
    *  the profile is stored, so the caller can leave for the management area
    *  knowing there is something there to render. */
@@ -78,13 +79,13 @@ export function useInterview(): InterviewState {
     }
   }, []);
 
-  const start = useCallback(() => {
-    lastAction.current = startInterview;
+  const start = useCallback((seed?: InterviewSeed) => {
+    lastAction.current = () => startInterview(seed);
     void run(lastAction.current);
   }, [run]);
 
-  const answer = useCallback(
-    (content: string) => {
+  const send = useCallback(
+    (content: string, mode: "answer" | "correction") => {
       const sessionId = turn?.session_id;
       if (!sessionId) return;
       // Echo the answer immediately. A turn is a full model generation, and
@@ -102,6 +103,7 @@ export function useInterview(): InterviewState {
                   question: null,
                   options: [],
                   recommendation: null,
+                  mode,
                 },
               ],
               // Retire the buttons with the question they belonged to, so the
@@ -111,10 +113,20 @@ export function useInterview(): InterviewState {
             }
           : current,
       );
-      lastAction.current = () => answerInterview(sessionId, content);
+      lastAction.current = () => answerInterview(sessionId, content, mode);
       void run(lastAction.current);
     },
     [run, turn?.session_id],
+  );
+
+  const answer = useCallback(
+    (content: string) => send(content, "answer"),
+    [send],
+  );
+
+  const correct = useCallback(
+    (content: string) => send(content, "correction"),
+    [send],
   );
 
   const end = useCallback(async () => {
@@ -160,5 +172,5 @@ export function useInterview(): InterviewState {
     };
   }, [run]);
 
-  return { turn, busy, error, start, answer, end, reset, retry };
+  return { turn, busy, error, start, answer, correct, end, reset, retry };
 }

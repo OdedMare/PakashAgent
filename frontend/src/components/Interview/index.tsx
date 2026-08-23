@@ -2,8 +2,10 @@
 
 import {
   AlertCircle,
+  ArrowLeft,
   CalendarDays,
   DoorOpen,
+  FileSpreadsheet,
   LayoutGrid,
   LogOut,
   MessagesSquare,
@@ -17,11 +19,12 @@ import { useEffect, useRef, useState } from "react";
 
 import { SettingsPanel } from "@/components/Settings";
 import { ShareLink } from "@/components/Workspace/ShareLink";
-import type { TeamView } from "@/types";
+import type { InterviewTurn, TeamView } from "@/types";
 
 import { Composer } from "./Composer";
 import { ConfirmEnd } from "./ConfirmEnd";
 import { DraftPanel } from "./DraftPanel";
+import { InterviewImport } from "./InterviewImport";
 import { ProfileSummary } from "./ProfileSummary";
 import { Turn } from "./Turn";
 import { useInterview } from "./useInterview";
@@ -31,6 +34,22 @@ import { useTheme } from "./useTheme";
  *  the denominator early on, when the agent has resolved two points and
  *  raised one — without it, the bar would read 66% on the second turn. */
 const EXPECTED_TOPICS = 9;
+const INTERVIEW_STAGES = [
+  {
+    title: "המשמרות",
+    topics: [
+      "workplace_and_cycle",
+      "operating_calendar",
+      "shift_vocabulary",
+      "staffing",
+    ],
+  },
+  { title: "הצוות", topics: ["roster", "special_cases"] },
+  {
+    title: "כללים ואישור",
+    topics: ["constraints", "rest_policy", "priorities"],
+  },
+] as const;
 
 /** The boss's surface: the intro interview plus the workspace controls.
  *
@@ -62,11 +81,12 @@ export function Interview({
   /** Open the shift board and generate its first schedule. */
   onBuild?: () => void;
 } = {}) {
-  const { turn, busy, error, start, answer, end, reset, retry } =
+  const { turn, busy, error, start, answer, correct, end, reset, retry } =
     useInterview();
   const { theme, toggle } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [entry, setEntry] = useState<"welcome" | "import">("welcome");
   // The confirmation in front of ending early. Closing writes the profile
   // the whole management area reads, so it is not something a mis-click
   // should do — but it is also not a decision worth a whole screen.
@@ -88,15 +108,6 @@ export function Interview({
   const bottom = useRef<HTMLDivElement>(null);
 
   const complete = turn?.status === "complete";
-  // The agent now reports its own state, so the bar tracks what it says is
-  // settled against what it says remains — a far better signal than counting
-  // turns, which credited a follow-up as progress and a folded answer as
-  // none. Capped just short of full until the profile actually lands.
-  const resolved = turn?.resolved.length ?? 0;
-  const open = turn?.open_points.length ?? 0;
-  const known = Math.max(resolved + open, EXPECTED_TOPICS);
-  const progress = complete ? 100 : Math.min(94, (resolved / known) * 100);
-
   // Follow the conversation as it grows, including while a turn is being
   // generated — the thinking dots are the thing worth keeping in view.
   useEffect(() => {
@@ -200,18 +211,7 @@ export function Interview({
         />
       ) : null}
 
-      {turn ? (
-        <div
-          className="progress"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(progress)}
-          aria-label="התקדמות הראיון"
-        >
-          <div className="progress-fill" style={{ width: `${progress}%` }} />
-        </div>
-      ) : null}
+      {turn ? <InterviewProgress turn={turn} /> : null}
 
       <main id="main-content" className={turn && !complete ? "with-draft" : ""}>
         {turn ? (
@@ -229,11 +229,25 @@ export function Interview({
                 resolved={turn.resolved}
                 openPoints={turn.open_points}
                 busy={busy}
+                onCorrect={correct}
               />
             ) : null}
           </>
+        ) : entry === "import" ? (
+          <InterviewImport
+            workplaceName={workspace?.name}
+            interviewBusy={busy}
+            onStart={start}
+            onBack={() => setEntry("welcome")}
+          />
         ) : (
-          <Welcome busy={busy} onStart={start} />
+          <Welcome
+            busy={busy}
+            onStart={() =>
+              start(workspace?.name ? { workplace_name: workspace.name } : undefined)
+            }
+            onImport={() => setEntry("import")}
+          />
         )}
       </main>
 
@@ -410,7 +424,15 @@ function useThinkingPhase(): string {
 }
 
 
-function Welcome({ busy, onStart }: { busy: boolean; onStart: () => void }) {
+function Welcome({
+  busy,
+  onStart,
+  onImport,
+}: {
+  busy: boolean;
+  onStart: () => void;
+  onImport: () => void;
+}) {
   return (
     <div className="center">
       <section className="welcome-panel" aria-labelledby="welcome-title">
@@ -418,14 +440,50 @@ function Welcome({ busy, onStart }: { busy: boolean; onStart: () => void }) {
           <span className="brand-mark" aria-hidden="true">
             <MessagesSquare size={17} />
           </span>
-          <span>הקמה ראשונית · כ־10 דקות</span>
+          <span>פקש · מסייע AI להקמת הסידור</span>
         </div>
 
-        <h1 id="welcome-title">מלמדים את פקש איך הצוות באמת עובד</h1>
+        <h1 id="welcome-title">מתחילים ממה שכבר יודעים</h1>
         <p>
-          נעבור יחד על המשמרות, האנשים וכללי העבודה. שאלה אחת בכל פעם,
-          עם תשובה מומלצת שאפשר לקבל בלחיצה או לתקן במילים שלכם.
+          אם יש לכם סידור קיים, פקש יקרא אותו ויכין טיוטה. אם לא, נבנה אותה
+          יחד—שאלה אחת בכל פעם. בכל שלב אפשר לראות ולתקן מה נשמר.
         </p>
+
+        <div className="welcome-paths" aria-label="איך מתחילים">
+          <button
+            type="button"
+            className="welcome-path recommended"
+            onClick={onImport}
+            disabled={busy}
+          >
+            <span className="welcome-path-icon" aria-hidden="true">
+              <FileSpreadsheet size={20} />
+            </span>
+            <span className="welcome-path-copy">
+              <span className="welcome-path-label">הדרך המהירה</span>
+              <strong>יש לי סידור קיים</strong>
+              <small>מעלים אקסל או וורד ומאמתים רק את הפערים</small>
+            </span>
+            <ArrowLeft size={18} aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            className="welcome-path"
+            onClick={onStart}
+            disabled={busy}
+          >
+            <span className="welcome-path-icon" aria-hidden="true">
+              <MessagesSquare size={20} />
+            </span>
+            <span className="welcome-path-copy">
+              <span className="welcome-path-label">אין קובץ? זה בסדר</span>
+              <strong>{busy ? "מכין את השאלה הראשונה…" : "מתחילים בשיחה"}</strong>
+              <small>כ־10 דקות, עם תשובות מומלצות וטיוטה חיה</small>
+            </span>
+            <ArrowLeft size={18} aria-hidden="true" />
+          </button>
+        </div>
 
         <ol className="welcome-map" aria-label="מה נגדיר בראיון">
           <li>
@@ -445,18 +503,78 @@ function Welcome({ busy, onStart }: { busy: boolean; onStart: () => void }) {
           </li>
         </ol>
 
-        <div className="welcome-action">
-          <button
-            type="button"
-            className="start-button"
-            onClick={onStart}
-            disabled={busy}
-          >
-            {busy ? "מכין את השאלה הראשונה…" : "מתחילים את ההיכרות"}
-          </button>
-          <small>אפשר לעצור ולחזור בכל שלב</small>
-        </div>
+        <p className="welcome-save-note">נשמר אוטומטית · אפשר לעצור ולחזור בכל שלב</p>
       </section>
     </div>
+  );
+}
+
+function InterviewProgress({ turn }: { turn: InterviewTurn }) {
+  const answered = new Set<string>();
+  let pending = "";
+  for (const message of turn.turns) {
+    if (message.role === "assistant") {
+      pending = message.question?.topic_id ?? "";
+    } else if (pending && message.mode !== "correction") {
+      answered.add(pending);
+      pending = "";
+    }
+  }
+
+  const complete = turn.status === "complete";
+  const remaining = Math.max(0, EXPECTED_TOPICS - answered.size);
+  const progress = complete
+    ? 100
+    : Math.min(96, (answered.size / EXPECTED_TOPICS) * 100);
+  const currentTopic = turn.question?.topic_id ?? pending;
+  const foundStage = INTERVIEW_STAGES.findIndex((stage) =>
+    stage.topics.some((topic) => topic === currentTopic),
+  );
+  const activeStage = foundStage >= 0 ? foundStage : 2;
+
+  return (
+    <section className="interview-progress" aria-label="התקדמות הראיון">
+      <div className="interview-progress-copy">
+        <span>
+          שלב {activeStage + 1} מתוך {INTERVIEW_STAGES.length} ·{" "}
+          <strong>{INTERVIEW_STAGES[activeStage].title}</strong>
+        </span>
+        <span>
+          {complete
+            ? "הפרופיל מוכן"
+            : remaining
+              ? `${remaining} נושאים נשארו`
+              : "בדיקה ואישור"}
+          {" · "}<span className="autosave">נשמר אוטומטית</span>
+        </span>
+      </div>
+
+      <div
+        className="progress"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress)}
+        aria-valuetext={`${answered.size} מתוך ${EXPECTED_TOPICS} נושאים הושלמו`}
+      >
+        <div className="progress-fill" style={{ width: `${progress}%` }} />
+      </div>
+
+      <ol className="interview-stage-rail">
+        {INTERVIEW_STAGES.map((stage, index) => {
+          const done = stage.topics.every((topic) => answered.has(topic));
+          return (
+            <li
+              key={stage.title}
+              className={done ? "is-done" : index === activeStage ? "is-active" : ""}
+              aria-current={index === activeStage ? "step" : undefined}
+            >
+              <span>{index + 1}</span>
+              {stage.title}
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }

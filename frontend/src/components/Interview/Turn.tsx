@@ -22,7 +22,9 @@ export function Turn({ message, live = false, onSelect }: Props) {
         {assistant ? "פ" : "א"}
       </div>
       <div className="turn-body">
-        <div className="turn-name">{assistant ? "פקש" : "אתם"}</div>
+        <div className="turn-name">
+          {assistant ? "פקש · מסייע AI" : "אתם"}
+        </div>
         <p className="turn-text">{message.content}</p>
 
         {/* The question is kept separate from the reply above it: the reply

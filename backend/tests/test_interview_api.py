@@ -297,6 +297,51 @@ def test_starting_an_interview_returns_the_first_question_with_options():
     assert body["session_id"]
 
 
+def test_starting_from_an_import_seeds_a_draft_for_the_first_question():
+    llm = _ScriptedLlm([_question(draft_update={})])
+    client, _ = _client(llm)
+
+    body = client.post("/api/interview", json={
+        "workplace_name": "מוקד צפון",
+        "source_files": ["july.xlsx"],
+        "employees": {"דנה": ["בוקר"], "רון": ["ערב"]},
+        "shifts": {"בוקר": ["ראשון", "שני"], "ערב": ["שני"]},
+        "starts_on": "2026-07-01",
+        "ends_on": "2026-07-31",
+    }).json()
+
+    assert body["draft"]["workplace"]["name"] == "מוקד צפון"
+    assert [row["name"] for row in body["draft"]["employees"]] == [
+        "דנה", "רון",
+    ]
+    assert body["draft"]["shifts"][0]["days"] == ["ראשון", "שני"]
+    payload = json.loads(llm.calls[0])
+    assert payload["draft_so_far"]["existing_schedule_source"].startswith(
+        "קבצי סידור קיימים: july.xlsx"
+    )
+
+
+def test_a_correction_does_not_count_as_answering_the_pending_topic():
+    second = _question(INTERVIEW_TOPICS[1]["question"])
+    second["question"]["topic_id"] = INTERVIEW_TOPICS[1]["id"]
+    client, repository = _client(_ScriptedLlm([_question(), second, second]))
+    session_id = client.post("/api/interview").json()["session_id"]
+
+    corrected = client.post(
+        "/api/interview/%s/answer" % session_id,
+        json={"content": "תיקון: השם הוא מוקד צפון", "mode": "correction"},
+    ).json()
+    assert corrected["question"]["topic_id"] == INTERVIEW_TOPICS[0]["id"]
+
+    answered = client.post(
+        "/api/interview/%s/answer" % session_id,
+        json={"content": "מוקד צפון, סידור לשבוע"},
+    ).json()
+    assert answered["question"]["topic_id"] == INTERVIEW_TOPICS[1]["id"]
+    correction = repository.history(session_id)[1]
+    assert correction["payload"] == {"mode": "correction"}
+
+
 def test_the_question_is_persisted_as_an_assistant_turn():
     client, repository = _client(_ScriptedLlm([_question()]))
 

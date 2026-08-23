@@ -9,6 +9,7 @@ export interface Option {
 
 /** The single question a turn asks, with the agent's own recommendation. */
 export interface Question {
+  topic_id: string;
   question: string;
   recommendation: string;
   why: string;
@@ -21,6 +22,17 @@ export interface Message {
   question: Question | null;
   options: Option[];
   recommendation: string | null;
+  mode?: "" | "answer" | "correction";
+}
+
+/** Facts inferred from an existing schedule before the first question. */
+export interface InterviewSeed {
+  workplace_name?: string;
+  source_files?: string[];
+  employees?: Record<string, string[]>;
+  shifts?: Record<string, string[]>;
+  starts_on?: string;
+  ends_on?: string;
 }
 
 /** The workplace profile as it stands. Only the fields the summary screen

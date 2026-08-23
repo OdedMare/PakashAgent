@@ -2,7 +2,7 @@
 
 import datetime
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -20,6 +20,18 @@ class AnswerRequest(BaseModel):
     """
 
     content: str = Field(min_length=1, max_length=4000)
+    mode: Literal["answer", "correction"] = "answer"
+
+
+class InterviewSeed(BaseModel):
+    """Facts read from an existing schedule before the interview starts."""
+
+    workplace_name: str = Field(default="", max_length=120)
+    source_files: List[str] = Field(default=[], max_length=100)
+    employees: Dict[str, List[str]] = {}
+    shifts: Dict[str, List[str]] = {}
+    starts_on: str = Field(default="", max_length=10)
+    ends_on: str = Field(default="", max_length=10)
 
 
 class Option(BaseModel):
@@ -32,6 +44,7 @@ class Option(BaseModel):
 class Question(BaseModel):
     """The single question a turn asks, with the agent's own recommendation."""
 
+    topic_id: str = ""
     question: str
     recommendation: str = ""
     why: str = ""
@@ -51,6 +64,7 @@ class Message(BaseModel):
     question: Optional[Question] = None
     options: List[Option] = []
     recommendation: Optional[str] = None
+    mode: str = ""
 
 
 class InterviewTurn(BaseModel):

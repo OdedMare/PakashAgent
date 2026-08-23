@@ -30,7 +30,7 @@ from app.bl.briefing import (
 )
 from app.bl.changes import ChangeAgent, OP_ASSIGN, OP_REMOVE, OP_SWAP
 from app.bl.export import as_workbook, filename
-from app.bl.importer import infer, read_grid
+from app.bl.importer import infer, read_grids
 from app.bl.learn import RuleLearner, observe, observe_corrections
 from app.bl.placement import check as check_placement
 from app.bl.profile_service import ProfileService
@@ -679,16 +679,25 @@ class ScheduleService:
         for item in files or []:
             name = (item or {}).get("filename") or ""
             try:
-                found = infer(
-                    read_grid((item or {}).get("content") or b"", name),
-                    profile,
+                grids = read_grids(
+                    (item or {}).get("content") or b"", name
                 )
             except AgentError as error:
                 failures.append({"filename": name, "error": str(error)})
                 continue
-            periods.append(dict(found.to_dict(), filename=name))
-            assignments.extend(found.assignments)
-            unavailability.extend(found.unavailability)
+            many_sheets = len(grids) > 1
+            for sheet_name, grid in grids:
+                label = name
+                if many_sheets and sheet_name:
+                    label = "%s — %s" % (name, sheet_name)
+                try:
+                    found = infer(grid, profile)
+                except AgentError as error:
+                    failures.append({"filename": label, "error": str(error)})
+                    continue
+                periods.append(dict(found.to_dict(), filename=label))
+                assignments.extend(found.assignments)
+                unavailability.extend(found.unavailability)
 
         if not periods:
             raise AgentError(

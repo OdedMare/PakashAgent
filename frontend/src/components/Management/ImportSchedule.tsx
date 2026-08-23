@@ -6,15 +6,23 @@ import {
   FileSpreadsheet,
   FileWarning,
   Lightbulb,
+  Trash2,
   Upload,
   X,
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 import { confirmImport, previewImport } from "@/services/api";
-import type { CandidateRule, ImportPreview, ReadAssignment } from "@/types";
+import type {
+  CandidateRule,
+  ImportedConstraint,
+  ImportedPeriod,
+  ImportPreview,
+  ReadAssignment,
+} from "@/types";
 
-import { formatDate } from "./Calendar";
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
+const ROWS_PER_PAGE = 50;
 
 /** Loading a schedule the workplace already kept.
  *
@@ -53,6 +61,7 @@ export function ImportSchedule({
   // Which period the manager is looking at. A year of sheets is many
   // periods, and showing them all expanded would bury the summary.
   const [openPeriod, setOpenPeriod] = useState(0);
+  const [rowPage, setRowPage] = useState<Record<number, number>>({});
   // A shift chosen here for rows that arrived without one. Keyed by period
   // index; only the `date_only` layout ever needs it.
   const [chosenShift, setChosenShift] = useState<Record<number, string>>({});
@@ -68,7 +77,13 @@ export function ImportSchedule({
         (sum, period) => sum + period.assignments.length,
         0,
       ),
-      people: new Set(preview.periods.flatMap((period) => period.people)).size,
+      people: new Set(
+        preview.periods.flatMap((period) =>
+          period.assignments
+            .map((row) => row.employee.trim())
+            .filter(Boolean),
+        ),
+      ).size,
       constraints: preview.periods.reduce(
         (sum, period) => sum + period.unavailability.length,
         0,
@@ -76,21 +91,51 @@ export function ImportSchedule({
     };
   }, [preview]);
 
-  /** Rows that still have no shift, per period. The confirm button waits on
-   *  these: a shiftless assignment has no slot on the grid to sit in. */
-  const missingShift = useMemo(() => {
-    if (!preview) return [] as number[];
-    return preview.periods
-      .map((period, index) =>
-        period.assignments.some((row) => !row.shift) && !chosenShift[index]
-          ? index
-          : -1,
-      )
-      .filter((index) => index >= 0);
+  /** Incomplete rows stay visible and block confirmation; nothing inferred
+   *  from a file is silently filtered out on the way to persistence. */
+  const invalid = useMemo(() => {
+    if (!preview) return { assignments: 0, constraints: 0 };
+    return preview.periods.reduce(
+      (count, period, index) => ({
+        assignments:
+          count.assignments +
+          period.assignments.filter(
+            (row) =>
+              !row.employee.trim() ||
+              !(row.shift || chosenShift[index] || "").trim() ||
+              !row.date,
+          ).length,
+        constraints:
+          count.constraints +
+          period.unavailability.filter(
+            (row) => !row.employee.trim() || !row.date,
+          ).length,
+      }),
+      { assignments: 0, constraints: 0 },
+    );
   }, [preview, chosenShift]);
 
   async function read(selected: File[]) {
     if (!selected.length) return;
+    const legacy = selected.find((file) => /\.xls$/i.test(file.name));
+    if (legacy) {
+      setError(
+        `${legacy.name}: פורמט .xls הישן אינו נתמך. שמור אותו כ־.xlsx ונסה שוב.`,
+      );
+      return;
+    }
+    const unsupported = selected.find(
+      (file) => !/\.(xlsx|xlsm|docx)$/i.test(file.name),
+    );
+    if (unsupported) {
+      setError(`${unsupported.name}: אפשר להעלות קובצי Excel או Word בלבד.`);
+      return;
+    }
+    const tooLarge = selected.find((file) => file.size > MAX_FILE_SIZE);
+    if (tooLarge) {
+      setError(`${tooLarge.name}: הקובץ גדול מ־20MB.`);
+      return;
+    }
     setFiles(selected);
     setBusy(true);
     setError("");
@@ -98,6 +143,7 @@ export function ImportSchedule({
       const found = await previewImport(selected, true);
       setPreview(found);
       setOpenPeriod(0);
+      setRowPage({});
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "הקריאה נכשלה");
       setPreview(null);
@@ -108,6 +154,10 @@ export function ImportSchedule({
 
   async function confirm() {
     if (!preview) return;
+    if (invalid.assignments || invalid.constraints) {
+      setError("יש להשלים או למחוק את השורות המסומנות לפני השמירה.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -117,17 +167,21 @@ export function ImportSchedule({
       for (const [index, period] of preview.periods.entries()) {
         const rows = period.assignments
           .map((row: ReadAssignment) => ({
-            employee: row.employee,
-            shift: row.shift || chosenShift[index] || "",
+            employee: row.employee.trim(),
+            shift: (row.shift || chosenShift[index] || "").trim(),
             date: row.date,
-          }))
-          .filter((row) => row.employee && row.shift && row.date);
+          }));
         if (!rows.length) continue;
+        const dates = rows.map((row) => row.date).sort();
         await confirmImport({
           assignments: rows,
-          unavailability: period.unavailability.filter((row) => row.employee),
-          starts_on: period.starts_on,
-          ends_on: period.ends_on,
+          unavailability: period.unavailability.map((row) => ({
+            ...row,
+            employee: row.employee.trim(),
+            shift: row.shift.trim(),
+          })),
+          starts_on: dates[0],
+          ends_on: dates[dates.length - 1],
         });
       }
       onImported();
@@ -136,6 +190,64 @@ export function ImportSchedule({
     } finally {
       setBusy(false);
     }
+  }
+
+  function updatePeriod(
+    periodIndex: number,
+    update: (period: ImportedPeriod) => ImportedPeriod,
+  ) {
+    setPreview((current) =>
+      current
+        ? {
+            ...current,
+            periods: current.periods.map((period, index) =>
+              index === periodIndex ? update(period) : period,
+            ),
+          }
+        : current,
+    );
+  }
+
+  function updateAssignment(
+    periodIndex: number,
+    rowIndex: number,
+    patch: Partial<ReadAssignment>,
+  ) {
+    updatePeriod(periodIndex, (period) => ({
+      ...period,
+      assignments: period.assignments.map((row, index) =>
+        index === rowIndex ? { ...row, ...patch } : row,
+      ),
+    }));
+  }
+
+  function removeAssignment(periodIndex: number, rowIndex: number) {
+    updatePeriod(periodIndex, (period) => ({
+      ...period,
+      assignments: period.assignments.filter((_row, index) => index !== rowIndex),
+    }));
+  }
+
+  function updateConstraint(
+    periodIndex: number,
+    rowIndex: number,
+    patch: Partial<ImportedConstraint>,
+  ) {
+    updatePeriod(periodIndex, (period) => ({
+      ...period,
+      unavailability: period.unavailability.map((row, index) =>
+        index === rowIndex ? { ...row, ...patch } : row,
+      ),
+    }));
+  }
+
+  function removeConstraint(periodIndex: number, rowIndex: number) {
+    updatePeriod(periodIndex, (period) => ({
+      ...period,
+      unavailability: period.unavailability.filter(
+        (_row, index) => index !== rowIndex,
+      ),
+    }));
   }
 
   return (
@@ -195,11 +307,12 @@ export function ImportSchedule({
                 ref={picker}
                 type="file"
                 multiple
-                accept=".xlsx,.xls,.docx"
+                accept=".xlsx,.xlsm,.docx"
                 hidden
-                onChange={(event) =>
-                  read(Array.from(event.target.files ?? []))
-                }
+                onChange={(event) => {
+                  read(Array.from(event.target.files ?? []));
+                  event.currentTarget.value = "";
+                }}
               />
             </div>
 
@@ -211,7 +324,7 @@ export function ImportSchedule({
           <div className="import-result">
             {/* The one sentence D7 asks for, before any detail. */}
             <p className="import-headline">
-              נקראו <strong>{preview.periods.length}</strong> קבצים:{" "}
+              זוהו <strong>{preview.periods.length}</strong> לוחות:{" "}
               <strong>{totals.assignments}</strong> שיבוצים,{" "}
               <strong>{totals.people}</strong> אנשים
               {totals.constraints ? (
@@ -247,6 +360,19 @@ export function ImportSchedule({
                 const open = openPeriod === index;
                 const needsShift =
                   period.assignments.some((row) => !row.shift);
+                const pages = Math.max(
+                  1,
+                  Math.ceil(period.assignments.length / ROWS_PER_PAGE),
+                );
+                const page = Math.min(rowPage[index] ?? 0, pages - 1);
+                const rowStart = page * ROWS_PER_PAGE;
+                const visibleRows = period.assignments.slice(
+                  rowStart,
+                  rowStart + ROWS_PER_PAGE,
+                );
+                const shiftOptions = Array.from(
+                  new Set([...shiftNames, ...period.shifts]),
+                );
                 return (
                   <div className="import-period" key={period.filename + index}>
                     <button
@@ -259,7 +385,10 @@ export function ImportSchedule({
                         {period.filename || `קובץ ${index + 1}`}
                       </span>
                       <span className="import-period-summary">
-                        {period.summary}
+                        {period.assignments.length} שיבוצים
+                        {period.unavailability.length
+                          ? ` · ${period.unavailability.length} סימוני אי־זמינות`
+                          : ""}
                       </span>
                     </button>
 
@@ -308,22 +437,191 @@ export function ImportSchedule({
                           </label>
                         ) : null}
 
-                        <div className="import-rows">
-                          {period.assignments.slice(0, 40).map((row, n) => (
-                            <span className="import-row" key={n}>
-                              <strong>{row.employee}</strong>
-                              {" · "}
-                              {row.shift || chosenShift[index] || "—"}
-                              {" · "}
-                              {formatDate(row.date)}
-                            </span>
-                          ))}
-                          {period.assignments.length > 40 ? (
-                            <span className="import-row import-row-more">
-                              ועוד {period.assignments.length - 40}…
-                            </span>
+                        <section className="import-edit-section">
+                          <div className="import-edit-title">
+                            <h3>שיבוצים שנקראו</h3>
+                            <span>אפשר לתקן כל שדה לפני השמירה</span>
+                          </div>
+                          <div className="import-edit-head" aria-hidden="true">
+                            <span>עובד</span>
+                            <span>משמרת</span>
+                            <span>תאריך</span>
+                            <span />
+                          </div>
+                          <div className="import-edit-rows">
+                            {visibleRows.map((row, pageIndex) => {
+                              const rowIndex = rowStart + pageIndex;
+                              const shift =
+                                row.shift || chosenShift[index] || "";
+                              return (
+                                <div className="import-edit-row" key={rowIndex}>
+                                  <label>
+                                    <span>עובד</span>
+                                    <input
+                                      value={row.employee}
+                                      list={`import-people-${index}`}
+                                      aria-invalid={!row.employee.trim()}
+                                      onChange={(event) =>
+                                        updateAssignment(index, rowIndex, {
+                                          employee: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    <span>משמרת</span>
+                                    <input
+                                      value={shift}
+                                      list={`import-shifts-${index}`}
+                                      aria-invalid={!shift.trim()}
+                                      onChange={(event) =>
+                                        updateAssignment(index, rowIndex, {
+                                          shift: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    <span>תאריך</span>
+                                    <input
+                                      type="date"
+                                      value={row.date}
+                                      aria-invalid={!row.date}
+                                      onChange={(event) =>
+                                        updateAssignment(index, rowIndex, {
+                                          date: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  <button
+                                    type="button"
+                                    className="import-delete"
+                                    aria-label={`מחיקת השיבוץ של ${row.employee || "עובד ללא שם"}`}
+                                    onClick={() =>
+                                      removeAssignment(index, rowIndex)
+                                    }
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <datalist id={`import-people-${index}`}>
+                            {period.people.map((name) => (
+                              <option key={name} value={name} />
+                            ))}
+                          </datalist>
+                          <datalist id={`import-shifts-${index}`}>
+                            {shiftOptions.map((name) => (
+                              <option key={name} value={name} />
+                            ))}
+                          </datalist>
+                          {pages > 1 ? (
+                            <div className="import-pagination">
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                disabled={page === 0}
+                                onClick={() =>
+                                  setRowPage((current) => ({
+                                    ...current,
+                                    [index]: page - 1,
+                                  }))
+                                }
+                              >
+                                הקודם
+                              </button>
+                              <span>
+                                עמוד {page + 1} מתוך {pages}
+                              </span>
+                              <button
+                                type="button"
+                                className="ghost-button"
+                                disabled={page === pages - 1}
+                                onClick={() =>
+                                  setRowPage((current) => ({
+                                    ...current,
+                                    [index]: page + 1,
+                                  }))
+                                }
+                              >
+                                הבא
+                              </button>
+                            </div>
                           ) : null}
-                        </div>
+                        </section>
+
+                        {period.unavailability.length ? (
+                          <section className="import-edit-section constraint">
+                            <div className="import-edit-title">
+                              <h3>אי־זמינות שנקראה</h3>
+                              <span>שורה ללא עובד חייבת שיוך או מחיקה</span>
+                            </div>
+                            <div className="import-edit-head" aria-hidden="true">
+                              <span>עובד</span>
+                              <span>משמרת</span>
+                              <span>תאריך</span>
+                              <span />
+                            </div>
+                            <div className="import-edit-rows">
+                              {period.unavailability.map((row, rowIndex) => (
+                                <div className="import-edit-row" key={rowIndex}>
+                                  <label>
+                                    <span>עובד</span>
+                                    <input
+                                      value={row.employee}
+                                      list={`import-people-${index}`}
+                                      placeholder="בחר או הקלד שם"
+                                      aria-invalid={!row.employee.trim()}
+                                      onChange={(event) =>
+                                        updateConstraint(index, rowIndex, {
+                                          employee: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    <span>משמרת</span>
+                                    <input
+                                      value={row.shift}
+                                      list={`import-shifts-${index}`}
+                                      onChange={(event) =>
+                                        updateConstraint(index, rowIndex, {
+                                          shift: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  <label>
+                                    <span>תאריך</span>
+                                    <input
+                                      type="date"
+                                      value={row.date}
+                                      aria-invalid={!row.date}
+                                      onChange={(event) =>
+                                        updateConstraint(index, rowIndex, {
+                                          date: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  </label>
+                                  <button
+                                    type="button"
+                                    className="import-delete"
+                                    aria-label="מחיקת סימון אי־זמינות"
+                                    onClick={() =>
+                                      removeConstraint(index, rowIndex)
+                                    }
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </section>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
@@ -386,7 +684,11 @@ export function ImportSchedule({
           </div>
         )}
 
-        {error ? <p className="import-error">{error}</p> : null}
+        {error ? (
+          <p className="import-error" role="alert">
+            {error}
+          </p>
+        ) : null}
 
         {preview ? (
           <div className="modal-actions">
@@ -404,13 +706,19 @@ export function ImportSchedule({
               type="button"
               className="primary-button"
               onClick={confirm}
-              disabled={busy || missingShift.length > 0}
+              disabled={
+                busy ||
+                totals.assignments === 0 ||
+                Boolean(invalid.assignments || invalid.constraints)
+              }
             >
               <CheckCircle2 size={15} />
               {busy
                 ? "שומר…"
-                : missingShift.length
-                  ? "בחר משמרת כדי להמשיך"
+                : totals.assignments === 0
+                  ? "אין שיבוצים לשמירה"
+                : invalid.assignments || invalid.constraints
+                  ? `יש להשלים ${invalid.assignments + invalid.constraints} שורות`
                   : `שמירת ${totals.assignments} שיבוצים`}
             </button>
           </div>

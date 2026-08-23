@@ -1354,6 +1354,25 @@ def test_an_unreadable_file_does_not_sink_the_batch():
     assert body["failures"][0]["filename"] == "junk.xlsx"
 
 
+def test_a_workbook_reads_schedule_tabs_even_when_summary_is_active():
+    from openpyxl import Workbook
+
+    book = Workbook()
+    book.active.title = "סיכום"
+    book.active.append(["מדד", "ערך"])
+    schedule = book.create_sheet("שבוע 1")
+    schedule.append(["משמרות", "1/6/25"])
+    schedule.append([MORNING, "דנה"])
+
+    app, repo = _build_app([])
+    body = _preview(_client(app), [book]).json()
+
+    assert len(body["periods"]) == 1
+    assert body["periods"][0]["filename"].endswith("שבוע 1")
+    assert body["periods"][0]["assignments"][0]["employee"] == "דנה"
+    assert body["failures"][0]["filename"].endswith("סיכום")
+
+
 def test_no_readable_file_at_all_is_an_error():
     app, repo = _build_app([])
     response = _client(app).post(

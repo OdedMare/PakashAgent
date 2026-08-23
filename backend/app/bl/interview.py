@@ -398,8 +398,15 @@ class IntroInterview:
             topic_id for topic_id in CORE_TOPIC_IDS
             if topic_id not in payload["answered_topic_ids"]
         ]
+        correction_topic = _bounded(state.get("correction_topic_id"))
         question_topic = _as_dict(result.get("question")).get("topic_id")
-        if enforce_core and unanswered:
+        if enforce_core and correction_topic in unanswered:
+            # A correction updates an earlier fact; it does not silently
+            # answer the question that happened to be open at the time.
+            result["question"] = _topic_question(correction_topic)
+            result["awaiting_confirmation"] = False
+            result["ready"] = False
+        elif enforce_core and unanswered:
             # Optional discovery cannot run before every core question has a
             # manager answer. The model may choose the order, but not skip a
             # required topic or jump straight to its summary.

@@ -15,7 +15,7 @@ import io
 import pytest
 
 from app.bl.export import as_workbook
-from app.bl.importer import infer, read_grid
+from app.bl.importer import infer, read_grid, read_grids
 from app.common.errors import AgentError
 from tests.fixtures.build import EVENING, MORNING, ON_CALL, sample_a, sample_b
 
@@ -314,3 +314,84 @@ def test_the_declared_spelling_wins_over_the_sheets():
     ]
     found = infer(grid, {"shifts": [{"name": MORNING}]})
     assert found.shifts == [MORNING]
+
+
+# -- real-world workbook resilience ---------------------------------------
+
+def test_every_visible_worksheet_is_returned_for_inference():
+    from openpyxl import Workbook
+
+    book = Workbook()
+    book.active.title = "סיכום"
+    book.active.append(["הערות למנהל"])
+    schedule = book.create_sheet("שבוע 1")
+    schedule.append(["משמרות", "1/6/25"])
+    schedule.append([MORNING, "דנה"])
+
+    sheets = read_grids(_workbook_bytes(book), "year.xlsx")
+
+    assert [name for name, _grid in sheets] == ["סיכום", "שבוע 1"]
+    assert infer(sheets[1][1], PROFILE).assignments[0]["employee"] == "דנה"
+
+
+def test_reported_excel_dimensions_are_bounded_before_iteration():
+    from openpyxl import Workbook
+
+    book = Workbook()
+    book.active.append(["משמרות", "1/6/25"])
+    book.active.append([MORNING, "דנה"])
+    # A stray formatted/value cell far down the sheet is common after users
+    # delete old rows. It must not make openpyxl materialise half a million.
+    book.active.cell(row=500000, column=1, value="old")
+
+    grid = read_grid(_workbook_bytes(book), "large-dimension.xlsx")
+
+    assert len(grid) == 400
+    assert infer(grid, PROFILE).assignments[0]["employee"] == "דנה"
+
+
+def test_yearless_dates_are_never_assumed_silently():
+    found = infer(
+        [["משמרות", "2.2"], [MORNING, "דנה"]], PROFILE
+    )
+    assert any("ללא שנה" in note for note in found.warnings)
+
+
+def test_shift_major_unavailability_is_preserved_for_confirmation():
+    found = infer(
+        [
+            ["משמרות", "1/6/25", "2/6/25"],
+            [MORNING, "לא זמינה", "דנה"],
+        ], PROFILE
+    )
+    assert found.unavailability == [{
+        "employee": "", "shift": MORNING, "date": "2025-06-01",
+        "reason": "לא זמינה",
+    }]
+    assert any("אינם משויכים" in note for note in found.warnings)
+
+
+def test_duplicate_placements_are_removed_and_reported():
+    found = infer([
+        ["משמרות", "1/6/25"],
+        [MORNING, "דנה, דנה"],
+    ], PROFILE)
+    assert len(found.assignments) == 1
+    assert any("כפולות" in note for note in found.warnings)
+
+
+@pytest.mark.parametrize("header", ["2025-06-01", "1-6-2025", "45809"])
+def test_common_excel_date_representations_are_read(header):
+    found = infer([["משמרות", header], [MORNING, "דנה"]], PROFILE)
+    assert found.starts_on == "2025-06-01"
+
+
+def test_old_xls_gets_an_actionable_error():
+    with pytest.raises(AgentError, match="xlsx"):
+        read_grids(b"legacy", "schedule.xls")
+
+
+def _workbook_bytes(book):
+    stream = io.BytesIO()
+    book.save(stream)
+    return stream.getvalue()

@@ -3,9 +3,11 @@
 import {
   Circle,
   CircleCheck,
+  ChevronDown,
   Clock,
   ListTodo,
   Loader2,
+  PencilLine,
   Users,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -36,6 +38,7 @@ export function DraftPanel({
   draft,
   resolved,
   openPoints,
+  onCorrect,
   /** True while a turn is being generated. The panel keeps showing the last
    *  known numbers and marks itself as working, rather than blanking — the
    *  figures remain true until the answer in flight changes them, and
@@ -45,11 +48,15 @@ export function DraftPanel({
   draft: WorkplaceProfile | null;
   resolved: string[];
   openPoints: string[];
+  onCorrect?: (content: string) => void;
   busy?: boolean;
 }) {
   const workplace = draft?.workplace ?? {};
   const stats = computeDraftStats(draft);
   const changed = useChangedKeys(stats);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [editing, setEditing] = useState("");
+  const [correction, setCorrection] = useState("");
 
   const empty =
     !workplace.name &&
@@ -62,7 +69,22 @@ export function DraftPanel({
   if (empty) return null;
 
   return (
-    <aside className="draft-panel" aria-label="הפרופיל שנאסף עד כה">
+    <aside
+      className={`draft-panel${mobileOpen ? " mobile-open" : ""}`}
+      aria-label="הפרופיל שנאסף עד כה"
+    >
+      <button
+        type="button"
+        className="draft-mobile-toggle"
+        onClick={() => setMobileOpen((open) => !open)}
+        aria-expanded={mobileOpen}
+      >
+        <span>
+          הפרופיל שבנינו · {stats.staff} עובדים · {stats.shifts} משמרות
+        </span>
+        <ChevronDown size={16} aria-hidden="true" />
+      </button>
+
       <div className="draft-head">
         {workplace.name ? (
           <h2 className="draft-name">{workplace.name}</h2>
@@ -144,9 +166,66 @@ export function DraftPanel({
           </h3>
           <ul className="draft-list resolved">
             {resolved.map((line) => (
-              <li key={line}>{line}</li>
+              <li key={line}>
+                <span>{line}</span>
+                {onCorrect ? (
+                  <button
+                    type="button"
+                    className="draft-correct"
+                    onClick={() => {
+                      setEditing(line);
+                      setCorrection("");
+                    }}
+                    disabled={busy}
+                  >
+                    <PencilLine size={12} aria-hidden="true" />
+                    תיקון
+                  </button>
+                ) : null}
+              </li>
             ))}
           </ul>
+
+          {editing ? (
+            <form
+              className="draft-correction"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const value = correction.trim();
+                if (!value) return;
+                onCorrect?.(`תיקון ל״${editing}״: ${value}`);
+                setEditing("");
+                setCorrection("");
+              }}
+            >
+              <label>
+                <span>מה צריך לתקן?</span>
+                <textarea
+                  rows={2}
+                  value={correction}
+                  onChange={(event) => setCorrection(event.target.value)}
+                  autoFocus
+                  disabled={busy}
+                />
+              </label>
+              <div>
+                <button
+                  type="button"
+                  className="draft-correction-cancel"
+                  onClick={() => setEditing("")}
+                >
+                  ביטול
+                </button>
+                <button
+                  type="submit"
+                  className="draft-correction-save"
+                  disabled={busy || !correction.trim()}
+                >
+                  שמירת התיקון
+                </button>
+              </div>
+            </form>
+          ) : null}
         </section>
       ) : null}
 

@@ -810,6 +810,13 @@ def _parse_date(value: Any) -> str:
     text = _normalise(value)
     if not text:
         return ""
+    if re.match(r"^\d{5}(?:\.0+)?$", text):
+        serial = float(text)
+        if 20000 <= serial <= 80000:
+            return (
+                datetime.date(1899, 12, 30)
+                + datetime.timedelta(days=int(serial))
+            ).isoformat()
     # Strip a trailing or leading weekday name: it is a label on the date,
     # not part of it.
     for weekday in _HEBREW_WEEKDAYS:
@@ -860,6 +867,73 @@ def _warnings(dates: List[tuple]) -> List[str]:
 
 
 # -- helpers ---------------------------------------------------------------
+
+def _has_yearless_dates(grid: List[List[str]]) -> bool:
+    for row in grid[:_MAX_HEADER_SCAN]:
+        for value in row:
+            text = _normalise(value)
+            for weekday in _HEBREW_WEEKDAYS:
+                text = text.replace("יום " + weekday, " ").replace(
+                    weekday, " "
+                )
+            if _DAY_MONTH.match(text.strip(" ,|-()׳״")):
+                return True
+    return False
+
+
+def _deduplicated(found: Interpretation) -> Interpretation:
+    """Remove repeated rows without changing the first visible occurrence."""
+    assignments = []
+    seen = set()
+    for row in found.assignments:
+        clean = {
+            "employee": _text(row.get("employee")),
+            "shift": _text(row.get("shift")),
+            "date": _parse_date(row.get("date")),
+        }
+        key = (clean["employee"], clean["shift"], clean["date"])
+        if not clean["employee"] or not clean["date"] or key in seen:
+            continue
+        seen.add(key)
+        assignments.append(clean)
+
+    unavailability = []
+    seen_unavailability = set()
+    for row in found.unavailability:
+        clean = {
+            "employee": _text(row.get("employee")),
+            "shift": _text(row.get("shift")),
+            "date": _parse_date(row.get("date")),
+            "reason": _text(row.get("reason")),
+        }
+        key = (
+            clean["employee"], clean["shift"], clean["date"], clean["reason"]
+        )
+        if not clean["date"] or key in seen_unavailability:
+            continue
+        seen_unavailability.add(key)
+        unavailability.append(clean)
+
+    removed = (
+        len(found.assignments) - len(assignments)
+        + len(found.unavailability) - len(unavailability)
+    )
+    if removed:
+        found.warnings.append(
+            "%d שורות כפולות או חלקיות הוסרו מהתצוגה" % removed
+        )
+    found.assignments = assignments
+    found.unavailability = unavailability
+    found.people = sorted(set(
+        [_text(name) for name in found.people if _text(name)]
+        + [row["employee"] for row in unavailability if row["employee"]]
+    ))
+    found.dates = sorted(set(
+        [row["date"] for row in assignments]
+        + [row["date"] for row in unavailability]
+    ))
+    found.warnings = list(dict.fromkeys(found.warnings))
+    return found
 
 def _vocabulary(profile: Optional[dict]) -> List[dict]:
     """The declared shifts, with their hours (D9).

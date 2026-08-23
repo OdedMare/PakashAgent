@@ -7,9 +7,11 @@ which is authoring — D5 keeps employees on the reading side of the product, so
 a member's session cannot reach any of it.
 """
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends
 
-from app.api.contracts import AnswerRequest, InterviewTurn
+from app.api.contracts import AnswerRequest, InterviewSeed, InterviewTurn
 
 
 def build_router(service, guards) -> APIRouter:
@@ -17,9 +19,14 @@ def build_router(service, guards) -> APIRouter:
     boss = guards.boss()
 
     @router.post("", response_model=InterviewTurn)
-    def start(session: dict = Depends(boss)) -> dict:
+    def start(
+        request: Optional[InterviewSeed] = None,
+        session: dict = Depends(boss),
+    ) -> dict:
         """Open a new interview and return its first question."""
-        return service.start(session["team_id"])
+        return service.start(
+            session["team_id"], request.model_dump() if request else None
+        )
 
     @router.get("/{session_id}", response_model=InterviewTurn)
     def resume(session_id: str, session: dict = Depends(boss)) -> dict:
@@ -33,7 +40,9 @@ def build_router(service, guards) -> APIRouter:
         session: dict = Depends(boss),
     ) -> dict:
         """Record an answer and return the next question, or the profile."""
-        return service.answer(session_id, session["team_id"], request.content)
+        return service.answer(
+            session_id, session["team_id"], request.content, request.mode
+        )
 
     @router.post("/{session_id}/retry", response_model=InterviewTurn)
     def retry(session_id: str, session: dict = Depends(boss)) -> dict:

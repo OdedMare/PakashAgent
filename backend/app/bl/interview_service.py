@@ -53,7 +53,7 @@ class InterviewService:
         self._interview = IntroInterview(llm)
         self._launch = launch or _launch_thread
 
-    def start(self, team_id: str) -> dict:
+    def start(self, team_id: str, seed: dict = None) -> dict:
         """Open a session and ask the first question.
 
         An interview already in progress for this team is resumed instead of
@@ -66,7 +66,9 @@ class InterviewService:
         if active is not None:
             return self.resume(active["id"], team_id)
         session = self._repository.create_session(team_id)
-        return self._queue(session["id"], team_id, None)
+        return self._queue(
+            session["id"], team_id, _seeded_state(seed) if seed else None
+        )
 
     def start_follow_up(self, team_id: str, question: str) -> dict:
         """Open a resumable interview seeded with the current profile.
@@ -116,7 +118,10 @@ class InterviewService:
             return self._queue(session_id, team_id, pending)
         return _turn(session_id, pending, session["turns"])
 
-    def answer(self, session_id: str, team_id: str, content: str) -> dict:
+    def answer(
+        self, session_id: str, team_id: str, content: str,
+        mode: str = "answer",
+    ) -> dict:
         """Record the boss's answer and ask the next question."""
         session = self._repository.get_session(session_id, team_id)
         if session["status"] == "complete":
@@ -129,7 +134,8 @@ class InterviewService:
         text = (content or "").strip()
         if not text:
             raise AgentError("התשובה אינה יכולה להיות ריקה")
-        self._repository.append_turn(session_id, "user", text)
+        payload = {"mode": "correction"} if mode == "correction" else None
+        self._repository.append_turn(session_id, "user", text, payload)
         return self._queue(session_id, team_id, pending)
 
     def retry(self, session_id: str, team_id: str) -> dict:
@@ -201,6 +207,7 @@ class InterviewService:
         state["confirmation_was_awaiting"] = _last_assistant_was_awaiting(
             session["turns"]
         )
+        state["correction_topic_id"] = _correction_topic_id(session["turns"])
         draft = state.get("draft")
         result = self._interview.next_turn(history, draft, state)
         # Ending the interview is deliberately allowed while the model is
@@ -334,6 +341,7 @@ def _answered_topic_ids(turns) -> list:
         elif (
             row.get("role") == "user"
             and pending
+            and (row.get("payload") or {}).get("mode") != "correction"
             and (row.get("content") or "").strip()
         ):
             if pending not in answered:
@@ -350,6 +358,8 @@ def _optional_interview_choice(turns) -> str:
             question = (row.get("payload") or {}).get("question") or {}
             awaiting_choice = question.get("topic_id") == CONTINUE_TOPIC_ID
         elif row.get("role") == "user" and awaiting_choice:
+            if (row.get("payload") or {}).get("mode") == "correction":
+                continue
             answer = (row.get("content") or "").strip()
             if answer == CONTINUE_ANSWER:
                 return "continue"
@@ -366,6 +376,26 @@ def _last_assistant_was_awaiting(turns) -> bool:
                 (row.get("payload") or {}).get("awaiting_confirmation")
             )
     return False
+
+
+def _correction_topic_id(turns) -> str:
+    """The question a trailing correction interrupted, if there is one."""
+    if not turns:
+        return ""
+    last = turns[-1]
+    if (
+        last.get("role") != "user"
+        or (last.get("payload") or {}).get("mode") != "correction"
+    ):
+        return ""
+    for row in reversed(turns[:-1]):
+        if row.get("role") != "assistant":
+            continue
+        topic_id = ((row.get("payload") or {}).get("question") or {}).get(
+            "topic_id"
+        )
+        return topic_id if topic_id in CORE_TOPIC_IDS else ""
+    return ""
 
 
 def _turn(session_id: str, pending: dict, turns) -> dict:
@@ -452,7 +482,88 @@ def _message(row: dict) -> dict:
         "question": payload.get("question"),
         "options": question.get("options", []),
         "recommendation": question.get("recommendation"),
+        "mode": payload.get("mode", ""),
     }
+
+
+def _seeded_state(seed: dict) -> dict:
+    """A sparse draft from an imported roster; the interview verifies it."""
+    seed = seed if isinstance(seed, dict) else {}
+    workplace_name = _seed_text(seed.get("workplace_name"))
+    employee_rows = seed.get("employees")
+    shift_rows = seed.get("shifts")
+    employee_rows = employee_rows if isinstance(employee_rows, dict) else {}
+    shift_rows = shift_rows if isinstance(shift_rows, dict) else {}
+
+    employees = []
+    for raw_name, raw_shifts in list(employee_rows.items())[:500]:
+        name = _seed_text(raw_name)
+        if name:
+            employees.append({
+                "name": name,
+                "eligible_shifts": _seed_list(raw_shifts),
+            })
+
+    shifts = []
+    for raw_name, raw_days in list(shift_rows.items())[:100]:
+        name = _seed_text(raw_name)
+        if name:
+            shifts.append({"name": name, "days": _seed_list(raw_days)})
+
+    files = _seed_list(seed.get("source_files"), limit=8)
+    starts_on = _seed_text(seed.get("starts_on"), 10)
+    ends_on = _seed_text(seed.get("ends_on"), 10)
+    source = "קבצי סידור קיימים"
+    if files:
+        source += ": " + ", ".join(files)
+    if starts_on and ends_on:
+        source += " (%s עד %s)" % (starts_on, ends_on)
+
+    draft = empty_draft()
+    if workplace_name:
+        draft["workplace"] = {"name": workplace_name}
+    draft["employees"] = employees
+    draft["shifts"] = shifts
+    draft["existing_schedule_source"] = source
+
+    resolved = []
+    if workplace_name:
+        resolved.append("שם מקום העבודה: %s" % workplace_name)
+    if employees:
+        resolved.append("נמצאו %d עובדים בסידור הקיים." % len(employees))
+    if shifts:
+        resolved.append("נמצאו %d סוגי משמרות בסידור הקיים." % len(shifts))
+
+    open_points = []
+    if employees:
+        open_points.append("לאשר תפקידים והיקפי עבודה של העובדים שנמצאו.")
+    if shifts:
+        open_points.append("לאשר שעות ותקינה של המשמרות שנמצאו.")
+
+    return {
+        "draft": draft,
+        "resolved": resolved,
+        "open_points": open_points,
+        "reply": "קראתי את הסידור הקיים. עכשיו נאמת רק את מה שצריך.",
+    }
+
+
+def _seed_text(value, limit: int = 120) -> str:
+    return value.strip()[:limit] if isinstance(value, str) else ""
+
+
+def _seed_list(value, limit: int = 30) -> list:
+    if not isinstance(value, list):
+        return []
+    seen, result = set(), []
+    for item in value:
+        value = _seed_text(item)
+        if value and value not in seen:
+            seen.add(value)
+            result.append(value)
+        if len(result) == limit:
+            break
+    return result
 
 
 __all__ = ["InterviewService"]

@@ -15,6 +15,7 @@ import type {
   ImportedConstraint,
   ImportPreview,
   InterviewTurn,
+  InterviewSeed,
   ManagementOverview,
   Operation,
   PlacementCheck,
@@ -132,8 +133,11 @@ function errorDetail(data: unknown, status: number): string {
   return `שגיאת שרת (${status})`;
 }
 
-export function startInterview(): Promise<InterviewTurn> {
-  return request<InterviewTurn>("/api/interview", { method: "POST" });
+export function startInterview(seed?: InterviewSeed): Promise<InterviewTurn> {
+  return request<InterviewTurn>("/api/interview", {
+    method: "POST",
+    body: seed ? JSON.stringify(seed) : undefined,
+  });
 }
 
 export function resumeInterview(sessionId: string): Promise<InterviewTurn> {
@@ -143,10 +147,11 @@ export function resumeInterview(sessionId: string): Promise<InterviewTurn> {
 export function answerInterview(
   sessionId: string,
   content: string,
+  mode: "answer" | "correction" = "answer",
 ): Promise<InterviewTurn> {
   return request<InterviewTurn>(`/api/interview/${sessionId}/answer`, {
     method: "POST",
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, mode }),
   });
 }
 
