@@ -17,7 +17,9 @@ this be tested against a fake model with no database.
 """
 
 import copy
+import difflib
 import json
+import re
 from typing import Any, Dict, List, Optional
 
 from app.bl.prompts import load
@@ -50,90 +52,59 @@ _MAX_ASKED = 40
 
 INTERVIEW_TOPICS = (
     {
-        "id": "workplace_mission",
-        "question": "מה שם מקום העבודה ועל מה המשמרת אחראית?",
+        "id": "workplace_and_cycle",
+        "question": "מה שם מקום העבודה ולאיזו תקופה בונים כל סידור?",
     },
     {
-        "id": "success_criteria",
-        "question": "איך יודעים שהמשמרת הצליחה?",
-    },
-    {
-        "id": "operation_calendar",
-        "question": "באילו ימים ושעות מקום העבודה פעיל?",
-    },
-    {
-        "id": "planning_cycle",
-        "question": "לאיזו תקופה בונים סידור ומתי נסגרת הגשת האילוצים?",
+        "id": "operating_calendar",
+        "question": "באילו ימים ושעות מקום העבודה פעיל, והאם יש ימים חריגים?",
     },
     {
         "id": "shift_vocabulary",
-        "question": "אילו סוגי משמרות קיימים ומה השעות של כל אחת?",
+        "question": "מהן המשמרות: השם המדויק ושעת ההתחלה והסיום של כל אחת?",
     },
     {
         "id": "staffing",
-        "question": "כמה עובדים ותפקידים נדרשים בכל משמרת, והאם התקינה משתנה בין ימי השבוע?",
+        "question": "כמה עובדים ואילו תפקידים חייבים להיות בכל משמרת, והאם התקן משתנה לפי יום?",
     },
     {
-        "id": "employees",
-        "question": "מי העובדים שמחזיקים את המשמרות, מה תפקידם ומה היקף העבודה הרגיל שלהם?",
+        "id": "roster",
+        "question": "מי העובדים: שם, תפקיד, אילו משמרות הם יכולים לבצע ומה היקף העבודה הרגיל שלהם?",
     },
     {
-        "id": "managers",
-        "question": "האם מנהלי משמרת משובצים בעצמם, ולאילו סוגי משמרות?",
+        "id": "constraints",
+        "question": "אילו אילוצים קבועים וכללי חובה יש, ועד מתי העובדים מגישים אילוצים?",
     },
     {
-        "id": "qualifications",
-        "question": "מי מוסמך לכל סוג משמרת ואיך מזהים את ההכשרה או המגבלה?",
+        "id": "rest_policy",
+        "question": "מה כללי המנוחה בין משמרות, רצף ימי עבודה, לילות וסופי שבוע?",
     },
     {
-        "id": "shadow_training",
-        "question": "האם יש מתלמדים במשמרות צל ומה מדיניות החפיפה שלהם?",
+        "id": "special_cases",
+        "question": "האם יש כוננים, מתלמדים, עובדים מזדמנים או מנהלים שמשובצים, ואיך סופרים אותם?",
     },
     {
-        "id": "availability",
-        "question": "איך אילוצים וזמינות נראים בלוח, והאם אילוץ יומי פוסל את כל המשמרות באותו יום?",
-    },
-    {
-        "id": "casual_workers",
-        "question": "האם יש עובדים מזדמנים, ואיך ומתי מתקבלת הזמינות שלהם?",
-    },
-    {
-        "id": "on_call",
-        "question": "האם קיימת כוננות, וכיצד היא נספרת בשעות ובהוגנות לעומת משמרת רגילה?",
-    },
-    {
-        "id": "rest_and_weekend",
-        "question": "מה כללי המנוחה, הלילות וסופי השבוע, כולל המשמרת האחרונה לפני יציאה לסוף שבוע?",
-    },
-    {
-        "id": "fairness",
-        "question": "איך מחלקים משמרות רצויות, לילות, סופי שבוע ושעות נוספות בצורה הוגנת?",
-    },
-    {
-        "id": "rules",
-        "question": "אילו כללים הם חובה ואילו העדפות רכות, בניסוח שלך?",
-    },
-    {
-        "id": "availability_source",
-        "question": "מאיפה מגיעים אילוצים, חופשות ושינויים, ומי אחראי לעדכן אותם?",
-    },
-    {
-        "id": "recurring_constraints",
-        "question": "האם קיימים אילוצים קבועים שחוזרים בכל תקופת סידור?",
-    },
-    {
-        "id": "scheduling_authority",
-        "question": "מי רשאי לשבץ ולאשר את הסידור, והאם הוא עובד במשמרות?",
-    },
-    {
-        "id": "existing_schedule",
-        "question": "האם יש סידורים קודמים או קובץ לדוגמה שמהם כדאי ללמוד?",
-    },
-    {
-        "id": "conflict_policy",
-        "question": "כשאי אפשר לעמוד בכל הדרישות, מה סדר העדיפויות ועל מה חייבים להתריע?",
+        "id": "priorities",
+        "question": "כשיש התנגשות, מה קודם למה ואיך תרצה לחלק עומס, לילות וסופי שבוע?",
     },
 )
+
+CORE_TOPIC_IDS = tuple(item["id"] for item in INTERVIEW_TOPICS)
+CONTINUE_TOPIC_ID = "continue_optional"
+OPTIONAL_TOPIC_ID = "optional_follow_up"
+CONTINUE_ANSWER = "כן, אפשר להמשיך לכמה שאלות העמקה קצרות."
+FINISH_ANSWER = "לא, מספיק לי. אפשר לעבור לסיכום ולאישור."
+
+_CONTINUE_QUESTION = {
+    "topic_id": CONTINUE_TOPIC_ID,
+    "question": "סיימנו את שאלות החובה. להמשיך לכמה שאלות העמקה אופציונליות?",
+    "recommendation": "אם זה הסידור הראשון שלך במערכת, כדאי לעבור לסיכום ולהתחיל לעבוד.",
+    "why": "פרטים נוספים אפשר ללמד אחר כך מתוך תיקונים אמיתיים, בלי להאריך את ההקמה.",
+    "options": [
+        {"label": "לעבור לסיכום", "answer": FINISH_ANSWER},
+        {"label": "להמשיך להעמקה", "answer": CONTINUE_ANSWER},
+    ],
+}
 
 
 _PROFILE_SCHEMA = {
@@ -317,8 +288,14 @@ _OPTION_SCHEMA = {
 _QUESTION_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["question", "recommendation", "why", "options"],
+    "required": ["topic_id", "question", "recommendation", "why", "options"],
     "properties": {
+        "topic_id": {
+            "type": "string",
+            "enum": list(CORE_TOPIC_IDS) + [
+                CONTINUE_TOPIC_ID, OPTIONAL_TOPIC_ID,
+            ],
+        },
         "question": {"type": "string"},
         "recommendation": {"type": "string"},
         "why": {"type": "string"},
@@ -389,6 +366,7 @@ class IntroInterview:
     ) -> dict:
         """One turn: gather context, ask the model once, shape the answer."""
         state = _as_dict(state)
+        enforce_core = "answered_topic_ids" in state
         clean = _validated_history(history)
         payload = {
             "topics": INTERVIEW_TOPICS,
@@ -406,9 +384,58 @@ class IntroInterview:
             "draft_so_far": _as_dict(draft),
             "resolved_so_far": _lines(state.get("resolved")),
             "open_points_so_far": _lines(state.get("open_points")),
+            "answered_topic_ids": [
+                topic_id for topic_id in state.get("answered_topic_ids", [])
+                if topic_id in CORE_TOPIC_IDS
+            ],
+            "optional_interview_choice": _bounded(
+                state.get("optional_interview_choice")
+            ),
         }
         answer = self._ask(payload)
         result = _result(answer, draft)
+        unanswered = [
+            topic_id for topic_id in CORE_TOPIC_IDS
+            if topic_id not in payload["answered_topic_ids"]
+        ]
+        question_topic = _as_dict(result.get("question")).get("topic_id")
+        if enforce_core and unanswered:
+            # Optional discovery cannot run before every core question has a
+            # manager answer. The model may choose the order, but not skip a
+            # required topic or jump straight to its summary.
+            if question_topic not in unanswered:
+                result["question"] = _topic_question(unanswered[0])
+            result["awaiting_confirmation"] = False
+            result["ready"] = False
+        elif enforce_core and not payload["optional_interview_choice"]:
+            result["reply"] = "סיימנו את תשע שאלות החובה."
+            result["question"] = copy.deepcopy(_CONTINUE_QUESTION)
+            result["awaiting_confirmation"] = False
+            result["ready"] = False
+        elif (
+            enforce_core
+            and payload["optional_interview_choice"] == "finish"
+            and not state.get("confirmation_was_awaiting")
+        ):
+            result["question"] = None
+            result["awaiting_confirmation"] = True
+            result["ready"] = False
+        elif (
+            result["question"] is not None
+            and _already_asked(
+                result["question"]["question"],
+                payload["questions_already_asked"],
+            )
+        ):
+            replacement = _next_topic_question(
+                payload["questions_already_asked"]
+            )
+            if replacement is not None:
+                result["question"] = replacement
+            elif not missing_topics(result["draft"]):
+                result["question"] = None
+                result["awaiting_confirmation"] = True
+                result["ready"] = False
         # A model can legally satisfy the JSON schema with `question: null`
         # while also saying the interview is neither confirming nor done.
         # That leaves a live composer under no question and the conversation
@@ -578,6 +605,7 @@ def _question(value) -> Optional[dict]:
     if not asked:
         return None
     return {
+        "topic_id": _bounded(value.get("topic_id")),
         "question": asked,
         "recommendation": _bounded(value.get("recommendation")),
         "why": _bounded(value.get("why")),
@@ -585,19 +613,68 @@ def _question(value) -> Optional[dict]:
     }
 
 
-def _next_topic_question(asked) -> dict:
+def _next_topic_question(asked) -> Optional[dict]:
     """A deterministic escape hatch when a model forgets to ask anything."""
-    seen = {_bounded(item) for item in asked or [] if _bounded(item)}
-    topic = next(
-        (item for item in INTERVIEW_TOPICS if item["question"] not in seen),
-        INTERVIEW_TOPICS[-1],
-    )
+    asked = [_bounded(item) for item in asked or [] if _bounded(item)]
+    topic = next((
+        item for item in INTERVIEW_TOPICS
+        if not _already_asked(item["question"], asked)
+    ), None)
+    if topic is None:
+        return None
     return {
+        "topic_id": topic["id"],
         "question": topic["question"],
         "recommendation": "",
         "why": "",
         "options": [],
     }
+
+
+def _topic_question(topic_id: str) -> dict:
+    topic = next(item for item in INTERVIEW_TOPICS if item["id"] == topic_id)
+    return {
+        "topic_id": topic_id,
+        "question": topic["question"],
+        "recommendation": "",
+        "why": "",
+        "options": [],
+    }
+
+
+_QUESTION_STOP_WORDS = frozenset({
+    "איך", "אילו", "איזה", "האם", "מה", "מי", "של", "את", "על", "עם",
+    "בכל", "כל", "יש", "כמה", "ומה", "הם", "היא", "הוא",
+})
+
+
+def _already_asked(question: str, asked: List[str]) -> bool:
+    """Exact or near-identical wording that the manager already saw."""
+    current = _question_words(question)
+    if not current:
+        return False
+    current_text = " ".join(current)
+    current_set = set(current)
+    for previous in asked:
+        words = _question_words(previous)
+        if not words:
+            continue
+        previous_text = " ".join(words)
+        if difflib.SequenceMatcher(
+            None, current_text, previous_text
+        ).ratio() >= 0.76:
+            return True
+        shared = current_set.intersection(words)
+        if len(shared) >= 2 and len(shared) / min(
+            len(current_set), len(set(words))
+        ) >= 0.75:
+            return True
+    return False
+
+
+def _question_words(value: str) -> List[str]:
+    words = re.findall(r"[\w\u0590-\u05ff]+", _bounded(value).lower())
+    return [word for word in words if word not in _QUESTION_STOP_WORDS]
 
 
 def _options(question: dict) -> List[dict]:
@@ -678,7 +755,6 @@ def _merged_draft(offered, previous) -> dict:
 # point rather than the manager discovering it after the session closed.
 _REQUIRED_TOPICS = (
     ("workplace", "name", "חסר שם למקום העבודה."),
-    ("workplace", "mission", "חסר תיאור האחריות של המשמרת."),
     ("workplace", "planning_horizon", "חסרה תקופת התכנון של הסידור."),
 )
 
@@ -803,6 +879,7 @@ def empty_draft() -> dict:
 
 
 __all__ = [
+    "CONTINUE_ANSWER", "CONTINUE_TOPIC_ID", "CORE_TOPIC_IDS", "FINISH_ANSWER",
     "INTERVIEW_RESPONSE_SCHEMA", "INTERVIEW_TOPICS", "IntroInterview",
     "empty_draft", "missing_topics",
 ]

@@ -306,6 +306,14 @@ def test_one_employee_is_answered_with_no_model(repo, tools):
     assert "8" in answer["answer"]
 
 
+def test_team_information_is_answered_with_no_model(repo, tools):
+    agent = PlanningAgent(_NoModel(), tools)
+    answer = agent.answer(TEAM, "מי נמצא בצוות ומה התפקיד של כל אחד?", PROFILE)
+    assert answer["understood"] is True
+    assert DANA in answer["answer"] and "מוקדנית" in answer["answer"]
+    assert answer["steps"][0]["tool"] == "team_overview"
+
+
 def test_publish_readiness_is_answered_with_no_model(repo, tools):
     agent = PlanningAgent(_NoModel(), tools)
     answer = agent.answer(TEAM, "מה חסר לפני פרסום", PROFILE,

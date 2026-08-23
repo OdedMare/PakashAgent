@@ -1,4 +1,4 @@
-"""The named questions the agent may ask about a schedule, answered in code.
+"""The named questions the agent may ask about the team or schedule, answered in code.
 
 **Pure Python. No LLM call anywhere in this file.** Every function here is
 arithmetic or a filter over state the board already renders, and that is the
@@ -19,6 +19,7 @@ way that reads exactly like right.
 
 So the questions are named, and each one is answered by code:
 
+- `team_overview` — the declared roster, roles, shifts and workplace rules.
 - `read_period` — the schedule for a date or a period id, with its warnings.
 - `employee_state` — one person's shifts, hours, constraints and warnings.
 - `coverage_gaps` — slots short of their headcount, worst first.
@@ -60,6 +61,7 @@ from app.common.errors import AgentError
 # answering it with an error rather than an improvisation is what keeps the
 # model from describing capabilities the product does not have.
 TOOL_READ_PERIOD = "read_period"
+TOOL_TEAM_OVERVIEW = "team_overview"
 TOOL_EMPLOYEE_STATE = "employee_state"
 TOOL_COVERAGE_GAPS = "coverage_gaps"
 TOOL_VALIDATE_PLACEMENT = "validate_placement"
@@ -69,6 +71,7 @@ TOOL_PROFILE_GAPS = "profile_gaps"
 
 TOOL_NAMES = (
     TOOL_READ_PERIOD,
+    TOOL_TEAM_OVERVIEW,
     TOOL_EMPLOYEE_STATE,
     TOOL_COVERAGE_GAPS,
     TOOL_VALIDATE_PLACEMENT,
@@ -82,6 +85,7 @@ TOOL_NAMES = (
 # did, so the two can never describe the tools differently.
 TOOL_DESCRIPTIONS = {
     TOOL_READ_PERIOD: "קריאת הסידור של תקופה או של תאריך מסוים",
+    TOOL_TEAM_OVERVIEW: "מי נמצא בצוות, מה התפקידים ואילו משמרות הוגדרו",
     TOOL_EMPLOYEE_STATE: "המשמרות, השעות והאילוצים של עובד אחד",
     TOOL_COVERAGE_GAPS: "משמרות שחסרים בהן אנשים",
     TOOL_VALIDATE_PLACEMENT: "בדיקה מה יקרה אם משבצים מישהו למשמרת",
@@ -126,6 +130,7 @@ class ScheduleTools:
         arguments = arguments if isinstance(arguments, dict) else {}
         handler = {
             TOOL_READ_PERIOD: self.read_period,
+            TOOL_TEAM_OVERVIEW: self.team_overview,
             TOOL_EMPLOYEE_STATE: self.employee_state,
             TOOL_COVERAGE_GAPS: self.coverage_gaps,
             TOOL_VALIDATE_PLACEMENT: self.validate_placement,
@@ -159,6 +164,43 @@ class ScheduleTools:
         return dict(result, tool=_text(name), ok=result.get("ok", True))
 
     # -- reading -----------------------------------------------------------
+
+    def team_overview(self, team_id: str) -> dict:
+        """The declared team and shift vocabulary, without schedule rows."""
+        profile = self._profile(team_id)
+        if not profile:
+            return {
+                "found": False,
+                "reason": "לא הוגדרו עדיין פרטי צוות",
+                "employees": [],
+                "shifts": [],
+            }
+        employees = [
+            {
+                "name": _text(row.get("name")),
+                "role": _text(row.get("role")),
+                "eligible_shifts": _eligible(row),
+            }
+            for row in _employees(profile) if _text(row.get("name"))
+        ]
+        shifts = [
+            {
+                "name": _text(row.get("name")),
+                "start_time": _text(row.get("start_time")),
+                "end_time": _text(row.get("end_time")),
+                "is_on_call": bool(row.get("is_on_call")),
+            }
+            for row in _shifts(profile) if _text(row.get("name"))
+        ]
+        return {
+            "found": True,
+            "workplace": profile.get("workplace") or {},
+            "employee_count": len(employees),
+            "employees": employees,
+            "shift_count": len(shifts),
+            "shifts": shifts,
+            "rules": profile.get("rules") or [],
+        }
 
     def read_period(
         self,
@@ -823,6 +865,7 @@ __all__ = [
     "TOOL_NAMES",
     "TOOL_DESCRIPTIONS",
     "TOOL_READ_PERIOD",
+    "TOOL_TEAM_OVERVIEW",
     "TOOL_EMPLOYEE_STATE",
     "TOOL_COVERAGE_GAPS",
     "TOOL_VALIDATE_PLACEMENT",

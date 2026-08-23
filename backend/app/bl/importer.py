@@ -40,6 +40,7 @@ from app.common.errors import AgentError
 # cell is visited several times during inference.
 _MAX_ROWS = 400
 _MAX_COLUMNS = 200
+_MAX_FILE_BYTES = 20 * 1024 * 1024
 
 # How far a header row may sit from the top before we stop looking for it.
 # Real files carry a title and a blank line above the grid -- `export.py`
@@ -136,10 +137,33 @@ def read_grid(data: bytes, filename: str = "") -> List[List[str]]:
     what lets inference treat the header as a real `date x shift` grid rather
     than a row with holes in it.
     """
+    return read_grids(data, filename)[0][1]
+
+
+def read_grids(
+    data: bytes, filename: str = ""
+) -> List[Tuple[str, List[List[str]]]]:
+    """Every usable worksheet/table in one upload.
+
+    A workbook often opens on a summary or instructions tab while the real
+    schedules live in the other tabs. Returning every sheet lets the caller
+    infer each one independently; non-schedule tabs then become ordinary
+    per-sheet failures instead of hiding the schedules behind them.
+    """
+    if not data:
+        raise AgentError("הקובץ ריק")
+    if len(data) > _MAX_FILE_BYTES:
+        raise AgentError("הקובץ גדול מדי (עד 20MB לקובץ)")
+
     name = (filename or "").lower()
     if name.endswith(".docx"):
-        return _read_docx(data)
-    return _read_xlsx(data)
+        return [("", _read_docx(data))]
+    if name.endswith(".xls"):
+        raise AgentError(
+            "פורמט Excel הישן (.xls) אינו נתמך; "
+            "שמור את הקובץ כ־.xlsx ונסה שוב"
+        )
+    return _read_xlsx_sheets(data)
 
 
 def infer(grid: List[List[str]], profile: Optional[dict] = None) -> Interpretation:
@@ -178,13 +202,35 @@ def infer(grid: List[List[str]], profile: Optional[dict] = None) -> Interpretati
     structured = [
         found for found in candidates if found[1].layout != "date_only"
     ]
-    best = max(structured or candidates, key=lambda found: found[0])
-    return best[1]
+    ranked = sorted(
+        structured or candidates, key=lambda found: found[0], reverse=True
+    )
+    best = ranked[0]
+    result = best[1]
+    if (
+        len(ranked) > 1
+        and ranked[1][1].layout != result.layout
+        and ranked[1][0] >= best[0] * 0.85
+    ):
+        result.warnings.append(
+            "המבנה אינו חד־משמעי; בדוק שהשורות והעמודות "
+            "פורשו נכון לפני האישור"
+        )
+    if _has_yearless_dates(grid):
+        result.warnings.append(
+            "בקובץ יש תאריכים ללא שנה; השנה הנוכחית הונחה — "
+            "ודא אותה לפני האישור"
+        )
+    return _deduplicated(result)
 
 
 # -- xlsx / docx reading ---------------------------------------------------
 
 def _read_xlsx(data: bytes) -> List[List[str]]:
+    return _read_xlsx_sheets(data)[0][1]
+
+
+def _read_xlsx_sheets(data: bytes) -> List[Tuple[str, List[List[str]]]]:
     try:
         import io
 
@@ -197,10 +243,37 @@ def _read_xlsx(data: bytes) -> List[List[str]]:
     except Exception:
         raise AgentError("לא הצלחתי לפתוח את קובץ האקסל")
 
-    sheet = book.active
+    sheets = [
+        sheet for sheet in book.worksheets
+        if sheet.sheet_state == "visible"
+    ] or list(book.worksheets)
+    found = []
+    for sheet in sheets:
+        grid = _sheet_grid(sheet)
+        if any(any(cell for cell in row) for row in grid):
+            found.append((sheet.title, grid))
+    if not found:
+        raise AgentError("קובץ האקסל ריק")
+    return found
+
+
+def _sheet_grid(sheet) -> List[List[str]]:
+    """One worksheet, bounded before iteration rather than afterwards.
+
+    Excel files frequently carry formatting down to row 1,048,576. Asking
+    openpyxl to iterate the reported dimensions before `_bounded` runs makes
+    a visually tiny sheet need huge time and memory, so the limits belong at
+    the read boundary.
+    """
     grid = [
         [_text(value) for value in row]
-        for row in sheet.iter_rows(values_only=True)
+        for row in sheet.iter_rows(
+            min_row=1,
+            max_row=min(sheet.max_row, _MAX_ROWS),
+            min_col=1,
+            max_col=min(sheet.max_column, _MAX_COLUMNS),
+            values_only=True,
+        )
     ]
 
     # Merged ranges carry their value only in the top-left cell. Sample B's
@@ -213,8 +286,12 @@ def _read_xlsx(data: bytes) -> List[List[str]]:
         value = grid[top][left]
         if not value:
             continue
-        for row in range(merged.min_row - 1, merged.max_row):
-            for column in range(merged.min_col - 1, merged.max_col):
+        for row in range(
+            merged.min_row - 1, min(merged.max_row, _MAX_ROWS)
+        ):
+            for column in range(
+                merged.min_col - 1, min(merged.max_col, _MAX_COLUMNS)
+            ):
                 if row < len(grid) and column < len(grid[row]):
                     grid[row][column] = value
     return _rectangular(grid)
@@ -319,6 +396,10 @@ def _read_shift_major(
             explained += 1
             for name in _split_names(value):
                 if _is_unavailable(name):
+                    unavailability.append({
+                        "employee": "", "date": iso,
+                        "shift": shift_name, "reason": name,
+                    })
                     continue
                 assignments.append({
                     "employee": name, "shift": shift_name, "date": iso,
@@ -328,6 +409,12 @@ def _read_shift_major(
 
     if not shifts or not assignments:
         return None
+    notes = _warnings(dates)
+    if unavailability:
+        notes.append(
+            "%d סימוני אי־זמינות אינם משויכים לאדם — "
+            "השלם את השם לפני האישור" % len(unavailability)
+        )
     return explained, Interpretation(
         layout="shift_major",
         shifts=shifts,
@@ -335,7 +422,7 @@ def _read_shift_major(
         dates=[iso for _column, iso in dates],
         assignments=assignments,
         unavailability=unavailability,
-        warnings=_warnings(dates),
+        warnings=notes,
     )
 
 
@@ -689,10 +776,13 @@ def _is_weekday_row(row: List[str], dates: List[tuple]) -> bool:
 # -- dates -----------------------------------------------------------------
 
 _DATE_PATTERNS = (
+    ("%Y-%m-%d", r"^(\d{4})-(\d{1,2})-(\d{1,2})$"),
     ("%d/%m/%Y", r"^(\d{1,2})/(\d{1,2})/(\d{4})$"),
     ("%d/%m/%y", r"^(\d{1,2})/(\d{1,2})/(\d{2})$"),
     ("%d.%m.%Y", r"^(\d{1,2})\.(\d{1,2})\.(\d{4})$"),
     ("%d.%m.%y", r"^(\d{1,2})\.(\d{1,2})\.(\d{2})$"),
+    ("%d-%m-%Y", r"^(\d{1,2})-(\d{1,2})-(\d{4})$"),
+    ("%d-%m-%y", r"^(\d{1,2})-(\d{1,2})-(\d{2})$"),
 )
 # `d.M` with no year at all (Sample B). The year is not in the file and must
 # come from context -- see `_resolve_year`.
@@ -709,6 +799,14 @@ def _parse_date(value: Any) -> str:
     """
     if hasattr(value, "isoformat") and not isinstance(value, str):
         return value.isoformat()[:10]
+    if (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and 20000 <= value <= 80000
+    ):
+        return (
+            datetime.date(1899, 12, 30) + datetime.timedelta(days=int(value))
+        ).isoformat()
     text = _normalise(value)
     if not text:
         return ""
@@ -716,7 +814,7 @@ def _parse_date(value: Any) -> str:
     # not part of it.
     for weekday in _HEBREW_WEEKDAYS:
         text = text.replace("יום " + weekday, " ").replace(weekday, " ")
-    text = text.strip()
+    text = text.strip(" ,|-()׳״")
     if not text:
         return ""
 
@@ -884,7 +982,13 @@ def _declared_shift(value: str, vocabulary: List[dict]) -> str:
 
 def _normalise(value: Any) -> str:
     """Trimmed, whitespace-collapsed text for comparison."""
-    return re.sub(r"\s+", " ", _text(value)).strip()
+    text = _text(value).translate({
+        ord("\u200e"): None,
+        ord("\u200f"): None,
+        ord("\ufeff"): None,
+        ord("\u00a0"): " ",
+    })
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _text(value: Any) -> str:

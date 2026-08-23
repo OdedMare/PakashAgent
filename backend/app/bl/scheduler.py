@@ -290,9 +290,21 @@ class Scheduler:
             repaired_rows, repair_rejected = _read_day_assignments(
                 repaired_answer.get("assignments"), slots, profile, candidates
             )
-            current = _replace_day(committed, required + repaired_rows, day)
+            repaired_current = _replace_day(
+                committed, required + repaired_rows, day
+            )
+            repaired_warnings = _day_warnings(
+                repaired_current, slots, profile, availability, candidates, day
+            )
+            # A repair is another model answer, not proof of improvement.
+            # Keep the first answer when the second introduces more concrete
+            # rejected rows or audit warnings.
+            if len(repair_rejected) + len(repaired_warnings) <= (
+                len(rejected) + len(warnings)
+            ):
+                current = repaired_current
+                answer = repaired_answer
             rejected.extend(repair_rejected)
-            answer = repaired_answer
             repaired = True
 
         final_rows = [row for row in current if row.get("date") == day]
@@ -683,7 +695,7 @@ def _candidates(profile: dict, slots: List[dict], availability: List[dict]) -> d
         employees.append({
             "id": employee_id,
             "name": name,
-            "roles": person.get("roles") or [],
+            "role": person.get("role") or person.get("roles") or "",
             "eligible_shifts": person.get("eligible_shifts") or [],
             "max_weekly_hours": person.get("max_weekly_hours") or 0,
             "is_trainee": bool(person.get("is_trainee")),

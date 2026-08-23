@@ -21,6 +21,7 @@ import {
   simulateChange,
   unassignEmployee,
   unpublishSchedule,
+  updateProfile,
 } from "@/services/api";
 import type {
   AgentAnswer,
@@ -142,6 +143,10 @@ export interface ManagementState {
     source?: string;
   }) => Promise<void>;
   removeConstraint: (rowId: string) => Promise<void>;
+  saveProfile: (input: {
+    employees?: Record<string, unknown>[];
+    shifts?: Record<string, unknown>[];
+  }) => Promise<void>;
   clearError: () => void;
 }
 
@@ -413,6 +418,7 @@ export function useManagement(): ManagementState {
         applyChange({
           schedule_id: proposal.schedule_id,
           operations: proposal.operations as Operation[],
+          profile_operations: proposal.profile_operations,
           reason,
           agent_reason: proposal.agent_reason,
         }),
@@ -423,6 +429,13 @@ export function useManagement(): ManagementState {
   );
 
   const dismissProposal = useCallback(() => setProposal(null), []);
+
+  const saveProfile = useCallback(async (input: {
+    employees?: Record<string, unknown>[];
+    shifts?: Record<string, unknown>[];
+  }) => {
+    await run(() => updateProfile(input));
+  }, [run]);
 
   /** Ask the agent about the schedule. **Reads only.**
    *
@@ -437,6 +450,7 @@ export function useManagement(): ManagementState {
   const ask = useCallback(
     async (request: string) => {
       setAnswerBusy(true);
+      setAnswer(null);
       setError(null);
       try {
         const found = await askAgent({ request, schedule_id: scheduleId });
@@ -608,6 +622,7 @@ export function useManagement(): ManagementState {
     move,
     addConstraint,
     removeConstraint,
+    saveProfile,
     clearError,
     gaps,
     dismissGaps,

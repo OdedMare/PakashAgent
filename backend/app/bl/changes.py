@@ -38,6 +38,14 @@ OP_ASSIGN = "assign"
 OP_REMOVE = "remove"
 OP_SWAP = "swap"
 _OPERATIONS = (OP_ASSIGN, OP_REMOVE, OP_SWAP)
+PROFILE_ADD_EMPLOYEE = "add_employee"
+PROFILE_UPDATE_EMPLOYEE = "update_employee"
+PROFILE_ADD_SHIFT = "add_shift"
+PROFILE_UPDATE_SHIFT = "update_shift"
+_PROFILE_OPERATIONS = (
+    PROFILE_ADD_EMPLOYEE, PROFILE_UPDATE_EMPLOYEE,
+    PROFILE_ADD_SHIFT, PROFILE_UPDATE_SHIFT,
+)
 
 _OPERATION_SCHEMA = {
     "type": "object",
@@ -70,11 +78,41 @@ _CONSTRAINT_SCHEMA = {
     },
 }
 
+_PROFILE_ITEM_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "name", "role", "eligible_shifts", "start_time", "end_time",
+        "headcount", "is_on_call",
+    ],
+    "properties": {
+        "name": {"type": "string"},
+        "role": {"type": "string"},
+        "eligible_shifts": {"type": "array", "items": {"type": "string"}},
+        "start_time": {"type": "string"},
+        "end_time": {"type": "string"},
+        "headcount": {"type": "integer"},
+        "is_on_call": {"type": "boolean"},
+    },
+}
+
+_PROFILE_OPERATION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["action", "target", "item"],
+    "properties": {
+        "action": {"type": "string", "enum": list(_PROFILE_OPERATIONS)},
+        "target": {"type": "string"},
+        "item": _PROFILE_ITEM_SCHEMA,
+    },
+}
+
 CHANGE_RESPONSE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "required": [
         "reply", "needs_reason", "agent_reason", "operations", "constraints",
+        "profile_operations",
     ],
     "properties": {
         "reply": {"type": "string"},
@@ -87,6 +125,10 @@ CHANGE_RESPONSE_SCHEMA = {
             "maxItems": _MAX_OPERATIONS,
         },
         "constraints": {"type": "array", "items": _CONSTRAINT_SCHEMA},
+        "profile_operations": {
+            "type": "array", "items": _PROFILE_OPERATION_SCHEMA,
+            "maxItems": 10,
+        },
     },
 }
 
@@ -119,7 +161,7 @@ class ChangeAgent:
             "stated_reason": _bounded(stated_reason),
         }
         answer = self._ask(payload)
-        return _proposal(answer, schedule, _bounded(stated_reason))
+        return _proposal(answer, profile, schedule, _bounded(stated_reason))
 
     def _ask(self, payload: dict) -> dict:
         answer = self._llm.complete_json(
@@ -133,7 +175,9 @@ class ChangeAgent:
         return answer
 
 
-def _proposal(answer: dict, schedule: dict, stated_reason: str) -> dict:
+def _proposal(
+    answer: dict, profile: dict, schedule: dict, stated_reason: str
+) -> dict:
     """The model's turn, bounded, with the reason gate enforced in code.
 
     `needs_reason` is not left to the prompt alone: a proposal that would
@@ -143,6 +187,9 @@ def _proposal(answer: dict, schedule: dict, stated_reason: str) -> dict:
     into the only history the system keeps.
     """
     operations = _operations(answer.get("operations"), schedule)
+    profile_operations = _profile_operations(
+        answer.get("profile_operations"), profile
+    )
     needs_reason = bool(answer.get("needs_reason")) and not stated_reason
     if operations and not stated_reason and not answer.get("agent_reason"):
         needs_reason = True
@@ -150,12 +197,16 @@ def _proposal(answer: dict, schedule: dict, stated_reason: str) -> dict:
         # A question, not a rejection: the manager omitted something, and
         # the product's answer to an omission is to ask.
         operations = []
+    if profile_operations:
+        operations = []
+        needs_reason = False
     return {
         "reply": _bounded(answer.get("reply")),
         "needs_reason": needs_reason,
         "agent_reason": _bounded(answer.get("agent_reason")),
         "stated_reason": stated_reason,
         "operations": operations,
+        "profile_operations": profile_operations,
         "constraints": _constraints(answer.get("constraints")),
     }
 
@@ -174,6 +225,8 @@ def _operations(offered: Any, schedule: dict) -> List[dict]:
         (_bounded(slot.get("shift_name")), _date(slot.get("slot_date")))
         for slot in (schedule or {}).get("slots") or []
     }
+    if not slots:
+        return []
     operations = []
     for item in offered[:_MAX_OPERATIONS]:
         if not isinstance(item, dict):
@@ -208,6 +261,52 @@ def _operations(offered: Any, schedule: dict) -> List[dict]:
             })
         operations.append(operation)
     return operations
+
+
+def _profile_operations(offered: Any, profile: dict) -> List[dict]:
+    """Bound profile edits to the four operations the UI can also perform."""
+    if not isinstance(offered, list):
+        return []
+    employee_names = {
+        _bounded(row.get("name")) for row in (profile or {}).get("employees") or []
+        if isinstance(row, dict)
+    }
+    shift_names = {
+        _bounded(row.get("name")) for row in (profile or {}).get("shifts") or []
+        if isinstance(row, dict)
+    }
+    result = []
+    for raw in offered[:10]:
+        if not isinstance(raw, dict):
+            continue
+        action = _bounded(raw.get("action"))
+        target = _bounded(raw.get("target"))
+        item = raw.get("item") if isinstance(raw.get("item"), dict) else {}
+        item = {
+            "name": _bounded(item.get("name")),
+            "role": _bounded(item.get("role")),
+            "eligible_shifts": [
+                _bounded(value) for value in item.get("eligible_shifts") or []
+                if _bounded(value)
+            ],
+            "start_time": _bounded(item.get("start_time")),
+            "end_time": _bounded(item.get("end_time")),
+            "headcount": item.get("headcount") or 1,
+            "is_on_call": bool(item.get("is_on_call")),
+        }
+        name = item["name"]
+        if action not in _PROFILE_OPERATIONS or not name:
+            continue
+        if action == PROFILE_ADD_EMPLOYEE and name in employee_names:
+            continue
+        if action == PROFILE_UPDATE_EMPLOYEE and target not in employee_names:
+            continue
+        if action == PROFILE_ADD_SHIFT and name in shift_names:
+            continue
+        if action == PROFILE_UPDATE_SHIFT and target not in shift_names:
+            continue
+        result.append({"action": action, "target": target, "item": item})
+    return result
 
 
 def _constraints(offered: Any) -> List[dict]:
@@ -310,4 +409,6 @@ def _bounded(value: Any, limit: int = _MAX_TEXT_CHARS) -> str:
 __all__ = [
     "ChangeAgent", "CHANGE_RESPONSE_SCHEMA",
     "OP_ASSIGN", "OP_REMOVE", "OP_SWAP",
+    "PROFILE_ADD_EMPLOYEE", "PROFILE_UPDATE_EMPLOYEE",
+    "PROFILE_ADD_SHIFT", "PROFILE_UPDATE_SHIFT",
 ]

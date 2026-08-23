@@ -450,6 +450,12 @@ export interface Operation {
   with_date?: string;
 }
 
+export interface ProfileOperation {
+  action: "add_employee" | "update_employee" | "add_shift" | "update_shift";
+  target: string;
+  item: Record<string, unknown>;
+}
+
 /** What the agent would do, and why. **Nothing has been applied.**
  *
  *  `needs_reason` true means the agent asked the manager why the change is
@@ -462,6 +468,7 @@ export interface Proposal {
   agent_reason: string;
   stated_reason: string;
   operations: Operation[];
+  profile_operations: ProfileOperation[];
   constraints: Record<string, unknown>[];
   warnings: ScheduleWarning[];
 }

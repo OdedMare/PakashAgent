@@ -568,6 +568,11 @@
   padding: 0.9rem 1rem;
 }
 
+.agent-chat {
+  position: relative;
+  isolation: isolate;
+}
+
 .agent-chat-header {
   display: flex;
   gap: 0.6rem;
@@ -743,6 +748,11 @@
   color: var(--primary);
 }
 
+.op-profile {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
 .proposal-actions,
 .modal-actions,
 .constraint-form-actions {
@@ -754,6 +764,69 @@
 .agent-composer {
   display: flex;
   gap: 0.5rem;
+}
+
+/* Answers belong to the conversation that produced them. They float above
+   the composer instead of becoming another card at the top of the drawer. */
+.agent-answer-float {
+  position: absolute;
+  z-index: 5;
+  inset-inline: 0.8rem;
+  bottom: 4.2rem;
+  filter: drop-shadow(0 16px 26px color-mix(in srgb, #000 18%, transparent));
+}
+
+.agent-answer-float::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: 2rem;
+  top: 100%;
+  width: 0.9rem;
+  height: 0.9rem;
+  background: var(--surface);
+  border-inline-end: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transform: translateY(-0.48rem) rotate(45deg);
+}
+
+.agent-answer-float .agent-answer {
+  position: relative;
+  z-index: 1;
+  max-height: min(52vh, 24rem);
+  overflow-y: auto;
+  border-color: var(--border-strong);
+}
+
+.agent-answer-float .agent-answer-close {
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin: -0.7rem -0.65rem -0.7rem 0;
+  border-radius: 999px;
+}
+
+.agent-answer-float .agent-answer-close:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.agent-answer-float .agent-answer-close:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .agent-answer-float {
+    animation: agent-answer-in 180ms ease-out;
+  }
+}
+
+@keyframes agent-answer-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.45rem);
+  }
 }
 
 .agent-composer input,
@@ -778,6 +851,11 @@
   outline: none;
   box-shadow: var(--focus);
   border-color: var(--primary);
+}
+
+.profile-form input[readonly] {
+  background: var(--surface-2);
+  color: var(--text-muted);
 }
 
 /* -- roster and constraints --------------------------------------------- */
@@ -815,7 +893,7 @@
 .roster li.roster-card {
   position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   gap: 0.55rem;
   padding: 0.55rem;
   border: 1px solid var(--border);
@@ -823,6 +901,10 @@
   background: var(--surface-2);
   transition: border-color 0.15s ease, box-shadow 0.15s ease,
     transform 0.15s ease;
+}
+
+.roster li.roster-card.shift-card {
+  grid-template-columns: minmax(0, 1fr) auto auto;
 }
 
 .roster li.roster-card.is-draggable {
@@ -965,6 +1047,38 @@
   color: var(--text-muted);
 }
 
+.profile-form label > small {
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.profile-checkboxes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.profile-checkboxes legend {
+  padding-inline: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
+
+.profile-checkboxes label,
+.constraint-form label.profile-check {
+  flex-direction: row;
+  align-items: center;
+}
+
+.profile-checkboxes input,
+.constraint-form .profile-check input {
+  flex: none;
+}
+
 .constraint-time-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -991,6 +1105,11 @@
 .icon-button.subtle {
   color: var(--text-muted);
   margin-inline-start: auto;
+}
+
+.roster-card .icon-button.subtle {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
 }
 
 /* -- history ------------------------------------------------------------- */

@@ -59,6 +59,7 @@ INTENT_GAPS = "gaps"
 INTENT_EMPLOYEE = "employee"
 INTENT_PUBLISH = "publish_readiness"
 INTENT_PERIOD = "period"
+INTENT_TEAM = "team"
 INTENT_UNKNOWN = "unknown"
 
 # Hebrew weekdays as the product writes them everywhere else -- the interview
@@ -110,7 +111,14 @@ _PERIOD_WORDS = (
 # Phrases asking about one person's own week.
 _EMPLOYEE_WORDS = (
     "כמה שעות", "מה יש ל", "מתי עובד", "מתי עובדת", "המשמרות של",
-    "השעות של", "מה המצב של",
+    "השעות של", "מה המצב של", "מה התפקיד של",
+)
+
+_TEAM_WORDS = (
+    "מי בצוות", "מי נמצא בצוות", "רשימת הצוות", "כמה עובדים בצוות",
+    "איזה עובדים בצוות", "איזה עובדות בצוות", "מידע על הצוות",
+    "ספר לי על הצוות", "מה אתה יודע על הצוות", "מה ידוע על הצוות",
+    "התפקיד של כל אחד", "מה הכללים", "אילו כללים", "כללי הצוות",
 )
 
 _MAX_TEXT_CHARS = 500
@@ -188,6 +196,8 @@ def _classify(text: str, employee: str) -> str:
         return INTENT_GAPS
     if employee and _any_in(text, _EMPLOYEE_WORDS):
         return INTENT_EMPLOYEE
+    if _any_in(text, _TEAM_WORDS):
+        return INTENT_TEAM
     if _any_in(text, _PERIOD_WORDS):
         return INTENT_PERIOD
     return INTENT_UNKNOWN
@@ -362,5 +372,6 @@ __all__ = [
     "INTENT_EMPLOYEE",
     "INTENT_PUBLISH",
     "INTENT_PERIOD",
+    "INTENT_TEAM",
     "INTENT_UNKNOWN",
 ]

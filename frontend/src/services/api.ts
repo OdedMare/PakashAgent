@@ -266,6 +266,18 @@ export function scheduleOverview(): Promise<ManagementOverview> {
   return request<ManagementOverview>("/api/schedule/overview");
 }
 
+/** Replace either editable part of the workplace profile. Existing schedule
+ * rows stay untouched; the vocabulary is used by future blank/generated periods. */
+export function updateProfile(body: {
+  employees?: Record<string, unknown>[];
+  shifts?: Record<string, unknown>[];
+}): Promise<import("@/types").WorkplaceProfile> {
+  return request("/api/profile", {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
 /** Build a date range one checkpointed day per HTTP/model request. */
 export async function generateSchedule(
   body: {
@@ -465,10 +477,11 @@ export function proposeChange(
 export function applyChange(body: {
   schedule_id: string;
   operations: Operation[];
+  profile_operations?: import("@/types").ProfileOperation[];
   reason: string;
   agent_reason?: string;
-}): Promise<Schedule> {
-  return request<Schedule>("/api/schedule/apply", {
+}): Promise<unknown> {
+  return request("/api/schedule/apply", {
     method: "POST",
     body: JSON.stringify(body),
   });
@@ -832,7 +845,7 @@ export function confirmImport(body: {
   });
 }
 
-/** Ask the agent a question about the schedule. **Writes nothing.**
+/** Ask the agent a question about the team or schedule. **Writes nothing.**
  *
  *  The multi-step half of the agent: the planner picks read-only tools, the
  *  backend answers each with arithmetic, and the reply is assembled from

@@ -63,6 +63,10 @@ class _FakeScheduleRepo:
     def team_profile(self, team_id):
         return self.profiles.get(team_id)
 
+    def update_team_profile(self, team_id, profile):
+        self.profiles[team_id] = profile
+        return profile
+
     def create_schedule(self, team_id, starts_on, ends_on):
         schedule_id = self._id("sched")
         self.schedules[schedule_id] = {
@@ -871,6 +875,44 @@ def test_applying_without_a_reason_is_rejected_by_validation():
         "schedule_id": "s", "operations": [], "reason": "",
     })
     assert response.status_code == 422
+
+
+def test_agent_can_propose_and_apply_adding_an_employee_without_a_schedule():
+    """Profile maintenance is conversational too, but still confirmed."""
+    app, repo = _build_app([{
+        "reply": "אוסיף את מאיה לצוות",
+        "needs_reason": False,
+        "agent_reason": "פרטי העובדת נמסרו במפורש",
+        "operations": [],
+        "constraints": [],
+        "profile_operations": [{
+            "action": "add_employee",
+            "target": "",
+            "item": {
+                "name": "מאיה", "role": "אחראית משמרת",
+                "eligible_shifts": [MORNING], "start_time": "",
+                "end_time": "", "headcount": 1, "is_on_call": False,
+            },
+        }],
+    }])
+    client = _client(app)
+
+    proposal = client.post("/api/schedule/propose", json={
+        "request": "תוסיף את מאיה לצוות כאחראית משמרת",
+    }).json()
+    assert proposal["schedule_id"] == ""
+    assert proposal["profile_operations"][0]["item"]["name"] == "מאיה"
+    assert [row["name"] for row in repo.profiles[TEAM]["employees"]] == [
+        "דנה", "יוסי",
+    ]
+
+    response = client.post("/api/schedule/apply", json={
+        "profile_operations": proposal["profile_operations"],
+    })
+    assert response.status_code == 200
+    assert [row["name"] for row in repo.profiles[TEAM]["employees"]] == [
+        "דנה", "יוסי", "מאיה",
+    ]
 
 
 # -- the drag, which is a proposal ----------------------------------------

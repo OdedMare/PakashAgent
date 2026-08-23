@@ -4,7 +4,7 @@ import datetime
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.common.runtime_settings.normalizers import MASKED_SECRET
 
@@ -389,6 +389,13 @@ class ManagementOverview(BaseModel):
     stats: ShiftStats = ShiftStats()
 
 
+class ProfileUpdate(BaseModel):
+    """A manual replacement of either editable profile collection."""
+
+    employees: Optional[List[Dict[str, Any]]] = None
+    shifts: Optional[List[Dict[str, Any]]] = None
+
+
 class BriefingItem(BaseModel):
     """One thing the agent noticed on its own.
 
@@ -479,6 +486,14 @@ class Operation(BaseModel):
     with_date: str = ""
 
 
+class ProfileOperation(BaseModel):
+    """One proposed edit to the roster or shift vocabulary."""
+
+    action: str
+    target: str = ""
+    item: Dict[str, Any]
+
+
 class Proposal(BaseModel):
     """What the agent would do, and why. Nothing has been applied.
 
@@ -492,6 +507,7 @@ class Proposal(BaseModel):
     agent_reason: str = ""
     stated_reason: str = ""
     operations: List[Operation] = []
+    profile_operations: List[ProfileOperation] = []
     constraints: List[Dict[str, Any]] = []
     warnings: List[Warning] = []
 
@@ -499,10 +515,19 @@ class Proposal(BaseModel):
 class ApplyRequest(BaseModel):
     """Confirm a proposal. The manager's reason is required by now."""
 
-    schedule_id: str = Field(min_length=1)
-    operations: List[Operation]
-    reason: str = Field(min_length=1, max_length=1000)
+    schedule_id: str = ""
+    operations: List[Operation] = []
+    profile_operations: List[ProfileOperation] = []
+    reason: str = Field(default="", max_length=1000)
     agent_reason: str = Field(default="", max_length=2000)
+
+    @model_validator(mode="after")
+    def validate_kind(self):
+        if self.profile_operations:
+            return self
+        if not self.schedule_id or not self.reason.strip():
+            raise ValueError("schedule_id and reason are required")
+        return self
 
 
 class BlankRequest(BaseModel):

@@ -12,7 +12,9 @@ import json
 
 import pytest
 
-from app.bl.interview import INTERVIEW_TOPICS, IntroInterview, empty_draft
+from app.bl.interview import (
+    CORE_TOPIC_IDS, INTERVIEW_TOPICS, IntroInterview, empty_draft,
+)
 from app.common.errors import AgentError
 
 
@@ -30,6 +32,7 @@ def _question_response(**overrides):
     response = {
         "reply": "תודה, רשמתי.",
         "question": {
+            "topic_id": "workplace_and_cycle",
             "question": "על מה המשמרת אחראית?",
             "recommendation": "כדאי לתאר במשפט אחד את האחריות והתוצאה.",
             "why": "בלי זה אי אפשר לדעת מה נחשב משמרת מוצלחת.",
@@ -89,10 +92,12 @@ def test_first_turn_sends_the_topics_and_returns_one_question():
     assert payload["draft_so_far"] == {}
     assert payload["topics"] == [dict(item) for item in INTERVIEW_TOPICS]
     topic_ids = {item["id"] for item in payload["topics"]}
-    assert {
-        "shift_vocabulary", "staffing", "qualifications", "on_call",
-        "rest_and_weekend", "fairness", "conflict_policy",
-    }.issubset(topic_ids)
+    assert topic_ids == {
+        "workplace_and_cycle", "operating_calendar", "shift_vocabulary",
+        "staffing", "roster", "constraints", "rest_policy", "special_cases",
+        "priorities",
+    }
+    assert "success_criteria" not in topic_ids
 
 
 def test_the_recent_conversation_is_passed_to_the_next_turn():
@@ -343,6 +348,21 @@ def test_a_confirmed_complete_profile_is_ready():
     assert result["draft"]["workplace"]["name"] == "מוקד"
 
 
+def test_a_mission_statement_is_not_required_to_finish():
+    profile = _complete_profile()
+    profile["workplace"]["mission"] = ""
+    response = _question_response(
+        question=None, awaiting_confirmation=False, ready=True,
+        draft_update=profile, reply="מצוין, סיימנו.",
+    )
+
+    result = IntroInterview(_FakeLlm(response)).next_turn([
+        {"role": "user", "content": "כן, הסיכום נכון"},
+    ])
+
+    assert result["ready"] is True
+
+
 def test_a_profile_missing_a_required_topic_is_not_ready():
     """The scheduler cannot run without shifts, so a model that calls a
     shiftless profile finished is overruled and the gap resurfaces."""
@@ -564,6 +584,64 @@ def test_a_turn_that_forgets_to_ask_gets_the_next_canonical_question():
     )
 
     assert result["question"]["question"] == INTERVIEW_TOPICS[1]["question"]
+
+
+def test_a_reworded_duplicate_question_moves_to_the_next_topic():
+    response = _question_response()
+    response["question"]["question"] = (
+        "מי העובדים בצוות ומה התפקיד של כל אחד מהם?"
+    )
+
+    result = IntroInterview(_FakeLlm(response)).next_turn([
+        {"role": "assistant", "content": "מי העובדים בצוות ומה התפקידים שלהם?"},
+        {"role": "user", "content": "דנה ורון"},
+    ])
+
+    assert result["question"]["question"] == INTERVIEW_TOPICS[0]["question"]
+
+
+def test_the_model_cannot_confirm_before_all_nine_answers():
+    response = _question_response(
+        question=None, awaiting_confirmation=True, ready=False,
+        draft_update=_complete_profile(),
+    )
+
+    result = IntroInterview(_FakeLlm(response)).next_turn([], state={
+        "answered_topic_ids": list(CORE_TOPIC_IDS[:-1]),
+    })
+
+    assert result["question"]["topic_id"] == CORE_TOPIC_IDS[-1]
+    assert result["awaiting_confirmation"] is False
+
+
+def test_after_nine_answers_the_manager_is_asked_before_deepening():
+    response = _question_response(
+        question=None, awaiting_confirmation=True,
+        draft_update=_complete_profile(),
+    )
+
+    result = IntroInterview(_FakeLlm(response)).next_turn([], state={
+        "answered_topic_ids": list(CORE_TOPIC_IDS),
+    })
+
+    assert result["question"]["topic_id"] == "continue_optional"
+    assert [item["label"] for item in result["question"]["options"]] == [
+        "לעבור לסיכום", "להמשיך להעמקה",
+    ]
+
+
+def test_optional_question_is_allowed_only_after_the_manager_agrees():
+    response = _question_response()
+    response["question"]["topic_id"] = "optional_follow_up"
+    response["question"]["question"] = "רוצה להגדיר העדפה נוספת?"
+
+    result = IntroInterview(_FakeLlm(response)).next_turn([], state={
+        "answered_topic_ids": list(CORE_TOPIC_IDS),
+        "optional_interview_choice": "continue",
+    })
+
+    assert result["question"]["topic_id"] == "optional_follow_up"
+    assert result["question"]["question"] == "רוצה להגדיר העדפה נוספת?"
 
 
 def test_a_non_dict_model_reply_is_rejected():

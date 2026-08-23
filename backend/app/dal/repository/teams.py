@@ -19,7 +19,9 @@ import os
 import secrets
 from typing import List, Optional
 
-from app.common.errors import AuthError, ConflictError
+from psycopg.types.json import Jsonb
+
+from app.common.errors import AuthError, ConflictError, NotFoundError
 from app.dal.database.postgres import connect
 from app.dal.repository.base import RepositoryBase, new_id
 
@@ -162,6 +164,30 @@ class TeamRepository(RepositoryBase):
             LIMIT 1
         """, (team_id,))
         return rows[0]["profile"] if rows else None
+
+    def update_team_profile(self, team_id: str, profile: dict) -> dict:
+        """Replace the newest completed interview's working profile.
+
+        Manual edits update the same durable profile instead of creating a
+        second source of truth. Stored schedules keep their historical slots.
+        """
+        with connect(self._store) as connection:
+            row = connection.execute("""
+                SELECT id FROM interview_sessions
+                WHERE team_id=%s AND status='complete' AND profile IS NOT NULL
+                ORDER BY updated_at DESC
+                LIMIT 1
+                FOR UPDATE
+            """, (team_id,)).fetchone()
+            if row is None:
+                raise NotFoundError("פרופיל הצוות לא נמצא")
+            connection.execute("""
+                UPDATE interview_sessions
+                SET profile=%s, updated_at=NOW()
+                WHERE id=%s AND team_id=%s
+            """, (Jsonb(profile), row["id"], team_id))
+            connection.commit()
+        return profile
 
     def claim_orphan_sessions(self, team_id: str) -> int:
         """Adopt interviews recorded before workspaces existed.

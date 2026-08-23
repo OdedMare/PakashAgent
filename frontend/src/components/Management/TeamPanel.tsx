@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarOff, Clock3, GripVertical, Plus, Trash2, UserRound } from "lucide-react";
+import { CalendarOff, Clock3, GripVertical, Pencil, Plus, Trash2, UserRound } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { EMPLOYEE_DRAG_TYPE } from "@/components/Board/dragData";
@@ -30,6 +30,7 @@ export function TeamPanel({
   readOnly = false,
   onAdd,
   onRemove,
+  onSaveProfile,
 }: {
   employees: Record<string, unknown>[];
   shifts: Record<string, unknown>[];
@@ -51,8 +52,16 @@ export function TeamPanel({
     source?: string;
   }) => void;
   onRemove?: (rowId: string) => void;
+  onSaveProfile?: (input: {
+    employees?: Record<string, unknown>[];
+    shifts?: Record<string, unknown>[];
+  }) => void;
 }) {
   const [adding, setAdding] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<string | null>(null);
+  const [addingEmployee, setAddingEmployee] = useState(false);
+  const [editingShift, setEditingShift] = useState<string | null>(null);
+  const [addingShift, setAddingShift] = useState(false);
   const names = employees
     .map((row) => text(row.name))
     .filter((name) => name !== "");
@@ -128,6 +137,19 @@ export function TeamPanel({
                 {draggable ? (
                   <GripVertical className="roster-grip" size={17} aria-hidden="true" />
                 ) : null}
+                {onSaveProfile ? (
+                  <button
+                    type="button"
+                    className="icon-button subtle"
+                    onClick={() => {
+                      setAddingEmployee(false);
+                      setEditingEmployee(name);
+                    }}
+                    aria-label={`עריכת ${name}`}
+                  >
+                    <Pencil size={13} />
+                  </button>
+                ) : null}
               </li>
             );
           })}
@@ -135,6 +157,113 @@ export function TeamPanel({
             <li className="panel-empty">אין עובדים בפרופיל עדיין.</li>
           ) : null}
         </ul>
+        {onSaveProfile ? (
+          addingEmployee || editingEmployee ? (
+            <EmployeeForm
+              initial={editingEmployee
+                ? employees.find((row) => text(row.name) === editingEmployee)
+                : undefined}
+              shiftNames={shiftNames}
+              onCancel={() => {
+                setAddingEmployee(false);
+                setEditingEmployee(null);
+              }}
+              onSubmit={(employee) => {
+                const next = editingEmployee
+                  ? employees.map((row) => text(row.name) === editingEmployee
+                    ? { ...row, ...employee }
+                    : row)
+                  : [...employees, employee];
+                onSaveProfile({ employees: next });
+                setAddingEmployee(false);
+                setEditingEmployee(null);
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              className="ghost-button full"
+              onClick={() => setAddingEmployee(true)}
+            >
+              <Plus size={14} />
+              הוספת עובד/ת
+            </button>
+          )
+        ) : null}
+      </section>
+
+      <section className="panel-section">
+        <h3>
+          <Clock3 size={15} />
+          סוגי משמרות
+          <span className="panel-count">{shiftNames.length}</span>
+        </h3>
+        <ul className="roster shift-types">
+          {shifts.map((shift) => {
+            const name = text(shift.name);
+            if (!name) return null;
+            return (
+              <li className="roster-card shift-card" key={name}>
+                <span className="roster-person">
+                  <span className="roster-name">{name}</span>
+                  <span className="roster-role">
+                    {text(shift.start_time) || "—"}–{text(shift.end_time) || "—"}
+                    {Boolean(shift.is_on_call) ? " · כוננות" : ""}
+                  </span>
+                </span>
+                <span className="roster-load">תקן {shiftHeadcount(shift)}</span>
+                {onSaveProfile ? (
+                  <button
+                    type="button"
+                    className="icon-button subtle"
+                    onClick={() => {
+                      setAddingShift(false);
+                      setEditingShift(name);
+                    }}
+                    aria-label={`עריכת משמרת ${name}`}
+                  >
+                    <Pencil size={13} />
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+        {onSaveProfile ? (
+          addingShift || editingShift ? (
+            <ShiftForm
+              initial={editingShift
+                ? shifts.find((row) => text(row.name) === editingShift)
+                : undefined}
+              onCancel={() => {
+                setAddingShift(false);
+                setEditingShift(null);
+              }}
+              onSubmit={(shift) => {
+                const next = editingShift
+                  ? shifts.map((row) => text(row.name) === editingShift
+                    ? { ...row, ...shift }
+                    : row)
+                  : [...shifts, shift];
+                onSaveProfile({ shifts: next });
+                setAddingShift(false);
+                setEditingShift(null);
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              className="ghost-button full"
+              onClick={() => setAddingShift(true)}
+            >
+              <Plus size={14} />
+              הוספת סוג משמרת
+            </button>
+          )
+        ) : null}
+        <p className="roster-help">
+          שינוי סוג משמרת משפיע על סידורים חדשים; לוחות קיימים נשמרים כפי שנבנו.
+        </p>
       </section>
 
       <section className="panel-section">
@@ -208,6 +337,120 @@ export function TeamPanel({
       </section>
     </aside>
   );
+}
+
+function EmployeeForm({
+  initial,
+  shiftNames,
+  onCancel,
+  onSubmit,
+}: {
+  initial?: Record<string, unknown>;
+  shiftNames: string[];
+  onCancel: () => void;
+  onSubmit: (employee: Record<string, unknown>) => void;
+}) {
+  const [name, setName] = useState(text(initial?.name));
+  const [role, setRole] = useState(text(initial?.role));
+  const initialEligible = Array.isArray(initial?.eligible_shifts)
+    ? initial.eligible_shifts.filter((value): value is string => typeof value === "string")
+    : shiftNames;
+  const [eligible, setEligible] = useState<string[]>(initialEligible);
+
+  return (
+    <form className="constraint-form profile-form" onSubmit={(event) => {
+      event.preventDefault();
+      if (!name.trim()) return;
+      onSubmit({ name: name.trim(), role: role.trim(), eligible_shifts: eligible });
+    }}>
+      <label>
+        <span>שם *</span>
+        <input value={name} maxLength={120} onChange={(event) => setName(event.target.value)} required readOnly={Boolean(initial)} title={initial ? "שם קיים הוא מזהה קבוע" : undefined} />
+        {initial ? <small>השם מקושר לזהות ולשיבוצים ולכן נשאר קבוע.</small> : null}
+      </label>
+      <label>
+        <span>תפקיד</span>
+        <input value={role} maxLength={120} onChange={(event) => setRole(event.target.value)} />
+      </label>
+      {shiftNames.length ? (
+        <fieldset className="profile-checkboxes">
+          <legend>משמרות שהעובד/ת יכול/ה לבצע</legend>
+          {shiftNames.map((shift) => (
+            <label key={shift}>
+              <input
+                type="checkbox"
+                checked={eligible.includes(shift)}
+                onChange={(event) => setEligible(event.target.checked
+                  ? [...eligible, shift]
+                  : eligible.filter((name_) => name_ !== shift))}
+              />
+              <span>{shift}</span>
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
+      <FormActions onCancel={onCancel} ready={Boolean(name.trim())} />
+    </form>
+  );
+}
+
+function ShiftForm({
+  initial,
+  onCancel,
+  onSubmit,
+}: {
+  initial?: Record<string, unknown>;
+  onCancel: () => void;
+  onSubmit: (shift: Record<string, unknown>) => void;
+}) {
+  const [name, setName] = useState(text(initial?.name));
+  const [start, setStart] = useState(text(initial?.start_time));
+  const [end, setEnd] = useState(text(initial?.end_time));
+  const [headcount, setHeadcount] = useState(shiftHeadcount(initial));
+  const [onCall, setOnCall] = useState(Boolean(initial?.is_on_call));
+
+  return (
+    <form className="constraint-form profile-form" onSubmit={(event) => {
+      event.preventDefault();
+      if (!name.trim()) return;
+      onSubmit({
+        name: name.trim(), start_time: start, end_time: end,
+        headcount, is_on_call: onCall,
+      });
+    }}>
+      <label>
+        <span>שם המשמרת *</span>
+        <input value={name} maxLength={120} onChange={(event) => setName(event.target.value)} required readOnly={Boolean(initial)} title={initial ? "שם קיים הוא מזהה קבוע" : undefined} />
+        {initial ? <small>השם מקושר ללוחות קיימים ולכן נשאר קבוע.</small> : null}
+      </label>
+      <div className="constraint-time-grid">
+        <label><span>התחלה</span><input type="time" value={start} onChange={(event) => setStart(event.target.value)} /></label>
+        <label><span>סיום</span><input type="time" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
+      </div>
+      <label><span>תקן בסיסי</span><input type="number" min={1} max={100} value={headcount} onChange={(event) => setHeadcount(Number(event.target.value) || 1)} /></label>
+      <label className="profile-check"><input type="checkbox" checked={onCall} onChange={(event) => setOnCall(event.target.checked)} /><span>משמרת כוננות</span></label>
+      <FormActions onCancel={onCancel} ready={Boolean(name.trim())} />
+    </form>
+  );
+}
+
+function FormActions({ onCancel, ready }: { onCancel: () => void; ready: boolean }) {
+  return (
+    <div className="constraint-form-actions">
+      <button type="button" className="ghost-button" onClick={onCancel}>ביטול</button>
+      <button type="submit" className="primary-button" disabled={!ready}>שמירה</button>
+    </div>
+  );
+}
+
+function shiftHeadcount(shift?: Record<string, unknown>): number {
+  const staffing = Array.isArray(shift?.staffing) ? shift.staffing : [];
+  const fallback = staffing.find((group) => {
+    if (!group || typeof group !== "object") return false;
+    const days = (group as { days?: unknown }).days;
+    return !Array.isArray(days) || days.length === 0;
+  }) as { headcount?: unknown } | undefined;
+  return typeof fallback?.headcount === "number" ? fallback.headcount : 1;
 }
 
 function formatHours(hours: number): string {

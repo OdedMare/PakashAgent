@@ -237,7 +237,7 @@ def build_router(service, guards) -> APIRouter:
             stated_reason=request.reason,
         )
 
-    @router.post("/apply", response_model=Schedule)
+    @router.post("/apply")
     def apply(request: ApplyRequest, session: dict = Depends(boss)) -> dict:
         """Apply a proposal the manager confirmed, and log both reasons."""
         return service.apply(
@@ -246,6 +246,10 @@ def build_router(service, guards) -> APIRouter:
             [operation.model_dump() for operation in request.operations],
             reason=request.reason,
             agent_reason=request.agent_reason,
+            profile_operations=[
+                operation.model_dump()
+                for operation in request.profile_operations
+            ],
         )
 
     @router.post("/move", response_model=Schedule)
@@ -400,7 +404,7 @@ def build_router(service, guards) -> APIRouter:
 
     @router.post("/ask", response_model=AgentAnswer)
     def ask(request: AskRequest, session: dict = Depends(boss)) -> dict:
-        """Answer a question about the schedule. **Writes nothing.**
+        """Answer a question about the team or schedule. **Writes nothing.**
 
         The multi-step half of the agent. `bl/planner.py` chooses which
         read-only tools to run, `bl/tools.py` answers each with arithmetic,

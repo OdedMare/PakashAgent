@@ -20,7 +20,15 @@ reach another workspace's interview by naming it.
 import logging
 from threading import Thread
 
-from app.bl.interview import IntroInterview, empty_draft, missing_topics
+from app.bl.interview import (
+    CONTINUE_ANSWER,
+    CONTINUE_TOPIC_ID,
+    CORE_TOPIC_IDS,
+    FINISH_ANSWER,
+    IntroInterview,
+    empty_draft,
+    missing_topics,
+)
 from app.common.errors import AgentError, ConflictError
 
 # What a turn stores and serves. Named once because the payload written to
@@ -186,6 +194,13 @@ class InterviewService:
             question for row in session["turns"]
             if (question := _stored_question(row))
         ]
+        state["answered_topic_ids"] = _answered_topic_ids(session["turns"])
+        state["optional_interview_choice"] = _optional_interview_choice(
+            session["turns"]
+        )
+        state["confirmation_was_awaiting"] = _last_assistant_was_awaiting(
+            session["turns"]
+        )
         draft = state.get("draft")
         result = self._interview.next_turn(history, draft, state)
         # Ending the interview is deliberately allowed while the model is
@@ -305,6 +320,52 @@ def _stored_question(row: dict) -> str:
     question = payload.get("question") or {}
     value = question.get("question")
     return value.strip() if isinstance(value, str) else ""
+
+
+def _answered_topic_ids(turns) -> list:
+    """Core question ids that have a non-empty manager answer after them."""
+    answered = []
+    pending = ""
+    for row in turns:
+        if row.get("role") == "assistant":
+            question = (row.get("payload") or {}).get("question") or {}
+            topic_id = question.get("topic_id")
+            pending = topic_id if topic_id in CORE_TOPIC_IDS else ""
+        elif (
+            row.get("role") == "user"
+            and pending
+            and (row.get("content") or "").strip()
+        ):
+            if pending not in answered:
+                answered.append(pending)
+            pending = ""
+    return answered
+
+
+def _optional_interview_choice(turns) -> str:
+    """The manager's answer to the deterministic continue-or-finish turn."""
+    awaiting_choice = False
+    for row in turns:
+        if row.get("role") == "assistant":
+            question = (row.get("payload") or {}).get("question") or {}
+            awaiting_choice = question.get("topic_id") == CONTINUE_TOPIC_ID
+        elif row.get("role") == "user" and awaiting_choice:
+            answer = (row.get("content") or "").strip()
+            if answer == CONTINUE_ANSWER:
+                return "continue"
+            if answer == FINISH_ANSWER:
+                return "finish"
+            awaiting_choice = False
+    return ""
+
+
+def _last_assistant_was_awaiting(turns) -> bool:
+    for row in reversed(turns):
+        if row.get("role") == "assistant":
+            return bool(
+                (row.get("payload") or {}).get("awaiting_confirmation")
+            )
+    return False
 
 
 def _turn(session_id: str, pending: dict, turns) -> dict:

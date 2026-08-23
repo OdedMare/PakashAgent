@@ -25,7 +25,6 @@ import { SettingsPanel } from "@/components/Settings";
 import { ShareLink } from "@/components/Workspace/ShareLink";
 import type { ManagementOverview, TeamView } from "@/types";
 
-import { AgentAnswer } from "./AgentAnswer";
 import { AgentChat } from "./AgentChat";
 import { ProfileGapsNotice } from "./ProfileGapsNotice";
 import { Briefing } from "./Briefing";
@@ -431,18 +430,6 @@ export function Management({
             }
             onDismiss={state.dismissBriefing}
           />
-          {/* What the agent found when *asked*. A fifth card state, distinct
-              from the proposal below it: an answer carries no operations and
-              has no confirm button, because reading the schedule is not the
-              same act as changing it. */}
-          <AgentAnswer
-            answer={state.answer}
-            busy={state.answer_busy}
-            onDismiss={state.dismissAnswer}
-            onContinue={() =>
-              document.getElementById("agent-composer-input")?.focus()
-            }
-          />
           {/* A change being considered rather than requested. Rendered in
               its own colour above the proposal so the two can never be
               confused — nothing here has been written, and approving runs
@@ -456,6 +443,8 @@ export function Management({
           />
           <AgentChat
             proposal={state.proposal}
+            answer={state.answer}
+            answerBusy={state.answer_busy}
             busy={state.busy}
             hasSchedule={Boolean(schedule)}
             writeLocked={schedule?.status === "published"}
@@ -466,6 +455,7 @@ export function Management({
             onSimulate={state.simulate}
             onConfirm={state.confirm}
             onDismiss={state.dismissProposal}
+            onDismissAnswer={state.dismissAnswer}
           />
           <CopilotInbox
             onOpenInterview={onOpenInterview}
@@ -500,6 +490,7 @@ export function Management({
             draggable={schedule?.status === "draft" && !state.busy}
             onAdd={state.addConstraint}
             onRemove={state.removeConstraint}
+            onSaveProfile={state.saveProfile}
           />
           </> : null}
 

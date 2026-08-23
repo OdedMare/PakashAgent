@@ -13,7 +13,9 @@ from fastapi.testclient import TestClient
 
 from app.api.dependencies import Guards
 from app.api.routers import health, interview
-from app.bl.interview import empty_draft
+from app.bl.interview import (
+    FINISH_ANSWER, INTERVIEW_TOPICS, empty_draft,
+)
 from app.bl.interview_service import InterviewService
 from app.common.errors import AgentError, AppError, ConflictError, NotFoundError
 from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
@@ -105,6 +107,7 @@ def _question(question="על מה המשמרת אחראית?", **overrides):
     response = {
         "reply": "תודה, רשמתי.",
         "question": {
+            "topic_id": "workplace_and_cycle",
             "question": question,
             "recommendation": "כדאי לתאר את האחריות במשפט אחד.",
             "why": "בלי זה אי אפשר לדעת מה נחשב משמרת מוצלחת.",
@@ -169,6 +172,25 @@ def _complete():
         question=None, awaiting_confirmation=False, ready=True,
         reply="מצוין, סיימנו.", draft_update=_profile(),
     )
+
+
+def _completion_responses():
+    responses = []
+    for topic in INTERVIEW_TOPICS:
+        response = _question(topic["question"])
+        response["question"]["topic_id"] = topic["id"]
+        responses.append(response)
+    return responses + [_confirming(), _complete()]
+
+
+def _answer_required_questions(client, session_id):
+    body = None
+    for _ in INTERVIEW_TOPICS:
+        body = client.post(
+            "/api/interview/%s/answer" % session_id,
+            json={"content": "תשובת חובה"},
+        ).json()
+    return body
 
 
 def _client(llm, role=ROLE_BOSS, team=TEAM, launch=None):
@@ -309,7 +331,7 @@ def test_an_answer_is_recorded_and_passed_back_to_the_model():
         json={"content": "רציפות תפעולית"},
     ).json()
 
-    assert body["question"]["question"] == "איך יודעים?"
+    assert body["question"]["question"] == INTERVIEW_TOPICS[1]["question"]
     assert [row["role"] for row in repository.history(session_id)] == [
         "assistant", "user", "assistant"
     ]
@@ -335,14 +357,20 @@ def test_resuming_replays_the_pending_question_without_calling_the_model():
 
 def test_a_confirmed_summary_completes_the_session_and_stores_the_profile():
     client, repository = _client(
-        _ScriptedLlm([_question(), _confirming(), _complete()])
+        _ScriptedLlm(_completion_responses())
     )
     session_id = client.post("/api/interview").json()["session_id"]
+
+    consent = _answer_required_questions(client, session_id)
+    assert consent["question"]["question"].startswith(
+        "סיימנו את שאלות החובה"
+    )
 
     # The summary turn presents the profile for approval but does not store
     # it: `ready` is false until the manager actually confirms.
     summary = client.post(
-        "/api/interview/%s/answer" % session_id, json={"content": "זהו"}
+        "/api/interview/%s/answer" % session_id,
+        json={"content": FINISH_ANSWER},
     ).json()
     assert summary["status"] == "question"
     assert summary["awaiting_confirmation"] is True
@@ -359,8 +387,13 @@ def test_a_confirmed_summary_completes_the_session_and_stores_the_profile():
 
 
 def test_answering_a_completed_interview_is_rejected():
-    client, _ = _client(_ScriptedLlm([_question(), _complete()]))
+    client, _ = _client(_ScriptedLlm(_completion_responses()))
     session_id = client.post("/api/interview").json()["session_id"]
+    _answer_required_questions(client, session_id)
+    client.post(
+        "/api/interview/%s/answer" % session_id,
+        json={"content": FINISH_ANSWER},
+    )
     client.post(
         "/api/interview/%s/answer" % session_id, json={"content": "כן"}
     )
@@ -374,8 +407,13 @@ def test_answering_a_completed_interview_is_rejected():
 
 
 def test_resuming_a_completed_interview_returns_the_profile():
-    client, _ = _client(_ScriptedLlm([_question(), _complete()]))
+    client, _ = _client(_ScriptedLlm(_completion_responses()))
     session_id = client.post("/api/interview").json()["session_id"]
+    _answer_required_questions(client, session_id)
+    client.post(
+        "/api/interview/%s/answer" % session_id,
+        json={"content": FINISH_ANSWER},
+    )
     client.post("/api/interview/%s/answer" % session_id, json={"content": "כן"})
 
     body = client.get("/api/interview/%s" % session_id).json()
@@ -496,13 +534,17 @@ def test_ending_records_what_the_profile_still_owes():
 def test_a_confirmed_interview_records_no_completeness_block():
     """Absence is what marks a profile finished; nothing is backfilled."""
     client, repository = _client(
-        _ScriptedLlm([_question(), _confirming(), _complete()])
+        _ScriptedLlm(_completion_responses())
     )
     session_id = client.post("/api/interview").json()["session_id"]
-    for _ in range(2):
-        client.post(
-            "/api/interview/%s/answer" % session_id, json={"content": "כן"}
-        )
+    _answer_required_questions(client, session_id)
+    client.post(
+        "/api/interview/%s/answer" % session_id,
+        json={"content": FINISH_ANSWER},
+    )
+    client.post(
+        "/api/interview/%s/answer" % session_id, json={"content": "כן"}
+    )
 
     profile = repository.sessions[session_id]["profile"]
     assert profile is not None

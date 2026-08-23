@@ -26,6 +26,7 @@ from app.bl.tools import (
     TOOL_PROFILE_GAPS,
     TOOL_PUBLISH_READINESS,
     TOOL_READ_PERIOD,
+    TOOL_TEAM_OVERVIEW,
     TOOL_VALIDATE_PLACEMENT,
     ScheduleTools,
 )
@@ -221,6 +222,17 @@ def test_no_schedule_at_all_is_an_answer_not_an_error(tools):
     """An empty workspace is an ordinary state, not a failure."""
     answer = tools.run(TEAM, TOOL_READ_PERIOD, {})
     assert answer["ok"] and answer["found"] is False
+
+
+def test_team_overview_returns_declared_people_and_roles(tools):
+    answer = tools.run(TEAM, TOOL_TEAM_OVERVIEW, {})
+    assert answer["found"] and answer["employee_count"] == 3
+    assert answer["employees"][0] == {
+        "name": DANA,
+        "role": "מוקדנית",
+        "eligible_shifts": [MORNING],
+    }
+    assert answer["shift_count"] == 2
 
 
 # -- one employee ----------------------------------------------------------

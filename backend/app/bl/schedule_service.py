@@ -33,6 +33,7 @@ from app.bl.export import as_workbook, filename
 from app.bl.importer import infer, read_grid
 from app.bl.learn import RuleLearner, observe, observe_corrections
 from app.bl.placement import check as check_placement
+from app.bl.profile_service import ProfileService
 from app.bl.planner import PlanningAgent
 from app.bl.simulate import simulate as simulate_operations
 from app.bl.tools import ScheduleTools
@@ -106,6 +107,7 @@ class ScheduleService:
         # has no route to a write even by accident.
         self._tools = ScheduleTools(repository)
         self._planner = PlanningAgent(llm, self._tools)
+        self._profiles = ProfileService(repository)
 
     # -- reading -----------------------------------------------------------
 
@@ -954,7 +956,9 @@ class ScheduleService:
         the change *would* produce, so a proposal that breaks something is
         visible before it is accepted rather than after.
         """
-        schedule = self._require_schedule(team_id, schedule_id)
+        schedule = self._repository.get_schedule(schedule_id, team_id) \
+            if schedule_id else self._repository.current_schedule(team_id)
+        schedule = schedule or {}
         profile = self._repository.team_profile(team_id) or {}
         window = _window(schedule)
         proposal = self._changes.propose(
@@ -967,14 +971,14 @@ class ScheduleService:
             ),
             history=self._repository.change_log(team_id, limit=40),
         )
-        proposal["schedule_id"] = schedule["id"]
+        proposal["schedule_id"] = schedule.get("id", "")
         # The audit runs against the schedule as the proposal would leave it,
         # so the manager sees the consequence rather than the current state.
         proposal["warnings"] = self._audit_rows(
             team_id,
             _applied(schedule, proposal["operations"]),
             schedule,
-        )
+        ) if schedule else []
         return proposal
 
     def apply(
@@ -984,6 +988,7 @@ class ScheduleService:
         operations: List[dict],
         reason: str,
         agent_reason: str = "",
+        profile_operations: Optional[List[dict]] = None,
     ) -> dict:
         """Apply a proposal the manager confirmed, and log it.
 
@@ -992,8 +997,19 @@ class ScheduleService:
         append-only log without one is a hole in the only history there is
         ([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)).
         """
-        if not (reason or "").strip():
+        profile_operations = profile_operations or []
+        if operations and not (reason or "").strip():
             raise AgentError("צריך לציין סיבה לשינוי")
+        if operations and profile_operations:
+            raise AgentError("יש לאשר שינויי צוות ושינויי סידור בנפרד")
+        if profile_operations:
+            profile = self._profiles.apply_operations(
+                team_id, profile_operations
+            )
+            schedule = self._repository.current_schedule(team_id)
+            if schedule:
+                return self._view(schedule, team_id)
+            return {"status": "ok", "profile": profile}
         schedule = self._repository.get_schedule(schedule_id, team_id)
         applied = 0
         for operation in operations or []:

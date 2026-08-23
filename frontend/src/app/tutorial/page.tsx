@@ -230,7 +230,7 @@ function Screenshot({ src, alt, caption, note, callouts }: { src: string; alt: s
     <figure className="tutorial-screenshot">
       <div className="tutorial-window">
         <div className="tutorial-window-bar"><span /><span /><span /><b>{caption}</b></div>
-        <Image src={src} alt={alt} width={1280} height={720} sizes="(max-width: 900px) 100vw, 1100px" />
+        <Image src={src} alt={alt} width={1280} height={720} sizes="(max-width: 900px) 100vw, 1100px" unoptimized />
         {callouts.map((callout) => (
           <span key={callout.n} className="tutorial-callout" style={{ insetInlineStart: callout.x, top: callout.y }}>
             <b>{callout.n}</b><em>{callout.label}</em>

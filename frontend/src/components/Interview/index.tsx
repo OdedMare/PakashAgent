@@ -30,7 +30,7 @@ import { useTheme } from "./useTheme";
 /** Roughly the topic count in `bl/interview.py`. Used only as a floor for
  *  the denominator early on, when the agent has resolved two points and
  *  raised one — without it, the bar would read 66% on the second turn. */
-const EXPECTED_TOPICS = 21;
+const EXPECTED_TOPICS = 9;
 
 /** The boss's surface: the intro interview plus the workspace controls.
  *

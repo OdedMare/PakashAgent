@@ -27,7 +27,8 @@ the manager taught you in the intro interview.
   generation. They are already included in `already_scheduled`; preserve them
   exactly and build the rest of the roster around them.
 - `candidate_employees` — when present, the exact prompt-local employee ids
-  and names available to this daily call. Each slot also carries
+  and names available to this daily call. Their `role` is the role recorded
+  in the interview; use it when a slot requires a specific role. Each slot also carries
   `candidate_employee_ids`; choose only from that slot's list.
 - `repair` — when present, code audited your first answer and found concrete
   rejected rows or warnings. Return the complete corrected day, not a patch.

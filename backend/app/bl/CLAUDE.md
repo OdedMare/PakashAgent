@@ -23,7 +23,7 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | `importer.py` | Excel/doc ingest with layout inference |
 | `tools.py` | **The named questions the agent may ask. Pure Python, no LLM, no write** — including `profile_gaps`, what the interview never taught |
 | `planner.py` | The tool loop, with a deterministic fallback when no model is reachable |
-| `intent.py` | **Reading a Hebrew sentence with no model.** Six shapes; never guesses |
+| `intent.py` | **Reading a Hebrew sentence with no model.** Seven shapes; never guesses |
 | `simulate.py` | **What a change would do.** No model, no repository, persists nothing |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
 
@@ -252,7 +252,7 @@ operations, which works for one absence and stops working for *"מי יכול
 what D3 already assigns to code.
 
 So the questions are **named**, and each is answered by arithmetic:
-`read_period`, `employee_state`, `coverage_gaps`, `validate_placement`,
+`team_overview`, `read_period`, `employee_state`, `coverage_gaps`, `validate_placement`,
 `find_replacements`, `publish_readiness`, `profile_gaps`. The model picks
 which to call and writes the Hebrew around the result; it never supplies a number, a name or a
 verdict.

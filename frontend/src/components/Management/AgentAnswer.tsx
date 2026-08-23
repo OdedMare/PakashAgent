@@ -16,7 +16,7 @@ import type { AgentAnswer as AgentAnswerRow } from "@/types";
  *  A fifth card state, distinct from the four that already exist on this
  *  screen — insight (`Briefing`), proposal awaiting approval (`AgentChat`),
  *  confirmed change (the grid itself), and error. This one is an **answer**:
- *  the agent read the schedule and is telling the manager what is there.
+ *  the agent read the team or schedule and is telling the manager what is there.
  *
  *  **It carries no operations, and there is no confirm button on it.** That
  *  is the whole difference from a proposal. The response type has no field
@@ -62,6 +62,7 @@ export function AgentAnswer({
     <section
       className={`agent-answer${answer.understood ? "" : " is-unsure"}${answer.needs_input ? " needs-input" : ""}`}
       aria-label="תשובת הסוכן"
+      aria-live="polite"
     >
       <header className="agent-answer-header">
         <span className="agent-answer-mark" aria-hidden="true">
@@ -151,6 +152,7 @@ export function AgentAnswer({
  *  model is handed as its menu — so what the agent was offered and what the
  *  manager is told it ran are the same words. */
 const TOOL_LABELS: Record<string, string> = {
+  team_overview: "קריאת פרטי הצוות והתפקידים",
   read_period: "קריאת הסידור",
   employee_state: "המשמרות והשעות של העובד/ת",
   coverage_gaps: "איתור משמרות חסרות",

@@ -175,6 +175,23 @@ def test_daily_generation_uses_ids_and_filters_unavailable_candidates():
     ]
     assert payload["instructions"] == "להתחשב בכללים הקשיחים"
     assert payload["profile"]["rules"] == PROFILE["rules"]
+    assert payload["candidate_employees"][0]["role"] == ""
+
+
+def test_daily_generation_sends_the_employee_role():
+    profile = dict(PROFILE, employees=[{
+        "name": "דנה", "role": "אחראית משמרת",
+        "eligible_shifts": [MORNING],
+    }])
+    llm = _ScriptedLlm([_reply([{
+        "employee_id": "employee-1", "slot_id": "slot-1",
+        "reason": "דנה ממלאת את תפקיד אחראית המשמרת",
+    }])])
+
+    Scheduler(llm).generate_day(profile, "2026-08-17")
+
+    payload = json.loads(llm.calls[0]["user"])
+    assert payload["candidate_employees"][0]["role"] == "אחראית משמרת"
 
 
 def test_daily_generation_filters_a_hard_time_window_but_keeps_a_soft_one():
@@ -227,6 +244,28 @@ def test_daily_generation_repairs_a_rejected_model_row_once():
     assert result["metrics"]["rejected"] == 1
     repair = json.loads(llm.calls[1]["user"])["repair"]
     assert repair["rejected_rows"]
+
+
+def test_a_worse_repair_does_not_replace_the_first_answer():
+    profile = dict(PROFILE)
+    profile["shifts"] = [dict(PROFILE["shifts"][0], staffing=[{
+        "days": [], "headcount": 2, "required_roles": [],
+    }])]
+    llm = _ScriptedLlm([
+        _reply([{
+            "employee_id": "employee-1", "slot_id": "slot-1",
+            "reason": "דנה זמינה ומוסמכת לבוקר",
+        }]),
+        _reply([{
+            "employee_id": "employee-99", "slot_id": "slot-1",
+            "reason": "מזהה לא קיים",
+        }]),
+    ])
+
+    result = Scheduler(llm).generate_day(profile, "2026-08-17")
+
+    assert [row["employee"] for row in result["assignments"]] == ["דנה"]
+    assert result["metrics"]["repaired"] is True
 
 
 def test_next_daily_call_sees_yesterday_and_cumulative_fairness():

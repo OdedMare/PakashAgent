@@ -40,7 +40,7 @@ sentence with keyword matching, runs the *same tools*, and renders the
 results with Hebrew sentence templates.
 
 What is lost is real and is not disguised: the deterministic reader handles
-six question shapes and says plainly that it did not understand anything
+seven question shapes and says plainly that it did not understand anything
 else. What is kept is the part that matters — the answer's *content* is
 identical either way, because the content was never the model's to begin
 with. The model was writing the sentence around it.
@@ -59,6 +59,7 @@ from app.bl.tools import (
     TOOL_NAMES,
     TOOL_PUBLISH_READINESS,
     TOOL_READ_PERIOD,
+    TOOL_TEAM_OVERVIEW,
 )
 from app.common.errors import AgentError
 
@@ -245,7 +246,7 @@ class PlanningAgent:
         """The same tools, chosen by keyword rather than by a model.
 
         The product's floor. `bl/intent.py` places the sentence into one of
-        six shapes, this maps each shape onto the tools that answer it, and
+        seven shapes, this maps each shape onto the tools that answer it, and
         the results are rendered with Hebrew templates.
 
         A sentence it cannot place comes back `understood: False` with a list
@@ -266,6 +267,7 @@ class PlanningAgent:
             intent_reader.INTENT_EMPLOYEE: self._fallback_employee,
             intent_reader.INTENT_PUBLISH: self._fallback_publish,
             intent_reader.INTENT_PERIOD: self._fallback_period,
+            intent_reader.INTENT_TEAM: self._fallback_team,
         }.get(read["intent"])
 
         if handler is None:
@@ -469,13 +471,46 @@ class PlanningAgent:
             lines.append("אזהרות פתוחות: %d." % len(warnings))
         return ("\n".join(lines), steps, [found], False)
 
+    def _fallback_team(self, team_id: str, read: dict) -> tuple:
+        found = self._tools.run(team_id, TOOL_TEAM_OVERVIEW, {})
+        steps = [{"tool": TOOL_TEAM_OVERVIEW, "arguments": {},
+                  "ok": bool(found.get("ok"))}]
+        if not found.get("found"):
+            return (_text(found.get("reason")) or "לא הוגדרו פרטי צוות.",
+                    steps, [found], False)
+
+        employees = found.get("employees") or []
+        lines = ["בצוות יש %d עובדים ועובדות:" % len(employees)]
+        lines.extend(
+            "· %s%s" % (
+                row.get("name", ""),
+                " — " + row["role"] if row.get("role") else "",
+            )
+            for row in employees
+        )
+        shifts = found.get("shifts") or []
+        if shifts:
+            lines.append("סוגי המשמרות שהוגדרו: %s." % ", ".join(
+                row.get("name", "") for row in shifts if row.get("name")
+            ))
+        rules = [
+            _text(row.get("text") or row.get("rule"))
+            if isinstance(row, dict) else _text(row)
+            for row in found.get("rules") or []
+        ]
+        rules = [row for row in rules if row]
+        if rules:
+            lines.append("כללים שנרשמו:")
+            lines.extend("· " + row for row in rules)
+        return ("\n".join(lines), steps, [found], False)
+
 
 # What the deterministic reader says when it could not place a sentence.
 # Lists what it *can* do rather than apologising: a manager told only "I did
 # not understand" has no way to find the sentence that would have worked.
 _NOT_UNDERSTOOD = (
     "אני רוצה לדייק ולא לנחש. מה תרצו לברר קודם — מחליף לעובד/ת, "
-    "חוסרים בסידור, שעות של עובד/ת, או מוכנות לפרסום?"
+    "מידע על הצוות, חוסרים בסידור, שעות של עובד/ת, או מוכנות לפרסום?"
 )
 
 

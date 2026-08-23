@@ -13,6 +13,7 @@ import { useState } from "react";
 
 import type { AgentAnswer, Operation, Proposal, Simulation } from "@/types";
 
+import { AgentAnswer as AgentAnswerBubble } from "./AgentAnswer";
 import { formatDate } from "./Calendar";
 
 /** Talking to the agent about the schedule — the way changes actually happen.
@@ -31,6 +32,8 @@ import { formatDate } from "./Calendar";
  *  reasoning is rendered in full rather than tucked behind a disclosure. */
 export function AgentChat({
   proposal,
+  answer,
+  answerBusy = false,
   busy,
   hasSchedule = true,
   writeLocked = false,
@@ -41,8 +44,11 @@ export function AgentChat({
   onSimulate,
   onConfirm,
   onDismiss,
+  onDismissAnswer,
 }: {
   proposal: Proposal | null;
+  answer: AgentAnswer | null;
+  answerBusy?: boolean;
   busy: boolean;
   /** Without a period there is nothing to change, but the agent can still
    *  answer questions about the workplace and help decide what to build. */
@@ -75,6 +81,7 @@ export function AgentChat({
   onSimulate?: (operations: Operation[]) => void;
   onConfirm: (reason: string) => void;
   onDismiss: () => void;
+  onDismissAnswer: () => void;
 }) {
   const [request, setRequest] = useState("");
   const [reason, setReason] = useState("");
@@ -97,6 +104,8 @@ export function AgentChat({
   // The manager's reason: whatever they already stated, otherwise what they
   // are typing now in answer to the agent asking.
   const confirmReason = (proposal?.stated_reason || reason).trim();
+  const hasScheduleOperations = Boolean(proposal?.operations.length);
+  const hasProfileOperations = Boolean(proposal?.profile_operations.length);
 
   return (
     <section className="agent-chat" aria-label="שיחה עם הסוכן">
@@ -105,11 +114,11 @@ export function AgentChat({
           <Sparkles size={15} />
         </span>
         <div>
-          <h3>שיחה על הסידור</h3>
+          <h3>שיחה עם הסוכן</h3>
           <p>
             {hasSchedule
-              ? "אפשר לבקש שינוי, לשאול על השיבוץ, או לתכנן קדימה."
-              : "אפשר לדבר ולתכנן גם לפני שנבנה הסידור הראשון."}
+              ? "אפשר להתייעץ על הצוות והסידור, או לבקש שינוי לאישור."
+              : "אפשר להתייעץ על הצוות, להוסיף עובדים ולהגדיר משמרות."}
           </p>
         </div>
       </header>
@@ -197,6 +206,19 @@ export function AgentChat({
             </ul>
           ) : null}
 
+          {proposal.profile_operations.length ? (
+            <ul className="proposal-operations">
+              {proposal.profile_operations.map((operation, index) => (
+                <li key={`profile-${index}`}>
+                  <span className="op-badge op-profile">
+                    {PROFILE_ACTION_LABELS[operation.action] ?? operation.action}
+                  </span>
+                  <span>{profileOperationSummary(operation)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
           {/* Warnings the change *would* produce, so a proposal that breaks
               something is visible before it is accepted rather than after.
               Still advisory: they do not disable the confirm button. */}
@@ -228,12 +250,15 @@ export function AgentChat({
                 סימולציה
               </button>
             ) : null}
-            {proposal.operations.length ? (
+            {hasScheduleOperations || hasProfileOperations ? (
               <button
                 type="button"
                 className="primary-button"
                 onClick={() => onConfirm(confirmReason)}
-                disabled={busy || writeLocked || !confirmReason}
+                disabled={
+                  busy ||
+                  (hasScheduleOperations && (writeLocked || !confirmReason))
+                }
               >
                 <Check size={14} />
                 {busy ? "מחיל…" : "אישור השינוי"}
@@ -243,18 +268,25 @@ export function AgentChat({
         </div>
       ) : null}
 
+      {answerBusy || answer ? (
+        <div className="agent-answer-float">
+          <AgentAnswerBubble
+            answer={answer}
+            busy={answerBusy}
+            onDismiss={onDismissAnswer}
+            onContinue={() =>
+              document.getElementById("agent-composer-input")?.focus()
+            }
+          />
+        </div>
+      ) : null}
+
       <form
         className="agent-composer"
         onSubmit={(event) => {
           event.preventDefault();
           const text = request.trim();
           if (!text || busy) return;
-          if (!hasSchedule && onAsk) {
-            onAsk(text);
-            setRequest("");
-            return;
-          }
-          if (writeLocked) return;
           onPropose(text);
           setRequest("");
           setReason("");
@@ -268,7 +300,7 @@ export function AgentChat({
           onChange={(event) => setRequest(event.target.value)}
           placeholder={hasSchedule
             ? "למשל: דנה חולה ביום חמישי"
-            : "למשל: מה כדאי להגדיר לפני שבונים סידור?"}
+            : "למשל: תוסיף את מאיה לצוות בתפקיד אחראית משמרת"}
           disabled={busy}
         />
         {/* Asking and requesting are two buttons because they are two
@@ -276,7 +308,7 @@ export function AgentChat({
             send asks the agent to propose a change. Collapsing them would
             make every question produce a confirm button for something the
             manager did not ask for. */}
-        {onAsk && hasSchedule ? (
+        {onAsk ? (
           <button
             type="button"
             className="ghost-button"
@@ -286,7 +318,7 @@ export function AgentChat({
               onAsk(text);
             }}
             disabled={busy || !request.trim()}
-            aria-label="שאלה על הסידור"
+            aria-label="שאלה על הצוות או הסידור"
             title="שאלה — קריאה בלבד, בלי לשנות כלום"
           >
             <Search size={15} />
@@ -295,11 +327,9 @@ export function AgentChat({
         <button
           type="submit"
           className="primary-button"
-          disabled={busy || (hasSchedule && writeLocked) || !request.trim()}
+          disabled={busy || !request.trim()}
           aria-label="שליחה"
-          title={hasSchedule
-            ? "בקשת שינוי — הסוכן יציע ואתם תאשרו"
-            : "שליחת שאלה לסוכן"}
+          title="בקשת שינוי — הסוכן יציע ואתם תאשרו"
         >
           <Send size={15} />
         </button>
@@ -314,10 +344,30 @@ const ACTION_LABELS: Record<string, string> = {
   swap: "החלפה",
 };
 
+const PROFILE_ACTION_LABELS: Record<string, string> = {
+  add_employee: "הוספת עובד/ת",
+  update_employee: "עריכת עובד/ת",
+  add_shift: "הוספת משמרת",
+  update_shift: "עריכת משמרת",
+};
+
+function profileOperationSummary(operation: Proposal["profile_operations"][number]): string {
+  const name = String(operation.item.name ?? operation.target);
+  if (operation.action.includes("employee")) {
+    const role = String(operation.item.role ?? "").trim();
+    return role ? `${name} · ${role}` : name;
+  }
+  const start = String(operation.item.start_time ?? "").trim();
+  const end = String(operation.item.end_time ?? "").trim();
+  const time = start || end ? ` · ${start || "—"}–${end || "—"}` : "";
+  const headcount = Number(operation.item.headcount ?? 1);
+  return `${name}${time} · תקן ${headcount}`;
+}
+
 const SCHEDULE_QUESTIONS = [
+  "מי נמצא בצוות ומה התפקיד של כל אחד?",
   "מה חסר לפני פרסום?",
   "איפה יש חוסרים בסידור?",
-  "איך נראה השבוע?",
 ] as const;
 
 const PROFILE_QUESTIONS = [
