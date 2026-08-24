@@ -50,7 +50,7 @@ class _ScriptedLlm:
         self.calls = []
 
     def complete_json(self, system, user, schema=None, flow=""):
-        self.calls.append({"system": system, "user": user})
+        self.calls.append({"system": system, "user": user, "schema": schema})
         if not self._answers:
             raise AssertionError("model called more times than scripted")
         return self._answers.pop(0)
@@ -192,6 +192,136 @@ def test_daily_generation_sends_the_employee_role():
 
     payload = json.loads(llm.calls[0]["user"])
     assert payload["candidate_employees"][0]["role"] == "אחראית משמרת"
+
+
+def test_daily_generation_receives_the_full_profile_and_active_preferences():
+    profile = dict(
+        PROFILE,
+        casual_worker_policy="מזדמנים רק כשאין כיסוי מהצוות הקבוע",
+        audit_policy={
+            "max_weekly_hours": 40,
+            "max_consecutive_days": 6,
+            "min_rest_hours": 10,
+        },
+    )
+    llm = _ScriptedLlm([_reply([]), _reply([])])
+
+    Scheduler(llm).generate_day(
+        profile,
+        "2026-08-17",
+        preferences=[{
+            "kind": "employee", "subject": "דנה",
+            "text": "דנה מעדיפה משמרות בוקר",
+        }],
+    )
+
+    payload = json.loads(llm.calls[0]["user"])
+    assert payload["profile"]["casual_worker_policy"].startswith("מזדמנים")
+    assert payload["profile"]["audit_policy"]["min_rest_hours"] == 10
+    assert payload["preferences"] == [{
+        "kind": "employee", "subject": "דנה",
+        "text": "דנה מעדיפה משמרות בוקר",
+    }]
+
+
+def test_structured_recurring_constraint_filters_daily_candidates():
+    employees = [dict(PROFILE["employees"][0], recurring_constraints=[{
+        "days": ["שני"], "shifts": [MORNING], "available": False,
+        "is_hard": True, "start_time": "", "end_time": "",
+        "reason": "דנה לא עובדת בימי שני",
+    }])] + PROFILE["employees"][1:]
+    profile = dict(PROFILE, employees=employees)
+    llm = _ScriptedLlm([_reply([{
+        "employee_id": "employee-2", "slot_id": "slot-1",
+        "reason": "יוסי זמין לבוקר ביום שני",
+    }])])
+
+    Scheduler(llm).generate_day(profile, "2026-08-17")
+
+    payload = json.loads(llm.calls[0]["user"])
+    assert payload["period"]["slots"][0]["candidate_employee_ids"] == [
+        "employee-2"
+    ]
+    assert payload["availability"][0]["source"] == "interview"
+
+
+def test_range_generation_receives_a_recurring_hard_rule_as_dated_context():
+    employees = [dict(PROFILE["employees"][0], recurring_constraints=[{
+        "days": ["שני"], "shifts": [MORNING], "available": False,
+        "is_hard": True, "start_time": "", "end_time": "",
+        "reason": "דנה לא עובדת בימי שני",
+    }])] + PROFILE["employees"][1:]
+    profile = dict(PROFILE, employees=employees)
+    llm = _ScriptedLlm([_reply([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "המודל ניסה לשבץ למרות האילוץ",
+    }])])
+
+    result = Scheduler(llm).generate(
+        profile, "2026-08-17", "2026-08-17"
+    )
+
+    assert result["assignments"][0]["employee"] == "דנה"
+    payload = json.loads(llm.calls[0]["user"])
+    assert payload["availability"] == [{
+        "employee": "דנה", "date": "2026-08-17", "shift": MORNING,
+        "available": False, "start_time": "", "end_time": "",
+        "is_hard": True, "reason": "דנה לא עובדת בימי שני",
+        "source": "interview",
+    }]
+
+
+def test_dated_constraint_overrides_the_same_recurring_occurrence():
+    employees = [dict(PROFILE["employees"][0], recurring_constraints=[{
+        "days": ["שני"], "shifts": [MORNING], "available": False,
+        "is_hard": True, "start_time": "", "end_time": "", "reason": "קבוע",
+    }])] + PROFILE["employees"][1:]
+    profile = dict(PROFILE, employees=employees)
+    llm = _ScriptedLlm([_reply([{
+        "employee_id": "employee-1", "slot_id": "slot-1",
+        "reason": "דנה אישרה חריג ליום הזה",
+    }])])
+
+    Scheduler(llm).generate_day(profile, "2026-08-17", availability=[{
+        "employee": "דנה", "constraint_date": datetime.date(2026, 8, 17),
+        "shift_name": MORNING, "available": True, "is_hard": True,
+    }])
+
+    payload = json.loads(llm.calls[0]["user"])
+    assert payload["period"]["slots"][0]["candidate_employee_ids"] == [
+        "employee-1", "employee-2"
+    ]
+
+
+def test_required_roles_and_non_counting_trainees_reach_the_daily_contract():
+    profile = dict(
+        PROFILE,
+        employees=[
+            {"name": "דנה", "role": "אחראית", "eligible_shifts": [MORNING]},
+            {
+                "name": "מתלמד", "role": "מתלמד", "eligible_shifts": [MORNING],
+                "is_trainee": True, "counts_toward_staffing": False,
+            },
+        ],
+        shifts=[dict(PROFILE["shifts"][0], staffing=[{
+            "days": [], "headcount": 1, "required_roles": ["אחראית"],
+        }])],
+    )
+    llm = _ScriptedLlm([_reply([{
+        "employee_id": "employee-1", "slot_id": "slot-1",
+        "reason": "דנה היא האחראית הנדרשת",
+    }, {
+        "employee_id": "employee-2", "slot_id": "slot-1",
+        "reason": "המתלמד מצטרף ואינו נספר בתקן",
+    }])])
+
+    Scheduler(llm).generate_day(profile, "2026-08-17")
+
+    call = llm.calls[0]
+    payload = json.loads(call["user"])
+    assert payload["period"]["slots"][0]["required_roles"] == ["אחראית"]
+    assert payload["candidate_employees"][1]["counts_toward_staffing"] is False
+    assert call["schema"]["properties"]["assignments"]["maxItems"] == 2
 
 
 def test_daily_generation_filters_a_hard_time_window_but_keeps_a_soft_one():

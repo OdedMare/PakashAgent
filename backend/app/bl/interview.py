@@ -113,8 +113,9 @@ _PROFILE_SCHEMA = {
     "required": [
         "workplace", "employees", "shifts", "dependencies", "rules",
         "availability_process", "constraint_deadline", "casual_worker_policy",
-        "training_policy", "rest_policy", "weekend_policy", "fairness_policy",
-        "conflict_policy", "existing_schedule_source", "summary",
+        "training_policy", "audit_policy", "rest_policy", "weekend_policy",
+        "fairness_policy", "conflict_policy", "existing_schedule_source",
+        "summary",
     ],
     "properties": {
         "workplace": {
@@ -146,7 +147,8 @@ _PROFILE_SCHEMA = {
                 "type": "object",
                 "additionalProperties": False,
                 "required": [
-                    "name", "role", "workload", "eligible_shifts",
+                    "name", "role", "workload", "max_weekly_hours",
+                    "eligible_shifts",
                     "is_shift_manager", "is_trainee",
                     "counts_toward_staffing", "can_train", "trainers",
                     "is_casual", "availability", "recurring_constraints",
@@ -155,6 +157,7 @@ _PROFILE_SCHEMA = {
                     "name": {"type": "string"},
                     "role": {"type": "string"},
                     "workload": {"type": "string"},
+                    "max_weekly_hours": {"type": "number", "minimum": 0},
                     "eligible_shifts": {
                         "type": "array", "items": {"type": "string"},
                     },
@@ -168,7 +171,36 @@ _PROFILE_SCHEMA = {
                     "is_casual": {"type": "boolean"},
                     "availability": {"type": "string"},
                     "recurring_constraints": {
-                        "type": "array", "items": {"type": "string"},
+                        "type": "array",
+                        "items": {
+                            "oneOf": [
+                                {"type": "string"},
+                                {
+                                    "type": "object",
+                                    "additionalProperties": False,
+                                    "required": [
+                                        "days", "shifts", "available",
+                                        "is_hard", "start_time", "end_time",
+                                        "reason",
+                                    ],
+                                    "properties": {
+                                        "days": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                        },
+                                        "shifts": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                        },
+                                        "available": {"type": "boolean"},
+                                        "is_hard": {"type": "boolean"},
+                                        "start_time": {"type": "string"},
+                                        "end_time": {"type": "string"},
+                                        "reason": {"type": "string"},
+                                    },
+                                },
+                            ],
+                        },
                     },
                 },
             },
@@ -250,6 +282,18 @@ _PROFILE_SCHEMA = {
                 "counts_toward_staffing": {"type": "boolean"},
             },
         },
+        "audit_policy": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "max_weekly_hours", "max_consecutive_days", "min_rest_hours",
+            ],
+            "properties": {
+                "max_weekly_hours": {"type": "number", "minimum": 0},
+                "max_consecutive_days": {"type": "integer", "minimum": 1},
+                "min_rest_hours": {"type": "number", "minimum": 0},
+            },
+        },
         "rest_policy": {"type": "string"},
         "weekend_policy": {"type": "string"},
         "fairness_policy": {"type": "string"},
@@ -269,7 +313,7 @@ _TEXT_FIELDS = (
     "existing_schedule_source", "summary",
 )
 _LIST_FIELDS = ("employees", "shifts", "dependencies", "rules")
-_OBJECT_FIELDS = ("workplace", "training_policy")
+_OBJECT_FIELDS = ("workplace", "training_policy", "audit_policy")
 
 
 _OPTION_SCHEMA = {
@@ -764,6 +808,11 @@ _REQUIRED_TOPICS = (
     ("workplace", "name", "חסר שם למקום העבודה."),
     ("workplace", "planning_horizon", "חסרה תקופת התכנון של הסידור."),
 )
+_REQUIRED_NUMERIC_TOPICS = (
+    ("audit_policy", "max_weekly_hours", "חסרה תקרת שעות שבועית."),
+    ("audit_policy", "max_consecutive_days", "חסר מספר ימי העבודה הרצופים המרבי."),
+    ("audit_policy", "min_rest_hours", "חסר זמן המנוחה המזערי בין משמרות."),
+)
 
 
 def missing_topics(draft: dict) -> List[str]:
@@ -780,6 +829,10 @@ def missing_topics(draft: dict) -> List[str]:
     missing = []
     for section, field, message in _REQUIRED_TOPICS:
         if not _bounded(_as_dict(draft.get(section)).get(field)):
+            missing.append(message)
+    for section, field, message in _REQUIRED_NUMERIC_TOPICS:
+        value = _as_dict(draft.get(section)).get(field)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
             missing.append(message)
     if not draft.get("shifts"):
         missing.append("לא הוגדר אף סוג משמרת.")

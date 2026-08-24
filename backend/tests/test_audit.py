@@ -16,6 +16,7 @@ from app.bl.audit import (
     CONSECUTIVE,
     load_history,
     DOUBLE_BOOKED,
+    MISSING_ROLE,
     OVERSTAFFED,
     OVER_HOURS,
     SEVERITY_NOTICE,
@@ -276,6 +277,39 @@ def test_an_understaffed_slot_is_reported():
     unfilled = _by_code(warnings, UNFILLED)
     assert len(unfilled) == 1
     assert unfilled[0]["details"] == {"assigned": 1, "required": 2}
+
+
+def test_required_role_is_checked_from_the_shift_staffing_contract():
+    shifts = [dict(SHIFTS[1], staffing=[{
+        "days": [], "headcount": 1, "required_roles": ["אחראית"],
+    }])]
+    warnings = audit(
+        [_assign("יוסי", EVENING, "2026-08-17")],
+        shifts,
+        [{"name": "יוסי", "role": "נציג"}],
+    )
+
+    missing = _by_code(warnings, MISSING_ROLE)
+    assert len(missing) == 1
+    assert missing[0]["details"] == {"required_role": "אחראית"}
+
+
+def test_non_counting_trainee_does_not_fill_or_overstaff_a_slot():
+    shifts = [dict(SHIFTS[1], staffing=[{
+        "days": [], "headcount": 1, "required_roles": [],
+    }])]
+    employees = [{
+        "name": "מתלמד", "is_trainee": True,
+        "counts_toward_staffing": False,
+    }]
+
+    warnings = audit(
+        [_assign("מתלמד", EVENING, "2026-08-17")],
+        shifts, employees,
+    )
+
+    assert len(_by_code(warnings, UNFILLED)) == 1
+    assert _by_code(warnings, OVERSTAFFED) == []
 
 
 def test_an_overstaffed_slot_is_a_notice_not_a_warning():

@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional
 from app.bl.audit import (
     CONSECUTIVE,
     DOUBLE_BOOKED,
+    MISSING_ROLE,
     OVER_HOURS,
     OVERSTAFFED,
     SHORT_REST,
@@ -59,6 +60,7 @@ _log = logging.getLogger("pakash.scheduler")
 _REPAIRABLE_WARNING_CODES = frozenset({
     CONSECUTIVE,
     DOUBLE_BOOKED,
+    MISSING_ROLE,
     OVER_HOURS,
     OVERSTAFFED,
     SHORT_REST,
@@ -128,6 +130,7 @@ class Scheduler:
         history: Optional[List[dict]] = None,
         instructions: str = "",
         required_assignments: Optional[List[dict]] = None,
+        preferences: Optional[List[dict]] = None,
     ) -> dict:
         """Slots for the period plus the model's assignments into them.
 
@@ -143,7 +146,9 @@ class Scheduler:
         shifts = (profile or {}).get("shifts") or []
         employees = (profile or {}).get("employees") or []
         trimmed = _profile_for_model(profile)
-        rows = _bounded_rows(availability)
+        rows = effective_availability(
+            profile, availability, starts_on, ends_on
+        )
 
         required = _required_assignments(required_assignments, slots, profile)
         assignments: List[dict] = list(required)
@@ -158,12 +163,15 @@ class Scheduler:
             fairness = load_history(past + assignments, shifts, employees)
             answer = self._ask({
                 "profile": trimmed,
+                "preferences": _preferences_for_model(preferences),
                 "period": {
                     "starts_on": chunk[0]["slot_date"],
                     "ends_on": chunk[-1]["slot_date"],
                     "slots": [_slot_for_model(slot) for slot in chunk],
                 },
-                "availability": rows,
+                "availability": _availability_for_dates(
+                    rows, {slot["slot_date"] for slot in chunk}
+                ),
                 # Counted rather than handed over raw. Several hundred
                 # assignment rows were roughly 60% of this payload, and
                 # counting them is code's job under D3 — so the model gets
@@ -205,6 +213,7 @@ class Scheduler:
         instructions: str = "",
         required_assignments: Optional[List[dict]] = None,
         already_scheduled: Optional[List[dict]] = None,
+        preferences: Optional[List[dict]] = None,
     ) -> dict:
         """Generate and verify exactly one date.
 
@@ -224,7 +233,7 @@ class Scheduler:
         profile = profile if isinstance(profile, dict) else {}
         shifts = profile.get("shifts") or []
         employees = profile.get("employees") or []
-        availability = _availability_for_day(availability, day)
+        availability = effective_availability(profile, availability, day, day)
         committed = _bounded_rows(already_scheduled)
         required = _required_assignments(
             required_assignments, slots, profile
@@ -232,6 +241,7 @@ class Scheduler:
         candidates = _candidates(profile, slots, availability)
         payload = {
             "profile": _profile_for_model(profile),
+            "preferences": _preferences_for_model(preferences),
             "period": {
                 "starts_on": day,
                 "ends_on": day,
@@ -473,21 +483,23 @@ def build_slots(profile: dict, starts_on: str, ends_on: str) -> List[dict]:
             )
             if not runs:
                 continue
+            headcount, required_roles = _staffing_requirements(shift, weekday)
             slots.append({
                 "shift_name": _bounded(shift.get("name")),
                 "slot_date": day.isoformat(),
                 "weekday": weekday,
                 "start_time": _bounded(shift.get("start_time")),
                 "end_time": _bounded(shift.get("end_time")),
-                "headcount": _headcount(shift, weekday),
+                "headcount": headcount,
+                "required_roles": required_roles,
                 "is_on_call": bool(shift.get("is_on_call")),
             })
         day += datetime.timedelta(days=1)
     return slots
 
 
-def _headcount(shift: dict, weekday: str) -> int:
-    """How many people this shift needs on this weekday.
+def _staffing_requirements(shift: dict, weekday: str) -> tuple:
+    """How many people and which roles this shift needs on this weekday.
 
     `staffing` is per group of days because the interview asks whether the
     standard changes across the week. A group naming this weekday wins over
@@ -495,8 +507,8 @@ def _headcount(shift: dict, weekday: str) -> int:
     """
     staffing = shift.get("staffing")
     if not isinstance(staffing, list):
-        return 1
-    fallback = 1
+        return 1, []
+    fallback = (1, [])
     for group in staffing:
         if not isinstance(group, dict):
             continue
@@ -505,9 +517,9 @@ def _headcount(shift: dict, weekday: str) -> int:
             continue
         days = group.get("days")
         if not isinstance(days, list) or not days:
-            fallback = headcount
+            fallback = (headcount, _role_list(group.get("required_roles")))
         elif _weekday_key(weekday) in {_weekday_key(item) for item in days}:
-            return headcount
+            return headcount, _role_list(group.get("required_roles"))
     return fallback
 
 
@@ -616,25 +628,26 @@ def _required_assignments(
 
 
 def _profile_for_model(profile: dict) -> dict:
-    """The profile, trimmed to what scheduling needs.
+    """The complete canonical interview profile used for scheduling.
 
-    Rules travel as the manager's own sentences
-    ([D2](../../../docs/DECISIONS.md#d2--rules-stay-natural-language)) — not
-    parsed, not normalized, not turned into typed records.
+    The interview schema is already the boundary. A second field list here
+    made newly collected facts disappear until both contracts were updated.
     """
-    profile = profile if isinstance(profile, dict) else {}
-    return {
-        "workplace": profile.get("workplace") or {},
-        "employees": profile.get("employees") or [],
-        "shifts": profile.get("shifts") or [],
-        "rules": profile.get("rules") or [],
-        "dependencies": profile.get("dependencies") or [],
-        "training_policy": profile.get("training_policy") or {},
-        "rest_policy": profile.get("rest_policy") or "",
-        "weekend_policy": profile.get("weekend_policy") or "",
-        "fairness_policy": profile.get("fairness_policy") or "",
-        "conflict_policy": profile.get("conflict_policy") or "",
-    }
+    return profile if isinstance(profile, dict) else {}
+
+
+def _preferences_for_model(preferences: Any) -> List[dict]:
+    """Confirmed standing preferences, kept distinct from hard rules."""
+    shaped = []
+    for row in preferences or []:
+        if not isinstance(row, dict):
+            continue
+        shaped.append({
+            "kind": _bounded(row.get("kind")),
+            "subject": _bounded(row.get("subject")),
+            "text": _bounded(row.get("text")),
+        })
+    return shaped[:40]
 
 
 def _slot_for_model(
@@ -649,6 +662,7 @@ def _slot_for_model(
         "start_time": slot["start_time"],
         "end_time": slot["end_time"],
         "headcount": slot["headcount"],
+        "required_roles": _role_list(slot.get("required_roles")),
         "is_on_call": slot["is_on_call"],
     }
     if index is not None:
@@ -660,14 +674,34 @@ def _slot_for_model(
     return shaped
 
 
-def _availability_for_day(rows: Any, day: str) -> List[dict]:
-    """Only constraints that can affect this model call."""
-    shaped = []
-    for row in _bounded_rows(rows):
-        date = _bounded(row.get("date") or row.get("constraint_date"))
-        if date != day:
+def _availability_for_dates(rows: Any, dates: set) -> List[dict]:
+    return [
+        row for row in _bounded_rows(rows, 2000)
+        if _date_text(row.get("date") or row.get("constraint_date")) in dates
+    ]
+
+
+def effective_availability(
+    profile: dict, rows: Any, starts_on: str, ends_on: str
+) -> List[dict]:
+    """Dated constraints plus structured recurring constraints from interview.
+
+    Explicit dated rows win for the same person, date and shift. A recurring
+    all-shifts rule is expanded per declared shift, which lets one dated shift
+    exception override only that occurrence.
+    """
+    start, end = _parse_date(starts_on), _parse_date(ends_on)
+    explicit = []
+    for row in _bounded_rows(rows, 2000):
+        date = _date_text(row.get("date") or row.get("constraint_date"))
+        if not date:
             continue
-        shaped.append({
+        parsed = _parse_date(date)
+        if start is not None and end is not None and (
+            parsed is None or parsed < start or parsed > end
+        ):
+            continue
+        explicit.append({
             "employee": _bounded(row.get("employee")),
             "date": date,
             "shift": _bounded(row.get("shift") or row.get("shift_name")),
@@ -677,7 +711,78 @@ def _availability_for_day(rows: Any, day: str) -> List[dict]:
             "is_hard": row.get("is_hard", True) is not False,
             "reason": _bounded(row.get("reason")),
         })
-    return shaped
+    if start is None or end is None or end < start:
+        return explicit
+
+    explicit_keys = {
+        (row["employee"], row["date"], row["shift"]) for row in explicit
+    }
+    shift_names = [
+        _bounded(shift.get("name"))
+        for shift in (profile or {}).get("shifts") or []
+        if isinstance(shift, dict) and _bounded(shift.get("name"))
+    ]
+    recurring = []
+    for person in (profile or {}).get("employees") or []:
+        if not isinstance(person, dict):
+            continue
+        employee = _bounded(person.get("name"))
+        for rule in person.get("recurring_constraints") or []:
+            if not employee or not isinstance(rule, dict):
+                continue
+            days = {
+                _weekday_key(item) for item in rule.get("days") or []
+                if _weekday_key(item)
+            }
+            offered_shifts = [
+                value for value in (
+                    _bounded(item) for item in rule.get("shifts") or []
+                ) if value
+            ]
+            applicable_shifts = offered_shifts or shift_names or [""]
+            day = start
+            while day <= end:
+                weekday = _weekday_key(_HEBREW_WEEKDAYS[day.weekday()])
+                if not days or weekday in days:
+                    date = day.isoformat()
+                    for shift in applicable_shifts:
+                        key = (employee, date, shift)
+                        if key in explicit_keys or (
+                            employee, date, ""
+                        ) in explicit_keys:
+                            continue
+                        recurring.append({
+                            "employee": employee,
+                            "date": date,
+                            "shift": shift,
+                            "available": bool(rule.get("available")),
+                            "start_time": _bounded(rule.get("start_time")),
+                            "end_time": _bounded(rule.get("end_time")),
+                            "is_hard": rule.get("is_hard", True) is not False,
+                            "reason": _bounded(rule.get("reason")),
+                            "source": "interview",
+                        })
+                day += datetime.timedelta(days=1)
+    return recurring + explicit
+
+
+def _counts_toward_staffing(person: dict, profile: dict) -> bool:
+    explicit = person.get("counts_toward_staffing")
+    if isinstance(explicit, bool):
+        return explicit
+    if not person.get("is_trainee"):
+        return True
+    policy = (profile or {}).get("training_policy")
+    return bool(
+        policy.get("counts_toward_staffing")
+        if isinstance(policy, dict) else False
+    )
+
+
+def _role_list(value: Any) -> List[str]:
+    if not isinstance(value, list):
+        return []
+    return [role for role in (_bounded(item) for item in value) if role]
 
 
 def _candidates(profile: dict, slots: List[dict], availability: List[dict]) -> dict:
@@ -699,6 +804,7 @@ def _candidates(profile: dict, slots: List[dict], availability: List[dict]) -> d
             "eligible_shifts": person.get("eligible_shifts") or [],
             "max_weekly_hours": person.get("max_weekly_hours") or 0,
             "is_trainee": bool(person.get("is_trainee")),
+            "counts_toward_staffing": _counts_toward_staffing(person, profile),
         })
 
     by_slot = {}
@@ -760,8 +866,11 @@ def _day_schema(slots: List[dict], candidates: dict) -> dict:
         "properties": {
             "assignments": {
                 "type": "array",
+                # Non-counting trainees may be assigned in addition to the
+                # required headcount, so permit every legal candidate once.
                 "maxItems": sum(
-                    max(1, int(slot.get("headcount", 1))) for slot in slots
+                    len(candidates["by_slot"].get("slot-%d" % index, []))
+                    for index, _ in enumerate(slots, 1)
                 ),
                 "items": assignment,
             },
@@ -922,9 +1031,18 @@ def _bounded(value: Any, limit: int = _MAX_TEXT_CHARS) -> str:
 
 def _parse_date(value: Any) -> Optional[datetime.date]:
     try:
-        return datetime.date.fromisoformat(_bounded(value))
+        return datetime.date.fromisoformat(_date_text(value))
     except (ValueError, TypeError):
         return None
 
 
-__all__ = ["Scheduler", "SCHEDULE_RESPONSE_SCHEMA", "build_slots"]
+def _date_text(value: Any) -> str:
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return _bounded(value)
+
+
+__all__ = [
+    "Scheduler", "SCHEDULE_RESPONSE_SCHEMA", "build_slots",
+    "effective_availability",
+]

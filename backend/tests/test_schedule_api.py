@@ -10,6 +10,8 @@ Three things here are the point of the feature and are asserted directly:
   200 and still renders (D3).
 """
 
+import json
+
 import pytest
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -53,6 +55,7 @@ class _FakeScheduleRepo:
         self.availability_rows = []
         self.changes = []
         self.requests = []
+        self.preference_rows = []
         self.profiles = {TEAM: PROFILE, OTHER_TEAM: PROFILE}
         self._n = 0
 
@@ -238,6 +241,12 @@ class _FakeScheduleRepo:
             rows = [r for r in rows if r["employee"] == employee]
         return rows
 
+    def preferences(self, team_id, status=None):
+        rows = [
+            row for row in self.preference_rows if row["team_id"] == team_id
+        ]
+        return [row for row in rows if row["status"] == status] if status else rows
+
     def delete_availability(self, row_id, team_id):
         self.availability_rows = [
             row for row in self.availability_rows
@@ -273,8 +282,10 @@ class _FakeScheduleRepo:
 class _ScriptedLlm:
     def __init__(self, answers=None):
         self._answers = list(answers or [])
+        self.calls = []
 
     def complete_json(self, system, user, schema=None, flow=""):
+        self.calls.append({"system": system, "user": user, "schema": schema})
         if not self._answers:
             raise AssertionError("model called more times than scripted")
         answer = self._answers.pop(0)
@@ -291,6 +302,7 @@ def _generation(assignments, notes=None):
 def _build_app(answers=None):
     repository = _FakeScheduleRepo()
     llm = _ScriptedLlm(answers)
+    repository.model_calls = llm.calls
     guards = Guards(SECRET)
     app = FastAPI()
     app.include_router(
@@ -330,6 +342,33 @@ def test_generating_stores_a_draft_with_reasons():
     body = response.json()
     assert body["status"] == "draft"
     assert body["assignments"][0]["reason"] == "דנה מוסמכת לבוקר"
+
+
+def test_generation_reads_only_active_standing_preferences():
+    app, repo = _build_app([_generation([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "דנה מוסמכת לבוקר",
+    }])])
+    repo.preference_rows = [
+        {
+            "team_id": TEAM, "status": "active", "kind": "employee",
+            "subject": "דנה", "text": "דנה מעדיפה בקרים",
+        },
+        {
+            "team_id": TEAM, "status": "suggested", "kind": "employee",
+            "subject": "יוסי", "text": "אולי יוסי יעדיף ערב",
+        },
+    ]
+
+    response = _client(app).post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    })
+
+    assert response.status_code == 200
+    payload = json.loads(repo.model_calls[0]["user"])
+    assert [row["text"] for row in payload["preferences"]] == [
+        "דנה מעדיפה בקרים"
+    ]
 
 
 def test_generating_enforces_the_managers_required_assignment():

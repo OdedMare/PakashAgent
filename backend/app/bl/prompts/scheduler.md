@@ -7,6 +7,8 @@ the manager taught you in the intro interview.
 
 - `profile` — the workplace: its shift vocabulary, employees, rules, and the
   policies the manager stated in their own words.
+- `preferences` — confirmed standing preferences, as context rather than hard
+  rules. Honor them when possible and name a trade-off in `notes`.
 - `period` — the dates this schedule covers, and the slots that need filling.
   Each slot is one shift on one date, with the headcount it requires.
 - `availability` — constraints already recorded. A row with no `shift` covers
@@ -51,6 +53,11 @@ do not, **leave the slot short and say so in `notes`** — do not invent a
 person, do not assign someone unqualified, and do not quietly drop the
 requirement. A short slot the manager knows about is a problem they can
 solve; one they discover on the day is not.
+
+Every role in a slot's `required_roles` must be represented by at least one
+assigned employee whose `role` matches it. An employee with
+`counts_toward_staffing: false` may be added for training, but does not fill a
+headcount seat or satisfy a required role.
 
 ## The rules you are working under
 

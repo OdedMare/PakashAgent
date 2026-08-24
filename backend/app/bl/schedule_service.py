@@ -37,7 +37,7 @@ from app.bl.profile_service import ProfileService
 from app.bl.planner import PlanningAgent
 from app.bl.simulate import simulate as simulate_operations
 from app.bl.tools import ScheduleTools
-from app.bl.scheduler import Scheduler, build_slots
+from app.bl.scheduler import Scheduler, build_slots, effective_availability
 from app.common.errors import (
     AgentError, NotFoundError, ProfileIncompleteError,
 )
@@ -383,6 +383,7 @@ class ScheduleService:
             history=self._recent_assignments(team_id, starts_on),
             instructions=instructions,
             required_assignments=required_assignments,
+            preferences=self._active_preferences(team_id),
         )
 
         schedule = self._repository.create_schedule(
@@ -530,6 +531,7 @@ class ScheduleService:
                     _model_assignment(row)
                     for row in schedule.get("assignments") or []
                 ],
+                preferences=self._active_preferences(team_id),
             )
             fresh = self._repository.get_schedule(schedule_id, team_id)
             rows = _persisted_generation_rows(
@@ -1668,6 +1670,12 @@ class ScheduleService:
         )
         return _dated(schedule)
 
+    def _active_preferences(self, team_id: str) -> List[dict]:
+        """Confirmed standing context for every scheduling model call."""
+        if not hasattr(self._repository, "preferences"):
+            return []
+        return self._repository.preferences(team_id, status=PREFERENCE_ACTIVE)
+
     def _audit_rows(
         self, team_id: str, assignments: List[dict], schedule: dict
     ) -> List[dict]:
@@ -1684,21 +1692,11 @@ class ScheduleService:
             ],
             _shifts(profile),
             _employees(profile),
-            availability=[
-                {
-                    "employee": row.get("employee"),
-                    "date": _iso(row.get("constraint_date")),
-                    "shift": row.get("shift_name") or "",
-                    "available": row.get("available"),
-                    "start_time": row.get("start_time") or "",
-                    "end_time": row.get("end_time") or "",
-                    "is_hard": row.get("is_hard", True),
-                    "reason": row.get("reason") or "",
-                }
-                for row in self._repository.availability(
-                    team_id, window[0], window[1]
-                )
-            ],
+            availability=effective_availability(
+                profile,
+                self._repository.availability(team_id, window[0], window[1]),
+                window[0], window[1],
+            ),
             profile=profile,
             # The grid, so a slot with nobody on it is still checked. Without
             # it an entirely unstaffed shift leaves no row to notice and the
@@ -1707,6 +1705,7 @@ class ScheduleService:
                 {
                     "shift_name": slot.get("shift_name"),
                     "slot_date": _iso(slot.get("slot_date")),
+                    "required_roles": slot.get("required_roles") or [],
                 }
                 for slot in schedule.get("slots") or []
             ],

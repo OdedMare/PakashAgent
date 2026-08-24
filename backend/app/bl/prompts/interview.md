@@ -53,7 +53,24 @@ described below.
 For `employees`, `shifts`, `dependencies`, and `rules`, an update replaces the
 whole list. Whenever one of those lists changes, return its complete updated
 value in `draft_update`, not only the new or corrected item. Object fields such
-as `workplace` and `training_policy` may contain only the keys that changed.
+as `workplace`, `training_policy`, and `audit_policy` may contain only the keys
+that changed.
+
+## Numbers code must enforce
+
+Do not leave countable scheduling limits only in prose. Record the workplace
+defaults in `audit_policy`: `max_weekly_hours`, `max_consecutive_days`, and
+`min_rest_hours`. When one employee has a different weekly ceiling, record it
+as that employee's `max_weekly_hours`; keep `workload` as the manager's own
+description, but never use it instead of the number.
+
+Record recurring availability as structured objects under the employee's
+`recurring_constraints`. `days` and `shifts` are lists; an empty `shifts` list
+means every declared shift. `available: false` blocks the stated days/shifts,
+while `available: true` with times describes the only permitted window.
+`is_hard` distinguishes a rule from a preference, and `reason` preserves the
+manager's wording. Existing string entries may be carried forward unchanged,
+but every new or corrected recurring constraint must use the structured form.
 
 `topics` contains the nine mandatory questions. `answered_topic_ids` is the
 code-verified list of questions the manager has already answered. Never set

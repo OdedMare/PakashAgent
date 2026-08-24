@@ -150,6 +150,10 @@ def _profile():
             "shadow_shift_fraction": 0.5, "shadow_shifts_per_week": 5,
             "alternate_halves": True, "counts_toward_staffing": False,
         },
+        "audit_policy": {
+            "max_weekly_hours": 40, "max_consecutive_days": 6,
+            "min_rest_hours": 10,
+        },
         "rest_policy": "8 שעות", "weekend_policy": "שישי-שבת",
         "fairness_policy": "איזון", "conflict_policy": "מציגים לשרון",
         "existing_schedule_source": "קבצים קודמים",

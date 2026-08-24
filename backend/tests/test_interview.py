@@ -74,6 +74,11 @@ def _complete_profile():
         "rules": [{"text": "אין בוקר אחרי לילה", "priority": "hard"}],
         "availability_process": "המנהל מעדכן",
         "constraint_deadline": "שבוע מראש",
+        "audit_policy": {
+            "max_weekly_hours": 40,
+            "max_consecutive_days": 6,
+            "min_rest_hours": 10,
+        },
         "summary": "מוקד שבועי",
     })
 
@@ -207,6 +212,11 @@ def test_model_schema_accepts_a_sparse_draft_update():
     assert "required" not in update["properties"]["workplace"]
     assert "required" not in update["properties"]["employees"]["items"]
     assert "required" not in update["properties"]["shifts"]["items"]
+    assert "required" not in update["properties"]["audit_policy"]
+    employee = update["properties"]["employees"]["items"]["properties"]
+    assert employee["max_weekly_hours"]["type"] == "number"
+    recurring = employee["recurring_constraints"]["items"]["oneOf"]
+    assert recurring[1]["properties"]["is_hard"]["type"] == "boolean"
 
 
 def test_the_draft_so_far_is_handed_back_to_the_model():

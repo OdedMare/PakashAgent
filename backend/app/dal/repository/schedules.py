@@ -189,8 +189,9 @@ class ScheduleRepository(RepositoryBase):
                 connection.execute("""
                     INSERT INTO shift_slots (
                         id, team_id, schedule_id, shift_name, slot_date,
-                        start_time, end_time, headcount, is_on_call
-                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        start_time, end_time, headcount, required_roles,
+                        is_on_call
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (schedule_id, shift_name, slot_date)
                     DO NOTHING
                 """, (
@@ -198,6 +199,7 @@ class ScheduleRepository(RepositoryBase):
                     slot["shift_name"], slot["slot_date"],
                     slot.get("start_time", ""), slot.get("end_time", ""),
                     int(slot.get("headcount", 1)),
+                    Jsonb(slot.get("required_roles") or []),
                     bool(slot.get("is_on_call", False)),
                 ))
             connection.execute(

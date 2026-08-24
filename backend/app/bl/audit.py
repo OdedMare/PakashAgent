@@ -30,6 +30,7 @@ DOUBLE_BOOKED = "double_booked"
 UNAVAILABLE = "unavailable"
 UNFILLED = "unfilled"
 OVERSTAFFED = "overstaffed"
+MISSING_ROLE = "missing_role"
 
 # Severity is advice about presentation, not authority. `warning` is a thing
 # the manager should look at; `notice` is a thing worth mentioning. Neither
@@ -88,7 +89,9 @@ def audit(
     warnings.extend(_over_hours(rows, employees or [], policy))
     warnings.extend(_consecutive_days(rows, policy))
     warnings.extend(_short_rest(rows, shift_index, policy))
-    warnings.extend(_staffing(rows, shifts or [], slots))
+    warnings.extend(_staffing(
+        rows, shifts or [], employees or [], profile or {}, slots
+    ))
     # Sorted for a stable render: the manager reads this list top-down, and a
     # set of warnings that reorders itself between two identical audits looks
     # like the schedule changed when it did not.
@@ -944,9 +947,10 @@ def _short_rest(
 
 
 def _staffing(
-    rows: List[dict], shifts: List[dict], slots: Optional[List[dict]] = None
+    rows: List[dict], shifts: List[dict], employees: List[dict], profile: dict,
+    slots: Optional[List[dict]] = None,
 ) -> List[dict]:
-    """Slots short of their headcount, and slots over it.
+    """Slots short of headcount or required roles, and slots over headcount.
 
     Understaffing is a warning -- somebody does not show up. Overstaffing is
     a notice: it costs money but nothing breaks, and the manager may have
@@ -958,10 +962,35 @@ def _staffing(
     entirely unstaffed shift would report nothing, which is the exact
     situation the manager most needs told about.
     """
-    filled: Dict[tuple, int] = {}
+    employee_index = {
+        _text(person.get("name")): person
+        for person in employees or []
+        if isinstance(person, dict) and _text(person.get("name"))
+    }
+    training_policy = profile.get("training_policy")
+    training_policy = training_policy if isinstance(training_policy, dict) else {}
+    counted_rows = []
     for row in rows:
+        person = employee_index.get(row["employee"], {})
+        explicit = person.get("counts_toward_staffing")
+        counts = explicit if isinstance(explicit, bool) else not bool(
+            person.get("is_trainee")
+        ) or bool(training_policy.get("counts_toward_staffing"))
+        if counts:
+            counted_rows.append(row)
+
+    filled: Dict[tuple, int] = {}
+    filled_roles: Dict[tuple, set] = {}
+    for row in counted_rows:
         key = (row["date"], row["shift"])
         filled[key] = filled.get(key, 0) + 1
+        person = employee_index.get(row["employee"], {})
+        roles = person.get("roles")
+        if not isinstance(roles, list):
+            roles = [person.get("role")]
+        filled_roles.setdefault(key, set()).update(
+            _text(role) for role in roles if _text(role)
+        )
 
     if slots:
         checked = {
@@ -995,7 +1024,64 @@ def _staffing(
                 date=date, shift=shift_name,
                 details={"assigned": count, "required": needed},
             ))
+        required_roles = _required_roles_for(
+            shifts, shift_name, _parse_date(date), slots
+        )
+        present = filled_roles.get((date, shift_name), set())
+        for role in required_roles:
+            if role in present:
+                continue
+            warnings.append(_warning(
+                MISSING_ROLE, SEVERITY_WARNING,
+                "במשמרת %s בתאריך %s חסר התפקיד הנדרש %s."
+                % (shift_name, date, role),
+                date=date, shift=shift_name,
+                details={"required_role": role},
+            ))
     return warnings
+
+
+def _required_roles_for(
+    shifts: List[dict], shift_name: str, day: Optional[datetime.date],
+    slots: Optional[List[dict]] = None,
+) -> List[str]:
+    """Required roles copied onto the slot, with profile fallback."""
+    date = day.isoformat() if day else ""
+    for slot in slots or []:
+        if not isinstance(slot, dict):
+            continue
+        slot_date = _text(slot.get("slot_date")) or _iso_date(
+            slot.get("slot_date")
+        )
+        if slot_date != date or _text(slot.get("shift_name")) != shift_name:
+            continue
+        roles = slot.get("required_roles")
+        if isinstance(roles, list):
+            return [_text(role) for role in roles if _text(role)]
+
+    weekday = _weekday_key(_hebrew_weekday(day))
+    for shift in shifts or []:
+        if not isinstance(shift, dict) or _text(shift.get("name")) != shift_name:
+            continue
+        fallback: List[str] = []
+        for group in shift.get("staffing") or []:
+            if not isinstance(group, dict):
+                continue
+            roles = group.get("required_roles")
+            roles = [_text(role) for role in roles or [] if _text(role)] \
+                if isinstance(roles, list) else []
+            days = group.get("days")
+            if not isinstance(days, list) or not days:
+                fallback = roles
+            elif weekday and weekday in {_weekday_key(_text(item)) for item in days}:
+                return roles
+        return fallback
+    return []
+
+
+def _weekday_key(value: str) -> str:
+    value = _text(value)
+    return value[4:].strip() if value.startswith("יום ") else value
 
 
 def _headcount_for(
@@ -1131,6 +1217,6 @@ def _text(value: Any) -> str:
 __all__ = [
     "audit", "personal_summary", "fairness", "load_history", "shift_stats",
     "OVER_HOURS", "CONSECUTIVE", "SHORT_REST", "DOUBLE_BOOKED",
-    "UNAVAILABLE", "UNFILLED", "OVERSTAFFED",
+    "UNAVAILABLE", "UNFILLED", "OVERSTAFFED", "MISSING_ROLE",
     "SEVERITY_WARNING", "SEVERITY_NOTICE",
 ]
