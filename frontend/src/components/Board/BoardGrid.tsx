@@ -64,6 +64,7 @@ export function BoardGrid({
   onDropEmployee,
   onOpenCard,
   onAddShift,
+  onGenerateDay,
 }: {
   schedule: Schedule | null;
   weekStart: string;
@@ -94,6 +95,7 @@ export function BoardGrid({
   }) => void;
   onOpenCard?: (assignment: Assignment) => void;
   onAddShift?: (input: { shift_name: string; slot_date: string }) => void;
+  onGenerateDay?: (date: string) => void;
 }) {
   const [dragging, setDragging] = useState<Assignment | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -238,6 +240,7 @@ export function BoardGrid({
             isToday={date === today}
             coverage={index.dayCoverage(date)}
             columnRef={date === today ? todayColumn : undefined}
+            onGenerate={onGenerateDay ? () => onGenerateDay(date) : undefined}
           />
         ))}
 
@@ -286,6 +289,7 @@ function DayHead({
   isToday,
   coverage,
   columnRef,
+  onGenerate,
 }: {
   date: string;
   isToday: boolean;
@@ -293,6 +297,7 @@ function DayHead({
   coverage: { assigned: number; required: number };
   /** Set on today's head only, so the scroller can bring it into view. */
   columnRef?: React.Ref<HTMLDivElement>;
+  onGenerate?: () => void;
 }) {
   const { assigned, required } = coverage;
 
@@ -322,6 +327,18 @@ function DayHead({
         <span className="board-dayhead-coverage is-empty">—</span>
       )}
       {isToday ? <span className="board-dayhead-pill">היום</span> : null}
+      {onGenerate ? (
+        <button
+          type="button"
+          className="board-dayhead-generate"
+          onClick={onGenerate}
+          aria-label={`שיבוץ ${hebrewWeekday(date)} ${displayDate(date)}`}
+          title="לתת לסוכן הנחיות ולשבץ רק את היום הזה"
+        >
+          <Sparkles size={12} />
+          שבץ יום
+        </button>
+      ) : null}
     </div>
   );
 }

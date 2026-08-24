@@ -24,6 +24,7 @@ import { ConfirmDrop } from "./ConfirmDrop";
 import { CoverageBar } from "./CoverageBar";
 import { FilterBar } from "./FilterBar";
 import { GenerateDialog } from "./GenerateDialog";
+import { GenerateDayDialog } from "./GenerateDayDialog";
 import { EditorTarget, ShiftEditor } from "./ShiftEditor";
 import { WeekNav } from "./WeekNav";
 import { WeekRail } from "./WeekRail";
@@ -63,6 +64,7 @@ export function Board({
   overview,
   busy,
   onGenerate,
+  onGenerateDay,
   onOpenBlank,
   onAssign,
   onUnassign,
@@ -80,6 +82,11 @@ export function Board({
     ends_on?: string;
     instructions?: string;
     required_assignments?: RequiredAssignment[];
+  }) => void;
+  onGenerateDay: (input: {
+    schedule_id: string;
+    date: string;
+    instructions?: string;
   }) => void;
   onOpenBlank: (input: { starts_on?: string; ends_on?: string }) => void;
   onAssign: (input: {
@@ -188,6 +195,7 @@ export function Board({
   const [check, setCheck] = useState<PlacementCheck | null>(null);
   const [checking, setChecking] = useState(false);
   const [generationOpen, setGenerationOpen] = useState(false);
+  const [generationDay, setGenerationDay] = useState<string | null>(null);
 
   // Every check is answered against the request that is still the newest.
   // Without this, a manager clicking through a dropdown gets whichever
@@ -263,7 +271,7 @@ export function Board({
     onPrevious: board.previousWeek,
     onNext: board.nextWeek,
     onToday: board.goToToday,
-    enabled: !pendingMove && !editor && !generationOpen,
+    enabled: !pendingMove && !editor && !generationOpen && !generationDay,
   });
 
   // The figures for the week on screen. The overview computed them for the
@@ -449,6 +457,9 @@ export function Board({
                   slot_date: input.slot_date,
                 });
               }}
+              onGenerateDay={schedule.status === "draft" && !busy
+                ? (date) => setGenerationDay(date)
+                : undefined}
           />
         </>
       ) : (
@@ -548,6 +559,22 @@ export function Board({
           onConfirm={(input) => {
             onGenerate(input);
             setGenerationOpen(false);
+          }}
+        />
+      ) : null}
+
+      {generationDay && schedule ? (
+        <GenerateDayDialog
+          date={generationDay}
+          busy={busy}
+          onCancel={() => setGenerationDay(null)}
+          onConfirm={(instructions) => {
+            onGenerateDay({
+              schedule_id: schedule.id,
+              date: generationDay,
+              instructions,
+            });
+            setGenerationDay(null);
           }}
         />
       ) : null}

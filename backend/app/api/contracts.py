@@ -490,6 +490,13 @@ class GenerateRequest(BaseModel):
     )
 
 
+class GenerateDayRequest(BaseModel):
+    """Rebuild one date inside an existing draft."""
+
+    date: str = Field(min_length=10, max_length=10)
+    instructions: str = Field(default="", max_length=2000)
+
+
 class ProposeRequest(BaseModel):
     """A change in the manager's own words. Applies nothing.
 

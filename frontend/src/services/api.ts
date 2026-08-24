@@ -312,24 +312,62 @@ export async function generateSchedule(
     body: JSON.stringify(body),
   });
   onProgress?.(schedule);
-  return resumeScheduleGeneration(schedule.id, onProgress, schedule);
+  return resumeScheduleGeneration(schedule.id, onProgress);
 }
 
-/** Continue a persisted range after a failed request or browser refresh. */
+/** Continue a persisted range after a failed request or browser refresh.
+ *
+ * The POST only launches background work. The browser then polls short GETs,
+ * so a proxy timeout cannot turn a completed model answer into a fake network
+ * failure. */
 export async function resumeScheduleGeneration(
   scheduleId: string,
   onProgress?: (schedule: Schedule) => void,
-  initial?: Schedule,
 ): Promise<Schedule> {
-  let schedule = initial;
-  while (!schedule || schedule.generation.status !== "complete") {
-    schedule = await request<Schedule>(
-      `/api/schedule/generate/${scheduleId}/next`,
-      { method: "POST" },
-    );
+  let schedule = await request<Schedule>(
+    `/api/schedule/generate/${scheduleId}/run`,
+    { method: "POST" },
+  );
+  onProgress?.(schedule);
+  let failedPolls = 0;
+  while (schedule.generation.status === "running") {
+    await waitForGenerationPoll();
+    try {
+      schedule = await getSchedule(scheduleId);
+      failedPolls = 0;
+    } catch (reason) {
+      // A poll is a read and is safe to repeat. Brief network blips should
+      // not fail a model job that is still progressing on the server.
+      if (++failedPolls < 10) continue;
+      throw reason;
+    }
     onProgress?.(schedule);
   }
   return schedule;
+}
+
+/** Rebuild one date in an existing draft, preserving manager-pinned rows. */
+export async function generateScheduleDay(body: {
+  schedule_id: string;
+  date: string;
+  instructions?: string;
+}, onProgress?: (schedule: Schedule) => void): Promise<Schedule> {
+  const schedule = await request<Schedule>(
+    `/api/schedule/generate/${body.schedule_id}/day/start`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        date: body.date,
+        instructions: body.instructions ?? "",
+      }),
+    },
+  );
+  onProgress?.(schedule);
+  return resumeScheduleGeneration(body.schedule_id, onProgress);
+}
+
+function waitForGenerationPoll(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 1_000));
 }
 
 /** Open an empty period the manager fills in themselves (D18).

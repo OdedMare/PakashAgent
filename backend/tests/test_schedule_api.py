@@ -299,14 +299,16 @@ def _generation(assignments, notes=None):
             "summary": "סידור השבוע"}
 
 
-def _build_app(answers=None):
+def _build_app(answers=None, launch=None):
     repository = _FakeScheduleRepo()
     llm = _ScriptedLlm(answers)
     repository.model_calls = llm.calls
     guards = Guards(SECRET)
     app = FastAPI()
     app.include_router(
-        schedules.build_router(ScheduleService(repository, llm), guards)
+        schedules.build_router(
+            ScheduleService(repository, llm, launch=launch), guards
+        )
     )
 
     # The real handler's body builder, not a copy of it. A second shaping of
@@ -326,6 +328,18 @@ def _client(app, role=ROLE_BOSS, team=TEAM):
     client = TestClient(app)
     client.cookies.set(COOKIE_NAME, issue(SECRET, team, role, 30))
     return client
+
+
+class _DeferredLauncher:
+    def __init__(self):
+        self.jobs = []
+
+    def __call__(self, target, *args):
+        self.jobs.append((target, args))
+
+    def run_next(self):
+        target, args = self.jobs.pop(0)
+        target(*args)
 
 
 # -- generating ------------------------------------------------------------
@@ -405,6 +419,87 @@ def test_progressive_generation_supports_one_specific_date():
     assert finished["generation"]["status"] == "complete"
     assert finished["generation"]["completed_days"] == 1
     assert finished["assignments"][0]["employee"] == "דנה"
+
+
+def test_generation_run_returns_before_the_model_and_is_polled_with_get():
+    launcher = _DeferredLauncher()
+    app, repo = _build_app([_generation([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "דנה מוסמכת לבוקר",
+    }])], launch=launcher)
+    client = _client(app)
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+
+    queued = client.post(
+        "/api/schedule/generate/%s/run" % started["id"]
+    ).json()
+
+    assert queued["generation"]["status"] == "running"
+    assert repo.model_calls == []
+    launcher.run_next()
+    completed = client.get("/api/schedule/%s" % started["id"]).json()
+    assert completed["generation"]["status"] == "complete"
+    assert completed["assignments"][0]["employee"] == "דנה"
+
+
+def test_failed_background_generation_requeues_as_running_for_polling():
+    launcher = _DeferredLauncher()
+    app, _ = _build_app([
+        AgentError("תקלה זמנית"),
+        _generation([{
+            "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+            "reason": "הניסיון החוזר הצליח",
+        }]),
+    ], launch=launcher)
+    client = _client(app)
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+    path = "/api/schedule/generate/%s/run" % started["id"]
+
+    client.post(path)
+    launcher.run_next()
+    assert client.get("/api/schedule/%s" % started["id"]).json()[
+        "generation"
+    ]["status"] == "failed"
+
+    resumed = client.post(path).json()
+    assert resumed["generation"]["status"] == "running"
+    launcher.run_next()
+    assert client.get("/api/schedule/%s" % started["id"]).json()[
+        "generation"
+    ]["status"] == "complete"
+
+
+def test_one_existing_day_can_be_rebuilt_with_board_instructions():
+    launcher = _DeferredLauncher()
+    app, repo = _build_app([_generation([{
+        "employee": "יוסי", "shift": MORNING, "date": "2026-08-17",
+        "reason": "יוסי בקבוצת הסגירה של שבת",
+    }])], launch=launcher)
+    client = _client(app)
+    opened = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+
+    prepared = client.post(
+        "/api/schedule/generate/%s/day/start" % opened["id"],
+        json={
+            "date": "2026-08-17",
+            "instructions": "זה יום הסגירה של קבוצה א; לשמור על הסבב",
+        },
+    ).json()
+    client.post("/api/schedule/generate/%s/run" % opened["id"])
+
+    assert prepared["generation"]["total_days"] == 1
+    assert repo.model_calls == []
+    launcher.run_next()
+    payload = json.loads(repo.model_calls[0]["user"])
+    assert "יום הסגירה" in payload["instructions"]
+    completed = client.get("/api/schedule/%s" % opened["id"]).json()
+    assert completed["assignments"][0]["employee"] == "יוסי"
 
 
 def test_progressive_long_range_is_one_persisted_request_per_day():

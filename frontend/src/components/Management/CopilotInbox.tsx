@@ -34,7 +34,7 @@ const ACTION_LABELS: Record<string, string> = {
   follow_up_interview: "השלמת הראיון",
   profile_review: "רענון פרופיל",
   schedule_repair: "תיקון הסידור",
-  system_health: "תקינות הקופיילוט",
+  system_health: "תקינות הסוכן",
 };
 
 const ACTION_DESCRIPTIONS: Record<string, string> = {
@@ -78,7 +78,7 @@ export function CopilotInbox({
 
   useEffect(() => {
     const refresh = () => void load().catch((reason) =>
-      setError(reason instanceof Error ? reason.message : "טעינת הקופיילוט נכשלה"),
+      setError(reason instanceof Error ? reason.message : "טעינת פעילות הסוכן נכשלה"),
     );
     const first = window.setTimeout(refresh, 0);
     const timer = window.setInterval(refresh, 15000);
@@ -138,7 +138,7 @@ export function CopilotInbox({
       await runCopilotNow();
       await dismissCopilotItem(item.id);
       await load();
-      setMessage("הבדיקה הוחזרה לתור. הקופיילוט יעדכן כאן את התוצאה.");
+      setMessage("הבדיקה הוחזרה לתור. הסוכן יעדכן כאן את התוצאה.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "הניסיון החוזר נכשל");
     } finally {
@@ -180,8 +180,8 @@ export function CopilotInbox({
                   ? "בדיקה ממתינה"
                   : "מוכן לבדיקה"}
             </span>
-            <h2>קופיילוט תפעולי</h2>
-            <p>עוקב אחרי הפרופיל והסידור גם כשהמסך סגור. שום שינוי בסידור לא מתבצע בלי אישור וסיבה.</p>
+            <h2>הסוכן — פעילות יזומה</h2>
+            <p>אותו סוכן שאיתו מדברים כאן עוקב אחרי הפרופיל והסידור גם כשהמסך סגור. שום שינוי בסידור לא מתבצע בלי אישור וסיבה.</p>
           </div>
         </div>
         <button
@@ -208,7 +208,7 @@ export function CopilotInbox({
         </button>
       </header>
 
-      <div className="copilot-metrics" aria-label="מצב הקופיילוט">
+      <div className="copilot-metrics" aria-label="מצב הפעילות היזומה של הסוכן">
         <CopilotMetric value={pending.length} label="דורש מבט" tone={failures ? "danger" : "primary"} />
         <CopilotMetric value={proposals} label="ממתין לאישור" />
         <CopilotMetric value={observations} label="לתשומת לב" />
@@ -218,7 +218,7 @@ export function CopilotInbox({
       {error ? <p className="copilot-feedback is-error" role="alert">{error}</p> : null}
       {message ? <p className="copilot-feedback" role="status">{message}</p> : null}
 
-      <div className="copilot-console-tabs" role="tablist" aria-label="תצוגת הקופיילוט">
+      <div className="copilot-console-tabs" role="tablist" aria-label="פעילות הסוכן">
         <ConsoleTabButton active={tab === "attention"} icon={<Activity size={15} />} label="דורש מבט" count={pending.length} onClick={() => setTab("attention")} />
         <ConsoleTabButton active={tab === "permissions"} icon={<ShieldCheck size={15} />} label="עצמאות" onClick={() => setTab("permissions")} />
         <ConsoleTabButton active={tab === "history"} icon={<HistoryIcon size={15} />} label="יומן" count={audit.length} onClick={() => setTab("history")} />
@@ -226,12 +226,12 @@ export function CopilotInbox({
 
       {tab === "attention" ? (
         <div className="copilot-queue" role="tabpanel">
-          {!data ? <p className="copilot-empty" aria-live="polite">טוען את עבודת הקופיילוט…</p> : null}
+          {!data ? <p className="copilot-empty" aria-live="polite">טוען את פעילות הסוכן…</p> : null}
           {data && !pending.length ? (
             <div className="copilot-zero">
               <Check size={20} aria-hidden="true" />
               <strong>אין כרגע משהו שמחכה לך</strong>
-              <span>הקופיילוט ימשיך לבדוק ברקע ויציג כאן רק פריטים חדשים.</span>
+              <span>הסוכן ימשיך לבדוק ברקע ויציג כאן רק פריטים חדשים.</span>
             </div>
           ) : null}
           {pending.map((item) => (
@@ -281,14 +281,14 @@ export function CopilotInbox({
       {tab === "permissions" ? (
         <div className="copilot-permissions" role="tabpanel">
           <div className="copilot-section-intro">
-            <h3>כמה עצמאות לתת לקופיילוט?</h3>
+            <h3>כמה עצמאות לתת לסוכן?</h3>
             <p>ההרשאה נקבעת לכל סוג עבודה בנפרד. אפשר לשנות אותה בכל רגע.</p>
           </div>
           {(data?.permissions ?? []).map((permission) => (
             <article key={permission.action_type} className="copilot-permission-row">
               <div>
                 <strong>{ACTION_LABELS[permission.action_type] ?? permission.action_type}</strong>
-                <p>{ACTION_DESCRIPTIONS[permission.action_type] ?? "פעולת קופיילוט ברקע."}</p>
+                <p>{ACTION_DESCRIPTIONS[permission.action_type] ?? "פעולת סוכן ברקע."}</p>
               </div>
               <div className="copilot-mode-picker" role="group" aria-label={`הרשאה עבור ${ACTION_LABELS[permission.action_type] ?? permission.action_type}`}>
                 {(["observe", "suggest", "auto"] as CopilotMode[]).map((mode) => (

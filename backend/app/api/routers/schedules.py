@@ -33,6 +33,7 @@ from app.api.contracts import (
     BriefingRequest,
     CheckRequest,
     ConstraintRequest,
+    GenerateDayRequest,
     GenerateRequest,
     ImportConfirmRequest,
     ImportPreview,
@@ -109,6 +110,26 @@ def build_router(service, guards) -> APIRouter:
     ) -> dict:
         """Generate and checkpoint one date; retry the failed date first."""
         return service.generate_next(session["team_id"], schedule_id)
+
+    @router.post("/generate/{schedule_id}/run", response_model=Schedule)
+    def run_generation(
+        schedule_id: str, session: dict = Depends(boss)
+    ) -> dict:
+        """Launch generation and return immediately; progress is polled."""
+        return service.queue_generation(session["team_id"], schedule_id)
+
+    @router.post("/generate/{schedule_id}/day/start", response_model=Schedule)
+    def start_day_generation(
+        schedule_id: str,
+        request: GenerateDayRequest,
+        session: dict = Depends(boss),
+    ) -> dict:
+        """Prepare one existing draft date; no model call is held open."""
+        return service.start_day_generation(
+            session["team_id"], schedule_id,
+            day=request.date,
+            instructions=request.instructions,
+        )
 
     @router.post("/blank", response_model=Schedule)
     def blank(

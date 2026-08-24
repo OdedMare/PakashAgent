@@ -10,7 +10,6 @@ import {
   Moon,
   MessagesSquare,
   Settings2,
-  ShieldCheck,
   SlidersHorizontal,
   Share2,
   Upload,
@@ -403,6 +402,7 @@ export function Management({
             busy={state.busy}
             dark={theme === "dark"}
             onGenerate={state.generate}
+            onGenerateDay={state.generateDay}
             onOpenBlank={state.openBlank}
             onAssign={state.assign}
             onUnassign={state.unassign}
@@ -451,14 +451,8 @@ export function Management({
               active={section === "agent"}
               icon={<Sparkles size={15} />}
               label="סוכן"
-              onClick={() => setSection("agent")}
-            />
-            <ManagerTab
-              active={section === "copilot"}
-              icon={<ShieldCheck size={15} />}
-              label="קופיילוט"
               count={copilotPending}
-              onClick={() => setSection("copilot")}
+              onClick={() => setSection("agent")}
             />
             <ManagerTab
               active={section === "requests"}
@@ -525,15 +519,14 @@ export function Management({
           />
           </> : null}
 
-          <div hidden={section !== "copilot"}>
-            <CopilotInbox
-              onOpenInterview={onOpenInterview}
-              onPendingChange={setCopilotPending}
-              onAct={(text) => {
-                setSuggested((previous) => ({ text, n: previous.n + 1 }));
-                setSection("agent");
-              }}
-            />
+          <div hidden={section !== "agent"}>
+          <CopilotInbox
+            onOpenInterview={onOpenInterview}
+            onPendingChange={setCopilotPending}
+            onAct={(text) => {
+              setSuggested((previous) => ({ text, n: previous.n + 1 }));
+            }}
+          />
           </div>
 
           {section === "requests" ? <>
@@ -604,7 +597,7 @@ export function Management({
 }
 
 type ManagerView = "board" | "team" | "analytics";
-type ManagerSection = "agent" | "copilot" | "requests" | "team" | "overview";
+type ManagerSection = "agent" | "requests" | "team" | "overview";
 
 function ManagerAnalytics({
   overview,

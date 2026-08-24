@@ -548,6 +548,38 @@
   color: var(--primary);
 }
 
+.board-dayhead-generate {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-width: 5.2rem;
+  min-height: 2.75rem;
+  margin-top: 0.25rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.board-dayhead-generate:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.board-dayhead-generate:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
 .board-rowhead {
   display: flex;
   flex-direction: column;
@@ -1090,6 +1122,28 @@
   line-height: 1.5;
 }
 
+.generate-day-dialog {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.generate-day-date {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 25%, var(--border));
+  border-radius: var(--radius-sm);
+  background: var(--primary-soft);
+  color: var(--text-soft);
+}
+
+.generate-day-date strong {
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
 .generate-required-list {
   display: grid;
   gap: 0.65rem;
@@ -1617,7 +1671,7 @@
 
 .manager-tabs {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
   padding: 0;
   background: var(--surface);

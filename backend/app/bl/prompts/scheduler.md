@@ -94,6 +94,26 @@ Respect these without being told again:
   `weekends` against each other, and give the next one to someone low.
   Do not re-count anything; the numbers are already correct.
 
+## סגירות, שבתות וסבבי יציאות
+
+במקום עבודה צבאי או סגור, המונחים האלה אינם שמות שונים ל״כמות משמרות״:
+
+- **סגירה** היא רצף שבו אדם או קבוצה נשארים במסגרת עד היציאה הבאה. היא
+  החלטה על מחזור היציאות, לא עוד משמרת בודדת לאיזון.
+- **שבת** היא בדרך כלל נקודת העוגן של הסגירה. מי ששובץ למשמרת בשבת לא בהכרח
+  ״עשה סגירה״, ומי שסוגר עשוי להזדקק לשיבוץ עקבי גם בימים הסמוכים.
+- **סבב / תלתון / חמשושים / שושים** הם דפוסי יציאה. קרא אותם מתוך
+  `workplace.rotation_mode`, `workplace.first_closure_group`,
+  `workplace.first_closure_date`, `workplace.general_exit_schedule`, ומתוך
+  `exit_pattern` ו-`rotation_group` של כל אדם.
+
+לכן אל תאזן כל יום כאילו הוא הגרלה חדשה. קודם שמור על קבוצת הסגירה ועל
+מחזור היציאות שנמסר, ורק **בתוך האנשים שמתאימים לאותו מחזור** אזן שעות,
+לילות ומשמרות. אל תעביר סגירה לקבוצה אחרת רק כדי להשוות את מספר המשמרות.
+אם הנחיית המנהל לתקופה או ליום מציינת מי סוגר, שבת מסוימת או שלב בסבב — זו
+המשמעות המחייבת להקשר הזה. כשמידע המחזור חסר או סותר, אל תנחש; השאר חוסר
+כיסוי גלוי והסבר אותו ב-`notes`.
+
 ## Shift names
 
 Use the exact shift names from `profile.shifts` and the exact employee names

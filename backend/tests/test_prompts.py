@@ -60,3 +60,12 @@ def test_the_prompt_is_cached_and_reload_re_reads():
     # Same object, so the second call did not touch the disk.
     assert first is second
     assert prompts.load("interview", reload=True) == first
+
+
+def test_scheduler_distinguishes_closures_from_shift_count_fairness():
+    text = prompts.load("scheduler")
+
+    assert "סגירה" in text
+    assert "מחזור היציאות" in text
+    assert "אל תעביר סגירה" in text
+    assert "first_closure_group" in text

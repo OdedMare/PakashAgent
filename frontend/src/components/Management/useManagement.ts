@@ -11,6 +11,7 @@ import {
   deleteConstraint,
   downloadSchedule,
   generateSchedule,
+  generateScheduleDay,
   moveAssignment,
   ProfileIncompleteError,
   proposeChange,
@@ -91,6 +92,12 @@ export interface ManagementState {
     ends_on?: string;
     instructions?: string;
     required_assignments?: import("@/types").RequiredAssignment[];
+  }) => Promise<void>;
+  /** Rebuild one date in the current draft from instructions on the board. */
+  generateDay: (input: {
+    schedule_id: string;
+    date: string;
+    instructions?: string;
   }) => Promise<void>;
   /** Open an empty period to fill in by hand (D18). Calls no model. */
   openBlank: (input: { starts_on?: string; ends_on?: string }) => Promise<void>;
@@ -296,6 +303,33 @@ export function useManagement(): ManagementState {
   const resumeGeneration = useCallback(async (scheduleId: string) => {
     const result = await run(() =>
       resumeScheduleGeneration(scheduleId, (schedule) => {
+        setGeneration(schedule.generation);
+        setOverview((current) => current
+          ? { ...current, schedule }
+          : current);
+      }),
+    );
+    if (!result) {
+      setGeneration(null);
+      await refresh();
+    }
+  }, [run, refresh]);
+
+  const generateDay = useCallback(async (input: {
+    schedule_id: string;
+    date: string;
+    instructions?: string;
+  }) => {
+    setGeneration({
+      status: "running",
+      current_date: input.date,
+      total_days: 1,
+      completed_days: 0,
+      failed_days: 0,
+      days: [],
+    });
+    const result = await run(() =>
+      generateScheduleDay(input, (schedule) => {
         setGeneration(schedule.generation);
         setOverview((current) => current
           ? { ...current, schedule }
@@ -564,7 +598,12 @@ export function useManagement(): ManagementState {
     scheduleOverview()
       .catch(() => null)
       .then((next) => {
-        if (!cancelled && next) setOverview(next);
+        if (!cancelled && next) {
+          setOverview(next);
+          if (next.schedule?.generation.status === "running") {
+            void resumeGeneration(next.schedule.id);
+          }
+        }
         // The opening remark, after the overview rather than beside it: the
         // calendar is what the manager came for, and the agent's greeting
         // must never be what they are waiting on.
@@ -573,7 +612,7 @@ export function useManagement(): ManagementState {
     return () => {
       cancelled = true;
     };
-  }, [brief]);
+  }, [brief, resumeGeneration]);
 
   /** The long look, for a control room left open.
    *
@@ -603,6 +642,7 @@ export function useManagement(): ManagementState {
     dismissBriefing,
     refresh,
     generate,
+    generateDay,
     openBlank,
     assign,
     unassign,

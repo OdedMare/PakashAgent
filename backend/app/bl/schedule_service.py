@@ -21,6 +21,8 @@ the repository, which filters on it. It is never taken from a request body.
 """
 
 import datetime
+import logging
+from threading import Lock, Thread
 from typing import Any, Dict, List, Optional
 
 from app.bl.audit import audit, fairness, shift_stats
@@ -80,6 +82,16 @@ ACTION_IMPORTED = "imported"
 # arithmetic, not context.
 _LEARN_HISTORY = 500
 
+_log = logging.getLogger("pakash.schedule")
+
+
+def _launch_thread(target, *args) -> None:
+    # ponytail: the schedule itself checkpoints every day, but the process-
+    # local runner does not survive a restart. A later POST /run resumes from
+    # that checkpoint; use the existing durable worker only if unattended
+    # restart recovery becomes a measured need.
+    Thread(target=target, args=args, daemon=True).start()
+
 # What a manually placed row says for itself when the manager gave no
 # sentence of their own. `assignments.reason` is NOT NULL and D8 is not
 # relaxed here -- this states plainly that a person placed it, rather than
@@ -96,7 +108,7 @@ IMPORTED_REASON = "יובא מקובץ סידור קיים"
 
 
 class ScheduleService:
-    def __init__(self, repository, llm):
+    def __init__(self, repository, llm, launch=None):
         self._repository = repository
         self._scheduler = Scheduler(llm)
         self._changes = ChangeAgent(llm)
@@ -108,6 +120,9 @@ class ScheduleService:
         self._tools = ScheduleTools(repository)
         self._planner = PlanningAgent(llm, self._tools)
         self._profiles = ProfileService(repository)
+        self._launch = launch or _launch_thread
+        self._generation_lock = Lock()
+        self._active_generations = set()
 
     # -- reading -----------------------------------------------------------
 
@@ -477,6 +492,131 @@ class ScheduleService:
             schedule["id"], team_id, generation
         )
         return self._view(schedule, team_id)
+
+    def start_day_generation(
+        self, team_id: str, schedule_id: str, day: str,
+        instructions: str = "",
+    ) -> dict:
+        """Prepare one existing draft day for regeneration.
+
+        Manager-placed rows on that date are pins, not suggestions: the agent
+        fills around them. Generated/imported rows are replaced for that day,
+        while every other date stays untouched.
+        """
+        schedule = self._repository.get_schedule(schedule_id, team_id)
+        if schedule.get("status") != "draft":
+            raise AgentError("יש להחזיר את הסידור לטיוטה לפני שיבוץ יום")
+        target = _iso(day)
+        if not target or not any(
+            _iso(slot.get("slot_date")) == target
+            for slot in schedule.get("slots") or []
+        ):
+            raise AgentError("היום שנבחר אינו קיים בסידור הזה")
+
+        required = [
+            {
+                "employee": row.get("employee"),
+                "shift": row.get("shift"),
+                "date": target,
+            }
+            for row in schedule.get("assignments") or []
+            if _iso(row.get("date")) == target
+            and row.get("source") == ASSIGNED_BY_MANAGER
+        ]
+        generation = {
+            "status": "running",
+            "current_date": target,
+            "total_days": 1,
+            "completed_days": 0,
+            "failed_days": 0,
+            "instructions": _text(instructions)[:2000],
+            "required_assignments": required,
+            "notes": [],
+            "summaries": [],
+            "days": [{
+                "date": target,
+                "status": "pending",
+                "attempts": 0,
+                "error": "",
+                "metrics": {},
+            }],
+        }
+        return self._view(
+            self._repository.set_generation(
+                schedule_id, team_id, generation
+            ),
+            team_id,
+        )
+
+    def queue_generation(self, team_id: str, schedule_id: str) -> dict:
+        """Start checkpointed generation and return immediately for polling."""
+        schedule = self._repository.get_schedule(schedule_id, team_id)
+        generation = schedule.get("generation") or {}
+        if generation.get("status") == "complete":
+            return self._view(schedule, team_id)
+        if not generation.get("days"):
+            raise AgentError("לסידור הזה אין תהליך יצירה שניתן להמשיך")
+        if generation.get("status") == "failed":
+            generation["status"] = "running"
+            schedule = self._repository.set_generation(
+                schedule_id, team_id, generation
+            )
+
+        key = (team_id, schedule_id)
+        should_launch = False
+        with self._generation_lock:
+            if key not in self._active_generations:
+                self._active_generations.add(key)
+                should_launch = True
+        if should_launch:
+            try:
+                self._launch(self._generate_safely, team_id, schedule_id)
+            except Exception:
+                with self._generation_lock:
+                    self._active_generations.discard(key)
+                raise
+        return self._view(schedule, team_id)
+
+    def _generate_safely(self, team_id: str, schedule_id: str) -> None:
+        """Finish a range behind the short POST that launched it."""
+        key = (team_id, schedule_id)
+        try:
+            while True:
+                schedule = self.generate_next(team_id, schedule_id)
+                if (schedule.get("generation") or {}).get("status") in (
+                    "complete", "failed",
+                ):
+                    return
+        except Exception as exc:
+            # `generate_next` checkpoints the failed day before raising. The
+            # poller reads that state and offers retry; the severed browser
+            # connection is no longer part of the model call.
+            _log.exception("schedule generation failed id=%s", schedule_id)
+            try:
+                schedule = self._repository.get_schedule(schedule_id, team_id)
+                generation = dict(schedule.get("generation") or {})
+                if generation.get("status") != "failed":
+                    generation["status"] = "failed"
+                    generation["failed_days"] = max(
+                        1, int(generation.get("failed_days") or 0)
+                    )
+                    for day in generation.get("days") or []:
+                        if day.get("status") == "running":
+                            day.update({
+                                "status": "failed",
+                                "error": str(exc)[:1000],
+                            })
+                            break
+                    self._repository.set_generation(
+                        schedule_id, team_id, generation
+                    )
+            except Exception:
+                _log.exception(
+                    "could not persist generation failure id=%s", schedule_id
+                )
+        finally:
+            with self._generation_lock:
+                self._active_generations.discard(key)
 
     def generate_next(self, team_id: str, schedule_id: str) -> dict:
         """Generate the next pending/failed date and checkpoint the result."""
