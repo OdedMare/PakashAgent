@@ -6,6 +6,7 @@ import {
   CalendarDays,
   DoorOpen,
   FileSpreadsheet,
+  ListChecks,
   LayoutGrid,
   LogOut,
   MessagesSquare,
@@ -44,7 +45,7 @@ const INTERVIEW_STAGES = [
       "staffing",
     ],
   },
-  { title: "הצוות", topics: ["roster", "special_cases"] },
+  { title: "כוח האדם", topics: ["roster", "special_cases"] },
   {
     title: "כללים ואישור",
     topics: ["constraints", "rest_policy", "priorities"],
@@ -63,6 +64,7 @@ export function Interview({
   onRotateLink,
   onDone,
   onBuild,
+  onManualSetup,
 }: {
   workspace?: TeamView;
   busy?: boolean;
@@ -80,6 +82,8 @@ export function Interview({
   onDone?: () => void;
   /** Open the shift board and generate its first schedule. */
   onBuild?: () => void;
+  /** Configure the whole profile with forms and no model call. */
+  onManualSetup?: () => void;
 } = {}) {
   const { turn, busy, error, start, answer, correct, end, reset, retry } =
     useInterview();
@@ -247,6 +251,7 @@ export function Interview({
               start(workspace?.name ? { workplace_name: workspace.name } : undefined)
             }
             onImport={() => setEntry("import")}
+            onManual={onManualSetup}
           />
         )}
       </main>
@@ -428,10 +433,12 @@ function Welcome({
   busy,
   onStart,
   onImport,
+  onManual,
 }: {
   busy: boolean;
   onStart: () => void;
   onImport: () => void;
+  onManual?: () => void;
 }) {
   return (
     <div className="center">
@@ -483,6 +490,25 @@ function Welcome({
             </span>
             <ArrowLeft size={18} aria-hidden="true" />
           </button>
+
+          {onManual ? (
+            <button
+              type="button"
+              className="welcome-path"
+              onClick={onManual}
+              disabled={busy}
+            >
+              <span className="welcome-path-icon" aria-hidden="true">
+                <ListChecks size={20} />
+              </span>
+              <span className="welcome-path-copy">
+                <span className="welcome-path-label">שליטה מלאה</span>
+                <strong>הגדרה ידנית</strong>
+                <small>סבב או תלתון, כוח אדם, תקינה, משמרות וכללים</small>
+              </span>
+              <ArrowLeft size={18} aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
 
         <ol className="welcome-map" aria-label="מה נגדיר בראיון">
@@ -493,8 +519,8 @@ function Welcome({
           </li>
           <li>
             <span>02</span>
-            <strong>הצוות</strong>
-            <small>תפקידים והסמכות</small>
+            <strong>כוח האדם</strong>
+            <small>סבב, מעמד ותפקידים</small>
           </li>
           <li>
             <span>03</span>

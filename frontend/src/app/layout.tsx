@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {
-  title: "פקש — ראיון היכרות",
-  description: "סוכן שבונה ומתחזק סידורי משמרות בשיחה",
+  title: "פקש — שיבוצים צבאיים",
+  description: "מערכת להגדרה ולניהול ידני של שיבוצים צבאיים",
 };
 
 export default function RootLayout({

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Employee } from "@/components/Employee";
 import { Interview } from "@/components/Interview";
 import { Management } from "@/components/Management";
+import { ManualSetup } from "@/components/ManualSetup";
 
 import { Login } from "./Login";
 import { MemberArea } from "./MemberArea";
@@ -70,18 +71,32 @@ function BossSurface({
   state: ReturnType<typeof useWorkspace>;
   workspace: NonNullable<ReturnType<typeof useWorkspace>["workspace"]>;
 }) {
-  const [reinterview, setReinterview] = useState(false);
+  const [setupMode, setSetupMode] = useState<"interview" | "manual" | null>(null);
   const [buildAfterInterview, setBuildAfterInterview] = useState(false);
   const taught = Boolean(workspace.profile);
 
-  if (taught && !reinterview) {
+  if (setupMode === "manual") {
+    return (
+      <ManualSetup
+        workspace={workspace}
+        onCancel={taught ? () => setSetupMode(null) : undefined}
+        onDone={async () => {
+          setSetupMode(null);
+          await state.refresh();
+        }}
+      />
+    );
+  }
+
+  if (taught && setupMode !== "interview") {
     return (
       <Management
         workspace={workspace}
         busy={state.busy}
         onLogout={state.logout}
         onRotateLink={state.rotateLink}
-        onOpenInterview={() => setReinterview(true)}
+        onOpenInterview={() => setSetupMode("interview")}
+        onOpenManualSetup={() => setSetupMode("manual")}
         autoGenerate={buildAfterInterview}
         onAutoGenerateStarted={() => setBuildAfterInterview(false)}
       />
@@ -100,14 +115,15 @@ function BossSurface({
       onLogout={state.logout}
       onRotateLink={state.rotateLink}
       onDone={async () => {
-        setReinterview(false);
+        setSetupMode(null);
         await state.refresh();
       }}
       onBuild={async () => {
         setBuildAfterInterview(true);
-        setReinterview(false);
+        setSetupMode(null);
         await state.refresh();
       }}
+      onManualSetup={() => setSetupMode("manual")}
     />
   );
 }

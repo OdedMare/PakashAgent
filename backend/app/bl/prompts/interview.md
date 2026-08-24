@@ -86,6 +86,13 @@ has shifts called morning, evening, or night, and never carry a name over from
 another workplace. Ask for the names they actually use, then reuse those exact
 strings everywhere in the draft.
 
+For a military roster, record the rotation explicitly. `rotation_mode` is
+`round` for A/B and `triplet` for A/B/C; also record which group closes first
+and its first closure date. Each person may carry `rotation_group` and
+`service_type`: `standard`, `overlap`, or `reserve`. A shift may carry
+`shift_type`: `regular`, `overlap`, or `on_call`. Never infer these values
+from a role or a name.
+
 Distinguish a **shift type** (a recurring named slot such as the one running
 08:00–16:00) from a **single occurrence** of it on one date. The interview
 collects types. A sentence about one specific date is an availability

@@ -1,9 +1,18 @@
-"""Manual editing of the workplace roster and shift vocabulary."""
+"""Manual editing of the complete workplace profile."""
 
 import copy
+import datetime
 from typing import Any, List, Optional
 
 from app.common.errors import AgentError, NotFoundError
+
+
+_TEXT_SECTIONS = (
+    "availability_process", "constraint_deadline", "casual_worker_policy",
+    "rest_policy", "weekend_policy", "fairness_policy", "conflict_policy",
+    "existing_schedule_source", "summary",
+)
+_OBJECT_SECTIONS = ("training_policy", "audit_policy")
 
 
 class ProfileService:
@@ -17,19 +26,50 @@ class ProfileService:
         team_id: str,
         employees: Optional[List[dict]] = None,
         shifts: Optional[List[dict]] = None,
+        workplace: Optional[dict] = None,
+        rules: Optional[List[dict]] = None,
+        dependencies: Optional[List[str]] = None,
+        **sections: Any
     ) -> dict:
         profile = self._repository.team_profile(team_id)
-        if profile is None:
-            raise NotFoundError("פרופיל הצוות לא נמצא")
-        updated = copy.deepcopy(profile)
+        creating = profile is None
+        current = profile or {}
+        updated = copy.deepcopy(current)
+        if workplace is not None:
+            offered_workplace = dict(current.get("workplace") or {})
+            offered_workplace.update(workplace)
+            updated["workplace"] = _workplace(offered_workplace)
         if employees is not None:
             edited = _employees(employees)
-            _keep_existing_names(profile.get("employees"), edited, "עובד")
+            _keep_existing_names(current.get("employees"), edited, "עובד")
             updated["employees"] = edited
         if shifts is not None:
             edited = _shifts(shifts)
-            _keep_existing_names(profile.get("shifts"), edited, "משמרת")
+            _keep_existing_names(current.get("shifts"), edited, "משמרת")
             updated["shifts"] = edited
+        if rules is not None:
+            updated["rules"] = _rules(rules)
+        if dependencies is not None:
+            updated["dependencies"] = _text_list(dependencies)
+        for key in _OBJECT_SECTIONS:
+            if key in sections and sections[key] is not None:
+                if not isinstance(sections[key], dict):
+                    raise AgentError("פרטי המדיניות אינם תקינים")
+                updated[key] = (
+                    _audit_policy(sections[key])
+                    if key == "audit_policy" else dict(sections[key])
+                )
+        for key in _TEXT_SECTIONS:
+            if key in sections and sections[key] is not None:
+                updated[key] = _text(sections[key])
+
+        _validate_rotation_groups(updated)
+        if creating:
+            _validate_first_profile(updated)
+            updated["completeness"] = {
+                "complete": True, "missing_topics": [], "open_points": [],
+            }
+            return self._repository.create_team_profile(team_id, updated)
         return self._repository.update_team_profile(team_id, updated)
 
     def apply_operations(self, team_id: str, operations: List[dict]) -> dict:
@@ -110,7 +150,24 @@ def _shift_item(item: dict) -> dict:
 
 
 def _employees(rows: Any) -> List[dict]:
-    return _named_rows(rows, "עובד")
+    result = _named_rows(rows, "עובד")
+    for row in result:
+        service_type = _text(row.get("service_type")) or "standard"
+        if service_type not in ("standard", "overlap", "reserve"):
+            raise AgentError("סוג כוח האדם אינו תקין")
+        row["service_type"] = service_type
+        row["rotation_group"] = _text(row.get("rotation_group"))
+        row["role"] = _text(row.get("role"))
+        row["eligible_shifts"] = _text_list(row.get("eligible_shifts") or [])
+        row["is_trainee"] = service_type == "overlap"
+        row["is_casual"] = service_type == "reserve"
+        if not isinstance(row.get("counts_toward_staffing"), bool):
+            row["counts_toward_staffing"] = service_type != "overlap"
+        recurring = row.get("recurring_constraints") or []
+        if not isinstance(recurring, list):
+            raise AgentError("האילוצים הקבועים של איש הצוות אינם תקינים")
+        row["recurring_constraints"] = recurring
+    return result
 
 
 def _shifts(rows: Any) -> List[dict]:
@@ -145,7 +202,106 @@ def _shifts(rows: Any) -> List[dict]:
                 "required_roles": default_staffing.get("required_roles") or [],
             }
         ] + staffing
-        row["is_on_call"] = bool(row.get("is_on_call", False))
+        shift_type = _text(row.get("shift_type")) or (
+            "on_call" if row.get("is_on_call") else "regular"
+        )
+        if shift_type not in ("regular", "overlap", "on_call"):
+            raise AgentError("סוג המשמרת אינו תקין")
+        row["shift_type"] = shift_type
+        row["purpose"] = _text(row.get("purpose"))
+        row["is_on_call"] = shift_type == "on_call"
+    return result
+
+
+def _workplace(value: Any) -> dict:
+    if not isinstance(value, dict):
+        raise AgentError("פרטי היחידה אינם תקינים")
+    result = dict(value)
+    result["name"] = _text(result.get("name"))
+    result["planning_horizon"] = _text(
+        result.get("planning_horizon")
+    ) or "שבוע"
+    result["operating_days"] = _text_list(result.get("operating_days") or [])
+    mode = _text(result.get("rotation_mode")) or "round"
+    if mode not in ("round", "triplet"):
+        raise AgentError("מבנה הסבב אינו תקין")
+    groups = ["א", "ב"] if mode == "round" else ["א", "ב", "ג"]
+    first_group = _text(result.get("first_closure_group")) or groups[0]
+    if first_group not in groups:
+        raise AgentError("קבוצת הסגירה הראשונה אינה מתאימה למבנה הסבב")
+    first_date = _text(result.get("first_closure_date"))
+    if first_date:
+        try:
+            datetime.date.fromisoformat(first_date)
+        except ValueError:
+            raise AgentError("תאריך הסגירה הראשונה אינו תקין")
+    result["rotation_mode"] = mode
+    result["first_closure_group"] = first_group
+    result["first_closure_date"] = first_date
+    return result
+
+
+def _rules(rows: Any) -> List[dict]:
+    if not isinstance(rows, list):
+        raise AgentError("רשימת הכללים אינה תקינה")
+    result = []
+    for row in rows:
+        if not isinstance(row, dict) or not _text(row.get("text")):
+            raise AgentError("לכל כלל חייב להיות ניסוח")
+        priority = _text(row.get("priority")) or "hard"
+        if priority not in ("hard", "soft"):
+            raise AgentError("עוצמת הכלל אינה תקינה")
+        result.append({"text": _text(row.get("text")), "priority": priority})
+    return result
+
+
+def _text_list(value: Any) -> List[str]:
+    if not isinstance(value, list):
+        raise AgentError("הרשימה אינה תקינה")
+    return [item for item in (_text(raw) for raw in value) if item]
+
+
+def _validate_first_profile(profile: dict) -> None:
+    workplace = profile.get("workplace") or {}
+    if not _text(workplace.get("name")):
+        raise AgentError("יש להזין שם יחידה")
+    if not _text(workplace.get("first_closure_date")):
+        raise AgentError("יש להזין את תאריך הסגירה הראשונה")
+    if not profile.get("employees"):
+        raise AgentError("יש להוסיף לפחות איש צוות אחד")
+    if any(
+        not _text(person.get("rotation_group"))
+        for person in profile.get("employees") or []
+    ):
+        raise AgentError("יש לבחור סבב או תלתון לכל איש צוות")
+    if not profile.get("shifts"):
+        raise AgentError("יש להוסיף לפחות סוג משמרת אחד")
+
+
+def _validate_rotation_groups(profile: dict) -> None:
+    workplace = profile.get("workplace") or {}
+    groups = {"א", "ב"} if workplace.get("rotation_mode") != "triplet" \
+        else {"א", "ב", "ג"}
+    for person in profile.get("employees") or []:
+        group = _text(person.get("rotation_group"))
+        if group and group not in groups:
+            raise AgentError("קבוצת הסבב של %s אינה מתאימה למבנה היחידה" % (
+                _text(person.get("name")) or "איש הצוות"
+            ))
+
+
+def _audit_policy(value: dict) -> dict:
+    result = dict(value)
+    for field, label, minimum in (
+        ("max_weekly_hours", "מקסימום שעות בשבוע", 0),
+        ("max_consecutive_days", "מקסימום ימים רצופים", 1),
+        ("min_rest_hours", "מינימום מנוחה בין משמרות", 0),
+    ):
+        offered = result.get(field)
+        if isinstance(offered, bool) or not isinstance(offered, (int, float)):
+            raise AgentError("%s חייב להיות מספר" % label)
+        if offered < minimum:
+            raise AgentError("%s אינו יכול להיות קטן מ־%s" % (label, minimum))
     return result
 
 

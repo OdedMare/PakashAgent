@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarOff, Clock3, GripVertical, Pencil, Plus, Trash2, UserRound } from "lucide-react";
+import { CalendarOff, Clock3, GripVertical, Pencil, Plus, Repeat2, Trash2, UserRound } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { EMPLOYEE_DRAG_TYPE } from "@/components/Board/dragData";
@@ -28,6 +28,7 @@ export function TeamPanel({
   dark = false,
   draggable = false,
   readOnly = false,
+  rotationMode = "round",
   onAdd,
   onRemove,
   onSaveProfile,
@@ -40,6 +41,7 @@ export function TeamPanel({
   /** A roster drag creates a new assignment; moving an existing card remains separate. */
   draggable?: boolean;
   readOnly?: boolean;
+  rotationMode?: "round" | "triplet";
   onAdd?: (input: {
     employee: string;
     constraint_date: string;
@@ -68,6 +70,11 @@ export function TeamPanel({
   const shiftNames = shifts
     .map((row) => text(row.name))
     .filter((name) => name !== "");
+  const rotationGroups = rotationMode === "triplet" ? ["א", "ב", "ג"] : ["א", "ב"];
+  const recurringConstraints = employees.flatMap((person) =>
+    (Array.isArray(person.recurring_constraints) ? person.recurring_constraints : [])
+      .map((rule, index) => ({ employee: text(person.name), rule: record(rule), index })),
+  );
   const hueOf = useMemo(() => buildPalette(names), [names]);
   const loadByName = useMemo(
     () => new Map((stats?.by_employee ?? []).map((row) => [row.employee, row])),
@@ -75,11 +82,11 @@ export function TeamPanel({
   );
 
   return (
-    <aside className="team-panel" aria-label="הצוות והאילוצים">
+    <aside className="team-panel" aria-label="כוח האדם, התקינה והאילוצים">
       <section className="panel-section">
         <h3>
           <UserRound size={15} />
-          הצוות
+          כוח אדם
           <span className="panel-count">{names.length}</span>
         </h3>
         {draggable && names.length ? (
@@ -121,6 +128,8 @@ export function TeamPanel({
                   <span className="roster-name">{name}</span>
                   <span className="roster-role">
                     {text(person?.role) || "ללא תפקיד מוגדר"}
+                    {text(person?.rotation_group) ? ` · ${text(person?.rotation_group)}` : ""}
+                    {text(person?.service_type) ? ` · ${SERVICE_TYPE_LABELS[text(person?.service_type)] ?? text(person?.service_type)}` : ""}
                   </span>
                 </span>
                 <span className="roster-load" aria-label="עומס בסידור הנוכחי">
@@ -164,6 +173,7 @@ export function TeamPanel({
                 ? employees.find((row) => text(row.name) === editingEmployee)
                 : undefined}
               shiftNames={shiftNames}
+              rotationGroups={rotationGroups}
               onCancel={() => {
                 setAddingEmployee(false);
                 setEditingEmployee(null);
@@ -208,7 +218,7 @@ export function TeamPanel({
                   <span className="roster-name">{name}</span>
                   <span className="roster-role">
                     {text(shift.start_time) || "—"}–{text(shift.end_time) || "—"}
-                    {Boolean(shift.is_on_call) ? " · כוננות" : ""}
+                    {` · ${SHIFT_TYPE_LABELS[text(shift.shift_type)] ?? (Boolean(shift.is_on_call) ? "כוננות" : "רגילה")}`}
                   </span>
                 </span>
                 <span className="roster-load">תקן {shiftHeadcount(shift)}</span>
@@ -270,10 +280,34 @@ export function TeamPanel({
         <h3>
           <CalendarOff size={15} />
           אילוצים
-          <span className="panel-count">{constraints.length}</span>
+          <span className="panel-count">{constraints.length + recurringConstraints.length}</span>
         </h3>
 
         <ul className="constraints">
+          {recurringConstraints.map(({ employee, rule, index }) => (
+            <li key={`recurring-${employee}-${index}`}>
+              <Repeat2 size={14} aria-hidden="true" />
+              <div className="constraint-main">
+                <span className="constraint-who">{employee}</span>
+                <span className="constraint-when">
+                  קבוע · {strings(rule.days).length ? strings(rule.days).join(", ") : "כל יום"}
+                  {strings(rule.shifts).length ? ` · ${strings(rule.shifts).join(", ")}` : " · כל המשמרות"}
+                </span>
+              </div>
+              {text(rule.reason) ? <span className="constraint-reason">{text(rule.reason)}</span> : null}
+              <span className="constraint-source">{rule.is_hard === false ? "העדפה" : "קשיח"}</span>
+              {!readOnly && onSaveProfile ? (
+                <button type="button" className="icon-button subtle" aria-label={`מחיקת האילוץ הקבוע של ${employee}`} onClick={() => {
+                  const next = employees.map((person) => {
+                    if (text(person.name) !== employee) return person;
+                    const recurring = Array.isArray(person.recurring_constraints) ? person.recurring_constraints : [];
+                    return { ...person, recurring_constraints: recurring.filter((_, ruleIndex) => ruleIndex !== index) };
+                  });
+                  onSaveProfile({ employees: next });
+                }}><Trash2 size={14} /></button>
+              ) : null}
+            </li>
+          ))}
           {constraints.map((row) => (
             <li key={row.id}>
               <div className="constraint-main">
@@ -305,7 +339,7 @@ export function TeamPanel({
               ) : null}
             </li>
           ))}
-          {constraints.length === 0 ? (
+          {constraints.length === 0 && recurringConstraints.length === 0 ? (
             <li className="panel-empty">
               לא נרשמו אילוצים לתקופה הזו.
             </li>
@@ -319,7 +353,29 @@ export function TeamPanel({
               shiftNames={shiftNames}
               onCancel={() => setAdding(false)}
               onSubmit={(input) => {
-                onAdd(input);
+                if (input.duration === "permanent" && onSaveProfile) {
+                  const next = employees.map((person) => {
+                    if (text(person.name) !== input.employee) return person;
+                    const recurring = Array.isArray(person.recurring_constraints) ? person.recurring_constraints : [];
+                    return {
+                      ...person,
+                      recurring_constraints: [...recurring, {
+                        days: input.weekdays,
+                        shifts: input.shift_name ? [input.shift_name] : [],
+                        available: input.available,
+                        start_time: input.start_time,
+                        end_time: input.end_time,
+                        is_hard: input.is_hard,
+                        reason: input.reason,
+                        source: "manager",
+                      }],
+                    };
+                  });
+                  onSaveProfile({ employees: next });
+                } else {
+                  const { duration: _duration, weekdays: _weekdays, ...temporary } = input;
+                  onAdd?.(temporary);
+                }
                 setAdding(false);
               }}
             />
@@ -342,16 +398,21 @@ export function TeamPanel({
 function EmployeeForm({
   initial,
   shiftNames,
+  rotationGroups,
   onCancel,
   onSubmit,
 }: {
   initial?: Record<string, unknown>;
   shiftNames: string[];
+  rotationGroups: string[];
   onCancel: () => void;
   onSubmit: (employee: Record<string, unknown>) => void;
 }) {
   const [name, setName] = useState(text(initial?.name));
   const [role, setRole] = useState(text(initial?.role));
+  const [rotationGroup, setRotationGroup] = useState(text(initial?.rotation_group) || rotationGroups[0]);
+  const [serviceType, setServiceType] = useState(text(initial?.service_type) || "standard");
+  const [countsTowardStaffing, setCountsTowardStaffing] = useState(initial?.counts_toward_staffing !== false);
   const initialEligible = Array.isArray(initial?.eligible_shifts)
     ? initial.eligible_shifts.filter((value): value is string => typeof value === "string")
     : shiftNames;
@@ -361,7 +422,7 @@ function EmployeeForm({
     <form className="constraint-form profile-form" onSubmit={(event) => {
       event.preventDefault();
       if (!name.trim()) return;
-      onSubmit({ name: name.trim(), role: role.trim(), eligible_shifts: eligible });
+      onSubmit({ name: name.trim(), role: role.trim(), eligible_shifts: eligible, rotation_group: rotationGroup, service_type: serviceType, counts_toward_staffing: countsTowardStaffing });
     }}>
       <label>
         <span>שם *</span>
@@ -372,6 +433,14 @@ function EmployeeForm({
         <span>תפקיד</span>
         <input value={role} maxLength={120} onChange={(event) => setRole(event.target.value)} />
       </label>
+      <div className="constraint-time-grid">
+        <label><span>סבב/תלתון</span><select value={rotationGroup} onChange={(event) => setRotationGroup(event.target.value)}>{rotationGroups.map((group) => <option key={group}>{group}</option>)}</select></label>
+        <label><span>מעמד</span><select value={serviceType} onChange={(event) => {
+          setServiceType(event.target.value);
+          if (event.target.value === "overlap") setCountsTowardStaffing(false);
+        }}><option value="standard">תקן</option><option value="overlap">נחפף/ת</option><option value="reserve">מילואים</option></select></label>
+      </div>
+      <label className="profile-check"><input type="checkbox" checked={countsTowardStaffing} onChange={(event) => setCountsTowardStaffing(event.target.checked)} /><span>נספר/ת בתקן</span></label>
       {shiftNames.length ? (
         <fieldset className="profile-checkboxes">
           <legend>משמרות שהעובד/ת יכול/ה לבצע</legend>
@@ -408,6 +477,8 @@ function ShiftForm({
   const [end, setEnd] = useState(text(initial?.end_time));
   const [headcount, setHeadcount] = useState(shiftHeadcount(initial));
   const [onCall, setOnCall] = useState(Boolean(initial?.is_on_call));
+  const [shiftType, setShiftType] = useState(text(initial?.shift_type) || (onCall ? "on_call" : "regular"));
+  const [purpose, setPurpose] = useState(text(initial?.purpose));
 
   return (
     <form className="constraint-form profile-form" onSubmit={(event) => {
@@ -415,7 +486,7 @@ function ShiftForm({
       if (!name.trim()) return;
       onSubmit({
         name: name.trim(), start_time: start, end_time: end,
-        headcount, is_on_call: onCall,
+        headcount, shift_type: shiftType, is_on_call: shiftType === "on_call", purpose,
       });
     }}>
       <label>
@@ -427,8 +498,9 @@ function ShiftForm({
         <label><span>התחלה</span><input type="time" value={start} onChange={(event) => setStart(event.target.value)} /></label>
         <label><span>סיום</span><input type="time" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
       </div>
+      <label><span>סוג משמרת</span><select value={shiftType} onChange={(event) => { setShiftType(event.target.value); setOnCall(event.target.value === "on_call"); }}><option value="regular">רגילה</option><option value="overlap">חפיפה</option><option value="on_call">כוננות</option></select></label>
+      <label><span>ייעוד</span><input value={purpose} maxLength={120} onChange={(event) => setPurpose(event.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></label>
       <label><span>תקן בסיסי</span><input type="number" min={1} max={100} value={headcount} onChange={(event) => setHeadcount(Number(event.target.value) || 1)} /></label>
-      <label className="profile-check"><input type="checkbox" checked={onCall} onChange={(event) => setOnCall(event.target.checked)} /><span>משמרת כוננות</span></label>
       <FormActions onCancel={onCancel} ready={Boolean(name.trim())} />
     </form>
   );
@@ -481,6 +553,8 @@ function ConstraintForm({
     is_hard?: boolean;
     reason?: string;
     source?: string;
+    duration: "temporary" | "permanent";
+    weekdays: string[];
   }) => void;
 }) {
   const [employee, setEmployee] = useState(names[0] ?? "");
@@ -492,10 +566,12 @@ function ConstraintForm({
   const [isHard, setIsHard] = useState(true);
   const [reason, setReason] = useState("");
   const [source, setSource] = useState("manager");
+  const [duration, setDuration] = useState<"temporary" | "permanent">("temporary");
+  const [weekdays, setWeekdays] = useState<string[]>([]);
 
   const ready =
     employee.trim() !== "" &&
-    date !== "" &&
+    (duration === "permanent" ? weekdays.length > 0 : date !== "") &&
     (kind === "unavailable" || startTime !== "" || endTime !== "");
 
   return (
@@ -514,6 +590,8 @@ function ConstraintForm({
           is_hard: isHard,
           reason: reason.trim(),
           source,
+          duration,
+          weekdays,
         });
       }}
     >
@@ -540,6 +618,14 @@ function ConstraintForm({
       </label>
 
       <label>
+        <span>משך האילוץ</span>
+        <select value={duration} onChange={(event) => setDuration(event.target.value as "temporary" | "permanent")}>
+          <option value="temporary">זמני — לתאריך מסוים</option>
+          <option value="permanent">קבוע — חוזר בכל שבוע</option>
+        </select>
+      </label>
+
+      {duration === "temporary" ? <label>
         <span>תאריך</span>
         <input
           type="date"
@@ -547,7 +633,7 @@ function ConstraintForm({
           onChange={(event) => setDate(event.target.value)}
           required
         />
-      </label>
+      </label> : <fieldset className="profile-checkboxes"><legend>ימים קבועים</legend>{WEEKDAYS.map((day) => <label key={day}><input type="checkbox" checked={weekdays.includes(day)} onChange={(event) => setWeekdays(event.target.checked ? [...weekdays, day] : weekdays.filter((value) => value !== day))} /><span>{day}</span></label>)}</fieldset>}
 
       <label>
         <span>משמרת</span>
@@ -655,6 +741,20 @@ const SOURCE_LABELS: Record<string, string> = {
   interview: "מהראיון",
 };
 
+const SERVICE_TYPE_LABELS: Record<string, string> = {
+  standard: "תקן",
+  overlap: "נחפף/ת",
+  reserve: "מילואים",
+};
+
+const SHIFT_TYPE_LABELS: Record<string, string> = {
+  regular: "רגילה",
+  overlap: "חפיפה",
+  on_call: "כוננות",
+};
+
+const WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+
 function formatWindow(row: Constraint): string {
   if (row.start_time && row.end_time) return `${row.start_time}–${row.end_time}`;
   if (row.start_time) return `החל מ־${row.start_time}`;
@@ -664,4 +764,16 @@ function formatWindow(row: Constraint): string {
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
+    : [];
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }

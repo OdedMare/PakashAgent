@@ -760,7 +760,7 @@ def effective_availability(
                             "end_time": _bounded(rule.get("end_time")),
                             "is_hard": rule.get("is_hard", True) is not False,
                             "reason": _bounded(rule.get("reason")),
-                            "source": "interview",
+                            "source": _bounded(rule.get("source")) or "interview",
                         })
                 day += datetime.timedelta(days=1)
     return recurring + explicit

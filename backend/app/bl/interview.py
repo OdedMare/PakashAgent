@@ -53,7 +53,7 @@ _MAX_ASKED = 40
 INTERVIEW_TOPICS = (
     {
         "id": "workplace_and_cycle",
-        "question": "מה שם מקום העבודה ולאיזו תקופה בונים כל סידור?",
+        "question": "מה שם היחידה, האם עובדים בסבב א/ב או בתלתון א/ב/ג, ומי סוגר ראשון ומתי?",
     },
     {
         "id": "operating_calendar",
@@ -61,7 +61,7 @@ INTERVIEW_TOPICS = (
     },
     {
         "id": "shift_vocabulary",
-        "question": "מהן המשמרות: השם המדויק ושעת ההתחלה והסיום של כל אחת?",
+        "question": "מהם סוגי המשמרות, מהן השעות, האם זו משמרת רגילה, חפיפה או כוננות, ומה התקן בכל אחת?",
     },
     {
         "id": "staffing",
@@ -69,11 +69,11 @@ INTERVIEW_TOPICS = (
     },
     {
         "id": "roster",
-        "question": "מי העובדים: שם, תפקיד, אילו משמרות הם יכולים לבצע ומה היקף העבודה הרגיל שלהם?",
+        "question": "מי אנשי הצוות: שם, תפקיד, סבב/תלתון, סטטוס תקן/נחפף/מילואים ואילו משמרות הם יכולים לבצע?",
     },
     {
         "id": "constraints",
-        "question": "אילו אילוצים קבועים וכללי חובה יש, ועד מתי העובדים מגישים אילוצים?",
+        "question": "אילו אילוצים קבועים חוזרים ואילו אילוצים זמניים יש, ועד מתי מגישים אותם?",
     },
     {
         "id": "rest_policy",
@@ -124,7 +124,8 @@ _PROFILE_SCHEMA = {
             "required": [
                 "name", "mission", "success_criteria", "timezone",
                 "operating_days", "planning_horizon", "scheduler_name",
-                "scheduler_works_shifts",
+                "scheduler_works_shifts", "rotation_mode",
+                "first_closure_group", "first_closure_date",
             ],
             "properties": {
                 "name": {"type": "string"},
@@ -139,6 +140,11 @@ _PROFILE_SCHEMA = {
                 "planning_horizon": {"type": "string"},
                 "scheduler_name": {"type": "string"},
                 "scheduler_works_shifts": {"type": "boolean"},
+                "rotation_mode": {
+                    "type": "string", "enum": ["round", "triplet"],
+                },
+                "first_closure_group": {"type": "string"},
+                "first_closure_date": {"type": "string"},
             },
         },
         "employees": {
@@ -152,6 +158,7 @@ _PROFILE_SCHEMA = {
                     "is_shift_manager", "is_trainee",
                     "counts_toward_staffing", "can_train", "trainers",
                     "is_casual", "availability", "recurring_constraints",
+                    "rotation_group", "service_type",
                 ],
                 "properties": {
                     "name": {"type": "string"},
@@ -169,6 +176,11 @@ _PROFILE_SCHEMA = {
                         "type": "array", "items": {"type": "string"},
                     },
                     "is_casual": {"type": "boolean"},
+                    "rotation_group": {"type": "string"},
+                    "service_type": {
+                        "type": "string",
+                        "enum": ["standard", "overlap", "reserve"],
+                    },
                     "availability": {"type": "string"},
                     "recurring_constraints": {
                         "type": "array",
@@ -213,7 +225,7 @@ _PROFILE_SCHEMA = {
                 "required": [
                     "name", "purpose", "start_time", "end_time", "days",
                     "staffing", "is_on_call", "hour_weight",
-                    "fairness_weight",
+                    "fairness_weight", "shift_type",
                 ],
                 "properties": {
                     "name": {"type": "string"},
@@ -245,6 +257,10 @@ _PROFILE_SCHEMA = {
                     "is_on_call": {"type": "boolean"},
                     "hour_weight": {"type": "number", "minimum": 0},
                     "fairness_weight": {"type": "number", "minimum": 0},
+                    "shift_type": {
+                        "type": "string",
+                        "enum": ["regular", "overlap", "on_call"],
+                    },
                 },
             },
         },

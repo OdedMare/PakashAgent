@@ -1515,6 +1515,7 @@
 }
 
 .manager-tab {
+  position: relative;
   min-height: 3.25rem;
   display: inline-flex;
   flex-direction: column;
@@ -1530,6 +1531,22 @@
   font: inherit;
   font-size: 0.66rem;
   cursor: pointer;
+}
+
+.manager-tab-badge {
+  position: absolute;
+  inset: 0.35rem auto auto 0.35rem;
+  display: grid;
+  place-items: center;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding-inline: 0.2rem;
+  color: #ffffff;
+  background: var(--danger);
+  border-radius: 999px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .manager-tab:hover,

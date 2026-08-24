@@ -189,6 +189,19 @@ class TeamRepository(RepositoryBase):
             connection.commit()
         return profile
 
+    def create_team_profile(self, team_id: str, profile: dict) -> dict:
+        """Create the first profile without requiring an AI interview.
+
+        A manually configured profile lives in the same completed-session
+        store as an interviewed one, so every downstream reader keeps one
+        source of truth.
+        """
+        self._execute("""
+            INSERT INTO interview_sessions (id, team_id, status, profile)
+            VALUES (%s,%s,'complete',%s)
+        """, (new_id(), team_id, Jsonb(profile)))
+        return profile
+
     def claim_orphan_sessions(self, team_id: str) -> int:
         """Adopt interviews recorded before workspaces existed.
 

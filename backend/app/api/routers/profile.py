@@ -12,9 +12,7 @@ def build_router(service, guards) -> APIRouter:
     @router.put("")
     def update(request: ProfileUpdate, session: dict = Depends(boss)) -> dict:
         return service.update(
-            session["team_id"],
-            employees=request.employees,
-            shifts=request.shifts,
+            session["team_id"], **request.model_dump(exclude_unset=True)
         )
 
     return router

@@ -30,7 +30,7 @@ export function ProfileSummary({ profile }: { profile: WorkplaceProfile }) {
       </p>
 
       <dl className="profile-grid">
-        <Stat label="עובדים" value={count(profile.employees)} />
+        <Stat label="אנשי צוות" value={count(profile.employees)} />
         <Stat label="סוגי משמרות" value={count(profile.shifts)} />
         <Stat label="כללים" value={count(profile.rules)} />
       </dl>

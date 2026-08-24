@@ -271,11 +271,25 @@ export function scheduleOverview(): Promise<ManagementOverview> {
   return request<ManagementOverview>("/api/schedule/overview");
 }
 
-/** Replace either editable part of the workplace profile. Existing schedule
- * rows stay untouched; the vocabulary is used by future blank/generated periods. */
+/** Create or patch the workplace profile manually, without a model call.
+ * Existing schedule rows stay untouched; the profile shapes future periods. */
 export function updateProfile(body: {
+  workplace?: Record<string, unknown>;
   employees?: Record<string, unknown>[];
   shifts?: Record<string, unknown>[];
+  rules?: Record<string, unknown>[];
+  dependencies?: string[];
+  training_policy?: Record<string, unknown>;
+  audit_policy?: Record<string, unknown>;
+  availability_process?: string;
+  constraint_deadline?: string;
+  casual_worker_policy?: string;
+  rest_policy?: string;
+  weekend_policy?: string;
+  fairness_policy?: string;
+  conflict_policy?: string;
+  existing_schedule_source?: string;
+  summary?: string;
 }): Promise<import("@/types").WorkplaceProfile> {
   return request("/api/profile", {
     method: "PUT",

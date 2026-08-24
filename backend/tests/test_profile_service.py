@@ -22,6 +22,10 @@ class _Repo:
         self.profile = profile
         return profile
 
+    def create_team_profile(self, team_id, profile):
+        self.profile = profile
+        return profile
+
 
 def test_manual_profile_edit_preserves_unedited_sections():
     repo = _Repo()
@@ -61,3 +65,46 @@ def test_adding_employee_does_not_rewrite_shift_staffing():
         "item": {"name": "מאיה", "eligible_shifts": ["בוקר"]},
     }])
     assert repo.profile["shifts"][0]["staffing"][0]["headcount"] == 2
+
+
+def test_first_profile_can_be_created_entirely_by_hand():
+    repo = _Repo()
+    repo.profile = None
+
+    result = ProfileService(repo).update(
+        "team",
+        workplace={
+            "name": "פלוגה א", "planning_horizon": "שבוע",
+            "operating_days": ["ראשון", "שני"],
+            "rotation_mode": "triplet", "first_closure_group": "ג",
+            "first_closure_date": "2026-08-30",
+        },
+        employees=[{
+            "name": "דנה", "rotation_group": "ג",
+            "service_type": "overlap", "counts_toward_staffing": False,
+        }],
+        shifts=[{
+            "name": "חמ״ל", "shift_type": "overlap",
+            "start_time": "08:00", "end_time": "16:00", "headcount": 2,
+        }],
+        rules=[{"text": "אין חפיפה אחרי לילה", "priority": "hard"}],
+        audit_policy={
+            "max_weekly_hours": 45, "max_consecutive_days": 6,
+            "min_rest_hours": 8,
+        },
+    )
+
+    assert result["workplace"]["rotation_mode"] == "triplet"
+    assert result["employees"][0]["is_trainee"] is True
+    assert result["shifts"][0]["staffing"][0]["headcount"] == 2
+    assert result["shifts"][0]["shift_type"] == "overlap"
+    assert result["completeness"]["complete"] is True
+
+
+def test_rotation_group_must_match_the_selected_structure():
+    repo = _Repo()
+    with pytest.raises(AgentError):
+        ProfileService(repo).update("team", workplace={
+            "name": "פלוגה", "rotation_mode": "round",
+            "first_closure_group": "ג", "first_closure_date": "2026-08-30",
+        })

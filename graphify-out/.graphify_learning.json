@@ -1,6 +1,22 @@
 {
-  "generated_at": "2026-08-23T18:49:29.957435+00:00",
+  "generated_at": "2026-08-24T12:19:31.299792+00:00",
   "nodes": {
+    "backend_app_api_claude_http_layer": {
+      "code_fingerprint": "c2084d64a2ac674d58aa41cbe62280c7597ed305ff435279c05f153edf5c49b4",
+      "label": "HTTP Layer",
+      "last": "2026-08-24T11:03:38.925277+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-24T11:03:38.925277+00:00",
+          "outcome": "useful",
+          "q": "עכשיו יש לי בעיה אני יוצר סידור אוטומטי אבל המודל מחזיר תשובה חיובית ו200 api אבל ui מחזיר שגיאת רשת 500"
+        }
+      ],
+      "score": 0.998783354,
+      "source_file": "backend/app/api/CLAUDE.md",
+      "status": "tentative",
+      "uses": 1
+    },
     "backend_app_bl_claude_agent_decides_code_audits": {
       "code_fingerprint": "40227f6cd5fb00754e6bad782d8c8541b4dbf4b4dcc186f04a26a5eafaee9c2f",
       "label": "Agent Decides; Code Audits",
@@ -27,7 +43,7 @@
           "q": "in the pakash agent app"
         }
       ],
-      "score": 3.769843836,
+      "score": 3.706862723,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
       "uses": 4
@@ -35,8 +51,18 @@
     "backend_app_bl_claude_interview_workflow": {
       "code_fingerprint": "40227f6cd5fb00754e6bad782d8c8541b4dbf4b4dcc186f04a26a5eafaee9c2f",
       "label": "Interview Workflow",
-      "last": "2026-08-23T18:46:29.458086+00:00",
+      "last": "2026-08-24T08:40:46.853992+00:00",
       "provenance": [
+        {
+          "date": "2026-08-24T08:40:46.853992+00:00",
+          "outcome": "useful",
+          "q": "היום הבעיה החמורה היא שהמידע שנשמר בראיון לא עובר במצב לטוב לתהליך בניית הסידור איך אתה מציע שנעשה את זה ונמקסם על זה"
+        },
+        {
+          "date": "2026-08-23T19:03:51.003530+00:00",
+          "outcome": "useful",
+          "q": "תבנה"
+        },
         {
           "date": "2026-08-23T18:46:29.458086+00:00",
           "outcome": "useful",
@@ -51,54 +77,59 @@
           "date": "2026-08-22T16:55:41.180609+00:00",
           "outcome": "useful",
           "q": "תעצב לי tutorial למערכת עם סקרינשוטים והכל לכל פונקציונליות"
-        },
-        {
-          "date": "2026-08-21T20:07:57.637896+00:00",
-          "outcome": "useful",
-          "q": "i want cllckable questions and theres alweys place that he say somthing like רשמתי את רשימת העובדים ואת ימי הפעילות (ראשון עד חמישי). but does nothing"
-        },
-        {
-          "date": "2026-08-21T08:14:12.433730+00:00",
-          "outcome": "useful",
-          "q": "תממש את זה ואני רוצה שזה יהיה בpolling ולא בstream כמו שעכשוי"
         }
       ],
-      "score": 9.431854996,
+      "score": 11.254297487,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
-      "uses": 10
+      "uses": 12
     },
     "backend_app_bl_claude_layout_inference_importer": {
       "code_fingerprint": "40227f6cd5fb00754e6bad782d8c8541b4dbf4b4dcc186f04a26a5eafaee9c2f",
       "label": "Layout Inference Importer",
-      "last": "2026-08-23T18:46:29.458086+00:00",
+      "last": "2026-08-23T19:03:51.003530+00:00",
       "provenance": [
+        {
+          "date": "2026-08-23T19:03:51.003530+00:00",
+          "outcome": "useful",
+          "q": "תבנה"
+        },
         {
           "date": "2026-08-23T18:46:29.458086+00:00",
           "outcome": "useful",
           "q": "בוא נחשוב איך נשפר את חווית הראיון היא משמעותית מאוד"
         }
       ],
-      "score": 0.999951732,
+      "score": 1.966765862,
       "source_file": "backend/app/bl/CLAUDE.md",
-      "status": "tentative",
-      "uses": 1
+      "status": "preferred",
+      "uses": 2
     },
     "backend_app_bl_claude_schedule_generation": {
       "code_fingerprint": "40227f6cd5fb00754e6bad782d8c8541b4dbf4b4dcc186f04a26a5eafaee9c2f",
       "label": "Schedule Generation",
-      "last": "2026-08-23T18:15:16.628937+00:00",
+      "last": "2026-08-24T11:03:38.925277+00:00",
       "provenance": [
+        {
+          "date": "2026-08-24T11:03:38.925277+00:00",
+          "outcome": "useful",
+          "q": "עכשיו יש לי בעיה אני יוצר סידור אוטומטי אבל המודל מחזיר תשובה חיובית ו200 api אבל ui מחזיר שגיאת רשת 500"
+        },
+        {
+          "date": "2026-08-24T08:40:46.853992+00:00",
+          "outcome": "useful",
+          "q": "היום הבעיה החמורה היא שהמידע שנשמר בראיון לא עובר במצב לטוב לתהליך בניית הסידור איך אתה מציע שנעשה את זה ונמקסם על זה"
+        },
         {
           "date": "2026-08-23T18:15:16.628937+00:00",
           "outcome": "useful",
           "q": "הראיון ארוך וחוזר על שאלות, ויצירת לוח המשמרות הראשוני לפעמים טועה"
         }
       ],
-      "score": 0.999451054,
+      "score": 2.978033462,
       "source_file": "backend/app/bl/CLAUDE.md",
-      "status": "tentative",
-      "uses": 1
+      "status": "preferred",
+      "uses": 3
     },
     "backend_app_dal_claude_assignments_with_agent_reason": {
       "code_fingerprint": "21e546f15e14af1992d469bedfa4fa3a21167e68d153b00b052fc445f4710e94",
@@ -111,7 +142,7 @@
           "q": "הראיון ארוך וחוזר על שאלות, ויצירת לוח המשמרות הראשוני לפעמים טועה"
         }
       ],
-      "score": 0.999451054,
+      "score": 0.982753667,
       "source_file": "backend/app/dal/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -119,8 +150,13 @@
     "backend_app_dal_claude_persistence_schema": {
       "code_fingerprint": "21e546f15e14af1992d469bedfa4fa3a21167e68d153b00b052fc445f4710e94",
       "label": "Scheduling Persistence Schema",
-      "last": "2026-08-21T08:14:12.433730+00:00",
+      "last": "2026-08-24T08:40:46.853992+00:00",
       "provenance": [
+        {
+          "date": "2026-08-24T08:40:46.853992+00:00",
+          "outcome": "useful",
+          "q": "היום הבעיה החמורה היא שהמידע שנשמר בראיון לא עובר במצב לטוב לתהליך בניית הסידור איך אתה מציע שנעשה את זה ונמקסם על זה"
+        },
         {
           "date": "2026-08-21T08:14:12.433730+00:00",
           "outcome": "useful",
@@ -132,16 +168,21 @@
           "q": "בוא נתכנן איך לממש את זה"
         }
       ],
-      "score": 1.890135352,
+      "score": 2.855054137,
       "source_file": "backend/app/dal/CLAUDE.md",
       "status": "preferred",
-      "uses": 2
+      "uses": 3
     },
     "backend_app_dal_llm_claude_openai_compatible_json_client": {
-      "code_fingerprint": "fd5dc0be2963d56c6d8b4bdab4f33fea551536e9288d2e1dbca39c0e6a6174f1",
+      "code_fingerprint": "623e8dde3cbd3bc2c3dd7926182e8be01761ce05c8d10112315f73359969589c",
       "label": "OpenAI-Compatible JSON Client",
-      "last": "2026-08-21T08:14:12.433730+00:00",
+      "last": "2026-08-24T11:03:38.925277+00:00",
       "provenance": [
+        {
+          "date": "2026-08-24T11:03:38.925277+00:00",
+          "outcome": "useful",
+          "q": "עכשיו יש לי בעיה אני יוצר סידור אוטומטי אבל המודל מחזיר תשובה חיובית ו200 api אבל ui מחזיר שגיאת רשת 500"
+        },
         {
           "date": "2026-08-21T08:14:12.433730+00:00",
           "outcome": "useful",
@@ -161,17 +202,28 @@
           "date": "2026-08-21T07:57:40.333736+00:00",
           "outcome": "useful",
           "q": "איך לייעל את כמות הטוקנים שאני מעביר בראיון זה מגיע לכמויות גדולות שגודל המידע"
-        },
-        {
-          "date": "2026-08-20T20:46:01.724923+00:00",
-          "outcome": "useful",
-          "q": "in the pakash agent app"
         }
       ],
-      "score": 5.501030613,
+      "score": 6.407910682,
       "source_file": "backend/app/dal/llm/CLAUDE.md",
       "status": "preferred",
-      "uses": 6
+      "uses": 7
+    },
+    "backend_claude_confirm_before_import_persistence": {
+      "code_fingerprint": "941876e35080ed27d421d5b2795c70c6c98c4a4ea804ff13686086982b7614e1",
+      "label": "Confirm Before Import Persistence",
+      "last": "2026-08-23T19:03:51.003530+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-23T19:03:51.003530+00:00",
+          "outcome": "useful",
+          "q": "תבנה"
+        }
+      ],
+      "score": 0.983519881,
+      "source_file": "backend/CLAUDE.md",
+      "status": "tentative",
+      "uses": 1
     },
     "backend_claude_per_workplace_shift_vocabulary": {
       "code_fingerprint": "941876e35080ed27d421d5b2795c70c6c98c4a4ea804ff13686086982b7614e1",
@@ -189,7 +241,7 @@
           "q": "hey i want to start work the agent init interview here some qusetions that give as the base the do interview from that mock the missing question that you miss then we implament this part"
         }
       ],
-      "score": 1.786231184,
+      "score": 1.75638941,
       "source_file": "backend/CLAUDE.md",
       "status": "preferred",
       "uses": 2
@@ -205,16 +257,37 @@
           "q": "in the pakash agent app"
         }
       ],
-      "score": 0.934779137,
+      "score": 0.919162196,
       "source_file": "backend/CLAUDE.md",
+      "status": "tentative",
+      "uses": 1
+    },
+    "docs_decisions_d1_hard_and_soft_rules": {
+      "code_fingerprint": "22b10c2742436df24f1f82345d312c166f1114d37aa2825680b6b3160decf14c",
+      "label": "D1 Hard and Soft Rules",
+      "last": "2026-08-24T08:40:46.853992+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-24T08:40:46.853992+00:00",
+          "outcome": "useful",
+          "q": "היום הבעיה החמורה היא שהמידע שנשמר בראיון לא עובר במצב לטוב לתהליך בניית הסידור איך אתה מציע שנעשה את זה ונמקסם על זה"
+        }
+      ],
+      "score": 0.99649644,
+      "source_file": "docs/DECISIONS.md",
       "status": "tentative",
       "uses": 1
     },
     "frontend_claude_chat_first_frontend": {
       "code_fingerprint": "6751b6d578ee081fb66d342747a61c57586889cdcdeba29b3f43c0c9e08ebc72",
       "label": "Chat-First Frontend",
-      "last": "2026-08-23T18:46:29.458086+00:00",
+      "last": "2026-08-23T19:03:51.003530+00:00",
       "provenance": [
+        {
+          "date": "2026-08-23T19:03:51.003530+00:00",
+          "outcome": "useful",
+          "q": "תבנה"
+        },
         {
           "date": "2026-08-23T18:46:29.458086+00:00",
           "outcome": "useful",
@@ -231,10 +304,10 @@
           "q": "i want cllckable questions and theres alweys place that he say somthing like רשמתי את רשימת העובדים ואת ימי הפעילות (ראשון עד חמישי). but does nothing"
         }
       ],
-      "score": 2.931373329,
+      "score": 3.865920052,
       "source_file": "frontend/CLAUDE.md",
       "status": "preferred",
-      "uses": 3
+      "uses": 4
     },
     "frontend_claude_read_only_employee_view": {
       "code_fingerprint": "6751b6d578ee081fb66d342747a61c57586889cdcdeba29b3f43c0c9e08ebc72",
@@ -247,13 +320,13 @@
           "q": "תעצב לי tutorial למערכת עם סקרינשוטים והכל לכל פונקציונליות"
         }
       ],
-      "score": 0.975377169,
+      "score": 0.959081974,
       "source_file": "frontend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
     },
     "readme_schedule_import": {
-      "code_fingerprint": "43ae5f6a5832923617eb0ede38d679d0a7bb66c368a79b2d4140727959a3a6e0",
+      "code_fingerprint": "828bc45a7b47d8d9d493ceff2c064d6bad8bbfefa6f0766322d6d832a3a09838",
       "label": "Schedule Import from Excel or Documents",
       "last": "2026-08-22T16:55:41.180609+00:00",
       "provenance": [
@@ -263,7 +336,7 @@
           "q": "תעצב לי tutorial למערכת עם סקרינשוטים והכל לכל פונקציונליות"
         }
       ],
-      "score": 0.975377169,
+      "score": 0.959081974,
       "source_file": "README.md",
       "status": "tentative",
       "uses": 1

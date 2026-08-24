@@ -125,6 +125,25 @@ class CopilotRepository(RepositoryBase):
         params.append(int(limit))
         return self._all(query, tuple(params))
 
+    def copilot_health(self, team_id: str) -> dict:
+        """Small operational snapshot for the manager's copilot console."""
+        counts = self._one("""
+            SELECT
+                COUNT(*) FILTER (WHERE status='queued') AS queued_jobs,
+                COUNT(*) FILTER (WHERE status='running') AS running_jobs,
+                MAX(finished_at) FILTER (WHERE status='complete') AS last_completed_at
+            FROM copilot_jobs WHERE team_id=%s
+        """, (team_id,))
+        latest = self._all("""
+            SELECT id, status, attempts, error, created_at, started_at, finished_at
+            FROM copilot_jobs WHERE team_id=%s
+            ORDER BY created_at DESC, id DESC LIMIT 1
+        """, (team_id,))
+        return {
+            **counts,
+            "latest_job": latest[0] if latest else None,
+        }
+
     def transition_copilot_item(
         self, item_id: str, team_id: str, status: str,
         before_state: Optional[dict] = None,

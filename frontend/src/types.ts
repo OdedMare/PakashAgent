@@ -43,6 +43,11 @@ export interface WorkplaceProfile {
     name?: string;
     mission?: string;
     summary?: string;
+    planning_horizon?: string;
+    operating_days?: string[];
+    rotation_mode?: "round" | "triplet";
+    first_closure_group?: string;
+    first_closure_date?: string;
   };
   employees?: unknown[];
   shifts?: unknown[];
@@ -948,6 +953,22 @@ export interface CopilotPermission {
 export interface CopilotInboxData {
   items: CopilotItem[];
   permissions: CopilotPermission[];
+  health: CopilotHealth;
+}
+
+export interface CopilotHealth {
+  queued_jobs: number;
+  running_jobs: number;
+  last_completed_at?: string | null;
+  latest_job?: {
+    id: string;
+    status: "queued" | "running" | "complete" | "failed";
+    attempts: number;
+    error?: string;
+    created_at?: string;
+    started_at?: string | null;
+    finished_at?: string | null;
+  } | null;
 }
 
 export interface CopilotAuditEvent {

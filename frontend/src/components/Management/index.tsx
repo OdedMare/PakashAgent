@@ -10,6 +10,8 @@ import {
   Moon,
   MessagesSquare,
   Settings2,
+  ShieldCheck,
+  SlidersHorizontal,
   Share2,
   Upload,
   Sparkles,
@@ -62,6 +64,7 @@ export function Management({
   onLogout,
   onRotateLink,
   onOpenInterview,
+  onOpenManualSetup,
   autoGenerate = false,
   onAutoGenerateStarted,
 }: {
@@ -70,6 +73,7 @@ export function Management({
   onLogout?: () => void;
   onRotateLink?: () => void;
   onOpenInterview?: () => void;
+  onOpenManualSetup?: () => void;
   autoGenerate?: boolean;
   onAutoGenerateStarted?: () => void;
 }) {
@@ -81,6 +85,7 @@ export function Management({
   const [view, setView] = useState<ManagerView>("board");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [section, setSection] = useState<ManagerSection>("agent");
+  const [copilotPending, setCopilotPending] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   // The import flow. Opening it writes nothing; the screen's own confirm
@@ -155,7 +160,7 @@ export function Management({
             aria-current={view === "team" ? "page" : undefined}
           >
             <Users size={15} />
-            צוות
+            כוח אדם
           </button>
           <button
             type="button"
@@ -185,6 +190,17 @@ export function Management({
         </nav>
 
         <div className="header-actions">
+          {onOpenManualSetup ? (
+            <button
+              type="button"
+              className="icon-button"
+              onClick={onOpenManualSetup}
+              aria-label="הגדרה ידנית של היחידה"
+              title="הגדרה ידנית של היחידה"
+            >
+              <SlidersHorizontal size={17} />
+            </button>
+          ) : null}
           {onOpenInterview ? (
             <button
               type="button"
@@ -355,9 +371,9 @@ export function Management({
           <section className="manager-analytics" aria-labelledby="manager-team-title">
             <header className="manager-analytics-head">
               <div>
-                <span className="manager-analytics-eyebrow">הצוות שלך</span>
-                <h1 id="manager-team-title">מידע על הצוות</h1>
-                <p>עובדים, תפקידים, סוגי משמרות ואילוצים במקום אחד.</p>
+                <span className="manager-analytics-eyebrow">היחידה שלך</span>
+                <h1 id="manager-team-title">כוח אדם ותקינה</h1>
+                <p>אנשי צוות, מעמד, סבב או תלתון, סוגי משמרות ואילוצים במקום אחד.</p>
               </div>
               <span className="manager-analytics-status">
                 {overview?.employees.length ?? 0} אנשי צוות
@@ -370,6 +386,7 @@ export function Management({
                 constraints={overview.availability}
                 stats={overview.stats}
                 dark={theme === "dark"}
+                rotationMode={overview.profile?.workplace?.rotation_mode}
                 onAdd={state.addConstraint}
                 onRemove={state.removeConstraint}
                 onSaveProfile={state.saveProfile}
@@ -437,6 +454,13 @@ export function Management({
               onClick={() => setSection("agent")}
             />
             <ManagerTab
+              active={section === "copilot"}
+              icon={<ShieldCheck size={15} />}
+              label="קופיילוט"
+              count={copilotPending}
+              onClick={() => setSection("copilot")}
+            />
+            <ManagerTab
               active={section === "requests"}
               icon={<Inbox size={15} />}
               label="בקשות"
@@ -499,13 +523,18 @@ export function Management({
             onDismiss={state.dismissProposal}
             onDismissAnswer={state.dismissAnswer}
           />
-          <CopilotInbox
-            onOpenInterview={onOpenInterview}
-            onAct={(text) => {
-              setSuggested((previous) => ({ text, n: previous.n + 1 }));
-            }}
-          />
           </> : null}
+
+          <div hidden={section !== "copilot"}>
+            <CopilotInbox
+              onOpenInterview={onOpenInterview}
+              onPendingChange={setCopilotPending}
+              onAct={(text) => {
+                setSuggested((previous) => ({ text, n: previous.n + 1 }));
+                setSection("agent");
+              }}
+            />
+          </div>
 
           {section === "requests" ? <>
           {schedule?.status === "published" ? (
@@ -529,6 +558,7 @@ export function Management({
             constraints={overview?.availability ?? []}
             stats={overview?.stats}
             dark={theme === "dark"}
+            rotationMode={overview?.profile?.workplace?.rotation_mode}
             draggable={schedule?.status === "draft" && !state.busy}
             onAdd={state.addConstraint}
             onRemove={state.removeConstraint}
@@ -574,7 +604,7 @@ export function Management({
 }
 
 type ManagerView = "board" | "team" | "analytics";
-type ManagerSection = "agent" | "requests" | "team" | "overview";
+type ManagerSection = "agent" | "copilot" | "requests" | "team" | "overview";
 
 function ManagerAnalytics({
   overview,
@@ -628,11 +658,13 @@ function ManagerTab({
   active,
   icon,
   label,
+  count,
   onClick,
 }: {
   active: boolean;
   icon: React.ReactNode;
   label: string;
+  count?: number;
   onClick: () => void;
 }) {
   return (
@@ -644,6 +676,7 @@ function ManagerTab({
     >
       {icon}
       {label}
+      {count ? <span className="manager-tab-badge">{count > 9 ? "9+" : count}</span> : null}
     </button>
   );
 }

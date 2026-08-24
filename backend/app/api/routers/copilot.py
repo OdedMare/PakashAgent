@@ -19,6 +19,7 @@ def build_router(service, repository, guards) -> APIRouter:
         return {
             "items": repository.copilot_items(session["team_id"], status),
             "permissions": repository.copilot_permissions(session["team_id"]),
+            "health": repository.copilot_health(session["team_id"]),
         }
 
     @router.get("/audit")
