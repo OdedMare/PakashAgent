@@ -462,6 +462,32 @@ def test_the_budget_always_leaves_room_for_one_round_trip():
             assert _budget_seconds(settings, flow) > timeout, (timeout, flow)
 
 
+def test_no_timeout_means_no_budget_either():
+    """A deadline over an unbounded call could only fire mid-generation,
+    discarding an answer the server was still producing — the exact failure
+    turning the timeout off is meant to avoid."""
+    for timeout in (0, -30):
+        settings = _Settings(llm_timeout_seconds=timeout)
+        for flow in ("scheduler", "interview", ""):
+            assert _budget_seconds(settings, flow) is None, (timeout, flow)
+
+
+def test_an_unbounded_call_is_not_cut_short_by_a_deadline():
+    """End to end: with no timeout the ladder runs every rung it needs.
+
+    Guards the wiring, not the arithmetic — a budget of 0 seconds rather than
+    None would have stopped this after the first BadRequestError.
+    """
+    settings = _Settings(llm_timeout_seconds=0)
+    llm, fake = _client([
+        _bad_request(), _bad_request(), _Response('{"ok": true}'),
+    ], settings)
+    assert llm.complete_json(
+        "sys", "usr", schema={"type": "object"}, flow="scheduler",
+    )["ok"] is True
+    assert len(fake.completions.models) == 3
+
+
 def test_a_slow_model_widens_the_budget_with_it():
     """The setting a deployment reaches for actually moves the ceiling.
 
@@ -484,6 +510,12 @@ def test_the_scheduler_keeps_the_tighter_budget():
 
 
 def test_a_settings_object_without_the_field_still_resolves():
-    """A saved file from an older version, or a test double, must not raise."""
-    assert _budget_seconds(object(), "scheduler") > 0
-    assert _budget_seconds(object(), "interview") > 0
+    """A saved file from an older version, or a test double, must not raise.
+
+    It resolves to no ceiling, which is the same answer an explicit 0 gets:
+    a settings object that never heard of the field cannot be asserting a
+    limit, and inventing one for it would time out calls on the strength of
+    a missing attribute.
+    """
+    assert _budget_seconds(object(), "scheduler") is None
+    assert _budget_seconds(object(), "interview") is None
