@@ -27,6 +27,15 @@ services:
       # The model runs on the host, not in the compose network.
       PAKASH_LLM_BASE_URL: ${PAKASH_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       PAKASH_LLM_MODEL: ${PAKASH_LLM_MODEL:-gemma3:27b}
+      # Wall time for ONE HTTP completion. A large local model can need
+      # several minutes per day of schedule; below that, every call fails on
+      # timeout while the server is still generating an answer nobody is
+      # waiting for any more. Raise it further for a slower model.
+      PAKASH_LLM_TIMEOUT_SECONDS: ${PAKASH_LLM_TIMEOUT_SECONDS:-600}
+      # Env-only by design: the semaphore is built once at import, so this
+      # cannot be changed from the settings panel. 1 suits Ollama; raise it
+      # for a batching server (vLLM, TGI).
+      PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-1}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -49,6 +58,12 @@ services:
       PAKASH_RUNTIME_SETTINGS_FILE: /data/runtime-settings.json
       PAKASH_LLM_BASE_URL: ${PAKASH_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       PAKASH_LLM_MODEL: ${PAKASH_LLM_MODEL:-gemma3:27b}
+      # Same values as `backend`: the worker shares the settings volume and
+      # calls the same model server, so a timeout that differs between them
+      # would make the same work succeed or fail depending on which process
+      # picked it up.
+      PAKASH_LLM_TIMEOUT_SECONDS: ${PAKASH_LLM_TIMEOUT_SECONDS:-600}
+      PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-1}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       PAKASH_COPILOT_SCAN_SECONDS: ${PAKASH_COPILOT_SCAN_SECONDS:-1800}
     extra_hosts:

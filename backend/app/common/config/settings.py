@@ -67,13 +67,23 @@ class Settings(BaseSettings):
     llm_diet_mode: bool = False
     """Use compact prompts and bounded completion output."""
 
-    llm_timeout_seconds: int = 120
+    llm_timeout_seconds: int = 600
     """Maximum wall time for ONE HTTP completion to the model.
 
     Not a budget for the whole logical call: the degradation ladder and the
     parse retry above it each get their own, so a pathological call can take
     a multiple of this. It exists to stop a hung model server from holding a
-    worker for the SDK's 600-second default."""
+    worker indefinitely.
+
+    **Why 600 and not the 120 this shipped with.** 120s was sized for a small
+    local model answering in seconds. It is not what the product is actually
+    run against: a large model on constrained hardware needs several minutes
+    for one day of schedule, and every call then failed on timeout *while the
+    server was still generating* — the answer arrived to a client that had
+    already hung up, so the model looked broken when it was merely slow. A
+    ceiling below the real answer time is not a safety net; it is a guarantee
+    of failure. This is now above the observed worst case, and a server that
+    is genuinely hung is still bounded."""
 
     # The shipped endpoint is Ollama, which serves one generation at a time.
     # vLLM/TGI deployments should raise this explicitly for batching.
