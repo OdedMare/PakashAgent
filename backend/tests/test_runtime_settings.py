@@ -142,6 +142,9 @@ def test_role_models_start_unset_so_one_model_deployments_are_unchanged(store):
     assert settings.llm_model_fast == ""
     assert settings.llm_model_default == ""
     assert settings.llm_model_advanced == ""
+    assert settings.llm_base_url_fast is None
+    assert settings.llm_base_url_default is None
+    assert settings.llm_base_url_advanced is None
 
 
 def test_role_models_are_saved_and_survive_a_restart(tmp_path):
@@ -153,6 +156,9 @@ def test_role_models_are_saved_and_survive_a_restart(tmp_path):
         "llm_model_fast": "small-model",
         "llm_model_default": "chat-model",
         "llm_model_advanced": "big-model",
+        "llm_base_url_fast": "http://fast:8000/v1",
+        "llm_base_url_default": "http://chat:8000/v1",
+        "llm_base_url_advanced": "http://advanced:8000/v1",
     })
 
     reloaded = RuntimeSettingsStore(
@@ -161,6 +167,9 @@ def test_role_models_are_saved_and_survive_a_restart(tmp_path):
     assert reloaded.llm_model_fast == "small-model"
     assert reloaded.llm_model_default == "chat-model"
     assert reloaded.llm_model_advanced == "big-model"
+    assert reloaded.llm_base_url_fast == "http://fast:8000/v1"
+    assert reloaded.llm_base_url_default == "http://chat:8000/v1"
+    assert reloaded.llm_base_url_advanced == "http://advanced:8000/v1"
 
 
 def test_a_settings_file_predating_roles_still_loads(tmp_path):
@@ -176,6 +185,7 @@ def test_a_settings_file_predating_roles_still_loads(tmp_path):
     assert settings.llm_model == "old-model"
     assert settings.llm_model_fast == ""
     assert settings.llm_model_advanced == ""
+    assert settings.llm_base_url_advanced is None
 
 
 def test_a_role_can_be_cleared_back_to_the_default_model(store):
@@ -184,6 +194,16 @@ def test_a_role_can_be_cleared_back_to_the_default_model(store):
     store.update({"llm_model_advanced": "big-model"})
     store.update({"llm_model_advanced": ""})
     assert store.get().llm_model_advanced == ""
+
+
+def test_a_role_url_is_normalized_and_can_be_cleared(store):
+    store.update({
+        "llm_base_url_advanced": "http://box:8000/v1/chat/completions",
+    })
+    assert store.get().llm_base_url_advanced == "http://box:8000/v1"
+
+    store.update({"llm_base_url_advanced": ""})
+    assert store.get().llm_base_url_advanced is None
 
 
 def test_the_roles_never_carry_a_hardcoded_model_name(store):

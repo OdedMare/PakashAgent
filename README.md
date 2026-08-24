@@ -161,4 +161,6 @@ generated per process, so sessions do not survive a restart and break across
 workers.
 
 The model defaults to a local Ollama endpoint; set `PAKASH_LLM_BASE_URL` and
-`PAKASH_LLM_MODEL` to point elsewhere. Nothing here is OpenAI-specific.
+`PAKASH_LLM_MODEL` to point elsewhere. Fast, default, and advanced roles may
+override both with `PAKASH_LLM_MODEL_<ROLE>` and
+`PAKASH_LLM_BASE_URL_<ROLE>`. Nothing here is OpenAI-specific.

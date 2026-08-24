@@ -23,7 +23,13 @@ _SECRET_FIELDS = {"database_password", "openai_api_key"}
 
 # Fields where None/empty means "clear the value", not "keep current".
 # Without this, an emptied base URL or port could never be unset from the UI.
-_NULLABLE = ("database_port", "llm_base_url")
+_LLM_BASE_URL_FIELDS = (
+    "llm_base_url",
+    "llm_base_url_fast",
+    "llm_base_url_default",
+    "llm_base_url_advanced",
+)
+_NULLABLE = ("database_port", *_LLM_BASE_URL_FIELDS)
 
 # Positive integers, clamped on the way in so a 0 or a negative from the UI
 # cannot produce a timeout that fires instantly.
@@ -58,6 +64,9 @@ class RuntimeSettingsStore:
             llm_model_fast=env.llm_model_fast,
             llm_model_default=env.llm_model_default,
             llm_model_advanced=env.llm_model_advanced,
+            llm_base_url_fast=env.llm_base_url_fast,
+            llm_base_url_default=env.llm_base_url_default,
+            llm_base_url_advanced=env.llm_base_url_advanced,
         )
         if self._path.exists():
             self._apply(json.loads(self._path.read_text("utf-8")), False)
@@ -129,7 +138,7 @@ class RuntimeSettingsStore:
                     value = normalize_database_url(value)
                 elif key == "database_schema":
                     value = normalize_database_schema(value)
-                elif key == "llm_base_url":
+                elif key in _LLM_BASE_URL_FIELDS:
                     value = normalize_llm_base_url(value)
                 elif key == "llm_repetition_penalty":
                     # Float, and 0 is meaningful ("do not send it"), so it

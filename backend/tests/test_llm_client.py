@@ -22,6 +22,9 @@ class _Settings:
         self.llm_model_fast = ""
         self.llm_model_default = ""
         self.llm_model_advanced = ""
+        self.llm_base_url_fast = None
+        self.llm_base_url_default = None
+        self.llm_base_url_advanced = None
         self.llm_diet_mode = False
         self.llm_repetition_penalty = 0.0
         self.llm_timeout_seconds = 120
@@ -366,14 +369,14 @@ def test_a_model_saved_mid_session_applies_to_the_next_call():
     assert fake.completions.models == ["test-model", "big-model"]
 
 
-def test_every_role_goes_through_one_client_on_one_endpoint():
-    """The roles name models on the SAME vLLM server, so they must not each
-    build a client — that would drop the shared connection pool and pay a
-    fresh handshake per role."""
+def test_every_role_uses_its_configured_endpoint():
     settings = _Settings(
         llm_model_fast="small-model",
         llm_model_default="chat-model",
         llm_model_advanced="big-model",
+        llm_base_url_fast="http://fast/v1",
+        llm_base_url_default="http://chat/v1",
+        llm_base_url_advanced="http://advanced/v1",
     )
     llm = OpenAIJsonClient(_Store(settings))
     fake = _FakeClient([_Response('{"ok": true}')] * 3)
@@ -388,9 +391,29 @@ def test_every_role_goes_through_one_client_on_one_endpoint():
         llm.complete_json("sys", "usr", flow=flow)
 
     assert fake.completions.models == ["small-model", "chat-model", "big-model"]
-    # Same connection arguments every time — one pool, three models.
-    assert len(set(built)) == 1
-    assert built[0][1] == "http://localhost:11434/v1"
+    assert [call[1] for call in built] == [
+        "http://fast/v1", "http://chat/v1", "http://advanced/v1",
+    ]
+
+
+def test_unset_role_endpoints_keep_using_the_general_endpoint():
+    settings = _Settings(
+        llm_model_fast="small-model",
+        llm_model_advanced="big-model",
+    )
+    llm = OpenAIJsonClient(_Store(settings))
+    fake = _FakeClient([_Response('{"ok": true}')] * 2)
+    built = []
+
+    def record(api_key, base_url, timeout):
+        built.append(base_url)
+        return fake
+
+    llm._client_for = record
+    llm.complete_json("sys", "usr", flow="briefing")
+    llm.complete_json("sys", "usr", flow="scheduler")
+
+    assert built == ["http://localhost:11434/v1"] * 2
 
 
 def test_the_ladder_still_runs_per_call_on_the_routed_model():

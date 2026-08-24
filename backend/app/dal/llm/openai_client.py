@@ -4,12 +4,11 @@ Model, API key, base URL, and timeout come from the runtime settings store on
 EVERY call, so changes saved in the UI settings panel apply immediately
 without a restart.
 
-Which model is a per-call question: `flow` picks one of three roles (see
-`model_roles.py`) and the role names a model id in the runtime settings.
-All roles are served by the SAME endpoint — one vLLM server publishing
-several models — so they share one `OpenAI` client and one connection pool,
-and switching model is a different `model` field on the request, not a
-different connection. An unset role falls back to `llm_model`. Works against OpenAI itself and OpenAI-compatible servers
+Which model and endpoint to use is a per-call question: `flow` picks one of
+three roles (see `model_roles.py`) and the role names both in runtime settings.
+Unset role fields fall back to `llm_model` and `llm_base_url`. Clients are
+cached per connection, so roles sharing an endpoint also share its pool.
+Works against OpenAI itself and OpenAI-compatible servers
 (Ollama, vLLM, Groq...); the default target is a local model through Ollama.
 
 Robustness policy:
@@ -44,7 +43,12 @@ from app.dal.llm.completion_retry import create_with_retry
 from app.dal.llm.json_response_parser import extract_json
 from app.dal.llm.message_merger import merge_system_into_user
 from app.dal.llm.model_id_extractor import extract_model_ids
-from app.dal.llm.model_roles import DEFAULT, resolve_model, role_for_flow
+from app.dal.llm.model_roles import (
+    DEFAULT,
+    resolve_base_url,
+    resolve_model,
+    role_for_flow,
+)
 
 # One initial attempt + one retry with the parse error appended.
 _MAX_JSON_ATTEMPTS = 2
@@ -161,8 +165,7 @@ class OpenAIJsonClient:
 
     def __init__(self, settings_store):
         self._store = settings_store
-        self._cached_client = None
-        self._cached_key = None
+        self._cached_clients = {}
 
     def complete_json(
         self, system: str, user: str, schema=None, flow: str = "",
@@ -187,19 +190,19 @@ class OpenAIJsonClient:
         anything in `bl/` today; they exist so a one-off does not have to
         edit the mapping to get a different model.
 
-        The model is resolved from the store HERE, per call, immediately
-        before the request — so a selection saved in the settings panel
-        applies to the very next call with no restart, exactly as the base
-        URL and API key already did.
+        The model and endpoint are resolved from the store HERE, per call,
+        immediately before the request — so a selection saved in the settings
+        panel applies to the very next call with no restart.
         """
         started = time.monotonic()
         settings = self._store.get()
         chosen_role = role or role_for_flow(flow)
         chosen_model = resolve_model(settings, chosen_role, model)
-        if not settings.openai_api_key and not settings.llm_base_url:
+        chosen_base_url = resolve_base_url(settings, chosen_role)
+        if not settings.openai_api_key and not chosen_base_url:
             raise AgentError("לא הוגדר מפתח API או שרת תואם OpenAI")
         client = self._client_for(
-            settings.openai_api_key, settings.llm_base_url,
+            settings.openai_api_key, chosen_base_url,
             settings.llm_timeout_seconds,
         )
         messages = [
@@ -285,14 +288,13 @@ class OpenAIJsonClient:
         nothing. It bounds ONE HTTP completion — the ladder and the parse
         retry each get their own budget on top."""
         cache_key = (api_key, base_url, timeout)
-        if self._cached_client is None or self._cached_key != cache_key:
-            self._cached_client = OpenAI(
+        if cache_key not in self._cached_clients:
+            self._cached_clients[cache_key] = OpenAI(
                 api_key=api_key or _LOCAL_SERVER_KEY_PLACEHOLDER,
                 base_url=base_url or None,
                 timeout=timeout,
             )
-            self._cached_key = cache_key
-        return self._cached_client
+        return self._cached_clients[cache_key]
 
     @staticmethod
     def _complete(

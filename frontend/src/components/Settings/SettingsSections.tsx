@@ -69,15 +69,15 @@ function AgentSettings({ settings }: { settings: SettingsController }) {
         optional="לא נדרש לשרתים מקומיים כמו Ollama"
         placeholder="sk-…"
       />
-      <ModelField settings={settings} />
       <Field
         settings={settings}
         name="llm_base_url"
-        label="כתובת בסיס"
+        label="כתובת בסיס כללית"
         type="url"
-        optional="שרת תואם OpenAI; ריק = OpenAI"
+        optional="ברירת מחדל לכל מודל שלא הוגדרה לו כתובת"
         placeholder="http://localhost:11434/v1"
       />
+      <ModelField settings={settings} />
       <Toggle
         settings={settings}
         name="llm_diet_mode"
@@ -110,23 +110,26 @@ function AgentSettings({ settings }: { settings: SettingsController }) {
 
 /** The roles a task can be routed to. Mirrors `_FLOW_ROLES` in
  *  `backend/app/dal/llm/model_roles.py` — the backend does the routing, this
- *  only says which model each role uses.
+ *  only says which model and endpoint each role uses.
  *
  *  No model name appears here, or anywhere else in the panel: which models
  *  exist is the server's answer, read from `/v1/models`. */
 const MODEL_ROLES = [
   {
     name: "llm_model_fast",
+    urlName: "llm_base_url_fast",
     label: "מודל מהיר",
     optional: "משימות קצרות — תדריך; ריק = המודל הכללי",
   },
   {
     name: "llm_model_default",
+    urlName: "llm_base_url_default",
     label: "מודל רגיל",
     optional: "ראיון, שיחה, שינויים ולמידה; ריק = המודל הכללי",
   },
   {
     name: "llm_model_advanced",
+    urlName: "llm_base_url_advanced",
     label: "מודל מתקדם",
     optional: "בניית סידור וחשיבה מורכבת; ריק = המודל הכללי",
   },
@@ -153,9 +156,8 @@ function ModelField({ settings }: { settings: SettingsController }) {
         </button>
       </div>
       <ModelInput settings={settings} name="llm_model" />
-      {/* A datalist, not a select: a model the server does not list is still
-          a legitimate thing to type. Shared by every model field — they all
-          address the same endpoint, so they all offer the same ids. */}
+      {/* A datalist, not a select: a model the general endpoint does not list
+          is still legitimate to type, including one served by a role URL. */}
       <datalist id="available-models">
         {settings.models.map((model) => (
           <option key={model} value={model} />
@@ -169,6 +171,14 @@ function ModelField({ settings }: { settings: SettingsController }) {
             <span className="optional"> ({role.optional})</span>
           </label>
           <ModelInput settings={settings} name={role.name} />
+          <Field
+            settings={settings}
+            name={role.urlName}
+            label={`כתובת עבור ${role.label}`}
+            type="url"
+            optional="ריק = כתובת הבסיס הכללית"
+            placeholder="http://localhost:11434/v1"
+          />
         </div>
       ))}
     </>

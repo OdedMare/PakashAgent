@@ -202,6 +202,10 @@ def test_get_exposes_the_three_role_fields_unset(client):
         "llm_model_fast", "llm_model_default", "llm_model_advanced",
     ):
         assert body[field] == ""
+    for field in (
+        "llm_base_url_fast", "llm_base_url_default", "llm_base_url_advanced",
+    ):
+        assert body[field] is None
 
 
 def test_put_saves_a_model_for_each_role(client, store):
@@ -216,6 +220,18 @@ def test_put_saves_a_model_for_each_role(client, store):
     assert store.get().llm_model_default == "chat-model"
 
 
+def test_put_saves_a_base_url_for_each_role(client, store):
+    body = client.put("/api/settings", json={
+        "llm_base_url_fast": "http://fast:8000/v1",
+        "llm_base_url_default": "http://chat:8000/v1",
+        "llm_base_url_advanced": "http://advanced:8000/v1",
+    }).json()
+
+    assert body["llm_base_url_advanced"] == "http://advanced:8000/v1"
+    assert store.get().llm_base_url_fast == "http://fast:8000/v1"
+    assert store.get().llm_base_url_default == "http://chat:8000/v1"
+
+
 def test_the_roles_are_selected_from_what_the_endpoint_reported(client, llm):
     """The panel offers the ids `/v1/models` returned and saves one verbatim
     — a vLLM alias must reach the request exactly as the server spells it."""
@@ -228,18 +244,20 @@ def test_the_roles_are_selected_from_what_the_endpoint_reported(client, llm):
     )
 
 
-def test_saving_roles_leaves_the_connection_and_key_alone(client, store):
-    """Roles name models on the same endpoint — selecting one must not touch
-    the base URL, and the mask must not overwrite the stored key."""
+def test_saving_role_connection_leaves_the_general_connection_and_key_alone(
+    client, store,
+):
     store.update({"openai_api_key": "sk-real-secret"})
 
     client.put("/api/settings", json={
         "llm_model_advanced": "big-model",
+        "llm_base_url_advanced": "http://advanced:8000/v1",
         "openai_api_key": MASKED_SECRET,
     })
 
     assert store.get().openai_api_key == "sk-real-secret"
     assert store.get().llm_base_url == "http://localhost:11434/v1"
+    assert store.get().llm_base_url_advanced == "http://advanced:8000/v1"
 
 
 def test_an_old_settings_file_gains_the_roles_unset(tmp_path, monkeypatch):
@@ -264,3 +282,4 @@ def test_an_old_settings_file_gains_the_roles_unset(tmp_path, monkeypatch):
     body = upgraded.get("/api/settings").json()
     assert body["llm_model"] == "old-model"
     assert body["llm_model_default"] == ""
+    assert body["llm_base_url_default"] is None

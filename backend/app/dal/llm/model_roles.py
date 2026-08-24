@@ -1,11 +1,8 @@
-"""Which model serves which kind of work.
+"""Which model and endpoint serve each kind of work.
 
-Three roles, one server. Every role names a model id on the SAME
-OpenAI-compatible endpoint (`llm_base_url`) — a role is a choice of *model*,
-never a choice of connection, which is why the client keeps one shared
-`OpenAI` instance and its connection pool across all of them. A vLLM server
-started with several models answers for all of them on one port; addressing
-another is a different `model` field on the request and nothing else.
+Every role may name both a model id and an OpenAI-compatible base URL. An
+unset role field falls back to the legacy `llm_model` / `llm_base_url` pair,
+so one-server deployments need no changes.
 
 Roles are resolved from the runtime settings store immediately before each
 request, so a model changed in the settings panel applies to the next call
@@ -26,6 +23,12 @@ _ROLE_FIELDS = {
     FAST: "llm_model_fast",
     DEFAULT: "llm_model_default",
     ADVANCED: "llm_model_advanced",
+}
+
+_ROLE_URL_FIELDS = {
+    FAST: "llm_base_url_fast",
+    DEFAULT: "llm_base_url_default",
+    ADVANCED: "llm_base_url_advanced",
 }
 
 # Flow → role. `flow` is the name every `bl/` caller already passes for
@@ -66,3 +69,9 @@ def resolve_model(settings, role: str, override: str = "") -> str:
         return override
     field = _ROLE_FIELDS.get(role or DEFAULT, _ROLE_FIELDS[DEFAULT])
     return getattr(settings, field, "") or settings.llm_model
+
+
+def resolve_base_url(settings, role: str):
+    """The role endpoint, falling back to the existing shared endpoint."""
+    field = _ROLE_URL_FIELDS.get(role or DEFAULT, _ROLE_URL_FIELDS[DEFAULT])
+    return getattr(settings, field, None) or settings.llm_base_url

@@ -11,6 +11,7 @@ from app.dal.llm.model_roles import (
     ADVANCED,
     DEFAULT,
     FAST,
+    resolve_base_url,
     resolve_model,
     role_for_flow,
 )
@@ -24,6 +25,10 @@ class _Settings:
         self.llm_model_fast = ""
         self.llm_model_default = ""
         self.llm_model_advanced = ""
+        self.llm_base_url = "http://general/v1"
+        self.llm_base_url_fast = None
+        self.llm_base_url_default = None
+        self.llm_base_url_advanced = None
         for key, value in overrides.items():
             setattr(self, key, value)
 
@@ -33,6 +38,7 @@ class _OldSettings:
     all, which is what a saved file or an older test double produces."""
 
     llm_model = "base-model"
+    llm_base_url = "http://general/v1"
 
 
 # --- flow → role -----------------------------------------------------------
@@ -100,6 +106,22 @@ def test_an_explicit_model_overrides_the_role():
 def test_an_empty_role_resolves_as_default():
     settings = _Settings(llm_model_default="chat-model")
     assert resolve_model(settings, "") == "chat-model"
+
+
+# --- role → endpoint -------------------------------------------------------
+
+def test_a_role_can_use_its_own_endpoint():
+    settings = _Settings(llm_base_url_advanced="http://advanced/v1")
+    assert resolve_base_url(settings, ADVANCED) == "http://advanced/v1"
+
+
+@pytest.mark.parametrize("role", [FAST, DEFAULT, ADVANCED])
+def test_an_unset_role_endpoint_falls_back_to_the_general_one(role):
+    assert resolve_base_url(_Settings(), role) == "http://general/v1"
+
+
+def test_settings_predating_role_endpoints_still_resolve_the_general_one():
+    assert resolve_base_url(_OldSettings(), ADVANCED) == "http://general/v1"
 
 
 # --- the mapping against the real call sites -------------------------------

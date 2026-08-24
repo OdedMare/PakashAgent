@@ -69,17 +69,16 @@ more honest than making the whole range look frozen for five minutes.
 
 ## Task-based model routing
 
-Three roles, **one server**. A role names a model id in the runtime settings;
-every one of them is served by the same `llm_base_url`, so switching model is
-a different `model` field on the request and nothing else. That is why there
-is still one `OpenAI` client and one connection pool — a client per model
-would throw the pool away for no reason.
+Three roles. A role names a model id and may name its own base URL in runtime
+settings. An empty role URL falls back to `llm_base_url`, so a deployment with
+one server is unchanged. OpenAI clients are cached by connection; roles on the
+same URL share a pool, while roles on different URLs keep separate pools.
 
-| Role | Setting | Flows |
-|---|---|---|
-| `advanced` | `llm_model_advanced` | `scheduler` |
-| `default` | `llm_model_default` | `interview`, `changes`, `planner`, `learn`, and anything unmapped |
-| `fast` | `llm_model_fast` | `briefing` |
+| Role | Model setting | URL setting | Flows |
+|---|---|---|---|
+| `advanced` | `llm_model_advanced` | `llm_base_url_advanced` | `scheduler` |
+| `default` | `llm_model_default` | `llm_base_url_default` | `interview`, `changes`, `planner`, `learn`, and anything unmapped |
+| `fast` | `llm_model_fast` | `llm_base_url_fast` | `briefing` |
 
 **`flow` routes.** The argument every caller already passed for telemetry is
 what picks the role, so a caller names itself once. A second argument would be
@@ -181,12 +180,11 @@ one in every other metric.
 
 ## Connection reuse
 
-`_client_for(api_key, base_url)` caches one `OpenAI` client keyed by
-`(api_key, base_url)`. A fresh client per call paid a TCP/TLS handshake on every
-round-trip. The cache re-keys automatically when settings change mid-session,
-because the store is still read per call. **The model is not part of the key**
-— all three roles address the same endpoint, so they share one client and one
-pool.
+`_client_for(api_key, base_url)` caches `OpenAI` clients keyed by
+`(api_key, base_url, timeout)`. A fresh client per call paid a TCP/TLS handshake
+on every round-trip. The cache picks up settings changes mid-session because
+the store is still read per call. **The model is not part of the key**: models
+on the same endpoint share one client and pool.
 
 ## Local-server accommodations
 
@@ -206,8 +204,8 @@ pool.
   fallback logic through `_complete`.
 - Routing is `model_roles.py` and nowhere else. A flow gets a model by being
   in the table, not by a branch at the call site.
-- **A role is a model, never a connection.** Giving one its own base URL or
-  key would mean a client per role and the end of the shared pool.
+- Keep endpoint routing beside model routing in `model_roles.py`; call sites
+  name only their flow.
 - **Never fail over to another model.** See the routing section.
 - **Nothing in `bl/audit.py` may call this.** The audit is arithmetic precisely so
   it cannot be hallucinated ([D3](../../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).

@@ -53,12 +53,16 @@ class Settings(BaseSettings):
 
     llm_model_advanced: str = ""
     """Model for schedule generation and other heavy reasoning. Empty = use
-    `llm_model`.
+    `llm_model`."""
 
-    All three name a model on the SAME server as `llm_model`: one vLLM
-    endpoint serving several models, addressed by the id `/v1/models`
-    reports. They are empty by default because naming one here would be
-    hardcoding a model this deployment may not serve."""
+    llm_base_url_fast: Optional[str] = None
+    """Endpoint for the fast role. Empty = use `llm_base_url`."""
+
+    llm_base_url_default: Optional[str] = None
+    """Endpoint for the default role. Empty = use `llm_base_url`."""
+
+    llm_base_url_advanced: Optional[str] = None
+    """Endpoint for the advanced role. Empty = use `llm_base_url`."""
 
     llm_diet_mode: bool = False
     """Use compact prompts and bounded completion output."""
