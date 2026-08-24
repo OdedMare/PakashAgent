@@ -22,7 +22,9 @@ Robustness policy:
 - strips markdown fences from the reply
 - retries once with the parse error appended before giving up
 - bounds each HTTP completion by `llm_timeout_seconds`, so a hung local
-  server cannot hold a request for the SDK's 600-second default
+  server cannot hold a request indefinitely, and bounds the whole logical
+  call by a multiple of it (`_budget_seconds`) so the ladder and the retries
+  above it always have room to run
 
 Errors leaving this package are `AgentError` in Hebrew. Nothing in
 `bl/audit.py` may call this — the audit is arithmetic precisely so it cannot
@@ -98,11 +100,49 @@ def _slots(settings):
 # single HTTP round-trip, but the ladder can run four of them and each retries
 # up to three times — multiplied out, one request could hold a worker for the
 # better part of an hour. This is the number that actually stops that.
-_TOTAL_BUDGET_SECONDS = 300
+#
+# **It is derived from the timeout, not fixed.** Both numbers used to be
+# constants, and a deployment whose model needed more than the default said
+# so by raising `llm_timeout_seconds` — which did nothing, because the budget
+# below it stayed where it was and cut every call off first. Worse, once the
+# timeout was raised past the budget the two inverted: the deadline expired
+# before a single HTTP call could finish, so the retries and the ladder could
+# never run at all and the setting appeared to make things worse.
+#
+# So the invariant is stated in code rather than left to whoever edits the
+# settings: the budget is always a multiple of one round-trip, which is what
+# makes room for the retry above it. Below this ratio the resilience
+# machinery is decorative.
+_BUDGET_MULTIPLIER = 2.5
+_MIN_TOTAL_BUDGET_SECONDS = 300
 # Daily scheduling calls are deliberately small. Letting one hold the whole
-# range for five minutes defeats checkpointing and makes the UI look frozen;
-# a failed day can be retried without discarding its neighbours.
-_SCHEDULER_TOTAL_BUDGET_SECONDS = 120
+# range defeats checkpointing and makes the UI look frozen; a failed day can
+# be retried without discarding its neighbours. So the scheduler gets a
+# *tighter* multiple — but still a multiple, never a flat constant that a
+# slow model would breach on its first attempt.
+_SCHEDULER_BUDGET_MULTIPLIER = 1.5
+
+
+def _budget_seconds(settings, flow: str):
+    """The ceiling on one logical call, in seconds — or `None` for no ceiling.
+
+    Always strictly greater than `llm_timeout_seconds`, so one HTTP attempt
+    can always complete inside it. `getattr` with a default because a
+    settings object predating the field — a saved file from an older version
+    or a test double — must resolve rather than raise.
+
+    `llm_timeout_seconds = 0` means the server is given as long as it needs,
+    and the budget above it goes away with it: a deadline over an unbounded
+    call could only ever fire mid-generation, throwing away an answer the
+    server was still producing, which is the failure the whole setting exists
+    to avoid.
+    """
+    timeout = getattr(settings, "llm_timeout_seconds", 0) or 0
+    if timeout <= 0:
+        return None
+    if flow == "scheduler":
+        return max(timeout * _SCHEDULER_BUDGET_MULTIPLIER, timeout + 60)
+    return max(timeout * _BUDGET_MULTIPLIER, _MIN_TOTAL_BUDGET_SECONDS)
 
 # Substrings local servers use when the prompt exceeds the context window.
 # Matched on text because none of them use a distinct status or error code:
@@ -218,8 +258,7 @@ class OpenAIJsonClient:
             content, current = self._complete(
                 client, chosen_model, messages, max_tokens, schema,
                 settings.llm_repetition_penalty, _slots(settings),
-                _SCHEDULER_TOTAL_BUDGET_SECONDS
-                if flow == "scheduler" else _TOTAL_BUDGET_SECONDS,
+                _budget_seconds(settings, flow),
             )
             # Tokens spent on a rejected reply were still spent — accumulate
             # across the retry rather than reporting only the last attempt.
@@ -286,20 +325,30 @@ class OpenAIJsonClient:
         without it a client built before the setting changed would keep
         serving every later call, and the saved value would appear to do
         nothing. It bounds ONE HTTP completion — the ladder and the parse
-        retry each get their own budget on top."""
+        retry each get their own budget on top.
+
+        A timeout of 0 or less means *no* limit, and is translated to `None`
+        here: the SDK reads 0 as "time out immediately", so passing it
+        through would turn "wait as long as it takes" into the one thing it
+        must never mean. `httpx.Timeout(None)` is explicit rather than
+        omitting the argument, because leaving it out restores the SDK's own
+        600-second default instead of removing the bound."""
         cache_key = (api_key, base_url, timeout)
         if cache_key not in self._cached_clients:
             self._cached_clients[cache_key] = OpenAI(
                 api_key=api_key or _LOCAL_SERVER_KEY_PLACEHOLDER,
                 base_url=base_url or None,
-                timeout=timeout,
+                timeout=(
+                    httpx.Timeout(None) if not timeout or timeout <= 0
+                    else timeout
+                ),
             )
         return self._cached_clients[cache_key]
 
     @staticmethod
     def _complete(
         client, model, messages, max_tokens, schema, penalty, slots,
-        total_budget_seconds=_TOTAL_BUDGET_SECONDS,
+        total_budget_seconds=_MIN_TOTAL_BUDGET_SECONDS,
     ):
         # Degradation ladder for OpenAI-compatible servers:
         # schema → JSON mode → plain → plain with the system prompt merged
@@ -308,7 +357,13 @@ class OpenAIJsonClient:
         # Only a BadRequestError advances the ladder; any other exception is
         # a real failure and becomes an AgentError immediately.
         last_bad_request = None
-        deadline = time.monotonic() + total_budget_seconds
+        # `None` is "no ceiling", which is what `create_with_retry` already
+        # means by a `None` deadline — so an unbounded call needs no branch
+        # here beyond not computing one.
+        deadline = (
+            None if total_budget_seconds is None
+            else time.monotonic() + total_budget_seconds
+        )
         with slots:
             for kwargs in OpenAIJsonClient._attempts(
                 messages, max_tokens, schema, penalty,

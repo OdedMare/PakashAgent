@@ -13,7 +13,7 @@ from app.common.errors import AgentError
 from app.dal.llm.json_response_parser import extract_json
 from app.dal.llm.message_merger import merge_system_into_user
 from app.dal.llm.model_id_extractor import extract_model_ids
-from app.dal.llm.openai_client import OpenAIJsonClient
+from app.dal.llm.openai_client import OpenAIJsonClient, _budget_seconds
 
 
 class _Settings:
@@ -439,3 +439,51 @@ def test_a_failing_model_is_never_swapped_for_another_one():
         llm.complete_json("sys", "usr", flow="scheduler")
     # Both attempts, including the parse retry, stayed on the routed model.
     assert set(fake.completions.models) == {"big-model"}
+
+
+# -- the total-call budget -------------------------------------------------
+#
+# These lock the invariant, not the numbers. What matters is that the ceiling
+# on a whole logical call always leaves room for at least one HTTP round-trip
+# — when it did not, the deadline expired before any attempt could finish and
+# the retries and the ladder became unreachable.
+
+
+def test_the_budget_always_leaves_room_for_one_round_trip():
+    """The invariant that makes the retry and the ladder reachable at all.
+
+    Both used to be flat constants, so raising `llm_timeout_seconds` past the
+    scheduler's fixed 120s inverted them: one HTTP call could no longer finish
+    inside the budget bounding it.
+    """
+    for timeout in (30, 120, 300, 600, 900):
+        settings = _Settings(llm_timeout_seconds=timeout)
+        for flow in ("scheduler", "interview", "changes", ""):
+            assert _budget_seconds(settings, flow) > timeout, (timeout, flow)
+
+
+def test_a_slow_model_widens_the_budget_with_it():
+    """The setting a deployment reaches for actually moves the ceiling.
+
+    Raising the timeout used to do nothing for the scheduler, whose budget
+    was hardcoded below it.
+    """
+    slow = _budget_seconds(_Settings(llm_timeout_seconds=600), "scheduler")
+    quick = _budget_seconds(_Settings(llm_timeout_seconds=120), "scheduler")
+    assert slow > quick
+
+
+def test_the_scheduler_keeps_the_tighter_budget():
+    """Daily generation is checkpointed, so it should give up sooner than a
+    conversational call and let the failed day be retried on its own."""
+    settings = _Settings(llm_timeout_seconds=600)
+    assert (
+        _budget_seconds(settings, "scheduler")
+        < _budget_seconds(settings, "interview")
+    )
+
+
+def test_a_settings_object_without_the_field_still_resolves():
+    """A saved file from an older version, or a test double, must not raise."""
+    assert _budget_seconds(object(), "scheduler") > 0
+    assert _budget_seconds(object(), "interview") > 0

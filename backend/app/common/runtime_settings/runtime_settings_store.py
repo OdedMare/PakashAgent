@@ -31,12 +31,14 @@ _LLM_BASE_URL_FIELDS = (
 )
 _NULLABLE = ("database_port", *_LLM_BASE_URL_FIELDS)
 
-# Positive integers, clamped on the way in so a 0 or a negative from the UI
-# cannot produce a timeout that fires instantly.
-# `llm_max_concurrency` is clamped here like any other positive int, but
-# unlike the rest it only takes effect on the next process start: the
-# semaphore in `dal/llm/` is built once and cannot be resized.
-_POSITIVE_INTS = ("llm_timeout_seconds", "llm_max_concurrency")
+# Integers where 0 is not a meaningful value and is clamped away. Only
+# concurrency qualifies: `llm_timeout_seconds` is handled separately because
+# 0 there means "no timeout" and must survive.
+#
+# `llm_max_concurrency` is clamped here, but unlike every other live setting
+# it only takes effect on the next process start: the semaphore in `dal/llm/`
+# is built once and cannot be resized.
+_POSITIVE_INTS = ("llm_max_concurrency",)
 
 
 class RuntimeSettingsStore:
@@ -144,6 +146,15 @@ class RuntimeSettingsStore:
                     # Float, and 0 is meaningful ("do not send it"), so it
                     # cannot join the max(1, int(...)) group below.
                     value = _clamp_penalty(value)
+                elif key == "llm_timeout_seconds":
+                    # 0 is meaningful here — "no timeout, wait as long as the
+                    # server needs" — so this cannot join the max(1, ...)
+                    # group below, which would quietly turn a request for no
+                    # limit into a one-second one: the harshest possible
+                    # setting, arrived at by asking for the mildest.
+                    # Negatives are folded to 0 rather than rejected; both
+                    # mean "no ceiling" and there is nothing else they could.
+                    value = max(0, int(value))
                 elif key in _POSITIVE_INTS:
                     value = max(1, int(value))
             except (TypeError, ValueError):

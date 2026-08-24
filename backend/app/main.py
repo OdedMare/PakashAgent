@@ -2,6 +2,7 @@
 
 import logging
 import os
+import secrets
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -160,4 +161,44 @@ async def app_error_handler(request, exc: AppError) -> JSONResponse:
     )
     return JSONResponse(
         status_code=exc.status_code, content=error_payload(exc)
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_error_handler(request, exc: Exception) -> JSONResponse:
+    """Anything that is not an `AppError`, with the cause kept.
+
+    Without this, an exception nobody anticipated left as Starlette's default
+    500, whose body carries no `detail` at all. The frontend reads `detail`
+    and falls through to `שגיאת שרת (500)` — a status code, which tells the
+    manager nothing and tells us nothing either, because the traceback was
+    never logged. That is precisely how a slow model, an exhausted connection
+    pool and a genuine bug all became the same unreadable screen.
+
+    So: log the traceback with the route that produced it, and answer with a
+    Hebrew sentence plus a short `error_id` that appears in both places. The
+    manager reads the sentence and can quote the id; we grep the log for it
+    and land on the exact stack.
+
+    **The id is random, never the exception text.** `str(exc)` on a database
+    or driver error can carry a connection string, a query with employee
+    names in it, or a file path — none of which belongs on a manager's
+    screen (backend/CLAUDE.md). It goes to the log, which is ours.
+
+    `AppError` is handled above and never reaches here; FastAPI matches the
+    most specific registered handler.
+    """
+    error_id = secrets.token_hex(4)
+    _log.exception(
+        "unhandled %s %s error_id=%s", request.method, request.url.path,
+        error_id,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": (
+                "שגיאה לא צפויה בשרת. מספר לאיתור: %s" % error_id
+            ),
+            "error_id": error_id,
+        },
     )

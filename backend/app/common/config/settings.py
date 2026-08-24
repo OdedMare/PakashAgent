@@ -67,23 +67,33 @@ class Settings(BaseSettings):
     llm_diet_mode: bool = False
     """Use compact prompts and bounded completion output."""
 
-    llm_timeout_seconds: int = 600
+    llm_timeout_seconds: int = 0
     """Maximum wall time for ONE HTTP completion to the model.
+    **0 — the default — means no limit: wait for as long as the server takes.**
 
     Not a budget for the whole logical call: the degradation ladder and the
-    parse retry above it each get their own, so a pathological call can take
-    a multiple of this. It exists to stop a hung model server from holding a
-    worker indefinitely.
+    parse retry above it each get their own, derived from this one. Set to 0,
+    those go away with it.
 
-    **Why 600 and not the 120 this shipped with.** 120s was sized for a small
-    local model answering in seconds. It is not what the product is actually
-    run against: a large model on constrained hardware needs several minutes
-    for one day of schedule, and every call then failed on timeout *while the
-    server was still generating* — the answer arrived to a client that had
-    already hung up, so the model looked broken when it was merely slow. A
-    ceiling below the real answer time is not a safety net; it is a guarantee
-    of failure. This is now above the observed worst case, and a server that
-    is genuinely hung is still bounded."""
+    **Why the default is no timeout.** Every finite value shipped here was
+    wrong for somebody. 120s was sized for a small local model answering in
+    seconds; against a large model on constrained hardware it failed every
+    call *while the server was still generating* — the answer arrived to a
+    client that had already hung up, so a merely slow model looked broken.
+    Raising it only moved the cliff, because the right number is a property
+    of the model and the hardware, which this code cannot know.
+
+    A ceiling below the real answer time is not a safety net; it is a
+    guarantee of failure. So the backend no longer guesses one: generation is
+    a background job checkpointed per day, the browser polls rather than
+    holding the connection open, and **giving up is the UI's decision** — it
+    is the only participant that knows whether anyone is still waiting.
+
+    **What this gives up.** A server that is genuinely hung — not slow — now
+    holds its worker thread until the process restarts, and with
+    `llm_max_concurrency` at 1 that blocks every other model call. Set a
+    positive value here if that ever happens; it should be comfortably above
+    the slowest real answer, not a round number that feels safe."""
 
     # The shipped endpoint is Ollama, which serves one generation at a time.
     # vLLM/TGI deployments should raise this explicitly for batching.

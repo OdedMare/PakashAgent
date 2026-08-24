@@ -31,7 +31,8 @@ def store(tmp_path, monkeypatch):
 def test_env_defaults_are_the_starting_point(store):
     settings = store.get()
     assert settings.llm_base_url == "http://localhost:11434/v1"
-    assert settings.llm_timeout_seconds == 120
+    # 0 means "no timeout": the UI decides when to stop waiting.
+    assert settings.llm_timeout_seconds == 0
     # 0 means "do not send repetition_penalty at all".
     assert settings.llm_repetition_penalty == 0.0
 
@@ -104,10 +105,28 @@ def test_a_schema_name_that_could_reach_sql_is_rejected(store):
         store.update({"database_schema": "pakash; DROP TABLE employees"})
 
 
-def test_timeout_cannot_be_saved_as_zero(store):
-    # A 0 would make every completion time out instantly.
+def test_timeout_zero_is_kept_and_means_no_limit(store):
+    """0 must survive the save. It used to be clamped to 1 on the grounds
+    that "a 0 would make every completion time out instantly" — true of the
+    SDK, which is why `dal/llm/` translates it, and exactly why clamping was
+    wrong: it turned a request for NO ceiling into the harshest one there is.
+    """
     store.update({"llm_timeout_seconds": 0})
-    assert store.get().llm_timeout_seconds == 1
+    assert store.get().llm_timeout_seconds == 0
+
+
+def test_a_negative_timeout_folds_to_no_limit(store):
+    """Both mean "no ceiling" and there is nothing else a negative could
+    mean, so it is folded rather than rejected."""
+    store.update({"llm_timeout_seconds": -30})
+    assert store.get().llm_timeout_seconds == 0
+
+
+def test_concurrency_zero_is_still_clamped(store):
+    """The exemption is for the timeout alone. A 0 here would mean a
+    semaphore admitting nobody, which is not a setting anyone wants."""
+    store.update({"llm_max_concurrency": 0})
+    assert store.get().llm_max_concurrency == 1
 
 
 def test_repetition_penalty_is_clamped_to_the_supported_range(store):
@@ -127,7 +146,7 @@ def test_a_bad_value_in_a_saved_file_does_not_stop_startup(tmp_path):
     store = RuntimeSettingsStore(
         Settings(_env_file=None, runtime_settings_file=str(path))
     )
-    assert store.get().llm_timeout_seconds == 120
+    assert store.get().llm_timeout_seconds == 0
 
 
 def test_unknown_keys_in_a_patch_are_ignored(store):
