@@ -146,6 +146,19 @@ export function Management({
           </button>
           <button
             type="button"
+            className={`management-nav-item${view === "team" ? " is-active" : ""}`}
+            onClick={() => {
+              setView("team");
+              setDrawerOpen(false);
+              window.scrollTo({ top: 0 });
+            }}
+            aria-current={view === "team" ? "page" : undefined}
+          >
+            <Users size={15} />
+            צוות
+          </button>
+          <button
+            type="button"
             className={`management-nav-item${view === "analytics" ? " is-active" : ""}`}
             onClick={() => {
               setView("analytics");
@@ -334,10 +347,39 @@ export function Management({
 
       <main
         id="main-content"
-        className={`management-workspace${drawerOpen ? " has-drawer" : ""}${view === "analytics" ? " is-analytics" : ""}`}
+        className={`management-workspace${drawerOpen ? " has-drawer" : ""}${view !== "board" ? " is-page" : ""}`}
       >
         {view === "analytics" ? (
           <ManagerAnalytics overview={overview} />
+        ) : view === "team" ? (
+          <section className="manager-analytics" aria-labelledby="manager-team-title">
+            <header className="manager-analytics-head">
+              <div>
+                <span className="manager-analytics-eyebrow">הצוות שלך</span>
+                <h1 id="manager-team-title">מידע על הצוות</h1>
+                <p>עובדים, תפקידים, סוגי משמרות ואילוצים במקום אחד.</p>
+              </div>
+              <span className="manager-analytics-status">
+                {overview?.employees.length ?? 0} אנשי צוות
+              </span>
+            </header>
+            {overview ? (
+              <TeamPanel
+                employees={overview.employees}
+                shifts={overview.shifts}
+                constraints={overview.availability}
+                stats={overview.stats}
+                dark={theme === "dark"}
+                onAdd={state.addConstraint}
+                onRemove={state.removeConstraint}
+                onSaveProfile={state.saveProfile}
+              />
+            ) : (
+              <div className="manager-analytics-loading" aria-busy="true">
+                טוען את פרטי הצוות…
+              </div>
+            )}
+          </section>
         ) : (
           <Board
             overview={overview}
@@ -531,7 +573,7 @@ export function Management({
   );
 }
 
-type ManagerView = "board" | "analytics";
+type ManagerView = "board" | "team" | "analytics";
 type ManagerSection = "agent" | "requests" | "team" | "overview";
 
 function ManagerAnalytics({

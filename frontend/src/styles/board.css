@@ -1345,7 +1345,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(22rem, 26rem);
 }
 
-.management-workspace.is-analytics {
+.management-workspace.is-page {
   display: block;
   overflow-y: auto;
 }
