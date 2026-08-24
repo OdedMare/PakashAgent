@@ -492,6 +492,9 @@ def build_slots(profile: dict, starts_on: str, ends_on: str) -> List[dict]:
                 "end_time": _bounded(shift.get("end_time")),
                 "headcount": headcount,
                 "required_roles": required_roles,
+                "requires_shift_manager": bool(
+                    shift.get("requires_shift_manager")
+                ),
                 "is_on_call": bool(shift.get("is_on_call")),
             })
         day += datetime.timedelta(days=1)
@@ -663,6 +666,7 @@ def _slot_for_model(
         "end_time": slot["end_time"],
         "headcount": slot["headcount"],
         "required_roles": _role_list(slot.get("required_roles")),
+        "requires_shift_manager": bool(slot.get("requires_shift_manager")),
         "is_on_call": slot["is_on_call"],
     }
     if index is not None:
@@ -804,6 +808,11 @@ def _candidates(profile: dict, slots: List[dict], availability: List[dict]) -> d
             "eligible_shifts": person.get("eligible_shifts") or [],
             "max_weekly_hours": person.get("max_weekly_hours") or 0,
             "is_trainee": bool(person.get("is_trainee")),
+            "is_shift_manager": bool(person.get("is_shift_manager")),
+            "can_train": bool(person.get("can_train")),
+            "exit_pattern": person.get("exit_pattern") or "",
+            "rotation_group": person.get("rotation_group") or "",
+            "notes": person.get("notes") or "",
             "counts_toward_staffing": _counts_toward_staffing(person, profile),
         })
 

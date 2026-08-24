@@ -162,6 +162,14 @@ export function Board({
     () => Array.from(new Set(Object.values(roles).filter(Boolean))).sort(),
     [roles],
   );
+  const shiftManagers = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    for (const row of overview?.employees ?? []) {
+      const name = typeof row.name === "string" ? row.name.trim() : "";
+      if (name) map[name] = Boolean(row.is_shift_manager);
+    }
+    return map;
+  }, [overview?.employees]);
 
   const shiftOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -422,6 +430,7 @@ export function Board({
               constraints={constraints}
               employees={roster}
               roles={roles}
+              shiftManagers={shiftManagers}
               filters={board.filters}
               dark={dark}
               readOnly={schedule.status === "published"}

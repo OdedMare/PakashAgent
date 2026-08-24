@@ -108,3 +108,36 @@ def test_rotation_group_must_match_the_selected_structure():
             "name": "פלוגה", "rotation_mode": "round",
             "first_closure_group": "ג", "first_closure_date": "2026-08-30",
         })
+
+
+def test_exit_pattern_capabilities_and_notes_are_per_employee():
+    repo = _Repo()
+    result = ProfileService(repo).update("team", employees=[{
+        "name": "דנה",
+        "role": "לוחמת חמ״ל",
+        "exit_pattern": "hamshushim",
+        "rotation_group": "ג",
+        "is_shift_manager": True,
+        "can_train": True,
+        "notes": "צריכה לצאת בחמישי מוקדם",
+    }])
+
+    employee = result["employees"][0]
+    assert employee["exit_pattern"] == "hamshushim"
+    assert employee["rotation_group"] == ""
+    assert employee["is_shift_manager"] is True
+    assert employee["can_train"] is True
+    assert employee["notes"] == "צריכה לצאת בחמישי מוקדם"
+
+
+def test_each_employee_rotation_group_is_validated_against_own_pattern():
+    repo = _Repo()
+    result = ProfileService(repo).update("team", employees=[{
+        "name": "דנה", "exit_pattern": "triplet", "rotation_group": "ג",
+    }])
+    assert result["employees"][0]["rotation_group"] == "ג"
+
+    with pytest.raises(AgentError):
+        ProfileService(repo).update("team", employees=[{
+            "name": "דנה", "exit_pattern": "round", "rotation_group": "ג",
+        }])

@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarPlus, Copy, PencilLine, Trash2, X } from "lucide-react";
+import { AlertTriangle, CalendarPlus, CheckCircle2, Copy, GraduationCap, MessageSquareText, PencilLine, ShieldCheck, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { formatDate, hebrewWeekday } from "@/components/Management/Calendar";
@@ -128,7 +128,7 @@ export function ShiftEditor({
   // Re-checked whenever the selection changes. Cheap: it is one arithmetic
   // call on the server with no model behind it.
   useEffect(() => {
-    if (!employee || !shiftName || !slotDate || !slot) return;
+    if (!shiftName || !slotDate || !slot) return;
     onCheck({
       employee,
       shift_name: shiftName,
@@ -216,9 +216,9 @@ export function ShiftEditor({
                     omission: a slot with nobody on it is what the coverage
                     figures and the unfilled warning are about. */}
                 <option value="">— ללא שיבוץ —</option>
-                {employees.map((name) => (
+                {(check?.candidates.length ? check.candidates.map((candidate) => candidate.employee) : employees).map((name) => (
                   <option key={name} value={name}>
-                    {roles[name] ? `${name} · ${roles[name]}` : name}
+                    {candidateOption(name, roles[name], check)}
                   </option>
                 ))}
               </select>
@@ -253,9 +253,38 @@ export function ShiftEditor({
             </label>
           </div>
 
-          {/* The hours are the shift's own, from the vocabulary. Read-only
-              because changing them would change the shift for the whole
-              workplace, which is the interview's job and not this panel's. */}
+          {check?.candidates.length ? (
+            <div className="board-availability" aria-label="זמינות החיילים למשמרת">
+              <div className="board-availability-head">
+                <strong>מי פנוי למשמרת</strong>
+                <span>{check.candidates.filter((candidate) => candidate.available).length} מתוך {check.candidates.length} ללא התראה</span>
+              </div>
+              <div className="board-candidate-list">
+                {check.candidates.map((candidate) => (
+                  <button
+                    type="button"
+                    key={candidate.employee}
+                    className={`board-candidate${candidate.employee === employee ? " is-selected" : ""}${candidate.available ? " is-available" : " is-unavailable"}`}
+                    onClick={() => setEmployee(candidate.employee)}
+                    aria-pressed={candidate.employee === employee}
+                  >
+                    {candidate.available ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
+                    <span className="board-candidate-copy">
+                      <strong>{candidate.employee}</strong>
+                      <small>{candidate.available ? `פנוי/ה · ${formatHours(candidate.hours)} בתקופה` : candidate.reasons.join(" ")}</small>
+                    </span>
+                    {candidate.is_shift_manager ? <span className="board-candidate-badge"><ShieldCheck size={12} /> מפקד/ת</span> : null}
+                    {candidate.can_train ? <span className="board-candidate-badge"><GraduationCap size={12} /> חופף/ת</span> : null}
+                  </button>
+                ))}
+              </div>
+              <small className="board-availability-note">אפשר לבחור גם חייל/ת עם התראה; הסיבה נשארת גלויה וההחלטה בידיך.</small>
+            </div>
+          ) : checking ? <p className="board-availability-loading" role="status">בודק מי פנוי למשמרת…</p> : null}
+
+          {/* The hours are the shift's own, from the vocabulary. This panel
+              edits one assignment; the clearly grouped time controls in the
+              team settings edit the shift type for future schedules. */}
           {slot ? (
             <p className="board-editor-hours">
               {slot.start_time ? (
@@ -285,6 +314,13 @@ export function ShiftEditor({
                 setSlotDate(picked.slot_date);
               }}
             />
+          ) : null}
+
+          {editing?.reason ? (
+            <div className="board-assignment-reason">
+              <MessageSquareText size={16} />
+              <div><strong>למה שובץ/ה כאן</strong><p>{editing.reason}</p></div>
+            </div>
           ) : null}
 
           {/* A reason is optional when filling an empty cell (D18) and
@@ -378,4 +414,14 @@ export function ShiftEditor({
       </div>
     </div>
   );
+}
+
+function candidateOption(name: string, role: string, check: PlacementCheck | null): string {
+  const candidate = check?.candidates.find((row) => row.employee === name);
+  const status = candidate ? (candidate.available ? "פנוי/ה" : "עם התראה") : "";
+  return [name, role, status].filter(Boolean).join(" · ");
+}
+
+function formatHours(hours: number): string {
+  return `${Number.isInteger(hours) ? hours : hours.toFixed(1)} שעות`;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, GripVertical, Hand, Move } from "lucide-react";
+import { AlertTriangle, GripVertical, Hand, Move, ShieldCheck } from "lucide-react";
 
 import { colorStyle } from "@/components/Management/palette";
 import type { Assignment, ScheduleWarning, Slot } from "@/types";
@@ -28,6 +28,7 @@ import type { Assignment, ScheduleWarning, Slot } from "@/types";
 export function ShiftCard({
   assignment,
   role,
+  isShiftManager,
   slot,
   hue,
   dark,
@@ -45,6 +46,7 @@ export function ShiftCard({
 }: {
   assignment: Assignment;
   role: string;
+  isShiftManager: boolean;
   slot: Slot;
   hue: number;
   dark: boolean;
@@ -149,6 +151,11 @@ export function ShiftCard({
             <Hand size={10} />
           </span>
         ) : null}
+        {slot.requires_shift_manager && isShiftManager ? (
+          <span className="board-card-commander" title="מפקד/ת המשמרת">
+            <ShieldCheck size={11} /> מפקד/ת
+          </span>
+        ) : null}
         {alarming ? (
           <span
             className="board-card-alarm"
@@ -162,6 +169,10 @@ export function ShiftCard({
           </span>
         ) : null}
       </div>
+
+      <p className="board-card-reason" title={assignment.reason}>
+        {assignment.reason}
+      </p>
 
       {/* The move handle, as a real button.
           The grip beside it is decoration for a gesture only a mouse can

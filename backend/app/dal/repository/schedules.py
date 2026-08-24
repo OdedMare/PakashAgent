@@ -190,8 +190,8 @@ class ScheduleRepository(RepositoryBase):
                     INSERT INTO shift_slots (
                         id, team_id, schedule_id, shift_name, slot_date,
                         start_time, end_time, headcount, required_roles,
-                        is_on_call
-                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        requires_shift_manager, is_on_call
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     ON CONFLICT (schedule_id, shift_name, slot_date)
                     DO NOTHING
                 """, (
@@ -200,6 +200,7 @@ class ScheduleRepository(RepositoryBase):
                     slot.get("start_time", ""), slot.get("end_time", ""),
                     int(slot.get("headcount", 1)),
                     Jsonb(slot.get("required_roles") or []),
+                    bool(slot.get("requires_shift_manager", False)),
                     bool(slot.get("is_on_call", False)),
                 ))
             connection.execute(

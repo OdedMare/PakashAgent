@@ -4,6 +4,7 @@ import { CalendarOff, Clock3, GripVertical, Pencil, Plus, Repeat2, Trash2, UserR
 import { useMemo, useState } from "react";
 
 import { EMPLOYEE_DRAG_TYPE } from "@/components/Board/dragData";
+import { DateInput } from "@/components/DateInput";
 import type { Constraint, ShiftStats } from "@/types";
 
 import { formatDate } from "./Calendar";
@@ -70,7 +71,6 @@ export function TeamPanel({
   const shiftNames = shifts
     .map((row) => text(row.name))
     .filter((name) => name !== "");
-  const rotationGroups = rotationMode === "triplet" ? ["א", "ב", "ג"] : ["א", "ב"];
   const recurringConstraints = employees.flatMap((person) =>
     (Array.isArray(person.recurring_constraints) ? person.recurring_constraints : [])
       .map((rule, index) => ({ employee: text(person.name), rule: record(rule), index })),
@@ -128,9 +128,13 @@ export function TeamPanel({
                   <span className="roster-name">{name}</span>
                   <span className="roster-role">
                     {text(person?.role) || "ללא תפקיד מוגדר"}
-                    {text(person?.rotation_group) ? ` · ${text(person?.rotation_group)}` : ""}
+                    {person ? ` · ${exitPatternLabel(person)}` : ""}
+                    {text(person?.rotation_group) ? ` ${text(person?.rotation_group)}` : ""}
                     {text(person?.service_type) ? ` · ${SERVICE_TYPE_LABELS[text(person?.service_type)] ?? text(person?.service_type)}` : ""}
                   </span>
+                  {person?.is_shift_manager ? <span className="roster-capability">מפקד/ת משמרת</span> : null}
+                  {person?.can_train ? <span className="roster-capability">מוסמך/ת לחפוף</span> : null}
+                  {text(person?.notes) ? <span className="roster-note">{text(person?.notes)}</span> : null}
                 </span>
                 <span className="roster-load" aria-label="עומס בסידור הנוכחי">
                   <span title="מספר משמרות">{load?.shifts ?? 0} משמרות</span>
@@ -173,7 +177,7 @@ export function TeamPanel({
                 ? employees.find((row) => text(row.name) === editingEmployee)
                 : undefined}
               shiftNames={shiftNames}
-              rotationGroups={rotationGroups}
+              defaultExitPattern={rotationMode}
               onCancel={() => {
                 setAddingEmployee(false);
                 setEditingEmployee(null);
@@ -219,6 +223,7 @@ export function TeamPanel({
                   <span className="roster-role">
                     {text(shift.start_time) || "—"}–{text(shift.end_time) || "—"}
                     {` · ${SHIFT_TYPE_LABELS[text(shift.shift_type)] ?? (Boolean(shift.is_on_call) ? "כוננות" : "רגילה")}`}
+                    {shift.requires_shift_manager ? " · נדרש מפקד/ת" : ""}
                   </span>
                 </span>
                 <span className="roster-load">תקן {shiftHeadcount(shift)}</span>
@@ -398,21 +403,28 @@ export function TeamPanel({
 function EmployeeForm({
   initial,
   shiftNames,
-  rotationGroups,
+  defaultExitPattern,
   onCancel,
   onSubmit,
 }: {
   initial?: Record<string, unknown>;
   shiftNames: string[];
-  rotationGroups: string[];
+  defaultExitPattern: "round" | "triplet";
   onCancel: () => void;
   onSubmit: (employee: Record<string, unknown>) => void;
 }) {
   const [name, setName] = useState(text(initial?.name));
   const [role, setRole] = useState(text(initial?.role));
-  const [rotationGroup, setRotationGroup] = useState(text(initial?.rotation_group) || rotationGroups[0]);
+  const [exitPattern, setExitPattern] = useState(
+    text(initial?.exit_pattern) || defaultExitPattern,
+  );
+  const groups = exitPattern === "triplet" ? ["א", "ב", "ג"] : exitPattern === "round" ? ["א", "ב"] : [];
+  const [rotationGroup, setRotationGroup] = useState(text(initial?.rotation_group) || groups[0] || "");
   const [serviceType, setServiceType] = useState(text(initial?.service_type) || "standard");
   const [countsTowardStaffing, setCountsTowardStaffing] = useState(initial?.counts_toward_staffing !== false);
+  const [isShiftManager, setIsShiftManager] = useState(Boolean(initial?.is_shift_manager));
+  const [canTrain, setCanTrain] = useState(Boolean(initial?.can_train));
+  const [notes, setNotes] = useState(rawText(initial?.notes));
   const initialEligible = Array.isArray(initial?.eligible_shifts)
     ? initial.eligible_shifts.filter((value): value is string => typeof value === "string")
     : shiftNames;
@@ -422,7 +434,7 @@ function EmployeeForm({
     <form className="constraint-form profile-form" onSubmit={(event) => {
       event.preventDefault();
       if (!name.trim()) return;
-      onSubmit({ name: name.trim(), role: role.trim(), eligible_shifts: eligible, rotation_group: rotationGroup, service_type: serviceType, counts_toward_staffing: countsTowardStaffing });
+      onSubmit({ name: name.trim(), role: role.trim(), eligible_shifts: eligible, exit_pattern: exitPattern, rotation_group: rotationGroup, service_type: serviceType, counts_toward_staffing: countsTowardStaffing, is_shift_manager: isShiftManager, can_train: canTrain, notes: notes.trim() });
     }}>
       <label>
         <span>שם *</span>
@@ -434,13 +446,21 @@ function EmployeeForm({
         <input value={role} maxLength={120} onChange={(event) => setRole(event.target.value)} />
       </label>
       <div className="constraint-time-grid">
-        <label><span>סבב/תלתון</span><select value={rotationGroup} onChange={(event) => setRotationGroup(event.target.value)}>{rotationGroups.map((group) => <option key={group}>{group}</option>)}</select></label>
+        <label><span>מבנה יציאות</span><select value={exitPattern} onChange={(event) => {
+          const pattern = event.target.value;
+          setExitPattern(pattern);
+          setRotationGroup(pattern === "triplet" || pattern === "round" ? "א" : "");
+        }}>{Object.entries(EXIT_PATTERN_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        {groups.length ? <label><span>קבוצה</span><select value={rotationGroup} onChange={(event) => setRotationGroup(event.target.value)}>{groups.map((group) => <option key={group}>{group}</option>)}</select></label> : null}
         <label><span>מעמד</span><select value={serviceType} onChange={(event) => {
           setServiceType(event.target.value);
           if (event.target.value === "overlap") setCountsTowardStaffing(false);
         }}><option value="standard">תקן</option><option value="overlap">נחפף/ת</option><option value="reserve">מילואים</option></select></label>
       </div>
       <label className="profile-check"><input type="checkbox" checked={countsTowardStaffing} onChange={(event) => setCountsTowardStaffing(event.target.checked)} /><span>נספר/ת בתקן</span></label>
+      <label className="profile-check"><input type="checkbox" checked={isShiftManager} onChange={(event) => setIsShiftManager(event.target.checked)} /><span>מוסמך/ת כמפקד/ת משמרת</span></label>
+      <label className="profile-check"><input type="checkbox" checked={canTrain} onChange={(event) => setCanTrain(event.target.checked)} /><span>מוסמך/ת לחפוף</span></label>
+      <label><span>הערות לחייל/ת</span><textarea value={notes} maxLength={200} rows={3} onChange={(event) => setNotes(event.target.value)} placeholder="מידע קבוע שכדאי לקחת בחשבון בשיבוץ" /></label>
       {shiftNames.length ? (
         <fieldset className="profile-checkboxes">
           <legend>משמרות שהעובד/ת יכול/ה לבצע</legend>
@@ -479,6 +499,7 @@ function ShiftForm({
   const [onCall, setOnCall] = useState(Boolean(initial?.is_on_call));
   const [shiftType, setShiftType] = useState(text(initial?.shift_type) || (onCall ? "on_call" : "regular"));
   const [purpose, setPurpose] = useState(text(initial?.purpose));
+  const [requiresManager, setRequiresManager] = useState(Boolean(initial?.requires_shift_manager));
 
   return (
     <form className="constraint-form profile-form" onSubmit={(event) => {
@@ -487,6 +508,7 @@ function ShiftForm({
       onSubmit({
         name: name.trim(), start_time: start, end_time: end,
         headcount, shift_type: shiftType, is_on_call: shiftType === "on_call", purpose,
+        requires_shift_manager: requiresManager,
       });
     }}>
       <label>
@@ -494,13 +516,18 @@ function ShiftForm({
         <input value={name} maxLength={120} onChange={(event) => setName(event.target.value)} required readOnly={Boolean(initial)} title={initial ? "שם קיים הוא מזהה קבוע" : undefined} />
         {initial ? <small>השם מקושר ללוחות קיימים ולכן נשאר קבוע.</small> : null}
       </label>
-      <div className="constraint-time-grid">
-        <label><span>התחלה</span><input type="time" value={start} onChange={(event) => setStart(event.target.value)} /></label>
-        <label><span>סיום</span><input type="time" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
-      </div>
+      <fieldset className="profile-time-card">
+        <legend>שעות המשמרת</legend>
+        <div className="constraint-time-grid">
+          <label><span>שעת התחלה</span><input type="time" step={300} value={start} onChange={(event) => setStart(event.target.value)} /></label>
+          <label><span>שעת סיום</span><input type="time" step={300} value={end} onChange={(event) => setEnd(event.target.value)} /></label>
+        </div>
+        <small>אפשר להקליד שעה ישירות. סיום מוקדם מההתחלה מסמן משמרת שחוצה חצות.</small>
+      </fieldset>
       <label><span>סוג משמרת</span><select value={shiftType} onChange={(event) => { setShiftType(event.target.value); setOnCall(event.target.value === "on_call"); }}><option value="regular">רגילה</option><option value="overlap">חפיפה</option><option value="on_call">כוננות</option></select></label>
       <label><span>ייעוד</span><input value={purpose} maxLength={120} onChange={(event) => setPurpose(event.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></label>
       <label><span>תקן בסיסי</span><input type="number" min={1} max={100} value={headcount} onChange={(event) => setHeadcount(Number(event.target.value) || 1)} /></label>
+      <label className="profile-check"><input type="checkbox" checked={requiresManager} onChange={(event) => setRequiresManager(event.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
       <FormActions onCancel={onCancel} ready={Boolean(name.trim())} />
     </form>
   );
@@ -627,10 +654,9 @@ function ConstraintForm({
 
       {duration === "temporary" ? <label>
         <span>תאריך</span>
-        <input
-          type="date"
+        <DateInput
           value={date}
-          onChange={(event) => setDate(event.target.value)}
+          onChange={setDate}
           required
         />
       </label> : <fieldset className="profile-checkboxes"><legend>ימים קבועים</legend>{WEEKDAYS.map((day) => <label key={day}><input type="checkbox" checked={weekdays.includes(day)} onChange={(event) => setWeekdays(event.target.checked ? [...weekdays, day] : weekdays.filter((value) => value !== day))} /><span>{day}</span></label>)}</fieldset>}
@@ -747,6 +773,13 @@ const SERVICE_TYPE_LABELS: Record<string, string> = {
   reserve: "מילואים",
 };
 
+const EXIT_PATTERN_LABELS: Record<string, string> = {
+  round: "סבב א / ב",
+  triplet: "תלתון א / ב / ג",
+  hamshushim: "חמשושים",
+  shushim: "שושים",
+};
+
 const SHIFT_TYPE_LABELS: Record<string, string> = {
   regular: "רגילה",
   overlap: "חפיפה",
@@ -764,6 +797,16 @@ function formatWindow(row: Constraint): string {
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function rawText(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function exitPatternLabel(person: Record<string, unknown>): string {
+  const pattern = text(person.exit_pattern);
+  if (EXIT_PATTERN_LABELS[pattern]) return EXIT_PATTERN_LABELS[pattern];
+  return text(person.rotation_group) === "ג" ? EXIT_PATTERN_LABELS.triplet : EXIT_PATTERN_LABELS.round;
 }
 
 function strings(value: unknown): string[] {

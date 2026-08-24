@@ -13,6 +13,7 @@ import type {
   ScheduleWarning,
   Slot,
 } from "@/types";
+import { displayDate } from "@/components/DateInput";
 
 import type { AgentTouch } from "./agentTouch";
 import { touchKey } from "./agentTouch";
@@ -54,6 +55,7 @@ export function BoardGrid({
   constraints,
   employees,
   roles,
+  shiftManagers,
   filters,
   dark,
   readOnly = false,
@@ -70,6 +72,7 @@ export function BoardGrid({
   employees: string[];
   /** Employee name -> role, for the card's second line. */
   roles: Record<string, string>;
+  shiftManagers: Record<string, boolean>;
   filters: BoardFilters;
   dark: boolean;
   readOnly?: boolean;
@@ -249,6 +252,7 @@ export function BoardGrid({
             cardsFor={cardsFor}
             constraints={constraints}
             roles={roles}
+            shiftManagers={shiftManagers}
             hueOf={hueOf}
             dark={dark}
             filters={filters}
@@ -332,6 +336,7 @@ function BoardRow({
   cardsFor,
   constraints,
   roles,
+  shiftManagers,
   hueOf,
   dark,
   filters,
@@ -356,6 +361,7 @@ function BoardRow({
   cardsFor: (shift: string, date: string) => Assignment[];
   constraints: Constraint[];
   roles: Record<string, string>;
+  shiftManagers: Record<string, boolean>;
   hueOf: (name: string) => number;
   dark: boolean;
   filters: BoardFilters;
@@ -512,6 +518,7 @@ function BoardRow({
                 key={row.id}
                 assignment={row}
                 role={roles[row.employee] ?? ""}
+                isShiftManager={Boolean(shiftManagers[row.employee])}
                 slot={slot}
                 hue={hueOf(row.employee)}
                 dark={dark}
@@ -624,7 +631,5 @@ function touchLabel(origin: AgentTouch["origin"]): string {
 }
 
 function shortDate(iso: string): string {
-  const date = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return iso;
-  return `${date.getDate()}.${date.getMonth() + 1}`;
+  return displayDate(iso).slice(0, 5);
 }

@@ -53,7 +53,7 @@ _MAX_ASKED = 40
 INTERVIEW_TOPICS = (
     {
         "id": "workplace_and_cycle",
-        "question": "מה שם היחידה, האם עובדים בסבב א/ב או בתלתון א/ב/ג, ומי סוגר ראשון ומתי?",
+        "question": "מה שם היחידה ומהן היציאות הכלליות של הצוות, כדי להבין את מחזורי הסגירות?",
     },
     {
         "id": "operating_calendar",
@@ -69,7 +69,7 @@ INTERVIEW_TOPICS = (
     },
     {
         "id": "roster",
-        "question": "מי אנשי הצוות: שם, תפקיד, סבב/תלתון, סטטוס תקן/נחפף/מילואים ואילו משמרות הם יכולים לבצע?",
+        "question": "מי אנשי הצוות: שם, תפקיד, מבנה יציאות אישי (סבב, תלתון, חמשושים או שושים), מעמד, יכולת פיקוד וחפיפה ואילו משמרות הם יכולים לבצע?",
     },
     {
         "id": "constraints",
@@ -145,6 +145,7 @@ _PROFILE_SCHEMA = {
                 },
                 "first_closure_group": {"type": "string"},
                 "first_closure_date": {"type": "string"},
+                "general_exit_schedule": {"type": "string"},
             },
         },
         "employees": {
@@ -177,6 +178,11 @@ _PROFILE_SCHEMA = {
                     },
                     "is_casual": {"type": "boolean"},
                     "rotation_group": {"type": "string"},
+                    "exit_pattern": {
+                        "type": "string",
+                        "enum": ["round", "triplet", "hamshushim", "shushim"],
+                    },
+                    "notes": {"type": "string"},
                     "service_type": {
                         "type": "string",
                         "enum": ["standard", "overlap", "reserve"],
@@ -257,6 +263,7 @@ _PROFILE_SCHEMA = {
                     "is_on_call": {"type": "boolean"},
                     "hour_weight": {"type": "number", "minimum": 0},
                     "fairness_weight": {"type": "number", "minimum": 0},
+                    "requires_shift_manager": {"type": "boolean"},
                     "shift_type": {
                         "type": "string",
                         "enum": ["regular", "overlap", "on_call"],

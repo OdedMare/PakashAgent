@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
+import { DateInput } from "@/components/DateInput";
 import { confirmImport, previewImport } from "@/services/api";
 import type {
   CandidateRule,
@@ -483,13 +484,12 @@ export function ImportSchedule({
                                   </label>
                                   <label>
                                     <span>תאריך</span>
-                                    <input
-                                      type="date"
+                                    <DateInput
                                       value={row.date}
                                       aria-invalid={!row.date}
-                                      onChange={(event) =>
+                                      onChange={(date) =>
                                         updateAssignment(index, rowIndex, {
-                                          date: event.target.value,
+                                          date,
                                         })
                                       }
                                     />
@@ -596,13 +596,12 @@ export function ImportSchedule({
                                   </label>
                                   <label>
                                     <span>תאריך</span>
-                                    <input
-                                      type="date"
+                                    <DateInput
                                       value={row.date}
                                       aria-invalid={!row.date}
-                                      onChange={(event) =>
+                                      onChange={(date) =>
                                         updateConstraint(index, rowIndex, {
-                                          date: event.target.value,
+                                          date,
                                         })
                                       }
                                     />

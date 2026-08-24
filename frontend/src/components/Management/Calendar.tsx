@@ -4,6 +4,7 @@ import { AlertTriangle, Moon, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { Assignment, Constraint, Schedule, Slot } from "@/types";
+import { displayDate } from "@/components/DateInput";
 import { constraintBlocksSlot } from "@/lib/constraints";
 
 import { buildPalette, colorStyle } from "./palette";
@@ -509,7 +510,5 @@ export function isWeekend(iso: string): boolean {
 }
 
 export function formatDate(iso: string): string {
-  const date = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return iso;
-  return `${date.getDate()}.${date.getMonth() + 1}`;
+  return displayDate(iso);
 }

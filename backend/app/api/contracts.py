@@ -177,6 +177,7 @@ class Slot(BaseModel):
     start_time: str = ""
     end_time: str = ""
     headcount: int = 1
+    requires_shift_manager: bool = False
     is_on_call: bool = False
 
 
@@ -578,7 +579,7 @@ class CheckRequest(BaseModel):
     and not as one person in two places at once.
     """
 
-    employee: str = Field(min_length=1, max_length=120)
+    employee: str = Field(default="", max_length=120)
     shift_name: str = Field(min_length=1, max_length=120)
     slot_date: str = Field(min_length=1, max_length=40)
     schedule_id: Optional[str] = None
@@ -609,6 +610,17 @@ class Alternatives(BaseModel):
     slots: List[AlternativeSlot] = []
 
 
+class PlacementCandidate(BaseModel):
+    """One roster option for the selected slot, including why not."""
+
+    employee: str
+    available: bool = True
+    reasons: List[str] = []
+    hours: float = 0.0
+    is_shift_manager: bool = False
+    can_train: bool = False
+
+
 class PlacementCheck(BaseModel):
     """What `bl/placement.py` makes of a proposed placement.
 
@@ -626,6 +638,7 @@ class PlacementCheck(BaseModel):
     warnings: List[Warning] = []
     eligible: bool = True
     alternatives: Alternatives = Alternatives()
+    candidates: List[PlacementCandidate] = []
 
 
 class AssignRequest(BaseModel):

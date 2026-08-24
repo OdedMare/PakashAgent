@@ -16,6 +16,7 @@ from app.bl.audit import (
     CONSECUTIVE,
     load_history,
     DOUBLE_BOOKED,
+    MISSING_COMMANDER,
     MISSING_ROLE,
     OVERSTAFFED,
     OVER_HOURS,
@@ -292,6 +293,24 @@ def test_required_role_is_checked_from_the_shift_staffing_contract():
     missing = _by_code(warnings, MISSING_ROLE)
     assert len(missing) == 1
     assert missing[0]["details"] == {"required_role": "אחראית"}
+
+
+def test_shift_requiring_a_commander_checks_the_employee_capability():
+    shifts = [dict(SHIFTS[1], requires_shift_manager=True)]
+    slots = [{
+        "shift_name": EVENING, "slot_date": "2026-08-17",
+        "requires_shift_manager": True,
+    }]
+    assignments = [_assign("יוסי", EVENING, "2026-08-17")]
+
+    missing = audit(assignments, shifts, [{"name": "יוסי"}], slots=slots)
+    assert len(_by_code(missing, MISSING_COMMANDER)) == 1
+
+    staffed = audit(
+        assignments, shifts,
+        [{"name": "יוסי", "is_shift_manager": True}], slots=slots,
+    )
+    assert _by_code(staffed, MISSING_COMMANDER) == []
 
 
 def test_non_counting_trainee_does_not_fill_or_overstaff_a_slot():

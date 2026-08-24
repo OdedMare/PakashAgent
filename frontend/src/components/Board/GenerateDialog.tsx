@@ -3,6 +3,7 @@
 import { CalendarPlus, CalendarRange, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { DateInput } from "@/components/DateInput";
 import { formatDate, hebrewWeekday } from "@/components/Management/Calendar";
 import type { RequiredAssignment } from "@/types";
 
@@ -133,11 +134,9 @@ export function GenerateDialog({
             <div className="generate-date-fields">
               <label>
                 <span>מתאריך</span>
-                <input
-                  type="date"
+                <DateInput
                   value={startsOn}
-                  onChange={(event) => {
-                    const next = event.target.value;
+                  onChange={(next) => {
                     setStartsOn(next);
                     if (endsOn < next) setEndsOn(next);
                   }}
@@ -147,11 +146,10 @@ export function GenerateDialog({
               <span className="generate-date-connector" aria-hidden="true">עד</span>
               <label>
                 <span>עד תאריך</span>
-                <input
-                  type="date"
+                <DateInput
                   min={startsOn}
                   value={endsOn}
-                  onChange={(event) => setEndsOn(event.target.value)}
+                  onChange={setEndsOn}
                   required
                 />
               </label>

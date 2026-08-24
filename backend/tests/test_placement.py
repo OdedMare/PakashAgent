@@ -174,6 +174,20 @@ def test_a_recorded_constraint_is_reported():
     assert any("לימודים" in text for text in result["reasons"])
 
 
+def test_manual_picker_lists_every_employee_and_explains_unavailability():
+    result = check(
+        _schedule(), PROFILE, "", MORNING, "2026-08-17",
+        availability=[{
+            "employee": YOSSI, "date": "2026-08-17", "shift": "",
+            "available": False, "reason": "לימודים",
+        }],
+    )
+    by_name = {row["employee"]: row for row in result["candidates"]}
+    assert by_name[RON]["available"] is True
+    assert by_name[YOSSI]["available"] is False
+    assert any("לימודים" in reason for reason in by_name[YOSSI]["reasons"])
+
+
 def test_an_ineligible_shift_is_reported_first():
     """Eligibility is not an audit warning, and is reported anyway.
 

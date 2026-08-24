@@ -77,6 +77,16 @@ def check(
     slots = _slots(schedule)
     availability = list(availability or [])
 
+    candidates = employee_options(
+        schedule, profile, shift_name, slot_date, availability,
+        moving_assignment_id,
+    )
+    if not employee:
+        return {
+            "ok": True, "blocking": False, "reasons": [], "warnings": [],
+            "eligible": True, "alternatives": {"employees": [], "slots": []},
+            "candidates": candidates,
+        }
     verdict = _verdict(
         schedule, profile, employee, shift_name, slot_date,
         shifts, employees, slots, availability, moving_assignment_id,
@@ -85,7 +95,45 @@ def check(
         schedule, profile, employee, shift_name, slot_date,
         availability=availability,
         moving_assignment_id=moving_assignment_id,
-    ) if verdict["reasons"] else {"employees": [], "slots": []})
+    ) if verdict["reasons"] else {"employees": [], "slots": []},
+        candidates=candidates)
+
+
+def employee_options(
+    schedule: dict,
+    profile: dict,
+    shift_name: str,
+    slot_date: str,
+    availability: Optional[List[dict]] = None,
+    moving_assignment_id: str = "",
+) -> List[dict]:
+    """Every roster member for a manual picker, with a concrete why-not."""
+    shift_name = _text(shift_name)
+    slot_date = _iso(slot_date)
+    availability = list(availability or [])
+    load = _hours_by_employee(schedule, profile)
+    options = []
+    for person in _employees(profile):
+        name = _text(person.get("name"))
+        if not name:
+            continue
+        verdict = _verdict(
+            schedule, profile, name, shift_name, slot_date,
+            _shifts(profile), _employees(profile), _slots(schedule),
+            availability, moving_assignment_id,
+        )
+        options.append({
+            "employee": name,
+            "available": verdict["ok"],
+            "reasons": verdict["reasons"],
+            "hours": load.get(name, 0.0),
+            "is_shift_manager": bool(person.get("is_shift_manager")),
+            "can_train": bool(person.get("can_train")),
+        })
+    options.sort(key=lambda item: (
+        not item["available"], item["hours"], item["employee"]
+    ))
+    return options
 
 
 def _verdict(
@@ -471,4 +519,4 @@ def _text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-__all__ = ["check", "suggest_alternatives"]
+__all__ = ["check", "employee_options", "suggest_alternatives"]

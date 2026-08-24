@@ -291,5 +291,5 @@ function describeShift(iso: string, shift: string): string {
 function formatDate(iso: string): string {
   const date = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(date.getTime())) return iso;
-  return `${date.getDate()}.${date.getMonth() + 1}`;
+  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`;
 }

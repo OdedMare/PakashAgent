@@ -48,6 +48,7 @@ export interface WorkplaceProfile {
     rotation_mode?: "round" | "triplet";
     first_closure_group?: string;
     first_closure_date?: string;
+    general_exit_schedule?: string;
   };
   employees?: unknown[];
   shifts?: unknown[];
@@ -193,6 +194,7 @@ export interface Slot {
   start_time: string;
   end_time: string;
   headcount: number;
+  requires_shift_manager: boolean;
   is_on_call: boolean;
 }
 
@@ -320,6 +322,16 @@ export interface PlacementCheck {
   warnings: ScheduleWarning[];
   eligible: boolean;
   alternatives: Alternatives;
+  candidates: PlacementCandidate[];
+}
+
+export interface PlacementCandidate {
+  employee: string;
+  available: boolean;
+  reasons: string[];
+  hours: number;
+  is_shift_manager: boolean;
+  can_train: boolean;
 }
 
 /** A recorded availability constraint.

@@ -31,6 +31,7 @@ UNAVAILABLE = "unavailable"
 UNFILLED = "unfilled"
 OVERSTAFFED = "overstaffed"
 MISSING_ROLE = "missing_role"
+MISSING_COMMANDER = "missing_commander"
 
 # Severity is advice about presentation, not authority. `warning` is a thing
 # the manager should look at; `notice` is a thing worth mentioning. Neither
@@ -981,6 +982,11 @@ def _staffing(
 
     filled: Dict[tuple, int] = {}
     filled_roles: Dict[tuple, set] = {}
+    commanded = {
+        (row["date"], row["shift"])
+        for row in rows
+        if employee_index.get(row["employee"], {}).get("is_shift_manager")
+    }
     for row in counted_rows:
         key = (row["date"], row["shift"])
         filled[key] = filled.get(key, 0) + 1
@@ -1038,7 +1044,34 @@ def _staffing(
                 date=date, shift=shift_name,
                 details={"required_role": role},
             ))
+        if _requires_shift_manager(shifts, shift_name, date, slots) \
+                and (date, shift_name) not in commanded:
+            warnings.append(_warning(
+                MISSING_COMMANDER, SEVERITY_WARNING,
+                "במשמרת %s בתאריך %s חסר/ה מפקד/ת משמרת מוסמך/ת."
+                % (shift_name, date),
+                date=date, shift=shift_name,
+                details={"requires_shift_manager": True},
+            ))
     return warnings
+
+
+def _requires_shift_manager(
+    shifts: List[dict], shift_name: str, date: str,
+    slots: Optional[List[dict]] = None,
+) -> bool:
+    for slot in slots or []:
+        if not isinstance(slot, dict):
+            continue
+        slot_date = _text(slot.get("slot_date")) or _iso_date(
+            slot.get("slot_date")
+        )
+        if slot_date == date and _text(slot.get("shift_name")) == shift_name:
+            return bool(slot.get("requires_shift_manager"))
+    for shift in shifts or []:
+        if isinstance(shift, dict) and _text(shift.get("name")) == shift_name:
+            return bool(shift.get("requires_shift_manager"))
+    return False
 
 
 def _required_roles_for(
@@ -1218,5 +1251,6 @@ __all__ = [
     "audit", "personal_summary", "fairness", "load_history", "shift_stats",
     "OVER_HOURS", "CONSECUTIVE", "SHORT_REST", "DOUBLE_BOOKED",
     "UNAVAILABLE", "UNFILLED", "OVERSTAFFED", "MISSING_ROLE",
+    "MISSING_COMMANDER",
     "SEVERITY_WARNING", "SEVERITY_NOTICE",
 ]

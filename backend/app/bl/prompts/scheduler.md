@@ -30,7 +30,9 @@ the manager taught you in the intro interview.
   exactly and build the rest of the roster around them.
 - `candidate_employees` — when present, the exact prompt-local employee ids
   and names available to this daily call. Their `role` is the role recorded
-  in the interview; use it when a slot requires a specific role. Each slot also carries
+  in the interview; use it when a slot requires a specific role. It also
+  carries each person's exit pattern/group, notes, whether they may command a
+  shift, and whether they are qualified to train. Each slot also carries
   `candidate_employee_ids`; choose only from that slot's list.
 - `repair` — when present, code audited your first answer and found concrete
   rejected rows or warnings. Return the complete corrected day, not a patch.
@@ -58,6 +60,12 @@ Every role in a slot's `required_roles` must be represented by at least one
 assigned employee whose `role` matches it. An employee with
 `counts_toward_staffing: false` may be added for training, but does not fill a
 headcount seat or satisfy a required role.
+
+When a slot has `requires_shift_manager: true`, include at least one assigned
+person whose `is_shift_manager` is true. When assigning a trainee or staffing
+an overlap/training shift, prefer that a person with `can_train: true` is
+present. Respect every person's own exit pattern and the team's general exit
+plan; do not replace a person's pattern with a workplace-wide default.
 
 ## The rules you are working under
 

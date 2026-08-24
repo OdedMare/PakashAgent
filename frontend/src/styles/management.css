@@ -833,6 +833,7 @@
 .proposal-reason input,
 .constraint-form input,
 .constraint-form select,
+.constraint-form textarea,
 .modal-field input {
   flex: 1;
   font: inherit;
@@ -847,6 +848,7 @@
 .agent-composer input:focus-visible,
 .constraint-form input:focus-visible,
 .constraint-form select:focus-visible,
+.constraint-form textarea:focus-visible,
 .modal-field input:focus-visible {
   outline: none;
   box-shadow: var(--focus);
@@ -962,6 +964,26 @@
   white-space: nowrap;
 }
 
+.roster-capability {
+  width: fit-content;
+  margin-top: 0.18rem;
+  padding: 0.1rem 0.4rem;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.roster-note {
+  max-width: 24rem;
+  margin-top: 0.22rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  white-space: normal;
+}
+
 .roster-load {
   display: flex;
   flex-direction: column;
@@ -1060,6 +1082,29 @@
   padding: 0.55rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+}
+
+.profile-time-card {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.65rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.profile-time-card legend {
+  padding-inline: 0.25rem;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.profile-time-card > small {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
 }
 
 .profile-checkboxes legend {

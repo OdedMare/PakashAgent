@@ -40,7 +40,13 @@ class ProfileService:
             offered_workplace.update(workplace)
             updated["workplace"] = _workplace(offered_workplace)
         if employees is not None:
-            edited = _employees(employees)
+            workplace_for_defaults = updated.get("workplace") or {}
+            edited = _employees(
+                employees,
+                default_exit_pattern=_text(
+                    workplace_for_defaults.get("rotation_mode")
+                ) or "round",
+            )
             _keep_existing_names(current.get("employees"), edited, "עובד")
             updated["employees"] = edited
         if shifts is not None:
@@ -136,6 +142,11 @@ def _employee_item(item: dict) -> dict:
         "name": item.get("name"),
         "role": item.get("role") or "",
         "eligible_shifts": item.get("eligible_shifts") or [],
+        "exit_pattern": item.get("exit_pattern") or "round",
+        "rotation_group": item.get("rotation_group") or "",
+        "is_shift_manager": bool(item.get("is_shift_manager")),
+        "can_train": bool(item.get("can_train")),
+        "notes": item.get("notes") or "",
     }
 
 
@@ -146,18 +157,29 @@ def _shift_item(item: dict) -> dict:
         "end_time": item.get("end_time") or "",
         "headcount": item.get("headcount") or 1,
         "is_on_call": bool(item.get("is_on_call")),
+        "requires_shift_manager": bool(item.get("requires_shift_manager")),
     }
 
 
-def _employees(rows: Any) -> List[dict]:
+def _employees(rows: Any, default_exit_pattern: str = "round") -> List[dict]:
     result = _named_rows(rows, "עובד")
     for row in result:
         service_type = _text(row.get("service_type")) or "standard"
         if service_type not in ("standard", "overlap", "reserve"):
             raise AgentError("סוג כוח האדם אינו תקין")
         row["service_type"] = service_type
-        row["rotation_group"] = _text(row.get("rotation_group"))
+        exit_pattern = _text(row.get("exit_pattern")) or default_exit_pattern
+        if exit_pattern not in ("round", "triplet", "hamshushim", "shushim"):
+            raise AgentError("מבנה היציאות של איש הצוות אינו תקין")
+        row["exit_pattern"] = exit_pattern
+        row["rotation_group"] = (
+            _text(row.get("rotation_group"))
+            if exit_pattern in ("round", "triplet") else ""
+        )
         row["role"] = _text(row.get("role"))
+        row["notes"] = _text(row.get("notes"))
+        row["is_shift_manager"] = bool(row.get("is_shift_manager"))
+        row["can_train"] = bool(row.get("can_train"))
         row["eligible_shifts"] = _text_list(row.get("eligible_shifts") or [])
         row["is_trainee"] = service_type == "overlap"
         row["is_casual"] = service_type == "reserve"
@@ -210,6 +232,9 @@ def _shifts(rows: Any) -> List[dict]:
         row["shift_type"] = shift_type
         row["purpose"] = _text(row.get("purpose"))
         row["is_on_call"] = shift_type == "on_call"
+        row["requires_shift_manager"] = bool(
+            row.get("requires_shift_manager")
+        )
     return result
 
 
@@ -238,6 +263,9 @@ def _workplace(value: Any) -> dict:
     result["rotation_mode"] = mode
     result["first_closure_group"] = first_group
     result["first_closure_date"] = first_date
+    result["general_exit_schedule"] = _text(
+        result.get("general_exit_schedule")
+    )
     return result
 
 
@@ -265,26 +293,26 @@ def _validate_first_profile(profile: dict) -> None:
     workplace = profile.get("workplace") or {}
     if not _text(workplace.get("name")):
         raise AgentError("יש להזין שם יחידה")
-    if not _text(workplace.get("first_closure_date")):
-        raise AgentError("יש להזין את תאריך הסגירה הראשונה")
     if not profile.get("employees"):
         raise AgentError("יש להוסיף לפחות איש צוות אחד")
     if any(
-        not _text(person.get("rotation_group"))
+        person.get("exit_pattern") in ("round", "triplet")
+        and not _text(person.get("rotation_group"))
         for person in profile.get("employees") or []
     ):
-        raise AgentError("יש לבחור סבב או תלתון לכל איש צוות")
+        raise AgentError("יש לבחור קבוצת סבב או תלתון לכל איש צוות מתאים")
     if not profile.get("shifts"):
         raise AgentError("יש להוסיף לפחות סוג משמרת אחד")
 
 
 def _validate_rotation_groups(profile: dict) -> None:
-    workplace = profile.get("workplace") or {}
-    groups = {"א", "ב"} if workplace.get("rotation_mode") != "triplet" \
-        else {"א", "ב", "ג"}
     for person in profile.get("employees") or []:
+        pattern = _text(person.get("exit_pattern")) or _text(
+            (profile.get("workplace") or {}).get("rotation_mode")
+        ) or "round"
+        groups = {"א", "ב", "ג"} if pattern == "triplet" else {"א", "ב"}
         group = _text(person.get("rotation_group"))
-        if group and group not in groups:
+        if pattern in ("round", "triplet") and group and group not in groups:
             raise AgentError("קבוצת הסבב של %s אינה מתאימה למבנה היחידה" % (
                 _text(person.get("name")) or "איש הצוות"
             ))

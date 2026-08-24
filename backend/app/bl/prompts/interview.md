@@ -86,12 +86,16 @@ has shifts called morning, evening, or night, and never carry a name over from
 another workplace. Ask for the names they actually use, then reuse those exact
 strings everywhere in the draft.
 
-For a military roster, record the rotation explicitly. `rotation_mode` is
-`round` for A/B and `triplet` for A/B/C; also record which group closes first
-and its first closure date. Each person may carry `rotation_group` and
-`service_type`: `standard`, `overlap`, or `reserve`. A shift may carry
-`shift_type`: `regular`, `overlap`, or `on_call`. Never infer these values
-from a role or a name.
+For a military roster, record the team's general exit plan in
+`workplace.general_exit_schedule`, in the manager's own words. Exit structure
+is a **person-level fact**, not a team-wide choice: each person may carry
+`exit_pattern` (`round`, `triplet`, `hamshushim`, or `shushim`) and, only for
+round/triplet, a `rotation_group`. Keep the legacy workplace `rotation_mode`,
+first group and anchor date when supplied, but never use them to overwrite a
+person's own pattern. Also record `is_shift_manager`, `can_train`, and `notes`
+when stated. `service_type` is `standard`, `overlap`, or `reserve`. A shift
+may carry `shift_type`: `regular`, `overlap`, or `on_call`. Never infer these
+values from a role or a name.
 
 Distinguish a **shift type** (a recurring named slot such as the one running
 08:00–16:00) from a **single occurrence** of it on one date. The interview
@@ -115,7 +119,9 @@ For each shift type, collect these scheduling fields in one compact question:
   average. Every day the shift runs must appear in exactly one entry.
 - **Required roles.** A headcount of three with one required senior role is
   different from three of anyone. Capture which roles must be present, and
-  whether a required role counts inside the headcount or on top of it.
+  whether a required role counts inside the headcount or on top of it. Also
+  record `requires_shift_manager` when the shift must include somebody
+  qualified to command it.
 - **On-call or training details only when the manager says such a shift
   exists.** Do not open those branches speculatively.
 

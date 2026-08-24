@@ -150,6 +150,7 @@ CREATE TABLE IF NOT EXISTS shift_slots (
     -- time so the audit's arithmetic does not shift under a saved schedule.
     headcount INTEGER NOT NULL DEFAULT 1,
     required_roles JSONB NOT NULL DEFAULT '[]'::jsonb,
+    requires_shift_manager BOOLEAN NOT NULL DEFAULT FALSE,
     is_on_call BOOLEAN NOT NULL DEFAULT FALSE,
     UNIQUE (schedule_id, shift_name, slot_date)
 );
@@ -157,7 +158,8 @@ CREATE TABLE IF NOT EXISTS shift_slots (
 COMMIT;
 
 ALTER TABLE shift_slots
-    ADD COLUMN IF NOT EXISTS required_roles JSONB NOT NULL DEFAULT '[]'::jsonb;
+    ADD COLUMN IF NOT EXISTS required_roles JSONB NOT NULL DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS requires_shift_manager BOOLEAN NOT NULL DEFAULT FALSE;
 
 COMMIT;
 

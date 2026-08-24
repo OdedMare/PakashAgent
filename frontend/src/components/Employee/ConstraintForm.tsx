@@ -3,6 +3,7 @@
 import { CalendarPlus, Check, Clock3, X } from "lucide-react";
 import { useState } from "react";
 
+import { DateInput } from "@/components/DateInput";
 import type { ConstraintRequestRow } from "@/types";
 
 /** Ask not to be scheduled — and see what happened to previous asks.
@@ -70,11 +71,10 @@ export function ConstraintForm({
 
       <form className="constraint-form" onSubmit={submit}>
         <label htmlFor="constraint-date">תאריך</label>
-        <input
+        <DateInput
           id="constraint-date"
-          type="date"
           value={date}
-          onChange={(event) => setDate(event.target.value)}
+          onChange={setDate}
           disabled={busy}
           required
         />
@@ -190,5 +190,5 @@ function StatusBadge({ status }: { status: ConstraintRequestRow["status"] }) {
 function formatDate(iso: string): string {
   const date = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(date.getTime())) return iso;
-  return `${date.getDate()}.${date.getMonth() + 1}`;
+  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`;
 }

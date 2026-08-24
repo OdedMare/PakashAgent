@@ -2,7 +2,6 @@
 
 import {
   CalendarClock,
-  Check,
   Clock3,
   Plus,
   Save,
@@ -14,6 +13,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { DateInput } from "@/components/DateInput";
 import { updateProfile } from "@/services/api";
 import type { TeamView, WorkplaceProfile } from "@/types";
 
@@ -27,6 +27,12 @@ const SHIFT_TYPES = {
   regular: "רגילה",
   overlap: "חפיפה",
   on_call: "כוננות",
+} as const;
+const EXIT_PATTERNS = {
+  round: "סבב א / ב",
+  triplet: "תלתון א / ב / ג",
+  hamshushim: "חמשושים",
+  shushim: "שושים",
 } as const;
 
 type Row = Record<string, unknown>;
@@ -50,7 +56,7 @@ export function ManualSetup({
       ? strings(initialWorkplace.operating_days)
       : DAYS,
   );
-  const [rotationMode, setRotationMode] = useState<"round" | "triplet">(
+  const [rotationMode] = useState<"round" | "triplet">(
     initialWorkplace.rotation_mode === "triplet" ? "triplet" : "round",
   );
   const [firstClosureGroup, setFirstClosureGroup] = useState(
@@ -58,6 +64,9 @@ export function ManualSetup({
   );
   const [firstClosureDate, setFirstClosureDate] = useState(
     text(initialWorkplace.first_closure_date),
+  );
+  const [generalExitSchedule, setGeneralExitSchedule] = useState(
+    inputText(initialWorkplace.general_exit_schedule),
   );
   const [employees, setEmployees] = useState<Row[]>(rows(profile.employees));
   const [shifts, setShifts] = useState<Row[]>(rows(profile.shifts));
@@ -69,7 +78,6 @@ export function ManualSetup({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const groups = rotationMode === "round" ? ["א", "ב"] : ["א", "ב", "ג"];
   const shiftNames = useMemo(
     () => shifts.map((shift) => text(shift.name)).filter(Boolean),
     [shifts],
@@ -82,9 +90,7 @@ export function ManualSetup({
     () => new Set(rows(profile.shifts).map((row) => text(row.name))),
     [profile.shifts],
   );
-  const ready = Boolean(
-    unitName.trim() && firstClosureDate && employees.some(named) && shifts.some(named),
-  );
+  const ready = Boolean(unitName.trim() && employees.some(named) && shifts.some(named));
 
   const save = async () => {
     if (!ready || busy) return;
@@ -100,15 +106,22 @@ export function ManualSetup({
           rotation_mode: rotationMode,
           first_closure_group: firstClosureGroup,
           first_closure_date: firstClosureDate,
+          general_exit_schedule: generalExitSchedule.trim(),
         },
         employees: employees.filter(named).map((person) => ({
           ...person,
           name: text(person.name),
           role: text(person.role),
-          rotation_group: text(person.rotation_group) || groups[0],
+          exit_pattern: exitPattern(person),
+          rotation_group: rotationGroups(exitPattern(person)).includes(text(person.rotation_group))
+            ? text(person.rotation_group)
+            : rotationGroups(exitPattern(person))[0] ?? "",
           service_type: text(person.service_type) || "standard",
           counts_toward_staffing: person.counts_toward_staffing !== false,
           eligible_shifts: strings(person.eligible_shifts),
+          is_shift_manager: Boolean(person.is_shift_manager),
+          can_train: Boolean(person.can_train),
+          notes: text(person.notes),
         })),
         shifts: shifts.filter(named).map((shift) => ({
           ...shift,
@@ -119,6 +132,7 @@ export function ManualSetup({
           end_time: text(shift.end_time),
           days: strings(shift.days),
           headcount: number(shift.headcount, headcount(shift)),
+          requires_shift_manager: Boolean(shift.requires_shift_manager),
         })),
         rules: rules
           .filter((rule) => text(rule.text))
@@ -131,7 +145,7 @@ export function ManualSetup({
           max_consecutive_days: maxConsecutiveDays,
           min_rest_hours: minRestHours,
         },
-        summary: `יחידה צבאית במבנה ${rotationMode === "round" ? "סבב א/ב" : "תלתון א/ב/ג"}`,
+        summary: "יחידה צבאית עם מבנה יציאות אישי לכל חייל/ת",
       });
       await onDone();
     } catch (reason) {
@@ -164,7 +178,7 @@ export function ManualSetup({
       {error ? <div className="manual-error" role="alert">{error}</div> : null}
 
       <main id="main-content" className="manual-sections">
-        <SetupSection icon={<CalendarClock />} title="מבנה היחידה והסבב" hint="העוגן שממנו המערכת יודעת מי סוגר ומתי.">
+        <SetupSection icon={<CalendarClock />} title="היחידה והיציאות הכלליות" hint="מתארים כאן את תמונת היציאות של הצוות; את המבנה האישי מגדירים לכל חייל/ת בנפרד.">
           <div className="manual-grid three">
             <Field label="שם היחידה *">
               <input value={unitName} onChange={(event) => setUnitName(event.target.value)} maxLength={120} required />
@@ -174,45 +188,35 @@ export function ManualSetup({
                 <option value="שבוע">שבוע</option><option value="שבועיים">שבועיים</option><option value="חודש">חודש</option>
               </select>
             </Field>
-            <Field label="מבנה יציאות">
-              <select value={rotationMode} onChange={(event) => {
-                const mode = event.target.value as "round" | "triplet";
-                setRotationMode(mode);
-                if (mode === "round" && firstClosureGroup === "ג") setFirstClosureGroup("א");
-              }}>
-                <option value="round">סבב א / ב</option>
-                <option value="triplet">תלתון א / ב / ג</option>
-              </select>
-            </Field>
-            <Field label="מי סוגר ראשון">
+            <Field label="קבוצת עוגן (לסבבים)">
               <select value={firstClosureGroup} onChange={(event) => setFirstClosureGroup(event.target.value)}>
-                {groups.map((group) => <option key={group} value={group}>{group}</option>)}
+                {(rotationMode === "triplet" ? ["א", "ב", "ג"] : ["א", "ב"]).map((group) => <option key={group} value={group}>{group}</option>)}
               </select>
             </Field>
-            <Field label="תאריך הסגירה הראשונה *">
-              <input type="date" value={firstClosureDate} onChange={(event) => setFirstClosureDate(event.target.value)} required />
+            <Field label="תאריך עוגן (רשות)">
+              <DateInput value={firstClosureDate} onChange={setFirstClosureDate} />
             </Field>
           </div>
-          <div className="rotation-rail" aria-label="סדר הקבוצות">
-            {groups.map((group) => (
-              <span key={group} className={group === firstClosureGroup ? "is-first" : ""}>
-                {group === firstClosureGroup ? <Check size={14} /> : null} {rotationMode === "round" ? "סבב" : "תלתון"} {group}
-              </span>
-            ))}
-          </div>
+          <Field label="היציאות הכלליות של הצוות">
+            <textarea value={generalExitSchedule} onChange={(event) => setGeneralExitSchedule(event.target.value)} rows={3} placeholder="לדוגמה: השבוע צוות א סוגר; חמשושים יוצאים בחמישי ב־10:00 וחוזרים בראשון ב־08:00" />
+          </Field>
           <CheckboxGrid label="ימי פעילות" values={DAYS} selected={operatingDays} onChange={setOperatingDays} />
         </SetupSection>
 
-        <SetupSection icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים קבוצה, מעמד והאם הוא נספר בתקן.">
+        <SetupSection icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">
           <div className="manual-list">
             {employees.map((person, index) => (
               <article className="manual-row" key={`employee-${index}`}>
                 <div className="manual-grid employee-grid">
-                  <Field label="שם *"><input value={text(person.name)} readOnly={originalEmployees.has(text(person.name))} onChange={(e) => edit(setEmployees, index, "name", e.target.value)} /></Field>
-                  <Field label="תפקיד"><input value={text(person.role)} onChange={(e) => edit(setEmployees, index, "role", e.target.value)} /></Field>
-                  <Field label={rotationMode === "round" ? "סבב" : "תלתון"}>
-                    <select value={text(person.rotation_group) || groups[0]} onChange={(e) => edit(setEmployees, index, "rotation_group", e.target.value)}>{groups.map((group) => <option key={group}>{group}</option>)}</select>
+                  <Field label="שם *"><input value={inputText(person.name)} readOnly={originalEmployees.has(text(person.name))} onChange={(e) => edit(setEmployees, index, "name", e.target.value)} /></Field>
+                  <Field label="תפקיד"><input value={inputText(person.role)} onChange={(e) => edit(setEmployees, index, "role", e.target.value)} /></Field>
+                  <Field label="מבנה יציאות">
+                    <select value={exitPattern(person)} onChange={(e) => {
+                      edit(setEmployees, index, "exit_pattern", e.target.value);
+                      edit(setEmployees, index, "rotation_group", rotationGroups(e.target.value)[0] ?? "");
+                    }}>{Object.entries(EXIT_PATTERNS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
                   </Field>
+                  {rotationGroups(exitPattern(person)).length ? <Field label="קבוצה"><select value={text(person.rotation_group) || rotationGroups(exitPattern(person))[0]} onChange={(e) => edit(setEmployees, index, "rotation_group", e.target.value)}>{rotationGroups(exitPattern(person)).map((group) => <option key={group}>{group}</option>)}</select></Field> : null}
                   <Field label="מעמד">
                     <select value={text(person.service_type) || "standard"} onChange={(e) => {
                       edit(setEmployees, index, "service_type", e.target.value);
@@ -222,15 +226,18 @@ export function ManualSetup({
                 </div>
                 <div className="manual-row-foot">
                   <label className="manual-check"><input type="checkbox" checked={person.counts_toward_staffing !== false} onChange={(e) => edit(setEmployees, index, "counts_toward_staffing", e.target.checked)} /><span>נספר/ת בתקן</span></label>
+                  <label className="manual-check"><input type="checkbox" checked={Boolean(person.is_shift_manager)} onChange={(e) => edit(setEmployees, index, "is_shift_manager", e.target.checked)} /><span>מוסמך/ת כמפקד/ת משמרת</span></label>
+                  <label className="manual-check"><input type="checkbox" checked={Boolean(person.can_train)} onChange={(e) => edit(setEmployees, index, "can_train", e.target.checked)} /><span>מוסמך/ת לחפוף</span></label>
                   <div className="manual-shift-picks" aria-label="משמרות מותרות">
                     {shiftNames.map((shift) => <label key={shift}><input type="checkbox" checked={strings(person.eligible_shifts).includes(shift)} onChange={(e) => toggleRowList(setEmployees, index, "eligible_shifts", shift, e.target.checked)} /><span>{shift}</span></label>)}
                   </div>
                   <button type="button" className="icon-button subtle" aria-label="מחיקת איש צוות" disabled={originalEmployees.has(text(person.name))} onClick={() => setEmployees((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
                 </div>
+                <Field label="הערות לחייל/ת"><textarea value={inputText(person.notes)} onChange={(e) => edit(setEmployees, index, "notes", e.target.value)} rows={2} placeholder="מידע קבוע שכדאי לקחת בחשבון בשיבוץ" /></Field>
               </article>
             ))}
           </div>
-          <button type="button" className="ghost-button" onClick={() => setEmployees((current) => [...current, { name: "", role: "", rotation_group: groups[0], service_type: "standard", counts_toward_staffing: true, eligible_shifts: [] }])}><Plus size={16} /> הוספת איש/אשת צוות</button>
+          <button type="button" className="ghost-button" onClick={() => setEmployees((current) => [...current, { name: "", role: "", exit_pattern: "round", rotation_group: "א", service_type: "standard", counts_toward_staffing: true, eligible_shifts: [], is_shift_manager: false, can_train: false, notes: "" }])}><Plus size={16} /> הוספת איש/אשת צוות</button>
         </SetupSection>
 
         <SetupSection icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה.">
@@ -238,13 +245,14 @@ export function ManualSetup({
             {shifts.map((shift, index) => (
               <article className="manual-row" key={`shift-${index}`}>
                 <div className="manual-grid shift-grid">
-                  <Field label="שם המשמרת *"><input value={text(shift.name)} readOnly={originalShifts.has(text(shift.name))} onChange={(e) => edit(setShifts, index, "name", e.target.value)} /></Field>
+                  <Field label="שם המשמרת *"><input value={inputText(shift.name)} readOnly={originalShifts.has(text(shift.name))} onChange={(e) => edit(setShifts, index, "name", e.target.value)} /></Field>
                   <Field label="סוג"><select value={text(shift.shift_type) || (shift.is_on_call ? "on_call" : "regular")} onChange={(e) => edit(setShifts, index, "shift_type", e.target.value)}>{Object.entries(SHIFT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
-                  <Field label="התחלה"><input type="time" value={text(shift.start_time)} onChange={(e) => edit(setShifts, index, "start_time", e.target.value)} /></Field>
-                  <Field label="סיום"><input type="time" value={text(shift.end_time)} onChange={(e) => edit(setShifts, index, "end_time", e.target.value)} /></Field>
+                  <Field label="התחלה"><input type="time" step={300} value={text(shift.start_time)} onChange={(e) => edit(setShifts, index, "start_time", e.target.value)} /></Field>
+                  <Field label="סיום"><input type="time" step={300} value={text(shift.end_time)} onChange={(e) => edit(setShifts, index, "end_time", e.target.value)} /></Field>
                   <Field label="תקן"><input type="number" min={1} max={100} value={number(shift.headcount, headcount(shift))} onChange={(e) => edit(setShifts, index, "headcount", Number(e.target.value) || 1)} /></Field>
-                  <Field label="ייעוד"><input value={text(shift.purpose)} onChange={(e) => edit(setShifts, index, "purpose", e.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></Field>
+                  <Field label="ייעוד"><input value={inputText(shift.purpose)} onChange={(e) => edit(setShifts, index, "purpose", e.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></Field>
                 </div>
+                <label className="manual-check"><input type="checkbox" checked={Boolean(shift.requires_shift_manager)} onChange={(e) => edit(setShifts, index, "requires_shift_manager", e.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
                 <CheckboxGrid label="ימים" values={DAYS} selected={strings(shift.days)} onChange={(value) => edit(setShifts, index, "days", value)} />
                 <button type="button" className="icon-button subtle manual-delete" aria-label="מחיקת סוג משמרת" disabled={originalShifts.has(text(shift.name))} onClick={() => setShifts((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
               </article>
@@ -257,7 +265,7 @@ export function ManualSetup({
           <div className="manual-list compact">
             {rules.map((rule, index) => (
               <div className="manual-rule" key={index}>
-                <input aria-label="ניסוח הכלל" value={text(rule.text)} onChange={(e) => edit(setRules, index, "text", e.target.value)} placeholder="לדוגמה: אין לשבץ חפיפה מיד אחרי לילה" />
+                <input aria-label="ניסוח הכלל" value={inputText(rule.text)} onChange={(e) => edit(setRules, index, "text", e.target.value)} placeholder="לדוגמה: אין לשבץ חפיפה מיד אחרי לילה" />
                 <select aria-label="עוצמת הכלל" value={rule.priority === "soft" ? "soft" : "hard"} onChange={(e) => edit(setRules, index, "priority", e.target.value)}><option value="hard">קשיח</option><option value="soft">העדפה</option></select>
                 <button type="button" className="icon-button subtle" aria-label="מחיקת כלל" onClick={() => setRules((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
               </div>
@@ -307,6 +315,16 @@ function record(value: unknown): Row { return value && typeof value === "object"
 function rows(value: unknown): Row[] { return Array.isArray(value) ? value.filter((item): item is Row => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : []; }
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : []; }
 function text(value: unknown): string { return typeof value === "string" ? value.trim() : ""; }
+function inputText(value: unknown): string { return typeof value === "string" ? value : ""; }
+function exitPattern(row: Row): keyof typeof EXIT_PATTERNS {
+  const value = text(row.exit_pattern);
+  return value in EXIT_PATTERNS ? value as keyof typeof EXIT_PATTERNS : "round";
+}
+function rotationGroups(pattern: string): string[] {
+  if (pattern === "triplet") return ["א", "ב", "ג"];
+  if (pattern === "round") return ["א", "ב"];
+  return [];
+}
 function number(value: unknown, fallback: number): number { return typeof value === "number" && Number.isFinite(value) ? value : fallback; }
 function named(row: Row): boolean { return Boolean(text(row.name)); }
 function headcount(shift: Row): number {
