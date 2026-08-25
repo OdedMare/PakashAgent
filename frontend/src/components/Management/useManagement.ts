@@ -8,10 +8,12 @@ import {
   assignEmployee,
   blankSchedule,
   briefManager,
+  cancelScheduleGeneration,
   deleteConstraint,
   downloadSchedule,
   generateSchedule,
   generateScheduleDay,
+  GenerationStoppedError,
   moveAssignment,
   ProfileIncompleteError,
   proposeChange,
@@ -32,6 +34,7 @@ import type {
   ManagementOverview,
   Operation,
   Proposal,
+  Schedule,
   Simulation,
 } from "@/types";
 
@@ -60,10 +63,29 @@ export interface ProfileGaps {
 
 export interface ManagementState {
   overview: ManagementOverview | undefined;
+  /** A short write is in flight. Gates the board's own controls.
+   *
+   *  **Building a period is deliberately not one of these.** A build runs for
+   *  minutes and its days land one at a time; holding the whole area disabled
+   *  for its duration is what left a manager unable to place a single shift —
+   *  or to reach the button that stops it — while the agent worked, and a
+   *  build that never finished disabled the area forever. Generation reports
+   *  through `generating` instead, and the board stays writable throughout
+   *  (D18): what the manager places by hand becomes a pin the agent fills
+   *  around, exactly as it does on a single-day rebuild. */
   busy: boolean;
   error: string | null;
   generation: GenerationProgress | null;
+  /** A build is running and this browser is watching it. */
+  generating: boolean;
   resumeGeneration: (scheduleId: string) => Promise<void>;
+  /** Stop waiting on a build, keeping every day already finished.
+   *
+   *  The manager's way out, and the reason polling is allowed to end at all:
+   *  with no model timeout configured, a hung server and a slow one look
+   *  identical from here, and only a person can say whether anyone is still
+   *  waiting. */
+  cancelGeneration: () => Promise<void>;
   /** Set when a build was refused because the interview never taught the
    *  shift vocabulary, and cleared by any later success.
    *
@@ -101,17 +123,23 @@ export interface ManagementState {
   }) => Promise<void>;
   /** Open an empty period to fill in by hand (D18). Calls no model. */
   openBlank: (input: { starts_on?: string; ends_on?: string }) => Promise<void>;
-  /** Place one person on one slot, by hand (D18). Writes immediately. */
+  /** Place one person on one slot, by hand (D18). Writes immediately.
+   *
+   *  `schedule_id` is the period the click happened on. The board always
+   *  sends it: without one the server writes to whichever period covers
+   *  today, which refuses every placement made on any other week. */
   assign: (input: {
     shift_name: string;
     slot_date: string;
     employee: string;
     reason?: string;
+    schedule_id?: string;
   }) => Promise<void>;
   /** Take one person off a slot, by hand (D18). */
   unassign: (input: {
     assignment_id: string;
     reason?: string;
+    schedule_id?: string;
   }) => Promise<void>;
   publish: (scheduleId: string, published: boolean) => Promise<void>;
   /** Download the period as `.xlsx` (D17). */
@@ -137,7 +165,17 @@ export interface ManagementState {
     shift_name: string;
     slot_date: string;
     reason: string;
+    schedule_id?: string;
   }) => Promise<void>;
+  /** Tell the hook which period the manager is looking at.
+   *
+   *  The overview hands over the *current* period, and the board may be
+   *  showing another week entirely. Everything that targets "the schedule"
+   *  — the agent's proposals, its answers, a simulation — followed the
+   *  overview and so answered about the wrong week whenever the manager had
+   *  paged away. The board reports what it is rendering, and this is what
+   *  the rest of the area then aims at. */
+  focusPeriod: (scheduleId: string) => void;
   addConstraint: (input: {
     employee: string;
     constraint_date: string;
@@ -167,6 +205,39 @@ export function useManagement(): ManagementState {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generation, setGeneration] = useState<GenerationProgress | null>(null);
+  // A build is running and this browser is watching it. Kept apart from
+  // `busy` on purpose -- see `ManagementState.busy`. The board stays
+  // writable while this is true.
+  const [generating, setGenerating] = useState(false);
+  // The poll in flight, so it can be stopped: by the manager pressing stop,
+  // or by a second build replacing it. A ref rather than state because
+  // nothing renders it and re-rendering on it would restart the effects that
+  // produced it.
+  const watching = useRef<AbortController | null>(null);
+  // Which period the current watch belongs to. Read when stopping, and the
+  // overview cannot be trusted for it: a build opens a period the overview
+  // has not been re-read for yet.
+  const generatingId = useRef<string>("");
+  // The period the manager is actually looking at, reported by the board.
+  // The overview only ever hands over the *current* one, so everything that
+  // aimed at "the schedule" aimed at the wrong week the moment the manager
+  // paged away — the agent answered about a week they were not looking at,
+  // and every hand-write was refused outright because the slot it named does
+  // not exist in the period covering today. Empty until the board has
+  // rendered; the overview is the fallback.
+  const [focused, setFocused] = useState("");
+  const focusPeriod = useCallback((id: string) => setFocused(id), []);
+
+  /** Stamp the period on a hand-write that did not name one.
+   *
+   *  The board always names it. This is the safety net for any caller that
+   *  does not, and it is what makes "no id" mean "the week on screen"
+   *  rather than "whatever covers today". */
+  const withPeriod = useCallback(
+    <T extends { schedule_id?: string }>(input: T): T =>
+      input.schedule_id ? input : { ...input, schedule_id: focused },
+    [focused],
+  );
   const [gaps, setGaps] = useState<ProfileGaps | null>(null);
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [briefing, setBriefing] = useState<Briefing | null>(null);
@@ -265,6 +336,80 @@ export function useManagement(): ManagementState {
     [refresh, brief],
   );
 
+  /** Watch a build to its end, leaving the rest of the area usable.
+   *
+   *  Deliberately **not** `run()`. That helper is for the short writes the
+   *  board's own controls wait on, and routing a build through it disabled
+   *  every one of them for the length of the build — including the button
+   *  that stops it, and including forever when the build never ended.
+   *
+   *  So this keeps its own flag, refreshes at the end rather than gating on
+   *  it, and treats the manager pressing stop as an outcome rather than an
+   *  error. Progress arrives from the poll: each day that lands re-renders
+   *  the grid under the manager while they keep working on it. */
+  const watchGeneration = useCallback(
+    async (
+      start: (
+        onProgress: (schedule: Schedule) => void,
+        signal: AbortSignal,
+      ) => Promise<Schedule>,
+      scheduleId = "",
+    ) => {
+      // Any earlier watch is stopped first: two pollers on one job would
+      // fight over `generation`, and the older one is by definition looking
+      // at whatever the manager just moved on from.
+      watching.current?.abort();
+      const control = new AbortController();
+      watching.current = control;
+      generatingId.current = scheduleId;
+      setGenerating(true);
+      setError(null);
+      try {
+        const schedule = await start((next) => {
+          if (control.signal.aborted) return;
+          generatingId.current = next.id;
+          setGeneration(next.generation);
+          // Only ever the period this watch is building. A poll that landed
+          // after the manager moved to another period must not swap the
+          // board out from under them.
+          setOverview((current) =>
+            current && (!current.schedule || current.schedule.id === next.id)
+              ? { ...current, schedule: next }
+              : current,
+          );
+        }, control.signal);
+        // A build that succeeded answers the refusal, whatever filled the
+        // gap in the meantime.
+        setGaps(null);
+        setGeneration(schedule.generation);
+        await refresh();
+        if (schedule.generation.status === "complete") void brief("changed");
+      } catch (reason) {
+        // The manager pressed stop. The days already built are on the board
+        // and the last poll left the banner saying so; there is no failure
+        // here to report.
+        if (reason instanceof GenerationStoppedError) return;
+        if (reason instanceof ProfileIncompleteError) {
+          setGaps({
+            message: reason.message,
+            gaps: reason.gaps,
+            blocks: reason.blocks,
+          });
+          setGeneration(null);
+        } else {
+          setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
+        }
+        await refresh();
+      } finally {
+        if (watching.current === control) {
+          watching.current = null;
+          setGenerating(false);
+        }
+      }
+    },
+    [refresh, brief],
+  );
+
   const generate = useCallback(
     async (input: {
       starts_on?: string;
@@ -284,36 +429,23 @@ export function useManagement(): ManagementState {
         failed_days: 0,
         days: [],
       });
-      const result = await run(() =>
-        generateSchedule(input, (schedule) => {
-          setGeneration(schedule.generation);
-          setOverview((current) => current
-            ? { ...current, schedule }
-            : current);
-        }),
+      await watchGeneration((onProgress, signal) =>
+        generateSchedule(input, onProgress, { signal }),
       );
-      if (!result) {
-        setGeneration(null);
-        await refresh();
-      }
     },
-    [run, refresh],
+    [watchGeneration],
   );
 
-  const resumeGeneration = useCallback(async (scheduleId: string) => {
-    const result = await run(() =>
-      resumeScheduleGeneration(scheduleId, (schedule) => {
-        setGeneration(schedule.generation);
-        setOverview((current) => current
-          ? { ...current, schedule }
-          : current);
-      }),
-    );
-    if (!result) {
-      setGeneration(null);
-      await refresh();
-    }
-  }, [run, refresh]);
+  const resumeGeneration = useCallback(
+    async (scheduleId: string) => {
+      await watchGeneration(
+        (onProgress, signal) =>
+          resumeScheduleGeneration(scheduleId, onProgress, { signal }),
+        scheduleId,
+      );
+    },
+    [watchGeneration],
+  );
 
   const generateDay = useCallback(async (input: {
     schedule_id: string;
@@ -328,19 +460,32 @@ export function useManagement(): ManagementState {
       failed_days: 0,
       days: [],
     });
-    const result = await run(() =>
-      generateScheduleDay(input, (schedule) => {
-        setGeneration(schedule.generation);
-        setOverview((current) => current
-          ? { ...current, schedule }
-          : current);
-      }),
+    await watchGeneration(
+      (onProgress, signal) =>
+        generateScheduleDay(input, onProgress, { signal }),
+      input.schedule_id,
     );
-    if (!result) {
-      setGeneration(null);
-      await refresh();
+  }, [watchGeneration]);
+
+  /** Stop the build this browser is watching.
+   *
+   *  Two halves, and both are needed: the server is told so it stops taking
+   *  new days, and the poller is aborted so the manager's screen settles
+   *  immediately rather than after the model finishes whatever it is on. */
+  const cancelGeneration = useCallback(async () => {
+    const scheduleId = generatingId.current;
+    watching.current?.abort();
+    watching.current = null;
+    setGenerating(false);
+    if (!scheduleId) return;
+    try {
+      const stopped = await cancelScheduleGeneration(scheduleId);
+      setGeneration(stopped.generation);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
     }
-  }, [run, refresh]);
+    await refresh();
+  }, [refresh]);
 
   /** Open an empty period for the manager to fill in themselves (D18).
    *
@@ -361,18 +506,23 @@ export function useManagement(): ManagementState {
       slot_date: string;
       employee: string;
       reason?: string;
+      schedule_id?: string;
     }) => {
-      await run(() => assignEmployee(input), { quiet: true });
+      await run(() => assignEmployee(withPeriod(input)), { quiet: true });
     },
-    [run],
+    [run, withPeriod],
   );
 
   /** Take one person off a slot. Quiet for the same reason as `assign`. */
   const unassign = useCallback(
-    async (input: { assignment_id: string; reason?: string }) => {
-      await run(() => unassignEmployee(input), { quiet: true });
+    async (input: {
+      assignment_id: string;
+      reason?: string;
+      schedule_id?: string;
+    }) => {
+      await run(() => unassignEmployee(withPeriod(input)), { quiet: true });
     },
-    [run],
+    [run, withPeriod],
   );
 
   /** Publish or withdraw a period.
@@ -420,7 +570,7 @@ export function useManagement(): ManagementState {
   // the dependency the compiler infers from `overview?.schedule?.id` is the
   // whole `overview`, which would not match the narrower one declared here
   // and costs the memoization entirely.
-  const scheduleId = overview?.schedule?.id;
+  const scheduleId = focused || overview?.schedule?.id;
 
   const propose = useCallback(
     async (request: string, reason?: string) => {
@@ -557,10 +707,11 @@ export function useManagement(): ManagementState {
       shift_name: string;
       slot_date: string;
       reason: string;
+      schedule_id?: string;
     }) => {
-      await run(() => moveAssignment(input));
+      await run(() => moveAssignment(withPeriod(input)));
     },
-    [run],
+    [run, withPeriod],
   );
 
   const addConstraint = useCallback(
@@ -614,6 +765,15 @@ export function useManagement(): ManagementState {
     };
   }, [brief, resumeGeneration]);
 
+  // A watch is a poll loop, not a subscription: nothing stops it when the
+  // component goes away, so leaving the area would otherwise keep a request
+  // per second going for the rest of the session. The job itself carries on
+  // server-side and is picked back up on the next visit.
+  useEffect(() => () => {
+    watching.current?.abort();
+    watching.current = null;
+  }, []);
+
   /** The long look, for a control room left open.
    *
    *  `periodic` is the only trigger nothing prompts — it exists so patterns
@@ -634,7 +794,9 @@ export function useManagement(): ManagementState {
     busy,
     error,
     generation: generation ?? overview?.schedule?.generation ?? null,
+    generating,
     resumeGeneration,
+    cancelGeneration,
     proposal,
     briefing,
     briefing_busy: briefingBusy,
@@ -660,6 +822,7 @@ export function useManagement(): ManagementState {
     approveSimulation,
     dismissSimulation,
     move,
+    focusPeriod,
     addConstraint,
     removeConstraint,
     saveProfile,

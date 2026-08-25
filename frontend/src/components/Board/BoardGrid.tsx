@@ -1,6 +1,17 @@
 "use client";
 
-import { AlertTriangle, Check, Moon, Plus, Sparkles, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  GripVertical,
+  Moon,
+  Plus,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { hebrewWeekday, isWeekend } from "@/components/Management/Calendar";
@@ -20,6 +31,8 @@ import { touchKey } from "./agentTouch";
 import { EMPLOYEE_DRAG_TYPE } from "./dragData";
 import type { ScheduleIndex } from "./scheduleIndex";
 import { buildScheduleIndex } from "./scheduleIndex";
+import type { ShiftOrder } from "./shiftOrder";
+import { SHIFT_DRAG_TYPE, useShiftOrder } from "./shiftOrder";
 import { ShiftCard } from "./ShiftCard";
 import type { BoardFilters } from "./useBoard";
 import { weekDates } from "./useBoard";
@@ -99,6 +112,12 @@ export function BoardGrid({
 }) {
   const [dragging, setDragging] = useState<Assignment | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  // The row being dragged to a new position, and the row it is currently
+  // over. Separate from the card drag above because they are different acts
+  // on different targets: one proposes a change to the week, the other only
+  // changes the order it is read in.
+  const [draggingShift, setDraggingShift] = useState<string | null>(null);
+  const [overShift, setOverShift] = useState<string | null>(null);
   // The keyboard and touch path to the same move. Beside the drag rather
   // than replacing it: a mouse still drags, and both gestures end in the
   // same confirmation (D12).
@@ -142,13 +161,30 @@ export function BoardGrid({
   // instead of walking the assignment, slot and warning lists per cell.
   const index = useMemo(() => buildScheduleIndex(schedule), [schedule]);
 
-  // Shift rows keep the vocabulary's own order — a workplace's shifts run
-  // morning, then evening, then on-call, and alphabetising would scramble a
-  // sequence that means something (D9).
+  // When each shift starts, read off whichever slot in its row carries the
+  // hours: a shift's times come from the vocabulary and hold all week, but a
+  // shift that does not run on Sunday has no Sunday slot to read them from.
+  const startTimes = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const slot of schedule?.slots ?? []) {
+      if (slot.start_time && !map[slot.shift_name]) {
+        map[slot.shift_name] = slot.start_time;
+      }
+    }
+    return map;
+  }, [schedule?.slots]);
+
+  // Shift rows run by the clock, not by the order the slots happened to be
+  // written in — a day happens morning, then noon, then evening, and a board
+  // that opens with those rows shuffled has to be re-read every time. Still
+  // not alphabetical, which would scramble the same sequence differently
+  // (D9); and still the manager's to override, which is what `shiftOrder`
+  // remembers.
+  const order = useShiftOrder({ shifts: index.shifts, startTimes });
   const shiftFilter = filters.shift;
   const shifts = useMemo(
-    () => index.shifts.filter((name) => !shiftFilter || name === shiftFilter),
-    [index, shiftFilter],
+    () => order.shifts.filter((name) => !shiftFilter || name === shiftFilter),
+    [order.shifts, shiftFilter],
   );
 
   // Escape puts a picked card back down. Bound on the window because the
@@ -224,6 +260,27 @@ export function BoardGrid({
         </div>
       ) : null}
 
+      {/* A board no longer in clock order says so, and offers the clock
+          back in one click. Shown only while the manager's own order
+          actually differs from it: a row nudged and nudged back is not
+          something to keep explaining. */}
+      {order.custom ? (
+        <div className="board-order-bar" role="status">
+          <span className="board-order-bar-text">
+            סדר המשמרות נקבע ידנית.
+          </span>
+          <button
+            type="button"
+            className="board-order-reset"
+            onClick={order.reset}
+            title="להחזיר את השורות לסדר לפי שעת ההתחלה"
+          >
+            <Clock size={13} />
+            סידור לפי שעות
+          </button>
+        </div>
+      ) : null}
+
       <div
         className="board-grid"
         dir="rtl"
@@ -244,10 +301,19 @@ export function BoardGrid({
           />
         ))}
 
-        {shifts.map((shift) => (
+        {shifts.map((shift, row) => (
           <BoardRow
             key={shift}
             shift={shift}
+            // Reordering is offered only when there is somewhere to reorder
+            // to: a board filtered down to one shift row has no sequence to
+            // change, and arrows that cannot move anything are noise.
+            position={shifts.length > 1 ? { at: row, of: shifts.length } : null}
+            order={order}
+            draggingShift={draggingShift}
+            setDraggingShift={setDraggingShift}
+            overShift={overShift}
+            setOverShift={setOverShift}
             dates={dates}
             today={today}
             schedule={schedule}
@@ -346,6 +412,12 @@ function DayHead({
 /** One shift's row across the week. */
 function BoardRow({
   shift,
+  position,
+  order,
+  draggingShift,
+  setDraggingShift,
+  overShift,
+  setOverShift,
   dates,
   today,
   schedule,
@@ -371,6 +443,14 @@ function BoardRow({
   onAddShift,
 }: {
   shift: string;
+  /** Where this row sits and how many there are, or null when the board is
+   *  showing too few rows for an order to exist. */
+  position: { at: number; of: number } | null;
+  order: ShiftOrder;
+  draggingShift: string | null;
+  setDraggingShift: (shift: string | null) => void;
+  overShift: string | null;
+  setOverShift: (shift: string | null) => void;
   dates: string[];
   today: string;
   schedule: Schedule;
@@ -413,10 +493,63 @@ function BoardRow({
     (slot) => slot.shift_name === shift && slot.is_on_call,
   );
 
+  const reorderable = position !== null;
+
   return (
     <>
-      <div className="board-rowhead">
+      {/* The row head is the handle. Dragging it reorders the board and
+          writes nothing — no assignment moves, so there is no reason to
+          collect and no dialog to open, which is why this gesture looks
+          like the card drag but ends nowhere near it (D12). It stays
+          available on a published board for the same reason: the week is
+          read-only, the order it is read in is not. */}
+      <div
+        className={[
+          "board-rowhead",
+          reorderable ? "is-reorderable" : "",
+          draggingShift === shift ? "is-dragging" : "",
+          overShift === shift && draggingShift !== shift ? "is-over" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        draggable={reorderable}
+        onDragStart={(event) => {
+          if (!reorderable) return;
+          event.dataTransfer.setData(SHIFT_DRAG_TYPE, shift);
+          event.dataTransfer.effectAllowed = "move";
+          setDraggingShift(shift);
+        }}
+        onDragEnd={() => {
+          setDraggingShift(null);
+          setOverShift(null);
+        }}
+        onDragOver={(event) => {
+          // Only a row drag lands here. A card or a roster name dragged
+          // over the head is not a placement — there is no cell under it —
+          // so it is left un-droppable rather than silently reordering.
+          if (!event.dataTransfer.types.includes(SHIFT_DRAG_TYPE)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          setOverShift(shift);
+        }}
+        onDragLeave={() => {
+          if (overShift === shift) setOverShift(null);
+        }}
+        onDrop={(event) => {
+          if (!event.dataTransfer.types.includes(SHIFT_DRAG_TYPE)) return;
+          event.preventDefault();
+          const moved = event.dataTransfer.getData(SHIFT_DRAG_TYPE).trim();
+          setDraggingShift(null);
+          setOverShift(null);
+          if (moved && moved !== shift) order.moveTo(moved, shift);
+        }}
+      >
         <span className="board-rowhead-name">
+          {reorderable ? (
+            <span className="board-rowhead-grip" aria-hidden="true">
+              <GripVertical size={12} />
+            </span>
+          ) : null}
           {shift}
           {onCall ? (
             <span className="board-rowhead-oncall" title="כוננות">
@@ -427,6 +560,33 @@ function BoardRow({
         {withTimes?.start_time ? (
           <span className="board-rowhead-hours">
             {withTimes.start_time}–{withTimes.end_time}
+          </span>
+        ) : null}
+
+        {/* The same reorder, without a mouse. HTML5 drag fires on neither
+            touch nor the keyboard, and the row order is exactly the kind of
+            thing a manager fixes once on a phone — so the arrows are the
+            reachable path, not a fallback. */}
+        {position ? (
+          <span className="board-rowhead-move">
+            <button
+              type="button"
+              onClick={() => order.nudge(shift, -1)}
+              disabled={position.at === 0}
+              aria-label={`הזזת ${shift} שורה למעלה`}
+              title="שורה למעלה"
+            >
+              <ChevronUp size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={() => order.nudge(shift, 1)}
+              disabled={position.at === position.of - 1}
+              aria-label={`הזזת ${shift} שורה למטה`}
+              title="שורה למטה"
+            >
+              <ChevronDown size={13} />
+            </button>
           </span>
         ) : null}
       </div>

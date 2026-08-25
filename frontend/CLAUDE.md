@@ -13,8 +13,8 @@ and there is no CORS setup.
 Chat-first. The boss talks to the agent in a conversation pane; the schedule
 renders beside it as a grid.
 
-The calendar is editable, but the two gestures on it behave differently on
-purpose:
+The calendar is editable, but its gestures behave differently on purpose —
+and the third of them is not an edit at all:
 
 - **Dragging an assignment writes nothing.** The drop opens a confirmation
   that collects the manager's reason, and that dialog is what applies the move
@@ -28,6 +28,18 @@ purpose:
   A drag moves somebody who is already placed; filling a gap takes nothing
   away from anybody, so nothing is owed an explanation. This is what lets the
   boss build a week without the agent at all.
+- **Dragging a shift *row* writes nothing at all** — it is not a third
+  gesture on the schedule but a change to the order the board is read in
+  (`Board/shiftOrder.ts`). The rows default to **the clock**, earliest start
+  first, because that is the sequence the day actually happens in; the order
+  the slots were written in carried no meaning a manager could see, and
+  alphabetising would scramble the same sequence differently
+  ([D9](../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)). A shift
+  with no hours cannot be placed on a clock, so those keep their declared
+  order and sit last. The manager can drag or nudge the rows into any other
+  order, remembered per browser, and put them back with one click. Because
+  nothing is written, this works on a published board too, where every write
+  is refused.
 
 **Every person has a colour**, assigned from the roster's own order and
 computed in `Management/palette.ts`. It is a rendering of a name, not a stored
@@ -139,6 +151,32 @@ impression.
   tab ([D17](../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
   It is the one management action that does *not* go through `run()` — a
   download changes nothing for a refetch or a briefing to react to.
+- **Building a period does not lock the area.** `generate` and its two
+  siblings report through `state.generating`, never through `state.busy`:
+  a build runs for minutes, and routing it through the helper the board's own
+  controls wait on left the manager unable to place a single shift — or to
+  reach the button that stops it — until it finished, which for a hung model
+  meant forever. While a build runs the board is fully writable (D18), and a
+  cell filled in by hand becomes a pin the agent fills around.
+- **The poll ends, and says why.** `resumeScheduleGeneration` reads
+  `/{id}/progress` rather than the whole period, backs off while one day is
+  in flight, and re-fetches the grid only when a day lands. It watches the
+  job's `heartbeat`: one that stops means the job lost its worker, and the
+  poller re-POSTs `/run` to adopt it. Everything else is the manager's call —
+  "עצירת היצירה" stops the wait *and* the job, keeping every finished day,
+  because with no model timeout configured the browser is the only
+  participant that knows whether anyone is still waiting.
+- **Every hand-write names the period it happened on.** `assign`, `unassign`
+  and `move` all send `schedule_id`, taken from the week the board is
+  actually rendering. Without it the server resolves "the period covering
+  today", so the moment the manager paged to another week every placement,
+  drag and removal was refused — while `check`, the one call that always sent
+  the id, had just told them the cell was fine. `focusPeriod` reports the
+  same period upward so the agent's proposals, answers and simulations are
+  about the week on screen rather than about today's.
+- **A failed build says why.** The per-day `error` is rendered in the banner.
+  It is usually the one thing the manager can act on — a model timeout is
+  fixed by a setting, not by pressing retry again.
 - **Everything re-reads after a write.** `useManagement` refetches the overview
   rather than patching locally: the schedule, its warnings, the constraints and
   the log all move together, and a locally patched grid beside a stale audit is

@@ -13,7 +13,11 @@ from app.common.errors import AgentError
 from app.dal.llm.json_response_parser import extract_json
 from app.dal.llm.message_merger import merge_system_into_user
 from app.dal.llm.model_id_extractor import extract_model_ids
-from app.dal.llm.openai_client import OpenAIJsonClient, _budget_seconds
+from app.dal.llm.openai_client import (
+    OpenAIJsonClient,
+    _budget_seconds,
+    read_timeout_for,
+)
 
 
 class _Settings:
@@ -469,10 +473,13 @@ def test_the_budget_always_leaves_room_for_one_round_trip():
     Both used to be flat constants, so raising `llm_timeout_seconds` past the
     scheduler's fixed 120s inverted them: one HTTP call could no longer finish
     inside the budget bounding it.
+
+    The scheduler is excluded because it no longer has a round trip to leave
+    room for -- its read is unbounded, so there is no ceiling to fit inside.
     """
     for timeout in (30, 120, 300, 600, 900):
         settings = _Settings(llm_timeout_seconds=timeout)
-        for flow in ("scheduler", "interview", "changes", ""):
+        for flow in ("interview", "changes", ""):
             assert _budget_seconds(settings, flow) > timeout, (timeout, flow)
 
 
@@ -505,22 +512,55 @@ def test_an_unbounded_call_is_not_cut_short_by_a_deadline():
 def test_a_slow_model_widens_the_budget_with_it():
     """The setting a deployment reaches for actually moves the ceiling.
 
-    Raising the timeout used to do nothing for the scheduler, whose budget
-    was hardcoded below it.
+    Raising the timeout used to do nothing, because the budget was hardcoded
+    below it.
     """
-    slow = _budget_seconds(_Settings(llm_timeout_seconds=600), "scheduler")
-    quick = _budget_seconds(_Settings(llm_timeout_seconds=120), "scheduler")
+    slow = _budget_seconds(_Settings(llm_timeout_seconds=600), "interview")
+    quick = _budget_seconds(_Settings(llm_timeout_seconds=120), "interview")
     assert slow > quick
 
 
-def test_the_scheduler_keeps_the_tighter_budget():
-    """Daily generation is checkpointed, so it should give up sooner than a
-    conversational call and let the failed day be retried on its own."""
-    settings = _Settings(llm_timeout_seconds=600)
-    assert (
-        _budget_seconds(settings, "scheduler")
-        < _budget_seconds(settings, "interview")
-    )
+def test_building_a_schedule_is_never_cut_off_by_the_timeout():
+    """The failure this replaced, seen in production.
+
+    `llm_timeout_seconds` is one number for calls that are not comparable: a
+    briefing is a short prompt to the fast model, one day of scheduling is a
+    large prompt to the heavy model. A value that keeps the settings panel
+    responsive is, for the scheduler, a ceiling below the real answer time --
+    so the briefing kept working while every build died on `ReadTimeout` with
+    the model server still generating.
+
+    A read ceiling existed to stop one request holding a browser connection
+    open. Generation holds none: it checkpoints per day, the browser polls,
+    and the manager can stop it. So the scheduler gets no ceiling, at any
+    configured value, and no deadline above one either.
+    """
+    for timeout in (30, 120, 600, 900):
+        settings = _Settings(llm_timeout_seconds=timeout)
+        assert read_timeout_for(settings, "scheduler") == 0, timeout
+        assert _budget_seconds(settings, "scheduler") is None, timeout
+        # Every other flow still honours the manager's setting exactly.
+        assert read_timeout_for(settings, "interview") == timeout, timeout
+
+
+def test_the_scheduler_client_is_built_with_no_read_ceiling():
+    """The wiring, not the arithmetic: `complete_json` must hand the flow's
+    own ceiling to the client, or the decision above never reaches httpx."""
+    built = []
+    settings = _Settings(llm_timeout_seconds=120)
+    llm, _ = _client([_Response('{"ok": true}')], settings)
+
+    original = llm._client_for
+
+    def record(api_key, base_url, timeout):
+        built.append(timeout)
+        return original(api_key, base_url, timeout)
+
+    llm._client_for = record
+    llm.complete_json("sys", "usr", flow="scheduler")
+    llm.complete_json("sys", "usr", flow="briefing")
+
+    assert built == [0, 120]
 
 
 def test_a_settings_object_without_the_field_still_resolves():

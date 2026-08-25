@@ -11,6 +11,8 @@ Three things here are the point of the feature and are asserted directly:
 """
 
 import json
+import threading
+import time
 
 import pytest
 from fastapi import FastAPI
@@ -116,6 +118,16 @@ class _FakeScheduleRepo:
         self.get_schedule(schedule_id, team_id)
         self.schedules[schedule_id]["generation"] = generation
         return self.get_schedule(schedule_id, team_id)
+
+    def touch_generation(self, schedule_id, team_id, at):
+        # Scoped to a running job exactly as the UPDATE is: a beat that lands
+        # after the job stopped must not make it look alive again.
+        row = self.schedules.get(schedule_id)
+        if row is None or row["team_id"] != team_id:
+            return
+        generation = row.get("generation") or {}
+        if generation.get("status") == "running":
+            generation["heartbeat"] = at
 
     def delete_schedule(self, schedule_id, team_id):
         self.get_schedule(schedule_id, team_id)
@@ -557,6 +569,388 @@ def test_a_failed_day_is_checkpointed_and_the_same_day_can_resume():
     resumed = client.post(path).json()
     assert resumed["generation"]["status"] == "complete"
     assert resumed["generation"]["days"][0]["attempts"] == 2
+
+
+def test_progress_answers_the_poll_without_rebuilding_the_grid():
+    """The poll is asked once a second; it must not cost a full period.
+
+    `GET /{id}` carries every slot, every assignment and a fresh audit over
+    both. This route carries the counter, which is the entire question the
+    browser is asking while a period is being built."""
+    launcher = _DeferredLauncher()
+    app, _ = _build_app([_generation([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "דנה מוסמכת לבוקר",
+    }])], launch=launcher)
+    client = _client(app)
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+    client.post("/api/schedule/generate/%s/run" % started["id"])
+
+    response = client.get("/api/schedule/%s/progress" % started["id"])
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == started["id"]
+    assert body["generation"]["status"] == "running"
+    # The counter and nothing else: no grid, no audit.
+    assert "assignments" not in body and "warnings" not in body
+    launcher.run_next()
+    assert client.get(
+        "/api/schedule/%s/progress" % started["id"]
+    ).json()["generation"]["status"] == "complete"
+
+
+def test_a_running_job_says_when_a_worker_last_touched_it():
+    """What separates a slow model from a hung one.
+
+    With no LLM timeout configured both look like "running" forever. A beat
+    is the difference, and it is what lets the browser stop guessing."""
+    launcher = _DeferredLauncher()
+    app, repo = _build_app([_generation([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "דנה מוסמכת לבוקר",
+    }])], launch=launcher)
+    client = _client(app)
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+
+    assert started["generation"]["heartbeat"]
+    client.post("/api/schedule/generate/%s/run" % started["id"])
+    launcher.run_next()
+    # Every checkpoint stamps one too, so the beat moves with the work even
+    # between the worker's own timed beats.
+    assert repo.schedules[started["id"]]["generation"]["heartbeat"]
+
+
+def test_a_manager_can_stop_a_build_and_keep_the_finished_days():
+    """Giving up is the manager's decision, and it costs them nothing.
+
+    The days already paid for stay, the period is an ordinary draft
+    immediately, and resuming picks up the first day that is not complete."""
+    app, repo = _build_app([
+        _generation([{
+            "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+            "reason": "כיסוי יום ראשון",
+        }]),
+        _generation([{
+            "employee": "יוסי", "shift": MORNING, "date": "2026-08-18",
+            "reason": "כיסוי יום שני",
+        }]),
+    ])
+    client = _client(app)
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    client.post("/api/schedule/generate/%s/next" % started["id"])
+
+    stopped = client.post(
+        "/api/schedule/generate/%s/cancel" % started["id"]
+    ).json()
+
+    assert stopped["generation"]["status"] == "cancelled"
+    assert stopped["generation"]["completed_days"] == 1
+    assert [row["date"] for row in stopped["assignments"]] == ["2026-08-17"]
+    assert stopped["status"] == "draft"
+
+
+def test_a_stopped_job_takes_no_further_model_call():
+    """Cooperative, but immediate at the next day boundary.
+
+    The scripted model raises if it is called more times than scripted, so a
+    worker that ignored the stop would fail this rather than pass it."""
+    launcher = _DeferredLauncher()
+    app, repo = _build_app([_generation([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "כיסוי יום ראשון",
+    }])], launch=launcher)
+    client = _client(app)
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-19",
+    }).json()
+    client.post("/api/schedule/generate/%s/run" % started["id"])
+    client.post("/api/schedule/generate/%s/cancel" % started["id"])
+
+    launcher.run_next()
+
+    assert repo.model_calls == []
+    assert client.get("/api/schedule/%s/progress" % started["id"]).json()[
+        "generation"
+    ]["status"] == "cancelled"
+
+
+def test_a_stopped_job_resumes_from_the_first_unfinished_day():
+    launcher = _DeferredLauncher()
+    app, _ = _build_app([_generation([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "כיסוי יום ראשון",
+    }])], launch=launcher)
+    client = _client(app)
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+    client.post("/api/schedule/generate/%s/cancel" % started["id"])
+
+    resumed = client.post(
+        "/api/schedule/generate/%s/run" % started["id"]
+    ).json()
+
+    assert resumed["generation"]["status"] == "running"
+    assert resumed["generation"]["cancel_requested"] is False
+    launcher.run_next()
+    assert client.get("/api/schedule/%s/progress" % started["id"]).json()[
+        "generation"
+    ]["status"] == "complete"
+
+
+def test_polling_the_same_job_twice_does_not_start_a_second_worker():
+    """Two tabs, one job. A second worker would generate every day twice."""
+    launcher = _DeferredLauncher()
+    app, _ = _build_app([_generation([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "כיסוי יום ראשון",
+    }])], launch=launcher)
+    client = _client(app)
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+    path = "/api/schedule/generate/%s/run" % started["id"]
+
+    client.post(path)
+    client.post(path)
+
+    assert len(launcher.jobs) == 1
+
+
+def test_a_hand_placed_shift_survives_the_day_being_generated():
+    """The board stays writable while a period is built (D18), so a cell
+    filled in mid-build must not be undone by the day that follows it.
+
+    It goes to the model as a pin, and it is kept whether or not the model
+    repeats it -- with the manager's own source, so the history still says a
+    person put it there."""
+    app, repo = _build_app([_generation([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "בחירת הסוכן",
+    }])])
+    client = _client(app)
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+    client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "יוסי", "schedule_id": started["id"],
+    })
+
+    built = client.post(
+        "/api/schedule/generate/%s/next" % started["id"]
+    ).json()
+
+    placed = {row["employee"]: row["source"] for row in built["assignments"]}
+    assert placed["יוסי"] == "manager"
+    payload = json.loads(repo.model_calls[0]["user"])
+    assert any(
+        row["employee"] == "יוסי"
+        for row in payload.get("required_assignments") or []
+    )
+
+
+class _BlockingLlm:
+    """A model that answers only when the test lets it.
+
+    Stands in for the case the whole heartbeat/cancel machinery exists for:
+    `llm_timeout_seconds` defaults to no limit, so a server that never
+    answers holds its day open forever and the job stays `running` with
+    nothing to read anywhere.
+    """
+
+    def __init__(self, answer):
+        self._answer = answer
+        self.entered = threading.Event()
+        self.release = threading.Event()
+        self.calls = []
+
+    def complete_json(self, system, user, schema=None, flow=""):
+        self.calls.append({"system": system, "user": user, "schema": schema})
+        self.entered.set()
+        self.release.wait(10)
+        return self._answer
+
+
+def test_a_build_held_open_by_the_model_leaves_the_board_usable():
+    """The failure this whole path exists to prevent.
+
+    A model that never answers used to leave the manager with a period stuck
+    at "building day one" and no way forward: the browser polled a `running`
+    job forever and the area was disabled for as long as it did. Three things
+    have to hold instead — the poll must stay cheap and answerable, a shift
+    must still be placeable by hand, and stopping must actually stop.
+    """
+    repository = _FakeScheduleRepo()
+    llm = _BlockingLlm(_generation([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "דנה מוסמכת לבוקר",
+    }]))
+    repository.model_calls = llm.calls
+    guards = Guards(SECRET)
+    app = FastAPI()
+    app.include_router(
+        schedules.build_router(ScheduleService(repository, llm), guards)
+    )
+
+    @app.exception_handler(AppError)
+    async def handler(request, exc):
+        return JSONResponse(
+            status_code=exc.status_code, content=error_payload(exc)
+        )
+
+    client = _client(app)
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    client.post("/api/schedule/generate/%s/run" % started["id"])
+    assert llm.entered.wait(10), "the worker never reached the model"
+
+    try:
+        # The poll answers while the model is still thinking, and answers
+        # with the counter rather than the period.
+        progress = client.get(
+            "/api/schedule/%s/progress" % started["id"]
+        ).json()
+        assert progress["generation"]["status"] == "running"
+        assert progress["generation"]["heartbeat"]
+
+        # The board is not locked: a manager can place a shift by hand on a
+        # date the agent has not reached yet.
+        placed = client.post("/api/schedule/assign", json={
+            "shift_name": MORNING, "slot_date": "2026-08-18",
+            "employee": "יוסי", "schedule_id": started["id"],
+        })
+        assert placed.status_code == 200
+
+        stopped = client.post(
+            "/api/schedule/generate/%s/cancel" % started["id"]
+        ).json()
+        assert stopped["generation"]["status"] == "cancelled"
+    finally:
+        llm.release.set()
+
+    # The day in flight is allowed to finish -- it is paid for -- and the
+    # worker takes no further day.
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        state = client.get("/api/schedule/%s/progress" % started["id"]).json()
+        if state["generation"]["status"] == "cancelled":
+            break
+        time.sleep(0.05)
+    assert state["generation"]["status"] == "cancelled"
+    assert len(llm.calls) == 1
+    # And what the manager placed by hand is still there.
+    kept = client.get("/api/schedule/%s" % started["id"]).json()
+    assert any(
+        row["employee"] == "יוסי" and row["source"] == "manager"
+        for row in kept["assignments"]
+    )
+
+
+def _two_periods(client):
+    """An older period and a newer one. The newer is what the server calls
+    "current", so the older stands in for any week the manager paged to."""
+    older = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+    newer = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-24", "ends_on": "2026-08-24",
+    }).json()
+    return older, newer
+
+
+def test_a_hand_placed_shift_lands_on_the_period_it_names():
+    """The board is not always on the week that covers today.
+
+    Every hand-write carries the period it happened on. Without one the
+    server resolves "the period covering today", so a placement made on any
+    other week went looking for its slot in the wrong period and came back
+    404 -- while the placement check beside it, the one call that always sent
+    the id, had just said the cell was fine."""
+    app, _ = _build_app([])
+    client = _client(app)
+    older, newer = _two_periods(client)
+
+    placed = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "schedule_id": older["id"],
+    })
+
+    assert placed.status_code == 200
+    assert placed.json()["id"] == older["id"]
+    assert [row["employee"] for row in placed.json()["assignments"]] == ["דנה"]
+    # And the period the server would have guessed is untouched.
+    assert client.get(
+        "/api/schedule/%s" % newer["id"]
+    ).json()["assignments"] == []
+
+
+def test_a_drag_on_another_period_is_not_refused():
+    """`move` had no `schedule_id` at all -- it resolved the current period
+    unconditionally, so a drag on any other week could never find its target
+    slot. The confirmation dialog now sends the period the drag happened
+    on."""
+    app, _ = _build_app([])
+    client = _client(app)
+    older, _ = _two_periods(client)
+    client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+    placed = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "schedule_id": older["id"],
+    }).json()
+    row = placed["assignments"][0]
+
+    moved = client.post("/api/schedule/move", json={
+        "assignment_id": row["id"], "shift_name": MORNING,
+        "slot_date": "2026-08-17", "reason": "החלפה מוסכמת",
+        "schedule_id": older["id"],
+    })
+
+    assert moved.status_code == 200
+    assert moved.json()["id"] == older["id"]
+
+
+def test_removing_a_shift_names_its_period_too():
+    app, _ = _build_app([])
+    client = _client(app)
+    older, _ = _two_periods(client)
+    placed = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "schedule_id": older["id"],
+    }).json()
+
+    removed = client.post("/api/schedule/unassign", json={
+        "assignment_id": placed["assignments"][0]["id"],
+        "reason": "בוטל",
+        "schedule_id": older["id"],
+    })
+
+    assert removed.status_code == 200
+    assert removed.json()["assignments"] == []
+
+
+def test_a_write_naming_no_period_still_means_the_current_one():
+    """The fallback stays, for any client that predates the field."""
+    app, _ = _build_app([])
+    client = _client(app)
+    _, newer = _two_periods(client)
+
+    placed = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-24", "employee": "דנה",
+    })
+
+    assert placed.status_code == 200
+    assert placed.json()["id"] == newer["id"]
 
 
 def test_generating_without_a_finished_interview_is_refused():

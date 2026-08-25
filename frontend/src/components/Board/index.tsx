@@ -11,7 +11,7 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   AgentAnswer,
@@ -38,6 +38,7 @@ import { CoverageBar } from "./CoverageBar";
 import { FilterBar } from "./FilterBar";
 import { GenerateDialog } from "./GenerateDialog";
 import { GenerateDayDialog } from "./GenerateDayDialog";
+import { orderByHours } from "./shiftOrder";
 import { EditorTarget, ShiftEditor } from "./ShiftEditor";
 import { WeekNav } from "./WeekNav";
 import { WeekRail } from "./WeekRail";
@@ -76,6 +77,7 @@ import { useBoardKeys } from "./useBoardKeys";
 export function Board({
   overview,
   busy,
+  generating,
   onGenerate,
   onGenerateDay,
   onOpenBlank,
@@ -85,11 +87,20 @@ export function Board({
   onPublish,
   onExport,
   onOpenAgent,
+  onPeriodChange,
   agent,
   dark,
 }: {
   overview: ManagementOverview | undefined;
   busy: boolean;
+  /** A period is being built in the background.
+   *
+   *  Separate from `busy` because it does not stop the board: the manager
+   *  keeps placing shifts by hand while the agent works, and what they place
+   *  becomes a pin the agent fills around (D18). Only the two controls that
+   *  would collide with the build itself — starting another one, and
+   *  rebuilding a single day inside it — read this. */
+  generating: boolean;
   onGenerate: (input: {
     starts_on?: string;
     ends_on?: string;
@@ -102,24 +113,40 @@ export function Board({
     instructions?: string;
   }) => void;
   onOpenBlank: (input: { starts_on?: string; ends_on?: string }) => void;
+  /** Every hand-write names the period it happened on.
+   *
+   *  Not optional, and not left to the server to infer. Without it the
+   *  backend resolves "the period covering today", so every one of these on
+   *  any other week was refused — while `check`, the one call that always
+   *  sent the id, had just told the manager the placement was fine. */
   onAssign: (input: {
     shift_name: string;
     slot_date: string;
     employee: string;
     reason?: string;
+    schedule_id?: string;
   }) => Promise<void> | void;
   onUnassign: (input: {
     assignment_id: string;
     reason?: string;
+    schedule_id?: string;
   }) => Promise<void> | void;
   onMove: (input: {
     assignment_id: string;
     shift_name: string;
     slot_date: string;
     reason: string;
+    schedule_id?: string;
   }) => Promise<void> | void;
   onPublish: (scheduleId: string, published: boolean) => void;
   onExport: (scheduleId: string) => void;
+  /** Which period this board is showing, whenever that changes.
+   *
+   *  The overview only ever hands over the period covering today, so
+   *  everything outside this component that aimed at "the schedule" aimed at
+   *  the wrong week the moment the manager paged away. The board is the only
+   *  thing that knows which week is on screen, so it is what says so. */
+  onPeriodChange?: (scheduleId: string) => void;
   /** Open the conversation with the agent — the control room beside this. */
   onOpenAgent?: () => void;
   /** What the agent is currently saying, so the week can show *where* it
@@ -158,6 +185,13 @@ export function Board({
   // not a screen the manager needs taken away from them. The error card
   // replaces the board only when there is no board to replace.
   const showingError = !board.weekBusy && Boolean(board.weekError) && !schedule;
+
+  // Report the period on screen upward. In an effect rather than inside the
+  // memo above, because it is a notification and not part of computing what
+  // to render.
+  useEffect(() => {
+    onPeriodChange?.(schedule?.id ?? "");
+  }, [schedule?.id, onPeriodChange]);
 
   // Where on the week what the agent is saying actually applies. Derived
   // from the panels' own state rather than from anything new on the wire:
@@ -204,10 +238,19 @@ export function Board({
     return map;
   }, [overview?.employees]);
 
+  // The filter's shift list reads in the same order the board's rows do —
+  // by the clock. A dropdown that disagrees with the grid beside it is the
+  // same confusion the row order was fixed for, one control over.
   const shiftOptions = useMemo(() => {
     const seen = new Set<string>();
-    for (const slot of schedule?.slots ?? []) seen.add(slot.shift_name);
-    return Array.from(seen);
+    const startTimes: Record<string, string> = {};
+    for (const slot of schedule?.slots ?? []) {
+      seen.add(slot.shift_name);
+      if (slot.start_time && !startTimes[slot.shift_name]) {
+        startTimes[slot.shift_name] = slot.start_time;
+      }
+    }
+    return orderByHours(Array.from(seen), startTimes);
   }, [schedule?.slots]);
 
   // A drop parks the intended move here and opens the confirmation. Nothing
@@ -486,7 +529,8 @@ export function Board({
               readOnly={schedule.status === "published"}
               touches={touches}
               onDropCard={openMove}
-              onDropEmployee={(input) => void onAssign(input)}
+              onDropEmployee={(input) =>
+                void onAssign({ ...input, schedule_id: schedule.id })}
               onOpenCard={(assignment) => {
                 setCheck(null);
                 setEditor({ mode: "edit", assignment });
@@ -499,14 +543,16 @@ export function Board({
                   slot_date: input.slot_date,
                 });
               }}
-              onGenerateDay={schedule.status === "draft" && !busy
-                ? (date) => setGenerationDay(date)
-                : undefined}
+              onGenerateDay={
+                schedule.status === "draft" && !busy && !generating
+                  ? (date) => setGenerationDay(date)
+                  : undefined}
           />
         </>
       ) : (
         <EmptyWeek
-          busy={busy}
+          busy={busy || board.weekBusy}
+          generating={generating}
           profile={overview?.profile ?? null}
           weekStart={board.weekStart}
           weekEnd={board.weekEnd}
@@ -539,6 +585,7 @@ export function Board({
               shift_name: pendingMove.shift_name,
               slot_date: pendingMove.slot_date,
               reason,
+              schedule_id: schedule?.id,
             });
             closeDialogs();
           }}
@@ -561,6 +608,7 @@ export function Board({
               slot_date: input.slot_date,
               employee: input.employee,
               reason: input.reason,
+              schedule_id: schedule.id,
             });
             closeDialogs();
           }}
@@ -574,6 +622,7 @@ export function Board({
             void onUnassign({
               assignment_id: input.assignment.id,
               reason: input.reason,
+              schedule_id: schedule.id,
             });
             closeDialogs();
           }}
@@ -583,6 +632,7 @@ export function Board({
               slot_date: input.slot_date,
               employee: input.employee,
               reason: "שוכפל משיבוץ קיים",
+              schedule_id: schedule.id,
             });
             closeDialogs();
           }}
@@ -596,7 +646,7 @@ export function Board({
           shifts={overview?.shifts ?? []}
           weekStart={board.weekStart}
           weekEnd={board.weekEnd}
-          busy={busy}
+          busy={busy || generating}
           onCancel={() => setGenerationOpen(false)}
           onConfirm={(input) => {
             onGenerate(input);
@@ -608,7 +658,7 @@ export function Board({
       {generationDay && schedule ? (
         <GenerateDayDialog
           date={generationDay}
-          busy={busy}
+          busy={busy || generating}
           onCancel={() => setGenerationDay(null)}
           onConfirm={(instructions) => {
             onGenerateDay({
@@ -846,6 +896,7 @@ function BoardLoadError({
  *  "build" builds *that* week rather than today's. */
 function EmptyWeek({
   busy,
+  generating,
   profile,
   weekStart,
   weekEnd,
@@ -853,6 +904,7 @@ function EmptyWeek({
   onOpenBlank,
 }: {
   busy: boolean;
+  generating: boolean;
   profile: WorkplaceProfile | null;
   weekStart: string;
   weekEnd: string;
@@ -908,7 +960,7 @@ function EmptyWeek({
           type="button"
           className="ghost-button"
           onClick={onOpenBlank}
-          disabled={busy}
+          disabled={busy || generating}
           title="פתיחת שבוע ריק לשיבוץ ידני"
         >
           <PencilLine size={14} />
@@ -918,9 +970,9 @@ function EmptyWeek({
           type="button"
           className="primary-button"
           onClick={onGenerate}
-          disabled={busy}
+          disabled={busy || generating}
         >
-          {busy ? "בונה…" : "בניית הסידור לשבוע"}
+          {generating ? "בונה…" : "בניית הסידור לשבוע"}
         </button>
       </div>
       <p className="board-empty-range">

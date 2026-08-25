@@ -219,6 +219,28 @@ class GenerationProgress(BaseModel):
     completed_days: int = 0
     failed_days: int = 0
     days: List[GenerationDay] = []
+    # When a worker last said it was still on this job, UTC ISO-8601. Empty
+    # on a job opened before this field existed, which the client reads as
+    # "cannot tell" rather than as "stalled".
+    heartbeat: str = ""
+    # Whether the manager asked to stop. The worker checks it between days,
+    # so a job can be `running` with this already true for as long as the
+    # current model call takes to answer.
+    cancel_requested: bool = False
+
+
+class ScheduleProgress(BaseModel):
+    """What the poller reads while a period is being built.
+
+    Deliberately not a `Schedule`: the browser asks for this once a second,
+    and the full period carries every slot, every assignment and a fresh
+    audit over both. Progress is the counter, and the grid is fetched when
+    the counter moves.
+    """
+
+    id: str
+    status: str
+    generation: GenerationProgress = GenerationProgress()
 
 
 class Schedule(BaseModel):
@@ -687,6 +709,13 @@ class MoveRequest(BaseModel):
     slot_date: str = Field(min_length=1)
     reason: str = Field(min_length=1, max_length=1000)
     agent_reason: str = Field(default="", max_length=2000)
+    # Which period the drag happened on. Every other hand-write on the board
+    # already carries this; `move` did not, and resolved "the current period"
+    # server-side instead — so a drag on any week other than the one covering
+    # today looked for the target slot in the wrong period and was refused.
+    # Empty still means "the current period", which is what an older client
+    # sends.
+    schedule_id: str = ""
 
 
 class ConstraintRequest(BaseModel):

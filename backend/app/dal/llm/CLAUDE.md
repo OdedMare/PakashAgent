@@ -63,9 +63,33 @@ out, one request could hold a worker for the better part of an hour. The
 deadline is passed into `create_with_retry`, which starts no attempt (and
 takes no sleep) that would cross it.
 
-The `scheduler` flow uses a shorter 120-second logical budget. Its interactive
-path checkpoints one date per request, so retrying that date is cheaper and
-more honest than making the whole range look frozen for five minutes.
+**The `scheduler` flow has no read timeout and no budget at all.**
+`read_timeout_for()` returns 0 for it whatever `llm_timeout_seconds` says, and
+`_budget_seconds()` returns `None` above that.
+
+This is the one place a configured setting is deliberately not honoured, so
+the reason matters. `llm_timeout_seconds` is a single number covering calls
+that are not comparable: a briefing is a short prompt to the *fast* model and
+answers in seconds, while one day of scheduling is a large prompt to the
+*advanced* model and can take minutes on the hardware these deployments run
+on. A value chosen so the settings panel feels responsive is, for the
+scheduler, a ceiling below the real answer time — and such a ceiling is not a
+safety net, it is a guarantee of failure. The observed shape of it in
+production was exactly that: briefings kept working while every build died on
+`httpcore.ReadTimeout` with the model server still generating an answer
+nobody was listening for.
+
+A read ceiling existed to stop one request holding a browser connection open.
+Generation no longer holds one — it is a background job that checkpoints every
+date, the browser polls short reads, and the manager has a stop button — so
+the protection is obsolete for this flow and only its cost remained.
+
+Connecting stays bounded for *every* flow (`_CONNECT_TIMEOUT_SECONDS`): a
+handshake that never completes is an unreachable server, not a slow one, and
+no amount of waiting fixes it.
+
+A timeout that does fire on another flow raises Hebrew naming the setting and
+how to change it — "Request timed out." is not something a manager can act on.
 
 ## Task-based model routing
 

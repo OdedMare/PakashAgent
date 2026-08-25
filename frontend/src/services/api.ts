@@ -26,6 +26,7 @@ import type {
   RosterName,
   RuntimeSettings,
   Schedule,
+  ScheduleProgress,
   Simulation,
   SwapRow,
   TeamSummary,
@@ -306,52 +307,160 @@ export async function generateSchedule(
     required_assignments?: import("@/types").RequiredAssignment[];
   } = {},
   onProgress?: (schedule: Schedule) => void,
+  options?: { signal?: AbortSignal },
 ): Promise<Schedule> {
   const schedule = await request<Schedule>("/api/schedule/generate/start", {
     method: "POST",
     body: JSON.stringify(body),
   });
   onProgress?.(schedule);
-  return resumeScheduleGeneration(schedule.id, onProgress);
+  return resumeScheduleGeneration(schedule.id, onProgress, options);
+}
+
+/** Thrown when the caller aborted the wait rather than the job failing.
+ *
+ *  A manager who pressed "stop" is not looking at an error, so this is a
+ *  distinct type: the hook that started the wait swallows it and leaves the
+ *  board exactly as the last poll found it. */
+export class GenerationStoppedError extends Error {
+  constructor() {
+    super("היצירה נעצרה");
+    this.name = "GenerationStoppedError";
+  }
 }
 
 /** Continue a persisted range after a failed request or browser refresh.
  *
  * The POST only launches background work. The browser then polls short GETs,
  * so a proxy timeout cannot turn a completed model answer into a fake network
- * failure. */
+ * failure.
+ *
+ * **Three things make the poll survivable rather than merely repeated.**
+ *
+ * - It reads `/progress`, not the whole period. The counter is the entire
+ *   question being asked once a second; the grid is fetched only when the
+ *   counter moves, so a twelve-day build stops re-auditing twelve days of
+ *   assignments to learn that the agent is still on Tuesday.
+ * - It backs off while nothing is happening, up to a few seconds, and drops
+ *   straight back to a tight interval the moment a day lands.
+ * - It watches the job's heartbeat. A job whose worker went away — a
+ *   restarted backend, a killed thread — stays `running` in the database
+ *   forever with nobody on it, and that is indistinguishable from a slow
+ *   model until the beat stops. When it does, this re-POSTs `/run`, which
+ *   relaunches from the first day that is not already complete. A handful of
+ *   those without the beat recovering is reported as a failure rather than
+ *   polled forever.
+ *
+ * `signal` aborts the *wait*, not the job: the server keeps building unless
+ * `cancelScheduleGeneration` is called too. */
 export async function resumeScheduleGeneration(
   scheduleId: string,
   onProgress?: (schedule: Schedule) => void,
+  options?: { signal?: AbortSignal },
 ): Promise<Schedule> {
+  const signal = options?.signal;
   let schedule = await request<Schedule>(
     `/api/schedule/generate/${scheduleId}/run`,
     { method: "POST" },
   );
   onProgress?.(schedule);
+
+  let completed = schedule.generation.completed_days;
+  let beat = schedule.generation.heartbeat ?? "";
+  let beatSeenAt = Date.now();
+  let relaunches = 0;
   let failedPolls = 0;
+  let delay = POLL_MIN_MS;
+
   while (schedule.generation.status === "running") {
-    await waitForGenerationPoll();
+    await waitForGenerationPoll(delay, signal);
+
+    let progress: ScheduleProgress;
     try {
-      schedule = await getSchedule(scheduleId);
+      progress = await scheduleProgress(scheduleId);
       failedPolls = 0;
     } catch (reason) {
       // A poll is a read and is safe to repeat. Brief network blips should
       // not fail a model job that is still progressing on the server.
-      if (++failedPolls < 10) continue;
+      if (++failedPolls < MAX_FAILED_POLLS) continue;
       throw reason;
     }
+
+    const moved =
+      progress.generation.completed_days !== completed ||
+      progress.generation.status !== "running";
+    completed = progress.generation.completed_days;
+    if (moved) {
+      // A day landed, or the job ended. Now the grid is worth re-reading.
+      schedule = await getSchedule(scheduleId);
+      delay = POLL_MIN_MS;
+    } else {
+      // Same day still in flight: report the counter without paying for the
+      // period, and ask less often the longer it goes on.
+      schedule = { ...schedule, generation: progress.generation };
+      delay = Math.min(Math.round(delay * POLL_BACKOFF), POLL_MAX_MS);
+    }
+    onProgress?.(schedule);
+    if (progress.generation.status !== "running") break;
+
+    const said = progress.generation.heartbeat ?? "";
+    if (!said) continue;
+    if (said !== beat || moved) {
+      beat = said;
+      beatSeenAt = Date.now();
+      relaunches = 0;
+      continue;
+    }
+    if (Date.now() - beatSeenAt < STALE_HEARTBEAT_MS) continue;
+    // The job says it is running and nothing has touched it in minutes. The
+    // worker is gone; POST /run adopts it. A process that still owns the job
+    // answers this without starting a second worker.
+    beatSeenAt = Date.now();
+    if (++relaunches > MAX_RELAUNCHES) {
+      throw new Error(
+        "בניית הסידור נתקעה. הימים שהושלמו נשמרו — אפשר לנסות להמשיך שוב",
+      );
+    }
+    schedule = await request<Schedule>(
+      `/api/schedule/generate/${scheduleId}/run`,
+      { method: "POST" },
+    );
+    beat = schedule.generation.heartbeat ?? beat;
     onProgress?.(schedule);
   }
   return schedule;
 }
 
+/** How far a build has got. The cheap read the poll above is built on. */
+export function scheduleProgress(
+  scheduleId: string,
+): Promise<ScheduleProgress> {
+  return request<ScheduleProgress>(`/api/schedule/${scheduleId}/progress`);
+}
+
+/** Stop a build, keeping every day already finished.
+ *
+ *  Cooperative on the server: a model call already in flight cannot be
+ *  interrupted, so the worker stops at the next day boundary. The period is
+ *  an ordinary draft the moment this returns. */
+export function cancelScheduleGeneration(
+  scheduleId: string,
+): Promise<Schedule> {
+  return request<Schedule>(`/api/schedule/generate/${scheduleId}/cancel`, {
+    method: "POST",
+  });
+}
+
 /** Rebuild one date in an existing draft, preserving manager-pinned rows. */
-export async function generateScheduleDay(body: {
-  schedule_id: string;
-  date: string;
-  instructions?: string;
-}, onProgress?: (schedule: Schedule) => void): Promise<Schedule> {
+export async function generateScheduleDay(
+  body: {
+    schedule_id: string;
+    date: string;
+    instructions?: string;
+  },
+  onProgress?: (schedule: Schedule) => void,
+  options?: { signal?: AbortSignal },
+): Promise<Schedule> {
   const schedule = await request<Schedule>(
     `/api/schedule/generate/${body.schedule_id}/day/start`,
     {
@@ -363,11 +472,43 @@ export async function generateScheduleDay(body: {
     },
   );
   onProgress?.(schedule);
-  return resumeScheduleGeneration(body.schedule_id, onProgress);
+  return resumeScheduleGeneration(body.schedule_id, onProgress, options);
 }
 
-function waitForGenerationPoll(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 1_000));
+/** The tight interval a poll returns to whenever a day lands. */
+const POLL_MIN_MS = 1_000;
+/** The slowest it gets while one day is still in flight. A build spends most
+ *  of its life here, and a day takes far longer than a second either way. */
+const POLL_MAX_MS = 5_000;
+const POLL_BACKOFF = 1.5;
+/** Consecutive failed polls tolerated before the wait gives up. A poll is a
+ *  read, so repeating it is free; a job still progressing on the server must
+ *  not be failed by a blip on the way to it. */
+const MAX_FAILED_POLLS = 10;
+/** How long a heartbeat may stand still before the job is presumed
+ *  worker-less. The backend beats every 20s, so this is four missed beats —
+ *  long enough that a slow database write is never mistaken for a death. */
+const STALE_HEARTBEAT_MS = 90_000;
+/** How many times a stalled job is relaunched before it is called stuck. */
+const MAX_RELAUNCHES = 3;
+
+/** Wait between polls, giving up early if the caller aborted. */
+function waitForGenerationPoll(
+  ms: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (signal?.aborted) return Promise.reject(new GenerationStoppedError());
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", stop);
+      resolve();
+    }, ms);
+    function stop() {
+      clearTimeout(timer);
+      reject(new GenerationStoppedError());
+    }
+    signal?.addEventListener("abort", stop, { once: true });
+  });
 }
 
 /** Open an empty period the manager fills in themselves (D18).
@@ -553,6 +694,9 @@ export function moveAssignment(body: {
   slot_date: string;
   reason: string;
   agent_reason?: string;
+  /** The period the drag happened on. Omitted means the one covering today,
+   *  which is only ever right by coincidence. */
+  schedule_id?: string;
 }): Promise<Schedule> {
   return request<Schedule>("/api/schedule/move", {
     method: "POST",
