@@ -49,6 +49,14 @@ export interface WorkplaceProfile {
     first_closure_group?: string;
     first_closure_date?: string;
     general_exit_schedule?: string;
+    enabled_exit_patterns?: Array<"triplet" | "hamshushim" | "shushim">;
+    rotation_a_unavailability?: Array<{
+      days: string[];
+      shifts: string[];
+      start_time: string;
+      end_time: string;
+      reason: string;
+    }>;
   };
   employees?: unknown[];
   shifts?: unknown[];
@@ -124,6 +132,7 @@ export interface RuntimeSettings {
   llm_diet_mode: boolean;
   llm_repetition_penalty: number;
   llm_timeout_seconds: number;
+  llm_queue_seconds: number;
   llm_base_url: string | null;
   openai_api_key: string;
 }

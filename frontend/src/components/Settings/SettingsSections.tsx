@@ -104,6 +104,15 @@ function AgentSettings({ settings }: { settings: SettingsController }) {
         optional="שניות"
         placeholder="120"
       />
+      <Field
+        settings={settings}
+        name="llm_queue_seconds"
+        label="זמן מרבי להמתנה בתור"
+        type="number"
+        min="0"
+        optional="שניות; 0 ללא הגבלה"
+        placeholder="180"
+      />
     </section>
   );
 }

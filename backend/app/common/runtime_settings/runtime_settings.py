@@ -31,3 +31,4 @@ class RuntimeSettings:
     llm_base_url_fast: Optional[str] = None
     llm_base_url_default: Optional[str] = None
     llm_base_url_advanced: Optional[str] = None
+    llm_queue_seconds: int = 180

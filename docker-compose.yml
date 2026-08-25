@@ -32,6 +32,9 @@ services:
       # not a number guessed here. Set a positive value only to bound a
       # server that HANGS.
       PAKASH_LLM_TIMEOUT_SECONDS: ${PAKASH_LLM_TIMEOUT_SECONDS:-0}
+      # Interactive calls fall back before a proxy turns queueing into a 500.
+      # Schedule generation is background work and is not bounded by this.
+      PAKASH_LLM_QUEUE_SECONDS: ${PAKASH_LLM_QUEUE_SECONDS:-180}
       # Env-only by design: the semaphore is built once at import, so this
       # cannot be changed from the settings panel. 1 suits Ollama; raise it
       # for a batching server (vLLM, TGI).
@@ -63,6 +66,7 @@ services:
       # would make the same work succeed or fail depending on which process
       # picked it up.
       PAKASH_LLM_TIMEOUT_SECONDS: ${PAKASH_LLM_TIMEOUT_SECONDS:-0}
+      PAKASH_LLM_QUEUE_SECONDS: ${PAKASH_LLM_QUEUE_SECONDS:-180}
       PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-1}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       PAKASH_COPILOT_SCAN_SECONDS: ${PAKASH_COPILOT_SCAN_SECONDS:-1800}

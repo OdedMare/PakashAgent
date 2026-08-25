@@ -4,6 +4,7 @@ import {
   CalendarClock,
   Clock3,
   Plus,
+  Repeat2,
   Save,
   Scale,
   ShieldCheck,
@@ -70,6 +71,16 @@ export function ManualSetup({
   );
   const [employees, setEmployees] = useState<Row[]>(rows(profile.employees));
   const [shifts, setShifts] = useState<Row[]>(rows(profile.shifts));
+  const [enabledExitPatterns, setEnabledExitPatterns] = useState<string[]>(() => {
+    const configured = strings(initialWorkplace.enabled_exit_patterns);
+    const used = rows(profile.employees)
+      .map((person) => exitPattern(person))
+      .filter((pattern) => pattern !== "round");
+    return [...new Set([...configured, ...used])];
+  });
+  const [rotationAUnavailability, setRotationAUnavailability] = useState<Row[]>(
+    rows(initialWorkplace.rotation_a_unavailability),
+  );
   const [rules, setRules] = useState<Row[]>(rows(profile.rules));
   const audit = record(profile.audit_policy);
   const [maxWeeklyHours, setMaxWeeklyHours] = useState(number(audit.max_weekly_hours, 45));
@@ -90,6 +101,14 @@ export function ManualSetup({
     () => new Set(rows(profile.shifts).map((row) => text(row.name))),
     [profile.shifts],
   );
+  const usedExitPatterns = useMemo(
+    () => new Set(employees.map(exitPattern).filter((pattern) => pattern !== "round")),
+    [employees],
+  );
+  const availableExitPatterns = useMemo(
+    () => new Set(["round", ...enabledExitPatterns, ...usedExitPatterns]),
+    [enabledExitPatterns, usedExitPatterns],
+  );
   const ready = Boolean(unitName.trim() && employees.some(named) && shifts.some(named));
 
   const save = async () => {
@@ -107,6 +126,14 @@ export function ManualSetup({
           first_closure_group: firstClosureGroup,
           first_closure_date: firstClosureDate,
           general_exit_schedule: generalExitSchedule.trim(),
+          enabled_exit_patterns: enabledExitPatterns,
+          rotation_a_unavailability: rotationAUnavailability.map((rule) => ({
+            days: strings(rule.days),
+            shifts: strings(rule.shifts),
+            start_time: text(rule.start_time),
+            end_time: text(rule.end_time),
+            reason: text(rule.reason),
+          })),
         },
         employees: employees.filter(named).map((person) => ({
           ...person,
@@ -188,7 +215,25 @@ export function ManualSetup({
                 <option value="שבוע">שבוע</option><option value="שבועיים">שבועיים</option><option value="חודש">חודש</option>
               </select>
             </Field>
-            <Field label="קבוצת עוגן (לסבבים)">
+          </div>
+          <Field label="היציאות הכלליות של הצוות">
+            <textarea value={generalExitSchedule} onChange={(event) => setGeneralExitSchedule(event.target.value)} rows={3} placeholder="לדוגמה: השבוע צוות א סוגר; חמשושים יוצאים בחמישי ב־10:00 וחוזרים בראשון ב־08:00" />
+          </Field>
+          <CheckboxGrid label="ימי פעילות" values={DAYS} selected={operatingDays} onChange={setOperatingDays} />
+          <PatternOptions selected={enabledExitPatterns} locked={usedExitPatterns} onChange={setEnabledExitPatterns} />
+        </SetupSection>
+
+        <SetupSection icon={<Repeat2 />} title="סבבים" hint="מגדירים רק מתי סבב א׳ אינו נמצא ואינו יכול לעבוד. סבב ב׳ מחושב אוטומטית כתמונה המשלימה.">
+          <div className="rotation-pair" aria-label="הקשר בין סבב א לסבב ב">
+            <div><strong>סבב א׳</strong><span>אתם מגדירים את זמני אי־הזמינות.</span></div>
+            <Repeat2 aria-hidden="true" />
+            <div className="is-derived"><strong>סבב ב׳</strong><span>מחושב בשרת ואינו ניתן לעריכה נפרדת.</span></div>
+          </div>
+
+          <PatternOptions selected={enabledExitPatterns} locked={usedExitPatterns} onChange={setEnabledExitPatterns} />
+
+          <div className="manual-grid three">
+            <Field label="קבוצת עוגן קיימת">
               <select value={firstClosureGroup} onChange={(event) => setFirstClosureGroup(event.target.value)}>
                 {(rotationMode === "triplet" ? ["א", "ב", "ג"] : ["א", "ב"]).map((group) => <option key={group} value={group}>{group}</option>)}
               </select>
@@ -197,10 +242,26 @@ export function ManualSetup({
               <DateInput value={firstClosureDate} onChange={setFirstClosureDate} />
             </Field>
           </div>
-          <Field label="היציאות הכלליות של הצוות">
-            <textarea value={generalExitSchedule} onChange={(event) => setGeneralExitSchedule(event.target.value)} rows={3} placeholder="לדוגמה: השבוע צוות א סוגר; חמשושים יוצאים בחמישי ב־10:00 וחוזרים בראשון ב־08:00" />
-          </Field>
-          <CheckboxGrid label="ימי פעילות" values={DAYS} selected={operatingDays} onChange={setOperatingDays} />
+
+          <div className="manual-list">
+            {rotationAUnavailability.map((rule, index) => (
+              <article className="manual-row rotation-rule" key={`rotation-a-${index}`}>
+                <div className="rotation-rule-head">
+                  <div><strong>תקופת אי־זמינות {index + 1}</strong><span>השארת ימים או משמרות ללא בחירה תחיל את הכלל על כולם.</span></div>
+                  <button type="button" className="icon-button subtle" aria-label={`מחיקת תקופת אי־זמינות ${index + 1}`} onClick={() => setRotationAUnavailability((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
+                </div>
+                <CheckboxGrid label="ימים שבהם סבב א׳ אינו זמין" values={DAYS} selected={strings(rule.days)} onChange={(value) => edit(setRotationAUnavailability, index, "days", value)} />
+                {shiftNames.length ? <CheckboxGrid label="משמרות (ללא בחירה = כל המשמרות)" values={shiftNames} selected={strings(rule.shifts)} onChange={(value) => edit(setRotationAUnavailability, index, "shifts", value)} /> : null}
+                <div className="manual-grid three">
+                  <Field label="משעה (רשות)"><input type="time" step={300} value={inputText(rule.start_time)} onChange={(event) => edit(setRotationAUnavailability, index, "start_time", event.target.value)} /></Field>
+                  <Field label="עד שעה (רשות)"><input type="time" step={300} value={inputText(rule.end_time)} onChange={(event) => edit(setRotationAUnavailability, index, "end_time", event.target.value)} /></Field>
+                  <Field label="סיבה / תיאור"><input value={inputText(rule.reason)} onChange={(event) => edit(setRotationAUnavailability, index, "reason", event.target.value)} placeholder="לדוגמה: יציאה קבועה" /></Field>
+                </div>
+              </article>
+            ))}
+          </div>
+          <button type="button" className="ghost-button" onClick={() => setRotationAUnavailability((current) => [...current, { days: [], shifts: [], start_time: "", end_time: "", reason: "" }])}><Plus size={16} /> הוספת זמן שבו סבב א׳ אינו זמין</button>
+          {rotationAUnavailability.length === 0 ? <p className="rotation-empty">לא הוגדר סבב פעיל. הצוות ימשיך לעבוד ללא מגבלת סבבים.</p> : <p className="rotation-derived-note">סבב ב׳ יהיה זמין בדיוק בזמנים שסבב א׳ אינו זמין, ולא זמין בשאר מועדי הפעילות. החישוב מתבצע בשירות השיבוץ.</p>}
         </SetupSection>
 
         <SetupSection icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">
@@ -214,7 +275,7 @@ export function ManualSetup({
                     <select value={exitPattern(person)} onChange={(e) => {
                       edit(setEmployees, index, "exit_pattern", e.target.value);
                       edit(setEmployees, index, "rotation_group", rotationGroups(e.target.value)[0] ?? "");
-                    }}>{Object.entries(EXIT_PATTERNS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+                    }}>{Object.entries(EXIT_PATTERNS).filter(([value]) => availableExitPatterns.has(value)).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
                   </Field>
                   {rotationGroups(exitPattern(person)).length ? <Field label="קבוצה"><select value={text(person.rotation_group) || rotationGroups(exitPattern(person))[0]} onChange={(e) => edit(setEmployees, index, "rotation_group", e.target.value)}>{rotationGroups(exitPattern(person)).map((group) => <option key={group}>{group}</option>)}</select></Field> : null}
                   <Field label="מעמד">
@@ -301,6 +362,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function CheckboxGrid({ label, values, selected, onChange }: { label: string; values: string[]; selected: string[]; onChange: (value: string[]) => void }) {
   return <fieldset className="manual-checkboxes"><legend>{label}</legend>{values.map((value) => <label key={value}><input type="checkbox" checked={selected.includes(value)} onChange={(event) => onChange(event.target.checked ? [...selected, value] : selected.filter((item) => item !== value))} /><span>{value}</span></label>)}</fieldset>;
+}
+
+function PatternOptions({ selected, locked, onChange }: { selected: string[]; locked: Set<string>; onChange: (value: string[]) => void }) {
+  return <fieldset className="manual-checkboxes"><legend>מבני יציאה אופציונליים</legend>{Object.entries(EXIT_PATTERNS).filter(([value]) => value !== "round").map(([value, label]) => {
+    const required = locked.has(value);
+    return <label key={value} title={required ? "המבנה משויך כרגע לאיש צוות" : undefined}><input type="checkbox" checked={selected.includes(value)} disabled={required} onChange={(event) => onChange(event.target.checked ? [...selected, value] : selected.filter((item) => item !== value))} /><span>{label}{required ? " · בשימוש" : ""}</span></label>;
+  })}<small>רשות — אפשר להשאיר את כל האפשרויות כבויות.</small></fieldset>;
 }
 
 function edit(setter: React.Dispatch<React.SetStateAction<Row[]>>, index: number, key: string, value: unknown) {

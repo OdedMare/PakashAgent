@@ -13,7 +13,7 @@ import json
 import pytest
 
 from app.bl.changes import ChangeAgent, OP_ASSIGN, OP_REMOVE, OP_SWAP
-from app.bl.scheduler import Scheduler, build_slots
+from app.bl.scheduler import Scheduler, build_slots, effective_availability
 from app.common.errors import AgentError
 
 MORNING = "בוקר"
@@ -291,6 +291,90 @@ def test_dated_constraint_overrides_the_same_recurring_occurrence():
     assert payload["period"]["slots"][0]["candidate_employee_ids"] == [
         "employee-1", "employee-2"
     ]
+
+
+def test_rotation_b_is_the_slot_complement_of_rotation_a():
+    profile = dict(
+        PROFILE,
+        workplace={
+            "name": "מוקד", "rotation_mode": "round",
+            "rotation_a_unavailability": [{
+                "days": ["שני"], "shifts": [MORNING],
+                "start_time": "", "end_time": "", "reason": "יציאה",
+            }],
+        },
+        employees=[
+            dict(PROFILE["employees"][0], exit_pattern="round", rotation_group="א"),
+            dict(PROFILE["employees"][1], exit_pattern="round", rotation_group="ב"),
+        ],
+    )
+
+    rows = effective_availability(
+        profile, [], "2026-08-17", "2026-08-18"
+    )
+
+    assert [(row["employee"], row["date"], row["shift"])
+            for row in rows] == [
+        ("דנה", "2026-08-17", MORNING),
+        ("יוסי", "2026-08-18", MORNING),
+    ]
+    assert all(row["source"] == "rotation" and row["is_hard"] for row in rows)
+
+
+def test_daily_scheduler_excludes_the_unavailable_rotation():
+    profile = dict(
+        PROFILE,
+        workplace={
+            "name": "מוקד", "rotation_mode": "round",
+            "rotation_a_unavailability": [{
+                "days": ["שני"], "shifts": [MORNING],
+                "start_time": "", "end_time": "", "reason": "יציאה",
+            }],
+        },
+        employees=[
+            dict(PROFILE["employees"][0], exit_pattern="round", rotation_group="א"),
+            dict(PROFILE["employees"][1], exit_pattern="round", rotation_group="ב"),
+        ],
+    )
+    llm = _ScriptedLlm([_reply([{
+        "employee_id": "employee-2", "slot_id": "slot-1",
+        "reason": "סבב ב זמין",
+    }])])
+
+    result = Scheduler(llm).generate_day(profile, "2026-08-17")
+    payload = json.loads(llm.calls[0]["user"])
+
+    assert [row["employee"] for row in result["assignments"]] == ["יוסי"]
+    assert payload["period"]["slots"][0]["candidate_employee_ids"] == [
+        "employee-2"
+    ]
+    assert payload["availability"][0]["derived_from"] == "rotation_a_unavailability"
+
+
+def test_legacy_range_generation_drops_a_rotation_violation():
+    profile = dict(
+        PROFILE,
+        workplace={
+            "name": "מוקד", "rotation_mode": "round",
+            "rotation_a_unavailability": [{
+                "days": ["שני"], "shifts": [MORNING],
+                "start_time": "", "end_time": "", "reason": "יציאה",
+            }],
+        },
+        employees=[
+            dict(PROFILE["employees"][0], exit_pattern="round", rotation_group="א"),
+        ],
+    )
+    llm = _ScriptedLlm([_reply([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "המודל ניסה לשבץ את הסבב החסר",
+    }])])
+
+    result = Scheduler(llm).generate(
+        profile, "2026-08-17", "2026-08-17"
+    )
+
+    assert result["assignments"] == []
 
 
 def test_required_roles_and_non_counting_trainees_reach_the_daily_contract():

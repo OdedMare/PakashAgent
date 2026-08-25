@@ -69,6 +69,7 @@ class RuntimeSettingsStore:
             llm_base_url_fast=env.llm_base_url_fast,
             llm_base_url_default=env.llm_base_url_default,
             llm_base_url_advanced=env.llm_base_url_advanced,
+            llm_queue_seconds=env.llm_queue_seconds,
         )
         if self._path.exists():
             self._apply(json.loads(self._path.read_text("utf-8")), False)
@@ -146,7 +147,7 @@ class RuntimeSettingsStore:
                     # Float, and 0 is meaningful ("do not send it"), so it
                     # cannot join the max(1, int(...)) group below.
                     value = _clamp_penalty(value)
-                elif key == "llm_timeout_seconds":
+                elif key in ("llm_timeout_seconds", "llm_queue_seconds"):
                     # 0 is meaningful here — "no timeout, wait as long as the
                     # server needs" — so this cannot join the max(1, ...)
                     # group below, which would quietly turn a request for no

@@ -52,6 +52,12 @@ from app.dal.llm.model_roles import (
     resolve_model,
     role_for_flow,
 )
+from app.dal.llm.model_slots import (
+    INTERACTIVE,
+    ModelBusy,
+    ModelSlots,
+    priority_for_flow,
+)
 
 # One initial attempt + one retry with the parse error appended.
 _MAX_JSON_ATTEMPTS = 2
@@ -78,10 +84,7 @@ _DEFAULT_MAX_CONCURRENCY = 1
 # burst of requests queues here instead of thrashing the server.
 #
 # Built on first use rather than at import, from the settings the first call
-# reads: a semaphore cannot be resized once created, so this is fixed for the
-# life of the process even though every other LLM setting is live. That is
-# honest about what a semaphore can do — the alternative is a UI control that
-# silently does nothing.
+# reads. The concurrency limit stays fixed for the life of the process.
 #
 # The right value depends entirely on the server. One that batches
 # continuously (vLLM, TGI) does its own scheduling and is *starved* by a low
@@ -100,8 +103,24 @@ def _slots(settings):
                 limit = getattr(
                     settings, "llm_max_concurrency", _DEFAULT_MAX_CONCURRENCY
                 )
-                _LLM_SLOTS = threading.BoundedSemaphore(max(1, int(limit or 1)))
+                _LLM_SLOTS = ModelSlots(limit)
     return _LLM_SLOTS
+
+
+_DEFAULT_QUEUE_SECONDS = 180
+
+
+def _queue_seconds(settings, flow: str):
+    """How long interactive work may wait for a slot; builds wait forever."""
+    if priority_for_flow(flow) != INTERACTIVE:
+        return None
+    try:
+        seconds = int(getattr(
+            settings, "llm_queue_seconds", _DEFAULT_QUEUE_SECONDS
+        ))
+    except (TypeError, ValueError):
+        seconds = _DEFAULT_QUEUE_SECONDS
+    return seconds if seconds > 0 else None
 
 # Ceiling on one logical `complete_json` call. `llm_timeout_seconds` bounds a
 # single HTTP round-trip, but the ladder can run four of them and each retries
@@ -320,7 +339,10 @@ class OpenAIJsonClient:
         for _attempt in range(_MAX_JSON_ATTEMPTS):
             content, current = self._complete(
                 client, chosen_model, messages, max_tokens, schema,
-                settings.llm_repetition_penalty, _slots(settings),
+                settings.llm_repetition_penalty,
+                _slots(settings).reserve(
+                    priority_for_flow(flow), _queue_seconds(settings, flow)
+                ),
                 _budget_seconds(settings, flow),
             )
             # Tokens spent on a rejected reply were still spent — accumulate
@@ -415,7 +437,7 @@ class OpenAIJsonClient:
 
     @staticmethod
     def _complete(
-        client, model, messages, max_tokens, schema, penalty, slots,
+        client, model, messages, max_tokens, schema, penalty, reservation,
         total_budget_seconds=_MIN_TOTAL_BUDGET_SECONDS,
     ):
         # Degradation ladder for OpenAI-compatible servers:
@@ -432,41 +454,38 @@ class OpenAIJsonClient:
             None if total_budget_seconds is None
             else time.monotonic() + total_budget_seconds
         )
-        with slots:
-            for kwargs in OpenAIJsonClient._attempts(
-                messages, max_tokens, schema, penalty,
-            ):
-                try:
-                    response = create_with_retry(
-                        client, model, kwargs, deadline=deadline
-                    )
-                except BadRequestError as exc:
-                    # Not every 400 is a shape rejection. A prompt longer than
-                    # the server's context window is also a 400, and stepping
-                    # down the ladder cannot shorten it — every remaining rung
-                    # sends the same oversized messages, fails identically, and
-                    # buries the real cause behind whichever rung happened to
-                    # be last. Say what actually happened instead.
-                    if _is_context_overflow(exc):
-                        raise AgentError(
-                            "הבקשה ארוכה מדי לחלון ההקשר של המודל. "
-                            "צמצם את התקופה או את כמות הנתונים."
+        try:
+            with reservation:
+                for kwargs in OpenAIJsonClient._attempts(
+                    messages, max_tokens, schema, penalty,
+                ):
+                    try:
+                        response = create_with_retry(
+                            client, model, kwargs, deadline=deadline
                         )
-                    last_bad_request = exc
-                    continue
-                except APITimeoutError:
-                    # "Request timed out." tells the manager nothing they can
-                    # act on, and the thing they can act on is a setting. The
-                    # server was still generating when the client hung up:
-                    # this names the ceiling and where to raise it.
-                    raise AgentError(
-                        "המודל לא הספיק לענות בתוך מגבלת הזמן שהוגדרה. "
-                        "אפשר להעלות את 'זמן המתנה למודל' בהגדרות, "
-                        "או לאפס אותו כדי להמתין כמה שנדרש."
-                    )
-                except Exception as exc:
-                    raise AgentError("שגיאת מודל: " + str(exc))
-                return OpenAIJsonClient._response_data(response)
+                    except BadRequestError as exc:
+                        # Not every 400 is a shape rejection. A prompt longer
+                        # than the server's context window is also a 400.
+                        if _is_context_overflow(exc):
+                            raise AgentError(
+                                "הבקשה ארוכה מדי לחלון ההקשר של המודל. "
+                                "צמצם את התקופה או את כמות הנתונים."
+                            )
+                        last_bad_request = exc
+                        continue
+                    except APITimeoutError:
+                        raise AgentError(
+                            "המודל לא הספיק לענות בתוך מגבלת הזמן שהוגדרה. "
+                            "אפשר להעלות את 'זמן המתנה למודל' בהגדרות, "
+                            "או לאפס אותו כדי להמתין כמה שנדרש."
+                        )
+                    except Exception as exc:
+                        raise AgentError("שגיאת מודל: " + str(exc))
+                    return OpenAIJsonClient._response_data(response)
+        except ModelBusy:
+            raise AgentError(
+                "המודל תפוס כרגע בעבודה אחרת. נסו שוב בעוד רגע."
+            )
         raise AgentError("שגיאת מודל: " + str(last_bad_request))
 
     @staticmethod

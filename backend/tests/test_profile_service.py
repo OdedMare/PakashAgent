@@ -141,3 +141,36 @@ def test_each_employee_rotation_group_is_validated_against_own_pattern():
         ProfileService(repo).update("team", employees=[{
             "name": "דנה", "exit_pattern": "round", "rotation_group": "ג",
         }])
+
+
+def test_rotation_a_schedule_and_optional_patterns_share_the_workplace_profile():
+    repo = _Repo()
+    result = ProfileService(repo).update("team", workplace={
+        "name": "פלוגה",
+        "enabled_exit_patterns": ["triplet", "hamshushim"],
+        "rotation_a_unavailability": [{
+            "days": ["שני"], "shifts": ["בוקר"],
+            "start_time": "08:00", "end_time": "12:00",
+            "reason": "יציאה קבועה",
+        }],
+    })
+
+    workplace = result["workplace"]
+    assert workplace["enabled_exit_patterns"] == ["triplet", "hamshushim"]
+    assert workplace["rotation_a_unavailability"] == [{
+        "days": ["שני"], "shifts": ["בוקר"],
+        "start_time": "08:00", "end_time": "12:00",
+        "reason": "יציאה קבועה",
+    }]
+
+
+def test_rotation_configuration_rejects_unknown_patterns_and_bad_times():
+    repo = _Repo()
+    with pytest.raises(AgentError):
+        ProfileService(repo).update("team", workplace={
+            "enabled_exit_patterns": ["invented"],
+        })
+    with pytest.raises(AgentError):
+        ProfileService(repo).update("team", workplace={
+            "rotation_a_unavailability": [{"start_time": "29:00"}],
+        })
