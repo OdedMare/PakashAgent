@@ -1317,6 +1317,7 @@ class ScheduleService:
         request: str,
         schedule_id: Optional[str] = None,
         stated_reason: str = "",
+        pending_request: str = "",
     ) -> dict:
         """What the agent would do about a request. Writes nothing.
 
@@ -1338,6 +1339,7 @@ class ScheduleService:
                 team_id, window[0], window[1]
             ),
             history=self._repository.change_log(team_id, limit=40),
+            pending_request=pending_request,
         )
         proposal["schedule_id"] = schedule.get("id", "")
         # The audit runs against the schedule as the proposal would leave it,
@@ -1729,6 +1731,7 @@ class ScheduleService:
         team_id: str,
         request: str,
         schedule_id: Optional[str] = None,
+        pending_request: str = "",
     ) -> dict:
         """Answer a question about the schedule by running read-only tools.
 
@@ -1760,6 +1763,7 @@ class ScheduleService:
             preferences=self._repository.preferences(
                 team_id, status=PREFERENCE_ACTIVE
             ) if hasattr(self._repository, "preferences") else [],
+            pending_request=pending_request,
         )
         answer["schedule_id"] = _text((schedule or {}).get("id"))
         return answer

@@ -173,10 +173,11 @@ def _employees(rows: Any, default_exit_pattern: str = "round") -> List[dict]:
         if exit_pattern not in ("round", "triplet", "hamshushim", "shushim"):
             raise AgentError("מבנה היציאות של איש הצוות אינו תקין")
         row["exit_pattern"] = exit_pattern
-        row["rotation_group"] = (
-            _text(row.get("rotation_group"))
-            if exit_pattern in ("round", "triplet") else ""
-        )
+        # Kept for every pattern, because a group is what makes one rotate.
+        # A חמשושים person *with* a group goes out on their group's weekends;
+        # the same person without one goes out every week. Discarding it here
+        # made the first of those impossible to record.
+        row["rotation_group"] = _text(row.get("rotation_group"))
         row["role"] = _text(row.get("role"))
         row["notes"] = _text(row.get("notes"))
         row["is_shift_manager"] = bool(row.get("is_shift_manager"))
@@ -344,9 +345,15 @@ def _validate_rotation_groups(profile: dict) -> None:
         pattern = _text(person.get("exit_pattern")) or _text(
             (profile.get("workplace") or {}).get("rotation_mode")
         ) or "round"
-        groups = {"א", "ב", "ג"} if pattern == "triplet" else {"א", "ב"}
+        # חמשושים and שושים say how long a closure runs, not how many groups
+        # take turns, so an optional group on one is validated against the
+        # unit's own cycle rather than against the pattern.
+        cycle = pattern if pattern in ("round", "triplet") else _text(
+            (profile.get("workplace") or {}).get("rotation_mode")
+        ) or "round"
+        groups = {"א", "ב", "ג"} if cycle == "triplet" else {"א", "ב"}
         group = _text(person.get("rotation_group"))
-        if pattern in ("round", "triplet") and group and group not in groups:
+        if group and group not in groups:
             raise AgentError("קבוצת הסבב של %s אינה מתאימה למבנה היחידה" % (
                 _text(person.get("name")) or "איש הצוות"
             ))

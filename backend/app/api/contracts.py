@@ -524,11 +524,20 @@ class ProposeRequest(BaseModel):
 
     `reason` carries the manager's reason when they volunteered it. When they
     did not, the agent asks rather than the request being rejected (D8).
+
+    `pending_request` carries the request a previous turn could not carry out
+    without guessing, echoed back from the `Proposal` that asked. It is what
+    makes "ערב" a complete answer to "לאיזו משמרת?": the manager answers the
+    question they were asked, and the original sentence is still here to
+    answer it *about*. Sent by the client rather than held on the server —
+    the alternative is per-manager conversation state on a stateless route,
+    and a wrong or stale pending request would silently re-target a change.
     """
 
     request: str = Field(min_length=1, max_length=2000)
     schedule_id: Optional[str] = None
     reason: str = Field(default="", max_length=1000)
+    pending_request: str = Field(default="", max_length=2000)
 
 
 class Operation(BaseModel):
@@ -557,13 +566,23 @@ class Proposal(BaseModel):
 
     `needs_reason` true means the manager was asked for their reason and the
     proposal is deliberately empty until they give one.
+
+    `needs_input` true means the agent could not tell *what* the request
+    referred to — which person, shift or date — and asked. The proposal is
+    empty for the same reason and in the same way, and `pending_request`
+    carries the sentence to resume once the manager answers.
     """
 
     schedule_id: str = ""
     reply: str = ""
     needs_reason: bool = False
+    needs_input: bool = False
     agent_reason: str = ""
     stated_reason: str = ""
+    # The request this proposal is still waiting to carry out. Empty on a
+    # finished proposal; set only alongside a question, so the client has
+    # nothing stale to send back once the answer has landed.
+    pending_request: str = ""
     operations: List[Operation] = []
     profile_operations: List[ProfileOperation] = []
     constraints: List[Dict[str, Any]] = []
@@ -964,6 +983,9 @@ class AskRequest(BaseModel):
 
     request: str = Field(min_length=1, max_length=500)
     schedule_id: Optional[str] = None
+    # The question a previous turn asked about, echoed back so a one-word
+    # answer resumes it instead of being read as a new question.
+    pending_request: str = Field(default="", max_length=500)
 
 
 class AgentStep(BaseModel):
@@ -1002,6 +1024,9 @@ class AgentAnswer(BaseModel):
     # True when the agent is asking one focused follow-up rather than closing
     # the conversation with an answer.
     needs_input: bool = False
+    # What the follow-up is a follow-up *to*. Set only beside a question, so
+    # the manager's answer continues that request rather than replacing it.
+    pending_request: str = ""
     used_model: bool = True
     understood: bool = True
     schedule_id: str = ""

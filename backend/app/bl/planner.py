@@ -143,6 +143,7 @@ class PlanningAgent:
         profile: dict,
         period: Optional[dict] = None,
         preferences: Optional[List[dict]] = None,
+        pending_request: str = "",
     ) -> dict:
         """What the agent makes of a question. Reads only; writes nothing.
 
@@ -152,17 +153,29 @@ class PlanningAgent:
         manager whose answer came from keyword matching should be able to
         tell, because its coverage is narrower and saying so is what keeps
         the narrower coverage honest.
+
+        `pending_request` is the question a previous turn asked about. When
+        it is set, `request` is the *answer* to a clarification rather than a
+        new question, and the two are read together — "ערב" alone says
+        nothing, and making the manager retype the whole sentence is the
+        interaction this exists to avoid.
         """
         text = _bounded(request)
         if not text:
             raise AgentError("הבקשה אינה יכולה להיות ריקה")
 
+        pending = _bounded(pending_request)
+        resolved = _resume(pending, text)
+
         try:
-            return self._with_model(team_id, text, profile, period, preferences)
+            return self._with_model(
+                team_id, resolved, profile, period, preferences,
+                pending=pending, reply=text if pending else "",
+            )
         except AgentError:
             # Unconfigured, unreachable, or answering with unusable JSON.
             # All three mean the same thing here: answer without it.
-            return self.without_model(team_id, text, profile, period)
+            return self.without_model(team_id, resolved, profile, period)
 
     # -- with a model ------------------------------------------------------
 
@@ -173,6 +186,8 @@ class PlanningAgent:
         profile: dict,
         period: Optional[dict],
         preferences: Optional[List[dict]],
+        pending: str = "",
+        reply: str = "",
     ) -> dict:
         """The tool loop. Model picks, tools answer, repeat until done."""
         results: List[dict] = []
@@ -192,6 +207,13 @@ class PlanningAgent:
                 ],
                 "results": results,
                 "request": request,
+                # What the manager was asked last turn and what they said
+                # back. Handed over so the model continues that request
+                # rather than re-asking it -- a model that cannot see it
+                # answered has no way to tell a clarification from a new
+                # question, and asking twice is the loop this prevents.
+                "asked_last_turn": pending,
+                "answer_to_that": reply,
             })
 
             answer = _bounded(turn.get("answer")) or answer
@@ -221,6 +243,9 @@ class PlanningAgent:
             "results": results,
             "needs_confirmation": needs_confirmation,
             "needs_input": needs_input,
+            # Carried back only while a question is open, so the client has
+            # nothing stale to echo once the answer has landed.
+            "pending_request": request if needs_input else "",
             "used_model": True,
             "understood": True,
         }
@@ -280,18 +305,25 @@ class PlanningAgent:
                 "results": [],
                 "needs_confirmation": False,
                 "needs_input": True,
+                # Nothing to resume: the sentence was never placed, so there
+                # is no intent for an answer to continue. Echoing it back
+                # would make the next turn read as a clarification of a
+                # request that was never understood in the first place.
+                "pending_request": "",
                 "used_model": False,
                 "understood": False,
                 "intent": read["intent"],
             }
 
         answer, steps, results, needs_confirmation = handler(team_id, read)
+        asking = _is_question(answer)
         return {
             "answer": answer,
             "steps": steps,
             "results": results,
             "needs_confirmation": needs_confirmation,
-            "needs_input": _is_question(answer),
+            "needs_input": asking,
+            "pending_request": request if asking else "",
             "used_model": False,
             "understood": True,
             "intent": read["intent"],
@@ -515,6 +547,29 @@ _NOT_UNDERSTOOD = (
     "אני רוצה לדייק ולא לנחש. מה תרצו לברר קודם — מחליף לעובד/ת, "
     "מידע על הצוות, חוסרים בסידור, שעות של עובד/ת, או מוכנות לפרסום?"
 )
+
+
+def _resume(pending: str, reply: str) -> str:
+    """The original request and the manager's clarification, read as one.
+
+    Joined rather than replaced. "ערב" is not a request and never was — it
+    is the missing half of one, and dropping the half that carried the verb
+    is how a clarification turns into a new, emptier question.
+
+    Kept as plain text rather than a parsed intent structure: the sentence
+    is what both the model and `bl/intent.py` already read, and a second
+    representation of the same request is a second thing to keep in sync.
+    """
+    pending = _bounded(pending)
+    reply = _bounded(reply)
+    if not pending:
+        return reply
+    if not reply:
+        return pending
+    # An answer that already restates the request is not appended to itself.
+    if pending in reply:
+        return reply
+    return "%s (%s)" % (pending, reply)
 
 
 def _is_question(value: str) -> bool:
