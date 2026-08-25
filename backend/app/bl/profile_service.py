@@ -13,6 +13,7 @@ _TEXT_SECTIONS = (
     "existing_schedule_source", "summary",
 )
 _OBJECT_SECTIONS = ("training_policy", "audit_policy")
+_OPTIONAL_EXIT_PATTERNS = ("triplet", "hamshushim", "shushim")
 
 
 class ProfileService:
@@ -266,6 +267,39 @@ def _workplace(value: Any) -> dict:
     result["general_exit_schedule"] = _text(
         result.get("general_exit_schedule")
     )
+    enabled_patterns = _text_list(
+        result.get("enabled_exit_patterns") or []
+    )
+    if any(pattern not in _OPTIONAL_EXIT_PATTERNS
+           for pattern in enabled_patterns):
+        raise AgentError("מבנה היציאות האופציונלי אינו תקין")
+    result["enabled_exit_patterns"] = list(dict.fromkeys(enabled_patterns))
+    result["rotation_a_unavailability"] = _rotation_rules(
+        result.get("rotation_a_unavailability") or []
+    )
+    return result
+
+
+def _rotation_rules(value: Any) -> List[dict]:
+    """Rotation A uses the same shape as recurring employee constraints."""
+    if not isinstance(value, list):
+        raise AgentError("זמני אי־הזמינות של סבב א׳ אינם תקינים")
+    result = []
+    for raw in value:
+        if not isinstance(raw, dict):
+            raise AgentError("פרטי אי־הזמינות של סבב א׳ אינם תקינים")
+        start_time = _text(raw.get("start_time"))
+        end_time = _text(raw.get("end_time"))
+        if any(value and not _valid_time(value)
+               for value in (start_time, end_time)):
+            raise AgentError("שעות הסבב חייבות להיות בפורמט HH:MM")
+        result.append({
+            "days": _text_list(raw.get("days") or []),
+            "shifts": _text_list(raw.get("shifts") or []),
+            "start_time": start_time,
+            "end_time": end_time,
+            "reason": _text(raw.get("reason")),
+        })
     return result
 
 

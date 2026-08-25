@@ -97,6 +97,13 @@ when stated. `service_type` is `standard`, `overlap`, or `reserve`. A shift
 may carry `shift_type`: `regular`, `overlap`, or `on_call`. Never infer these
 values from a role or a name.
 
+When the manager describes Rotation A's recurring unavailable periods, record
+them once in `workplace.rotation_a_unavailability` with the existing recurring
+constraint fields `days`, `shifts`, `start_time`, `end_time`, and `reason`.
+Do not record Rotation B: the application derives its complementary schedule.
+Optional team patterns belong in `workplace.enabled_exit_patterns` and may be
+any subset of `triplet`, `hamshushim`, and `shushim`.
+
 Distinguish a **shift type** (a recurring named slot such as the one running
 08:00–16:00) from a **single occurrence** of it on one date. The interview
 collects types. A sentence about one specific date is an availability

@@ -146,6 +146,35 @@ _PROFILE_SCHEMA = {
                 "first_closure_group": {"type": "string"},
                 "first_closure_date": {"type": "string"},
                 "general_exit_schedule": {"type": "string"},
+                "enabled_exit_patterns": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["triplet", "hamshushim", "shushim"],
+                    },
+                },
+                "rotation_a_unavailability": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": [
+                            "days", "shifts", "start_time", "end_time",
+                            "reason",
+                        ],
+                        "properties": {
+                            "days": {
+                                "type": "array", "items": {"type": "string"},
+                            },
+                            "shifts": {
+                                "type": "array", "items": {"type": "string"},
+                            },
+                            "start_time": {"type": "string"},
+                            "end_time": {"type": "string"},
+                            "reason": {"type": "string"},
+                        },
+                    },
+                },
             },
         },
         "employees": {
