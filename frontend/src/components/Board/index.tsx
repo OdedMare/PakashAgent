@@ -63,6 +63,7 @@ import { useBoardKeys } from "./useBoardKeys";
 export function Board({
   overview,
   busy,
+  generating,
   onGenerate,
   onGenerateDay,
   onOpenBlank,
@@ -77,6 +78,14 @@ export function Board({
 }: {
   overview: ManagementOverview | undefined;
   busy: boolean;
+  /** A period is being built in the background.
+   *
+   *  Separate from `busy` because it does not stop the board: the manager
+   *  keeps placing shifts by hand while the agent works, and what they place
+   *  becomes a pin the agent fills around (D18). Only the two controls that
+   *  would collide with the build itself — starting another one, and
+   *  rebuilding a single day inside it — read this. */
+  generating: boolean;
   onGenerate: (input: {
     starts_on?: string;
     ends_on?: string;
@@ -457,14 +466,16 @@ export function Board({
                   slot_date: input.slot_date,
                 });
               }}
-              onGenerateDay={schedule.status === "draft" && !busy
-                ? (date) => setGenerationDay(date)
-                : undefined}
+              onGenerateDay={
+                schedule.status === "draft" && !busy && !generating
+                  ? (date) => setGenerationDay(date)
+                  : undefined}
           />
         </>
       ) : (
         <EmptyWeek
           busy={busy || board.weekBusy}
+          generating={generating}
           profile={overview?.profile ?? null}
           weekStart={board.weekStart}
           weekEnd={board.weekEnd}
@@ -554,7 +565,7 @@ export function Board({
           shifts={overview?.shifts ?? []}
           weekStart={board.weekStart}
           weekEnd={board.weekEnd}
-          busy={busy}
+          busy={busy || generating}
           onCancel={() => setGenerationOpen(false)}
           onConfirm={(input) => {
             onGenerate(input);
@@ -566,7 +577,7 @@ export function Board({
       {generationDay && schedule ? (
         <GenerateDayDialog
           date={generationDay}
-          busy={busy}
+          busy={busy || generating}
           onCancel={() => setGenerationDay(null)}
           onConfirm={(instructions) => {
             onGenerateDay({
@@ -696,6 +707,7 @@ const EMPTY_STATS: ShiftStats = {
  *  "build" builds *that* week rather than today's. */
 function EmptyWeek({
   busy,
+  generating,
   profile,
   weekStart,
   weekEnd,
@@ -703,6 +715,7 @@ function EmptyWeek({
   onOpenBlank,
 }: {
   busy: boolean;
+  generating: boolean;
   profile: WorkplaceProfile | null;
   weekStart: string;
   weekEnd: string;
@@ -758,7 +771,7 @@ function EmptyWeek({
           type="button"
           className="ghost-button"
           onClick={onOpenBlank}
-          disabled={busy}
+          disabled={busy || generating}
           title="פתיחת שבוע ריק לשיבוץ ידני"
         >
           <PencilLine size={14} />
@@ -768,9 +781,9 @@ function EmptyWeek({
           type="button"
           className="primary-button"
           onClick={onGenerate}
-          disabled={busy}
+          disabled={busy || generating}
         >
-          {busy ? "בונה…" : "בניית הסידור לשבוע"}
+          {generating ? "בונה…" : "בניית הסידור לשבוע"}
         </button>
       </div>
       <p className="board-empty-range">

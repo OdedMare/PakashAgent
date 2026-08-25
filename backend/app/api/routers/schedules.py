@@ -46,6 +46,7 @@ from app.api.contracts import (
     ProposeRequest,
     Proposal,
     Schedule,
+    ScheduleProgress,
     SimulateRequest,
     Simulation,
     ToolRequest,
@@ -117,6 +118,22 @@ def build_router(service, guards) -> APIRouter:
     ) -> dict:
         """Launch generation and return immediately; progress is polled."""
         return service.queue_generation(session["team_id"], schedule_id)
+
+    @router.post("/generate/{schedule_id}/cancel", response_model=Schedule)
+    def cancel_generation(
+        schedule_id: str, session: dict = Depends(boss)
+    ) -> dict:
+        """Stop waiting on a build. **Keeps every day already finished.**
+
+        The manager's way out, and the reason the browser is allowed to stop
+        polling at all. Cooperative rather than forceful: a model call
+        already in flight cannot be interrupted from here, so this records
+        the decision and the worker stops at the next day boundary. What is
+        already checkpointed stays, and the period is an ordinary draft the
+        moment this returns — `POST /run` resumes the rest whenever the
+        manager wants it.
+        """
+        return service.cancel_generation(session["team_id"], schedule_id)
 
     @router.post("/generate/{schedule_id}/day/start", response_model=Schedule)
     def start_day_generation(
@@ -560,6 +577,19 @@ def build_router(service, guards) -> APIRouter:
     def delete(schedule_id: str, session: dict = Depends(boss)) -> dict:
         service.delete(schedule_id, session["team_id"])
         return {"status": "ok"}
+
+    @router.get("/{schedule_id}/progress", response_model=ScheduleProgress)
+    def progress(schedule_id: str, session: dict = Depends(boss)) -> dict:
+        """How far a build has got. **The poll, and nothing more.**
+
+        Separate from `GET /{schedule_id}` because it is asked for once a
+        second while a period is being built: the full period carries every
+        slot, every assignment and a fresh audit over both, and repeating
+        that arithmetic to learn that the agent is still on Tuesday is the
+        cost this route exists to remove. The browser reads the grid when
+        the counter moves, not on every tick.
+        """
+        return service.generation_progress(session["team_id"], schedule_id)
 
     # Declared last on purpose: a path parameter at the root of the prefix
     # matches any single segment, so "/constraints" and "/history" would be

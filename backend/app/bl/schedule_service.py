@@ -22,7 +22,7 @@ the repository, which filters on it. It is never taken from a request body.
 
 import datetime
 import logging
-from threading import Lock, Thread
+from threading import Event, Lock, Thread
 from typing import Any, Dict, List, Optional
 
 from app.bl.audit import audit, fairness, shift_stats
@@ -83,6 +83,33 @@ ACTION_IMPORTED = "imported"
 _LEARN_HISTORY = 500
 
 _log = logging.getLogger("pakash.schedule")
+
+# The states a persisted range job can be in. Written into the schedule's
+# `generation` document and read back by the browser, so they are named here
+# rather than spelled out at every comparison.
+GENERATION_RUNNING = "running"
+GENERATION_COMPLETE = "complete"
+GENERATION_FAILED = "failed"
+# The manager stopped waiting. Distinct from `failed` on purpose: nothing
+# went wrong, and the difference is what the board says to them. Both resume
+# the same way -- from the first day that is not already complete.
+GENERATION_CANCELLED = "cancelled"
+_GENERATION_RESUMABLE = (GENERATION_FAILED, GENERATION_CANCELLED)
+
+# How often a worker says it is still there.
+#
+# **This is what makes polling honest.** `llm_timeout_seconds` defaults to no
+# limit, so a day held open by a model that is slow and a day held open by a
+# model that is hung look identical from the outside -- both are simply
+# "running", and the browser used to poll one of them forever. A beat every
+# few seconds separates them: a job whose heartbeat is moving is working, and
+# a job whose heartbeat has stopped has lost its worker (a restarted process,
+# a killed thread) and can be relaunched by the next POST /run.
+#
+# Deliberately short relative to the client's staleness window: a beat is one
+# tiny UPDATE, and missing four of them in a row has to mean something.
+GENERATION_HEARTBEAT_SECONDS = 20
+
 
 
 def _launch_thread(target, *args) -> None:
@@ -468,7 +495,7 @@ class ScheduleService:
             )
         dates = sorted({_iso(slot.get("slot_date")) for slot in stored_slots})
         generation = {
-            "status": "running",
+            "status": GENERATION_RUNNING,
             "current_date": dates[0] if dates else "",
             "total_days": len(dates),
             "completed_days": 0,
@@ -477,6 +504,10 @@ class ScheduleService:
             "required_assignments": required_assignments or [],
             "notes": [],
             "summaries": [],
+            # Opened as of now so the browser has something to compare
+            # against before the first worker beat lands.
+            "heartbeat": _now(),
+            "cancel_requested": False,
             "days": [
                 {
                     "date": date,
@@ -524,7 +555,7 @@ class ScheduleService:
             and row.get("source") == ASSIGNED_BY_MANAGER
         ]
         generation = {
-            "status": "running",
+            "status": GENERATION_RUNNING,
             "current_date": target,
             "total_days": 1,
             "completed_days": 0,
@@ -533,6 +564,8 @@ class ScheduleService:
             "required_assignments": required,
             "notes": [],
             "summaries": [],
+            "heartbeat": _now(),
+            "cancel_requested": False,
             "days": [{
                 "date": target,
                 "status": "pending",
@@ -549,18 +582,21 @@ class ScheduleService:
         )
 
     def queue_generation(self, team_id: str, schedule_id: str) -> dict:
-        """Start checkpointed generation and return immediately for polling."""
+        """Start checkpointed generation and return immediately for polling.
+
+        Safe to call repeatedly, and the browser is meant to: it is both the
+        first launch and the way a job whose worker went away is picked back
+        up. A job this process is already running is left alone and answered
+        with its current state; anything else -- failed, cancelled, or
+        "running" with nobody on it after a restart -- is relaunched from the
+        first day that is not already complete.
+        """
         schedule = self._repository.get_schedule(schedule_id, team_id)
-        generation = schedule.get("generation") or {}
-        if generation.get("status") == "complete":
+        generation = dict(schedule.get("generation") or {})
+        if generation.get("status") == GENERATION_COMPLETE:
             return self._view(schedule, team_id)
         if not generation.get("days"):
             raise AgentError("לסידור הזה אין תהליך יצירה שניתן להמשיך")
-        if generation.get("status") == "failed":
-            generation["status"] = "running"
-            schedule = self._repository.set_generation(
-                schedule_id, team_id, generation
-            )
 
         key = (team_id, schedule_id)
         should_launch = False
@@ -568,23 +604,92 @@ class ScheduleService:
             if key not in self._active_generations:
                 self._active_generations.add(key)
                 should_launch = True
-        if should_launch:
-            try:
-                self._launch(self._generate_safely, team_id, schedule_id)
-            except Exception:
-                with self._generation_lock:
-                    self._active_generations.discard(key)
-                raise
+        if not should_launch:
+            # Somebody is already on it. Saying so through the stored state
+            # rather than starting a second worker is what keeps two browser
+            # tabs polling the same job from generating every day twice.
+            return self._view(schedule, team_id)
+
+        # Only now that this call owns the job: a resume clears the stop flag
+        # and puts the status back to running, so the poller sees movement
+        # from the response rather than from the first checkpoint.
+        generation.update({
+            "status": GENERATION_RUNNING,
+            "cancel_requested": False,
+            "heartbeat": _now(),
+        })
+        try:
+            schedule = self._repository.set_generation(
+                schedule_id, team_id, generation
+            )
+            self._launch(self._generate_safely, team_id, schedule_id)
+        except Exception:
+            with self._generation_lock:
+                self._active_generations.discard(key)
+            raise
         return self._view(schedule, team_id)
+
+    def cancel_generation(self, team_id: str, schedule_id: str) -> dict:
+        """Stop waiting on a running job. **Keeps every finished day.**
+
+        The manager's way out of a build that is going nowhere, and the
+        reason the browser is allowed to stop polling at all. It is
+        cooperative rather than forceful: a model call already in flight is
+        not interruptible from here, so this records the decision and the
+        worker stops at the next day boundary. What is already checkpointed
+        stays -- the period is an ordinary draft the moment this returns, and
+        `POST /run` picks the rest up later if the manager wants it.
+        """
+        schedule = self._repository.get_schedule(schedule_id, team_id)
+        generation = dict(schedule.get("generation") or {})
+        if not generation.get("days"):
+            raise AgentError("לסידור הזה אין תהליך יצירה שניתן לעצור")
+        if generation.get("status") == GENERATION_COMPLETE:
+            return self._view(schedule, team_id)
+
+        for day in generation.get("days") or []:
+            if day.get("status") == GENERATION_RUNNING:
+                day["status"] = "pending"
+        generation.update({
+            "status": GENERATION_CANCELLED,
+            "cancel_requested": True,
+            "heartbeat": _now(),
+        })
+        return self._view(
+            self._repository.set_generation(
+                schedule_id, team_id, generation
+            ),
+            team_id,
+        )
+
+    def generation_progress(self, team_id: str, schedule_id: str) -> dict:
+        """Just the progress of a job, for the poll that watches it.
+
+        The browser asks this once a second while a period is being built;
+        the full schedule carries every slot, every assignment and a fresh
+        audit over both, which is a great deal of arithmetic to repeat for an
+        answer that is usually "still on day three". This reads the row and
+        returns the counter.
+        """
+        schedule = self._repository.get_schedule(schedule_id, team_id)
+        generation = dict(schedule.get("generation") or {})
+        return {
+            "id": schedule.get("id"),
+            "status": schedule.get("status"),
+            "generation": generation,
+        }
 
     def _generate_safely(self, team_id: str, schedule_id: str) -> None:
         """Finish a range behind the short POST that launched it."""
         key = (team_id, schedule_id)
+        stop_beating = self._start_heartbeat(team_id, schedule_id)
         try:
             while True:
                 schedule = self.generate_next(team_id, schedule_id)
                 if (schedule.get("generation") or {}).get("status") in (
-                    "complete", "failed",
+                    GENERATION_COMPLETE,
+                    GENERATION_FAILED,
+                    GENERATION_CANCELLED,
                 ):
                     return
         except Exception as exc:
@@ -595,15 +700,18 @@ class ScheduleService:
             try:
                 schedule = self._repository.get_schedule(schedule_id, team_id)
                 generation = dict(schedule.get("generation") or {})
-                if generation.get("status") != "failed":
-                    generation["status"] = "failed"
+                if generation.get("status") not in (
+                    GENERATION_FAILED, GENERATION_CANCELLED,
+                ):
+                    generation["status"] = GENERATION_FAILED
+                    generation["heartbeat"] = _now()
                     generation["failed_days"] = max(
                         1, int(generation.get("failed_days") or 0)
                     )
                     for day in generation.get("days") or []:
-                        if day.get("status") == "running":
+                        if day.get("status") == GENERATION_RUNNING:
                             day.update({
-                                "status": "failed",
+                                "status": GENERATION_FAILED,
                                 "error": str(exc)[:1000],
                             })
                             break
@@ -615,8 +723,42 @@ class ScheduleService:
                     "could not persist generation failure id=%s", schedule_id
                 )
         finally:
+            stop_beating()
             with self._generation_lock:
                 self._active_generations.discard(key)
+
+    def _start_heartbeat(self, team_id: str, schedule_id: str):
+        """Say "still here" every few seconds. Returns the way to stop.
+
+        A separate thread rather than a stamp at each checkpoint, because the
+        thing worth reporting is exactly what a checkpoint cannot report: a
+        day held open by a model call that may never return. The beat runs
+        beside that call and stops with the job.
+
+        A repository that cannot beat -- an older one, a test double -- is
+        not an error. It only means the browser sees a job that never looks
+        stale, which is the behaviour that existed before this.
+        """
+        touch = getattr(self._repository, "touch_generation", None)
+        if touch is None:
+            return lambda: None
+
+        stop = Event()
+
+        def beat() -> None:
+            while not stop.wait(GENERATION_HEARTBEAT_SECONDS):
+                try:
+                    touch(schedule_id, team_id, _now())
+                except Exception:
+                    # A missed beat reads as a stalled job and costs one
+                    # relaunch, which is recoverable. Killing the generation
+                    # over it would not be.
+                    _log.warning(
+                        "generation heartbeat failed id=%s", schedule_id
+                    )
+
+        Thread(target=beat, daemon=True).start()
+        return stop.set
 
     def generate_next(self, team_id: str, schedule_id: str) -> dict:
         """Generate the next pending/failed date and checkpoint the result."""
@@ -625,18 +767,24 @@ class ScheduleService:
         days = [dict(item) for item in generation.get("days") or []]
         if not days:
             raise AgentError("לסידור הזה אין תהליך יצירה שניתן להמשיך")
-        if generation.get("status") == "complete":
+        if generation.get("status") == GENERATION_COMPLETE:
             return self._view(schedule, team_id)
+        # Checked before the day is chosen, not after the model answers: a
+        # manager who stopped waiting must not pay for one more call.
+        if generation.get("cancel_requested"):
+            return self._stop_generation(schedule, team_id, generation, days)
 
         target = next(
             (
                 item for item in days
-                if item.get("status") in ("failed", "running", "pending")
+                if item.get("status") in (
+                    GENERATION_FAILED, GENERATION_RUNNING, "pending",
+                )
             ),
             None,
         )
         if target is None:
-            generation["status"] = "complete"
+            generation["status"] = GENERATION_COMPLETE
             self._repository.set_generation(schedule_id, team_id, generation)
             return self._view(
                 self._repository.get_schedule(schedule_id, team_id), team_id
@@ -644,19 +792,31 @@ class ScheduleService:
 
         day = _iso(target.get("date"))
         target.update({
-            "status": "running",
+            "status": GENERATION_RUNNING,
             "attempts": int(target.get("attempts") or 0) + 1,
             "error": "",
         })
-        generation.update({"status": "running", "current_date": day})
+        generation.update({
+            "status": GENERATION_RUNNING,
+            "current_date": day,
+            "heartbeat": _now(),
+        })
         generation["days"] = days
         self._repository.set_generation(schedule_id, team_id, generation)
 
         profile = self._buildable_profile(team_id)
-        required = [
-            row for row in generation.get("required_assignments") or []
-            if _iso(row.get("date")) == day
-        ]
+        # What the manager pinned when the job was opened, plus anything they
+        # have placed by hand on this date since. The board stays writable
+        # while a period is being built, so a cell filled in at 10:04 must
+        # survive the day that gets generated at 10:05 -- as a pin the agent
+        # fills around, exactly as a single-day rebuild treats one.
+        required = _merged_required_rows(
+            [
+                row for row in generation.get("required_assignments") or []
+                if _iso(row.get("date")) == day
+            ],
+            _manager_rows_on(schedule, day),
+        )
         try:
             result = self._scheduler.generate_day(
                 profile,
@@ -679,7 +839,7 @@ class ScheduleService:
             )
             self._repository.replace_assignments(schedule_id, team_id, rows)
             target.update({
-                "status": "complete",
+                "status": GENERATION_COMPLETE,
                 "error": "",
                 "metrics": result.get("metrics") or {},
             })
@@ -688,15 +848,19 @@ class ScheduleService:
             if summary:
                 generation.setdefault("summaries", []).append(summary)
         except Exception as exc:
-            target.update({"status": "failed", "error": str(exc)[:1000]})
+            target.update({
+                "status": GENERATION_FAILED, "error": str(exc)[:1000],
+            })
             generation.update({
-                "status": "failed",
+                "status": GENERATION_FAILED,
                 "current_date": day,
+                "heartbeat": _now(),
                 "completed_days": sum(
-                    item.get("status") == "complete" for item in days
+                    item.get("status") == GENERATION_COMPLETE
+                    for item in days
                 ),
                 "failed_days": sum(
-                    item.get("status") == "failed" for item in days
+                    item.get("status") == GENERATION_FAILED for item in days
                 ),
                 "days": days,
             })
@@ -704,19 +868,34 @@ class ScheduleService:
             raise
 
         generation.update({
+            "heartbeat": _now(),
             "completed_days": sum(
-                item.get("status") == "complete" for item in days
+                item.get("status") == GENERATION_COMPLETE for item in days
             ),
             "failed_days": sum(
-                item.get("status") == "failed" for item in days
+                item.get("status") == GENERATION_FAILED for item in days
             ),
             "days": days,
         })
+        # A stop asked for while the model was answering. The day that just
+        # finished is kept -- it is paid for and correct -- and the job ends
+        # here rather than taking the next one.
+        if self._cancel_requested(schedule_id, team_id):
+            return self._stop_generation(
+                self._repository.get_schedule(schedule_id, team_id),
+                team_id, generation, days,
+            )
         remaining = next(
-            (item for item in days if item.get("status") != "complete"), None
+            (
+                item for item in days
+                if item.get("status") != GENERATION_COMPLETE
+            ),
+            None,
         )
         if remaining is None:
-            generation.update({"status": "complete", "current_date": ""})
+            generation.update({
+                "status": GENERATION_COMPLETE, "current_date": "",
+            })
             if not generation.get("logged"):
                 self._repository.append_change(
                     team_id,
@@ -730,7 +909,7 @@ class ScheduleService:
                 generation["logged"] = True
         else:
             generation.update({
-                "status": "running",
+                "status": GENERATION_RUNNING,
                 "current_date": _iso(remaining.get("date")),
             })
         schedule = self._repository.set_generation(
@@ -742,6 +921,44 @@ class ScheduleService:
             generation.get("summaries") or []
         ))[:4000]
         return view
+
+    def _cancel_requested(self, schedule_id: str, team_id: str) -> bool:
+        """Whether a stop was asked for while a day was being generated.
+
+        Re-read rather than remembered: the request arrives on a different
+        thread, through the database, after this method took its copy.
+        """
+        try:
+            schedule = self._repository.get_schedule(schedule_id, team_id)
+        except Exception:
+            return False
+        return bool((schedule.get("generation") or {}).get("cancel_requested"))
+
+    def _stop_generation(
+        self, schedule: dict, team_id: str, generation: dict, days: List[dict]
+    ) -> dict:
+        """Park a job the manager stopped, keeping every finished day."""
+        for day in days:
+            if day.get("status") == GENERATION_RUNNING:
+                day["status"] = "pending"
+        generation.update({
+            "status": GENERATION_CANCELLED,
+            "cancel_requested": True,
+            "heartbeat": _now(),
+            "completed_days": sum(
+                item.get("status") == GENERATION_COMPLETE for item in days
+            ),
+            "failed_days": sum(
+                item.get("status") == GENERATION_FAILED for item in days
+            ),
+            "days": days,
+        })
+        return self._view(
+            self._repository.set_generation(
+                schedule.get("id"), team_id, generation
+            ),
+            team_id,
+        )
 
     def create_blank(
         self,
@@ -2023,10 +2240,62 @@ def _model_assignment(row: dict) -> dict:
     }
 
 
+def _now() -> str:
+    """This instant, UTC, as the browser will parse it.
+
+    A `Z` suffix rather than `+00:00` because the value is read by
+    `Date.parse` in the poller, and a bare naive string there is read as
+    *local* time -- which would make a fresh heartbeat look hours stale to a
+    manager in Israel and stall a job that is working perfectly.
+    """
+    stamp = datetime.datetime.now(datetime.timezone.utc)
+    return stamp.replace(microsecond=0, tzinfo=None).isoformat() + "Z"
+
+
+def _manager_rows_on(schedule: dict, day: str) -> List[dict]:
+    """What the manager placed by hand on one date of a running job."""
+    return [
+        {
+            "employee": _text(row.get("employee")),
+            "shift": _text(row.get("shift")),
+            "date": day,
+        }
+        for row in schedule.get("assignments") or []
+        if _iso(row.get("date")) == day
+        and row.get("source") == ASSIGNED_BY_MANAGER
+        and _text(row.get("employee")) and _text(row.get("shift"))
+    ]
+
+
+def _merged_required_rows(
+    pinned: List[dict], manual: List[dict]
+) -> List[dict]:
+    """The pins for one date, without repeating a row named by both."""
+    rows, seen = [], set()
+    for row in list(pinned) + list(manual):
+        key = (
+            _text(row.get("employee")),
+            _text(row.get("shift")),
+            _iso(row.get("date")),
+        )
+        if not key[0] or key in seen:
+            continue
+        seen.add(key)
+        rows.append(row)
+    return rows
+
+
 def _persisted_generation_rows(
     schedule: dict, generated: List[dict], day: str
 ) -> List[dict]:
-    """Replace one generated date while preserving every other checkpoint."""
+    """Replace one generated date while preserving every other checkpoint.
+
+    Manager-placed rows on the generated date are kept rather than replaced.
+    They went in as pins the model was told to work around, so dropping the
+    ones it failed to repeat would silently undo a manager's own click --
+    and the board is writable while the job runs, so that click can land
+    between the moment the day was read and the moment it was answered.
+    """
     rows = [
         {
             "slot_id": row["slot_id"],
@@ -2036,7 +2305,14 @@ def _persisted_generation_rows(
         }
         for row in schedule.get("assignments") or []
         if _iso(row.get("date")) != day
+        or row.get("source") == ASSIGNED_BY_MANAGER
     ]
+    kept = {
+        (row.get("employee"), _text(row.get("shift")), _iso(row.get("date")))
+        for row in schedule.get("assignments") or []
+        if _iso(row.get("date")) == day
+        and row.get("source") == ASSIGNED_BY_MANAGER
+    }
     existing_sources = {
         (row.get("employee"), row.get("shift"), _iso(row.get("date"))):
             row.get("source") or "agent"
@@ -2051,6 +2327,10 @@ def _persisted_generation_rows(
         if slot_id is None:
             continue
         key = (item.get("employee"), item.get("shift"), _iso(item.get("date")))
+        if key in kept:
+            # Already carried over above, with the manager's own source and
+            # reason. Adding it again would be a duplicate row for one slot.
+            continue
         rows.append({
             "slot_id": slot_id,
             "employee": item["employee"],

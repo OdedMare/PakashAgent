@@ -155,6 +155,31 @@ class ScheduleRepository(RepositoryBase):
         """, (Jsonb(generation or {}), schedule_id, team_id))
         return self.get_schedule(schedule_id, team_id)
 
+    def touch_generation(
+        self, schedule_id: str, team_id: str, at: str
+    ) -> None:
+        """Stamp liveness on a running job without rewriting the document.
+
+        A single key is patched rather than the whole `generation` object,
+        because the worker that beats and the day loop that checkpoints are
+        writing to the same row from different moments: a read-modify-write
+        of the whole document would let a heartbeat overwrite a day that
+        finished while it was in flight.
+
+        Scoped to `status = 'running'` so a beat that lands after the job
+        finished, failed or was cancelled cannot revive the appearance of
+        one still working.
+        """
+        self._execute("""
+            UPDATE schedules
+               SET generation = jsonb_set(
+                       COALESCE(generation, '{}'::jsonb),
+                       '{heartbeat}', to_jsonb(%s::text), true
+                   )
+             WHERE id=%s AND team_id=%s
+               AND generation->>'status' = 'running'
+        """, (at, schedule_id, team_id))
+
     def delete_schedule(self, schedule_id: str, team_id: str) -> None:
         """Remove a period and everything hanging off it.
 

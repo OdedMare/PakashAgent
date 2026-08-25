@@ -139,6 +139,21 @@ impression.
   tab ([D17](../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
   It is the one management action that does *not* go through `run()` — a
   download changes nothing for a refetch or a briefing to react to.
+- **Building a period does not lock the area.** `generate` and its two
+  siblings report through `state.generating`, never through `state.busy`:
+  a build runs for minutes, and routing it through the helper the board's own
+  controls wait on left the manager unable to place a single shift — or to
+  reach the button that stops it — until it finished, which for a hung model
+  meant forever. While a build runs the board is fully writable (D18), and a
+  cell filled in by hand becomes a pin the agent fills around.
+- **The poll ends, and says why.** `resumeScheduleGeneration` reads
+  `/{id}/progress` rather than the whole period, backs off while one day is
+  in flight, and re-fetches the grid only when a day lands. It watches the
+  job's `heartbeat`: one that stops means the job lost its worker, and the
+  poller re-POSTs `/run` to adopt it. Everything else is the manager's call —
+  "עצירת היצירה" stops the wait *and* the job, keeping every finished day,
+  because with no model timeout configured the browser is the only
+  participant that knows whether anyone is still waiting.
 - **Everything re-reads after a write.** `useManagement` refetches the overview
   rather than patching locally: the schedule, its warnings, the constraints and
   the log all move together, and a locally patched grid beside a stale audit is
