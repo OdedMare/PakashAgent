@@ -211,6 +211,24 @@ def test_read_period_by_date_finds_the_covering_period(repo, tools):
     assert answer["found"] and answer["schedule"]["id"] == "sched-1"
 
 
+def test_relative_dates_never_reach_an_individual_scheduling_tool(tools):
+    answer = tools.run(TEAM, TOOL_READ_PERIOD, {"day": "tomorrow"})
+
+    assert answer["ok"] is False
+    assert "YYYY-MM-DD" in answer["error"]
+
+
+def test_an_absolute_israel_date_and_timezone_are_accepted(repo, tools):
+    _schedule(repo)
+
+    answer = tools.run(TEAM, TOOL_READ_PERIOD, {
+        "day": "2026-08-17", "timezone": "Asia/Jerusalem",
+    })
+
+    assert answer["ok"] is True
+    assert answer["schedule"]["starts_on"] == "2026-08-17"
+
+
 def test_a_date_no_period_covers_is_not_found(repo, tools):
     _schedule(repo)
     answer = tools.run(TEAM, TOOL_READ_PERIOD, {"day": "2027-01-01"})

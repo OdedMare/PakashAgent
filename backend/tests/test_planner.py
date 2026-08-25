@@ -15,6 +15,8 @@ stays zero throughout, which is the property that makes it safe for the
 answering path to exist at all.
 """
 
+import datetime
+
 import pytest
 
 from app.bl.planner import PlanningAgent
@@ -273,6 +275,20 @@ def test_replacements_are_found_with_no_model_configured(repo, tools):
     assert RON in answer["answer"]
     assert [step["tool"] for step in answer["steps"]][0] == TOOL_EMPLOYEE_STATE
     assert TOOL_FIND_REPLACEMENTS in [step["tool"] for step in answer["steps"]]
+
+
+def test_fallback_resolves_tomorrow_before_calling_a_tool(
+    repo, tools, monkeypatch,
+):
+    monkeypatch.setattr(
+        "app.bl.planner.israel_today", lambda: datetime.date(2026, 8, 20)
+    )
+
+    answer = PlanningAgent(_NoModel(), tools).answer(
+        TEAM, "יוסי לא מגיע מחר", PROFILE, period=repo.schedules["sched-1"],
+    )
+
+    assert answer["steps"][0]["arguments"]["day"] == "2026-08-21"
 
 
 def test_the_fallback_answer_rests_on_real_tool_output(repo, tools):

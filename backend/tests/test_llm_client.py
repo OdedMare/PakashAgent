@@ -109,6 +109,20 @@ def test_json_mode_is_the_first_rung_without_a_schema():
     assert fake.completions.calls[0]["response_format"]["type"] == "json_object"
 
 
+def test_backend_time_context_is_injected_into_every_model_request(monkeypatch):
+    monkeypatch.setattr(
+        "app.dal.llm.openai_client.agent_time_context",
+        lambda: "CURRENT ISRAEL CLOCK",
+    )
+    llm, fake = _client([_Response('{"ok": true}')])
+
+    llm.complete_json("original system prompt", "usr")
+
+    system = fake.completions.calls[0]["messages"][0]
+    assert system["role"] == "system"
+    assert system["content"] == "original system prompt\n\nCURRENT ISRAEL CLOCK"
+
+
 def test_ladder_steps_down_through_every_rung_on_bad_request():
     # schema → json_object → plain → merged system prompt
     llm, fake = _client([
