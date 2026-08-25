@@ -20,6 +20,8 @@ against a table of fixtures.
 import datetime
 from typing import Any, Dict, List, Optional
 
+from app.bl import rotation
+
 # Warning codes. Strings rather than an enum so they survive a JSON round
 # trip to the UI and back unchanged, and so a new check does not require a
 # frontend that knows about it in order to render.
@@ -783,20 +785,37 @@ def _cross_rotation(rows: List[dict], profile: dict) -> List[dict]:
     })
     if not dates:
         return []
-    start, end = _date(dates[0]), _date(dates[-1])
+    start, end = _parse_date(dates[0]), _parse_date(dates[-1])
     if start is None or end is None:
         return []
+
+    # Which cycles the roster actually runs. Read from the people rather
+    # than from any one closing person, so a cycle is still enforced on a day
+    # when nobody from its closing group happens to be rostered -- otherwise
+    # a group could be marked out of turn only when a colleague was there to
+    # contradict them.
+    cycles = {
+        _cycle_of(profile, person, rotation.exit_pattern(profile, person))
+        for person in people.values()
+        if _text(person.get("rotation_group"))
+    }
 
     # Who legitimately holds each date, and which cycles are closing it.
     # Built once for the period rather than per row: the arithmetic does not
     # change between two assignments on the same day.
     holders: Dict[str, set] = {}
     closing: Dict[str, set] = {}
+    day = start
+    while day <= end:
+        date = day.isoformat()
+        for cycle in cycles:
+            if rotation.closing_group(profile, day, cycle):
+                closing.setdefault(date, set()).add(cycle)
+        day += datetime.timedelta(days=1)
     for name, person in people.items():
         for row in rotation.closure_days(profile, person, start, end):
             holders.setdefault(row["date"], set()).add(name)
-            closing.setdefault(row["date"], set()).add(row["cycle"])
-    if not holders:
+    if not closing:
         return []
 
     warnings = []
@@ -804,7 +823,7 @@ def _cross_rotation(rows: List[dict], profile: dict) -> List[dict]:
         name = _text(row.get("employee"))
         date = _text(row.get("date"))
         person = people.get(name)
-        if person is None or date not in holders or name in holders[date]:
+        if person is None or name in holders.get(date, set()):
             continue
         group = _text(person.get("rotation_group"))
         if not group:
@@ -817,14 +836,17 @@ def _cross_rotation(rows: List[dict], profile: dict) -> List[dict]:
             # A different cycle is closing today; this person's own cycle
             # has no claim on the date, so they are not out of turn.
             continue
-        holding = sorted(holders[date])
+        holding = sorted(holders.get(date, set()))
         warnings.append(_warning(
             CROSS_ROTATION,
             SEVERITY_WARNING,
             "%s (קבוצה %s) משובץ ל%s בתאריך %s, "
-            "אך הסגירה במועד זה שייכת ל%s."
+            "אך הסגירה במועד זה אינה של קבוצתו%s."
             % (name, group, _text(row.get("shift")), date,
-               ", ".join(holding[:3]) + (" ואחרים" if len(holding) > 3 else "")),
+               " (סוגרים: %s%s)" % (
+                   ", ".join(holding[:3]),
+                   " ואחרים" if len(holding) > 3 else "",
+               ) if holding else ""),
             employee=name, date=date, shift=_text(row.get("shift")),
             details={
                 "rotation_group": group,
