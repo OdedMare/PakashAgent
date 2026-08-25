@@ -122,6 +122,17 @@ def test_a_negative_timeout_folds_to_no_limit(store):
     assert store.get().llm_timeout_seconds == 0
 
 
+def test_the_queue_ceiling_saves_and_zero_means_no_limit(store):
+    """It shares the timeout's exemption because it shares its meaning: 0 is
+    "wait as long as it takes", and clamping it to 1 would turn the request
+    for no ceiling into a one-second one."""
+    store.update({"llm_queue_seconds": 45})
+    assert store.get().llm_queue_seconds == 45
+    for value in (0, -10):
+        store.update({"llm_queue_seconds": value})
+        assert store.get().llm_queue_seconds == 0
+
+
 def test_concurrency_zero_is_still_clamped(store):
     """The exemption is for the timeout alone. A 0 here would mean a
     semaphore admitting nobody, which is not a setting anyone wants."""

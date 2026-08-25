@@ -4,6 +4,8 @@ Driven by a fake OpenAI client — no server, no network.
 """
 
 import json
+import threading
+import time
 
 import httpx
 import pytest
@@ -13,6 +15,7 @@ from app.common.errors import AgentError
 from app.dal.llm.json_response_parser import extract_json
 from app.dal.llm.message_merger import merge_system_into_user
 from app.dal.llm.model_id_extractor import extract_model_ids
+from app.dal.llm.model_slots import INTERACTIVE, ModelSlots
 from app.dal.llm.openai_client import OpenAIJsonClient, _budget_seconds
 
 
@@ -28,6 +31,7 @@ class _Settings:
         self.llm_diet_mode = False
         self.llm_repetition_penalty = 0.0
         self.llm_timeout_seconds = 120
+        self.llm_queue_seconds = 180
         self.llm_base_url = "http://localhost:11434/v1"
         self.openai_api_key = ""
         for key, value in overrides.items():
@@ -519,3 +523,84 @@ def test_a_settings_object_without_the_field_still_resolves():
     """
     assert _budget_seconds(object(), "scheduler") is None
     assert _budget_seconds(object(), "interview") is None
+
+
+# --- waiting for the model slot -------------------------------------------
+#
+# `llm_max_concurrency` is 1 against Ollama, so every call in the process
+# queues. What a caller must never do is queue forever: a request that
+# outlives the browser and the proxy in front of the backend is reported to
+# the manager as a bodyless 500 from a model that never failed.
+
+
+def test_a_full_queue_is_reported_rather_than_waited_out(monkeypatch):
+    """The manager gets a Hebrew sentence they can act on.
+
+    `AgentError` and not something new, so every existing caller keeps the
+    behaviour it already has: `bl/planner.py` answers the question with
+    `bl/intent.py` instead, and `schedule_service.brief()` stays quiet.
+    """
+    full = ModelSlots(limit=1)
+    occupied = threading.Event()
+    release = threading.Event()
+
+    def squat():
+        with full.reserve(INTERACTIVE):
+            occupied.set()
+            release.wait(5)
+
+    holder = threading.Thread(target=squat)
+    holder.start()
+    occupied.wait(2)
+
+    monkeypatch.setattr("app.dal.llm.openai_client._LLM_SLOTS", full)
+    llm, fake = _client([_Response('{"ok": true}')],
+                        _Settings(llm_queue_seconds=1))
+    try:
+        with pytest.raises(AgentError) as failure:
+            llm.complete_json("sys", "usr", flow="changes")
+    finally:
+        release.set()
+        holder.join(5)
+
+    assert "תפוס" in str(failure.value)
+    # Nothing was sent: the request never reached the server at all.
+    assert fake.completions.calls == []
+
+
+def test_generation_is_not_given_up_on_when_the_queue_is_busy(monkeypatch):
+    """A build waits for its turn however long that takes.
+
+    It is checkpointed per day and polled, so nobody is held up by the wait —
+    and abandoning it would throw away a day of model time to save nothing.
+    """
+    full = ModelSlots(limit=1)
+    occupied = threading.Event()
+    release = threading.Event()
+    finished = []
+
+    def squat():
+        with full.reserve(INTERACTIVE):
+            occupied.set()
+            time.sleep(0.3)
+
+    holder = threading.Thread(target=squat)
+    holder.start()
+    occupied.wait(2)
+
+    monkeypatch.setattr("app.dal.llm.openai_client._LLM_SLOTS", full)
+    llm, _fake = _client([_Response('{"ok": true}')],
+                         _Settings(llm_queue_seconds=1))
+
+    def build():
+        # A queue bound of 1s would have failed this if it applied here; the
+        # holder is still in the slot when the call starts.
+        finished.append(llm.complete_json("sys", "usr", flow="scheduler"))
+
+    builder = threading.Thread(target=build)
+    builder.start()
+    builder.join(5)
+    release.set()
+    holder.join(5)
+
+    assert finished and finished[0]["ok"] is True

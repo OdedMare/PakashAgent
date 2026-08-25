@@ -15,6 +15,8 @@ stays zero throughout, which is the property that makes it safe for the
 answering path to exist at all.
 """
 
+import datetime
+
 import pytest
 
 from app.bl.planner import PlanningAgent
@@ -394,4 +396,35 @@ def test_a_broken_model_falls_back_rather_than_failing(repo, tools):
         TEAM, "מה חסר בסידור", PROFILE, period=repo.schedules["sched-1"],
     )
     assert answer["used_model"] is False
+
+
+def test_a_tool_result_carrying_a_sql_date_reaches_the_model(repo, tools):
+    """The second turn puts raw tool output in front of the model.
+
+    A `datetime.date` arriving from a repository that does not stringify its
+    columns used to raise `TypeError` while *serialising the payload* — an
+    unhandled crash on the ask route, from a turn the model had answered
+    correctly, reported to the manager as a bodyless 500.
+    """
+    class _DatedTools:
+        def run(self, team_id, name, arguments=None):
+            return {"tool": name, "ok": True,
+                    "when": datetime.date(2026, 8, 22),
+                    "at": datetime.time(7, 0)}
+
+    model = _ScriptedModel([
+        {"done": False, "answer": "", "tool_calls": [
+            {"tool": TOOL_EMPLOYEE_STATE, "arguments": {"employee": DANA}}],
+         "needs_confirmation": False},
+        {"done": True, "answer": "מצאתי.", "tool_calls": [],
+         "needs_confirmation": False},
+    ])
+    answer = PlanningAgent(model, _DatedTools()).answer(
+        TEAM, "מתי דנה עובדת?", PROFILE, period=repo.schedules["sched-1"],
+    )
+
+    assert answer["used_model"] is True
+    assert answer["answer"] == "מצאתי."
+    # The date reached the model as a string rather than taking the turn down.
+    assert "2026-08-22" in model.calls[-1]
     assert answer["understood"] is True

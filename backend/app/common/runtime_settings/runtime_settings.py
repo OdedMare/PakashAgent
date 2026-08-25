@@ -31,3 +31,7 @@ class RuntimeSettings:
     llm_base_url_fast: Optional[str] = None
     llm_base_url_default: Optional[str] = None
     llm_base_url_advanced: Optional[str] = None
+    # How long an interactive call may wait for a model slot before it says
+    # the model is busy. Defaulted, like the role fields above, so a settings
+    # object built by older code still constructs. 0 means no limit.
+    llm_queue_seconds: int = 180

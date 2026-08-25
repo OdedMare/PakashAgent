@@ -51,6 +51,12 @@ from app.dal.llm.model_roles import (
     resolve_model,
     role_for_flow,
 )
+from app.dal.llm.model_slots import (
+    INTERACTIVE,
+    ModelBusy,
+    ModelSlots,
+    priority_for_flow,
+)
 
 # One initial attempt + one retry with the parse error appended.
 _MAX_JSON_ATTEMPTS = 2
@@ -87,6 +93,12 @@ _DEFAULT_MAX_CONCURRENCY = 1
 # limit, because a request held back here is a request it cannot put in a
 # batch. One that serves a single request at a time (Ollama's default) is only
 # thrashed by a high one.
+#
+# It is a `ModelSlots` rather than a semaphore because the order of the queue
+# turned out to matter as much as its length: a semaphore lets the generation
+# loop re-take the slot ahead of a chat request that has been waiting since
+# before the loop went round, which is how a healthy model produced a 500 on
+# the composer. See `model_slots.py`.
 _LLM_SLOTS = None
 _LLM_SLOTS_LOCK = threading.Lock()
 
@@ -99,8 +111,35 @@ def _slots(settings):
                 limit = getattr(
                     settings, "llm_max_concurrency", _DEFAULT_MAX_CONCURRENCY
                 )
-                _LLM_SLOTS = threading.BoundedSemaphore(max(1, int(limit or 1)))
+                _LLM_SLOTS = ModelSlots(limit)
     return _LLM_SLOTS
+
+
+# How long an interactive call waits for a slot before saying the model is
+# busy. Not a limit on the call itself — `llm_timeout_seconds` is that, and 0
+# there still means "wait as long as the server needs". This bounds only the
+# part of the wait during which nothing whatsoever is being generated for the
+# caller, and its job is to fail *before* the browser or a proxy in front of
+# it does, so the manager gets a Hebrew sentence instead of a dead socket.
+_DEFAULT_QUEUE_SECONDS = 180
+
+
+def _queue_seconds(settings, flow: str):
+    """The ceiling on waiting for a slot — or `None` for no ceiling.
+
+    Background work never has one: a build is checkpointed per day and polled,
+    so making it queue costs nothing and giving it up costs a day's work. Only
+    a call somebody is sitting in front of gives up, and `0` turns that off
+    too, mirroring what `llm_timeout_seconds = 0` already means.
+    """
+    if priority_for_flow(flow) != INTERACTIVE:
+        return None
+    seconds = getattr(settings, "llm_queue_seconds", _DEFAULT_QUEUE_SECONDS)
+    try:
+        seconds = int(seconds)
+    except (TypeError, ValueError):
+        seconds = _DEFAULT_QUEUE_SECONDS
+    return seconds if seconds > 0 else None
 
 # Ceiling on one logical `complete_json` call. `llm_timeout_seconds` bounds a
 # single HTTP round-trip, but the ladder can run four of them and each retries
@@ -283,7 +322,10 @@ class OpenAIJsonClient:
         for _attempt in range(_MAX_JSON_ATTEMPTS):
             content, current = self._complete(
                 client, chosen_model, messages, max_tokens, schema,
-                settings.llm_repetition_penalty, _slots(settings),
+                settings.llm_repetition_penalty,
+                _slots(settings).reserve(
+                    priority_for_flow(flow), _queue_seconds(settings, flow)
+                ),
                 _budget_seconds(settings, flow),
             )
             # Tokens spent on a rejected reply were still spent — accumulate
@@ -378,16 +420,9 @@ class OpenAIJsonClient:
 
     @staticmethod
     def _complete(
-        client, model, messages, max_tokens, schema, penalty, slots,
+        client, model, messages, max_tokens, schema, penalty, reservation,
         total_budget_seconds=_MIN_TOTAL_BUDGET_SECONDS,
     ):
-        # Degradation ladder for OpenAI-compatible servers:
-        # schema → JSON mode → plain → plain with the system prompt merged
-        # into the user turn (some local deployments reject a system role).
-        #
-        # Only a BadRequestError advances the ladder; any other exception is
-        # a real failure and becomes an AgentError immediately.
-        last_bad_request = None
         # `None` is "no ceiling", which is what `create_with_retry` already
         # means by a `None` deadline — so an unbounded call needs no branch
         # here beyond not computing one.
@@ -395,31 +430,62 @@ class OpenAIJsonClient:
             None if total_budget_seconds is None
             else time.monotonic() + total_budget_seconds
         )
-        with slots:
-            for kwargs in OpenAIJsonClient._attempts(
-                messages, max_tokens, schema, penalty,
-            ):
-                try:
-                    response = create_with_retry(
-                        client, model, kwargs, deadline=deadline
+        # The wait for a slot is bounded separately from the call itself, and
+        # only for work somebody is waiting on — see `model_slots.py`. Saying
+        # "the model is busy" in Hebrew is what stops a starved request from
+        # outliving the browser and arriving as a bodyless 500.
+        try:
+            with reservation:
+                return OpenAIJsonClient._ladder(
+                    client, model, messages, max_tokens, schema, penalty,
+                    deadline,
+                )
+        except ModelBusy:
+            raise AgentError(
+                "המודל תפוס כרגע בעבודה אחרת. נסו שוב בעוד רגע."
+            )
+
+    @staticmethod
+    def _ladder(
+        client, model, messages, max_tokens, schema, penalty, deadline,
+    ):
+        """The degradation ladder, with the slot already held.
+
+        schema → JSON mode → plain → plain with the system prompt merged into
+        the user turn (some local deployments reject a system role). Only a
+        `BadRequestError` advances a rung; any other exception is a real
+        failure and becomes an `AgentError` immediately.
+
+        Split out from `_complete` so the `with` above holds nothing but the
+        request: a body that both waits for the slot and runs the ladder
+        makes it easy to add a `return` that leaks the slot, and this is the
+        one resource in the process a leak would deadlock.
+        """
+        last_bad_request = None
+        for kwargs in OpenAIJsonClient._attempts(
+            messages, max_tokens, schema, penalty,
+        ):
+            try:
+                response = create_with_retry(
+                    client, model, kwargs, deadline=deadline
+                )
+            except BadRequestError as exc:
+                # Not every 400 is a shape rejection. A prompt longer than
+                # the server's context window is also a 400, and stepping
+                # down the ladder cannot shorten it — every remaining rung
+                # sends the same oversized messages, fails identically, and
+                # buries the real cause behind whichever rung happened to
+                # be last. Say what actually happened instead.
+                if _is_context_overflow(exc):
+                    raise AgentError(
+                        "הבקשה ארוכה מדי לחלון ההקשר של המודל. "
+                        "צמצם את התקופה או את כמות הנתונים."
                     )
-                except BadRequestError as exc:
-                    # Not every 400 is a shape rejection. A prompt longer than
-                    # the server's context window is also a 400, and stepping
-                    # down the ladder cannot shorten it — every remaining rung
-                    # sends the same oversized messages, fails identically, and
-                    # buries the real cause behind whichever rung happened to
-                    # be last. Say what actually happened instead.
-                    if _is_context_overflow(exc):
-                        raise AgentError(
-                            "הבקשה ארוכה מדי לחלון ההקשר של המודל. "
-                            "צמצם את התקופה או את כמות הנתונים."
-                        )
-                    last_bad_request = exc
-                    continue
-                except Exception as exc:
-                    raise AgentError("שגיאת מודל: " + str(exc))
-                return OpenAIJsonClient._response_data(response)
+                last_bad_request = exc
+                continue
+            except Exception as exc:
+                raise AgentError("שגיאת מודל: " + str(exc))
+            return OpenAIJsonClient._response_data(response)
         raise AgentError("שגיאת מודל: " + str(last_bad_request))
 
     @staticmethod

@@ -95,6 +95,27 @@ class Settings(BaseSettings):
     positive value here if that ever happens; it should be comfortably above
     the slowest real answer, not a round number that feels safe."""
 
+    llm_queue_seconds: int = 180
+    """Maximum time a request somebody is waiting on may spend QUEUING for a
+    model slot, before it answers "the model is busy". **0 means no limit.**
+
+    Not `llm_timeout_seconds` in another spelling. That one bounds the wait
+    for an answer being generated *for this request*, and defaults to no
+    limit because giving up there throws away work the server is still doing.
+    Nothing is being generated while a request waits in the queue, so there
+    is nothing to throw away — and a wait with no ceiling outlives the
+    browser and every proxy in front of it, which is how a busy-but-healthy
+    model produced a bodyless `500` on the manager's composer.
+
+    It applies to interactive flows only. Generation queues without a ceiling:
+    it is checkpointed per day and polled, so waiting costs it nothing and
+    giving up would cost a day of model time (`dal/llm/model_slots.py`).
+
+    Size it *below* whatever proxy sits in front of the backend, so this is
+    what answers first — the frontend allows 600s. Raise it for a model whose
+    single calls legitimately run longer than three minutes; 0 restores the
+    unbounded wait this replaced."""
+
     # The shipped endpoint is Ollama, which serves one generation at a time.
     # vLLM/TGI deployments should raise this explicitly for batching.
     llm_max_concurrency: int = 1

@@ -46,6 +46,7 @@ identical either way, because the content was never the model's to begin
 with. The model was writing the sentence around it.
 """
 
+import datetime
 import json
 from typing import Any, Dict, List, Optional
 
@@ -226,7 +227,12 @@ class PlanningAgent:
     def _ask(self, payload: dict) -> dict:
         answer = self._llm.complete_json(
             load("planner"),
-            json.dumps(payload, ensure_ascii=False),
+            # `default` for the same reason `bl/changes.py` has one: `results`
+            # carries whatever the tools returned, and a tool that ever hands
+            # back a raw SQL date would otherwise raise `TypeError` here —
+            # from a turn the model answered perfectly well, on the second
+            # pass, with nothing in the traceback naming the tool that did it.
+            json.dumps(payload, ensure_ascii=False, default=_json_default),
             schema=PLANNER_RESPONSE_SCHEMA,
             flow="planner",
         )
@@ -600,6 +606,16 @@ def _pretty(hours: Any) -> str:
         return "%g" % round(float(hours), 1)
     except (TypeError, ValueError):
         return "0"
+
+
+def _json_default(value: Any) -> str:
+    """SQL temporal values as JSON strings, in whatever a tool returned."""
+    if isinstance(value, (datetime.date, datetime.time)):
+        return value.isoformat()
+    raise TypeError(
+        "Object of type %s is not JSON serializable"
+        % value.__class__.__name__
+    )
 
 
 def _iso(value: Any) -> str:

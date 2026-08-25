@@ -124,6 +124,11 @@ export interface RuntimeSettings {
   llm_diet_mode: boolean;
   llm_repetition_penalty: number;
   llm_timeout_seconds: number;
+  /** How long a request somebody is waiting on may spend QUEUING for the
+   *  model before it answers "busy". Not the timeout above: that one bounds
+   *  waiting for an answer being generated, this one bounds waiting for a
+   *  turn, during which nothing is being generated at all. 0 = no limit. */
+  llm_queue_seconds: number;
   llm_base_url: string | null;
   openai_api_key: string;
 }

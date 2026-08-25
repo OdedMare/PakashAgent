@@ -104,6 +104,21 @@ function AgentSettings({ settings }: { settings: SettingsController }) {
         optional="שניות"
         placeholder="120"
       />
+      {/* Deliberately beside the timeout, because the two are constantly
+          confused. That one is "how long may the model take to answer me";
+          this one is "how long may I stand in line behind somebody else's
+          call". Only the second one can be waited out while nothing at all
+          is being generated, which is why only the second one has a modest
+          default. */}
+      <Field
+        settings={settings}
+        name="llm_queue_seconds"
+        label="זמן מרבי להמתנה בתור למודל"
+        type="number"
+        min="0"
+        optional="שניות; 0 = ללא הגבלה. בניית סידור ממתינה תמיד"
+        placeholder="180"
+      />
     </section>
   );
 }

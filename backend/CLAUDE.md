@@ -32,6 +32,9 @@ uvicorn app.main:app --reload
 - `dal/database/postgres.py` — connection; verifies the schema exists.
 - `dal/llm/` — the OpenAI-compatible JSON client and its degradation ladder,
   ported unchanged from AiSummryIO. Model/base URL/API key stay live per call.
+  `model_slots.py` owns the queue in front of the model: with
+  `llm_max_concurrency` at 1 every call queues, so the order matters as much
+  as the limit.
 - `dal/repository/` — the only SQL owner. `teams.py` also owns password
   hashing (`scrypt`, stdlib) and the member share token.
 - `bl/workspace_service.py` — workspace rules: who may enter a team, in which
@@ -110,6 +113,23 @@ one concern; split rather than append.
 
 ## Locked rules
 
+- **A person waiting never queues behind a build.** `dal/llm/model_slots.py`
+  hands the model slot out in arrival order and lets interactive work
+  (`changes`, `planner`, `interview`, `briefing`, `learn`) go in front of
+  generation. A plain semaphore did not: `bl/scheduler.py` releases and
+  immediately re-acquires for the next day, and that loop beat the request it
+  had just woken, so one chat message waited out day after day of a build.
+  Adding a flow to `_BACKGROUND_FLOWS` says "nobody is watching this", which
+  is true of generation — checkpointed per day, polled by the browser — and
+  of nothing else today.
+- **Waiting for a turn is bounded; waiting for an answer is not.**
+  `llm_timeout_seconds = 0` means "let the server take as long as it needs",
+  because giving up there discards an answer being generated. Queuing is the
+  opposite: nothing is being produced, so `llm_queue_seconds` ends the wait
+  with a Hebrew "the model is busy" instead. It has to fail *before* the
+  browser and any proxy in front of the backend do — a wait nobody bounds
+  reaches the manager as a bodyless `500` from a model that never failed,
+  which is exactly the bug it was added for.
 - **The audit never blocks.** `bl/audit.py` returns warnings and nothing else. It
   does not reject a schedule, rewrite an assignment, or veto the agent. Making it
   authoritative reverses [D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)

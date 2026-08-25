@@ -36,6 +36,12 @@ services:
       # cannot be changed from the settings panel. 1 suits Ollama; raise it
       # for a batching server (vLLM, TGI).
       PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-1}
+      # With one slot, every model call queues — and a request nobody can see
+      # queuing is a request that outlives the browser and arrives as a
+      # bodyless 500. This bounds only the WAIT FOR A TURN (generation waits
+      # without a ceiling; it is polled). Keep it under the frontend's
+      # 600s proxy timeout so this is what answers first. 0 = no limit.
+      PAKASH_LLM_QUEUE_SECONDS: ${PAKASH_LLM_QUEUE_SECONDS:-180}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -64,6 +70,7 @@ services:
       # picked it up.
       PAKASH_LLM_TIMEOUT_SECONDS: ${PAKASH_LLM_TIMEOUT_SECONDS:-0}
       PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-1}
+      PAKASH_LLM_QUEUE_SECONDS: ${PAKASH_LLM_QUEUE_SECONDS:-180}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       PAKASH_COPILOT_SCAN_SECONDS: ${PAKASH_COPILOT_SCAN_SECONDS:-1800}
     extra_hosts:
