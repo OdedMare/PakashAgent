@@ -728,8 +728,22 @@ function AgentTouchBar({
   );
 }
 
+/** Whether this period is the one to render for the displayed week.
+ *
+ *  Containment, not overlap, and the difference is a bug this used to have.
+ *  `starts_on <= end && ends_on >= start` is true when a period touches the
+ *  week by a single day, so paging off the end of a period kept the old
+ *  period on screen — rendered *as* the new week, with no loading state,
+ *  until `/at` answered. The server resolves a day by containment
+ *  (`schedule_service.period_at`), and the two rules have to agree: a period
+ *  the board would not get back from `/at` for this week is not this week's
+ *  schedule, whatever it overlaps.
+ *
+ *  Both bounds are checked because a week is a range. A period covering only
+ *  part of the week is not a stand-in for it either — the missing days would
+ *  render as empty columns rather than as the unread days they are. */
 function covers(schedule: Schedule, start: string, end: string): boolean {
-  return schedule.starts_on <= end && schedule.ends_on >= start;
+  return schedule.starts_on <= start && schedule.ends_on >= end;
 }
 
 /** The tiles for a period the overview did not compute.
@@ -808,7 +822,7 @@ function BoardLoading({
     <div className="board-loading" role="status" aria-busy="true">
       <p className="board-loading-line">
         <LoaderCircle className="spin" size={16} aria-hidden="true" />
-        טוען את השיבוצים ליום…
+        טוען את השיבוצים לשבוע…
       </p>
 
       {/* Marked hidden from assistive tech: the line above already says
