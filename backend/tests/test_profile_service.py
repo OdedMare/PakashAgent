@@ -116,7 +116,7 @@ def test_exit_pattern_capabilities_and_notes_are_per_employee():
         "name": "דנה",
         "role": "לוחמת חמ״ל",
         "exit_pattern": "hamshushim",
-        "rotation_group": "ג",
+        "rotation_group": "",
         "is_shift_manager": True,
         "can_train": True,
         "notes": "צריכה לצאת בחמישי מוקדם",
@@ -124,10 +124,40 @@ def test_exit_pattern_capabilities_and_notes_are_per_employee():
 
     employee = result["employees"][0]
     assert employee["exit_pattern"] == "hamshushim"
+    # No group: out every Thursday to Saturday rather than on a turn.
     assert employee["rotation_group"] == ""
     assert employee["is_shift_manager"] is True
     assert employee["can_train"] is True
     assert employee["notes"] == "צריכה לצאת בחמישי מוקדם"
+
+
+def test_a_span_pattern_keeps_a_group_because_that_is_what_makes_it_rotate():
+    """חמשושים with a group closes only its group's weekends.
+
+    The group used to be discarded for anything but round/triplet, which made
+    the rotating case impossible to record: every חמשושים person came back
+    out every single week.
+    """
+    repo = _Repo()
+    result = ProfileService(repo).update("team", employees=[{
+        "name": "אבי", "exit_pattern": "hamshushim", "rotation_group": "ב",
+    }])
+
+    assert result["employees"][0]["rotation_group"] == "ב"
+
+
+def test_a_span_pattern_group_is_validated_against_the_units_cycle():
+    """A round unit has no group ג to belong to, whatever the pattern."""
+    repo = _Repo()
+    with pytest.raises(AgentError):
+        ProfileService(repo).update(
+            "team",
+            workplace={"name": "פלוגה", "rotation_mode": "round"},
+            employees=[{
+                "name": "אבי", "exit_pattern": "hamshushim",
+                "rotation_group": "ג",
+            }],
+        )
 
 
 def test_each_employee_rotation_group_is_validated_against_own_pattern():

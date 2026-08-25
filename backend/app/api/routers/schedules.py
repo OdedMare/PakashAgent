@@ -267,12 +267,19 @@ def build_router(service, guards) -> APIRouter:
         Answers a request with no reason by asking for one
         (`needs_reason: true`) rather than by rejecting it: the manager made
         an omission, not an error.
+
+        Answers one it cannot *target* — an unknown name, or one several
+        people share — by asking which (`needs_input: true`), with no
+        operations attached. `pending_request` echoes back the sentence being
+        held, and the client sends it with the manager's answer so the
+        original request resumes instead of being retyped.
         """
         return service.propose(
             session["team_id"],
             request.request,
             schedule_id=request.schedule_id,
             stated_reason=request.reason,
+            pending_request=request.pending_request,
         )
 
     @router.post("/apply")
@@ -469,6 +476,7 @@ def build_router(service, guards) -> APIRouter:
             session["team_id"],
             request=request.request,
             schedule_id=request.schedule_id,
+            pending_request=request.pending_request,
         )
 
     @router.post("/tool")

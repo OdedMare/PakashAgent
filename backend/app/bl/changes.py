@@ -154,21 +154,39 @@ class ChangeAgent:
         stated_reason: str = "",
         availability: Optional[List[dict]] = None,
         history: Optional[List[dict]] = None,
+        pending_request: str = "",
     ) -> dict:
-        """What the agent would do, and why. Applies nothing."""
+        """What the agent would do, and why. Applies nothing.
+
+        `pending_request` is the request a previous turn held rather than
+        guess at. When it is set, `request` is the manager's *answer* to the
+        question that turn asked, and the two are proposed together — the
+        manager answers "ערב" and does not retype "תשבץ את דניאל".
+        """
         text = _bounded(request)
         if not text:
             raise AgentError("הבקשה אינה יכולה להיות ריקה")
+        pending = _bounded(pending_request)
+        resolved = _resume(pending, text)
         payload = {
             "profile": _profile_for_model(profile),
             "schedule": _schedule_for_model(schedule),
             "availability": _rows(availability),
             "history": _rows(history, 100),
-            "request": text,
+            "request": resolved,
+            # What was asked and what came back, kept apart from the merged
+            # sentence. A model that can see it already asked is a model that
+            # does not ask the same question twice, which is the loop this
+            # closes.
+            "asked_last_turn": pending,
+            "answer_to_that": text if pending else "",
             "stated_reason": _bounded(stated_reason),
         }
         answer = self._ask(payload)
-        return _proposal(answer, profile, schedule, _bounded(stated_reason))
+        return _proposal(
+            answer, profile, schedule, _bounded(stated_reason),
+            request=resolved,
+        )
 
     def _ask(self, payload: dict) -> dict:
         answer = self._llm.complete_json(
@@ -183,7 +201,8 @@ class ChangeAgent:
 
 
 def _proposal(
-    answer: dict, profile: dict, schedule: dict, stated_reason: str
+    answer: dict, profile: dict, schedule: dict, stated_reason: str,
+    request: str = "",
 ) -> dict:
     """The model's turn, bounded, with both gates enforced in code.
 
@@ -248,12 +267,36 @@ def _proposal(
         "reply": reply,
         "needs_reason": needs_reason,
         "needs_input": needs_input,
+        # Echoed back only while a question is open. A finished proposal
+        # carries nothing to resume, so the client cannot send a stale
+        # request back and have an answered question re-open.
+        "pending_request": request if needs_input else "",
         "agent_reason": _bounded(answer.get("agent_reason")),
         "stated_reason": stated_reason,
         "operations": operations,
         "profile_operations": profile_operations,
         "constraints": _constraints(answer.get("constraints")),
     }
+
+
+def _resume(pending: str, reply: str) -> str:
+    """The held request and the manager's answer to it, read as one sentence.
+
+    The same join `bl/planner.py` does on the read path, and deliberately the
+    same shape: a clarification answers the request rather than replacing it,
+    so what goes to the model is both halves. Plain text rather than a parsed
+    pending-intent record — the sentence is what the model already reads, and
+    a structured duplicate of it is a second thing to keep in sync.
+    """
+    pending = _bounded(pending)
+    reply = _bounded(reply)
+    if not pending:
+        return reply
+    if not reply:
+        return pending
+    if pending in reply:
+        return reply
+    return "%s (%s)" % (pending, reply)
 
 
 def _unresolved_people(operations: List[dict], profile: dict) -> List[dict]:
