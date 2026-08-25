@@ -39,7 +39,12 @@ export interface ScheduleIndex {
   assignedCount: (shift: string, date: string) => number;
   /** Assigned and required across one day, for the column head. */
   dayCoverage: (date: string) => { assigned: number; required: number };
-  /** The shift vocabulary in the order the slots declare it (D9). */
+  /** The shift vocabulary in the order the slots declare it (D9).
+   *
+   *  Declaration order, not display order: `shiftOrder.ts` is what decides
+   *  which row the board draws first, and it starts from this list. Keeping
+   *  the raw order here means the two can disagree without either being
+   *  wrong — this is what the schedule said, that is how it reads best. */
   shifts: string[];
 }
 
@@ -51,9 +56,9 @@ export function buildScheduleIndex(schedule: Schedule | null): ScheduleIndex {
   const assignments = new Map<string, Assignment[]>();
   const warnings = new Map<string, ScheduleWarning[]>();
   const byDay = new Map<string, { assigned: number; required: number }>();
-  // Shift order is the vocabulary's own, not alphabetical: a workplace runs
-  // morning, then evening, then on-call, and sorting would scramble a
-  // sequence that carries meaning (D9).
+  // The vocabulary in the order the slots name it, kept as-is. Never sorted
+  // here: inventing an order is `shiftOrder.ts`'s job, and it needs this one
+  // to fall back on for a shift the vocabulary gave no hours to (D9).
   const shiftOrder: string[] = [];
   const seenShifts = new Set<string>();
 

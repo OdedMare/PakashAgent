@@ -13,8 +13,8 @@ and there is no CORS setup.
 Chat-first. The boss talks to the agent in a conversation pane; the schedule
 renders beside it as a grid.
 
-The calendar is editable, but the two gestures on it behave differently on
-purpose:
+The calendar is editable, but its gestures behave differently on purpose —
+and the third of them is not an edit at all:
 
 - **Dragging an assignment writes nothing.** The drop opens a confirmation
   that collects the manager's reason, and that dialog is what applies the move
@@ -28,6 +28,18 @@ purpose:
   A drag moves somebody who is already placed; filling a gap takes nothing
   away from anybody, so nothing is owed an explanation. This is what lets the
   boss build a week without the agent at all.
+- **Dragging a shift *row* writes nothing at all** — it is not a third
+  gesture on the schedule but a change to the order the board is read in
+  (`Board/shiftOrder.ts`). The rows default to **the clock**, earliest start
+  first, because that is the sequence the day actually happens in; the order
+  the slots were written in carried no meaning a manager could see, and
+  alphabetising would scramble the same sequence differently
+  ([D9](../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)). A shift
+  with no hours cannot be placed on a clock, so those keep their declared
+  order and sit last. The manager can drag or nudge the rows into any other
+  order, remembered per browser, and put them back with one click. Because
+  nothing is written, this works on a published board too, where every write
+  is refused.
 
 **Every person has a colour**, assigned from the roster's own order and
 computed in `Management/palette.ts`. It is a rendering of a name, not a stored
