@@ -3,7 +3,7 @@
 import { AlertTriangle, GripVertical, Hand, Move, ShieldCheck } from "lucide-react";
 
 import { colorStyle } from "@/components/Management/palette";
-import type { Assignment, ScheduleWarning, Slot } from "@/types";
+import type { Assignment, CardPerson, ScheduleWarning, Slot } from "@/types";
 
 /** One assignment, as a card the manager can read without hovering.
  *
@@ -27,8 +27,7 @@ import type { Assignment, ScheduleWarning, Slot } from "@/types";
  */
 export function ShiftCard({
   assignment,
-  role,
-  isShiftManager,
+  person,
   slot,
   hue,
   dark,
@@ -45,8 +44,9 @@ export function ShiftCard({
   onOpen,
 }: {
   assignment: Assignment;
-  role: string;
-  isShiftManager: boolean;
+  /** Who this is — role, rotation, command, overlap. From the roster, so it
+   *  reads the same on every shift they hold. */
+  person: CardPerson;
   slot: Slot;
   hue: number;
   dark: boolean;

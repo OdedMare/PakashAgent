@@ -19,6 +19,7 @@ import { buildPalette } from "@/components/Management/palette";
 import { constraintBlocksSlot } from "@/lib/constraints";
 import type {
   Assignment,
+  CardPerson,
   Constraint,
   Schedule,
   ScheduleWarning,
@@ -29,6 +30,7 @@ import { displayDate } from "@/components/DateInput";
 import type { AgentTouch } from "./agentTouch";
 import { touchKey } from "./agentTouch";
 import { EMPLOYEE_DRAG_TYPE } from "./dragData";
+import { EMPTY_PERSON } from "./person";
 import type { ScheduleIndex } from "./scheduleIndex";
 import { buildScheduleIndex } from "./scheduleIndex";
 import type { ShiftOrder } from "./shiftOrder";
