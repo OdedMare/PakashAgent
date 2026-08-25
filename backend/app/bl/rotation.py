@@ -133,14 +133,17 @@ def closure_days(
 ) -> List[dict]:
     """Every closure day this person owns in the period, in date order.
 
+    Read against *this person's own* pattern, so a תלתון א soldier and a
+    round א soldier standing the same shift each get their own weekends
+    rather than one being folded into the other's cycle.
+
     One row per day, each naming the weekend it belongs to, so a caller can
     say "this is the Thursday of דנה's חמשוש" rather than only "דנה closes
     that week". Empty when the person is not on a rotation, when the cycle is
     undefined, or when their group simply does not close in this period --
     all three are ordinary, not errors.
     """
-    state = cycle(profile)
-    if state is None or start > end:
+    if start > end:
         return []
 
     pattern = exit_pattern(profile, person)
@@ -149,10 +152,21 @@ def closure_days(
         return []
 
     group = _text(person.get("rotation_group"))
-    if pattern in _GROUPED_PATTERNS and group not in state["groups"]:
-        # A grouped pattern with no valid group cannot be placed in the
-        # cycle. `profile_service` already rejects this on save; here it just
-        # means "nothing to claim".
+    # חמשושים and שושים say how long a closure runs, not who owns it, so
+    # such a person still needs a group to say *which* weekends are theirs.
+    # Which cycle that group belongs to is read from how many groups the
+    # unit runs, since the pattern itself does not carry one.
+    lookup = pattern if pattern in _GROUPED_PATTERNS else _cycle_of_group(
+        profile, group
+    )
+    state = cycle(profile, lookup)
+    if state is None:
+        return []
+    if group not in state["groups"]:
+        # Ungrouped on a span pattern, or a group that does not belong to
+        # this person's cycle -- either way there is no weekend to claim.
+        # `profile_service` rejects the mismatched case on save; here it is
+        # simply "nothing to claim", not an error.
         return []
 
     rows = []
@@ -162,8 +176,7 @@ def closure_days(
     saturday = _saturday_of(start)
     while saturday - datetime.timedelta(days=lead) <= end:
         owner = _group_for_saturday(state, saturday)
-        closes = owner == group if pattern in _GROUPED_PATTERNS else True
-        if closes:
+        if owner == group:
             day = saturday - datetime.timedelta(days=lead)
             while day <= saturday:
                 if start <= day <= end:
@@ -172,6 +185,7 @@ def closure_days(
                         "weekend": saturday.isoformat(),
                         "group": owner,
                         "pattern": pattern,
+                        "cycle": lookup,
                         "is_saturday": day == saturday,
                     })
                 day += datetime.timedelta(days=1)
@@ -200,11 +214,14 @@ def schedule_for_model(
     """The period's closures, per weekend, as the model should read them.
 
     Handed to the scheduler prompt so the model never has to derive a cycle
-    it cannot verify. Each row is one weekend: who closes it, and who is
-    held on each day of it.
+    it cannot verify. Each row is one weekend: which group of each pattern
+    closes it, and who is held on each day of it.
+
+    A weekend carries `closing_groups` rather than one group, because a unit
+    running both structures has a round group and a triplet group in on the
+    very same weekend.
     """
-    state = cycle(profile)
-    if state is None or start > end:
+    if start > end:
         return []
 
     people = [
@@ -217,9 +234,14 @@ def schedule_for_model(
         for row in closure_days(profile, person, start, end):
             weekend = by_weekend.setdefault(row["weekend"], {
                 "weekend": row["weekend"],
-                "closing_group": row["group"],
+                "closing_groups": {},
                 "days": {},
             })
+            if row["group"]:
+                # Keyed by cycle rather than by the person's pattern: a
+                # חמשושים א and a round א are the same א on the same cycle,
+                # and listing them separately would read as two groups in.
+                weekend["closing_groups"][row["cycle"]] = row["group"]
             weekend["days"].setdefault(row["date"], []).append(
                 _text(person.get("name"))
             )
@@ -228,7 +250,10 @@ def schedule_for_model(
     for weekend in sorted(by_weekend.values(), key=lambda item: item["weekend"]):
         result.append({
             "weekend": weekend["weekend"],
-            "closing_group": weekend["closing_group"],
+            "closing_groups": [
+                {"pattern": pattern, "group": group}
+                for pattern, group in sorted(weekend["closing_groups"].items())
+            ],
             "days": [
                 {"date": date, "employees": sorted(names)}
                 for date, names in sorted(weekend["days"].items())
@@ -244,6 +269,20 @@ def _group_for_saturday(state: dict, saturday: datetime.date) -> str:
     # weekends before the anchor count backwards correctly without a branch.
     index = (weeks + state["offset"]) % state["length"]
     return state["groups"][index]
+
+
+def _cycle_of_group(profile: dict, group: str) -> str:
+    """Which cycle a span pattern's group belongs to.
+
+    A חמשושים person carries a group but not a cycle length. `ג` can only be
+    a תלתון group; otherwise the unit's own `rotation_mode` decides, because
+    that is the cycle the manager set the rest of the unit to.
+    """
+    if group == "ג":
+        return "triplet"
+    workplace = (profile or {}).get("workplace") or {}
+    mode = _text(workplace.get("rotation_mode"))
+    return mode if mode in _GROUPED_PATTERNS else "round"
 
 
 def _groups_for(pattern: str) -> Optional[tuple]:

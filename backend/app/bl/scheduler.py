@@ -37,6 +37,7 @@ from app.bl.audit import (
     constraint_conflicts,
     load_history,
 )
+from app.bl import rotation as rotation_cycle
 from app.bl.prompts import load
 from app.common.errors import AgentError
 
@@ -747,6 +748,7 @@ def effective_availability(
     rotation = _rotation_availability(
         profile, start, end, explicit_keys
     )
+    closure = _closure_availability(profile, start, end, explicit_keys)
     recurring = []
     for person in (profile or {}).get("employees") or []:
         if not isinstance(person, dict):
@@ -788,7 +790,7 @@ def effective_availability(
                             "source": _bounded(rule.get("source")) or "interview",
                         })
                 day += datetime.timedelta(days=1)
-    return rotation + recurring + explicit
+    return rotation + closure + recurring + explicit
 
 
 def _rotation_availability(
@@ -840,6 +842,114 @@ def _rotation_availability(
                 "derived_from": "rotation_a_unavailability",
             })
     return result
+
+
+def _closure_availability(
+    profile: dict, start: datetime.date, end: datetime.date,
+    explicit_keys: set,
+) -> List[dict]:
+    """Hard rows keeping each closure day inside the group that owns it.
+
+    The rotation is the point of a closure. A scheduler that balances every
+    day on its own merits will hand Saturday to whoever is under quota, which
+    equalises a number nobody asked to equalise and breaks the cycle the unit
+    planned its month around. So on a day some group is closing, everyone on
+    a rotation who is *not* holding that day is marked unavailable, and the
+    model chooses only among the people actually in.
+
+    Derived from the anchored cycle in `rotation.py` rather than asked of the
+    model, for the reason `audit.py` is code: which group closes on 12/09 is
+    arithmetic ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+
+    Only people on a rotation are constrained. Someone with no pattern and no
+    group -- a civilian, a reserve on call -- is untouched, because the cycle
+    says nothing about them and inventing a rule would remove them from days
+    they can genuinely work.
+
+    Silent when the unit never anchored its cycle: with no
+    `first_closure_date` there is no phase to enforce, and guessing one would
+    put the wrong group in on the wrong weekend while looking authoritative.
+    """
+    people = [
+        person for person in (profile or {}).get("employees") or []
+        if isinstance(person, dict) and _bounded(person.get("name"))
+    ]
+    # Who is legitimately held on each date, and by which cycle. A person on
+    # a rotation the profile never anchored contributes nothing here, so
+    # their days simply stay unconstrained.
+    holders, cycles = {}, {}
+    on_rotation = {}
+    for person in people:
+        name = _bounded(person.get("name"))
+        rows = rotation_cycle.closure_days(profile, person, start, end)
+        on_rotation[name] = bool(rows) or _on_rotation(profile, person)
+        for row in rows:
+            holders.setdefault(row["date"], set()).add(name)
+            cycles.setdefault(row["date"], set()).add(row["cycle"])
+    if not holders:
+        return []
+
+    result = []
+    for slot in build_slots(profile, start.isoformat(), end.isoformat()):
+        date = slot["slot_date"]
+        held = holders.get(date)
+        if not held:
+            # No group closes this date, so it is an ordinary working day and
+            # the rotation has no claim on who works it.
+            continue
+        for person in people:
+            name = _bounded(person.get("name"))
+            if name in held or not on_rotation.get(name):
+                continue
+            # A person whose own cycle is not the one closing today is not
+            # being displaced by it -- a תלתון soldier is not off because the
+            # round pair happens to be in.
+            pattern = rotation_cycle.exit_pattern(profile, person)
+            if _cycle_key(profile, person, pattern) not in cycles.get(date, set()):
+                continue
+            key = (name, date, slot["shift_name"])
+            if key in explicit_keys or (name, date, "") in explicit_keys:
+                continue
+            result.append({
+                "employee": name,
+                "date": date,
+                "shift": slot["shift_name"],
+                "available": False,
+                "start_time": "",
+                "end_time": "",
+                "is_hard": True,
+                "reason": "%s סוגר במועד זה" % " ו".join(
+                    sorted(
+                        "%s %s" % (_CYCLE_LABELS.get(cycle, "סבב"), group)
+                        for cycle, group in owners.get(date, set())
+                    )
+                ),
+                "source": "closure",
+                "rotation_group": _bounded(person.get("rotation_group")),
+                "derived_from": "closure_cycle",
+            })
+    return result
+
+
+def _on_rotation(profile: dict, person: dict) -> bool:
+    """Whether the cycle has any claim on this person at all."""
+    pattern = rotation_cycle.exit_pattern(profile, person)
+    return (
+        pattern in ("round", "triplet", "hamshushim", "shushim")
+        and bool(_bounded(person.get("rotation_group")))
+    )
+
+
+def _cycle_key(profile: dict, person: dict, pattern: str) -> str:
+    """The cycle a person turns on: their pattern, or their group's."""
+    if pattern in ("round", "triplet"):
+        return pattern
+    if _bounded(person.get("rotation_group")) == "ג":
+        return "triplet"
+    mode = _bounded(
+        ((profile or {}).get("workplace") or {}).get("rotation_mode")
+    )
+    return mode if mode in ("round", "triplet") else "round"
 
 
 def _rotation_a_blocks(slot: dict, rules: List[dict]) -> bool:
