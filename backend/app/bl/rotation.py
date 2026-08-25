@@ -142,6 +142,14 @@ def closure_days(
     that week". Empty when the person is not on a rotation, when the cycle is
     undefined, or when their group simply does not close in this period --
     all three are ordinary, not errors.
+
+    **A group is what makes a pattern rotate.** חמשושים and שושים say how
+    long a closure runs, not whose turn it is, so a person carrying one with
+    *no* group is not in a rotation at all: they go out every Thursday, or
+    every Friday, every single week. That is an ordinary arrangement, not a
+    missing field, and it needs no anchor -- there is no phase to fix when
+    every weekend is theirs. Given a group, the same pattern rotates: they
+    take only the weekends their group holds.
     """
     if start > end:
         return []
@@ -152,22 +160,22 @@ def closure_days(
         return []
 
     group = _text(person.get("rotation_group"))
-    # חמשושים and שושים say how long a closure runs, not who owns it, so
-    # such a person still needs a group to say *which* weekends are theirs.
-    # Which cycle that group belongs to is read from how many groups the
-    # unit runs, since the pattern itself does not carry one.
-    lookup = pattern if pattern in _GROUPED_PATTERNS else _cycle_of_group(
-        profile, group
-    )
-    state = cycle(profile, lookup)
-    if state is None:
-        return []
-    if group not in state["groups"]:
-        # Ungrouped on a span pattern, or a group that does not belong to
-        # this person's cycle -- either way there is no weekend to claim.
-        # `profile_service` rejects the mismatched case on save; here it is
-        # simply "nothing to claim", not an error.
-        return []
+    every_weekend = not group and pattern not in _GROUPED_PATTERNS
+
+    state, lookup = None, ""
+    if not every_weekend:
+        # Which cycle the group belongs to is read from how many groups the
+        # unit runs, since a span pattern does not carry one of its own.
+        lookup = pattern if pattern in _GROUPED_PATTERNS else _cycle_of_group(
+            profile, group
+        )
+        state = cycle(profile, lookup)
+        if state is None or group not in state["groups"]:
+            # No anchored cycle, or a group that does not belong to this
+            # person's cycle -- either way there is no weekend to claim.
+            # `profile_service` rejects the mismatched case on save; here it
+            # is simply "nothing to claim", not an error.
+            return []
 
     rows = []
     # Walk Saturdays from the one covering the first day, so a closure that
@@ -175,8 +183,8 @@ def closure_days(
     # days.
     saturday = _saturday_of(start)
     while saturday - datetime.timedelta(days=lead) <= end:
-        owner = _group_for_saturday(state, saturday)
-        if owner == group:
+        owner = group if every_weekend else _group_for_saturday(state, saturday)
+        if every_weekend or owner == group:
             day = saturday - datetime.timedelta(days=lead)
             while day <= saturday:
                 if start <= day <= end:
