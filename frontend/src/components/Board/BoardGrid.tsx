@@ -68,7 +68,7 @@ export function BoardGrid({
   constraints,
   employees,
   roles,
-  shiftManagers,
+  people,
   filters,
   dark,
   readOnly = false,
@@ -84,9 +84,10 @@ export function BoardGrid({
   today: string;
   constraints: Constraint[];
   employees: string[];
-  /** Employee name -> role, for the card's second line. */
+  /** Employee name -> role, for the filter and the editor's picker. */
   roles: Record<string, string>;
-  shiftManagers: Record<string, boolean>;
+  /** Employee name -> who they are, for the card's identity lines. */
+  people: Record<string, CardPerson>;
   filters: BoardFilters;
   dark: boolean;
   readOnly?: boolean;
@@ -321,7 +322,7 @@ export function BoardGrid({
             cardsFor={cardsFor}
             constraints={constraints}
             roles={roles}
-            shiftManagers={shiftManagers}
+            people={people}
             hueOf={hueOf}
             dark={dark}
             filters={filters}
@@ -425,7 +426,7 @@ function BoardRow({
   cardsFor,
   constraints,
   roles,
-  shiftManagers,
+  people,
   hueOf,
   dark,
   filters,
@@ -458,7 +459,7 @@ function BoardRow({
   cardsFor: (shift: string, date: string) => Assignment[];
   constraints: Constraint[];
   roles: Record<string, string>;
-  shiftManagers: Record<string, boolean>;
+  people: Record<string, CardPerson>;
   hueOf: (name: string) => number;
   dark: boolean;
   filters: BoardFilters;
@@ -694,8 +695,7 @@ function BoardRow({
               <ShiftCard
                 key={row.id}
                 assignment={row}
-                role={roles[row.employee] ?? ""}
-                isShiftManager={Boolean(shiftManagers[row.employee])}
+                person={people[row.employee] ?? EMPTY_PERSON}
                 slot={slot}
                 hue={hueOf(row.employee)}
                 dark={dark}
