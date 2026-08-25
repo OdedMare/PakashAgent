@@ -35,6 +35,7 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.common.errors import AgentError
+from app.common.time_context import israel_today
 
 # A sheet bigger than this is not a shift schedule. Bounded because every
 # cell is visited several times during inference.
@@ -847,7 +848,7 @@ def _resolve_year(day: int, month: int) -> str:
     — a schedule filed under the wrong year is exactly the kind of quiet
     wrongness the confirm step exists to catch.
     """
-    year = datetime.date.today().year
+    year = israel_today().year
     try:
         return datetime.date(year, month, day).isoformat()
     except ValueError:
