@@ -16,10 +16,20 @@ export function WeekRail({
   weekStart,
   today,
   schedule,
+  busy = false,
 }: {
   weekStart: string;
   today: string;
   schedule: Schedule | null;
+  /** The week's schedule is still being read.
+   *
+   *  The rail renders from `weekStart` alone, so it is already correct for
+   *  the newly selected week the moment the manager pages — which is the
+   *  point, the dates must move immediately. But its *fills* come from a
+   *  schedule that has not arrived, and "לא תוכנן" on every day is a
+   *  factual claim about a week nobody has read yet. While this is set the
+   *  rail names the days and says it is still counting. */
+  busy?: boolean;
 }) {
   const days = weekDates(weekStart).map((date) => {
     const required = (schedule?.slots ?? [])
@@ -48,27 +58,31 @@ export function WeekRail({
   });
 
   return (
-    <section className="week-rail" aria-label="מוכנות לפי יום">
+    <section
+      className="week-rail"
+      aria-label="מוכנות לפי יום"
+      aria-busy={busy || undefined}
+    >
       <div className="week-rail-label">
         <strong>מסילת השבוע</strong>
-        <span>איוש מול צורך</span>
+        <span>{busy ? "טוען…" : "איוש מול צורך"}</span>
       </div>
       <div className="week-rail-days" role="list">
         {days.map((day) => (
           <div
             key={day.date}
-            className={`week-rail-day is-${day.tone}${day.date === today ? " is-today" : ""}`}
+            className={`week-rail-day is-${busy ? "loading" : day.tone}${day.date === today ? " is-today" : ""}`}
             role="listitem"
-            aria-label={`${hebrewWeekday(day.date)} ${formatDate(day.date)}: ${dayLabel(day)}`}
+            aria-label={`${hebrewWeekday(day.date)} ${formatDate(day.date)}: ${busy ? "נטען" : dayLabel(day)}`}
           >
             <div className="week-rail-day-head">
               <strong>{hebrewWeekday(day.date)}</strong>
               <span>{formatDate(day.date)}</span>
             </div>
             <div className="week-rail-track" aria-hidden="true">
-              <span style={{ width: `${day.percent}%` }} />
+              <span style={{ width: busy ? "0%" : `${day.percent}%` }} />
             </div>
-            <small>{dayLabel(day)}</small>
+            <small>{busy ? "טוען…" : dayLabel(day)}</small>
           </div>
         ))}
       </div>

@@ -367,7 +367,22 @@ export function Board({
         schedule={schedule}
       />
 
-      {schedule ? (
+      {/* Loading first, and *before* the empty state.
+          A week the manager paged to is unknown until `/at` answers, and
+          `schedule` is null for both "still reading" and "nothing stored
+          here". Falling straight through to `EmptyWeek` showed the second
+          answer while the first was still true — a card headed "אין סידור
+          לשבוע הזה", offering to build a week that may already exist, for
+          as long as the request took. The skeleton holds that ground until
+          there is an actual answer to render. */}
+      {board.weekBusy ? (
+        <BoardLoading weekStart={board.weekStart} weekEnd={board.weekEnd} />
+      ) : board.weekError ? (
+        <BoardLoadError
+          message={board.weekError}
+          onRetry={() => void board.reloadWeek()}
+        />
+      ) : schedule ? (
         <>
           <CoverageBar
             // The figures describe the *current* period, which is what the
@@ -464,7 +479,7 @@ export function Board({
         </>
       ) : (
         <EmptyWeek
-          busy={busy || board.weekBusy}
+          busy={busy}
           profile={overview?.profile ?? null}
           weekStart={board.weekStart}
           weekEnd={board.weekEnd}
