@@ -709,6 +709,13 @@ class MoveRequest(BaseModel):
     slot_date: str = Field(min_length=1)
     reason: str = Field(min_length=1, max_length=1000)
     agent_reason: str = Field(default="", max_length=2000)
+    # Which period the drag happened on. Every other hand-write on the board
+    # already carries this; `move` did not, and resolved "the current period"
+    # server-side instead — so a drag on any week other than the one covering
+    # today looked for the target slot in the wrong period and was refused.
+    # Empty still means "the current period", which is what an older client
+    # sends.
+    schedule_id: str = ""
 
 
 class ConstraintRequest(BaseModel):

@@ -110,6 +110,13 @@ export function Management({
       ? state.generation.status
       : "";
   const buildId = overview?.schedule?.id ?? "";
+  // Why the build stopped, in the manager's own language. The per-day error
+  // was recorded from the first version of this feature and never rendered,
+  // so a build that failed for a fixable reason — a model timeout that only
+  // a setting can widen — read as an unexplained "היצירה נעצרה" and left the
+  // manager with nothing to do but press retry and watch it fail again.
+  const buildError =
+    state.generation?.days?.find((day) => day.status === "failed")?.error ?? "";
   // How many topics the interview left unsettled. Counted from the profile's
   // own record rather than re-derived, so the badge, the board's notice and
   // what the agent says when asked are all reading one answer. Zero — and no
@@ -303,6 +310,9 @@ export function Management({
                 ? `היצירה הופסקה — ${state.generation?.completed_days ?? 0} מתוך ${state.generation?.total_days ?? 7} ימים נשמרו`
                 : `בונים את הסידור — ${state.generation?.completed_days ?? 0} מתוך ${state.generation?.total_days ?? 7} ימים`}
             </strong>
+            {buildState === "failed" && buildError ? (
+              <span className="schedule-generation-why">{buildError}</span>
+            ) : null}
             <span className="schedule-generation-actions">
               {buildId && (buildState === "failed" || buildState === "cancelled") ? (
                 <button
@@ -447,6 +457,7 @@ export function Management({
             onMove={state.move}
             onPublish={state.publish}
             onExport={state.exportSchedule}
+            onPeriodChange={state.focusPeriod}
             onOpenAgent={() => {
               setSection("agent");
               setDrawerOpen(true);

@@ -26,6 +26,7 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 1rem;
   font-size: 0.82rem;
 }
@@ -48,6 +49,14 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.5rem;
+}
+
+/* Why a build stopped. Its own line rather than inside the actions row:
+   it can be a full sentence, and it is the part worth reading. */
+.schedule-generation-why {
+  flex-basis: 100%;
+  color: var(--text);
+  font-size: 0.8rem;
 }
 
 .schedule-generation-note {

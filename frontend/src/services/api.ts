@@ -694,6 +694,9 @@ export function moveAssignment(body: {
   slot_date: string;
   reason: string;
   agent_reason?: string;
+  /** The period the drag happened on. Omitted means the one covering today,
+   *  which is only ever right by coincidence. */
+  schedule_id?: string;
 }): Promise<Schedule> {
   return request<Schedule>("/api/schedule/move", {
     method: "POST",

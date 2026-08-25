@@ -123,17 +123,23 @@ export interface ManagementState {
   }) => Promise<void>;
   /** Open an empty period to fill in by hand (D18). Calls no model. */
   openBlank: (input: { starts_on?: string; ends_on?: string }) => Promise<void>;
-  /** Place one person on one slot, by hand (D18). Writes immediately. */
+  /** Place one person on one slot, by hand (D18). Writes immediately.
+   *
+   *  `schedule_id` is the period the click happened on. The board always
+   *  sends it: without one the server writes to whichever period covers
+   *  today, which refuses every placement made on any other week. */
   assign: (input: {
     shift_name: string;
     slot_date: string;
     employee: string;
     reason?: string;
+    schedule_id?: string;
   }) => Promise<void>;
   /** Take one person off a slot, by hand (D18). */
   unassign: (input: {
     assignment_id: string;
     reason?: string;
+    schedule_id?: string;
   }) => Promise<void>;
   publish: (scheduleId: string, published: boolean) => Promise<void>;
   /** Download the period as `.xlsx` (D17). */
@@ -159,7 +165,17 @@ export interface ManagementState {
     shift_name: string;
     slot_date: string;
     reason: string;
+    schedule_id?: string;
   }) => Promise<void>;
+  /** Tell the hook which period the manager is looking at.
+   *
+   *  The overview hands over the *current* period, and the board may be
+   *  showing another week entirely. Everything that targets "the schedule"
+   *  — the agent's proposals, its answers, a simulation — followed the
+   *  overview and so answered about the wrong week whenever the manager had
+   *  paged away. The board reports what it is rendering, and this is what
+   *  the rest of the area then aims at. */
+  focusPeriod: (scheduleId: string) => void;
   addConstraint: (input: {
     employee: string;
     constraint_date: string;
@@ -202,6 +218,26 @@ export function useManagement(): ManagementState {
   // overview cannot be trusted for it: a build opens a period the overview
   // has not been re-read for yet.
   const generatingId = useRef<string>("");
+  // The period the manager is actually looking at, reported by the board.
+  // The overview only ever hands over the *current* one, so everything that
+  // aimed at "the schedule" aimed at the wrong week the moment the manager
+  // paged away — the agent answered about a week they were not looking at,
+  // and every hand-write was refused outright because the slot it named does
+  // not exist in the period covering today. Empty until the board has
+  // rendered; the overview is the fallback.
+  const [focused, setFocused] = useState("");
+  const focusPeriod = useCallback((id: string) => setFocused(id), []);
+
+  /** Stamp the period on a hand-write that did not name one.
+   *
+   *  The board always names it. This is the safety net for any caller that
+   *  does not, and it is what makes "no id" mean "the week on screen"
+   *  rather than "whatever covers today". */
+  const withPeriod = useCallback(
+    <T extends { schedule_id?: string }>(input: T): T =>
+      input.schedule_id ? input : { ...input, schedule_id: focused },
+    [focused],
+  );
   const [gaps, setGaps] = useState<ProfileGaps | null>(null);
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [briefing, setBriefing] = useState<Briefing | null>(null);
@@ -470,18 +506,23 @@ export function useManagement(): ManagementState {
       slot_date: string;
       employee: string;
       reason?: string;
+      schedule_id?: string;
     }) => {
-      await run(() => assignEmployee(input), { quiet: true });
+      await run(() => assignEmployee(withPeriod(input)), { quiet: true });
     },
-    [run],
+    [run, withPeriod],
   );
 
   /** Take one person off a slot. Quiet for the same reason as `assign`. */
   const unassign = useCallback(
-    async (input: { assignment_id: string; reason?: string }) => {
-      await run(() => unassignEmployee(input), { quiet: true });
+    async (input: {
+      assignment_id: string;
+      reason?: string;
+      schedule_id?: string;
+    }) => {
+      await run(() => unassignEmployee(withPeriod(input)), { quiet: true });
     },
-    [run],
+    [run, withPeriod],
   );
 
   /** Publish or withdraw a period.
@@ -529,7 +570,7 @@ export function useManagement(): ManagementState {
   // the dependency the compiler infers from `overview?.schedule?.id` is the
   // whole `overview`, which would not match the narrower one declared here
   // and costs the memoization entirely.
-  const scheduleId = overview?.schedule?.id;
+  const scheduleId = focused || overview?.schedule?.id;
 
   const propose = useCallback(
     async (request: string, reason?: string) => {
@@ -666,10 +707,11 @@ export function useManagement(): ManagementState {
       shift_name: string;
       slot_date: string;
       reason: string;
+      schedule_id?: string;
     }) => {
-      await run(() => moveAssignment(input));
+      await run(() => moveAssignment(withPeriod(input)));
     },
-    [run],
+    [run, withPeriod],
   );
 
   const addConstraint = useCallback(
@@ -780,6 +822,7 @@ export function useManagement(): ManagementState {
     approveSimulation,
     dismissSimulation,
     move,
+    focusPeriod,
     addConstraint,
     removeConstraint,
     saveProfile,

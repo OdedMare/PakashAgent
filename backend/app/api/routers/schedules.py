@@ -305,6 +305,7 @@ def build_router(service, guards) -> APIRouter:
             request.slot_date,
             reason=request.reason,
             agent_reason=request.agent_reason,
+            schedule_id=request.schedule_id,
         )
 
     @router.get("/export/{schedule_id}")

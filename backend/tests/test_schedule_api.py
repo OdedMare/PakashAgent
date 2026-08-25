@@ -855,6 +855,104 @@ def test_a_build_held_open_by_the_model_leaves_the_board_usable():
     )
 
 
+def _two_periods(client):
+    """An older period and a newer one. The newer is what the server calls
+    "current", so the older stands in for any week the manager paged to."""
+    older = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+    newer = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-24", "ends_on": "2026-08-24",
+    }).json()
+    return older, newer
+
+
+def test_a_hand_placed_shift_lands_on_the_period_it_names():
+    """The board is not always on the week that covers today.
+
+    Every hand-write carries the period it happened on. Without one the
+    server resolves "the period covering today", so a placement made on any
+    other week went looking for its slot in the wrong period and came back
+    404 -- while the placement check beside it, the one call that always sent
+    the id, had just said the cell was fine."""
+    app, _ = _build_app([])
+    client = _client(app)
+    older, newer = _two_periods(client)
+
+    placed = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "schedule_id": older["id"],
+    })
+
+    assert placed.status_code == 200
+    assert placed.json()["id"] == older["id"]
+    assert [row["employee"] for row in placed.json()["assignments"]] == ["דנה"]
+    # And the period the server would have guessed is untouched.
+    assert client.get(
+        "/api/schedule/%s" % newer["id"]
+    ).json()["assignments"] == []
+
+
+def test_a_drag_on_another_period_is_not_refused():
+    """`move` had no `schedule_id` at all -- it resolved the current period
+    unconditionally, so a drag on any other week could never find its target
+    slot. The confirmation dialog now sends the period the drag happened
+    on."""
+    app, _ = _build_app([])
+    client = _client(app)
+    older, _ = _two_periods(client)
+    client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    })
+    placed = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "schedule_id": older["id"],
+    }).json()
+    row = placed["assignments"][0]
+
+    moved = client.post("/api/schedule/move", json={
+        "assignment_id": row["id"], "shift_name": MORNING,
+        "slot_date": "2026-08-17", "reason": "החלפה מוסכמת",
+        "schedule_id": older["id"],
+    })
+
+    assert moved.status_code == 200
+    assert moved.json()["id"] == older["id"]
+
+
+def test_removing_a_shift_names_its_period_too():
+    app, _ = _build_app([])
+    client = _client(app)
+    older, _ = _two_periods(client)
+    placed = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "schedule_id": older["id"],
+    }).json()
+
+    removed = client.post("/api/schedule/unassign", json={
+        "assignment_id": placed["assignments"][0]["id"],
+        "reason": "בוטל",
+        "schedule_id": older["id"],
+    })
+
+    assert removed.status_code == 200
+    assert removed.json()["assignments"] == []
+
+
+def test_a_write_naming_no_period_still_means_the_current_one():
+    """The fallback stays, for any client that predates the field."""
+    app, _ = _build_app([])
+    client = _client(app)
+    _, newer = _two_periods(client)
+
+    placed = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-24", "employee": "דנה",
+    })
+
+    assert placed.status_code == 200
+    assert placed.json()["id"] == newer["id"]
+
+
 def test_generating_without_a_finished_interview_is_refused():
     """No profile means no shift vocabulary, and guessing one is exactly
     the hardcoding D9 forbids."""

@@ -1398,6 +1398,7 @@ class ScheduleService:
         slot_date: str,
         reason: str,
         agent_reason: str = "",
+        schedule_id: Optional[str] = None,
     ) -> dict:
         """Move one assignment — what a confirmed drag resolves to.
 
@@ -1407,10 +1408,17 @@ class ScheduleService:
         and the agent's ([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)).
         Dragging is a way of *proposing* a change, not a way around the
         decision that changes are explained.
+
+        `schedule_id` is the period the drag happened on. It used to be
+        hardcoded to `None` here, which resolved to whichever period covers
+        today: a drag on any other week then looked for its target slot in
+        the wrong period and came back "המשמרת לא נמצאה בסידור", while the
+        placement check beside it — the one call that always passed the id —
+        had just said the move was fine.
         """
         if not (reason or "").strip():
             raise AgentError("צריך לציין סיבה להעברת המשמרת")
-        schedule = self._require_schedule(team_id, None)
+        schedule = self._require_schedule(team_id, schedule_id)
         slot = self._repository.find_slot(
             schedule["id"], team_id, shift_name, slot_date
         )

@@ -38,7 +38,7 @@ import time
 from typing import List, Optional
 
 import httpx
-from openai import BadRequestError, OpenAI
+from openai import APITimeoutError, BadRequestError, OpenAI
 
 from app.common.errors import AgentError
 from app.dal.llm.completion_retry import create_with_retry
@@ -129,21 +129,54 @@ _MIN_TOTAL_BUDGET_SECONDS = 300
 _SCHEDULER_BUDGET_MULTIPLIER = 1.5
 
 
+def read_timeout_for(settings, flow: str) -> int:
+    """The per-call read ceiling, which the scheduler does not have.
+
+    **Building a schedule is the one flow with no read timeout at all**, and
+    that is deliberate rather than an oversight.
+
+    `llm_timeout_seconds` is one number for every call this product makes,
+    and the calls are not comparable. A briefing is a short prompt to the
+    fast model and answers in seconds; one day of scheduling is a large
+    prompt to the heavy model and can take minutes on the hardware these
+    deployments run on. A value chosen so the settings panel feels
+    responsive is therefore, for the scheduler, a ceiling *below* the real
+    answer time — and such a ceiling is not a safety net, it is a guarantee
+    of failure. The observed shape of that failure is exactly this: the
+    briefing works, and every build dies on `ReadTimeout` while the model
+    server is still generating the answer nobody is listening for any more.
+
+    The reason a read ceiling existed at all was to stop one request holding
+    a browser connection open. Generation no longer holds one: it is a
+    background job that checkpoints every day, the browser polls short reads,
+    and the manager has a stop button. So the protection is obsolete for this
+    flow and only its cost remains.
+
+    Connecting stays bounded for every flow — see `_httpx_timeout`. An
+    unreachable server is not a slow one.
+    """
+    if flow == "scheduler":
+        return 0
+    return getattr(settings, "llm_timeout_seconds", 0) or 0
+
+
 def _budget_seconds(settings, flow: str):
     """The ceiling on one logical call, in seconds — or `None` for no ceiling.
 
-    Always strictly greater than `llm_timeout_seconds`, so one HTTP attempt
+    Always strictly greater than the flow's read timeout, so one HTTP attempt
     can always complete inside it. `getattr` with a default because a
     settings object predating the field — a saved file from an older version
     or a test double — must resolve rather than raise.
 
-    `llm_timeout_seconds = 0` means the server is given as long as it needs,
-    and the budget above it goes away with it: a deadline over an unbounded
-    call could only ever fire mid-generation, throwing away an answer the
-    server was still producing, which is the failure the whole setting exists
-    to avoid.
+    A read timeout of 0 means the server is given as long as it needs, and
+    the budget above it goes away with it: a deadline over an unbounded call
+    could only ever fire mid-generation, throwing away an answer the server
+    was still producing, which is the failure the whole setting exists to
+    avoid. That is why the scheduler, whose read is never bounded, has no
+    budget either — a deadline there would reintroduce the timeout under a
+    different name.
     """
-    timeout = getattr(settings, "llm_timeout_seconds", 0) or 0
+    timeout = read_timeout_for(settings, flow)
     if timeout <= 0:
         return None
     if flow == "scheduler":
@@ -269,7 +302,7 @@ class OpenAIJsonClient:
             raise AgentError("לא הוגדר מפתח API או שרת תואם OpenAI")
         client = self._client_for(
             settings.openai_api_key, chosen_base_url,
-            settings.llm_timeout_seconds,
+            read_timeout_for(settings, flow),
         )
         messages = [
             {"role": "system", "content": system},
@@ -417,6 +450,16 @@ class OpenAIJsonClient:
                         )
                     last_bad_request = exc
                     continue
+                except APITimeoutError:
+                    # "Request timed out." tells the manager nothing they can
+                    # act on, and the thing they can act on is a setting. The
+                    # server was still generating when the client hung up:
+                    # this names the ceiling and where to raise it.
+                    raise AgentError(
+                        "המודל לא הספיק לענות בתוך מגבלת הזמן שהוגדרה. "
+                        "אפשר להעלות את 'זמן המתנה למודל' בהגדרות, "
+                        "או לאפס אותו כדי להמתין כמה שנדרש."
+                    )
                 except Exception as exc:
                     raise AgentError("שגיאת מודל: " + str(exc))
                 return OpenAIJsonClient._response_data(response)

@@ -1,7 +1,7 @@
 "use client";
 
 import { Download, Eye, EyeOff, LockKeyhole, PencilLine, Sparkles } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   AgentAnswer,
@@ -74,6 +74,7 @@ export function Board({
   onPublish,
   onExport,
   onOpenAgent,
+  onPeriodChange,
   agent,
   dark,
 }: {
@@ -99,24 +100,40 @@ export function Board({
     instructions?: string;
   }) => void;
   onOpenBlank: (input: { starts_on?: string; ends_on?: string }) => void;
+  /** Every hand-write names the period it happened on.
+   *
+   *  Not optional, and not left to the server to infer. Without it the
+   *  backend resolves "the period covering today", so every one of these on
+   *  any other week was refused — while `check`, the one call that always
+   *  sent the id, had just told the manager the placement was fine. */
   onAssign: (input: {
     shift_name: string;
     slot_date: string;
     employee: string;
     reason?: string;
+    schedule_id?: string;
   }) => Promise<void> | void;
   onUnassign: (input: {
     assignment_id: string;
     reason?: string;
+    schedule_id?: string;
   }) => Promise<void> | void;
   onMove: (input: {
     assignment_id: string;
     shift_name: string;
     slot_date: string;
     reason: string;
+    schedule_id?: string;
   }) => Promise<void> | void;
   onPublish: (scheduleId: string, published: boolean) => void;
   onExport: (scheduleId: string) => void;
+  /** Which period this board is showing, whenever that changes.
+   *
+   *  The overview only ever hands over the period covering today, so
+   *  everything outside this component that aimed at "the schedule" aimed at
+   *  the wrong week the moment the manager paged away. The board is the only
+   *  thing that knows which week is on screen, so it is what says so. */
+  onPeriodChange?: (scheduleId: string) => void;
   /** Open the conversation with the agent — the control room beside this. */
   onOpenAgent?: () => void;
   /** What the agent is currently saying, so the week can show *where* it
@@ -142,6 +159,13 @@ export function Board({
     }
     return board.weekSchedule;
   }, [current, board.weekSchedule, board.weekStart, board.weekEnd]);
+
+  // Report the period on screen upward. In an effect rather than inside the
+  // memo above, because it is a notification and not part of computing what
+  // to render.
+  useEffect(() => {
+    onPeriodChange?.(schedule?.id ?? "");
+  }, [schedule?.id, onPeriodChange]);
 
   // Where on the week what the agent is saying actually applies. Derived
   // from the panels' own state rather than from anything new on the wire:
@@ -463,7 +487,8 @@ export function Board({
               readOnly={schedule.status === "published"}
               touches={touches}
               onDropCard={openMove}
-              onDropEmployee={(input) => void onAssign(input)}
+              onDropEmployee={(input) =>
+                void onAssign({ ...input, schedule_id: schedule.id })}
               onOpenCard={(assignment) => {
                 setCheck(null);
                 setEditor({ mode: "edit", assignment });
@@ -518,6 +543,7 @@ export function Board({
               shift_name: pendingMove.shift_name,
               slot_date: pendingMove.slot_date,
               reason,
+              schedule_id: schedule?.id,
             });
             closeDialogs();
           }}
@@ -540,6 +566,7 @@ export function Board({
               slot_date: input.slot_date,
               employee: input.employee,
               reason: input.reason,
+              schedule_id: schedule.id,
             });
             closeDialogs();
           }}
@@ -553,6 +580,7 @@ export function Board({
             void onUnassign({
               assignment_id: input.assignment.id,
               reason: input.reason,
+              schedule_id: schedule.id,
             });
             closeDialogs();
           }}
@@ -562,6 +590,7 @@ export function Board({
               slot_date: input.slot_date,
               employee: input.employee,
               reason: "שוכפל משיבוץ קיים",
+              schedule_id: schedule.id,
             });
             closeDialogs();
           }}

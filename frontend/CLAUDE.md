@@ -166,6 +166,17 @@ impression.
   "עצירת היצירה" stops the wait *and* the job, keeping every finished day,
   because with no model timeout configured the browser is the only
   participant that knows whether anyone is still waiting.
+- **Every hand-write names the period it happened on.** `assign`, `unassign`
+  and `move` all send `schedule_id`, taken from the week the board is
+  actually rendering. Without it the server resolves "the period covering
+  today", so the moment the manager paged to another week every placement,
+  drag and removal was refused — while `check`, the one call that always sent
+  the id, had just told them the cell was fine. `focusPeriod` reports the
+  same period upward so the agent's proposals, answers and simulations are
+  about the week on screen rather than about today's.
+- **A failed build says why.** The per-day `error` is rendered in the banner.
+  It is usually the one thing the manager can act on — a model timeout is
+  fixed by a setting, not by pressing retry again.
 - **Everything re-reads after a write.** `useManagement` refetches the overview
   rather than patching locally: the schedule, its warnings, the constraints and
   the log all move together, and a locally patched grid beside a stale audit is
