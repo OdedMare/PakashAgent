@@ -523,13 +523,24 @@ export interface ProfileOperation {
  *
  *  `needs_reason` true means the agent asked the manager why the change is
  *  happening and is deliberately proposing nothing until they answer — a
- *  missing reason is met with a question, never a rejection (D8). */
+ *  missing reason is met with a question, never a rejection (D8).
+ *
+ *  `needs_input` true means it could not tell *what* the request referred to
+ *  — which person, shift or date — and asked instead of picking one. Also
+ *  carries no operations, and for a stronger reason: a change applied to the
+ *  wrong record has to be found before it can be undone. */
 export interface Proposal {
   schedule_id: string;
   reply: string;
   needs_reason: boolean;
+  needs_input: boolean;
   agent_reason: string;
   stated_reason: string;
+  /** The request still waiting to be carried out, echoed back beside the
+   *  question. Sent with the manager's answer so the original request
+   *  resumes — they answer "ערב", not "תשבץ את דניאל במשמרת ערב". Empty on a
+   *  finished proposal, so there is never a stale one to send back. */
+  pending_request: string;
   operations: Operation[];
   profile_operations: ProfileOperation[];
   constraints: Record<string, unknown>[];
@@ -888,6 +899,10 @@ export interface AgentAnswer {
   needs_confirmation: boolean;
   /** The answer is a focused question and the conversation should continue. */
   needs_input: boolean;
+  /** What that question is a question *about*, echoed back so the manager's
+   *  reply continues it rather than being read as a new question. Empty
+   *  whenever the agent is not waiting on an answer. */
+  pending_request: string;
   used_model: boolean;
   understood: boolean;
   schedule_id: string;

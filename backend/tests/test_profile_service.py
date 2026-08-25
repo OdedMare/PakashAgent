@@ -140,7 +140,7 @@ def test_a_span_pattern_keeps_a_group_because_that_is_what_makes_it_rotate():
     """
     repo = _Repo()
     result = ProfileService(repo).update("team", employees=[{
-        "name": "אבי", "exit_pattern": "hamshushim", "rotation_group": "ב",
+        "name": "דנה", "exit_pattern": "hamshushim", "rotation_group": "ב",
     }])
 
     assert result["employees"][0]["rotation_group"] == "ב"
@@ -154,7 +154,7 @@ def test_a_span_pattern_group_is_validated_against_the_units_cycle():
             "team",
             workplace={"name": "פלוגה", "rotation_mode": "round"},
             employees=[{
-                "name": "אבי", "exit_pattern": "hamshushim",
+                "name": "דנה", "exit_pattern": "hamshushim",
                 "rotation_group": "ג",
             }],
         )

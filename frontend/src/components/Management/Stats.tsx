@@ -347,6 +347,9 @@ const WARNING_LABELS: Record<string, string> = {
   unavailable: "שיבוץ בניגוד לאילוץ",
   unfilled: "משמרת לא מאוישת",
   overstaffed: "איוש עודף",
+  missing_role: "תפקיד חסר",
+  missing_commander: "אין אחראי משמרת",
+  cross_rotation: "שיבוץ מחוץ לסבב",
 };
 
 /** "יום שני" → "ב׳". Falls back to the full name for anything unexpected,

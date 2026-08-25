@@ -437,6 +437,15 @@ class PlanningAgent:
 
     def _fallback_employee(self, team_id: str, read: dict) -> tuple:
         employee = read["employee"]
+        if not employee:
+            # The sentence was placed as a question about one person without
+            # naming one the roster carries. Asking is the only honest move:
+            # `employee_state` with an empty name raises, and picking
+            # somebody to ask about is the guess this path must not make.
+            return (
+                "על מי מהצוות תרצו לשמוע?",
+                [], [], False,
+            )
         found = self._tools.run(
             team_id, TOOL_EMPLOYEE_STATE,
             {"employee": employee, "day": read["date"]},

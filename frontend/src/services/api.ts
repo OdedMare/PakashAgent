@@ -662,7 +662,14 @@ export async function downloadSchedule(scheduleId: string): Promise<void> {
 }
 
 export function proposeChange(
-  body: { request: string; schedule_id?: string; reason?: string },
+  body: {
+    request: string;
+    schedule_id?: string;
+    reason?: string;
+    /** The request a previous turn held rather than guess at, sent back with
+     *  the manager's clarification so it resumes instead of being retyped. */
+    pending_request?: string;
+  },
 ): Promise<Proposal> {
   return request<Proposal>("/api/schedule/propose", {
     method: "POST",
@@ -1059,6 +1066,8 @@ export function confirmImport(body: {
 export function askAgent(body: {
   request: string;
   schedule_id?: string;
+  /** The question the agent left open, so a one-word reply continues it. */
+  pending_request?: string;
 }): Promise<AgentAnswer> {
   return request<AgentAnswer>("/api/schedule/ask", {
     method: "POST",

@@ -245,6 +245,16 @@ export function useManagement(): ManagementState {
   const [answer, setAnswer] = useState<AgentAnswer | null>(null);
   const [answerBusy, setAnswerBusy] = useState(false);
   const [simulation, setSimulation] = useState<Simulation | null>(null);
+  // The request the agent is still waiting on an answer to, on each of the
+  // two conversations. Refs rather than state for the reason the headlines
+  // below are: they are sent back, never rendered, and holding them in state
+  // would re-render the composer on every turn to no visible effect.
+  //
+  // Kept apart because asking and changing are separate acts (D19) — a
+  // clarification about a question must not resume a held *change*, which is
+  // the one way this could target the wrong record.
+  const pendingRequest = useRef<string>("");
+  const pendingAnswer = useRef<string>("");
   // The headlines already shown this sitting, sent back so the agent does not
   // open with something the manager just read. Deliberately a ref and not
   // state: it is remembered, never rendered, and putting it in state would
@@ -581,8 +591,18 @@ export function useManagement(): ManagementState {
           request,
           reason: reason ?? "",
           schedule_id: scheduleId,
+          // Whatever the agent was still waiting on. Read out of the
+          // proposal on screen rather than kept in a second piece of state:
+          // the question the manager is looking at *is* the pending request,
+          // and two records of it could disagree. The server clears it the
+          // moment the request is carried out, so an answered question
+          // cannot be reopened by a stale echo.
+          pending_request: pendingRequest.current,
         });
         setProposal(result);
+        // Only a question leaves something pending; the server sends back an
+        // empty string on a finished proposal, which clears this.
+        pendingRequest.current = result.pending_request ?? "";
         return result;
       } catch (reason_) {
         setError(reason_ instanceof Error ? reason_.message : "שגיאה לא ידועה");
@@ -612,7 +632,12 @@ export function useManagement(): ManagementState {
     [proposal, run],
   );
 
-  const dismissProposal = useCallback(() => setProposal(null), []);
+  const dismissProposal = useCallback(() => {
+    setProposal(null);
+    // Dismissing is the manager declining to answer. The next thing they say
+    // is a new request, not a late clarification of the one they closed.
+    pendingRequest.current = "";
+  }, []);
 
   const saveProfile = useCallback(async (input: {
     employees?: Record<string, unknown>[];
@@ -637,8 +662,13 @@ export function useManagement(): ManagementState {
       setAnswer(null);
       setError(null);
       try {
-        const found = await askAgent({ request, schedule_id: scheduleId });
+        const found = await askAgent({
+          request,
+          schedule_id: scheduleId,
+          pending_request: pendingAnswer.current,
+        });
         setAnswer(found);
+        pendingAnswer.current = found.pending_request ?? "";
         return found;
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
@@ -650,7 +680,10 @@ export function useManagement(): ManagementState {
     [scheduleId],
   );
 
-  const dismissAnswer = useCallback(() => setAnswer(null), []);
+  const dismissAnswer = useCallback(() => {
+    setAnswer(null);
+    pendingAnswer.current = "";
+  }, []);
 
   /** What a set of operations would do. **Persists nothing.**
    *
