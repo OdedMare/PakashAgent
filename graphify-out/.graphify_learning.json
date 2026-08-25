@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-24T14:25:29.310318+00:00",
+  "generated_at": "2026-08-25T18:18:59.850284+00:00",
   "nodes": {
     "backend_app_api_claude_http_layer": {
       "code_fingerprint": "c2084d64a2ac674d58aa41cbe62280c7597ed305ff435279c05f153edf5c49b4",
@@ -12,13 +12,13 @@
           "q": "עכשיו יש לי בעיה אני יוצר סידור אוטומטי אבל המודל מחזיר תשובה חיובית ו200 api אבל ui מחזיר שגיאת רשת 500"
         }
       ],
-      "score": 0.996766705,
+      "score": 0.970358092,
       "source_file": "backend/app/api/CLAUDE.md",
       "status": "tentative",
       "uses": 1
     },
     "backend_app_bl_claude_agent_decides_code_audits": {
-      "code_fingerprint": "40227f6cd5fb00754e6bad782d8c8541b4dbf4b4dcc186f04a26a5eafaee9c2f",
+      "code_fingerprint": "d1f44b150865b84ef0417175867268c23a6bf8e9b04245f45bbc6138bd882773",
       "label": "Agent Decides; Code Audits",
       "last": "2026-08-24T12:44:20.840181+00:00",
       "provenance": [
@@ -48,13 +48,13 @@
           "q": "in the pakash agent app"
         }
       ],
-      "score": 4.697756672,
+      "score": 4.573293007,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
       "uses": 5
     },
     "backend_app_bl_claude_interview_workflow": {
-      "code_fingerprint": "40227f6cd5fb00754e6bad782d8c8541b4dbf4b4dcc186f04a26a5eafaee9c2f",
+      "code_fingerprint": "d1f44b150865b84ef0417175867268c23a6bf8e9b04245f45bbc6138bd882773",
       "label": "Interview Workflow",
       "last": "2026-08-24T12:44:20.840181+00:00",
       "provenance": [
@@ -84,13 +84,13 @@
           "q": "בוא נחשוב איך נשפר את חווית הראיון היא משמעותית מאוד"
         }
       ],
-      "score": 13.228227721,
+      "score": 12.877755396,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
       "uses": 14
     },
     "backend_app_bl_claude_layout_inference_importer": {
-      "code_fingerprint": "40227f6cd5fb00754e6bad782d8c8541b4dbf4b4dcc186f04a26a5eafaee9c2f",
+      "code_fingerprint": "d1f44b150865b84ef0417175867268c23a6bf8e9b04245f45bbc6138bd882773",
       "label": "Layout Inference Importer",
       "last": "2026-08-23T19:03:51.003530+00:00",
       "provenance": [
@@ -105,16 +105,21 @@
           "q": "בוא נחשוב איך נשפר את חווית הראיון היא משמעותית מאוד"
         }
       ],
-      "score": 1.962794753,
+      "score": 1.910791926,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
       "uses": 2
     },
     "backend_app_bl_claude_schedule_generation": {
-      "code_fingerprint": "40227f6cd5fb00754e6bad782d8c8541b4dbf4b4dcc186f04a26a5eafaee9c2f",
+      "code_fingerprint": "d1f44b150865b84ef0417175867268c23a6bf8e9b04245f45bbc6138bd882773",
       "label": "Schedule Generation",
-      "last": "2026-08-24T14:17:00.063395+00:00",
+      "last": "2026-08-24T15:13:27.098807+00:00",
       "provenance": [
+        {
+          "date": "2026-08-24T15:13:27.098807+00:00",
+          "outcome": "useful",
+          "q": "היום אני חוטף שגיאות של שגיאות רשת אבל המודל חוזר ומחזיר תשובה תעשה את זה לא בסטרימינג אלא בפולינג ככה שהכל יעבוד כמו שצריך בנוסף אני רוצה ממש אופציה לפתוח ולשבץ יום ספציפי כמו כפתור על יום ואז לתת הנחיות על הלוח אני רוצה שסוכן וקופיילוט יתאחדו אני רוצה שתשפר את הפרומפטים לסגירות ליציאות היום הוא מאזן בין הסבבים אבל לא מבין שזה סגירות שבתות סבבים"
+        },
         {
           "date": "2026-08-24T14:17:00.063395+00:00",
           "outcome": "useful",
@@ -136,10 +141,10 @@
           "q": "הראיון ארוך וחוזר על שאלות, ויצירת לוח המשמרות הראשוני לפעמים טועה"
         }
       ],
-      "score": 3.971884324,
+      "score": 4.840907316,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
-      "uses": 4
+      "uses": 5
     },
     "backend_app_dal_claude_assignments_with_agent_reason": {
       "code_fingerprint": "21e546f15e14af1992d469bedfa4fa3a21167e68d153b00b052fc445f4710e94",
@@ -152,7 +157,7 @@
           "q": "הראיון ארוך וחוזר על שאלות, ויצירת לוח המשמרות הראשוני לפעמים טועה"
         }
       ],
-      "score": 0.980769383,
+      "score": 0.954784608,
       "source_file": "backend/app/dal/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -183,13 +188,13 @@
           "q": "בוא נתכנן איך לממש את זה"
         }
       ],
-      "score": 3.847564837,
+      "score": 3.745626389,
       "source_file": "backend/app/dal/CLAUDE.md",
       "status": "preferred",
       "uses": 4
     },
     "backend_app_dal_llm_claude_openai_compatible_json_client": {
-      "code_fingerprint": "623e8dde3cbd3bc2c3dd7926182e8be01761ce05c8d10112315f73359969589c",
+      "code_fingerprint": "eb042bdadd0e012e2c61d7d9863e4b0ad06efc9d2eeea74ab51e0a4251dfe6cd",
       "label": "OpenAI-Compatible JSON Client",
       "last": "2026-08-24T14:17:00.063395+00:00",
       "provenance": [
@@ -219,7 +224,7 @@
           "q": "זה לא יפגע באיכות?"
         }
       ],
-      "score": 7.394836258,
+      "score": 7.19891542,
       "source_file": "backend/app/dal/llm/CLAUDE.md",
       "status": "preferred",
       "uses": 8
@@ -235,7 +240,7 @@
           "q": "תבנה"
         }
       ],
-      "score": 0.98153405,
+      "score": 0.955529015,
       "source_file": "backend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -261,7 +266,7 @@
           "q": "hey i want to start work the agent init interview here some qusetions that give as the base the do interview from that mock the missing question that you miss then we implament this part"
         }
       ],
-      "score": 2.75111843,
+      "score": 2.678229537,
       "source_file": "backend/CLAUDE.md",
       "status": "preferred",
       "uses": 3
@@ -277,7 +282,7 @@
           "q": "in the pakash agent app"
         }
       ],
-      "score": 0.91730631,
+      "score": 0.893002943,
       "source_file": "backend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -293,16 +298,21 @@
           "q": "היום הבעיה החמורה היא שהמידע שנשמר בראיון לא עובר במצב לטוב לתהליך בניית הסידור איך אתה מציע שנעשה את זה ונמקסם על זה"
         }
       ],
-      "score": 0.994484408,
+      "score": 0.968136263,
       "source_file": "docs/DECISIONS.md",
       "status": "tentative",
       "uses": 1
     },
     "frontend_claude_chat_first_frontend": {
-      "code_fingerprint": "6751b6d578ee081fb66d342747a61c57586889cdcdeba29b3f43c0c9e08ebc72",
+      "code_fingerprint": "083f3043cc414cfa652bd64d2d0fa7eaa76caaa1dbf66129b13508698834e63e",
       "label": "Chat-First Frontend",
-      "last": "2026-08-24T14:17:00.063395+00:00",
+      "last": "2026-08-24T15:13:27.098807+00:00",
       "provenance": [
+        {
+          "date": "2026-08-24T15:13:27.098807+00:00",
+          "outcome": "useful",
+          "q": "היום אני חוטף שגיאות של שגיאות רשת אבל המודל חוזר ומחזיר תשובה תעשה את זה לא בסטרימינג אלא בפולינג ככה שהכל יעבוד כמו שצריך בנוסף אני רוצה ממש אופציה לפתוח ולשבץ יום ספציפי כמו כפתור על יום ואז לתת הנחיות על הלוח אני רוצה שסוכן וקופיילוט יתאחדו אני רוצה שתשפר את הפרומפטים לסגירות ליציאות היום הוא מאזן בין הסבבים אבל לא מבין שזה סגירות שבתות סבבים"
+        },
         {
           "date": "2026-08-24T14:17:00.063395+00:00",
           "outcome": "useful",
@@ -322,20 +332,15 @@
           "date": "2026-08-23T18:46:29.458086+00:00",
           "outcome": "useful",
           "q": "בוא נחשוב איך נשפר את חווית הראיון היא משמעותית מאוד"
-        },
-        {
-          "date": "2026-08-22T16:55:41.180609+00:00",
-          "outcome": "useful",
-          "q": "תעצב לי tutorial למערכת עם סקרינשוטים והכל לכל פונקציונליות"
         }
       ],
-      "score": 5.856356676,
+      "score": 6.675451936,
       "source_file": "frontend/CLAUDE.md",
       "status": "preferred",
-      "uses": 6
+      "uses": 7
     },
     "frontend_claude_read_only_employee_view": {
-      "code_fingerprint": "6751b6d578ee081fb66d342747a61c57586889cdcdeba29b3f43c0c9e08ebc72",
+      "code_fingerprint": "083f3043cc414cfa652bd64d2d0fa7eaa76caaa1dbf66129b13508698834e63e",
       "label": "Read-Only Employee View",
       "last": "2026-08-22T16:55:41.180609+00:00",
       "provenance": [
@@ -345,7 +350,7 @@
           "q": "תעצב לי tutorial למערכת עם סקרינשוטים והכל לכל פונקציונליות"
         }
       ],
-      "score": 0.957145485,
+      "score": 0.931786608,
       "source_file": "frontend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -361,7 +366,7 @@
           "q": "תעצב לי tutorial למערכת עם סקרינשוטים והכל לכל פונקציונליות"
         }
       ],
-      "score": 0.957145485,
+      "score": 0.931786608,
       "source_file": "README.md",
       "status": "tentative",
       "uses": 1
@@ -369,18 +374,23 @@
     "readme_shift_loading_and_generation": {
       "code_fingerprint": "828bc45a7b47d8d9d493ceff2c064d6bad8bbfefa6f0766322d6d832a3a09838",
       "label": "Shift Loading and Generation",
-      "last": "2026-08-24T14:17:00.063395+00:00",
+      "last": "2026-08-24T15:13:27.098807+00:00",
       "provenance": [
+        {
+          "date": "2026-08-24T15:13:27.098807+00:00",
+          "outcome": "useful",
+          "q": "היום אני חוטף שגיאות של שגיאות רשת אבל המודל חוזר ומחזיר תשובה תעשה את זה לא בסטרימינג אלא בפולינג ככה שהכל יעבוד כמו שצריך בנוסף אני רוצה ממש אופציה לפתוח ולשבץ יום ספציפי כמו כפתור על יום ואז לתת הנחיות על הלוח אני רוצה שסוכן וקופיילוט יתאחדו אני רוצה שתשפר את הפרומפטים לסגירות ליציאות היום הוא מאזן בין הסבבים אבל לא מבין שזה סגירות שבתות סבבים"
+        },
         {
           "date": "2026-08-24T14:17:00.063395+00:00",
           "outcome": "useful",
           "q": "בשיבוץ למשמרות התשובה מהמודל מגיעה תוך 120 עד 300 שניות תוודא שהui לא מחזיר לי timeout כי עכשיו הוא מחזיר"
         }
       ],
-      "score": 0.999863828,
+      "score": 1.947628353,
       "source_file": "README.md",
-      "status": "tentative",
-      "uses": 1
+      "status": "preferred",
+      "uses": 2
     }
   },
   "version": 1
