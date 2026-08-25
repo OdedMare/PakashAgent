@@ -188,7 +188,17 @@ class ScheduleRepository(RepositoryBase):
         The `change_log` rows survive by design: they are the history of what
         was done, and history does not disappear because the thing it
         describes did (D4). Their `schedule_id` goes NULL via the FK.
+
+        The row is read before it is deleted so a period belonging to another
+        team answers 404, exactly as reading, publishing and exporting it
+        already do. Without that check the scoped DELETE removes nothing and
+        still reports success, which tells a caller their period is gone when
+        it is untouched.
         """
+        self._one(
+            "SELECT id FROM schedules WHERE id=%s AND team_id=%s",
+            (schedule_id, team_id),
+        )
         self._execute(
             "DELETE FROM schedules WHERE id=%s AND team_id=%s",
             (schedule_id, team_id),
