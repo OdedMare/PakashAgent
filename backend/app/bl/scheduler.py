@@ -87,6 +87,18 @@ _HEBREW_WEEKDAYS = (
     "יום שישי", "שבת", "יום ראשון",
 )
 
+# The floor a `reason` has to clear to be worth reading. A reason is the
+# manager's only chance to catch a bad call before the schedule is accepted
+# (D8), and the failure it guards against is not an empty string but a label:
+# "נחפף סבב א" restates two fields the model was handed and explains nothing.
+# Roughly a Hebrew clause naming a person-specific fact — hours carried, a
+# qualification, a rest window — which is what an actual justification costs.
+#
+# It lives in the response schema rather than in `_assignments()` on purpose:
+# a terse reason is a bad answer, not an invalid one, and dropping the row
+# would cost the slot its coverage to win an argument about wording.
+_MIN_REASON_CHARS = 24
+
 _ASSIGNMENT_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -97,7 +109,7 @@ _ASSIGNMENT_SCHEMA = {
         "date": {"type": "string"},
         # Required by the schema as well as checked below: the model is told
         # in two places because this is the field the whole decision rests on.
-        "reason": {"type": "string"},
+        "reason": {"type": "string", "minLength": _MIN_REASON_CHARS},
     },
 }
 
@@ -865,7 +877,7 @@ def _day_schema(slots: List[dict], candidates: dict) -> dict:
                 if employee_ids else {"type": "string"}
             ),
             "slot_id": {"type": "string", "enum": slot_ids},
-            "reason": {"type": "string", "minLength": 4},
+            "reason": {"type": "string", "minLength": _MIN_REASON_CHARS},
         },
     }
     return {

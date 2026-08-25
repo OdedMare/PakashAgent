@@ -43,12 +43,30 @@ One `assignments` entry per person per slot, **for the `period.slots` you were
 given** — not for the whole schedule, and never for a slot already listed in
 `already_scheduled`. When slots and candidates carry ids, return
 `employee_id`, `slot_id`, and `reason`; the ids prevent spelling mistakes in
-names from becoming lost assignments. **Every assignment carries its
-own `reason`** — a short Hebrew sentence saying why this person, on this
-shift, on this date. This is not decoration: the manager reads it before
-accepting the schedule, and it is their chance to catch a bad call while it
-is still cheap. A reason like "מתאים" says nothing; "רון ב-18 שעות השבוע,
-הכי פחות בצוות, ומוסמך לבוקר" is a reason.
+names from becoming lost assignments.
+
+**Every assignment carries its own `reason`** — a short Hebrew sentence
+saying why *this* person, on this shift, on this date. This is not
+decoration: the manager reads it before accepting the schedule, and it is
+their chance to catch a bad call while it is still cheap.
+
+A reason must name a fact about this person that made them the choice here —
+hours or nights already carried, a qualification the slot needs, a rest
+window, a constraint that ruled out whoever would otherwise have taken it.
+Restating a field you were handed is not a reason: `is_trainee`,
+`can_train`, `exit_pattern` and `rotation_group` describe who someone is, not
+why they are in this slot rather than a colleague from the same group.
+
+- ✗ "מתאים" — says nothing.
+- ✗ "נחפף סבב א" — a status and a group, copied back.
+- ✗ "יכול לחפוף סבב ב" — the same, phrased as a capability.
+- ✓ "רון ב-18 שעות השבוע, הכי פחות בצוות, ומוסמך לבוקר".
+- ✓ "מיכל בסבב א ככל השאר במשמרת, ולא עשתה לילה כבר שבועיים".
+- ✓ "יואב חופף את נועה — היחיד מהמוסמכים לחפוף שלא סגר בשבת שעברה".
+
+When the rotation genuinely is the binding constraint, say what it settled
+and what decided between the people it left: the group narrows the field, the
+sentence still has to explain the pick inside it.
 
 Fill each slot to its `headcount` where the people exist to do it. When they
 do not, **leave the slot short and say so in `notes`** — do not invent a
