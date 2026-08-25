@@ -511,3 +511,205 @@ def test_literal_paths_are_not_read_as_schedule_ids(path):
     app, repo = _build_app()
     _seed(repo)
     assert _client(app).get(path).status_code == 200
+
+
+# -- clarification, at the HTTP boundary -----------------------------------
+#
+# The contract the frontend depends on: a question comes back with the
+# request it is waiting on, the manager's answer is sent back beside it, and
+# nothing is written in between.
+
+
+def _asking(reply, **extra):
+    """A change turn that asks rather than proposes."""
+    answer = {
+        "reply": reply, "needs_reason": False, "needs_input": True,
+        "agent_reason": "", "operations": [], "constraints": [],
+        "profile_operations": [],
+    }
+    answer.update(extra)
+    return answer
+
+
+def _proposing(operations, **extra):
+    answer = {
+        "reply": "הצעה", "needs_reason": False, "needs_input": False,
+        "agent_reason": "הכי פנוי ומוסמך", "operations": operations,
+        "constraints": [], "profile_operations": [],
+    }
+    answer.update(extra)
+    return answer
+
+
+def test_an_ambiguous_change_asks_and_writes_nothing():
+    """The acceptance criterion, end to end.
+
+    The model is scripted to be confident — it names a shift and a date and
+    sets `needs_input` false. Code holds it anyway, because "דניאל" is two
+    people here, and the stored schedule is unchanged afterwards.
+    """
+    llm = _ScriptedLlm([_proposing([
+        {"action": "assign", "employee": "דניאל", "shift": MORNING,
+         "date": "2026-08-17", "reason": "פנוי"},
+    ])])
+    app, repo = _build_app(llm)
+    schedule = _seed(repo)
+    # Two people who both answer to "דניאל" — the case a roster with one of
+    # each name cannot produce.
+    repo.profiles[TEAM] = dict(
+        repo.profiles[TEAM],
+        employees=[{"name": "דניאל כהן"}, {"name": "דניאל לוי"}],
+    )
+    before = repo.get_schedule(schedule["id"], TEAM)
+
+    body = _client(app).post("/api/schedule/propose", json={
+        "request": "תשבץ את דניאל", "reason": "כיסוי",
+    }).json()
+
+    assert body["needs_input"] is True
+    assert body["operations"] == []
+    assert body["pending_request"] == "תשבץ את דניאל"
+    assert repo.get_schedule(schedule["id"], TEAM) == before
+
+
+def test_a_change_naming_nobody_on_the_roster_asks_too():
+    """The other half of the same gate: a name the workplace does not have.
+
+    Separated from the ambiguous case because they are different failures
+    asked about differently — "which one" needs candidates to offer, "who is
+    that" has none.
+    """
+    llm = _ScriptedLlm([_proposing([
+        {"action": "assign", "employee": "אבישי", "shift": MORNING,
+         "date": "2026-08-17", "reason": "פנוי"},
+    ])])
+    app, repo = _build_app(llm)
+    schedule = _seed(repo)
+    before = repo.get_schedule(schedule["id"], TEAM)
+
+    body = _client(app).post("/api/schedule/propose", json={
+        "request": "תשבץ את אבישי", "reason": "כיסוי",
+    }).json()
+
+    assert body["needs_input"] is True
+    assert body["operations"] == []
+    assert repo.get_schedule(schedule["id"], TEAM) == before
+
+
+def test_the_clarification_resumes_the_original_request():
+    """The manager answers the question, not the whole sentence again."""
+    llm = _ScriptedLlm([_proposing([
+        {"action": "assign", "employee": DANA, "shift": EVENING,
+         "date": "2026-08-17", "reason": "פנויה"},
+    ])])
+    app, repo = _build_app(llm)
+    _seed(repo)
+
+    body = _client(app).post("/api/schedule/propose", json={
+        "request": "צהריים",
+        "pending_request": "תשבץ את דנה",
+        "reason": "כיסוי",
+    }).json()
+
+    assert body["needs_input"] is False
+    assert len(body["operations"]) == 1
+    # Nothing left waiting, so the next sentence starts clean.
+    assert body["pending_request"] == ""
+    # And both halves reached the model.
+    sent = llm.calls[0]["user"]
+    assert "תשבץ את דנה" in sent
+    assert "צהריים" in sent
+
+
+def test_an_answered_question_is_not_asked_again():
+    """The infinite-loop guard, at the boundary that would show it.
+
+    Two turns: the first asks which shift, the second is scripted to propose.
+    What is asserted is that the second turn *was given* what it already
+    asked and what came back — a model that cannot see either is a model with
+    no way to avoid repeating itself.
+    """
+    llm = _ScriptedLlm([
+        _asking("לאיזו משמרת לשבץ את דנה — בוקר או צהריים?"),
+        _proposing([
+            {"action": "assign", "employee": DANA, "shift": EVENING,
+             "date": "2026-08-17", "reason": "פנויה"},
+        ]),
+    ])
+    app, repo = _build_app(llm)
+    _seed(repo)
+    client = _client(app)
+
+    first = client.post("/api/schedule/propose", json={
+        "request": "תשבץ את דנה", "reason": "כיסוי",
+    }).json()
+    assert first["needs_input"] is True
+
+    second = client.post("/api/schedule/propose", json={
+        "request": "צהריים",
+        "pending_request": first["pending_request"],
+        "reason": "כיסוי",
+    }).json()
+
+    assert second["needs_input"] is False
+    assert len(second["operations"]) == 1
+    sent = llm.calls[1]["user"]
+    assert "asked_last_turn" in sent
+    assert "answer_to_that" in sent
+
+
+def test_a_clear_change_request_never_asks():
+    """Existing behaviour, unchanged. The regression that would matter most."""
+    llm = _ScriptedLlm([_proposing([
+        {"action": "remove", "employee": DANA, "shift": MORNING,
+         "date": "2026-08-17", "reason": "מחלה"},
+    ])])
+    app, repo = _build_app(llm)
+    _seed(repo, assignments=[
+        {"employee": DANA, "shift": MORNING, "date": "2026-08-17"},
+    ])
+
+    body = _client(app).post("/api/schedule/propose", json={
+        "request": "תוריד את דנה מהבוקר של ה-17", "reason": "מחלה",
+    }).json()
+
+    assert body["needs_input"] is False
+    assert body["pending_request"] == ""
+    assert len(body["operations"]) == 1
+
+
+def test_a_question_carries_its_pending_request_back():
+    """`/ask` gets the same continuation contract as `/propose`."""
+    app, repo = _build_app()
+    _seed(repo)
+
+    body = _client(app).post(
+        "/api/schedule/ask", json={"request": "בלה בלה בלה"},
+    ).json()
+
+    # Nothing was placed, so there is nothing to continue.
+    assert body["understood"] is False
+    assert body["pending_request"] == ""
+
+
+def test_a_pending_request_from_another_workspace_cannot_target_this_one():
+    """`pending_request` is client-supplied text, so it is content, not authority.
+
+    It reaches the model as part of the sentence and nothing else: it names
+    no schedule, selects no row, and cannot widen what this session may
+    touch. The team the write would land on still comes from the cookie.
+    """
+    llm = _ScriptedLlm([_proposing([
+        {"action": "assign", "employee": DANA, "shift": MORNING,
+         "date": "2026-08-17", "reason": "פנויה"},
+    ])])
+    app, repo = _build_app(llm)
+    _seed(repo)
+
+    body = _client(app).post("/api/schedule/propose", json={
+        "request": "בוקר",
+        "pending_request": "תשבץ מישהו בצוות אחר",
+        "reason": "כיסוי",
+    }).json()
+
+    assert body["schedule_id"] == repo.current_schedule(TEAM)["id"]

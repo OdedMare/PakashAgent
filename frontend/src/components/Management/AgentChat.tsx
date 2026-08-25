@@ -101,6 +101,11 @@ export function AgentChat({
   }
 
   const needsReason = proposal?.needs_reason ?? false;
+  // The agent could not tell what the request referred to and asked. The
+  // question is already in `reply`; what this changes is the composer, which
+  // says "answer" rather than "request a change" — the manager is finishing
+  // a sentence, not starting one.
+  const needsInput = proposal?.needs_input ?? false;
   // The manager's reason: whatever they already stated, otherwise what they
   // are typing now in answer to the agent asking.
   const confirmReason = (proposal?.stated_reason || reason).trim();
@@ -140,8 +145,15 @@ export function AgentChat({
       ) : null}
 
       {proposal ? (
-        <div className="proposal">
-          <p className="proposal-reply">{proposal.reply}</p>
+        <div className={needsInput ? "proposal proposal-asking" : "proposal"}>
+          <p className="proposal-reply">
+            {needsInput ? (
+              <span className="proposal-question-mark" aria-hidden="true">
+                <HelpCircle size={14} />
+              </span>
+            ) : null}
+            {proposal.reply}
+          </p>
 
           {/* The agent asked why. No operations came back, and none will
               until it is answered — a missing reason is met with a question,
@@ -298,10 +310,15 @@ export function AgentChat({
           value={request}
           maxLength={500}
           onChange={(event) => setRequest(event.target.value)}
-          placeholder={hasSchedule
-            ? "למשל: דנה חולה ביום חמישי"
-            : "למשל: תוסיף את מאיה לצוות בתפקיד אחראית משמרת"}
+          placeholder={
+            needsInput
+              ? "התשובה לשאלה של הסוכן — אין צורך לחזור על הבקשה"
+              : hasSchedule
+                ? "למשל: דנה חולה ביום חמישי"
+                : "למשל: תוסיף את מאיה לצוות בתפקיד אחראית משמרת"
+          }
           disabled={busy}
+          autoFocus={needsInput}
         />
         {/* Asking and requesting are two buttons because they are two
             different acts. The magnifier reads the schedule and answers;

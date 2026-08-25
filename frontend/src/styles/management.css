@@ -687,6 +687,22 @@
   line-height: 1.5;
 }
 
+/* A proposal that is asking rather than proposing. Marked so it does not read
+   as a change awaiting approval — there is nothing here to approve, and a
+   question styled like a proposal invites the manager to look for a confirm
+   button that deliberately is not there. */
+.proposal-asking {
+  border-style: dashed;
+  background: var(--surface);
+}
+
+.proposal-question-mark {
+  display: inline-flex;
+  vertical-align: -0.15em;
+  margin-inline-end: 0.35rem;
+  color: var(--primary);
+}
+
 /* The agent's reasoning, before the manager confirms. Given its own card so
    it reads as the agent's judgment rather than as something already agreed —
    it is the point of the confirmation step, not a footnote. */
