@@ -35,6 +35,7 @@ import datetime
 from typing import Any, Dict, List, Optional
 
 from app.bl.audit import audit
+from app.bl.scheduler import effective_availability
 
 # How many alternatives are worth offering. Past a handful the list stops
 # being an answer and becomes a second grid to read -- the manager already
@@ -75,7 +76,9 @@ def check(
     shifts = _shifts(profile)
     employees = _employees(profile)
     slots = _slots(schedule)
-    availability = list(availability or [])
+    availability = _effective_availability(
+        schedule, profile, availability, slot_date
+    )
 
     candidates = employee_options(
         schedule, profile, shift_name, slot_date, availability,
@@ -110,7 +113,9 @@ def employee_options(
     """Every roster member for a manual picker, with a concrete why-not."""
     shift_name = _text(shift_name)
     slot_date = _iso(slot_date)
-    availability = list(availability or [])
+    availability = _effective_availability(
+        schedule, profile, availability, slot_date
+    )
     load = _hours_by_employee(schedule, profile)
     options = []
     for person in _employees(profile):
@@ -222,7 +227,9 @@ def suggest_alternatives(
     employee = _text(employee)
     shift_name = _text(shift_name)
     slot_date = _iso(slot_date)
-    availability = list(availability or [])
+    availability = _effective_availability(
+        schedule, profile, availability, slot_date
+    )
 
     return {
         "employees": _free_employees(
@@ -345,6 +352,17 @@ def _clean(
         _shifts(profile), _employees(profile), _slots(schedule),
         availability, moving_assignment_id,
     )["ok"]
+
+
+def _effective_availability(
+    schedule: dict, profile: dict, availability: Optional[List[dict]],
+    fallback_day: str,
+) -> List[dict]:
+    starts_on = _iso((schedule or {}).get("starts_on")) or fallback_day
+    ends_on = _iso((schedule or {}).get("ends_on")) or fallback_day
+    return effective_availability(
+        profile, list(availability or []), starts_on, ends_on
+    )
 
 
 def _explain(warning: dict) -> str:

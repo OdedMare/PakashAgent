@@ -187,7 +187,9 @@ class Scheduler:
             # decision that is perfectly valid for the period being built.
             assignments = _merge(
                 assignments,
-                _assignments(answer.get("assignments"), slots, profile),
+                _assignments(
+                    answer.get("assignments"), slots, profile, rows
+                ),
             )
             notes.extend(_lines(answer.get("notes")))
             summary = _bounded(answer.get("summary"))
@@ -272,7 +274,8 @@ class Scheduler:
         answer = self._ask(payload, schema=_day_schema(slots, candidates))
         usage = _usage(answer)
         accepted, rejected = _read_day_assignments(
-            answer.get("assignments"), slots, profile, candidates
+            answer.get("assignments"), slots, profile, candidates,
+            availability,
         )
         current = _replace_day(committed, required + accepted, day)
         warnings = _day_warnings(
@@ -298,7 +301,8 @@ class Scheduler:
                 for key in ("prompt_tokens", "completion_tokens", "total_tokens")
             }
             repaired_rows, repair_rejected = _read_day_assignments(
-                repaired_answer.get("assignments"), slots, profile, candidates
+                repaired_answer.get("assignments"), slots, profile,
+                candidates, availability,
             )
             repaired_current = _replace_day(
                 committed, required + repaired_rows, day
@@ -538,7 +542,8 @@ def _weekday_key(value: Any) -> str:
 
 
 def _assignments(
-    offered: Any, slots: List[dict], profile: dict
+    offered: Any, slots: List[dict], profile: dict,
+    availability: Optional[List[dict]] = None,
 ) -> List[dict]:
     """The model's assignments, bounded to what actually exists.
 
@@ -582,6 +587,18 @@ def _assignments(
         if (shift, date) not in known_slots:
             continue
         if known_people and employee not in known_people:
+            continue
+        slot = known_slots[(shift, date)]
+        assignment = {
+            "employee": employee, "shift": shift, "date": date,
+            "start_time": slot.get("start_time"),
+            "end_time": slot.get("end_time"),
+        }
+        if any(
+            row.get("source") == "rotation"
+            and constraint_conflicts(assignment, row)
+            for row in (availability or []) if isinstance(row, dict)
+        ):
             continue
         key = (employee, shift, date)
         if key in seen:
@@ -714,6 +731,7 @@ def effective_availability(
             "end_time": _bounded(row.get("end_time")),
             "is_hard": row.get("is_hard", True) is not False,
             "reason": _bounded(row.get("reason")),
+            "source": _bounded(row.get("source")),
         })
     if start is None or end is None or end < start:
         return explicit
@@ -726,6 +744,9 @@ def effective_availability(
         for shift in (profile or {}).get("shifts") or []
         if isinstance(shift, dict) and _bounded(shift.get("name"))
     ]
+    rotation = _rotation_availability(
+        profile, start, end, explicit_keys
+    )
     recurring = []
     for person in (profile or {}).get("employees") or []:
         if not isinstance(person, dict):
@@ -767,7 +788,90 @@ def effective_availability(
                             "source": _bounded(rule.get("source")) or "interview",
                         })
                 day += datetime.timedelta(days=1)
-    return recurring + explicit
+    return rotation + recurring + explicit
+
+
+def _rotation_availability(
+    profile: dict, start: datetime.date, end: datetime.date,
+    explicit_keys: set,
+) -> List[dict]:
+    """Expand Rotation A once; Rotation B is its exact slot complement."""
+    workplace = (profile or {}).get("workplace") or {}
+    rules = workplace.get("rotation_a_unavailability") or []
+    rules = [rule for rule in rules if isinstance(rule, dict)]
+    if not rules:
+        return []
+
+    people = []
+    for person in (profile or {}).get("employees") or []:
+        if not isinstance(person, dict):
+            continue
+        pattern = _bounded(person.get("exit_pattern")) or _bounded(
+            workplace.get("rotation_mode")
+        ) or "round"
+        group = _bounded(person.get("rotation_group"))
+        name = _bounded(person.get("name"))
+        if pattern == "round" and group in ("א", "ב") and name:
+            people.append((name, group))
+
+    result = []
+    for slot in build_slots(profile, start.isoformat(), end.isoformat()):
+        unavailable_a = _rotation_a_blocks(slot, rules)
+        for employee, group in people:
+            unavailable = unavailable_a if group == "א" else not unavailable_a
+            if not unavailable:
+                continue
+            key = (employee, slot["slot_date"], slot["shift_name"])
+            if key in explicit_keys or (
+                employee, slot["slot_date"], ""
+            ) in explicit_keys:
+                continue
+            result.append({
+                "employee": employee,
+                "date": slot["slot_date"],
+                "shift": slot["shift_name"],
+                "available": False,
+                "start_time": "",
+                "end_time": "",
+                "is_hard": True,
+                "reason": "סבב %s אינו זמין במועד זה" % group,
+                "source": "rotation",
+                "rotation_group": group,
+                "derived_from": "rotation_a_unavailability",
+            })
+    return result
+
+
+def _rotation_a_blocks(slot: dict, rules: List[dict]) -> bool:
+    weekday = _weekday_key(slot.get("weekday"))
+    for rule in rules:
+        days = {
+            _weekday_key(item) for item in rule.get("days") or []
+            if _weekday_key(item)
+        }
+        if days and weekday not in days:
+            continue
+        shifts = {
+            _bounded(item) for item in rule.get("shifts") or []
+            if _bounded(item)
+        }
+        if shifts and slot.get("shift_name") not in shifts:
+            continue
+        assignment = {
+            "employee": "rotation-a", "date": slot.get("slot_date"),
+            "shift": slot.get("shift_name"),
+            "start_time": slot.get("start_time"),
+            "end_time": slot.get("end_time"),
+        }
+        constraint = {
+            "employee": "rotation-a", "date": slot.get("slot_date"),
+            "shift": slot.get("shift_name"), "available": False,
+            "start_time": rule.get("start_time"),
+            "end_time": rule.get("end_time"),
+        }
+        if constraint_conflicts(assignment, constraint):
+            return True
+    return False
 
 
 def _counts_toward_staffing(person: dict, profile: dict) -> bool:
@@ -890,7 +994,8 @@ def _day_schema(slots: List[dict], candidates: dict) -> dict:
 
 
 def _read_day_assignments(
-    offered: Any, slots: List[dict], profile: dict, candidates: dict
+    offered: Any, slots: List[dict], profile: dict, candidates: dict,
+    availability: Optional[List[dict]] = None,
 ) -> tuple:
     """Translate prompt-local ids and retain an auditable rejection count."""
     if not isinstance(offered, list):
@@ -929,7 +1034,7 @@ def _read_day_assignments(
             # Backward-compatible with older compatible servers and scripted
             # tests while the prompt contract rolls forward to ids.
             translated.append(item)
-    accepted = _assignments(translated, slots, profile)
+    accepted = _assignments(translated, slots, profile, availability)
     if len(accepted) < len(translated):
         rejected.extend(
             {"reason": "missing reason, duplicate, or unknown slot/person"}

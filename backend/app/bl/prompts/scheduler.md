@@ -106,6 +106,9 @@ Respect these without being told again:
   `workplace.rotation_mode`, `workplace.first_closure_group`,
   `workplace.first_closure_date`, `workplace.general_exit_schedule`, ומתוך
   `exit_pattern` ו-`rotation_group` של כל אדם.
+- `workplace.rotation_a_unavailability` הוא המקור שהמנהל הגדיר לסבב א׳.
+  סבב ב׳ מחושב ממנו בשרת; אל תחשב אותו שוב. שורות `availability` שמסומנות
+  `source: "rotation"` הן התוצאה המחייבת לשיבוץ בתאריך ובמשמרת הנתונים.
 
 לכן אל תאזן כל יום כאילו הוא הגרלה חדשה. קודם שמור על קבוצת הסגירה ועל
 מחזור היציאות שנמסר, ורק **בתוך האנשים שמתאימים לאותו מחזור** אזן שעות,

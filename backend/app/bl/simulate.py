@@ -54,6 +54,7 @@ from typing import Any, Dict, List, Optional
 
 from app.bl.audit import audit, fairness
 from app.bl.changes import OP_ASSIGN, OP_REMOVE, OP_SWAP
+from app.bl.scheduler import effective_availability
 
 # How many operations one simulation may carry. The same bound
 # `changes._MAX_OPERATIONS` applies to a proposal: a simulation is a proposal
@@ -83,7 +84,12 @@ def simulate(
     """
     schedule = schedule if isinstance(schedule, dict) else {}
     profile = profile if isinstance(profile, dict) else {}
-    availability = list(availability or [])
+    availability = effective_availability(
+        profile,
+        list(availability or []),
+        _iso(schedule.get("starts_on")),
+        _iso(schedule.get("ends_on")),
+    )
 
     before = _rows(schedule)
     after, applied, skipped = _apply_all(before, schedule, operations)
