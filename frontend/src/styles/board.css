@@ -821,8 +821,11 @@
   font-variant-numeric: tabular-nums;
 }
 
-.board-card-reason {
-  display: -webkit-box;
+/* Who she is, on the line the agent's reason used to hold.
+   One line, not the reason's clamped two: a rotation is a short phrase and
+   never wraps, so the card gets shorter and a day column fits more of the
+   week without scrolling. */
+.board-card-identity {
   grid-column: 1 / -1;
   grid-row: 3;
   margin: 0.12rem 0 0;
@@ -830,8 +833,8 @@
   font-size: 0.66rem;
   line-height: 1.35;
   opacity: 0.78;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .board-card-hours {
@@ -841,13 +844,23 @@
 
 .board-card-alarm,
 .board-card-manual,
-.board-card-commander {
+.board-card-commander,
+.board-card-overlap {
   display: inline-flex;
   align-items: center;
   gap: 0.16rem;
 }
 
+/* Command reads as an assertion, overlap as a qualification — so one is
+   heavier than the surrounding meta and the other lighter. A manager
+   scanning for "can anyone here run this" should catch the first without
+   reading, and should not mistake the second for it. */
 .board-card-commander { font-weight: 650; }
+
+.board-card-overlap {
+  font-weight: 500;
+  opacity: 0.82;
+}
 
 .board-card-grip {
   display: none;

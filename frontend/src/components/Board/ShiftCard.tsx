@@ -14,12 +14,18 @@ import type { Assignment, CardPerson, ScheduleWarning, Slot } from "@/types";
 
 /** One assignment, as a card the manager can read without hovering.
  *
- *  The old grid's chip carried a name and hid everything else behind a
- *  `title`: the role was nowhere, the hours were on the row head, and the
- *  agent's reason needed a hover that does not exist on a touch screen. This
- *  card carries the person, their role, the shift's hours, where the row
- *  came from, and its warning state — which is what makes a week scannable
- *  rather than merely present.
+ *  The card answers **who is standing here**, not why the agent put them
+ *  here. Name, role, rotation, whether they can command, whether they are
+ *  still being handed over to — plus the shift's hours, where the row came
+ *  from, and its warning state. Those are the facts that decide whether a
+ *  cell is manned or only filled, and a manager reading a week is deciding
+ *  exactly that, cell by cell.
+ *
+ *  `assignment.reason` used to hold the last line. It is a record D8 requires
+ *  and it is still written on every path and still on the card's hover — but
+ *  a justification for a placement is read once, when the placement is made,
+ *  and the grid is read every day. The line went to the reader who is
+ *  actually there.
  *
  *  **Colour is signal, not decoration.** The person's hue is the fill (a
  *  week reads as a shape before it reads as text), but a card carrying a
@@ -133,9 +139,11 @@ export function ShiftCard({
       }}
       role={onOpen ? "button" : undefined}
       tabIndex={onOpen ? 0 : undefined}
+      // A screen reader gets the same identity a sighted manager reads off
+      // the card, not just the name: the role and rotation are the point.
       aria-label={
         onOpen
-          ? `${assignment.employee}, ${slot.shift_name}. עריכה`
+          ? `${ariaWho(assignment, person)}, ${slot.shift_name}. עריכה`
           : undefined
       }
       aria-grabbed={onPick ? picked : undefined}
@@ -270,4 +278,17 @@ function identityTitle(assignment: Assignment, person: CardPerson): string {
   const lines = [`${assignment.employee}${who ? ` — ${who}` : ""}`];
   if (assignment.reason) lines.push(`סיבת השיבוץ: ${assignment.reason}`);
   return lines.join("\n");
+}
+
+/** The card's identity as one spoken phrase, for `aria-label`. */
+function ariaWho(assignment: Assignment, person: CardPerson): string {
+  return [
+    assignment.employee,
+    person.role,
+    person.rotation,
+    person.is_shift_manager ? "מפקד/ת" : "",
+    person.is_overlap ? "נחפף/ת" : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
 }
