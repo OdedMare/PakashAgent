@@ -151,6 +151,35 @@ def test_assignments_come_back_with_their_reasons():
     assert result["assignments"][0]["reason"].startswith("דנה מוסמכת")
 
 
+def test_the_schema_asks_for_a_reason_long_enough_to_be_one():
+    """A label is not a reason, and the schema is where that is enforced.
+
+    "נחפף סבב א" is a status and a rotation group copied back out of the
+    candidate payload: it clears "not empty" while telling the manager
+    nothing they could catch a bad call with. Both the period schema and the
+    per-day one carry the same floor, because the model reaches either.
+    """
+    llm = _ScriptedLlm([_reply([
+        {"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+         "reason": "דנה מוסמכת לבוקר ובשעות הנמוכות בצוות"},
+    ])])
+    Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
+    period = llm.calls[0]["schema"]["properties"]["assignments"]["items"]
+
+    llm = _ScriptedLlm([_reply([{
+        "employee_id": "employee-1",
+        "slot_id": "slot-1",
+        "reason": "דנה מוסמכת לבוקר ולא עבדה השבוע",
+    }])])
+    Scheduler(llm).generate_day(PROFILE, "2026-08-17")
+    day = llm.calls[0]["schema"]["properties"]["assignments"]["items"]
+
+    for schema in (period, day):
+        floor = schema["properties"]["reason"]["minLength"]
+        assert floor > len("נחפף סבב א")
+        assert floor <= len("דנה מוסמכת לבוקר ובשעות הנמוכות בצוות")
+
+
 def test_daily_generation_uses_ids_and_filters_unavailable_candidates():
     llm = _ScriptedLlm([_reply([{
         "employee_id": "employee-2",
