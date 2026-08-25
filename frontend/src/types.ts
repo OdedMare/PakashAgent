@@ -226,6 +226,32 @@ export interface Assignment {
   source: AssignmentSource;
 }
 
+/** Who a person is, as the board card states it.
+ *
+ *  The card used to spend its last line on `Assignment.reason` — *why* the
+ *  agent put this person here. That sentence is a record ([D8](docs/DECISIONS.md))
+ *  and it is still stored and still readable, but it answers a question the
+ *  manager has already stopped asking by the time they are looking at a
+ *  week. Scanning a grid, the question is *who is this* — what they do, which
+ *  rotation they are in, whether they can command, whether they are still
+ *  being trained in. Those four facts are what makes a cell staffed or only
+ *  filled, so those four facts are what the card carries.
+ *
+ *  Assembled in the board from the roster, not from the assignment: it
+ *  describes the person, and it reads the same on every shift they hold. */
+export interface CardPerson {
+  role: string;
+  /** `exit_pattern` and `rotation_group` already rendered together — "סבב א",
+   *  "תלתון ג", "חמשושים" for somebody with no group. Empty when the roster
+   *  says nothing. */
+  rotation: string;
+  is_shift_manager: boolean;
+  /** `service_type === "overlap"` — נחפף/ת. Someone learning the shift, who
+   *  by default does not count toward its staffing, which is exactly the
+   *  thing a manager must not have to hover to discover. */
+  is_overlap: boolean;
+}
+
 /** A manager-selected placement that schedule generation must preserve. */
 export interface RequiredAssignment {
   employee: string;
