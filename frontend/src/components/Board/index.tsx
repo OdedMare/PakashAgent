@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AgentAnswer,
   Assignment,
+  CardPerson,
   Constraint,
   ManagementOverview,
   PlacementCheck,
@@ -38,6 +39,7 @@ import { CoverageBar } from "./CoverageBar";
 import { FilterBar } from "./FilterBar";
 import { GenerateDialog } from "./GenerateDialog";
 import { GenerateDayDialog } from "./GenerateDayDialog";
+import { rotationLabel } from "./person";
 import { orderByHours } from "./shiftOrder";
 import { EditorTarget, ShiftEditor } from "./ShiftEditor";
 import { WeekNav } from "./WeekNav";
