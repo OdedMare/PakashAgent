@@ -124,7 +124,7 @@ CHANGE_RESPONSE_SCHEMA = {
         # it refers to* -- which person, which shift, which date. A different
         # gap from `needs_reason`: that one is missing *why*, this one is
         # missing *what*, and a change made against the wrong record is not
-        # fixed by knowing the reason for it.
+        # fixed by knowing the reason for it (D24).
         "needs_input": {"type": "boolean"},
         "agent_reason": {"type": "string"},
         "operations": {
@@ -212,7 +212,8 @@ def _proposal(
     model that forgets it once would otherwise write an unexplained change
     into the only history the system keeps.
 
-    `needs_input` is the same enforcement for a different gap. A change whose
+    `needs_input` is the same enforcement for a different gap
+    ([D24](../../../docs/DECISIONS.md#d24--the-agent-asks-when-it-would-otherwise-guess--strengthens-d8)). A change whose
     *target* was guessed — a name that matches nobody on the roster, or one
     that matches several people — is withdrawn the same way, because the
     reason gate does not help here: knowing why דניאל is being moved does not

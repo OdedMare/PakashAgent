@@ -675,6 +675,64 @@ person has answered it, rollback is refused because deleting their answer
 would be data loss. Schedule repair proposals remain on the ordinary
 propose-confirm path and therefore never need rollback before confirmation.
 
+## D24 — The agent asks when it would otherwise guess ⚠️ *(strengthens D8)*
+
+A request the agent cannot carry out without guessing **which person, shift,
+date, team, rotation or assignment** it refers to is answered with **one
+focused question**, and nothing is proposed behind it.
+
+**The threshold differs by what the request would do**, and that asymmetry is
+the decision:
+
+- **Reading** (`bl/planner.py`) may interpret. A question answered against a
+  reasonable reading of a loose sentence costs a re-ask and moves nothing, so
+  it asks only when a guess would change *what it reports*.
+- **Writing** (`bl/changes.py`) may not. A change applied to the wrong
+  person's shift has to be *found* before it can be undone, and the manager
+  who would find it is the one who trusted the proposal.
+
+**On the write path this is enforced in code, not by the prompt.**
+`_unresolved_people` checks every name an operation carries against
+`tools.resolve_employee`; a name matching nobody, or several people, empties
+the proposal and turns it into a question — the same treatment
+[D8](#d8--two-reasons-both-required)'s missing reason already gets, for the
+same reason. A model that forgets the rule once must not be able to move
+somebody. `resolve_employee` returns *several* matches rather than the first,
+because picking the first is precisely the guess being refused.
+
+**Two gates, one question at a time.** `needs_reason` is a missing *why*;
+`needs_input` is a missing *what*. Either holds a proposal, and the target is
+settled before the reason is collected: a reason recorded against the wrong
+person is worse than a missing one, and a manager handed two questions
+answers neither.
+
+**A clarification continues the request rather than replacing it.**
+`pending_request` travels out with the question and back with the answer, and
+the two are read as one sentence — the manager answers *"ערב"*, never
+*"תשבץ את דניאל במשמרת ערב"*. It is plain text, deliberately not a parsed
+pending-intent record: the sentence is what the model already reads, and a
+structured duplicate is a second thing to keep in sync. It is cleared the
+moment the request is carried out, so an answered question cannot be reopened
+by a stale echo, and both agents are shown what they already asked
+(`asked_last_turn`) so the same question is never put twice.
+
+*Why the client carries it:* the alternative is per-manager conversation
+state on a stateless route. `pending_request` is content, not authority — it
+reaches the model as part of the sentence, names no schedule and selects no
+row, so `team_id` from the signed cookie remains the only thing that scopes a
+write ([D10](#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)).
+
+**⚠️ This is not the audit becoming a gate.** Nothing here refuses a change
+the manager wants; it refuses one the *agent* would have aimed by guessing.
+Once the target is named, the placement proceeds over every warning exactly
+as before ([D3](#d3--the-agent-decides-code-only-audits-)).
+
+**A tool failure is not an ambiguous request.** Nothing matching found, a
+technical error, and "which of these did you mean" are three different
+answers. The deterministic fallback still answers the question rather than
+asking what the manager meant — an unreachable model is not the manager
+having been unclear, and asking would repeat on every retry.
+
 ## Open
 
 - **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment
