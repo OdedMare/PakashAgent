@@ -798,6 +798,9 @@ def _cross_rotation(rows: List[dict], profile: dict) -> List[dict]:
     # when nobody from its closing group happens to be rostered -- otherwise
     # a group could be marked out of turn only when a colleague was there to
     # contradict them.
+    # A group is what puts somebody in a rotation. Without one they are out
+    # every weekend rather than on a turn, so they neither take a turn nor
+    # can be out of one.
     cycles = {
         _cycle_of(profile, person, rotation.exit_pattern(profile, person))
         for person in people.values()

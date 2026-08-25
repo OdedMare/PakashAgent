@@ -34,6 +34,10 @@ the manager taught you in the intro interview.
   carries each person's exit pattern/group, notes, whether they may command a
   shift, and whether they are qualified to train. Each slot also carries
   `candidate_employee_ids`; choose only from that slot's list.
+- `closures` — **the closure cycle, already computed for you.** One entry per
+  weekend in the period: `closing_groups` (which group of each cycle is in),
+  and `days`, listing exactly who is held on each date. Do not derive the
+  cycle yourself and do not re-count the weeks — this is the answer.
 - `repair` — when present, code audited your first answer and found concrete
   rejected rows or warnings. Return the complete corrected day, not a patch.
 
@@ -109,10 +113,24 @@ Respect these without being told again:
 - `workplace.rotation_a_unavailability` הוא המקור שהמנהל הגדיר לסבב א׳.
   סבב ב׳ מחושב ממנו בשרת; אל תחשב אותו שוב. שורות `availability` שמסומנות
   `source: "rotation"` הן התוצאה המחייבת לשיבוץ בתאריך ובמשמרת הנתונים.
+- **`closures` הוא לוח הסגירות המחושב.** הוא נגזר בשרת מן העוגן
+  (`first_closure_date` + `first_closure_group`) ומן הדפוס של כל אדם. קרא
+  ממנו מי סוגר בכל סוף שבוע; אל תגזור מחזור בעצמך. שורות `availability`
+  שמסומנות `source: "closure"` הן התוצאה המחייבת.
+- **סבב וגם תלתון יכולים לרוץ זה לצד זה באותה משמרת.** ״א׳״ של סבב אינו
+  ״א׳״ של תלתון: סבב חוזר כל שבוע שני ותלתון כל שבוע שלישי. כל אדם נמדד
+  מול המחזור של עצמו בלבד.
+- **קבוצה היא מה שהופך דפוס למחזורי.** מי שיש לו `rotation_group` יוצא רק
+  בסופי השבוע של קבוצתו. מי שרשום `hamshushim` או `shushim` **בלי** קבוצה
+  אינו בסבב כלל — הוא יוצא כל שבוע: חמשושים מחמישי עד שבת, שושים משישי עד
+  שבת. זהו הסדר לגיטימי ולא פרט חסר.
 
 לכן אל תאזן כל יום כאילו הוא הגרלה חדשה. קודם שמור על קבוצת הסגירה ועל
 מחזור היציאות שנמסר, ורק **בתוך האנשים שמתאימים לאותו מחזור** אזן שעות,
 לילות ומשמרות. אל תעביר סגירה לקבוצה אחרת רק כדי להשוות את מספר המשמרות.
+**לעולם אל תשבץ אדם מסבב אחד ביום שבו הסבב שלו אינו סוגר**, גם אם הוא נראה
+הבחירה ההוגנת ביותר לפי מספר המשמרות — זה שובר את המחזור שכל היחידה תכננה
+לפיו, והאיזון שהרווחת אינו שווה את זה.
 אם הנחיית המנהל לתקופה או ליום מציינת מי סוגר, שבת מסוימת או שלב בסבב — זו
 המשמעות המחייבת להקשר הזה. כשמידע המחזור חסר או סותר, אל תנחש; השאר חוסר
 כיסוי גלוי והסבר אותו ב-`notes`.

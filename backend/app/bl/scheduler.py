@@ -177,6 +177,9 @@ class Scheduler:
                 "availability": _availability_for_dates(
                     rows, {slot["slot_date"] for slot in chunk}
                 ),
+                "closures": _closures_for_model(
+                    profile, chunk[0]["slot_date"], chunk[-1]["slot_date"]
+                ),
                 # Counted rather than handed over raw. Several hundred
                 # assignment rows were roughly 60% of this payload, and
                 # counting them is code's job under D3 — so the model gets
@@ -259,6 +262,10 @@ class Scheduler:
             },
             "candidate_employees": candidates["employees"],
             "availability": availability,
+            # The closure cycle, already worked out. Handed over as a fact so
+            # the model reads whose weekend it is rather than deriving a
+            # phase it has no way to check.
+            "closures": _closures_for_model(profile, day, day),
             "fairness": load_history(
                 _bounded_rows(history, _MAX_HISTORY_ROWS)
                 + [row for row in committed if _bounded(row.get("date")) < day]
@@ -848,6 +855,14 @@ def _rotation_availability(
     return result
 
 
+
+def _closures_for_model(profile: dict, starts_on: str, ends_on: str) -> List[dict]:
+    """The period's closure cycle, per weekend, for the prompt."""
+    start, end = _parse_date(starts_on), _parse_date(ends_on)
+    if start is None or end is None:
+        return []
+    return rotation_cycle.schedule_for_model(profile, start, end)
+
 def _closure_availability(
     profile: dict, start: datetime.date, end: datetime.date,
     explicit_keys: set,
@@ -889,12 +904,17 @@ def _closure_availability(
         on_rotation[name] = bool(rows) or _on_rotation(profile, person)
         for row in rows:
             holders.setdefault(row["date"], set()).add(name)
-            cycles.setdefault(row["date"], set()).add(row["cycle"])
+            # Only a real rotation displaces anybody. A blank cycle is
+            # somebody out every weekend regardless of whose turn it is, so
+            # their presence must not put a rotating group "out of turn".
+            if row["cycle"]:
+                cycles.setdefault(row["date"], set()).add(row["cycle"])
             # Cycle plus group, so the reason can say "תלתון ג" rather than
             # only naming a letter that means different things per cycle.
-            owners.setdefault(row["date"], set()).add(
-                (row["cycle"], row["group"])
-            )
+            if row["cycle"] and row["group"]:
+                owners.setdefault(row["date"], set()).add(
+                    (row["cycle"], row["group"])
+                )
     if not holders:
         return []
 

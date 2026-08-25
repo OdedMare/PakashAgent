@@ -25,6 +25,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 from app.bl.prompts import load
+from app.bl.tools import resolve_employee
 from app.common.errors import AgentError
 
 _MAX_TEXT_CHARS = 4000
@@ -111,14 +112,20 @@ CHANGE_RESPONSE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "required": [
-        "reply", "needs_reason", "agent_reason", "operations", "constraints",
-        "profile_operations",
+        "reply", "needs_reason", "needs_input", "agent_reason", "operations",
+        "constraints", "profile_operations",
     ],
     "properties": {
         "reply": {"type": "string"},
         # True when the manager has not said why. The answer is a question
         # back, never a rejection and never a guess.
         "needs_reason": {"type": "boolean"},
+        # True when the request cannot be carried out without guessing *what
+        # it refers to* -- which person, which shift, which date. A different
+        # gap from `needs_reason`: that one is missing *why*, this one is
+        # missing *what*, and a change made against the wrong record is not
+        # fixed by knowing the reason for it.
+        "needs_input": {"type": "boolean"},
         "agent_reason": {"type": "string"},
         "operations": {
             "type": "array", "items": _OPERATION_SCHEMA,
@@ -178,21 +185,50 @@ class ChangeAgent:
 def _proposal(
     answer: dict, profile: dict, schedule: dict, stated_reason: str
 ) -> dict:
-    """The model's turn, bounded, with the reason gate enforced in code.
+    """The model's turn, bounded, with both gates enforced in code.
 
     `needs_reason` is not left to the prompt alone: a proposal that would
     change the roster without the manager having said why is withdrawn here
     and turned back into a question. D8 is the decision this protects, and a
     model that forgets it once would otherwise write an unexplained change
     into the only history the system keeps.
+
+    `needs_input` is the same enforcement for a different gap. A change whose
+    *target* was guessed — a name that matches nobody on the roster, or one
+    that matches several people — is withdrawn the same way, because the
+    reason gate does not help here: knowing why דניאל is being moved does not
+    tell you *which* דניאל got moved. The two gates are separate on purpose
+    and a proposal can be held by either.
     """
     operations = _operations(answer.get("operations"), schedule)
     profile_operations = _profile_operations(
         answer.get("profile_operations"), profile
     )
+
+    # Which operations name somebody this workplace cannot identify. Computed
+    # before the reason gate because an unidentifiable target is the more
+    # basic failure: a reason attached to the wrong person is worse than a
+    # missing one.
+    unresolved = _unresolved_people(operations, profile)
+
     needs_reason = bool(answer.get("needs_reason")) and not stated_reason
     if operations and not stated_reason and not answer.get("agent_reason"):
         needs_reason = True
+
+    needs_input = bool(answer.get("needs_input"))
+    if unresolved:
+        needs_input = True
+    if needs_input:
+        # Held for the same reason and in the same way as a missing reason:
+        # the manager is asked, and nothing is queued in the meantime. A
+        # mutation proposed against a target nobody could resolve is exactly
+        # the guess this gate exists to refuse.
+        operations = []
+        profile_operations = []
+        # One gap at a time. Asking "which דניאל, and also why?" in the same
+        # breath is two questions for a manager who has answered neither, and
+        # the reason is worth asking for only once the target is settled.
+        needs_reason = False
     if needs_reason:
         # A question, not a rejection: the manager omitted something, and
         # the product's answer to an omission is to ask.
@@ -200,15 +236,69 @@ def _proposal(
     if profile_operations:
         operations = []
         needs_reason = False
+
+    reply = _bounded(answer.get("reply"))
+    if unresolved and not reply:
+        # The model claimed no ambiguity, so it wrote no question. Code found
+        # one anyway, and a held proposal with nothing said would read as the
+        # agent having ignored the request.
+        reply = _ask_which_person(unresolved)
+
     return {
-        "reply": _bounded(answer.get("reply")),
+        "reply": reply,
         "needs_reason": needs_reason,
+        "needs_input": needs_input,
         "agent_reason": _bounded(answer.get("agent_reason")),
         "stated_reason": stated_reason,
         "operations": operations,
         "profile_operations": profile_operations,
         "constraints": _constraints(answer.get("constraints")),
     }
+
+
+def _unresolved_people(operations: List[dict], profile: dict) -> List[dict]:
+    """Every person an operation names whom the roster cannot pin down.
+
+    Two failures, reported apart because they are asked about differently: a
+    name matching *several* people needs "which one", and a name matching
+    *none* needs "who did you mean". Both are the model having supplied an
+    identity rather than read one, which is the thing it may not do.
+    """
+    unresolved = []
+    seen = set()
+    for operation in operations:
+        for field in ("employee", "with_employee"):
+            name = _bounded(operation.get(field))
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            found = resolve_employee(profile, name)
+            if found["found"]:
+                continue
+            unresolved.append({
+                "name": name,
+                "ambiguous": bool(found["ambiguous"]),
+                "matches": found["matches"],
+            })
+    return unresolved
+
+
+def _ask_which_person(unresolved: List[dict]) -> str:
+    """The question code asks when the model did not.
+
+    Deliberately one question about one name — the first unresolved one —
+    rather than a list. A manager handed three questions answers none of
+    them, and resolving the first commonly resolves the rest.
+    """
+    first = unresolved[0]
+    if first["ambiguous"] and first["matches"]:
+        return "יש כמה עובדים בשם %s — למי מהם התכוונתם: %s?" % (
+            first["name"], "‏, ".join(first["matches"]),
+        )
+    return (
+        "לא זיהיתי מי זה/זו %s ברשימת הצוות. אפשר לכתוב את השם כפי שהוא "
+        "מופיע ברשימה?" % first["name"]
+    )
 
 
 def _operations(offered: Any, schedule: dict) -> List[dict]:

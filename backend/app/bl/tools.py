@@ -828,11 +828,68 @@ def _hours_for(employee: str, schedule: dict, profile: dict) -> float:
     return 0.0
 
 
+def resolve_employee(profile: dict, name: str) -> dict:
+    """Which roster person a manager's word means — or that it is unclear.
+
+    Exact match first, and an exact match wins outright: a workplace with
+    both "דן" and "דניאל" must not have "דן" read as ambiguous, because the
+    manager typed a name that exists.
+
+    Only when nothing matches exactly does this fall back to a prefix and
+    then a containment pass, and only there can the answer be *several*
+    people. "דניאל" in a team with two of them is the case this exists for:
+    the honest answer is both names, not the first one, and picking the
+    first is the guess `changes.py` and `planner.py` are forbidden to make.
+
+    Always a dict, never an exception, for the reason the module docstring
+    gives — the caller is a conversation that has to say something.
+    `matches` carries every candidate found, so the caller can ask
+    "התכוונת ל…" against real names rather than inventing one.
+    """
+    wanted = _text(name)
+    roster = [_text(row.get("name")) for row in _employees(profile)]
+    roster = [row for row in roster if row]
+    if not wanted:
+        return {"found": False, "ambiguous": False, "matches": [],
+                "person": None, "roster": roster}
+
+    exact = [
+        person for person in _employees(profile)
+        if _text(person.get("name")) == wanted
+    ]
+    partial = exact
+    if not partial:
+        partial = [
+            person for person in _employees(profile)
+            if _text(person.get("name")).startswith(wanted)
+        ]
+    if not partial:
+        partial = [
+            person for person in _employees(profile)
+            if wanted and wanted in _text(person.get("name"))
+        ]
+
+    matches = [_text(person.get("name")) for person in partial]
+    if len(partial) == 1:
+        return {"found": True, "ambiguous": False, "matches": matches,
+                "person": partial[0], "roster": roster}
+    if len(partial) > 1:
+        # Several real people, and no basis in the sentence for choosing.
+        # Reported as ambiguous rather than resolved to `partial[0]`.
+        return {"found": False, "ambiguous": True, "matches": matches,
+                "person": None, "roster": roster}
+    return {"found": False, "ambiguous": False, "matches": [],
+            "person": None, "roster": roster}
+
+
 def _find_person(profile: dict, name: str) -> Optional[dict]:
-    for person in _employees(profile):
-        if _text(person.get("name")) == name:
-            return person
-    return None
+    """The one person this name means, or `None` when that is not one person.
+
+    `None` covers both "no such name" and "several people match" — callers
+    here already answer both with `found: False` and the roster attached,
+    which is the shape that lets the agent ask instead of guessing.
+    """
+    return resolve_employee(profile, name)["person"]
 
 
 def _eligible(person: dict) -> List[str]:
