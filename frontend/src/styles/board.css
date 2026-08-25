@@ -2265,3 +2265,176 @@
   font-size: 0.65rem;
   font-weight: 700;
 }
+
+/* -- the week still being read ------------------------------------------- */
+
+/* Sits exactly where `.board-grid` will, so the answer landing does not move
+   the page under the manager. Dashed like `.board-empty` because both are
+   states of the same slot — what differs is that this one resolves itself. */
+.board-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1.6rem 1.2rem 2rem;
+  border-radius: var(--radius);
+  border: 1px dashed var(--border);
+  background: var(--surface);
+}
+
+/* The same line the settings panel uses, so a wait reads the same
+   everywhere in the product. `.spin` and its keyframes come from
+   settings.css, which globals.css imports before this file. */
+.board-loading-line {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* The skeleton borrows `.board-grid`'s own column template rather than
+   inventing one, so the placeholder and the real grid line up column for
+   column and the day headings do not shift when the schedule arrives. */
+.board-loading-grid {
+  width: 100%;
+  min-width: 62rem;
+  overflow: hidden;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.board-loading-row {
+  display: grid;
+  grid-template-columns: 9rem repeat(7, minmax(8.5rem, 1fr));
+  border-bottom: 1px solid var(--border);
+}
+
+.board-loading-row:last-child {
+  border-bottom: 0;
+}
+
+.board-loading-row.is-head {
+  background: var(--surface-2);
+}
+
+.board-loading-corner {
+  padding: 0.7rem 0.8rem;
+}
+
+.board-loading-day {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.7rem 0.8rem;
+  border-inline-start: 1px solid var(--border);
+  font-size: 0.75rem;
+}
+
+/* The dates stay at full contrast while the cells beneath them are blank:
+   which week is on screen is the one thing that *is* known before the
+   request answers, and dimming it would hide the answer to the question the
+   manager just asked by clicking. */
+.board-loading-day strong {
+  font-weight: 600;
+}
+
+.board-loading-day span {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.board-loading-shift,
+.board-loading-cell {
+  min-height: 3.4rem;
+  margin: 0.45rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  animation: board-skeleton 1.4s ease-in-out infinite;
+}
+
+.board-loading-cell {
+  border-inline-start: 0;
+}
+
+/* Columns pulse slightly out of phase, left to right. A grid of twenty-one
+   tiles breathing in perfect unison reads as one flashing block; staggering
+   it reads as a surface loading. */
+.board-loading-row > :nth-child(2) { animation-delay: 0.06s; }
+.board-loading-row > :nth-child(3) { animation-delay: 0.12s; }
+.board-loading-row > :nth-child(4) { animation-delay: 0.18s; }
+.board-loading-row > :nth-child(5) { animation-delay: 0.24s; }
+.board-loading-row > :nth-child(6) { animation-delay: 0.3s; }
+.board-loading-row > :nth-child(7) { animation-delay: 0.36s; }
+.board-loading-row > :nth-child(8) { animation-delay: 0.42s; }
+
+@keyframes board-skeleton {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.board-loading-range {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A pulse is decoration; the sentence above carries the meaning. Anyone who
+   has asked for less motion loses nothing by having it held still. */
+@media (prefers-reduced-motion: reduce) {
+  .board-loading-shift,
+  .board-loading-cell {
+    animation: none;
+    opacity: 0.7;
+  }
+
+  .board-loading-line .spin {
+    animation: none;
+  }
+}
+
+/* The rail's days while the week is being counted. Flat and quiet: the day
+   names and dates are known, the fills are not, and a coloured track would
+   be asserting a readiness nobody has read yet. */
+.week-rail-day.is-loading .week-rail-track span {
+  min-width: 0;
+  background: transparent;
+}
+
+.week-rail-day.is-loading small {
+  opacity: 0.7;
+}
+
+/* -- the week that could not be read -------------------------------------- */
+
+/* Solid-bordered and in the danger colour, unlike `.board-empty`'s dashed
+   calm: an empty week is an ordinary state of the product, and a week that
+   failed to load is not. The two render in the same place, so they have to
+   be told apart at a glance. */
+.board-load-error {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger) 5%, var(--surface));
+}
+
+.board-load-error h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--danger);
+}
+
+.board-load-error-detail {
+  font-size: 0.78rem !important;
+  color: var(--text-muted) !important;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  word-break: break-word;
+}

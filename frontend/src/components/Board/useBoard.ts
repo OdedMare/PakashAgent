@@ -95,6 +95,21 @@ export interface BoardState {
  *  tomorrow means *this* week, not the one they last had open. */
 const WEEK_KEY = "pakash.board.week";
 
+/** The week on hand: which one it is for, what it holds, and why it is empty
+ *  if it is. `for` trailing `weekStart` is what "still loading" means. */
+interface WeekState {
+  for: string | null;
+  schedule: Schedule | null;
+  error: string | null;
+}
+
+/** One completed read, tagged with the request that made it, so the caller
+ *  can drop it if a newer read has since started. */
+interface WeekRead {
+  token: number;
+  week: WeekState;
+}
+
 export function useBoard(scheduleId?: string): BoardState {
   const today = useMemo(() => localToday(), []);
   const [weekStart, setWeekStart] = useState<string>(() => {
@@ -108,11 +123,11 @@ export function useBoard(scheduleId?: string): BoardState {
   // is what produces the cascading render the compiler warns about, and
   // splitting them also allows a moment where a stale schedule is shown as
   // settled.
-  const [week, setWeek] = useState<{
-    for: string | null;
-    schedule: Schedule | null;
-    error: string | null;
-  }>({ for: null, schedule: null, error: null });
+  const [week, setWeek] = useState<WeekState>({
+    for: null,
+    schedule: null,
+    error: null,
+  });
 
   // Every read of a week is answered against the request that is still the
   // newest, by the same token the board already uses for placement checks.
@@ -151,27 +166,35 @@ export function useBoard(scheduleId?: string): BoardState {
   );
   const goToToday = useCallback(() => goToWeek(today), [goToWeek, today]);
 
-  /** Read the period covering one week, and settle it as the answer — but
-   *  only if it is still the week being asked about. */
-  const readWeek = useCallback(async (wanted: string) => {
+  /** Read one week, and resolve to how it should settle.
+   *
+   *  Deliberately *does not* call `setState` itself. The settle happens in
+   *  the caller's `.then()`, which is what keeps the effect below out of the
+   *  cascading-render pattern the compiler rejects — the same shape the
+   *  original inline fetch had, with the token and the error arm factored
+   *  out so the effect and `reloadWeek` cannot drift apart.
+   *
+   *  A failure resolves rather than rejects, and resolves *marked for this
+   *  week*: the week is settled either way, so the board always leaves its
+   *  loading state. A failure that left `for` behind `weekStart` would spin
+   *  forever, which is the one outcome worse than the failure itself. */
+  const fetchWeek = useCallback(async (wanted: string): Promise<WeekRead> => {
     const token = ++weekToken.current;
     try {
       const found = await scheduleAt(wanted);
-      if (token !== weekToken.current) return;
-      setWeek({ for: wanted, schedule: found, error: null });
+      return { token, week: { for: wanted, schedule: found, error: null } };
     } catch (reason) {
-      if (token !== weekToken.current) return;
-      // Settled as an *error for this week*, not as an absent schedule. The
-      // week is marked read either way, so the board leaves its loading
-      // state — a failure that kept `for` behind `weekStart` would spin
-      // forever, which is the one outcome worse than the failure itself.
-      setWeek({
-        for: wanted,
-        schedule: null,
-        error: reason instanceof Error && reason.message
-          ? reason.message
-          : "לא הצלחנו לטעון את הסידור",
-      });
+      return {
+        token,
+        week: {
+          for: wanted,
+          schedule: null,
+          error:
+            reason instanceof Error && reason.message
+              ? reason.message
+              : "לא הצלחנו לטעון את הסידור",
+        },
+      };
     }
   }, []);
 
@@ -180,20 +203,24 @@ export function useBoard(scheduleId?: string): BoardState {
    *  The overview hands over the *current* period, so the common case — a
    *  manager on this week — costs no extra request, and paging away is what
    *  fetches. */
-  const reloadWeek = useCallback(
-    () => readWeek(weekStart),
-    [readWeek, weekStart],
-  );
+  const reloadWeek = useCallback(async () => {
+    const read = await fetchWeek(weekStart);
+    if (read.token !== weekToken.current) return;
+    setWeek(read.week);
+  }, [fetchWeek, weekStart]);
 
   useEffect(() => {
-    void readWeek(weekStart);
-    // No cleanup flag: `readWeek` bumps the token on entry, so the read this
-    // render supersedes is already stale by the time its response lands.
-    //
+    fetchWeek(weekStart).then((read) => {
+      // The token, not a cleanup flag. A cleanup flag only covers the read
+      // this effect started; the token also makes a `reloadWeek` begun
+      // before the manager paged land as stale, and that one has no effect
+      // body to hang a flag on.
+      if (read.token === weekToken.current) setWeek(read.week);
+    });
     // `scheduleId` is a dependency because a write to the current period
     // changes what `/at` answers for the week containing it — without it, a
     // freshly generated week would render against the pre-write copy.
-  }, [readWeek, weekStart, scheduleId]);
+  }, [fetchWeek, weekStart, scheduleId]);
 
   const setFilters = useCallback((next: Partial<BoardFilters>) => {
     setFiltersState((current) => ({ ...current, ...next }));
