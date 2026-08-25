@@ -1,6 +1,13 @@
 "use client";
 
-import { AlertTriangle, GripVertical, Hand, Move, ShieldCheck } from "lucide-react";
+import {
+  AlertTriangle,
+  GripVertical,
+  Hand,
+  Move,
+  ShieldCheck,
+  Users,
+} from "lucide-react";
 
 import { colorStyle } from "@/components/Management/palette";
 import type { Assignment, CardPerson, ScheduleWarning, Slot } from "@/types";
@@ -104,6 +111,7 @@ export function ShiftCard({
       }}
       onDragEnd={onDragEnd}
       onClick={onOpen}
+      title={identityTitle(assignment, person)}
       onKeyDown={(event) => {
         // The card is a div because it is also a drag source; a button
         // inside a draggable is fought over by both behaviours. Keyboard
@@ -134,7 +142,9 @@ export function ShiftCard({
     >
       <div className="board-card-main">
         <span className="board-card-name">{assignment.employee}</span>
-        {role ? <span className="board-card-role">{role}</span> : null}
+        {person.role ? (
+          <span className="board-card-role">{person.role}</span>
+        ) : null}
       </div>
 
       <div className="board-card-meta">
@@ -151,9 +161,31 @@ export function ShiftCard({
             <Hand size={10} />
           </span>
         ) : null}
-        {slot.requires_shift_manager && isShiftManager ? (
-          <span className="board-card-commander" title="מפקד/ת המשמרת">
+        {/* Command is a property of the person, not of the slot. It used to
+            appear only where `requires_shift_manager` was set, which meant
+            the one fact a manager most needs while reading a cell —
+            *is anybody here able to run this shift* — was invisible on
+            exactly the shifts where nobody had declared it needed. The
+            badge now says what is true of her; whether this slot demands it
+            is the audit's question and the audit already asks it. */}
+        {person.is_shift_manager ? (
+          <span
+            className="board-card-commander"
+            title={
+              slot.requires_shift_manager
+                ? "מפקד/ת המשמרת"
+                : "מוסמך/ת לפקד על משמרת"
+            }
+          >
             <ShieldCheck size={11} /> מפקד/ת
+          </span>
+        ) : null}
+        {person.is_overlap ? (
+          <span
+            className="board-card-overlap"
+            title="נחפף/ת — בחפיפה, לרוב אינו/ה נספר/ת בתקן המשמרת"
+          >
+            <Users size={11} /> נחפף/ת
           </span>
         ) : null}
         {alarming ? (
@@ -170,9 +202,19 @@ export function ShiftCard({
         ) : null}
       </div>
 
-      <p className="board-card-reason" title={assignment.reason}>
-        {assignment.reason}
-      </p>
+      {/* Who she is, not why she is here.
+          `assignment.reason` is a record D8 requires and it is still stored,
+          still written on every path, and still one hover away — but as the
+          card's own last line it answered a question that is already closed
+          by the time a week is on screen. What a manager reads a grid for is
+          whether each cell is *manned*, and that is a question about the
+          people in it: their rotation, and whether they are counted or still
+          being handed over to. Role and command sit above; this line carries
+          the rotation, which is the fact that decides whether the person is
+          even around next weekend. */}
+      {person.rotation ? (
+        <p className="board-card-identity">{person.rotation}</p>
+      ) : null}
 
       {/* The move handle, as a real button.
           The grip beside it is decoration for a gesture only a mouse can
@@ -206,4 +248,26 @@ export function ShiftCard({
       ) : null}
     </div>
   );
+}
+
+/** The hover on the identity line: who she is, then why she is here.
+ *
+ *  D8 keeps `assignment.reason` on every row and the manager must be able to
+ *  reach it — it is the account of a placement, and on a hand-placed row it
+ *  is the manager's own sentence. Moving it off the card's face does not
+ *  mean losing it: it moves from the line that is read a hundred times a
+ *  week to the one place somebody goes when they actually want to know.
+ */
+function identityTitle(assignment: Assignment, person: CardPerson): string {
+  const who = [
+    person.role,
+    person.rotation,
+    person.is_shift_manager ? "מפקד/ת" : "",
+    person.is_overlap ? "נחפף/ת" : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const lines = [`${assignment.employee}${who ? ` — ${who}` : ""}`];
+  if (assignment.reason) lines.push(`סיבת השיבוץ: ${assignment.reason}`);
+  return lines.join("\n");
 }
