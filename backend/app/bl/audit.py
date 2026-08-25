@@ -36,6 +36,10 @@ MISSING_ROLE = "missing_role"
 MISSING_COMMANDER = "missing_commander"
 CROSS_ROTATION = "cross_rotation"
 
+# The lettered groups each cycle turns through. Used to probe which dates a
+# cycle closes without needing one of its people to be rostered that day.
+_GROUPS_BY_CYCLE = {"round": ("א", "ב"), "triplet": ("א", "ב", "ג")}
+
 # Severity is advice about presentation, not authority. `warning` is a thing
 # the manager should look at; `notice` is a thing worth mentioning. Neither
 # blocks, and the UI renders both as non-blocking banners.
@@ -805,16 +809,19 @@ def _cross_rotation(rows: List[dict], profile: dict) -> List[dict]:
     # change between two assignments on the same day.
     holders: Dict[str, set] = {}
     closing: Dict[str, set] = {}
-    day = start
-    while day <= end:
-        date = day.isoformat()
-        for cycle in cycles:
-            if rotation.closing_group(profile, day, cycle):
-                closing.setdefault(date, set()).add(cycle)
-        day += datetime.timedelta(days=1)
     for name, person in people.items():
         for row in rotation.closure_days(profile, person, start, end):
             holders.setdefault(row["date"], set()).add(name)
+    # Which dates each cycle is actually closing, probed with a representative
+    # of every group so a date counts even when nobody from the group in is
+    # rostered. Probing matters because only closure *days* are constrained:
+    # an ordinary Tuesday belongs to nobody, and treating every date as part
+    # of the coming weekend's closure would flag the whole week.
+    for cycle in cycles:
+        for group in _GROUPS_BY_CYCLE.get(cycle, ()):  # noqa: E501
+            probe = {"exit_pattern": cycle, "rotation_group": group}
+            for row in rotation.closure_days(profile, probe, start, end):
+                closing.setdefault(row["date"], set()).add(cycle)
     if not closing:
         return []
 
