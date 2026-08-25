@@ -88,6 +88,10 @@ _HEBREW_WEEKDAYS = (
     "יום שישי", "שבת", "יום ראשון",
 )
 
+# How each cycle is named to the manager. The keys are the internal pattern
+# names; a reason the manager reads should never show them.
+_CYCLE_LABELS = {"round": "סבב", "triplet": "תלתון"}
+
 _ASSIGNMENT_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -877,7 +881,7 @@ def _closure_availability(
     # Who is legitimately held on each date, and by which cycle. A person on
     # a rotation the profile never anchored contributes nothing here, so
     # their days simply stay unconstrained.
-    holders, cycles = {}, {}
+    holders, cycles, owners = {}, {}, {}
     on_rotation = {}
     for person in people:
         name = _bounded(person.get("name"))
@@ -886,6 +890,11 @@ def _closure_availability(
         for row in rows:
             holders.setdefault(row["date"], set()).add(name)
             cycles.setdefault(row["date"], set()).add(row["cycle"])
+            # Cycle plus group, so the reason can say "תלתון ג" rather than
+            # only naming a letter that means different things per cycle.
+            owners.setdefault(row["date"], set()).add(
+                (row["cycle"], row["group"])
+            )
     if not holders:
         return []
 

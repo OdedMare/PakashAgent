@@ -32,6 +32,7 @@ UNFILLED = "unfilled"
 OVERSTAFFED = "overstaffed"
 MISSING_ROLE = "missing_role"
 MISSING_COMMANDER = "missing_commander"
+CROSS_ROTATION = "cross_rotation"
 
 # Severity is advice about presentation, not authority. `warning` is a thing
 # the manager should look at; `notice` is a thing worth mentioning. Neither
@@ -93,6 +94,7 @@ def audit(
     warnings.extend(_staffing(
         rows, shifts or [], employees or [], profile or {}, slots
     ))
+    warnings.extend(_cross_rotation(rows, profile or {}))
     # Sorted for a stable render: the manager reads this list top-down, and a
     # set of warnings that reorders itself between two identical audits looks
     # like the schedule changed when it did not.
@@ -748,6 +750,99 @@ def _unavailable(rows: List[dict], availability: List[dict]) -> List[dict]:
             break
     return warnings
 
+
+
+def _cross_rotation(rows: List[dict], profile: dict) -> List[dict]:
+    """Assignments that put somebody in on another rotation's closure.
+
+    A closure belongs to one group. Someone assigned on a day their own cycle
+    is not holding has been moved across the rotation -- the exact thing the
+    scheduler's hard rows exist to prevent, so reaching here means a schedule
+    was imported, hand-edited, or built before the cycle was anchored.
+
+    Named separately from UNAVAILABLE because the manager needs the two apart.
+    "יוסי has a doctor's appointment" is resolved by finding someone else;
+    "יוסי is in on סבב א's Saturday" means the rotation itself has drifted,
+    and swapping in another name from the wrong group does not fix it.
+
+    Advisory like everything else here: it reports, and never blocks
+    ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+    Silent when the workplace never anchored a cycle -- with no anchor there
+    is no phase to be wrong about, and warning would be inventing one.
+    """
+    people = {
+        _text(person.get("name")): person
+        for person in (profile or {}).get("employees") or []
+        if isinstance(person, dict) and _text(person.get("name"))
+    }
+    if not people:
+        return []
+
+    dates = sorted({
+        _text(row.get("date")) for row in rows if _text(row.get("date"))
+    })
+    if not dates:
+        return []
+    start, end = _date(dates[0]), _date(dates[-1])
+    if start is None or end is None:
+        return []
+
+    # Who legitimately holds each date, and which cycles are closing it.
+    # Built once for the period rather than per row: the arithmetic does not
+    # change between two assignments on the same day.
+    holders: Dict[str, set] = {}
+    closing: Dict[str, set] = {}
+    for name, person in people.items():
+        for row in rotation.closure_days(profile, person, start, end):
+            holders.setdefault(row["date"], set()).add(name)
+            closing.setdefault(row["date"], set()).add(row["cycle"])
+    if not holders:
+        return []
+
+    warnings = []
+    for row in rows:
+        name = _text(row.get("employee"))
+        date = _text(row.get("date"))
+        person = people.get(name)
+        if person is None or date not in holders or name in holders[date]:
+            continue
+        group = _text(person.get("rotation_group"))
+        if not group:
+            # Nobody the cycle speaks for. A civilian or an unassigned
+            # reserve works an ordinary day here.
+            continue
+        pattern = rotation.exit_pattern(profile, person)
+        cycle = _cycle_of(profile, person, pattern)
+        if cycle not in closing.get(date, set()):
+            # A different cycle is closing today; this person's own cycle
+            # has no claim on the date, so they are not out of turn.
+            continue
+        holding = sorted(holders[date])
+        warnings.append(_warning(
+            CROSS_ROTATION,
+            SEVERITY_WARNING,
+            "%s (קבוצה %s) משובץ ל%s בתאריך %s, "
+            "אך הסגירה במועד זה שייכת ל%s."
+            % (name, group, _text(row.get("shift")), date,
+               ", ".join(holding[:3]) + (" ואחרים" if len(holding) > 3 else "")),
+            employee=name, date=date, shift=_text(row.get("shift")),
+            details={
+                "rotation_group": group,
+                "exit_pattern": pattern,
+                "closing_employees": holding,
+            },
+        ))
+    return warnings
+
+
+def _cycle_of(profile: dict, person: dict, pattern: str) -> str:
+    """Which cycle a person turns on: their pattern, or their group's."""
+    if pattern in ("round", "triplet"):
+        return pattern
+    if _text(person.get("rotation_group")) == "ג":
+        return "triplet"
+    mode = _text(((profile or {}).get("workplace") or {}).get("rotation_mode"))
+    return mode if mode in ("round", "triplet") else "round"
 
 def constraint_conflicts(assignment: dict, constraint: dict) -> bool:
     """Whether one assignment falls outside one recorded availability.
