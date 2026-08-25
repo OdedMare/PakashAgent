@@ -55,6 +55,7 @@ from app.bl.audit import audit, fairness
 from app.bl.placement import check as check_placement
 from app.bl.placement import suggest_alternatives
 from app.common.errors import AgentError
+from app.common.time_context import israel_today
 
 # Every tool the agent may call, by name. The planner picks from this list
 # and nothing else -- a name outside it is a tool that does not exist, and
@@ -128,6 +129,14 @@ class ScheduleTools:
         on, and an exception is not.
         """
         arguments = arguments if isinstance(arguments, dict) else {}
+        invalid_date = _invalid_date_argument(arguments)
+        if invalid_date:
+            return {
+                "tool": _text(name),
+                "ok": False,
+                "error": "%s חייב להיות תאריך מוחלט בפורמט YYYY-MM-DD"
+                % invalid_date,
+            }
         handler = {
             TOOL_READ_PERIOD: self.read_period,
             TOOL_TEAM_OVERVIEW: self.team_overview,
@@ -754,6 +763,19 @@ def _arguments_for(handler, arguments: dict) -> dict:
     }
 
 
+def _invalid_date_argument(arguments: dict) -> str:
+    """Reject relative or ambiguous dates at the shared tool boundary."""
+    for key in ("day", "slot_date", "starts_on", "ends_on"):
+        value = _text(arguments.get(key))
+        if not value:
+            continue
+        try:
+            datetime.date.fromisoformat(value)
+        except ValueError:
+            return key
+    return ""
+
+
 def _period_view(schedule: dict) -> dict:
     """A period as a tool answer carries it: identity and bounds, no rows.
 
@@ -837,7 +859,7 @@ def _shifts(profile: dict) -> List[dict]:
 def _window(schedule: Optional[dict]) -> tuple:
     """The date range a period covers, for reading constraints over it."""
     if not schedule:
-        today = datetime.date.today()
+        today = israel_today()
         return (today.isoformat(), today.isoformat())
     return (_iso(schedule.get("starts_on")), _iso(schedule.get("ends_on")))
 

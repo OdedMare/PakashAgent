@@ -62,6 +62,7 @@ from app.bl.tools import (
     TOOL_TEAM_OVERVIEW,
 )
 from app.common.errors import AgentError
+from app.common.time_context import israel_today
 
 _MAX_TEXT_CHARS = 4000
 
@@ -91,6 +92,7 @@ _TOOL_CALL_SCHEMA = {
                 "day": {"type": "string"},
                 "starts_on": {"type": "string"},
                 "ends_on": {"type": "string"},
+                "timezone": {"type": "string"},
                 "schedule_id": {"type": "string"},
                 "moving_assignment_id": {"type": "string"},
             },
@@ -257,7 +259,8 @@ class PlanningAgent:
         roster = [_text(row.get("name")) for row in _employees(profile)]
         shift_names = [_text(row.get("name")) for row in _shifts(profile)]
         read = intent_reader.read(
-            request, roster=roster, shift_names=shift_names, period=period,
+            request, roster=roster, shift_names=shift_names,
+            today=israel_today().isoformat(), period=period,
         )
 
         handler = {

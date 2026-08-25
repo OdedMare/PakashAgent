@@ -41,6 +41,7 @@ import httpx
 from openai import BadRequestError, OpenAI
 
 from app.common.errors import AgentError
+from app.common.time_context import agent_time_context
 from app.dal.llm.completion_retry import create_with_retry
 from app.dal.llm.json_response_parser import extract_json
 from app.dal.llm.message_merger import merge_system_into_user
@@ -246,7 +247,10 @@ class OpenAIJsonClient:
             settings.llm_timeout_seconds,
         )
         messages = [
-            {"role": "system", "content": system},
+            {
+                "role": "system",
+                "content": system.rstrip() + "\n\n" + agent_time_context(),
+            },
             {"role": "user", "content": user},
         ]
         usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}

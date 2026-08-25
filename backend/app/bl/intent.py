@@ -50,6 +50,8 @@ import datetime
 import re
 from typing import Any, Dict, List, Optional
 
+from app.common.time_context import israel_today
+
 # What the manager was asking for. Each maps to one or two `bl/tools.py`
 # calls -- the mapping lives in the service, because which period a tool
 # should read is a question about stored state rather than about the words.
@@ -242,11 +244,10 @@ def _date_in(
     relative word (`היום`, `מחר`, `מחרתיים`, `אתמול`), and a Hebrew weekday
     resolved inside the open period.
     """
-    explicit = _explicit_date(text)
+    anchor = _parse(today) or israel_today()
+    explicit = _explicit_date(text, anchor)
     if explicit:
         return explicit
-
-    anchor = _parse(today) or datetime.date.today()
 
     if "מחרתיים" in text:
         return (anchor + datetime.timedelta(days=2)).isoformat()
@@ -297,7 +298,7 @@ def _weekday_in(
     return (anchor + datetime.timedelta(days=ahead)).isoformat()
 
 
-def _explicit_date(text: str) -> str:
+def _explicit_date(text: str, anchor: datetime.date) -> str:
     """A date written out, as ISO or as `d/m` / `d.m` / `d/m/yy`.
 
     The formats the real source files use (`FILE_FORMATS.md`) plus ISO, which
@@ -317,7 +318,7 @@ def _explicit_date(text: str) -> str:
     short = re.search(r"\b(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2,4}))?\b", text)
     if short:
         day, month, year = short.group(1), short.group(2), short.group(3)
-        value = int(year) if year else datetime.date.today().year
+        value = int(year) if year else anchor.year
         if value < 100:
             value += 2000
         try:

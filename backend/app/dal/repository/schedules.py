@@ -24,6 +24,7 @@ from typing import List, Optional
 from psycopg.types.json import Jsonb
 
 from app.common.errors import AgentError, NotFoundError
+from app.common.time_context import israel_today
 from app.dal.database.postgres import connect
 from app.dal.repository.base import RepositoryBase, new_id
 
@@ -120,14 +121,15 @@ class ScheduleRepository(RepositoryBase):
         looking at -- publishing is the act that makes it theirs.
         """
         clause = " AND status='published'" if published_only else ""
+        today = israel_today().isoformat()
         rows = self._all("""
             SELECT id FROM schedules
             WHERE team_id=%s""" + clause + """
             ORDER BY
-                (starts_on <= CURRENT_DATE AND ends_on >= CURRENT_DATE) DESC,
+                (starts_on <= %s AND ends_on >= %s) DESC,
                 starts_on DESC
             LIMIT 1
-        """, (team_id,))
+        """, (team_id, today, today))
         if not rows:
             return None
         return self.get_schedule(rows[0]["id"], team_id)
@@ -615,7 +617,7 @@ def week_bounds(day: Optional[datetime.date] = None) -> tuple:
     ראשון through שבת, and a Monday-based week would split every one of them
     across two schedules.
     """
-    day = day or datetime.date.today()
+    day = day or israel_today()
     # `weekday()` is Monday=0; Sunday is 6, so this rolls back to Sunday.
     start = day - datetime.timedelta(days=(day.weekday() + 1) % 7)
     return start.isoformat(), (start + datetime.timedelta(days=6)).isoformat()

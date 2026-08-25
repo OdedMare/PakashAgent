@@ -36,6 +36,12 @@ for a shift you have not established exists.
 Call several tools in one turn when they do not depend on each other. Call
 them in sequence when they do.
 
+Resolve every relative date in the manager's request against the provided
+Israel clock before calling a tool. Tool date arguments (`day`, `slot_date`,
+`starts_on`, `ends_on`) must be absolute `YYYY-MM-DD` values, never words such
+as `today`, `tomorrow`, `היום`, or `מחר`. Include `timezone` with date-bearing
+calls; use `Asia/Jerusalem` unless the manager explicitly named another zone.
+
 **Stop when you can answer.** Every extra turn is a round trip the manager
 waits through, and a tool called to confirm something you already have in
 `results` tells you nothing new.
