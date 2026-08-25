@@ -169,6 +169,28 @@ The browser repeats that request for a single date or an arbitrary range. A
 failed date is marked `failed` and the same endpoint retries it, so completed
 neighbours survive a timeout or refresh.
 
+**A running job says so, and can be stopped.** `/generate/{id}/run` launches
+a worker and returns; `GET /{id}/progress` is what the browser polls, and it
+carries the counter alone rather than the period and a fresh audit over it.
+Two fields make that poll terminate:
+
+- `heartbeat`, stamped every `GENERATION_HEARTBEAT_SECONDS` by the worker and
+  at every checkpoint. `llm_timeout_seconds` defaults to no limit, so a model
+  that is slow to answer and one that has hung look identical from outside —
+  both are `running` forever. A beat that stops is the difference, and it
+  means the job has lost its worker (a restarted process, a killed thread).
+  `POST /run` adopts such a job and resumes it from the first unfinished day.
+- `cancel_requested`, set by `/generate/{id}/cancel`. Cooperative rather than
+  forceful: a model call in flight cannot be interrupted, so the worker stops
+  at the next day boundary and every finished day is kept. The period is an
+  ordinary draft immediately, and `/run` resumes it later.
+
+**The board stays writable while a job runs**, which is what makes the two
+above matter rather than being merely tidy. A shift the manager places by
+hand on a date that has not been generated yet becomes a pin: it goes into
+the day's `required_assignments`, and `_persisted_generation_rows` keeps it
+with the manager's own source whether or not the model repeats it.
+
 Each daily payload carries legal candidate ids, the previous day's concrete
 assignments, and a fairness tally over the earlier range. Code audits the
 answer and may make one focused repair call. It never loops indefinitely; an

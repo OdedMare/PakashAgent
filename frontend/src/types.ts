@@ -246,12 +246,35 @@ export interface GenerationDay {
 }
 
 export interface GenerationProgress {
-  status: "" | "running" | "complete" | "failed";
+  /** `cancelled` is the manager stopping the wait, not a failure — every
+   *  day already built is kept and resuming continues from the next one. */
+  status: "" | "running" | "complete" | "failed" | "cancelled";
   current_date: string;
   total_days: number;
   completed_days: number;
   failed_days: number;
   days: GenerationDay[];
+  /** When a worker last said it was still on this job, UTC ISO-8601.
+   *
+   *  What separates a slow model from a hung one: with no LLM timeout
+   *  configured both look like `running` forever, and only a beat that
+   *  stops tells the poller the job has lost its worker. Empty on a job
+   *  opened before the field existed, which reads as "cannot tell". */
+  heartbeat?: string;
+  /** Whether a stop has been asked for. A job can still be `running` with
+   *  this true for as long as the current model call takes to answer. */
+  cancel_requested?: boolean;
+}
+
+/** What the poller reads while a period is being built.
+ *
+ *  Deliberately not a `Schedule`: this is asked for every second or two, and
+ *  the full period carries every slot, every assignment and a fresh audit
+ *  over both. The grid is fetched when the counter moves. */
+export interface ScheduleProgress {
+  id: string;
+  status: "draft" | "published";
+  generation: GenerationProgress;
 }
 
 /** One living period (D4) — edited in place, never versioned. */

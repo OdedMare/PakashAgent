@@ -62,6 +62,12 @@ _NEUTRAL_PENALTY = 0.0
 _LOCAL_SERVER_KEY_PLACEHOLDER = "null"
 _DEFAULT_BASE_URL = "https://api.openai.com/v1"
 _MODELS_PROBE_TIMEOUT_SECONDS = 30
+# How long to wait for the TCP/TLS handshake to a model server, in every
+# configuration including "no timeout". Reaching a server that is up is a
+# matter of milliseconds on a LAN and a second or two across the internet; a
+# handshake still unfinished after this is a wrong host, a wrong port or a
+# server that is not listening, and none of those get better by waiting.
+_CONNECT_TIMEOUT_SECONDS = 30
 
 _log = logging.getLogger("pakash.llm")
 
@@ -200,6 +206,26 @@ def _is_context_overflow(error) -> bool:
     )
 
 
+def _httpx_timeout(timeout) -> httpx.Timeout:
+    """One HTTP completion's budget, phase by phase.
+
+    `timeout` bounds the whole round-trip when it is positive. When it is 0
+    or less the read is unbounded — see `_client_for` — but connecting,
+    writing and waiting for a pooled connection stay bounded, because none of
+    those three is the model thinking.
+    """
+    if not timeout or timeout <= 0:
+        return httpx.Timeout(
+            None,
+            connect=_CONNECT_TIMEOUT_SECONDS,
+            write=_CONNECT_TIMEOUT_SECONDS,
+            pool=_CONNECT_TIMEOUT_SECONDS,
+        )
+    return httpx.Timeout(
+        timeout, connect=min(_CONNECT_TIMEOUT_SECONDS, timeout)
+    )
+
+
 class OpenAIJsonClient:
     """The only class callers use. `complete_json` is the method that matters."""
 
@@ -332,16 +358,21 @@ class OpenAIJsonClient:
         through would turn "wait as long as it takes" into the one thing it
         must never mean. `httpx.Timeout(None)` is explicit rather than
         omitting the argument, because leaving it out restores the SDK's own
-        600-second default instead of removing the bound."""
+        600-second default instead of removing the bound.
+
+        **Unbounded applies to reading, never to connecting.** "No limit"
+        exists so a model that is slow to *answer* is waited for; a server
+        that never completes a TCP handshake is not answering slowly, it is
+        unreachable, and waiting forever on that is what turns a mistyped
+        base URL into a schedule stuck at "building day one" with nothing to
+        read anywhere. So the connect phase keeps a small ceiling in every
+        configuration, and only the read phase is ever unbounded."""
         cache_key = (api_key, base_url, timeout)
         if cache_key not in self._cached_clients:
             self._cached_clients[cache_key] = OpenAI(
                 api_key=api_key or _LOCAL_SERVER_KEY_PLACEHOLDER,
                 base_url=base_url or None,
-                timeout=(
-                    httpx.Timeout(None) if not timeout or timeout <= 0
-                    else timeout
-                ),
+                timeout=_httpx_timeout(timeout),
             )
         return self._cached_clients[cache_key]
 

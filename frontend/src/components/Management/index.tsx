@@ -101,6 +101,15 @@ export function Management({
   });
 
   const overview = state.overview;
+  // Which of the three banner states a build is in, or none. Read from the
+  // stored job rather than from whether this browser happens to be polling:
+  // a period left half-built by a closed tab is still a job, and the manager
+  // needs to be told so on the next visit.
+  const buildState =
+    state.generation && state.generation.status !== "complete"
+      ? state.generation.status
+      : "";
+  const buildId = overview?.schedule?.id ?? "";
   // How many topics the interview left unsettled. Counted from the profile's
   // own record rather than re-derived, so the badge, the board's notice and
   // what the agent says when asked are all reading one answer. Zero — and no
@@ -277,33 +286,61 @@ export function Management({
         />
       ) : null}
 
-      {autoGenerating || state.generation?.status === "running" || state.generation?.status === "failed" ? (
+      {/* What a build is doing, and the way out of one.
+          The banner is the *only* thing a build occupies: the board below it
+          stays writable throughout (D18), so a manager can keep placing
+          shifts by hand while the agent works — and can stop it. Stopping
+          keeps every day already built; the period is an ordinary draft the
+          moment it returns, and "המשך" picks the rest up from the first day
+          that is not finished. */}
+      {autoGenerating || buildState ? (
         <div className="schedule-generation" role="status" aria-live="polite">
           <div className="schedule-generation-copy">
             <strong>
-              {state.generation?.status === "failed"
-                ? `היצירה נעצרה בתאריך ${state.generation.current_date}`
+              {buildState === "failed"
+                ? `היצירה נעצרה בתאריך ${state.generation?.current_date ?? ""}`
+                : buildState === "cancelled"
+                ? `היצירה הופסקה — ${state.generation?.completed_days ?? 0} מתוך ${state.generation?.total_days ?? 7} ימים נשמרו`
                 : `בונים את הסידור — ${state.generation?.completed_days ?? 0} מתוך ${state.generation?.total_days ?? 7} ימים`}
             </strong>
-            <span>
-              {state.generation?.status === "failed" && overview?.schedule?.id ? (
+            <span className="schedule-generation-actions">
+              {buildId && (buildState === "failed" || buildState === "cancelled") ? (
                 <button
                   type="button"
                   className="ghost-button"
-                  disabled={state.busy}
-                  onClick={() => void state.resumeGeneration(overview.schedule!.id)}
+                  disabled={state.generating}
+                  onClick={() => void state.resumeGeneration(buildId)}
                 >
-                  ניסיון חוזר מהיום שנכשל
+                  {buildState === "failed"
+                    ? "ניסיון חוזר מהיום שנכשל"
+                    : "המשך יצירה מהיום הבא"}
                 </button>
-              ) : state.generation?.status === "running" && !state.busy && overview?.schedule?.id ? (
+              ) : null}
+              {buildId && buildState === "running" && state.generating ? (
                 <button
                   type="button"
                   className="ghost-button"
-                  onClick={() => void state.resumeGeneration(overview.schedule!.id)}
+                  onClick={() => void state.cancelGeneration()}
+                >
+                  עצירת היצירה
+                </button>
+              ) : null}
+              {/* A job the database still calls running that nobody in this
+                  browser is watching — left behind by a closed tab or a
+                  restarted backend. Picking it up is one click. */}
+              {buildId && buildState === "running" && !state.generating ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => void state.resumeGeneration(buildId)}
                 >
                   המשך יצירה מהיום הבא
                 </button>
-              ) : `הסוכן בונה כל יום בנפרד ומתחשב במה שכבר שובץ.`}
+              ) : null}
+              <span className="schedule-generation-note">
+                הסוכן בונה כל יום בנפרד ומתחשב במה שכבר שובץ — אפשר לשבץ ידנית
+                בזמן שהוא עובד.
+              </span>
             </span>
           </div>
           <div
@@ -316,7 +353,7 @@ export function Management({
             aria-valuetext={`${state.generation?.completed_days || 0} מתוך ${state.generation?.total_days || 7}`}
           >
             <span
-              className={state.generation?.status === "failed" ? "is-failed" : ""}
+              className={buildState === "failed" ? "is-failed" : ""}
               style={state.generation?.total_days ? {
                 width: `${Math.max(4, state.generation.completed_days / state.generation.total_days * 100)}%`,
                 animation: "none",
@@ -400,6 +437,7 @@ export function Management({
           <Board
             overview={overview}
             busy={state.busy}
+            generating={state.generating}
             dark={theme === "dark"}
             onGenerate={state.generate}
             onGenerateDay={state.generateDay}
