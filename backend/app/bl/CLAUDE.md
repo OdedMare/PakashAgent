@@ -234,6 +234,24 @@ The schedule is edited in place; the change log is append-only and is the only
 history ([D4](../../../docs/DECISIONS.md#d4--living-schedule-not-versioned)).
 No versioning, no rollback.
 
+**Two gates, both enforced in code, and either can hold a proposal.**
+`needs_reason` is the missing *why* (D8). `needs_input` is the missing
+*what* — a change whose target could not be resolved without guessing.
+`_unresolved_people` checks every name an operation carries against
+`tools.resolve_employee`, and a name that matches nobody, or several people,
+empties the proposal and turns it into a question. Neither gate is left to
+the prompt: a model that forgets `needs_reason` once writes an unexplained
+row into the only history there is, and one that forgets `needs_input` once
+moves the wrong person's shift — which has to be *found* before it can be
+undone. Only one question is asked per turn, target before reason, because a
+manager handed two questions answers neither.
+
+`pending_request` is how the answer resumes the request rather than replacing
+it. Plain text, joined with the manager's reply and sent as one sentence —
+deliberately not a parsed pending-intent record, since the sentence is what
+the model already reads and a structured duplicate is a second thing to keep
+in sync. Cleared as soon as the request is carried out.
+
 ## `briefing.py` — the agent speaking first
 
 The only model call in this package that answers nothing the manager said. It
@@ -296,6 +314,13 @@ and shift vocabulary, runs the same tools, and renders Hebrew templates.
 Anything it cannot place comes back `unknown` with a list of what it *can*
 answer. **It never guesses**: an agent acting on a misread sentence with no
 model to blame is worse than one that asks.
+
+**Reading may interpret where writing may not.** A question answered against
+a reasonable reading of a loose sentence costs a re-ask and moves nothing, so
+the planner asks only when a guess would change *what it reports*. The bar is
+not "is a field missing" but "would guessing change the answer". A failed
+tool is never a clarification: `found: false` is a complete answer, an error
+is an error, and only *several matches* is a question for the manager.
 
 ## `simulate.py` — what a change would do
 

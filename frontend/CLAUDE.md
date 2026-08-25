@@ -132,6 +132,20 @@ impression.
   the manager confirms. A proposal that comes back `needs_reason` carries no
   operations — the agent is asking why, and the answer goes back through the
   same call.
+- **A proposal that is asking does not look like one that is proposing.**
+  `needs_input` means the agent could not tell which person, shift or date the
+  request meant and asked instead of picking one. The card renders dashed with
+  no confirm button, because there is nothing to confirm — a question styled
+  like a proposal invites the manager to look for a button that deliberately
+  is not there.
+- **The manager answers the question, not the whole request again.**
+  `pending_request` comes back with the question and `useManagement` sends it
+  with their next sentence, so "ערב" resumes "תשבץ את דניאל". Held in a ref
+  rather than state — it is sent, never rendered — and in *two* refs, one per
+  conversation: a clarification about a question must never resume a held
+  change, which is the one way this could target the wrong record. Dismissing
+  either card clears its pending request, since the manager declining to
+  answer means their next sentence is a new request.
 - **The agent speaks first, and still writes nothing.** `Briefing` renders
   what the agent noticed on its own — on open, after every write, before
   publishing, and every half hour in an idle room

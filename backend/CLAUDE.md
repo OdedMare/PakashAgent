@@ -226,6 +226,38 @@ one concern; split rather than append.
   stays `schedule_service.apply()` behind the manager's confirmation. A tool
   that could write would be a second way to change a schedule, and the
   product deliberately has one.
+- **The agent asks rather than guesses what a request refers to.** When
+  carrying out a request would mean guessing which person, shift or date it
+  means, the agent asks one focused question and proposes nothing. On the
+  write path this is enforced **in code**, not by the prompt:
+  `changes._proposal` withdraws every operation naming an employee the
+  roster cannot resolve — unknown, or shared by several people — exactly as
+  it already withdraws one with no reason (D8). The two gates are separate
+  and either can hold a proposal, but only one question is asked at a time:
+  the target is settled before the reason is collected, because a reason
+  recorded against the wrong person is worse than a missing one.
+  `tools.resolve_employee` is the single resolver both paths use; it returns
+  *several* matches rather than the first, since picking the first is the
+  guess the whole gate exists to refuse.
+- **Reading may interpret; writing may not.** `bl/planner.py` answers a
+  loosely-worded question against a reasonable reading — nothing moves, and a
+  re-ask is cheap. `bl/changes.py` may not, because a change applied to the
+  wrong record has to be found before it can be undone.
+- **A clarification continues the request; it does not replace it.**
+  `pending_request` travels to the client with the question and back with the
+  answer, and the two halves are read as one sentence — the manager answers
+  "ערב", never "תשבץ את דניאל במשמרת ערב". It is client-supplied text that
+  reaches the model as part of the sentence and nothing else: it names no
+  schedule and selects no row, so `team_id` from the signed cookie is still
+  the only thing that scopes a write. It is cleared the moment the request is
+  carried out, so an answered question cannot be reopened by a stale echo,
+  and both agents are shown what they already asked (`asked_last_turn`) so
+  the same question is never put twice.
+- **A tool failure is not an ambiguous request.** Nothing matching found, a
+  technical error, and "which of these did you mean" are three different
+  answers. The deterministic fallback answers the question rather than asking
+  what the manager meant — an unreachable model is not the manager having
+  been unclear, and asking would repeat on every retry.
 - **An answer carries no operations.** `POST /api/schedule/ask` returns
   `answer`, `steps`, `needs_confirmation` — and nothing `apply` could read,
   the same guard `bl/briefing.py` has (D15). Asking and changing are
