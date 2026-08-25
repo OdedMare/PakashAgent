@@ -229,11 +229,21 @@ export function Board({
     () => Array.from(new Set(Object.values(roles).filter(Boolean))).sort(),
     [roles],
   );
-  const shiftManagers = useMemo(() => {
-    const map: Record<string, boolean> = {};
+  // Who each person is, for the card's identity lines. One map rather than
+  // one per fact: they are read together, on the same line, about the same
+  // person, and a card that had to look up four maps to describe somebody
+  // would drift the moment one of them was passed and another forgotten.
+  const people = useMemo(() => {
+    const map: Record<string, CardPerson> = {};
     for (const row of overview?.employees ?? []) {
       const name = typeof row.name === "string" ? row.name.trim() : "";
-      if (name) map[name] = Boolean(row.is_shift_manager);
+      if (!name) continue;
+      map[name] = {
+        role: typeof row.role === "string" ? row.role.trim() : "",
+        rotation: rotationLabel(row.exit_pattern, row.rotation_group),
+        is_shift_manager: Boolean(row.is_shift_manager),
+        is_overlap: row.service_type === "overlap",
+      };
     }
     return map;
   }, [overview?.employees]);
@@ -523,7 +533,7 @@ export function Board({
               constraints={constraints}
               employees={roster}
               roles={roles}
-              shiftManagers={shiftManagers}
+              people={people}
               filters={board.filters}
               dark={dark}
               readOnly={schedule.status === "published"}
