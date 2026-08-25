@@ -12,7 +12,8 @@ import type { CardPerson } from "@/types";
  *
  *  The wording matches `TeamPanel`'s `EXIT_PATTERN_LABELS`, minus the option
  *  list's "א / ב" — a card names the group somebody is actually in, where
- *  the editor had to offer both.
+ *  the editor had to offer both. Empty when the roster records neither
+ *  field, so the card stays silent rather than guessing.
  */
 const PATTERN_LABELS: Record<string, string> = {
   round: "סבב",
@@ -26,9 +27,18 @@ function text(value: unknown): string {
 }
 
 export function rotationLabel(pattern: unknown, group: unknown): string {
-  const name = PATTERN_LABELS[text(pattern)] ?? "";
   const arm = text(group);
-  if (!name) return arm ? `סבב ${arm}` : "";
+  // Nothing recorded means nothing said. The fallback below reads a rotation
+  // out of a partial row; it must not invent one out of an empty row, or
+  // every person the roster is silent about would be labelled "סבב".
+  if (!text(pattern) && !arm) return "";
+  // The same fallback `TeamPanel.exitPatternLabel` applies to a row whose
+  // pattern was never written: a "ג" arm only exists in a triplet, so the
+  // group names the cycle when the cycle does not name itself. Anything else
+  // is the default round.
+  const name =
+    PATTERN_LABELS[text(pattern)] ??
+    (arm === "ג" ? PATTERN_LABELS.triplet : PATTERN_LABELS.round);
   return arm ? `${name} ${arm}` : name;
 }
 

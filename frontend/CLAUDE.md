@@ -51,6 +51,18 @@ falls back to a hashed hue so a departed employee's past shifts stay coloured.
 Every hue clears 4.5:1 in both themes and avoids the warning and danger
 colours, which mean something specific on this grid.
 
+**A board card says who is standing there, not why** (`Board/ShiftCard.tsx`).
+Name, role, rotation — `exit_pattern` and `rotation_group` rendered as one
+phrase by `Board/person.ts`, since a group is what makes somebody rotate at
+all — plus badges for **מפקד/ת** and **נחפף/ת**. The command badge reads off
+the *person*, not `slot.requires_shift_manager`: whether anyone in a cell can
+run the shift is the question, and gating it on the slot hid the answer on
+exactly the shifts nobody had declared it needed. `assignment.reason` used to
+hold the card's last line; it is still written on every path and still
+[D8](../docs/DECISIONS.md#d8--two-reasons-both-required)'s record, and it is
+one hover away — but a justification is read once, when the placement is made,
+and the grid is read every day.
+
 Built so far: the workspace gate, the interview, the management area, and the
 import screen. All surfaces exist.
 
