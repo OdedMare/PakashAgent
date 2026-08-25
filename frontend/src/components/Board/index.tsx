@@ -25,6 +25,7 @@ import { CoverageBar } from "./CoverageBar";
 import { FilterBar } from "./FilterBar";
 import { GenerateDialog } from "./GenerateDialog";
 import { GenerateDayDialog } from "./GenerateDayDialog";
+import { orderByHours } from "./shiftOrder";
 import { EditorTarget, ShiftEditor } from "./ShiftEditor";
 import { WeekNav } from "./WeekNav";
 import { WeekRail } from "./WeekRail";
@@ -187,10 +188,19 @@ export function Board({
     return map;
   }, [overview?.employees]);
 
+  // The filter's shift list reads in the same order the board's rows do —
+  // by the clock. A dropdown that disagrees with the grid beside it is the
+  // same confusion the row order was fixed for, one control over.
   const shiftOptions = useMemo(() => {
     const seen = new Set<string>();
-    for (const slot of schedule?.slots ?? []) seen.add(slot.shift_name);
-    return Array.from(seen);
+    const startTimes: Record<string, string> = {};
+    for (const slot of schedule?.slots ?? []) {
+      seen.add(slot.shift_name);
+      if (slot.start_time && !startTimes[slot.shift_name]) {
+        startTimes[slot.shift_name] = slot.start_time;
+      }
+    }
+    return orderByHours(Array.from(seen), startTimes);
   }, [schedule?.slots]);
 
   // A drop parks the intended move here and opens the confirmation. Nothing
