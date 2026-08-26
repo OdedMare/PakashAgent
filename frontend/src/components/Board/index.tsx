@@ -192,6 +192,24 @@ export function Board({
     return board.weekSchedule;
   }, [current, board.weekSchedule, board.weekStart, board.weekEnd]);
 
+  // Every write refreshes the overview, but the overview only carries the
+  // current/newest period. When the manager is editing another week, that
+  // refresh therefore leaves `weekSchedule` untouched and the successful
+  // write stays invisible until a browser reload. Re-read only that paged
+  // week; the current period already arrived fresh in `overview`.
+  const previousOverview = useRef(overview);
+  useEffect(() => {
+    const changed = previousOverview.current !== overview;
+    previousOverview.current = overview;
+    if (
+      changed &&
+      overview &&
+      (!current || !covers(current, board.weekStart, board.weekEnd))
+    ) {
+      void board.reloadWeek();
+    }
+  }, [overview, current, board.weekStart, board.weekEnd, board.reloadWeek]);
+
   // Whether the *schedule area* has nothing to draw yet.
   //
   // Not simply `board.weekBusy`. The overview hands over the current period,
