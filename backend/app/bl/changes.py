@@ -228,7 +228,7 @@ def _proposal(
     tell you *which* דניאל got moved. The two gates are separate on purpose
     and a proposal can be held by either.
     """
-    operations = _operations(answer.get("operations"), schedule)
+    operations, dropped = _operations(answer.get("operations"), schedule)
     profile_operations = _profile_operations(
         answer.get("profile_operations"), profile
     )
@@ -243,8 +243,17 @@ def _proposal(
     if operations and not stated_reason and not answer.get("agent_reason"):
         needs_reason = True
 
+    # An operation held back for naming several possible shifts is a
+    # question, not a failure -- the same shape as an unresolvable name, and
+    # asked the same way. Only when *nothing* survived: a proposal that can
+    # carry out three of four moves should carry out the three and say so,
+    # rather than putting the whole request behind one question.
+    ambiguous = [
+        row for row in dropped if row["why"] == "ambiguous_shift"
+    ] if not operations else []
+
     needs_input = bool(answer.get("needs_input"))
-    if unresolved:
+    if unresolved or ambiguous:
         needs_input = True
     if needs_input:
         # Held for the same reason and in the same way as a missing reason:
@@ -271,6 +280,18 @@ def _proposal(
         # one anyway, and a held proposal with nothing said would read as the
         # agent having ignored the request.
         reply = _ask_which_person(unresolved)
+    elif ambiguous:
+        reply = _ask_which_shift(ambiguous[0])
+    elif dropped and not needs_reason and not needs_input and (
+        not operations and not profile_operations
+    ):
+        # Everything the model asked for was aimed at something that is not
+        # there. Its `reply` describes the change as though it happened, and
+        # leaving that standing is how "the agent does not really change
+        # shifts" felt like the agent ignoring the manager: a confident
+        # sentence, no confirm button, and nothing moved. Say which target
+        # was missing instead.
+        reply = _report_dropped(dropped)
 
     return {
         "reply": reply,
@@ -353,33 +374,108 @@ def _ask_which_person(unresolved: List[dict]) -> str:
     )
 
 
-def _operations(offered: Any, schedule: dict) -> List[dict]:
-    """Operations bounded to slots this schedule actually has.
+def _ask_which_shift(held: dict) -> str:
+    """The question code asks when a change named a day but not a shift.
 
-    A move naming a shift or date the period does not contain has nothing to
-    apply to, so it is dropped rather than half-applied later. That is a
-    check on whether the target exists, not on whether the choice was good —
-    the audit is what comments on the choice.
+    Offers the real candidates rather than asking an open question — one tap
+    instead of another sentence, which is what the prompt asks the model for
+    and what code should do when the model did not.
+    """
+    options = held.get("options") or []
+    if options:
+        return "לאיזו משמרת ב-%s התכוונת עבור %s — %s?" % (
+            held["date"], held["employee"], " או ".join(options),
+        )
+    return "לאיזו משמרת ב-%s התכוונת עבור %s?" % (held["date"], held["employee"])
+
+
+def _report_dropped(dropped: List[dict]) -> str:
+    """What could not be carried out, said plainly instead of swallowed.
+
+    One line about one target, for the same reason `_ask_which_person` asks
+    about one name: a manager handed a list of four things that did not work
+    reads none of them. The first is the one the request was mostly about.
+    """
+    first = dropped[0]
+    if first["why"] == "not_assigned":
+        return (
+            "%s לא משובץ/ת ב-%s בסידור הזה, אז אין מה להוריד. אפשר לבדוק את "
+            "התאריך?" % (first["employee"], first["date"])
+        )
+    if first["shift"]:
+        return (
+            "אין משמרת %s בתאריך %s בסידור הזה, אז לא ביצעתי כלום. אפשר "
+            "לבדוק את המשמרת ואת התאריך?" % (first["shift"], first["date"])
+        )
+    return (
+        "אין משמרות בתאריך %s בסידור הזה, אז לא ביצעתי כלום. אפשר לבדוק את "
+        "התאריך?" % first["date"]
+    )
+
+
+def _operations(offered: Any, schedule: dict) -> tuple:
+    """Operations bounded to what this schedule can actually be changed by.
+
+    Returns the usable operations **and what was dropped**, because a
+    dropped operation used to disappear: the model would answer "העברתי את
+    דנה לערב", code would find no slot for the row it named, and the manager
+    got a confident sentence with nothing to confirm and nothing changed.
+    Silence was the bug — a target that cannot be found is something to say,
+    not something to swallow (see `_report_dropped`).
+
+    **An empty shift means "that day", not "no shift".** The model writes one
+    when the manager did: *"תוריד את דנה מיום חמישי"* names a person and a
+    date and nothing else, and `schedule_service._match` has always read a
+    blank shift as the whole day. Bounding against the slot grid alone
+    therefore threw away the most ordinary removal the product has — `("",
+    date)` is never a slot. So a blank shift is resolved against the
+    schedule: one assignment that day fills itself in, several is a question
+    for the manager (D24), and none is a target that is not there.
+
+    A shift and date the period genuinely does not contain is still dropped.
+    That is a check on whether the target exists, not on whether the choice
+    was good — the audit is what comments on the choice.
     """
     if not isinstance(offered, list):
-        return []
+        return [], []
     slots = {
         (_bounded(slot.get("shift_name")), _date(slot.get("slot_date")))
         for slot in (schedule or {}).get("slots") or []
     }
-    if not slots:
-        return []
-    operations = []
+    # What each person is actually on, per date. A removal is bounded by this
+    # rather than by the grid: the row being taken off is an assignment, and
+    # a schedule with no stored slots (an import, an older period) still has
+    # assignments somebody may need removed.
+    rostered: Dict[tuple, List[str]] = {}
+    for row in (schedule or {}).get("assignments") or []:
+        if not isinstance(row, dict):
+            continue
+        key = (_bounded(row.get("employee")), _date(row.get("date")))
+        shift = _bounded(row.get("shift"))
+        if key[0] and key[1] and shift not in rostered.setdefault(key, []):
+            rostered[key].append(shift)
+
+    operations, dropped = [], []
     for item in offered[:_MAX_OPERATIONS]:
         if not isinstance(item, dict):
             continue
         action = _bounded(item.get("action"))
         employee = _bounded(item.get("employee"))
-        shift = _bounded(item.get("shift"))
         date = _date(item.get("date"))
         if action not in _OPERATIONS or not employee or not date:
             continue
-        if slots and (shift, date) not in slots:
+        shift, why = _resolve_shift(
+            action, employee, _bounded(item.get("shift")), date,
+            slots, rostered,
+        )
+        if why:
+            dropped.append({
+                "action": action, "employee": employee,
+                "shift": _bounded(item.get("shift")), "date": date,
+                "why": why, "options": _shift_options(
+                    action, employee, date, slots, rostered
+                ),
+            })
             continue
         operation = {
             "action": action,
@@ -390,11 +486,22 @@ def _operations(offered: Any, schedule: dict) -> List[dict]:
         }
         if action == OP_SWAP:
             with_employee = _bounded(item.get("with_employee"))
-            with_shift = _bounded(item.get("with_shift")) or shift
             with_date = _date(item.get("with_date")) or date
             if not with_employee:
                 continue
-            if slots and (with_shift, with_date) not in slots:
+            with_shift, why = _resolve_shift(
+                action, with_employee, _bounded(item.get("with_shift")),
+                with_date, slots, rostered, fallback=shift,
+            )
+            if why:
+                dropped.append({
+                    "action": action, "employee": with_employee,
+                    "shift": _bounded(item.get("with_shift")),
+                    "date": with_date, "why": why,
+                    "options": _shift_options(
+                        action, with_employee, with_date, slots, rostered
+                    ),
+                })
                 continue
             operation.update({
                 "with_employee": with_employee,
@@ -402,7 +509,77 @@ def _operations(offered: Any, schedule: dict) -> List[dict]:
                 "with_date": with_date,
             })
         operations.append(operation)
-    return operations
+    return operations, dropped
+
+
+def _resolve_shift(
+    action: str,
+    employee: str,
+    shift: str,
+    date: str,
+    slots: set,
+    rostered: Dict[tuple, List[str]],
+    fallback: str = "",
+) -> tuple:
+    """The shift an operation means, or why it cannot be carried out.
+
+    Returns `(shift, why)` with `why` empty on success. The three failures
+    are kept apart because they are answered differently: a target the
+    period does not have is something to state, a person not on that date is
+    something to state, and *several* possible shifts is the one case that
+    is a question for the manager rather than a report to them (D24).
+    """
+    on_that_day = rostered.get((employee, date), [])
+    if action == OP_REMOVE or (action == OP_SWAP and on_that_day):
+        # Removing and swapping both act on a row that already exists, so
+        # the roster answers first: it knows which shift the person is
+        # actually on, which the grid does not.
+        if shift in on_that_day:
+            return shift, ""
+        if shift:
+            # A named shift the period genuinely runs is a real target even
+            # when this person is not on it: whether the row exists is a
+            # fact the manager can see on the grid, and holding the whole
+            # proposal over it would put code in front of a question the
+            # name gate below may need to ask first.
+            return (shift, "") if (shift, date) in slots else (
+                "", "not_assigned" if on_that_day else "no_slot"
+            )
+        if len(on_that_day) == 1:
+            return on_that_day[0], ""
+        return "", "ambiguous_shift" if on_that_day else "not_assigned"
+
+    shift = shift or fallback
+    if shift:
+        # An assignment needs a real slot to land on: `add_assignment` is
+        # given a slot id, so a shift the period does not run that day has
+        # nothing to write to.
+        return (shift, "") if (shift, date) in slots else ("", "no_slot")
+    running = [name for name, day in slots if day == date]
+    if len(running) == 1:
+        # One shift runs that day, so naming it is not a guess -- there was
+        # nothing else the manager could have meant.
+        return running[0], ""
+    return "", "ambiguous_shift" if running else "no_slot"
+
+
+def _shift_options(
+    action: str,
+    employee: str,
+    date: str,
+    slots: set,
+    rostered: Dict[tuple, List[str]],
+) -> List[str]:
+    """The shifts a held question can offer as answers.
+
+    What the person is on, for a removal; what runs that day, for a
+    placement. Offering the real candidates is the difference between one
+    tap and another sentence — the prompt asks for the same thing and this
+    is what code has when the model did not.
+    """
+    if action == OP_REMOVE:
+        return sorted(rostered.get((employee, date), []))
+    return sorted({name for name, day in slots if day == date})
 
 
 def _profile_operations(offered: Any, profile: dict) -> List[dict]:

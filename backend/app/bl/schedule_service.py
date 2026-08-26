@@ -1448,7 +1448,12 @@ class ScheduleService:
                 team_id, schedule, operation, reason, agent_reason
             )
         if not applied:
-            raise AgentError("לא היה שינוי להחיל")
+            # Which operation found nothing, rather than only that nothing
+            # happened. "לא היה שינוי להחיל" in front of a proposal the
+            # manager just read and approved reads as the product refusing
+            # them; naming the row that was not there is the difference
+            # between a dead end and something they can correct.
+            raise AgentError(_nothing_applied(operations or []))
         return self._view(
             self._repository.get_schedule(schedule_id, team_id), team_id
         )
@@ -2432,6 +2437,32 @@ def _persisted_generation_rows(
             "source": existing_sources.get(key, "agent"),
         })
     return rows
+
+
+def _nothing_applied(operations: List[dict]) -> str:
+    """Why a confirmed proposal changed nothing, as the manager reads it.
+
+    One operation named, not all of them: a manager handed a list of four
+    targets that were not found reads none of them, and the first is what
+    the request was mostly about.
+    """
+    first = next(
+        (row for row in operations if isinstance(row, dict)), None
+    )
+    if first is None:
+        return "לא היה שינוי להחיל"
+    employee = (first.get("employee") or "").strip()
+    shift = (first.get("shift") or "").strip()
+    date = _iso(first.get("date"))
+    if first.get("action") == OP_ASSIGN:
+        return (
+            "לא ניתן לשבץ את %s: אין משמרת %s בתאריך %s בסידור הזה."
+            % (employee, shift or "המבוקשת", date)
+        )
+    return (
+        "לא נמצא שיבוץ של %s ל%s בתאריך %s, אז לא בוצע שינוי."
+        % (employee, shift or "אותו יום", date)
+    )
 
 
 def _match(

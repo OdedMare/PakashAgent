@@ -25,6 +25,8 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | `planner.py` | The tool loop, with a deterministic fallback when no model is reachable |
 | `intent.py` | **Reading a Hebrew sentence with no model.** Seven shapes; never guesses |
 | `simulate.py` | **What a change would do.** No model, no repository, persists nothing |
+| `rotation.py` | **Whose closure a date is.** Pure arithmetic off one anchor; no model |
+| `placement.py` | **What a placement would cost, and what else the manager could do.** No model |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
 
 ## The division that defines this layer
@@ -246,11 +248,58 @@ moves the wrong person's shift — which has to be *found* before it can be
 undone. Only one question is asked per turn, target before reason, because a
 manager handed two questions answers neither.
 
+**A dropped operation is never silent.** `_operations` bounds what the model
+proposes to targets that exist, and it used to do that by discarding the rest
+without a word: the model answered *"העברתי את דנה"*, code found no slot for
+the row it named, and the manager was left with a confident sentence, no
+confirm button, and a schedule that had not moved — the agent appearing to
+ignore them. It now returns what it dropped alongside what it kept, and the
+proposal either asks (several possible shifts — the same question shape as an
+unresolvable name) or reports which target was not there. It also reads an
+empty `shift` as **the whole day**, the convention `schedule_service._match`
+has always used: *"תוריד את דנה מיום חמישי"* names a person and a date, and
+bounding it against the slot grid threw it away every time, because `("",
+date)` is not a slot.
+
+**What can be done is still proposed.** A request whose fourth operation has
+no target still carries the other three; holding all of them behind one
+question would make every multi-step change all-or-nothing.
+
 `pending_request` is how the answer resumes the request rather than replacing
 it. Plain text, joined with the manager's reply and sent as one sentence —
 deliberately not a parsed pending-intent record, since the sentence is what
 the model already reads and a structured duplicate is a second thing to keep
 in sync. Cleared as soon as the request is carried out.
+
+## `rotation.py` — whose weekend it is
+
+A closure (`סגירה`) is not another shift to balance. It is a stretch one
+group holds, and balancing it away — handing Saturday to whoever is under
+quota — breaks the cycle the unit planned its month around. So the cycle is
+**computed, not asked of the model**, for the same reason `audit.py` is code:
+"which group closes on the weekend of 12/09" is arithmetic, and a wrong
+answer to it looks exactly like a right one (D3).
+
+**A closure weekend is Thursday to Sunday morning.** Four dates, not one
+Saturday: the group goes in on Thursday (on `shushim`, Friday), holds Friday
+and Saturday, and is relieved at the Sunday handover. Every pattern ends at
+the same handover and they differ only in when the stretch begins. The Sunday
+tail covers **the day's first shift by the clock** — found by reading the
+declared start times, never by matching a Hebrew morning name, because shift
+vocabulary is per workplace (D9). A workplace whose shifts carry no times has
+no clock to read, so its closures honestly end on Saturday rather than
+blocking a Sunday on a guess.
+
+**The cycle is anchored, not inferred.** With no `first_closure_date` there
+is no phase, and every function here returns nothing rather than guess one:
+an invented phase looks authoritative while putting the wrong group in.
+
+Read by four callers, which is the point of it being one module:
+`scheduler.py` turns it into hard availability rows and refuses assignments
+that contradict them, `audit.py` warns about a schedule that already drifted
+(`cross_rotation`), `placement.py` tells the board whose closure a slot is
+before the manager clicks, and `changes.py` hands the same schedule to the
+model so a spoken change sees the rotation too.
 
 ## `briefing.py` — the agent speaking first
 

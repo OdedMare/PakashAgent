@@ -146,6 +146,21 @@ one concern; split rather than append.
   it decorates a screen that must render regardless of what the model is doing.
 - **A dragged shift is a proposal, not an edit.** `POST /api/schedule/move`
   requires the manager's reason exactly as a spoken change does ([D12](../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
+- **Clearing keeps the grid; deleting does not.** `POST /{id}/clear` empties
+  one day's assignments or the period's and leaves the slots standing — the
+  week's shape comes from the shift vocabulary (D9), not from what a build
+  decided, so a manager taking back a bad build should not have to rebuild
+  the week's rows too. `DELETE /{id}` is the other one and removes the
+  period outright. Both log every removed row individually: a day cleared in
+  one gesture is still N people taken off N shifts, and the change log is
+  the only history there is (D4).
+- **The rotation is enforced where a shift is assigned, and only ever
+  advisory afterwards.** `bl/rotation.py` is the single definition of whose
+  closure a date is; `scheduler.py` refuses to store a row contradicting it,
+  `placement.py` says so before the click, and `audit.py` warns about a
+  schedule that already drifted. Refusing a *generated* row is not the audit
+  gaining a veto (D3): it is the same class of bound as "a person nobody
+  declared", because the cycle was arithmetic this code already did.
 - **The boss can build a schedule without the agent** ([D18](../docs/DECISIONS.md#d18--the-boss-can-place-a-shift-without-the-agent-️-completes-d6)).
   `/blank`, `/assign` and `/unassign` call no model at all — `build_slots()`
   was always pure arithmetic. `assign` writes immediately and that is *not* a

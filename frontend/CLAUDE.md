@@ -41,6 +41,24 @@ and the third of them is not an edit at all:
   nothing is written, this works on a published board too, where every write
   is refused.
 
+**A day column says whose closure it is.** `schedule.closures` arrives with
+the period, computed by `bl/rotation.py`, and the board renders it on the
+column head and in the placement dialog. It is not derived here on purpose:
+which group closes on 12/09 is arithmetic, and a browser-side cycle would be
+a second answer to a question that must have exactly one. The Sunday a
+closure hands over on reads dimmer and says `חילוף` — the group is in for
+that morning and out for the rest of the day.
+
+**Taking a week back is two different acts.** *ניקוי* empties the
+assignments and keeps the shift rows, so the week can be filled in again
+immediately; *מחיקה* removes the period and returns the week to the state
+where it offers to be built. Both go through one confirmation that counts
+what is going and says which of the two it is, and the reason on it is
+offered rather than required — clearing a day the agent just built takes
+nothing from any one person, so there is nobody for a reason to be owed to
+(D8/D18). Both are withheld on a published board and while a build is
+running on the period.
+
 **Every person has a colour**, assigned from the roster's own order and
 computed in `Management/palette.ts`. It is a rendering of a name, not a stored
 fact: nothing persists it, and there is no colour picker. Hues come from

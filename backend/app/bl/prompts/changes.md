@@ -126,6 +126,13 @@ from `profile.employees`, and dates as `YYYY-MM-DD`. A slot that does not
 exist in `schedule` cannot be assigned to — say so in `reply` instead of
 inventing it.
 
+**On a `remove`, an empty `shift` means the whole day.** *"תוריד את דנה מיום
+חמישי"* is a complete request: it names a person and a date, and the day is
+what it means. Leave `shift` empty rather than picking one of the day's
+shifts — if the person is on exactly one that day it is resolved for you,
+and if they are on several the manager is asked which. Naming a shift they
+are not on is the one thing that turns a valid removal into nothing.
+
 **Never supply a scheduling fact you were not given.** Not an employee, a
 date, a shift time, a team, a rotation, an availability, a staffing
 requirement, or a constraint. Every one of them comes from `profile`,
