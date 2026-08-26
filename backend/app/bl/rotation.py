@@ -13,13 +13,14 @@ weekend of 12/09" is arithmetic, and an LLM that gets it wrong produces an
 answer indistinguishable from a right one
 ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
 
-The cycle is anchored, not inferred. `workplace.first_closure_date` and
-`workplace.first_closure_group` name one Saturday and who held it; every
-other closure follows from counting weeks. Without an anchor there is no
-cycle -- this module returns nothing and says why, rather than guessing a
-phase and silently shifting everybody's exits by a week.
+The cycle is anchored, not inferred. Each grouped pattern may name its own
+Saturday and first group through `round_first_closure_*` and
+`triplet_first_closure_*`. The legacy `first_closure_*` pair remains a
+fallback for profiles created before the cycles could be anchored separately.
+Without an anchor for a pattern there is no cycle -- this module returns
+nothing rather than guessing a phase and silently shifting exits by a week.
 
-Four patterns, all anchored to the same Saturday:
+Four patterns, with round and triplet independently anchored:
 
 - `round`     -- two groups, alternating weekends (א, ב, א, ב …)
 - `triplet`   -- three groups, one weekend in three (תלתון: א, ב, ג, א …)
@@ -54,10 +55,8 @@ a Sunday blocked on a guess.
 shift routinely holds a soldier on א/ב next to one on תלתון א/ב/ג, and those
 two "א"s are not the same א: a two-group cycle repeats every second weekend,
 a three-group cycle every third, so they drift apart and re-align every six.
-Collapsing them into one cycle would silently move somebody's exits. Each
-pattern is therefore counted on its own, off the one shared anchor -- the
-anchor fixes *when* the rotation starts, and each pattern decides how fast it
-turns from there.
+Collapsing them into one cycle or forcing them onto one anchor would silently
+move somebody's exits. Each pattern is therefore counted from its own anchor.
 """
 
 import datetime
@@ -103,8 +102,8 @@ def cycle(profile: dict, pattern: str = "round") -> Optional[dict]:
     """One pattern's closure cycle, or None when it is not defined.
 
     `pattern` selects which cycle: `round` turns every second weekend,
-    `triplet` every third. They share the anchor and are otherwise
-    independent, so asking for one never perturbs the other.
+    `triplet` every third. Each reads its own anchor, so asking for one never
+    perturbs the other.
 
     None is the honest answer for a workplace that never named an anchor. A
     caller that gets None must leave the rotation alone rather than invent
@@ -115,14 +114,25 @@ def cycle(profile: dict, pattern: str = "round") -> Optional[dict]:
     if not isinstance(workplace, dict):
         return None
 
-    anchor = _parse_date(workplace.get("first_closure_date"))
+    date_key = "%s_first_closure_date" % pattern
+    group_key = "%s_first_closure_group" % pattern
+    # A pattern-specific key, even when blank, is deliberate: it lets a
+    # manager anchor one cycle and leave the other undefined. Profiles that
+    # predate these keys keep their former behaviour through the legacy pair.
+    anchor = _parse_date(
+        workplace.get(date_key)
+        if date_key in workplace else workplace.get("first_closure_date")
+    )
     if anchor is None:
         return None
 
     groups = _groups_for(pattern)
     if groups is None:
         return None
-    first_group = _text(workplace.get("first_closure_group"))
+    first_group = _text(
+        workplace.get(group_key)
+        if group_key in workplace else workplace.get("first_closure_group")
+    )
     # The anchor names the group that held the first closure. When the unit
     # stated it in the other structure's vocabulary -- "ג" for a unit whose
     # mode is round -- it cannot place this cycle, so this cycle starts at

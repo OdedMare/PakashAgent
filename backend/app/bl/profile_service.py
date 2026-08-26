@@ -265,6 +265,8 @@ def _workplace(value: Any) -> dict:
     result["rotation_mode"] = mode
     result["first_closure_group"] = first_group
     result["first_closure_date"] = first_date
+    _pattern_anchor(result, "round", ("א", "ב"))
+    _pattern_anchor(result, "triplet", ("א", "ב", "ג"))
     result["general_exit_schedule"] = _text(
         result.get("general_exit_schedule")
     )
@@ -279,6 +281,25 @@ def _workplace(value: Any) -> dict:
         result.get("rotation_a_unavailability") or []
     )
     return result
+
+
+def _pattern_anchor(workplace: dict, pattern: str, groups: tuple) -> None:
+    """Validate one optional cycle anchor without inventing the other one."""
+    date_key = "%s_first_closure_date" % pattern
+    group_key = "%s_first_closure_group" % pattern
+    if date_key not in workplace and group_key not in workplace:
+        return
+    group = _text(workplace.get(group_key)) or groups[0]
+    if group not in groups:
+        raise AgentError("קבוצת העוגן אינה מתאימה למחזור היציאות")
+    date = _text(workplace.get(date_key))
+    if date:
+        try:
+            datetime.date.fromisoformat(date)
+        except ValueError:
+            raise AgentError("תאריך העוגן של מחזור היציאות אינו תקין")
+    workplace[group_key] = group
+    workplace[date_key] = date
 
 
 def _rotation_rules(value: Any) -> List[dict]:

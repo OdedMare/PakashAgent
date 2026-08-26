@@ -898,9 +898,10 @@ def _closure_availability(
     says nothing about them and inventing a rule would remove them from days
     they can genuinely work.
 
-    Silent when the unit never anchored its cycle: with no
-    `first_closure_date` there is no phase to enforce, and guessing one would
-    put the wrong group in on the wrong weekend while looking authoritative.
+    Silent for a cycle the unit never anchored: without that pattern's
+    round/triplet anchor (or the legacy fallback) there is no phase to enforce,
+    and guessing one would put the wrong group in on the wrong weekend while
+    looking authoritative.
     """
     people = [
         person for person in (profile or {}).get("employees") or []

@@ -153,7 +153,7 @@ export function AgentAnswer({
  *  manager is told it ran are the same words. */
 const TOOL_LABELS: Record<string, string> = {
   team_overview: "קריאת פרטי הצוות והתפקידים",
-  read_period: "קריאת הסידור",
+  read_period: "קריאת הסידור והסגירות",
   employee_state: "המשמרות והשעות של העובד/ת",
   coverage_gaps: "איתור משמרות חסרות",
   validate_placement: "בדיקת תקינות שיבוץ",

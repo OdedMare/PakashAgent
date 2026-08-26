@@ -60,11 +60,23 @@ export function ManualSetup({
   const [rotationMode] = useState<"round" | "triplet">(
     initialWorkplace.rotation_mode === "triplet" ? "triplet" : "round",
   );
-  const [firstClosureGroup, setFirstClosureGroup] = useState(
-    text(initialWorkplace.first_closure_group) || "א",
+  const [roundFirstClosureGroup, setRoundFirstClosureGroup] = useState(
+    text(initialWorkplace.round_first_closure_group)
+      || (rotationMode === "round" ? text(initialWorkplace.first_closure_group) : "")
+      || "א",
   );
-  const [firstClosureDate, setFirstClosureDate] = useState(
-    text(initialWorkplace.first_closure_date),
+  const [roundFirstClosureDate, setRoundFirstClosureDate] = useState(
+    text(initialWorkplace.round_first_closure_date)
+      || (rotationMode === "round" ? text(initialWorkplace.first_closure_date) : ""),
+  );
+  const [tripletFirstClosureGroup, setTripletFirstClosureGroup] = useState(
+    text(initialWorkplace.triplet_first_closure_group)
+      || (rotationMode === "triplet" ? text(initialWorkplace.first_closure_group) : "")
+      || "א",
+  );
+  const [tripletFirstClosureDate, setTripletFirstClosureDate] = useState(
+    text(initialWorkplace.triplet_first_closure_date)
+      || (rotationMode === "triplet" ? text(initialWorkplace.first_closure_date) : ""),
   );
   const [generalExitSchedule, setGeneralExitSchedule] = useState(
     inputText(initialWorkplace.general_exit_schedule),
@@ -74,7 +86,7 @@ export function ManualSetup({
   const [enabledExitPatterns, setEnabledExitPatterns] = useState<string[]>(() => {
     const configured = strings(initialWorkplace.enabled_exit_patterns);
     const used = rows(profile.employees)
-      .map((person) => exitPattern(person))
+      .map((person) => exitPattern(person, rotationMode))
       .filter((pattern) => pattern !== "round");
     return [...new Set([...configured, ...used])];
   });
@@ -102,8 +114,8 @@ export function ManualSetup({
     [profile.shifts],
   );
   const usedExitPatterns = useMemo(
-    () => new Set(employees.map(exitPattern).filter((pattern) => pattern !== "round")),
-    [employees],
+    () => new Set(employees.map((person) => exitPattern(person, rotationMode)).filter((pattern) => pattern !== "round")),
+    [employees, rotationMode],
   );
   const availableExitPatterns = useMemo(
     () => new Set(["round", ...enabledExitPatterns, ...usedExitPatterns]),
@@ -123,8 +135,14 @@ export function ManualSetup({
           planning_horizon: planningHorizon.trim() || "שבוע",
           operating_days: operatingDays,
           rotation_mode: rotationMode,
-          first_closure_group: firstClosureGroup,
-          first_closure_date: firstClosureDate,
+          // Keep the old pair readable by older deployments while the two
+          // real cycles use their own independent anchors.
+          first_closure_group: rotationMode === "triplet" ? tripletFirstClosureGroup : roundFirstClosureGroup,
+          first_closure_date: rotationMode === "triplet" ? tripletFirstClosureDate : roundFirstClosureDate,
+          round_first_closure_group: roundFirstClosureGroup,
+          round_first_closure_date: roundFirstClosureDate,
+          triplet_first_closure_group: tripletFirstClosureGroup,
+          triplet_first_closure_date: tripletFirstClosureDate,
           general_exit_schedule: generalExitSchedule.trim(),
           enabled_exit_patterns: enabledExitPatterns,
           rotation_a_unavailability: rotationAUnavailability.map((rule) => ({
@@ -139,10 +157,10 @@ export function ManualSetup({
           ...person,
           name: text(person.name),
           role: text(person.role),
-          exit_pattern: exitPattern(person),
-          rotation_group: rotationGroups(exitPattern(person)).includes(text(person.rotation_group))
+          exit_pattern: exitPattern(person, rotationMode),
+          rotation_group: rotationGroups(exitPattern(person, rotationMode)).includes(text(person.rotation_group))
             ? text(person.rotation_group)
-            : rotationGroups(exitPattern(person))[0] ?? "",
+            : rotationGroups(exitPattern(person, rotationMode))[0] ?? "",
           service_type: text(person.service_type) || "standard",
           counts_toward_staffing: person.counts_toward_staffing !== false,
           eligible_shifts: strings(person.eligible_shifts),
@@ -223,7 +241,7 @@ export function ManualSetup({
           <PatternOptions selected={enabledExitPatterns} locked={usedExitPatterns} onChange={setEnabledExitPatterns} />
         </SetupSection>
 
-        <SetupSection icon={<Repeat2 />} title="סבבים" hint="מגדירים רק מתי סבב א׳ אינו נמצא ואינו יכול לעבוד. סבב ב׳ מחושב אוטומטית כתמונה המשלימה.">
+        <SetupSection icon={<Repeat2 />} title="סבבים ותלתונים" hint="קודם מגדירים מי סוגר בסופ״ש עוגן בכל מחזור; אחר כך אפשר להוסיף זמני אי־זמינות קבועים לסבב א׳.">
           <div className="rotation-pair" aria-label="הקשר בין סבב א לסבב ב">
             <div><strong>סבב א׳</strong><span>אתם מגדירים את זמני אי־הזמינות.</span></div>
             <Repeat2 aria-hidden="true" />
@@ -232,15 +250,36 @@ export function ManualSetup({
 
           <PatternOptions selected={enabledExitPatterns} locked={usedExitPatterns} onChange={setEnabledExitPatterns} />
 
-          <div className="manual-grid three">
-            <Field label="קבוצת עוגן קיימת">
-              <select value={firstClosureGroup} onChange={(event) => setFirstClosureGroup(event.target.value)}>
-                {(rotationMode === "triplet" ? ["א", "ב", "ג"] : ["א", "ב"]).map((group) => <option key={group} value={group}>{group}</option>)}
-              </select>
-            </Field>
-            <Field label="תאריך עוגן (רשות)">
-              <DateInput value={firstClosureDate} onChange={setFirstClosureDate} />
-            </Field>
+          <div className="rotation-anchors" aria-label="נקודות ההתחלה של מחזורי הסגירה">
+            <article className="rotation-anchor-card">
+              <header><strong>סבב א / ב</strong><span>מחזור של שני סופי־שבוע</span></header>
+              <div className="manual-grid three">
+                <Field label="מי סוגר בסופ״ש העוגן">
+                  <select value={roundFirstClosureGroup} onChange={(event) => setRoundFirstClosureGroup(event.target.value)}>
+                    {["א", "ב"].map((group) => <option key={group} value={group}>סבב {group}</option>)}
+                  </select>
+                </Field>
+                <Field label="סופ״ש עוגן (רשות)">
+                  <DateInput value={roundFirstClosureDate} onChange={setRoundFirstClosureDate} />
+                </Field>
+              </div>
+            </article>
+
+            {availableExitPatterns.has("triplet") ? (
+              <article className="rotation-anchor-card is-triplet">
+                <header><strong>תלתון א / ב / ג</strong><span>מחזור של שלושה סופי־שבוע, בנפרד מהסבב</span></header>
+                <div className="manual-grid three">
+                  <Field label="מי סוגר בסופ״ש העוגן">
+                    <select value={tripletFirstClosureGroup} onChange={(event) => setTripletFirstClosureGroup(event.target.value)}>
+                      {["א", "ב", "ג"].map((group) => <option key={group} value={group}>תלתון {group}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="סופ״ש עוגן (רשות)">
+                    <DateInput value={tripletFirstClosureDate} onChange={setTripletFirstClosureDate} />
+                  </Field>
+                </div>
+              </article>
+            ) : null}
           </div>
 
           <div className="manual-list">
@@ -261,7 +300,7 @@ export function ManualSetup({
             ))}
           </div>
           <button type="button" className="ghost-button" onClick={() => setRotationAUnavailability((current) => [...current, { days: [], shifts: [], start_time: "", end_time: "", reason: "" }])}><Plus size={16} /> הוספת זמן שבו סבב א׳ אינו זמין</button>
-          {rotationAUnavailability.length === 0 ? <p className="rotation-empty">לא הוגדר סבב פעיל. הצוות ימשיך לעבוד ללא מגבלת סבבים.</p> : <p className="rotation-derived-note">סבב ב׳ יהיה זמין בדיוק בזמנים שסבב א׳ אינו זמין, ולא זמין בשאר מועדי הפעילות. החישוב מתבצע בשירות השיבוץ.</p>}
+          {rotationAUnavailability.length === 0 ? <p className="rotation-empty">לא הוגדרו זמני אי־זמינות נוספים. לוח הסגירות עדיין מחושב מעוגני הסבב והתלתון.</p> : <p className="rotation-derived-note">סבב ב׳ יהיה זמין בדיוק בזמנים שסבב א׳ אינו זמין, ולא זמין בשאר מועדי הפעילות. החישוב מתבצע בשירות השיבוץ.</p>}
         </SetupSection>
 
         <SetupSection icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">
@@ -272,12 +311,12 @@ export function ManualSetup({
                   <Field label="שם *"><input value={inputText(person.name)} readOnly={originalEmployees.has(text(person.name))} onChange={(e) => edit(setEmployees, index, "name", e.target.value)} /></Field>
                   <Field label="תפקיד"><input value={inputText(person.role)} onChange={(e) => edit(setEmployees, index, "role", e.target.value)} /></Field>
                   <Field label="מבנה יציאות">
-                    <select value={exitPattern(person)} onChange={(e) => {
+                    <select value={exitPattern(person, rotationMode)} onChange={(e) => {
                       edit(setEmployees, index, "exit_pattern", e.target.value);
                       edit(setEmployees, index, "rotation_group", rotationGroups(e.target.value)[0] ?? "");
                     }}>{Object.entries(EXIT_PATTERNS).filter(([value]) => availableExitPatterns.has(value)).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
                   </Field>
-                  {rotationGroups(exitPattern(person)).length ? <Field label="קבוצה"><select value={text(person.rotation_group) || rotationGroups(exitPattern(person))[0]} onChange={(e) => edit(setEmployees, index, "rotation_group", e.target.value)}>{rotationGroups(exitPattern(person)).map((group) => <option key={group}>{group}</option>)}</select></Field> : null}
+                  {rotationGroups(exitPattern(person, rotationMode)).length ? <Field label="קבוצה"><select value={text(person.rotation_group) || rotationGroups(exitPattern(person, rotationMode))[0]} onChange={(e) => edit(setEmployees, index, "rotation_group", e.target.value)}>{rotationGroups(exitPattern(person, rotationMode)).map((group) => <option key={group}>{group}</option>)}</select></Field> : null}
                   <Field label="מעמד">
                     <select value={text(person.service_type) || "standard"} onChange={(e) => {
                       edit(setEmployees, index, "service_type", e.target.value);
@@ -298,7 +337,7 @@ export function ManualSetup({
               </article>
             ))}
           </div>
-          <button type="button" className="ghost-button" onClick={() => setEmployees((current) => [...current, { name: "", role: "", exit_pattern: "round", rotation_group: "א", service_type: "standard", counts_toward_staffing: true, eligible_shifts: [], is_shift_manager: false, can_train: false, notes: "" }])}><Plus size={16} /> הוספת איש/אשת צוות</button>
+          <button type="button" className="ghost-button" onClick={() => setEmployees((current) => [...current, { name: "", role: "", exit_pattern: rotationMode, rotation_group: "א", service_type: "standard", counts_toward_staffing: true, eligible_shifts: [], is_shift_manager: false, can_train: false, notes: "" }])}><Plus size={16} /> הוספת איש/אשת צוות</button>
         </SetupSection>
 
         <SetupSection icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה.">
@@ -384,9 +423,9 @@ function rows(value: unknown): Row[] { return Array.isArray(value) ? value.filte
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : []; }
 function text(value: unknown): string { return typeof value === "string" ? value.trim() : ""; }
 function inputText(value: unknown): string { return typeof value === "string" ? value : ""; }
-function exitPattern(row: Row): keyof typeof EXIT_PATTERNS {
+function exitPattern(row: Row, fallback: "round" | "triplet" = "round"): keyof typeof EXIT_PATTERNS {
   const value = text(row.exit_pattern);
-  return value in EXIT_PATTERNS ? value as keyof typeof EXIT_PATTERNS : "round";
+  return value in EXIT_PATTERNS ? value as keyof typeof EXIT_PATTERNS : fallback;
 }
 function rotationGroups(pattern: string): string[] {
   if (pattern === "triplet") return ["א", "ב", "ג"];

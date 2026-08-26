@@ -1441,6 +1441,10 @@
   color: var(--accent);
 }
 
+.briefing-item.rotation .briefing-icon {
+  color: var(--primary);
+}
+
 .briefing-item.request .briefing-icon {
   color: var(--success);
 }

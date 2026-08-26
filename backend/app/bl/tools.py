@@ -51,6 +51,7 @@ malformed rather than merely absent.
 import datetime
 from typing import Any, Dict, List, Optional
 
+from app.bl import rotation
 from app.bl.audit import audit, fairness
 from app.bl.placement import check as check_placement
 from app.bl.placement import closure_of, suggest_alternatives
@@ -85,7 +86,7 @@ TOOL_NAMES = (
 # Handed to the model as its menu and rendered in the UI as what the agent
 # did, so the two can never describe the tools differently.
 TOOL_DESCRIPTIONS = {
-    TOOL_READ_PERIOD: "קריאת הסידור של תקופה או של תאריך מסוים",
+    TOOL_READ_PERIOD: "קריאת הסידור ומי סוגר בכל סוף שבוע בתקופה",
     TOOL_TEAM_OVERVIEW: "מי נמצא בצוות, מה התפקידים ואילו משמרות הוגדרו",
     TOOL_EMPLOYEE_STATE: "המשמרות, השעות והאילוצים של עובד אחד",
     TOOL_COVERAGE_GAPS: "משמרות שחסרים בהן אנשים",
@@ -241,6 +242,9 @@ class ScheduleTools:
         return {
             "found": True,
             "schedule": _period_view(schedule),
+            # Pure rotation arithmetic. This lets the agent answer "who
+            # closes" without deriving a cycle from names or dates.
+            "closures": _closure_schedule(profile, schedule),
             "warnings": self._warnings(team_id, schedule, profile),
             "fairness": fairness(
                 _audit_assignments(schedule), _shifts(profile),
@@ -798,6 +802,15 @@ def _period_view(schedule: dict) -> dict:
         "slot_count": len(schedule.get("slots") or []),
         "assignment_count": len(schedule.get("assignments") or []),
     }
+
+
+def _closure_schedule(profile: dict, schedule: dict) -> List[dict]:
+    try:
+        start = datetime.date.fromisoformat(_iso(schedule.get("starts_on")))
+        end = datetime.date.fromisoformat(_iso(schedule.get("ends_on")))
+    except ValueError:
+        return []
+    return rotation.schedule_for_model(profile, start, end)
 
 
 def _audit_assignments(schedule: dict) -> List[dict]:

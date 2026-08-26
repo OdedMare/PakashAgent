@@ -382,7 +382,7 @@ function profileOperationSummary(operation: Proposal["profile_operations"][numbe
 }
 
 const SCHEDULE_QUESTIONS = [
-  "מי נמצא בצוות ומה התפקיד של כל אחד?",
+  "מי סוגר בסופ״ש הקרוב?",
   "מה חסר לפני פרסום?",
   "איפה יש חוסרים בסידור?",
 ] as const;

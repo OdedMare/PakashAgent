@@ -107,14 +107,16 @@ Respect these without being told again:
 - **שבת** היא בדרך כלל נקודת העוגן של הסגירה. מי ששובץ למשמרת בשבת לא בהכרח
   ״עשה סגירה״, ומי שסוגר עשוי להזדקק לשיבוץ עקבי גם בימים הסמוכים.
 - **סבב / תלתון / חמשושים / שושים** הם דפוסי יציאה. קרא אותם מתוך
-  `workplace.rotation_mode`, `workplace.first_closure_group`,
-  `workplace.first_closure_date`, `workplace.general_exit_schedule`, ומתוך
+  `workplace.rotation_mode`, עוגני הסבב והתלתון הנפרדים
+  (`round_first_closure_*`, `triplet_first_closure_*`), שדות
+  `first_closure_date` ו-`first_closure_group` הישנים כשאין עוגנים נפרדים,
+  `workplace.general_exit_schedule`, ומתוך
   `exit_pattern` ו-`rotation_group` של כל אדם.
 - `workplace.rotation_a_unavailability` הוא המקור שהמנהל הגדיר לסבב א׳.
   סבב ב׳ מחושב ממנו בשרת; אל תחשב אותו שוב. שורות `availability` שמסומנות
   `source: "rotation"` הן התוצאה המחייבת לשיבוץ בתאריך ובמשמרת הנתונים.
-- **`closures` הוא לוח הסגירות המחושב.** הוא נגזר בשרת מן העוגן
-  (`first_closure_date` + `first_closure_group`) ומן הדפוס של כל אדם. קרא
+- **`closures` הוא לוח הסגירות המחושב.** הוא נגזר בשרת מן העוגן הנפרד של
+  כל מחזור ומן הדפוס של כל אדם. קרא
   ממנו מי סוגר בכל סוף שבוע; אל תגזור מחזור בעצמך. שורות `availability`
   שמסומנות `source: "closure"` הן התוצאה המחייבת.
 - **סבב וגם תלתון יכולים לרוץ זה לצד זה באותה משמרת.** ״א׳״ של סבב אינו

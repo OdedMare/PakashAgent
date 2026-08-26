@@ -53,7 +53,7 @@ _MAX_ASKED = 40
 INTERVIEW_TOPICS = (
     {
         "id": "workplace_and_cycle",
-        "question": "מה שם היחידה ומהן היציאות הכלליות של הצוות, כדי להבין את מחזורי הסגירות?",
+        "question": "מה שם היחידה ומה מבנה היציאות הכללי, ובכל סבב או תלתון פעיל איזו קבוצה סוגרת באיזה סוף שבוע עוגן?",
     },
     {
         "id": "operating_calendar",
@@ -126,6 +126,8 @@ _PROFILE_SCHEMA = {
                 "operating_days", "planning_horizon", "scheduler_name",
                 "scheduler_works_shifts", "rotation_mode",
                 "first_closure_group", "first_closure_date",
+                "round_first_closure_group", "round_first_closure_date",
+                "triplet_first_closure_group", "triplet_first_closure_date",
             ],
             "properties": {
                 "name": {"type": "string"},
@@ -145,6 +147,10 @@ _PROFILE_SCHEMA = {
                 },
                 "first_closure_group": {"type": "string"},
                 "first_closure_date": {"type": "string"},
+                "round_first_closure_group": {"type": "string"},
+                "round_first_closure_date": {"type": "string"},
+                "triplet_first_closure_group": {"type": "string"},
+                "triplet_first_closure_date": {"type": "string"},
                 "general_exit_schedule": {"type": "string"},
                 "enabled_exit_patterns": {
                     "type": "array",

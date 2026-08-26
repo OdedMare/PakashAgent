@@ -194,6 +194,28 @@ def test_rotation_a_schedule_and_optional_patterns_share_the_workplace_profile()
     }]
 
 
+def test_round_and_triplet_anchors_are_saved_and_validated_separately():
+    repo = _Repo()
+    result = ProfileService(repo).update("team", workplace={
+        "name": "פלוגה",
+        "round_first_closure_group": "ב",
+        "round_first_closure_date": "2026-08-29",
+        "triplet_first_closure_group": "ג",
+        "triplet_first_closure_date": "2026-09-05",
+    })
+
+    workplace = result["workplace"]
+    assert workplace["round_first_closure_group"] == "ב"
+    assert workplace["round_first_closure_date"] == "2026-08-29"
+    assert workplace["triplet_first_closure_group"] == "ג"
+    assert workplace["triplet_first_closure_date"] == "2026-09-05"
+
+    with pytest.raises(AgentError):
+        ProfileService(repo).update("team", workplace={
+            "round_first_closure_group": "ג",
+        })
+
+
 def test_rotation_configuration_rejects_unknown_patterns_and_bad_times():
     repo = _Repo()
     with pytest.raises(AgentError):

@@ -55,7 +55,11 @@ KIND_FAIRNESS = "fairness"
 KIND_GAP = "gap"
 KIND_REQUEST = "request"
 KIND_PATTERN = "pattern"
-_KINDS = (KIND_RISK, KIND_FAIRNESS, KIND_GAP, KIND_REQUEST, KIND_PATTERN)
+KIND_ROTATION = "rotation"
+_KINDS = (
+    KIND_RISK, KIND_FAIRNESS, KIND_GAP, KIND_REQUEST, KIND_PATTERN,
+    KIND_ROTATION,
+)
 
 _ITEM_SCHEMA = {
     "type": "object",
@@ -242,6 +246,9 @@ def _schedule_for_model(schedule: Optional[dict]) -> Optional[dict]:
             }
             for row in schedule.get("assignments") or []
         ],
+        # Already computed by `rotation.py` and attached by the schedule
+        # service. The model reads who closes; it never derives the cycle.
+        "closures": _rows(schedule.get("closures"), 80),
     }
 
 

@@ -48,6 +48,10 @@ export interface WorkplaceProfile {
     rotation_mode?: "round" | "triplet";
     first_closure_group?: string;
     first_closure_date?: string;
+    round_first_closure_group?: string;
+    round_first_closure_date?: string;
+    triplet_first_closure_group?: string;
+    triplet_first_closure_date?: string;
     general_exit_schedule?: string;
     enabled_exit_patterns?: Array<"triplet" | "hamshushim" | "shushim">;
     rotation_a_unavailability?: Array<{
@@ -616,7 +620,8 @@ export type BriefingKind =
   | "fairness"
   | "gap"
   | "request"
-  | "pattern";
+  | "pattern"
+  | "rotation";
 
 /** Why the agent is speaking. The backend branches on these by name. */
 export type BriefingTrigger =

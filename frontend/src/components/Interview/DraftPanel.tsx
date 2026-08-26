@@ -8,6 +8,7 @@ import {
   ListTodo,
   Loader2,
   PencilLine,
+  Repeat2,
   Users,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -53,6 +54,7 @@ export function DraftPanel({
 }) {
   const workplace = draft?.workplace ?? {};
   const stats = computeDraftStats(draft);
+  const anchors = closureAnchors(workplace);
   const changed = useChangedKeys(stats);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [editing, setEditing] = useState("");
@@ -123,6 +125,13 @@ export function DraftPanel({
           changed={changed.has("rules")}
         />
       </dl>
+
+      {anchors.length ? (
+        <div className="draft-anchors" aria-label="עוגני הסגירה שנאספו">
+          <span><Repeat2 size={13} /> מי סוגר</span>
+          {anchors.map((anchor) => <strong key={anchor}>{anchor}</strong>)}
+        </div>
+      ) : null}
 
       {/* The derived half: what the drafted shifts actually demand. Hidden
           until there is a shift to demand anything, so it does not sit at
@@ -260,6 +269,20 @@ function peopleNote(stats: DraftStats): string | undefined {
   if (stats.trainees > 0) parts.push(`${stats.trainees} מתלמדים`);
   if (stats.casuals > 0) parts.push(`${stats.casuals} מזדמנים`);
   return parts.length > 0 ? `+ ${parts.join(" · ")}` : undefined;
+}
+
+function closureAnchors(workplace: NonNullable<WorkplaceProfile["workplace"]>): string[] {
+  return ([
+    ["סבב", workplace.round_first_closure_group, workplace.round_first_closure_date],
+    ["תלתון", workplace.triplet_first_closure_group, workplace.triplet_first_closure_date],
+  ] as const)
+    .filter(([, group, date]) => Boolean(group && date))
+    .map(([label, group, date]) => `${label} ${group} · ${displayDate(date ?? "")}`);
+}
+
+function displayDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
 }
 
 function Stat({

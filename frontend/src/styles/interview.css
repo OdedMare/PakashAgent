@@ -1257,6 +1257,37 @@
   border-style: dashed;
 }
 
+.draft-anchors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.draft-anchors > span,
+.draft-anchors > strong {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+}
+
+.draft-anchors > span {
+  color: var(--text-muted);
+  padding-inline-start: 0;
+}
+
+.draft-anchors > strong {
+  color: var(--primary);
+  background: var(--primary-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border));
+  font-weight: 700;
+}
+
 /* Which figure just moved. Held briefly, then cleared: a cue that stays on
    accumulates until every tile is lit and it means nothing. */
 .draft-card-changed {

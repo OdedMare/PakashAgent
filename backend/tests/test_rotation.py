@@ -88,6 +88,43 @@ def test_the_two_cycles_run_side_by_side_and_do_not_share_a_group():
     assert "2026-09-12" not in _saturdays(profile, profile["employees"][1])
 
 
+def test_round_and_triplet_can_start_from_different_weekends_and_groups():
+    """Each structure keeps its own phase even when both staff one shift."""
+    profile = _profile([
+        {"name": "מפקדת סבב", "exit_pattern": "round", "rotation_group": "א",
+         "is_shift_manager": True},
+        {"name": "מפקד תלתון", "exit_pattern": "triplet", "rotation_group": "ג",
+         "is_shift_manager": True},
+    ],
+        round_first_closure_date="2026-08-29",
+        round_first_closure_group="א",
+        triplet_first_closure_date="2026-09-05",
+        triplet_first_closure_group="ג",
+    )
+
+    first = datetime.date(2026, 8, 29)
+    second = datetime.date(2026, 9, 5)
+    assert rotation.closing_group(profile, first, "round") == "א"
+    assert rotation.closing_group(profile, first, "triplet") == "ב"
+    assert rotation.closing_group(profile, second, "round") == "ב"
+    assert rotation.closing_group(profile, second, "triplet") == "ג"
+
+
+def test_a_blank_specific_anchor_does_not_borrow_the_other_cycle():
+    profile = _profile([
+        {"name": "דנה", "exit_pattern": "round", "rotation_group": "א"},
+        {"name": "רון", "exit_pattern": "triplet", "rotation_group": "א"},
+    ],
+        round_first_closure_date=ANCHOR,
+        round_first_closure_group="א",
+        triplet_first_closure_date="",
+        triplet_first_closure_group="א",
+    )
+
+    assert rotation.cycle(profile, "round") is not None
+    assert rotation.cycle(profile, "triplet") is None
+
+
 def test_a_group_is_what_makes_a_pattern_rotate():
     """No group means every weekend -- "יוצא כל חמישי לסופ״ש"."""
     weekly = {"name": "טל", "exit_pattern": "hamshushim", "rotation_group": ""}

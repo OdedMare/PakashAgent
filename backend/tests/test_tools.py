@@ -205,6 +205,32 @@ def test_read_period_returns_the_current_one(repo, tools):
     assert answer["schedule"]["assignment_count"] == 1
 
 
+def test_read_period_returns_computed_round_and_triplet_closures(repo, tools):
+    repo.profiles[TEAM] = {
+        **PROFILE,
+        "workplace": {
+            "name": "מוקד",
+            "round_first_closure_date": "2026-08-22",
+            "round_first_closure_group": "א",
+            "triplet_first_closure_date": "2026-08-22",
+            "triplet_first_closure_group": "ג",
+        },
+        "employees": [
+            {"name": DANA, "exit_pattern": "round", "rotation_group": "א"},
+            {"name": YOSSI, "exit_pattern": "triplet", "rotation_group": "ג"},
+        ],
+    }
+    schedule = _schedule(repo)
+    schedule["ends_on"] = "2026-08-23"
+
+    answer = tools.run(TEAM, TOOL_READ_PERIOD, {})
+
+    assert answer["closures"][0]["closing_groups"] == [
+        {"pattern": "round", "group": "א"},
+        {"pattern": "triplet", "group": "ג"},
+    ]
+
+
 def test_read_period_by_date_finds_the_covering_period(repo, tools):
     _schedule(repo)
     answer = tools.run(TEAM, TOOL_READ_PERIOD, {"day": "2026-08-18"})

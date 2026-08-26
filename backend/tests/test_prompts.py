@@ -69,3 +69,20 @@ def test_scheduler_distinguishes_closures_from_shift_count_fairness():
     assert "מחזור היציאות" in text
     assert "אל תעביר סגירה" in text
     assert "first_closure_group" in text
+    assert "round_first_closure" in text
+    assert "triplet_first_closure" in text
+
+
+def test_interview_collects_separate_round_and_triplet_anchors():
+    text = prompts.load("interview", reload=True)
+
+    assert "round_first_closure_date" in text
+    assert "triplet_first_closure_date" in text
+
+
+def test_briefing_prioritizes_the_closing_group_before_fairness():
+    text = prompts.load("briefing", reload=True)
+
+    assert "schedule.closures" in text
+    assert "cross_rotation" in text
+    assert "closure continuity comes first" in text

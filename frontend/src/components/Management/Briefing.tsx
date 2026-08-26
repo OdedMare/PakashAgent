@@ -3,6 +3,7 @@
 import {
   CheckCircle2,
   Inbox,
+  Repeat2,
   Scale,
   Sparkles,
   TrendingUp,
@@ -101,6 +102,7 @@ export function Briefing({
 /** Presentation only, exactly like the audit's severity. Nothing branches on
  *  `kind` beyond which glyph sits beside the line. */
 function iconFor(kind: BriefingKind): ReactNode {
+  if (kind === "rotation") return <Repeat2 size={14} />;
   if (kind === "fairness") return <Scale size={14} />;
   if (kind === "gap") return <TriangleAlert size={14} />;
   if (kind === "request") return <Inbox size={14} />;

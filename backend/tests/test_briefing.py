@@ -44,6 +44,17 @@ SCHEDULE = {
     "assignments": [
         {"employee": "דנה", "shift": MORNING, "date": "2026-08-17"},
     ],
+    "closures": [{
+        "date": "2026-08-20",
+        "groups": [
+            {"pattern": "round", "group": "א", "label": "סבב א"},
+            {"pattern": "triplet", "group": "ג", "label": "תלתון ג"},
+        ],
+        "label": "סבב א ותלתון ג",
+        "employees": ["דנה", "יוסי"],
+        "shifts": [],
+        "until_handover": False,
+    }],
 }
 
 
@@ -188,6 +199,22 @@ def test_the_model_is_never_asked_to_count():
     payload = json.loads(llm.calls[0]["user"])
     assert payload["warnings"][0]["code"] == "unfilled"
     assert payload["fairness"]["average_hours"] == 24.0
+
+
+def test_computed_closures_reach_clickable_improvement_suggestions():
+    """The briefing reads who closes; it never tries to derive the cycle."""
+    llm = _ScriptedLlm([_answer(items=[_item(
+        kind="rotation",
+        suggestion="הצע כיסוי מתוך סבב א ותלתון ג שסוגרים בסופ״ש.",
+    )])])
+    result = BriefingAgent(llm).brief(
+        TRIGGER_OPENED, PROFILE, schedule=SCHEDULE,
+    )
+
+    payload = json.loads(llm.calls[0]["user"])
+    assert payload["schedule"]["closures"][0]["label"] == "סבב א ותלתון ג"
+    assert result["items"][0]["kind"] == "rotation"
+    assert result["items"][0]["suggestion"].startswith("הצע כיסוי")
 
 
 # -- the trigger -----------------------------------------------------------

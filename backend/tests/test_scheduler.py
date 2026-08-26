@@ -408,6 +408,49 @@ def test_required_roles_and_non_counting_trainees_reach_the_daily_contract():
     assert call["schema"]["properties"]["assignments"]["maxItems"] == 2
 
 
+def test_round_and_triplet_commanders_can_staff_the_same_shift():
+    """Command qualification is independent of each person's exit cycle."""
+    profile = dict(
+        PROFILE,
+        workplace={
+            "name": "מוקד",
+            "round_first_closure_date": "2026-08-22",
+            "round_first_closure_group": "א",
+            "triplet_first_closure_date": "2026-08-22",
+            "triplet_first_closure_group": "ג",
+        },
+        employees=[
+            {
+                "name": "מפקדת סבב", "exit_pattern": "round",
+                "rotation_group": "א", "is_shift_manager": True,
+                "eligible_shifts": [MORNING],
+            },
+            {
+                "name": "מפקד תלתון", "exit_pattern": "triplet",
+                "rotation_group": "ג", "is_shift_manager": True,
+                "eligible_shifts": [MORNING],
+            },
+        ],
+        shifts=[dict(PROFILE["shifts"][0], staffing=[{
+            "days": [], "headcount": 2, "required_roles": [],
+        }], requires_shift_manager=True)],
+    )
+    llm = _ScriptedLlm([_reply([
+        {"employee_id": "employee-1", "slot_id": "slot-1", "reason": "מפקדת הסבב סוגרת"},
+        {"employee_id": "employee-2", "slot_id": "slot-1", "reason": "מפקד התלתון סוגר"},
+    ])])
+
+    result = Scheduler(llm).generate_day(profile, "2026-08-22")
+    payload = json.loads(llm.calls[0]["user"])
+
+    assert payload["period"]["slots"][0]["candidate_employee_ids"] == [
+        "employee-1", "employee-2",
+    ]
+    assert [row["employee"] for row in result["assignments"]] == [
+        "מפקדת סבב", "מפקד תלתון",
+    ]
+
+
 def test_daily_generation_filters_a_hard_time_window_but_keeps_a_soft_one():
     hard_llm = _ScriptedLlm([_reply([{
         "employee_id": "employee-2", "slot_id": "slot-1",

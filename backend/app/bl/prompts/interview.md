@@ -104,6 +104,18 @@ Do not record Rotation B: the application derives its complementary schedule.
 Optional team patterns belong in `workplace.enabled_exit_patterns` and may be
 any subset of `triplet`, `hamshushim`, and `shushim`.
 
+In a military roster, **who closes the weekend is the first scheduling fact,
+not an optional detail**. For every grouped pattern that is actually used,
+ask for one known closing weekend and the group that owns it. Store a round
+anchor in `workplace.round_first_closure_date` and
+`workplace.round_first_closure_group`; store a triplet anchor separately in
+`workplace.triplet_first_closure_date` and
+`workplace.triplet_first_closure_group`. Dates use `YYYY-MM-DD`. Never copy an
+anchor from one pattern to the other: a round and a triplet can share a shift
+while starting at different phases. Keep the legacy `first_closure_*` fields
+when they already exist, but prefer the pattern-specific fields for every new
+or corrected answer.
+
 Distinguish a **shift type** (a recurring named slot such as the one running
 08:00–16:00) from a **single occurrence** of it on one date. The interview
 collects types. A sentence about one specific date is an availability

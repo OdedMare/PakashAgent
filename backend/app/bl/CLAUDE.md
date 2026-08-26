@@ -25,7 +25,7 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | `planner.py` | The tool loop, with a deterministic fallback when no model is reachable |
 | `intent.py` | **Reading a Hebrew sentence with no model.** Seven shapes; never guesses |
 | `simulate.py` | **What a change would do.** No model, no repository, persists nothing |
-| `rotation.py` | **Whose closure a date is.** Pure arithmetic off one anchor; no model |
+| `rotation.py` | **Whose closure a date is.** Pure arithmetic off separate round/triplet anchors; no model |
 | `placement.py` | **What a placement would cost, and what else the manager could do.** No model |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
 
@@ -290,9 +290,10 @@ vocabulary is per workplace (D9). A workplace whose shifts carry no times has
 no clock to read, so its closures honestly end on Saturday rather than
 blocking a Sunday on a guess.
 
-**The cycle is anchored, not inferred.** With no `first_closure_date` there
-is no phase, and every function here returns nothing rather than guess one:
-an invented phase looks authoritative while putting the wrong group in.
+**Each cycle is anchored, not inferred.** Round and triplet may use separate
+anchor dates and first groups. Legacy profiles fall back to
+`first_closure_*`; with no anchor for a pattern every function returns nothing
+rather than guess a phase that puts the wrong group in.
 
 Read by four callers, which is the point of it being one module:
 `scheduler.py` turns it into hard availability rows and refuses assignments
