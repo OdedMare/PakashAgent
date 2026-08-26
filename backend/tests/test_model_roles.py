@@ -11,6 +11,7 @@ from app.dal.llm.model_roles import (
     ADVANCED,
     DEFAULT,
     FAST,
+    resolve_api_key,
     resolve_base_url,
     resolve_model,
     role_for_flow,
@@ -29,6 +30,10 @@ class _Settings:
         self.llm_base_url_fast = None
         self.llm_base_url_default = None
         self.llm_base_url_advanced = None
+        self.openai_api_key = "general-key"
+        self.llm_api_key_fast = ""
+        self.llm_api_key_default = ""
+        self.llm_api_key_advanced = ""
         for key, value in overrides.items():
             setattr(self, key, value)
 
@@ -39,6 +44,7 @@ class _OldSettings:
 
     llm_model = "base-model"
     llm_base_url = "http://general/v1"
+    openai_api_key = "general-key"
 
 
 # --- flow → role -----------------------------------------------------------
@@ -122,6 +128,37 @@ def test_an_unset_role_endpoint_falls_back_to_the_general_one(role):
 
 def test_settings_predating_role_endpoints_still_resolve_the_general_one():
     assert resolve_base_url(_OldSettings(), ADVANCED) == "http://general/v1"
+
+
+# --- role → API key --------------------------------------------------------
+
+def test_a_role_can_use_its_own_api_key():
+    settings = _Settings(llm_api_key_advanced="sk-advanced")
+    assert resolve_api_key(settings, ADVANCED) == "sk-advanced"
+
+
+@pytest.mark.parametrize("role", [FAST, DEFAULT, ADVANCED])
+def test_an_unset_role_key_falls_back_to_the_general_one(role):
+    assert resolve_api_key(_Settings(), role) == "general-key"
+
+
+def test_one_role_s_key_does_not_leak_into_the_others():
+    """The point of the whole feature: a credential reaches the endpoint it
+    belongs to and no other."""
+    settings = _Settings(llm_api_key_advanced="sk-advanced")
+    assert resolve_api_key(settings, FAST) == "general-key"
+    assert resolve_api_key(settings, DEFAULT) == "general-key"
+
+
+def test_a_role_with_its_own_url_but_no_key_borrows_the_general_key():
+    # A second Ollama on the LAN needs no credential of its own; the
+    # fallback is on the key alone, not on the URL/key pair.
+    settings = _Settings(llm_base_url_fast="http://fast/v1")
+    assert resolve_api_key(settings, FAST) == "general-key"
+
+
+def test_settings_predating_role_keys_still_resolve_the_general_one():
+    assert resolve_api_key(_OldSettings(), ADVANCED) == "general-key"
 
 
 # --- the mapping against the real call sites -------------------------------

@@ -31,4 +31,10 @@ class RuntimeSettings:
     llm_base_url_fast: Optional[str] = None
     llm_base_url_default: Optional[str] = None
     llm_base_url_advanced: Optional[str] = None
+    # A role's endpoint may belong to a different provider than the general
+    # one, so each carries its own credential. Empty falls back to
+    # `openai_api_key`, keeping single-provider deployments unchanged.
+    llm_api_key_fast: str = ""
+    llm_api_key_default: str = ""
+    llm_api_key_advanced: str = ""
     llm_queue_seconds: int = 180

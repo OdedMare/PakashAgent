@@ -22,6 +22,7 @@ Cross-cutting infrastructure. **Ported from AiSummryIO.**
 | `PAKASH_LLM_BASE_URL` | OpenAI-compatible endpoint; defaults to local Ollama |
 | `PAKASH_LLM_MODEL_<ROLE>` | Optional model id for `FAST`, `DEFAULT`, or `ADVANCED` |
 | `PAKASH_LLM_BASE_URL_<ROLE>` | Optional endpoint for that role; falls back to the general URL |
+| `PAKASH_LLM_API_KEY_<ROLE>` | Optional API key for that role's endpoint; falls back to `OPENAI_API_KEY`. A role on another provider is authenticated by another credential |
 | `PAKASH_LLM_DIET_MODE` | Compact prompts and bounded completions |
 | `PAKASH_LLM_TIMEOUT_SECONDS` | Wall time for one logical call, retries included |
 | `OPENAI_API_KEY` | Read unprefixed, as the SDK expects |

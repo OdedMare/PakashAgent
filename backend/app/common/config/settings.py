@@ -64,6 +64,24 @@ class Settings(BaseSettings):
     llm_base_url_advanced: Optional[str] = None
     """Endpoint for the advanced role. Empty = use `llm_base_url`."""
 
+    llm_api_key_fast: str = ""
+    """API key for the fast role's endpoint. Empty = use `openai_api_key`."""
+
+    llm_api_key_default: str = ""
+    """API key for the default role's endpoint. Empty = use
+    `openai_api_key`."""
+
+    llm_api_key_advanced: str = ""
+    """API key for the advanced role's endpoint. Empty = use
+    `openai_api_key`.
+
+    A role pointing at a different provider needs a different credential:
+    the moment `llm_base_url_advanced` names a hosted API while the general
+    endpoint is a local Ollama, the shared key is either absent or belongs to
+    the wrong service. So each endpoint field has a key field beside it, and
+    a key travels with the URL it authenticates rather than with the process.
+    """
+
     llm_diet_mode: bool = False
     """Use compact prompts and bounded completion output."""
 

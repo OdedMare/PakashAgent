@@ -125,14 +125,19 @@ export interface RuntimeSettings {
   database_name: string;
   database_schema: string;
   llm_model: string;
-  /** Per-role model ids and endpoints. Empty values fall back to the general
-   *  model/URL, keeping a single-model deployment unchanged. */
+  /** Per-role model ids, endpoints and API keys. Empty values fall back to
+   *  the general model/URL/key, keeping a single-model deployment unchanged.
+   *  A role's key travels with its URL, so roles may sit on different
+   *  providers. Keys arrive masked, like every other secret. */
   llm_model_fast: string;
   llm_model_default: string;
   llm_model_advanced: string;
   llm_base_url_fast: string | null;
   llm_base_url_default: string | null;
   llm_base_url_advanced: string | null;
+  llm_api_key_fast: string;
+  llm_api_key_default: string;
+  llm_api_key_advanced: string;
   llm_diet_mode: boolean;
   llm_repetition_penalty: number;
   llm_timeout_seconds: number;

@@ -76,6 +76,34 @@ def test_masked_value_coming_back_keeps_the_stored_secret(store):
     assert store.get().llm_model == "other"
 
 
+@pytest.mark.parametrize("field", [
+    "llm_api_key_fast", "llm_api_key_default", "llm_api_key_advanced",
+])
+def test_every_role_api_key_is_masked_like_the_general_one(store, field):
+    """A per-role key is a credential like any other — it must never leave
+    the API in the clear, and the mask coming back must keep it."""
+    store.update({field: "sk-role-secret"})
+    public = store.public()
+
+    assert public[field] == MASKED_SECRET
+    assert "sk-role-secret" not in json.dumps(public)
+
+    store.update({field: MASKED_SECRET})
+    assert getattr(store.get(), field) == "sk-role-secret"
+
+
+def test_a_role_key_is_stored_beside_its_own_endpoint(store):
+    store.update({
+        "llm_base_url_advanced": "https://api.provider.com/v1",
+        "llm_api_key_advanced": "sk-advanced",
+    })
+
+    assert store.get().llm_base_url_advanced == "https://api.provider.com/v1"
+    assert store.get().llm_api_key_advanced == "sk-advanced"
+    # The general key is untouched by a role setting its own.
+    assert store.get().openai_api_key == ""
+
+
 def test_pasted_endpoint_has_its_operation_suffix_stripped(store):
     # The SDK appends the path itself; leaving the suffix on 404s every call.
     store.update({"llm_base_url": "http://box:8000/v1/chat/completions"})

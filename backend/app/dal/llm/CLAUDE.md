@@ -5,7 +5,8 @@ client. Default target is a local model through Ollama, but the same code works
 against OpenAI itself, vLLM, Groq, and other compatible gateways.
 
 Model, API key, and base URL are read from the runtime settings store on **every
-call**, so a change saved in the UI applies immediately without a restart.
+call**, so a change saved in the UI applies immediately without a restart. All
+three are per role, so different kinds of work can run on different providers.
 
 ## Files
 
@@ -16,7 +17,7 @@ call**, so a change saved in the UI applies immediately without a restart.
 | `json_response_parser.py` | `extract_json` — strips fences, finds the object |
 | `message_merger.py` | Folds the system prompt into the user turn |
 | `model_id_extractor.py` | Pulls model IDs out of a `/models` response |
-| `model_roles.py` | Flow → role → model id, and the fallback |
+| `model_roles.py` | Flow → role → model id, endpoint and API key, and the fallbacks |
 
 Each helper is separate because each handles a different failure of
 "OpenAI-compatible" servers that are only approximately compatible.
@@ -93,16 +94,30 @@ how to change it — "Request timed out." is not something a manager can act on.
 
 ## Task-based model routing
 
-Three roles. A role names a model id and may name its own base URL in runtime
-settings. An empty role URL falls back to `llm_base_url`, so a deployment with
-one server is unchanged. OpenAI clients are cached by connection; roles on the
-same URL share a pool, while roles on different URLs keep separate pools.
+Three roles. A role names a model id and may name its own base URL and API key
+in runtime settings. An empty role URL falls back to `llm_base_url` and an
+empty role key to `openai_api_key`, so a deployment with one server is
+unchanged. OpenAI clients are cached by `(key, URL, timeout)`; roles on the
+same connection share a pool, while roles on different ones keep separate
+pools — including two roles on the same URL with different keys, which must
+never share a client or one would authenticate as the other.
 
-| Role | Model setting | URL setting | Flows |
-|---|---|---|---|
-| `advanced` | `llm_model_advanced` | `llm_base_url_advanced` | `scheduler` |
-| `default` | `llm_model_default` | `llm_base_url_default` | `interview`, `changes`, `planner`, `learn`, and anything unmapped |
-| `fast` | `llm_model_fast` | `llm_base_url_fast` | `briefing` |
+| Role | Model setting | URL setting | Key setting | Flows |
+|---|---|---|---|---|
+| `advanced` | `llm_model_advanced` | `llm_base_url_advanced` | `llm_api_key_advanced` | `scheduler` |
+| `default` | `llm_model_default` | `llm_base_url_default` | `llm_api_key_default` | `interview`, `changes`, `planner`, `learn`, and anything unmapped |
+| `fast` | `llm_model_fast` | `llm_base_url_fast` | `llm_api_key_fast` | `briefing` |
+
+**A key travels with the URL it authenticates, not with the process.** One
+shared key stops being right the moment two roles sit on two providers: it is
+either absent where a hosted API requires one, or sent to a server it does not
+belong to. So each endpoint field has a key field beside it.
+
+**The key falls back on its own, not as part of a pair.** A role naming its own
+URL but no key still borrows the general key — a second Ollama on the LAN needs
+the placeholder rather than a credential — and the client sends the placeholder
+when both are empty, so a local endpoint is never blocked for want of a key it
+ignores.
 
 **`flow` routes.** The argument every caller already passed for telemetry is
 what picks the role, so a caller names itself once. A second argument would be
@@ -204,18 +219,26 @@ one in every other metric.
 
 ## Connection reuse
 
-`_client_for(api_key, base_url)` caches `OpenAI` clients keyed by
+`_client_for(api_key, base_url, timeout)` caches `OpenAI` clients keyed by
 `(api_key, base_url, timeout)`. A fresh client per call paid a TCP/TLS handshake
 on every round-trip. The cache picks up settings changes mid-session because
 the store is still read per call. **The model is not part of the key**: models
 on the same endpoint share one client and pool.
+
+**The key is part of it, and has to be.** Two roles can name the same provider
+with different credentials — one project's key for the scheduler and another's
+for chat — and a cache keyed on the URL alone would hand the second role the
+first one's client, silently billing and authenticating as the wrong account.
 
 ## Local-server accommodations
 
 - **No API key is required when `llm_base_url` is set.** Local servers ignore
   auth; the SDK still demands a non-empty string, so a placeholder is sent.
 - `list_models()` calls `/models` over raw `httpx` rather than the SDK, so the
-  admin UI can probe a candidate endpoint before saving it.
+  admin UI can probe a candidate endpoint before saving it. It takes a `role`,
+  so an omitted URL or key falls back to *that role's* saved connection: with
+  roles free to sit on different providers, the general endpoint's catalogue is
+  the wrong list for a role pointing elsewhere.
 - Base URLs are normalized before storage: a pasted `.../chat/completions` has the
   operation suffix stripped, because the SDK appends the path itself and would
   otherwise 404.
@@ -228,8 +251,11 @@ on the same endpoint share one client and pool.
   fallback logic through `_complete`.
 - Routing is `model_roles.py` and nowhere else. A flow gets a model by being
   in the table, not by a branch at the call site.
-- Keep endpoint routing beside model routing in `model_roles.py`; call sites
-  name only their flow.
+- Keep endpoint and credential routing beside model routing in
+  `model_roles.py`; call sites name only their flow.
+- **A role's key is never sent to another role's endpoint.** The resolution is
+  per role in one place, and the client cache is keyed by the key as well as
+  the URL so two roles on one provider with different keys stay separate.
 - **Never fail over to another model.** See the routing section.
 - **Nothing in `bl/audit.py` may call this.** The audit is arithmetic precisely so
   it cannot be hallucinated ([D3](../../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).

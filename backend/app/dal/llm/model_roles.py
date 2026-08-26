@@ -1,8 +1,15 @@
-"""Which model and endpoint serve each kind of work.
+"""Which model, endpoint and credential serve each kind of work.
 
-Every role may name both a model id and an OpenAI-compatible base URL. An
-unset role field falls back to the legacy `llm_model` / `llm_base_url` pair,
-so one-server deployments need no changes.
+Every role may name a model id, an OpenAI-compatible base URL, and the API
+key for that URL. An unset role field falls back to the general
+`llm_model` / `llm_base_url` / `openai_api_key` trio, so one-server
+deployments need no changes.
+
+The key is per role for the same reason the URL is: a role pointing at
+another provider is authenticated by another credential. Once
+`llm_base_url_advanced` names a hosted API while the general endpoint is a
+local Ollama, one shared key is necessarily wrong for one of them — either
+absent where it is required, or sent to a server it does not belong to.
 
 Roles are resolved from the runtime settings store immediately before each
 request, so a model changed in the settings panel applies to the next call
@@ -29,6 +36,12 @@ _ROLE_URL_FIELDS = {
     FAST: "llm_base_url_fast",
     DEFAULT: "llm_base_url_default",
     ADVANCED: "llm_base_url_advanced",
+}
+
+_ROLE_KEY_FIELDS = {
+    FAST: "llm_api_key_fast",
+    DEFAULT: "llm_api_key_default",
+    ADVANCED: "llm_api_key_advanced",
 }
 
 # Flow → role. `flow` is the name every `bl/` caller already passes for
@@ -75,3 +88,19 @@ def resolve_base_url(settings, role: str):
     """The role endpoint, falling back to the existing shared endpoint."""
     field = _ROLE_URL_FIELDS.get(role or DEFAULT, _ROLE_URL_FIELDS[DEFAULT])
     return getattr(settings, field, None) or settings.llm_base_url
+
+
+def resolve_api_key(settings, role: str) -> str:
+    """The credential for this role's endpoint.
+
+    Falls back to `openai_api_key`, which is what keeps a deployment whose
+    roles all sit on one server working with the single key it always had.
+
+    **The fallback is on the key alone, not on the pair.** A role naming its
+    own URL but no key still borrows the general key — a second Ollama on
+    the LAN needs the placeholder, not a credential — and the client sends
+    the placeholder when both are empty, so a local endpoint is never
+    blocked for want of a key it ignores.
+    """
+    field = _ROLE_KEY_FIELDS.get(role or DEFAULT, _ROLE_KEY_FIELDS[DEFAULT])
+    return getattr(settings, field, "") or settings.openai_api_key

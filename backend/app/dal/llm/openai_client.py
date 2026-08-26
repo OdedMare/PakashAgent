@@ -4,10 +4,12 @@ Model, API key, base URL, and timeout come from the runtime settings store on
 EVERY call, so changes saved in the UI settings panel apply immediately
 without a restart.
 
-Which model and endpoint to use is a per-call question: `flow` picks one of
-three roles (see `model_roles.py`) and the role names both in runtime settings.
-Unset role fields fall back to `llm_model` and `llm_base_url`. Clients are
-cached per connection, so roles sharing an endpoint also share its pool.
+Which model, endpoint and API key to use is a per-call question: `flow` picks
+one of three roles (see `model_roles.py`) and the role names all three in
+runtime settings. Unset role fields fall back to `llm_model`, `llm_base_url`
+and `openai_api_key`, so roles may sit on different providers with different
+credentials. Clients are cached per (key, URL, timeout), so roles sharing a
+connection also share its pool while roles on different ones stay separate.
 Works against OpenAI itself and OpenAI-compatible servers
 (Ollama, vLLM, Groq...); the default target is a local model through Ollama.
 
@@ -48,6 +50,7 @@ from app.dal.llm.message_merger import merge_system_into_user
 from app.dal.llm.model_id_extractor import extract_model_ids
 from app.dal.llm.model_roles import (
     DEFAULT,
+    resolve_api_key,
     resolve_base_url,
     resolve_model,
     role_for_flow,
@@ -304,12 +307,14 @@ class OpenAIJsonClient:
         model without repeating the choice in a second argument that could
         drift out of step with the first.
 
-        `role` overrides that mapping and `model` overrides both, for a
+        `role` overrides that mapping and `model` overrides the model alone;
+        the endpoint and key always follow the role, since a model id means
+        nothing away from the server that serves it. For a
         caller that knows better than the table. Neither is needed by
         anything in `bl/` today; they exist so a one-off does not have to
         edit the mapping to get a different model.
 
-        The model and endpoint are resolved from the store HERE, per call,
+        The model, endpoint and key are resolved from the store HERE, per call,
         immediately before the request — so a selection saved in the settings
         panel applies to the very next call with no restart.
         """
@@ -318,10 +323,11 @@ class OpenAIJsonClient:
         chosen_role = role or role_for_flow(flow)
         chosen_model = resolve_model(settings, chosen_role, model)
         chosen_base_url = resolve_base_url(settings, chosen_role)
-        if not settings.openai_api_key and not chosen_base_url:
+        chosen_api_key = resolve_api_key(settings, chosen_role)
+        if not chosen_api_key and not chosen_base_url:
             raise AgentError("לא הוגדר מפתח API או שרת תואם OpenAI")
         client = self._client_for(
-            settings.openai_api_key, chosen_base_url,
+            chosen_api_key, chosen_base_url,
             read_timeout_for(settings, flow),
         )
         messages = [
@@ -377,12 +383,24 @@ class OpenAIJsonClient:
         self,
         base_url_override: Optional[str] = None,
         api_key_override: Optional[str] = None,
+        role: str = "",
     ) -> List[str]:
         """Probe `/models` over raw httpx rather than the SDK, so the admin UI
-        can test a candidate endpoint before saving it."""
+        can test a candidate endpoint before saving it.
+
+        `role` picks which saved connection the overrides fall back to, so
+        the panel can list what one role's server offers rather than always
+        asking the general one — with roles on different providers, the
+        general endpoint's catalogue is the wrong list for two of the three
+        model fields.
+        """
         settings = self._store.get()
-        base = base_url_override or settings.llm_base_url
-        key = api_key_override or settings.openai_api_key
+        base = base_url_override or (
+            resolve_base_url(settings, role) if role else settings.llm_base_url
+        )
+        key = api_key_override or (
+            resolve_api_key(settings, role) if role else settings.openai_api_key
+        )
         if not key and not base:
             raise AgentError("לא הוגדר חיבור למודל")
         try:

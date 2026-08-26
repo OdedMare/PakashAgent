@@ -19,7 +19,13 @@ from app.common.runtime_settings.normalizers import (
 )
 from app.common.runtime_settings.runtime_settings import RuntimeSettings
 
-_SECRET_FIELDS = {"database_password", "openai_api_key"}
+_SECRET_FIELDS = {
+    "database_password",
+    "openai_api_key",
+    "llm_api_key_fast",
+    "llm_api_key_default",
+    "llm_api_key_advanced",
+}
 
 # Fields where None/empty means "clear the value", not "keep current".
 # Without this, an emptied base URL or port could never be unset from the UI.
@@ -69,6 +75,9 @@ class RuntimeSettingsStore:
             llm_base_url_fast=env.llm_base_url_fast,
             llm_base_url_default=env.llm_base_url_default,
             llm_base_url_advanced=env.llm_base_url_advanced,
+            llm_api_key_fast=env.llm_api_key_fast,
+            llm_api_key_default=env.llm_api_key_default,
+            llm_api_key_advanced=env.llm_api_key_advanced,
             llm_queue_seconds=env.llm_queue_seconds,
         )
         if self._path.exists():

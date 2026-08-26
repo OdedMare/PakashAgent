@@ -27,8 +27,10 @@ class FakeLLM:
         self.error = error
         self.calls = []
 
-    def list_models(self, base_url_override=None, api_key_override=None):
-        self.calls.append((base_url_override, api_key_override))
+    def list_models(
+        self, base_url_override=None, api_key_override=None, role="",
+    ):
+        self.calls.append((base_url_override, api_key_override, role))
         if self.error:
             raise self.error
         return self.models
@@ -146,7 +148,7 @@ def test_get_models_probes_the_saved_connection(client, llm):
 
     assert body["models"] == ["gemma3:27b", "gemma3:12b"]
     # No overrides: the GET form always reads the stored connection.
-    assert llm.calls == [(None, None)]
+    assert llm.calls == [(None, None, "")]
 
 
 def test_post_models_probes_an_unsaved_connection(client, llm):
@@ -155,7 +157,7 @@ def test_post_models_probes_an_unsaved_connection(client, llm):
         "openai_api_key": "sk-typed",
     })
 
-    assert llm.calls[-1] == ("http://elsewhere:11434/v1", "sk-typed")
+    assert llm.calls[-1] == ("http://elsewhere:11434/v1", "sk-typed", "")
 
 
 def test_probe_falls_back_to_saved_values(client, llm):
@@ -166,7 +168,22 @@ def test_probe_falls_back_to_saved_values(client, llm):
         "openai_api_key": MASKED_SECRET,
     })
 
-    assert llm.calls[-1] == (None, None)
+    assert llm.calls[-1] == (None, None, "")
+
+
+def test_probe_names_the_role_so_the_fallback_is_that_role_s_connection(
+    client, llm
+):
+    """A role's fields may both be empty while its endpoint is not the
+    general one — the role name is what lets the client fall back to the
+    connection that will actually serve that role."""
+    client.post("/api/models", json={
+        "llm_base_url": "",
+        "openai_api_key": MASKED_SECRET,
+        "role": "advanced",
+    })
+
+    assert llm.calls[-1] == (None, None, "advanced")
 
 
 def test_probe_failure_reaches_the_panel_as_hebrew(store):

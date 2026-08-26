@@ -191,9 +191,17 @@ export function updateSettings(
 
 /** Models available on a connection — the one typed into the form when
  *  `overrides` carries it, otherwise the saved one. Lets a base URL or key be
- *  tested before it is committed. */
+ *  tested before it is committed.
+ *
+ *  `role` says which saved connection an omitted field falls back to, so a
+ *  role pointing at another provider is probed against its own server rather
+ *  than against the general one. */
 export function probeModels(
-  overrides: { llm_base_url?: string; openai_api_key?: string } = {},
+  overrides: {
+    llm_base_url?: string;
+    openai_api_key?: string;
+    role?: string;
+  } = {},
 ): Promise<{ models: string[] }> {
   return request<{ models: string[] }>("/api/models", {
     method: "POST",

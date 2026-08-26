@@ -29,6 +29,9 @@ class _Settings:
         self.llm_base_url_fast = None
         self.llm_base_url_default = None
         self.llm_base_url_advanced = None
+        self.llm_api_key_fast = ""
+        self.llm_api_key_default = ""
+        self.llm_api_key_advanced = ""
         self.llm_diet_mode = False
         self.llm_repetition_penalty = 0.0
         self.llm_timeout_seconds = 120
@@ -432,6 +435,74 @@ def test_unset_role_endpoints_keep_using_the_general_endpoint():
     llm.complete_json("sys", "usr", flow="scheduler")
 
     assert built == ["http://localhost:11434/v1"] * 2
+
+
+def test_every_role_sends_its_own_api_key_to_its_own_endpoint():
+    """Roles on different providers need different credentials, and each one
+    must reach only the endpoint it belongs to."""
+    settings = _Settings(
+        llm_base_url_fast="http://fast/v1",
+        llm_base_url_advanced="https://api.provider.com/v1",
+        llm_api_key_advanced="sk-advanced",
+        openai_api_key="general-key",
+    )
+    llm = OpenAIJsonClient(_Store(settings))
+    fake = _FakeClient([_Response('{"ok": true}')] * 3)
+    built = []
+
+    def record(api_key, base_url, timeout):
+        built.append((api_key, base_url))
+        return fake
+
+    llm._client_for = record
+    for flow in ("briefing", "interview", "scheduler"):
+        llm.complete_json("sys", "usr", flow=flow)
+
+    assert built == [
+        # Its own endpoint, but no key of its own — a local server needs none.
+        ("general-key", "http://fast/v1"),
+        ("general-key", "http://localhost:11434/v1"),
+        ("sk-advanced", "https://api.provider.com/v1"),
+    ]
+
+
+def test_a_role_key_and_url_are_cached_as_one_connection():
+    """The client cache is keyed by (key, URL, timeout), so two roles on the
+    same endpoint with different keys never share a pool — one of them would
+    otherwise authenticate as the other."""
+    settings = _Settings(
+        llm_base_url_fast="https://api.provider.com/v1",
+        llm_base_url_advanced="https://api.provider.com/v1",
+        llm_api_key_fast="sk-one",
+        llm_api_key_advanced="sk-two",
+    )
+    llm = OpenAIJsonClient(_Store(settings))
+
+    fast = llm._client_for(*_connection(settings, "fast"))
+    advanced = llm._client_for(*_connection(settings, "advanced"))
+
+    assert fast is not advanced
+
+
+def _connection(settings, role):
+    from app.dal.llm.model_roles import resolve_api_key, resolve_base_url
+    return resolve_api_key(settings, role), resolve_base_url(settings, role), 0
+
+
+def test_a_role_key_is_enough_when_no_general_key_is_set():
+    """A deployment whose only credential belongs to one role must not be
+    told it has no API key configured."""
+    settings = _Settings(
+        openai_api_key="",
+        llm_base_url=None,
+        llm_base_url_advanced="https://api.provider.com/v1",
+        llm_api_key_advanced="sk-advanced",
+    )
+    llm = OpenAIJsonClient(_Store(settings))
+    fake = _FakeClient([_Response('{"ok": true}')])
+    llm._client_for = lambda api_key, base_url, timeout: fake
+
+    assert llm.complete_json("sys", "usr", flow="scheduler")["ok"] is True
 
 
 def test_the_ladder_still_runs_per_call_on_the_routed_model():

@@ -119,33 +119,42 @@ function AgentSettings({ settings }: { settings: SettingsController }) {
 
 /** The roles a task can be routed to. Mirrors `_FLOW_ROLES` in
  *  `backend/app/dal/llm/model_roles.py` — the backend does the routing, this
- *  only says which model and endpoint each role uses.
+ *  only says which model, endpoint and key each role uses.
  *
  *  No model name appears here, or anywhere else in the panel: which models
  *  exist is the server's answer, read from `/v1/models`. */
 const MODEL_ROLES = [
   {
+    role: "fast",
     name: "llm_model_fast",
     urlName: "llm_base_url_fast",
+    keyName: "llm_api_key_fast",
     label: "מודל מהיר",
     optional: "משימות קצרות — תדריך; ריק = המודל הכללי",
   },
   {
+    role: "default",
     name: "llm_model_default",
     urlName: "llm_base_url_default",
+    keyName: "llm_api_key_default",
     label: "מודל רגיל",
     optional: "ראיון, שיחה, שינויים ולמידה; ריק = המודל הכללי",
   },
   {
+    role: "advanced",
     name: "llm_model_advanced",
     urlName: "llm_base_url_advanced",
+    keyName: "llm_api_key_advanced",
     label: "מודל מתקדם",
     optional: "בניית סידור וחשיבה מורכבת; ריק = המודל הכללי",
   },
 ];
 
-/** The model fields carry one shared refresh button, so a base URL typed
- *  above can be probed without saving it first. */
+/** Every connection — the general one and each role's — carries its own
+ *  refresh button, so an endpoint typed above can be probed without saving
+ *  it first. Per connection rather than one shared button because a role may
+ *  point at another provider entirely: one list refreshed from the general
+ *  server would offer models the role's endpoint does not serve. */
 function ModelField({ settings }: { settings: SettingsController }) {
   return (
     <>
@@ -154,32 +163,23 @@ function ModelField({ settings }: { settings: SettingsController }) {
           מודל כללי
           <span className="optional"> (משמש לכל תפקיד שלא הוגדר לו מודל)</span>
         </label>
-        <button
-          type="button"
-          className="models-refresh"
-          onClick={() => void settings.loadModels()}
-          disabled={settings.loadingModels}
-        >
-          <RefreshCw className={settings.loadingModels ? "spin" : ""} size={14} />
-          {settings.loadingModels ? "טוען…" : "רענון מודלים"}
-        </button>
+        <RefreshModels settings={settings} role="" />
       </div>
-      <ModelInput settings={settings} name="llm_model" />
-      {/* A datalist, not a select: a model the general endpoint does not list
-          is still legitimate to type, including one served by a role URL. */}
-      <datalist id="available-models">
-        {settings.models.map((model) => (
-          <option key={model} value={model} />
-        ))}
-      </datalist>
-      <ModelStatus settings={settings} />
+      <ModelInput settings={settings} name="llm_model" role="" />
+      <ModelOptions settings={settings} role="" />
+      <ModelStatus settings={settings} role="" />
       {MODEL_ROLES.map((role) => (
         <div key={role.name}>
-          <label className="field-label" htmlFor={`set-${role.name}`}>
-            {role.label}
-            <span className="optional"> ({role.optional})</span>
-          </label>
-          <ModelInput settings={settings} name={role.name} />
+          <div className="model-field-header">
+            <label className="field-label" htmlFor={`set-${role.name}`}>
+              {role.label}
+              <span className="optional"> ({role.optional})</span>
+            </label>
+            <RefreshModels settings={settings} role={role.role} />
+          </div>
+          <ModelInput settings={settings} name={role.name} role={role.role} />
+          <ModelOptions settings={settings} role={role.role} />
+          <ModelStatus settings={settings} role={role.role} />
           <Field
             settings={settings}
             name={role.urlName}
@@ -188,13 +188,65 @@ function ModelField({ settings }: { settings: SettingsController }) {
             optional="ריק = כתובת הבסיס הכללית"
             placeholder="http://localhost:11434/v1"
           />
+          {/* A key beside every URL: a role served by another provider is
+              authenticated by another credential, and the general key would
+              be either missing or wrong for it. */}
+          <Field
+            settings={settings}
+            name={role.keyName}
+            label={`מפתח API עבור ${role.label}`}
+            type="password"
+            optional="ריק = המפתח הכללי; לא נדרש לשרתים מקומיים"
+            placeholder="sk-…"
+          />
         </div>
       ))}
     </>
   );
 }
 
-/** One model input, offering whatever `/v1/models` reported.
+/** One connection's refresh button. */
+function RefreshModels({
+  settings,
+  role,
+}: {
+  settings: SettingsController;
+  role: string;
+}) {
+  const loading = settings.loadingRole === role;
+  return (
+    <button
+      type="button"
+      className="models-refresh"
+      onClick={() => void settings.loadModels(role)}
+      disabled={settings.loadingRole !== null}
+    >
+      <RefreshCw className={loading ? "spin" : ""} size={14} />
+      {loading ? "טוען…" : "רענון מודלים"}
+    </button>
+  );
+}
+
+/** A datalist, not a select: a model this endpoint does not list is still
+ *  legitimate to type — a vLLM alias, or a tag pulled after the last probe. */
+function ModelOptions({
+  settings,
+  role,
+}: {
+  settings: SettingsController;
+  role: string;
+}) {
+  return (
+    <datalist id={`available-models-${role || "general"}`}>
+      {settings.modelsFor(role).map((model) => (
+        <option key={model} value={model} />
+      ))}
+    </datalist>
+  );
+}
+
+/** One model input, offering whatever its own connection's `/v1/models`
+ *  reported.
  *
  *  Empty is meaningful — it is how a role is left unset, falling back to the
  *  general model — so there is no placeholder naming a model. The value is
@@ -203,32 +255,42 @@ function ModelField({ settings }: { settings: SettingsController }) {
 function ModelInput({
   settings,
   name,
+  role,
 }: {
   settings: SettingsController;
   name: string;
+  role: string;
 }) {
   return (
     <input
       id={`set-${name}`}
       className="settings-input"
       dir="ltr"
-      list="available-models"
+      list={`available-models-${role || "general"}`}
       value={settings.text(name)}
       onChange={(event) => settings.set(name, event.target.value)}
     />
   );
 }
 
-function ModelStatus({ settings }: { settings: SettingsController }) {
-  if (settings.modelsError) {
+function ModelStatus({
+  settings,
+  role,
+}: {
+  settings: SettingsController;
+  role: string;
+}) {
+  const failure = settings.modelsErrorFor(role);
+  if (failure) {
     return (
       <p className="models-status error" role="alert" dir="auto">
-        {settings.modelsError}
+        {failure}
       </p>
     );
   }
-  if (!settings.models.length) return null;
-  return <p className="models-status">נמצאו {settings.models.length} מודלים זמינים</p>;
+  const found = settings.modelsFor(role);
+  if (!found.length) return null;
+  return <p className="models-status">נמצאו {found.length} מודלים זמינים</p>;
 }
 
 function DatabaseSettings({ settings }: { settings: SettingsController }) {

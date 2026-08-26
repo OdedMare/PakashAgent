@@ -28,9 +28,16 @@ export function useSettings() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [models, setModels] = useState<string[]>([]);
-  const [loadingModels, setLoadingModels] = useState(false);
-  const [modelsError, setModelsError] = useState("");
+  // Model lists are per connection, not global: with roles free to sit on
+  // different providers, one shared list would offer the general server's
+  // catalogue for a field served by another. Keyed by role name, with ""
+  // for the general connection.
+  const [modelsByRole, setModelsByRole] = useState<Record<string, string[]>>({});
+  // `null`, not "": the general connection *is* the empty role name, so an
+  // empty string could not tell "nothing is loading" from "the general one
+  // is" — and the general refresh button would never show its spinner.
+  const [loadingRole, setLoadingRole] = useState<string | null>(null);
+  const [errorsByRole, setErrorsByRole] = useState<Record<string, string>>({});
 
   useEffect(() => {
     getSettings()
@@ -41,7 +48,9 @@ export function useSettings() {
         // failure here is not worth showing before the boss asks for it —
         // the model server simply may not be running yet.
         void probeModels({ llm_base_url: String(next.llm_base_url ?? "") })
-          .then((result) => setModels(result.models))
+          .then((result) => setModelsByRole((current) => ({
+            ...current, "": result.models,
+          })))
           .catch(() => undefined);
       })
       .catch((reason) => setError(errorMessage(reason, "טעינת ההגדרות נכשלה")))
@@ -64,22 +73,36 @@ export function useSettings() {
     }
   };
 
-  const loadModels = async () => {
-    setLoadingModels(true);
-    setModelsError("");
+  /** Probe one connection. `role` is "" for the general one, or a role name
+   *  whose own URL and key are sent when the form carries them.
+   *
+   *  The URL and key are read from the form fields belonging to that role, so
+   *  an endpoint can be tested before it is saved — and an empty role field
+   *  is sent empty rather than filled in from the general one, because the
+   *  backend already applies exactly that fallback and doing it here too
+   *  would hide which connection actually answered. */
+  const loadModels = async (role = "") => {
+    setLoadingRole(role);
+    setErrorsByRole((current) => ({ ...current, [role]: "" }));
     try {
       // What is typed in the form wins, so a base URL or key can be tested
       // before it is saved. An untouched secret is still masked, and the
       // backend reads that as "use the stored one".
+      const urlKey = role ? `llm_base_url_${role}` : "llm_base_url";
+      const secretKey = role ? `llm_api_key_${role}` : "openai_api_key";
       const result = await probeModels({
-        llm_base_url: String(values.llm_base_url ?? ""),
-        openai_api_key: String(values.openai_api_key ?? ""),
+        llm_base_url: String(values[urlKey] ?? ""),
+        openai_api_key: String(values[secretKey] ?? ""),
+        role,
       });
-      setModels(result.models);
+      setModelsByRole((current) => ({ ...current, [role]: result.models }));
     } catch (reason) {
-      setModelsError(errorMessage(reason, "טעינת המודלים נכשלה"));
+      setErrorsByRole((current) => ({
+        ...current,
+        [role]: errorMessage(reason, "טעינת המודלים נכשלה"),
+      }));
     } finally {
-      setLoadingModels(false);
+      setLoadingRole(null);
     }
   };
 
@@ -91,9 +114,16 @@ export function useSettings() {
    *  "(נשמר)" and stays empty instead of rendering the mask as content. */
   const secretSaved = (key: string) => values[key] === MASKED;
 
+  /** What a role's field should offer: its own probe when it has one,
+   *  otherwise the general list — which mirrors the backend's own fallback,
+   *  so a role with no URL of its own is served by the endpoint that will
+   *  actually answer for it. */
+  const modelsFor = (role = "") => modelsByRole[role] ?? modelsByRole[""] ?? [];
+  const modelsErrorFor = (role = "") => errorsByRole[role] ?? "";
+
   return {
     activeSection, setActiveSection, loaded, loading, saving, message, error,
-    models, loadingModels, modelsError,
+    modelsFor, modelsErrorFor, loadingRole,
     save, loadModels, set, text, checked, secretSaved,
   };
 }

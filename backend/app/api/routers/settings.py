@@ -55,10 +55,15 @@ def build_router(store, llm, guards) -> APIRouter:
         request: ModelsProbeRequest, session: dict = Depends(boss)
     ) -> dict:
         """Models available on a connection typed into the form but not yet
-        saved, so a base URL or key can be tested before committing it."""
+        saved, so a base URL or key can be tested before committing it.
+
+        `role` selects which saved connection an omitted field falls back
+        to, so each role's model list comes from the server that will
+        actually serve it."""
         return {"models": llm.list_models(
             base_url_override=request.override("llm_base_url"),
             api_key_override=request.override("openai_api_key"),
+            role=(request.role or "").strip(),
         )}
 
     return router
