@@ -243,6 +243,34 @@ class ScheduleProgress(BaseModel):
     generation: GenerationProgress = GenerationProgress()
 
 
+class ClosingGroup(BaseModel):
+    """One group holding a closure, named the way the manager says it."""
+
+    pattern: str = ""
+    group: str = ""
+    label: str = ""
+
+
+class Closure(BaseModel):
+    """Whose closure a date is — computed by `bl/rotation.py`, never guessed.
+
+    `groups` empty means the rotation has nothing to say about this date: an
+    ordinary weekday, or a workplace that never anchored its cycle. The two
+    render the same way, because in both the honest answer is silence.
+
+    `until_handover` marks the Sunday a closure ends on: the group is in for
+    that morning and off for the rest of the day, so `shifts` names what the
+    stretch still covers.
+    """
+
+    date: str = ""
+    groups: List[ClosingGroup] = []
+    label: str = ""
+    employees: List[str] = []
+    shifts: List[str] = []
+    until_handover: bool = False
+
+
 class Schedule(BaseModel):
     """One living period (D4) — edited in place, never versioned."""
 
@@ -253,6 +281,11 @@ class Schedule(BaseModel):
     slots: List[Slot] = []
     assignments: List[Assignment] = []
     warnings: List[Warning] = []
+    # Which dates in this period are somebody's closure. Computed once here
+    # rather than in the browser: which group closes on 12/09 is arithmetic
+    # (D3), and a second implementation of the cycle in TypeScript would
+    # drift from the one the scheduler and the audit agree on.
+    closures: List[Closure] = []
     notes: List[str] = []
     summary: str = ""
     generation: GenerationProgress = GenerationProgress()
@@ -261,6 +294,11 @@ class Schedule(BaseModel):
     # on (slot, employee), so a double click is a success that changed
     # nothing. Empty on every other response.
     assigned: str = ""
+    # How many rows a clear actually removed, echoed for the same reason
+    # `assigned` is: clearing an already-empty day is not a failure, and the
+    # UI should say "nothing to clear" rather than report a change it did
+    # not make. Zero on every other response.
+    cleared: int = 0
 
 
 class SchedulePeriod(BaseModel):
@@ -659,7 +697,12 @@ class Alternatives(BaseModel):
 
 
 class PlacementCandidate(BaseModel):
-    """One roster option for the selected slot, including why not."""
+    """One roster option for the selected slot, including why not.
+
+    `rotation` and `closing` are what make a closure placeable by hand: the
+    grid never says whose weekend a Thursday is, so a picker sorted only by
+    hours would offer the group on exit first.
+    """
 
     employee: str
     available: bool = True
@@ -667,6 +710,8 @@ class PlacementCandidate(BaseModel):
     hours: float = 0.0
     is_shift_manager: bool = False
     can_train: bool = False
+    rotation: str = ""
+    closing: bool = False
 
 
 class PlacementCheck(BaseModel):
@@ -687,6 +732,7 @@ class PlacementCheck(BaseModel):
     eligible: bool = True
     alternatives: Alternatives = Alternatives()
     candidates: List[PlacementCandidate] = []
+    closure: Closure = Closure()
 
 
 class AssignRequest(BaseModel):
@@ -712,6 +758,20 @@ class UnassignRequest(BaseModel):
     assignment_id: str = Field(min_length=1)
     reason: str = Field(default="", max_length=1000)
     schedule_id: Optional[str] = None
+
+
+class ClearRequest(BaseModel):
+    """Empty one day's shifts, or the whole period's (D18).
+
+    `slot_date` empty means the period. `reason` is optional for the reason
+    `unassign`'s is: a manager clearing a day the agent just built is
+    correcting an outcome rather than deciding about a person, and refusing
+    the gesture without a sentence would strand the manual path halfway
+    through. Every row that goes is still logged with where it came from.
+    """
+
+    slot_date: str = Field(default="", max_length=20)
+    reason: str = Field(default="", max_length=1000)
 
 
 class MoveRequest(BaseModel):

@@ -1216,6 +1216,88 @@ def test_unassigning_removes_the_row_and_logs_it():
     assert removed["reason"] == "דנה התחלפה"
 
 
+def test_clearing_a_day_empties_it_and_leaves_the_rest_of_the_week():
+    """The counterpart to building a week: taking one day back.
+
+    Logged per row rather than as one "the day was cleared" entry — the log
+    is the only history there is (D4), and a manager asking later which
+    shifts those were has to be able to find out.
+    """
+    app, repo = _build_app([])
+    client = _client(app)
+    created = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    for day in ("2026-08-17", "2026-08-18"):
+        client.post("/api/schedule/assign", json={
+            "shift_name": MORNING, "slot_date": day, "employee": "דנה",
+            "schedule_id": created["id"],
+        })
+
+    response = client.post("/api/schedule/%s/clear" % created["id"], json={
+        "slot_date": "2026-08-17", "reason": "בונים את היום מחדש",
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["cleared"] == 1
+    assert [row["date"] for row in body["assignments"]] == ["2026-08-18"]
+    # The grid stays: the week's shape comes from the vocabulary, not from
+    # what happened to be assigned into it.
+    assert len(body["slots"]) == 2
+    removed = [row for row in repo.changes if row["action"] == "removed"]
+    assert [row["slot_date"] for row in removed] == ["2026-08-17"]
+    assert removed[0]["reason"] == "בונים את היום מחדש"
+
+
+def test_clearing_without_a_date_empties_the_whole_period():
+    app, _ = _build_app([])
+    client = _client(app)
+    created = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    for day in ("2026-08-17", "2026-08-18"):
+        client.post("/api/schedule/assign", json={
+            "shift_name": MORNING, "slot_date": day, "employee": "דנה",
+            "schedule_id": created["id"],
+        })
+
+    body = client.post(
+        "/api/schedule/%s/clear" % created["id"], json={},
+    ).json()
+
+    assert body["cleared"] == 2
+    assert body["assignments"] == []
+    assert len(body["slots"]) == 2
+
+
+def test_clearing_an_empty_day_reports_that_nothing_went():
+    """Not a failure: the manager asked for an empty day and it is empty."""
+    app, _ = _build_app([])
+    client = _client(app)
+    created = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+
+    body = client.post("/api/schedule/%s/clear" % created["id"], json={
+        "slot_date": "2026-08-17",
+    }).json()
+
+    assert body["cleared"] == 0
+
+
+def test_one_workspace_cannot_clear_anothers_period():
+    app, _ = _build_app([])
+    created = _client(app).post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    intruder = _client(app, team=OTHER_TEAM)
+
+    assert intruder.post(
+        "/api/schedule/%s/clear" % created["id"], json={},
+    ).status_code == 404
+
+
 def test_unassigning_something_that_is_not_there_is_a_404():
     app, _ = _build_app([])
     client = _client(app)
@@ -1273,6 +1355,7 @@ def test_one_workspace_cannot_assign_into_anothers_schedule():
     ("post", "/api/schedule/constraints",
      {"employee": "דנה", "constraint_date": "2026-08-17"}),
     ("delete", "/api/schedule/constraints/x", None),
+    ("post", "/api/schedule/some-id/clear", {}),
     ("delete", "/api/schedule/some-id", None),
 ])
 def test_a_member_cannot_reach_any_mutation(method, path, body):

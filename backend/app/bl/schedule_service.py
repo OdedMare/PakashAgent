@@ -34,6 +34,7 @@ from app.bl.changes import ChangeAgent, OP_ASSIGN, OP_REMOVE, OP_SWAP
 from app.bl.export import as_workbook, filename
 from app.bl.importer import infer, read_grids
 from app.bl.learn import RuleLearner, observe, observe_corrections
+from app.bl import rotation
 from app.bl.placement import check as check_placement
 from app.bl.profile_service import ProfileService
 from app.bl.planner import PlanningAgent
@@ -1309,6 +1310,66 @@ class ScheduleService:
     def delete(self, schedule_id: str, team_id: str) -> None:
         self._repository.delete_schedule(schedule_id, team_id)
 
+    def clear(
+        self,
+        team_id: str,
+        schedule_id: str,
+        slot_date: str = "",
+        reason: str = "",
+    ) -> dict:
+        """Empty a day's shifts, or the whole period's. Keeps the grid.
+
+        The counterpart to building a week: a manager who does not like what
+        came out needs to be able to take it back without deleting the period
+        and rebuilding its slots. `slot_date` narrows it to one day; empty
+        clears every assignment in the period.
+
+        **The slots stay.** They are the shape of the week — which shifts run
+        on which dates — and they come from the vocabulary rather than from
+        any decision made here. Clearing them too would leave a period that
+        renders as no shifts at all rather than as unstaffed ones, which is
+        the same conflation `bl/export.py` documents between an empty cell
+        and `UNFILLED`.
+
+        Every removed row is logged individually, exactly as `unassign` logs
+        one. A day cleared in one gesture is still N people taken off N
+        shifts, and the log is the only history there is
+        ([D4](../../../docs/DECISIONS.md#d4--living-schedule-not-versioned)):
+        collapsing it into a single "the day was cleared" entry would lose
+        which shifts those were, on the day somebody asks.
+
+        No model call, like every other manual write (D18).
+        """
+        schedule = self._require_schedule(team_id, schedule_id)
+        wanted = _iso(slot_date)
+        rows = [
+            row for row in schedule.get("assignments") or []
+            if not wanted or _iso(row.get("date")) == wanted
+        ]
+        stated = (reason or "").strip()
+        for row in rows:
+            self._repository.remove_assignment(row["id"], team_id)
+            self._repository.append_change(
+                team_id, ACTION_REMOVED, schedule_id=schedule["id"],
+                employee=row.get("employee") or "",
+                slot_date=_iso(row.get("date")),
+                shift_name=row.get("shift") or "",
+                reason=stated,
+                agent_reason=(
+                    "נמחק בניקוי היום על ידי המנהל" if wanted
+                    else "נמחק בניקוי הסידור על ידי המנהל"
+                ),
+            )
+        view = self._view(
+            self._repository.get_schedule(schedule["id"], team_id), team_id
+        )
+        # How many rows actually went. A day that was already empty is not a
+        # failure -- the manager asked for it to be empty and it is -- but
+        # the UI should be able to say "nothing to clear" rather than report
+        # a change it did not make, the same way `assign` echoes `assigned`.
+        view["cleared"] = len(rows)
+        return view
+
     # -- changing ----------------------------------------------------------
 
     def propose(
@@ -2037,7 +2098,28 @@ class ScheduleService:
         schedule["warnings"] = self._audit_rows(
             team_id, schedule.get("assignments") or [], schedule
         )
+        schedule["closures"] = self._closures(team_id, schedule)
         return _dated(schedule)
+
+    def _closures(self, team_id: str, schedule: dict) -> List[dict]:
+        """Which of this period's dates belong to a closure, and to whom.
+
+        Rides along with the schedule for the same reason the warnings do:
+        the board has to render the week either way, and whose weekend a
+        Thursday is cannot be worked out from the grid. It is read-only
+        arithmetic from `bl/rotation.py` — there is no field here anything
+        could act on, so a closure shown on a column stays a description of
+        the cycle rather than a second way to change it.
+        """
+        window = _window(schedule)
+        try:
+            start = datetime.date.fromisoformat(_iso(window[0]))
+            end = datetime.date.fromisoformat(_iso(window[1]))
+        except (TypeError, ValueError):
+            return []
+        profile = self._repository.team_profile(team_id) or {}
+        days = rotation.by_date(profile, start, end)
+        return [days[date] for date in sorted(days)]
 
     def _active_preferences(self, team_id: str) -> List[dict]:
         """Confirmed standing context for every scheduling model call."""

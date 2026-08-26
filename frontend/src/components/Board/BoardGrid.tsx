@@ -6,9 +6,11 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
+  Eraser,
   GripVertical,
   Moon,
   Plus,
+  Repeat2,
   Sparkles,
   X,
 } from "lucide-react";
@@ -20,6 +22,7 @@ import { constraintBlocksSlot } from "@/lib/constraints";
 import type {
   Assignment,
   CardPerson,
+  Closure,
   Constraint,
   Schedule,
   ScheduleWarning,
@@ -80,6 +83,7 @@ export function BoardGrid({
   onOpenCard,
   onAddShift,
   onGenerateDay,
+  onClearDay,
 }: {
   schedule: Schedule | null;
   weekStart: string;
@@ -112,6 +116,9 @@ export function BoardGrid({
   onOpenCard?: (assignment: Assignment) => void;
   onAddShift?: (input: { shift_name: string; slot_date: string }) => void;
   onGenerateDay?: (date: string) => void;
+  /** Clear one day's shifts. Withheld on a published board, where every
+   *  write is refused, and while a build is running on this period. */
+  onClearDay?: (date: string) => void;
 }) {
   const [dragging, setDragging] = useState<Assignment | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -163,6 +170,18 @@ export function BoardGrid({
   // The week bucketed by cell, once. Every lookup below reads from this
   // instead of walking the assignment, slot and warning lists per cell.
   const index = useMemo(() => buildScheduleIndex(schedule), [schedule]);
+
+  // Whose closure each date is, keyed for the column heads. Read off the
+  // schedule rather than derived here: which group closes on 12/09 is
+  // arithmetic the backend already did, and a browser-side cycle would be a
+  // second answer to a question that must have exactly one (D3).
+  const closures = useMemo(() => {
+    const map = new Map<string, Closure>();
+    for (const row of schedule?.closures ?? []) {
+      if (row.groups.length) map.set(row.date, row);
+    }
+    return map;
+  }, [schedule?.closures]);
 
   // When each shift starts, read off whichever slot in its row carries the
   // hours: a shift's times come from the vocabulary and hold all week, but a
@@ -299,8 +318,10 @@ export function BoardGrid({
             date={date}
             isToday={date === today}
             coverage={index.dayCoverage(date)}
+            closure={closures.get(date)}
             columnRef={date === today ? todayColumn : undefined}
             onGenerate={onGenerateDay ? () => onGenerateDay(date) : undefined}
+            onClear={onClearDay ? () => onClearDay(date) : undefined}
           />
         ))}
 
@@ -357,16 +378,23 @@ function DayHead({
   date,
   isToday,
   coverage,
+  closure,
   columnRef,
   onGenerate,
+  onClear,
 }: {
   date: string;
   isToday: boolean;
   /** Assigned and required for this day, counted once by the index. */
   coverage: { assigned: number; required: number };
+  /** Whose closure this day is, when it is one. Undefined on an ordinary
+   *  day and on a workplace whose cycle was never anchored — the two are
+   *  the same thing here: the rotation has nothing to say. */
+  closure?: Closure;
   /** Set on today's head only, so the scroller can bring it into view. */
   columnRef?: React.Ref<HTMLDivElement>;
   onGenerate?: () => void;
+  onClear?: () => void;
 }) {
   const { assigned, required } = coverage;
 
@@ -396,18 +424,55 @@ function DayHead({
         <span className="board-dayhead-coverage is-empty">—</span>
       )}
       {isToday ? <span className="board-dayhead-pill">היום</span> : null}
-      {onGenerate ? (
-        <button
-          type="button"
-          className="board-dayhead-generate"
-          onClick={onGenerate}
-          aria-label={`שיבוץ ${hebrewWeekday(date)} ${displayDate(date)}`}
-          title="לתת לסוכן הנחיות ולשבץ רק את היום הזה"
+      {/* Whose weekend this is. The single most consequential fact about a
+          Thursday, and the one thing the grid underneath cannot show: a
+          manager filling a closure day without it is choosing between
+          colleagues who are not all in. `until_handover` marks the Sunday a
+          closure ends on, where only the morning still belongs to them. */}
+      {closure ? (
+        <span
+          className={`board-dayhead-closure${
+            closure.until_handover ? " is-handover" : ""
+          }`}
+          title={
+            (closure.until_handover
+              ? `${closure.label} סוגר/ת עד החילוף של הבוקר`
+              : `${closure.label} סוגר/ת ביום הזה`) +
+            (closure.employees.length
+              ? ` — ${closure.employees.join(", ")}`
+              : "")
+          }
         >
-          <Sparkles size={12} />
-          שבץ יום
-        </button>
+          <Repeat2 size={11} aria-hidden="true" />
+          {closure.until_handover ? `${closure.label} · חילוף` : closure.label}
+        </span>
       ) : null}
+      <div className="board-dayhead-actions">
+        {onGenerate ? (
+          <button
+            type="button"
+            className="board-dayhead-generate"
+            onClick={onGenerate}
+            aria-label={`שיבוץ ${hebrewWeekday(date)} ${displayDate(date)}`}
+            title="לתת לסוכן הנחיות ולשבץ רק את היום הזה"
+          >
+            <Sparkles size={12} />
+            שבץ יום
+          </button>
+        ) : null}
+        {onClear ? (
+          <button
+            type="button"
+            className="board-dayhead-clear"
+            onClick={onClear}
+            aria-label={`מחיקת המשמרות של ${hebrewWeekday(date)} ${displayDate(date)}`}
+            title="מחיקת כל השיבוצים ביום הזה"
+          >
+            <Eraser size={12} />
+            נקה יום
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

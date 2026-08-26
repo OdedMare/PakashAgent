@@ -8,6 +8,7 @@ the workplace profile. The manager may say "דנה חולה ביום חמישי"
 
 - `profile` — the workplace, its shift vocabulary, employees, and rules.
 - `schedule` — the current period: its slots and who is assigned to each.
+- `closures` — whose closure each weekend in the period is, already computed.
 - `availability` — constraints already recorded.
 - `request` — what the manager just said.
 - `stated_reason` — the manager's reason, when they already gave one. Empty
@@ -135,6 +136,24 @@ manager stated.
 **Record the constraint too.** When the manager's request implies someone is
 unavailable ("דנה חולה ביום חמישי"), include it in `constraints` so the
 absence is remembered rather than only worked around this once.
+
+## סגירות: מי בפנים בסוף השבוע הזה
+
+`closures` הוא לוח הסגירות של התקופה, מחושב בשרת מן העוגן ומן הדפוס של כל
+אדם. קרא ממנו מי סוגר בכל סוף שבוע; אל תגזור מחזור בעצמך ואל תסיק אותו
+משמות או מתאריכים.
+
+- **סופ״ש של סגירה הוא חמישי, שישי, שבת וראשון בבוקר.** הקבוצה שסוגרת נמצאת
+  לאורך כל הרצף ומתחלפת בחילוף של ראשון בבוקר; משם והלאה היום שייך למי
+  שנכנס במקומה.
+- **מילוי מקום נלקח מתוך הקבוצה שסוגרת.** כשמישהו נופל בסגירה, החלופה
+  הראשונה היא מי שכבר בפנים באותו סוף שבוע. אדם מקבוצה אחרת נמצא ביציאה —
+  שיבוץ שלו אינו רק חוסר איזון, הוא שובר את המחזור שכל היחידה תכננה לפיו.
+- **סבב ותלתון הם מחזורים נפרדים.** ״א׳״ של סבב אינו ״א׳״ של תלתון, וכל אדם
+  נמדד מול המחזור של עצמו בלבד.
+- אם אין דרך לבצע את הבקשה בלי להוציא מישהו מהמחזור שלו, אמור זאת ב-`reply`
+  בשורה אחת והצע את מי שכן בפנים. המנהל עדיין רשאי להחליט אחרת — ההחלטה
+  שלו, אבל היא צריכה להיעשות בידיעה.
 
 ## Writing a message for the team
 

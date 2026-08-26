@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   Download,
+  Eraser,
   Eye,
   EyeOff,
   LoaderCircle,
@@ -10,6 +11,7 @@ import {
   PencilLine,
   RefreshCw,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -35,6 +37,8 @@ import type { AgentTouch } from "./agentTouch";
 import { collectTouches } from "./agentTouch";
 import { BoardGrid } from "./BoardGrid";
 import { ConfirmDrop } from "./ConfirmDrop";
+import type { RemovalTarget } from "./ConfirmRemoval";
+import { ConfirmRemoval } from "./ConfirmRemoval";
 import { CoverageBar } from "./CoverageBar";
 import { FilterBar } from "./FilterBar";
 import { GenerateDialog } from "./GenerateDialog";
@@ -86,6 +90,8 @@ export function Board({
   onAssign,
   onUnassign,
   onMove,
+  onClear,
+  onDelete,
   onPublish,
   onExport,
   onOpenAgent,
@@ -140,6 +146,17 @@ export function Board({
     reason: string;
     schedule_id?: string;
   }) => Promise<void> | void;
+  /** Empty a day's shifts, or the whole week's. The grid stays behind, so
+   *  the week can be filled in again without rebuilding its slots. */
+  onClear: (input: {
+    schedule_id: string;
+    slot_date?: string;
+    reason?: string;
+  }) => Promise<void> | void;
+  /** Delete the week's period outright. Offered beside clearing rather than
+   *  instead of it: they undo different things — one takes back what was
+   *  assigned, the other takes back the week having been built at all. */
+  onDelete: (scheduleId: string) => Promise<void> | void;
   onPublish: (scheduleId: string, published: boolean) => void;
   onExport: (scheduleId: string) => void;
   /** Which period this board is showing, whenever that changes.
@@ -273,6 +290,10 @@ export function Board({
     slot_date: string;
   } | null>(null);
   const [editor, setEditor] = useState<EditorTarget | null>(null);
+  // What the manager has asked to remove, held until they confirm. Nothing
+  // has reached the server while this is set — the same shape a drop has,
+  // for a gesture that is even harder to take back.
+  const [removal, setRemoval] = useState<RemovalTarget | null>(null);
   const [check, setCheck] = useState<PlacementCheck | null>(null);
   const [checking, setChecking] = useState(false);
   const [generationOpen, setGenerationOpen] = useState(false);
@@ -352,8 +373,15 @@ export function Board({
     onPrevious: board.previousWeek,
     onNext: board.nextWeek,
     onToday: board.goToToday,
-    enabled: !pendingMove && !editor && !generationOpen && !generationDay,
+    enabled:
+      !pendingMove && !editor && !generationOpen && !generationDay && !removal,
   });
+
+  // Whether this week can still be written to at all. Publishing locks the
+  // board, and a build running on it owns the days it has not reached yet —
+  // clearing underneath either would be racing something.
+  const writable =
+    Boolean(schedule) && schedule?.status === "draft" && !busy && !generating;
 
   // The figures for the week on screen. The overview computed them for the
   // *current* period; a week the manager paged to counts itself. Memoised
@@ -415,6 +443,41 @@ export function Board({
             >
               <Download size={14} />
               אקסל
+            </button>
+          ) : null}
+          {/* Taking the week back. Two buttons because they undo two
+              different things: clearing empties the grid the manager is
+              looking at, deleting removes the period that grid belongs to.
+              Both are withheld while the board is not writable — a published
+              week refuses every write, and a running build owns the days it
+              has not reached. */}
+          {schedule && writable ? (
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() =>
+                setRemoval({ mode: "week", count: schedule.assignments.length })
+              }
+              title="מחיקת כל השיבוצים בשבוע, בלי למחוק את שורות המשמרות"
+            >
+              <Eraser size={14} />
+              ניקוי השבוע
+            </button>
+          ) : null}
+          {schedule && writable ? (
+            <button
+              type="button"
+              className="ghost-button is-danger"
+              onClick={() =>
+                setRemoval({
+                  mode: "period",
+                  count: schedule.assignments.length,
+                })
+              }
+              title="מחיקת הסידור לשבוע הזה, כולל שורות המשמרות"
+            >
+              <Trash2 size={14} />
+              מחיקת הסידור
             </button>
           ) : null}
           {schedule ? (
@@ -556,8 +619,17 @@ export function Board({
                 });
               }}
               onGenerateDay={
-                schedule.status === "draft" && !busy && !generating
-                  ? (date) => setGenerationDay(date)
+                writable ? (date) => setGenerationDay(date) : undefined}
+              onClearDay={
+                writable
+                  ? (date) =>
+                      setRemoval({
+                        mode: "day",
+                        date,
+                        count: schedule.assignments.filter(
+                          (row) => row.date === date,
+                        ).length,
+                      })
                   : undefined}
           />
         </>
@@ -663,6 +735,26 @@ export function Board({
           onConfirm={(input) => {
             onGenerate(input);
             setGenerationOpen(false);
+          }}
+        />
+      ) : null}
+
+      {removal && schedule ? (
+        <ConfirmRemoval
+          target={removal}
+          busy={busy}
+          onCancel={() => setRemoval(null)}
+          onConfirm={(reason) => {
+            if (removal.mode === "period") {
+              void onDelete(schedule.id);
+            } else {
+              void onClear({
+                schedule_id: schedule.id,
+                slot_date: removal.mode === "day" ? removal.date : "",
+                reason,
+              });
+            }
+            setRemoval(null);
           }}
         />
       ) : null}

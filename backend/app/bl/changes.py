@@ -24,6 +24,7 @@ import datetime
 import json
 from typing import Any, Dict, List, Optional
 
+from app.bl import rotation
 from app.bl.prompts import load
 from app.bl.tools import resolve_employee
 from app.common.errors import AgentError
@@ -171,6 +172,13 @@ class ChangeAgent:
         payload = {
             "profile": _profile_for_model(profile),
             "schedule": _schedule_for_model(schedule),
+            # Whose weekend each closure in the period is, already worked
+            # out. Without it a spoken change was the one path into the
+            # schedule that could not see the rotation: the scheduler is
+            # handed the same fact, the board renders it, and the audit
+            # warns about it, while the agent moved people across cycles
+            # having never been told one existed.
+            "closures": _closures_for_model(profile, schedule),
             "availability": _rows(availability),
             "history": _rows(history, 100),
             "request": resolved,
@@ -480,6 +488,24 @@ def _profile_for_model(profile: dict) -> dict:
         "fairness_policy": profile.get("fairness_policy") or "",
         "conflict_policy": profile.get("conflict_policy") or "",
     }
+
+
+def _closures_for_model(profile: dict, schedule: dict) -> List[dict]:
+    """The period's closure cycle, per weekend, as the model reads it.
+
+    The same rows `bl/scheduler.py` sends, from the same arithmetic, because
+    the agent proposing a Saturday swap and the agent building the week must
+    not disagree about whose Saturday it is. Empty when the period has no
+    readable dates or the unit never anchored a cycle — an invented phase is
+    worse than none (D3).
+    """
+    schedule = schedule if isinstance(schedule, dict) else {}
+    try:
+        start = datetime.date.fromisoformat(_date(schedule.get("starts_on")))
+        end = datetime.date.fromisoformat(_date(schedule.get("ends_on")))
+    except (TypeError, ValueError):
+        return []
+    return rotation.schedule_for_model(profile, start, end)
 
 
 def _schedule_for_model(schedule: dict) -> dict:

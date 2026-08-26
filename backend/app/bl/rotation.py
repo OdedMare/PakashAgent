@@ -23,13 +23,32 @@ Four patterns, all anchored to the same Saturday:
 
 - `round`     -- two groups, alternating weekends (א, ב, א, ב …)
 - `triplet`   -- three groups, one weekend in three (תלתון: א, ב, ג, א …)
-- `hamshushim`-- the closing group stays from Thursday through Saturday
-- `shushim`   -- the closing group stays from Friday through Saturday
+- `hamshushim`-- the closing group stays from Thursday (חמשוש)
+- `shushim`   -- the closing group stays from Friday (שוש)
 
 `round` and `triplet` set *who* closes. `hamshushim` and `shushim` set *how
 long* that closure runs, which is why a person carries both a
 `rotation_group` and an `exit_pattern`: the group picks the weekend, the
 pattern picks the days.
+
+**A closure weekend here is Thursday to Sunday morning.** That is the
+Israeli week, not a parameter: the group goes in on Thursday, holds Friday
+and Saturday, and is relieved at the Sunday morning handover -- so a closure
+is four calendar dates, the last of them only until its first shift of the
+day is over. An earlier version ended the stretch on Saturday night, which
+left Sunday morning belonging to nobody: the group that closed was free to
+be rostered elsewhere on it and the group still on exit was free to be
+rostered *into* it, which is precisely the handover the rotation exists to
+order. `shushim` starts a day later and ends at the same handover -- the
+span differs at its beginning, never at its end.
+
+The Sunday tail covers **the day's first shift by the clock**, not a shift
+named "בוקר": shift vocabulary is per workplace
+([D9](../../../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)), so
+the handover is found by reading the declared start times and taking the
+earliest. A workplace that declared no start times has no clock to read and
+its closures simply end on Saturday, which is the honest answer rather than
+a Sunday blocked on a guess.
 
 **`round` and `triplet` are separate cycles that run side by side.** One
 shift routinely holds a soldier on א/ב next to one on תלתון א/ב/ג, and those
@@ -49,6 +68,10 @@ from typing import Any, Dict, List, Optional
 _ROUND_GROUPS = ("א", "ב")
 _TRIPLET_GROUPS = ("א", "ב", "ג")
 
+# How each cycle is named to a person reading it. The keys are the internal
+# pattern names, which no manager should ever be shown.
+_CYCLE_LABELS = {"round": "סבב", "triplet": "תלתון"}
+
 # Patterns that place a person in a lettered group. `hamshushim` and
 # `shushim` describe a closure's span, not its owner, so a person on one of
 # them may be ungrouped and still close.
@@ -56,12 +79,21 @@ _GROUPED_PATTERNS = frozenset({"round", "triplet"})
 
 # How many days before Saturday each pattern's closure begins.
 # Thursday is 2 days before Saturday, Friday is 1.
+#
+# `round` and `triplet` lead by two like a חמשוש: a closure weekend in an
+# Israeli unit runs Thursday to Sunday morning, and a cycle naming only its
+# Saturday was describing a weekend nobody actually works.
 _CLOSURE_LEAD_DAYS = {
-    "round": 0,
-    "triplet": 0,
+    "round": 2,
+    "triplet": 2,
     "hamshushim": 2,
     "shushim": 1,
 }
+
+# How many days past Saturday a closure runs. One, and only until that day's
+# handover -- see the module docstring. Shared by every pattern: they differ
+# in when the stretch begins, never in when it ends.
+_HANDOVER_TAIL_DAYS = 1
 
 # `datetime.date.weekday()` numbering: Monday is 0, so Saturday is 5.
 _SATURDAY = 5
@@ -143,6 +175,12 @@ def closure_days(
     undefined, or when their group simply does not close in this period --
     all three are ordinary, not errors.
 
+    The last row is the **Sunday handover** (`until_handover`), and it is the
+    one row that does not own its whole date: `shifts` names the shift the
+    group is held for, and an empty `shifts` on every other row means the
+    whole day. A caller that ignores `shifts` blocks a Sunday it should only
+    have blocked a morning of.
+
     **A group is what makes a pattern rotate.** חמשושים and שושים say how
     long a closure runs, not whose turn it is, so a person carrying one with
     *no* group is not in a rotation at all: they go out every Thursday, or
@@ -177,16 +215,21 @@ def closure_days(
             # is simply "nothing to claim", not an error.
             return []
 
+    handover = handover_shifts(profile)
+    tail = _HANDOVER_TAIL_DAYS if handover else 0
+
     rows = []
-    # Walk Saturdays from the one covering the first day, so a closure that
-    # begins on the Thursday before `start` still contributes its in-period
-    # days.
-    saturday = _saturday_of(start)
+    # Walk Saturdays from the one *before* the week the period opens in, so a
+    # closure that begins on the Thursday before `start` still contributes
+    # its in-period days -- and so a period opening on a Sunday still gets
+    # the handover belonging to the weekend that just ended.
+    saturday = _saturday_of(start) - datetime.timedelta(days=7)
     while saturday - datetime.timedelta(days=lead) <= end:
         owner = group if every_weekend else _group_for_saturday(state, saturday)
         if every_weekend or owner == group:
             day = saturday - datetime.timedelta(days=lead)
-            while day <= saturday:
+            last = saturday + datetime.timedelta(days=tail)
+            while day <= last:
                 if start <= day <= end:
                     rows.append({
                         "date": day.isoformat(),
@@ -195,10 +238,44 @@ def closure_days(
                         "pattern": pattern,
                         "cycle": lookup,
                         "is_saturday": day == saturday,
+                        # The Sunday the group is relieved on. It owns only
+                        # the handover itself, which is why this row is the
+                        # only one naming shifts.
+                        "until_handover": day > saturday,
+                        "shifts": list(handover) if day > saturday else [],
                     })
                 day += datetime.timedelta(days=1)
         saturday += datetime.timedelta(days=7)
     return rows
+
+
+def handover_shifts(profile: dict) -> List[str]:
+    """The shift a closure is handed over on: the earliest one of the day.
+
+    Read off the declared vocabulary's own start times rather than matched
+    against a name, because shift names belong to the workplace
+    ([D9](../../../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace))
+    and a list of Hebrew morning names is exactly the hardcoding that
+    decision forbids.
+
+    Ties are kept together: a workplace running two shifts from the same hour
+    hands over on both, and picking one of them alphabetically would be a
+    guess. A workplace whose shifts carry no times returns nothing, and the
+    closure then ends on Saturday -- no clock, no handover.
+    """
+    earliest, names = None, []
+    for shift in (profile or {}).get("shifts") or []:
+        if not isinstance(shift, dict):
+            continue
+        name = _text(shift.get("name"))
+        minutes = _minutes(shift.get("start_time"))
+        if not name or minutes is None:
+            continue
+        if earliest is None or minutes < earliest:
+            earliest, names = minutes, [name]
+        elif minutes == earliest and name not in names:
+            names.append(name)
+    return names
 
 
 def exit_pattern(profile: dict, person: dict) -> str:
@@ -216,6 +293,113 @@ def exit_pattern(profile: dict, person: dict) -> str:
     return _text(workplace.get("rotation_mode")) or "round"
 
 
+def label(cycle: str, group: str) -> str:
+    """One closing group named the way the manager says it: `סבב א`.
+
+    The internal pattern name never leaves this module. Anything rendering a
+    closure -- a board column, a placement dialog, an assignment's reason --
+    goes through here, so the vocabulary cannot drift between the screens
+    that show the same closure.
+    """
+    group = _text(group)
+    if not group:
+        return ""
+    return "%s %s" % (_CYCLE_LABELS.get(_text(cycle), "סבב"), group)
+
+
+def by_date(
+    profile: dict, start: datetime.date, end: datetime.date
+) -> Dict[str, dict]:
+    """Every closure *day* in the period: whose it is, and who is held on it.
+
+    The per-date view of the same arithmetic `schedule_for_model` folds by
+    weekend. Both exist because they answer different questions: a prompt
+    reads a cycle a weekend at a time, while a board column, a placement
+    check and a picker all ask "what is true of this one date".
+
+    A date with no entry is an ordinary working day and belongs to nobody --
+    the absence is the answer, so callers must not read a missing date as a
+    closure with no owner. The whole map is empty for a workplace that never
+    anchored a cycle, for the reason `cycle()` returns None: an invented
+    phase looks authoritative while putting the wrong group in.
+    """
+    if start > end:
+        return {}
+
+    rows: Dict[str, dict] = {}
+    for person in _people(profile):
+        name = _text(person.get("name"))
+        for row in closure_days(profile, person, start, end):
+            entry = rows.setdefault(row["date"], {
+                "date": row["date"],
+                "weekend": row["weekend"],
+                # Keyed by cycle rather than by pattern: a חמשושים א and a
+                # round א are the same א on the same cycle, and listing them
+                # apart would read as two groups in on one weekend.
+                "closing_groups": {},
+                "employees": [],
+                "shifts": [],
+                # A date is a handover only while *every* closure landing on
+                # it is one. A שוש starting Friday and a חמשוש already in are
+                # both mid-stretch on the same Saturday; a Sunday that is one
+                # group's handover and another's full day belongs to the
+                # wider claim, or the fuller closure would be cut short.
+                "until_handover": True,
+            })
+            if row["cycle"] and row["group"]:
+                entry["closing_groups"][row["cycle"]] = row["group"]
+            if name not in entry["employees"]:
+                entry["employees"].append(name)
+            if not row["until_handover"]:
+                entry["until_handover"] = False
+                entry["shifts"] = []
+            elif entry["until_handover"]:
+                for shift in row["shifts"]:
+                    if shift not in entry["shifts"]:
+                        entry["shifts"].append(shift)
+
+    result = {}
+    for date, entry in rows.items():
+        groups = [
+            {"pattern": cycle, "group": group, "label": label(cycle, group)}
+            for cycle, group in sorted(entry["closing_groups"].items())
+        ]
+        result[date] = {
+            "date": date,
+            "weekend": entry["weekend"],
+            "groups": groups,
+            "label": " ו".join(item["label"] for item in groups),
+            "employees": sorted(entry["employees"]),
+            # Empty means the whole date. Named shifts mean the closure only
+            # runs until that morning's handover.
+            "shifts": sorted(entry["shifts"]),
+            "until_handover": bool(entry["until_handover"]),
+        }
+    return result
+
+
+def holds(
+    profile: dict, person: dict, day: datetime.date, shift: str = ""
+) -> bool:
+    """Whether this person's own cycle holds `day`, or `shift` on it.
+
+    The question a placement asks about one name, one date and one shift,
+    answered off the person's own pattern so a תלתון soldier is never read
+    against the round pair's turn.
+
+    `shift` matters on the Sunday handover and nowhere else: the group is in
+    for that morning and out for the rest of the day, so asking about the
+    date alone would answer "yes" for a Sunday night they are no longer on.
+    Asked with no shift, a handover Sunday counts as held -- the day does
+    carry a claim of theirs, and a caller enumerating a person's closure
+    dates wants it listed.
+    """
+    for row in closure_days(profile, person, day, day):
+        if not row["until_handover"] or not shift or shift in row["shifts"]:
+            return True
+    return False
+
+
 def schedule_for_model(
     profile: dict, start: datetime.date, end: datetime.date
 ) -> List[dict]:
@@ -229,45 +413,42 @@ def schedule_for_model(
     running both structures has a round group and a triplet group in on the
     very same weekend.
     """
-    if start > end:
-        return []
-
-    people = [
-        person for person in (profile or {}).get("employees") or []
-        if isinstance(person, dict) and _text(person.get("name"))
-    ]
-
+    days = by_date(profile, start, end)
     by_weekend: Dict[str, dict] = {}
-    for person in people:
-        for row in closure_days(profile, person, start, end):
-            weekend = by_weekend.setdefault(row["weekend"], {
-                "weekend": row["weekend"],
-                "closing_groups": {},
-                "days": {},
-            })
-            if row["group"]:
-                # Keyed by cycle rather than by the person's pattern: a
-                # חמשושים א and a round א are the same א on the same cycle,
-                # and listing them separately would read as two groups in.
-                weekend["closing_groups"][row["cycle"]] = row["group"]
-            weekend["days"].setdefault(row["date"], []).append(
-                _text(person.get("name"))
-            )
+    for date in sorted(days):
+        day = days[date]
+        weekend = by_weekend.setdefault(day["weekend"], {
+            "weekend": day["weekend"],
+            "closing_groups": {},
+            "days": [],
+        })
+        for item in day["groups"]:
+            weekend["closing_groups"][item["pattern"]] = item["group"]
+        weekend["days"].append({
+            "date": date, "employees": day["employees"],
+        })
 
-    result = []
-    for weekend in sorted(by_weekend.values(), key=lambda item: item["weekend"]):
-        result.append({
+    return [
+        {
             "weekend": weekend["weekend"],
             "closing_groups": [
                 {"pattern": pattern, "group": group}
                 for pattern, group in sorted(weekend["closing_groups"].items())
             ],
-            "days": [
-                {"date": date, "employees": sorted(names)}
-                for date, names in sorted(weekend["days"].items())
-            ],
-        })
-    return result
+            "days": weekend["days"],
+        }
+        for weekend in sorted(
+            by_weekend.values(), key=lambda item: item["weekend"]
+        )
+    ]
+
+
+def _people(profile: dict) -> List[dict]:
+    """The roster rows a cycle can speak about — the ones carrying a name."""
+    return [
+        person for person in (profile or {}).get("employees") or []
+        if isinstance(person, dict) and _text(person.get("name"))
+    ]
 
 
 def _group_for_saturday(state: dict, saturday: datetime.date) -> str:
@@ -315,6 +496,26 @@ def _saturday_of(day: datetime.date) -> datetime.date:
     onward looks forward to the coming Saturday, and Saturday is its own.
     """
     return day + datetime.timedelta(days=(_SATURDAY - day.weekday()) % 7)
+
+
+def _minutes(value: Any) -> Optional[int]:
+    """A declared start time as minutes past midnight, or None if unusable.
+
+    Only enough parsing to order shifts against each other; `audit.py` and
+    `placement.py` do their own arithmetic on the same field for lengths.
+    """
+    text = _text(value)
+    if not text:
+        return None
+    parts = text.split(":")
+    try:
+        hour = int(parts[0])
+        minute = int(parts[1]) if len(parts) > 1 else 0
+    except (TypeError, ValueError):
+        return None
+    if not 0 <= hour < 24 or not 0 <= minute < 60:
+        return None
+    return hour * 60 + minute
 
 
 def _parse_date(value: Any) -> Optional[datetime.date]:

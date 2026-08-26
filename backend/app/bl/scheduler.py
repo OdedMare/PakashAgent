@@ -88,9 +88,15 @@ _HEBREW_WEEKDAYS = (
     "יום שישי", "שבת", "יום ראשון",
 )
 
-# How each cycle is named to the manager. The keys are the internal pattern
-# names; a reason the manager reads should never show them.
-_CYCLE_LABELS = {"round": "סבב", "triplet": "תלתון"}
+# Availability rows this module derived from the rotation itself rather than
+# read from the manager's constraints. They are the cycle expressed as
+# unavailability, so an assignment contradicting one is not a judgment call
+# the audit should merely remark on: it puts somebody in on a weekend that
+# is not theirs, which is the drift `rotation.py` exists to prevent. Both
+# sources are refused on every generation path, the legacy chunked one
+# included -- the daily path's candidate lists already exclude them, and a
+# gate in only one of the two is a gate the other route walks around.
+_ROTATION_SOURCES = frozenset({"rotation", "closure"})
 
 _ASSIGNMENT_SCHEMA = {
     "type": "object",
@@ -559,7 +565,7 @@ def _assignments(
 ) -> List[dict]:
     """The model's assignments, bounded to what actually exists.
 
-    Three rejections, each for a reason that is not a scheduling judgment:
+    Four rejections, each for a reason that is not a scheduling judgment:
 
     - **No reason** — D8. An assignment nobody can account for is dropped
       rather than stored, because storing it is how the decision gets quietly
@@ -568,6 +574,13 @@ def _assignments(
       this period does not have, so there is nothing to assign into.
     - **A person the profile does not list** — a name nobody declared cannot
       be rostered onto a real shift.
+    - **A day the rotation says is not theirs** — the closure cycle is
+      arithmetic this module already did (`_rotation_availability` and
+      `_closure_availability`), and a row contradicting it puts somebody in
+      on a weekend belonging to another group. That is not the model
+      weighing a soft rule differently; it is the cycle the unit planned its
+      month around being silently re-phased, so the row is dropped here as
+      well as excluded from the candidate lists.
 
     Everything else is kept exactly as the model decided it, including
     choices the audit will go on to warn about: warning is the audit's job,
@@ -607,7 +620,7 @@ def _assignments(
             "end_time": slot.get("end_time"),
         }
         if any(
-            row.get("source") == "rotation"
+            row.get("source") in _ROTATION_SOURCES
             and constraint_conflicts(assignment, row)
             for row in (availability or []) if isinstance(row, dict)
         ):
@@ -898,12 +911,22 @@ def _closure_availability(
     # their days simply stay unconstrained.
     holders, cycles, owners = {}, {}, {}
     on_rotation = {}
+    # Which shifts a date's closure actually covers. Absent means the whole
+    # day; a set means only those shifts, which is the Sunday handover. A
+    # date carrying one closure that runs all day and another that ends at
+    # the handover is a whole-day date, or the fuller closure would be cut
+    # short by the shorter one sharing its Sunday.
+    covered: Dict[str, Optional[set]] = {}
     for person in people:
         name = _bounded(person.get("name"))
         rows = rotation_cycle.closure_days(profile, person, start, end)
         on_rotation[name] = bool(rows) or _on_rotation(profile, person)
         for row in rows:
             holders.setdefault(row["date"], set()).add(name)
+            if not row["until_handover"]:
+                covered[row["date"]] = None
+            elif covered.setdefault(row["date"], set()) is not None:
+                covered[row["date"]].update(row["shifts"])
             # Only a real rotation displaces anybody. A blank cycle is
             # somebody out every weekend regardless of whose turn it is, so
             # their presence must not put a rotating group "out of turn".
@@ -925,6 +948,13 @@ def _closure_availability(
         if not held:
             # No group closes this date, so it is an ordinary working day and
             # the rotation has no claim on who works it.
+            continue
+        limit = covered.get(date)
+        if limit is not None and slot["shift_name"] not in limit:
+            # The Sunday after a closure, past its handover. The stretch is
+            # over: the day belongs to whoever is being relieved onto it, so
+            # the rotation stops speaking here rather than blocking a whole
+            # date on the strength of one morning.
             continue
         for person in people:
             name = _bounded(person.get("name"))
@@ -949,7 +979,7 @@ def _closure_availability(
                 "is_hard": True,
                 "reason": "%s סוגר במועד זה" % " ו".join(
                     sorted(
-                        "%s %s" % (_CYCLE_LABELS.get(cycle, "סבב"), group)
+                        rotation_cycle.label(cycle, group)
                         for cycle, group in owners.get(date, set())
                     )
                 ),

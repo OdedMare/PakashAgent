@@ -455,6 +455,8 @@ export function Management({
             onAssign={state.assign}
             onUnassign={state.unassign}
             onMove={state.move}
+            onClear={state.clearShifts}
+            onDelete={state.removeSchedule}
             onPublish={state.publish}
             onExport={state.exportSchedule}
             onPeriodChange={state.focusPeriod}

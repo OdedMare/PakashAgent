@@ -321,6 +321,11 @@ export interface Schedule {
   slots: Slot[];
   assignments: Assignment[];
   warnings: ScheduleWarning[];
+  /** Which of this period's dates are somebody's closure. Computed by
+   *  `bl/rotation.py` and read here — the cycle is arithmetic (D3), and a
+   *  second implementation of it in the browser would drift from the one the
+   *  scheduler and the audit already agree on. */
+  closures: Closure[];
   notes: string[];
   summary: string;
   generation: GenerationProgress;
@@ -381,6 +386,9 @@ export interface PlacementCheck {
   eligible: boolean;
   alternatives: Alternatives;
   candidates: PlacementCandidate[];
+  /** Whose closure this slot falls in. Empty `groups` means the rotation has
+   *  nothing to say here — an ordinary weekday, or a cycle never anchored. */
+  closure?: Closure;
 }
 
 export interface PlacementCandidate {
@@ -390,6 +398,28 @@ export interface PlacementCandidate {
   hours: number;
   is_shift_manager: boolean;
   can_train: boolean;
+  /** "סבב א" / "תלתון ג", written by the backend so the two screens that
+   *  show a rotation cannot word it differently. Empty when the person is
+   *  not in one. */
+  rotation?: string;
+  /** Whether this person's own cycle holds this slot. On a closure the
+   *  picker puts them first: "who is free" and "whose weekend is it" are
+   *  different questions, and only one of them is on the grid. */
+  closing?: boolean;
+}
+
+/** One date the rotation speaks for.
+ *
+ *  A closure weekend runs Thursday to the Sunday morning handover, which is
+ *  why the last date carries `until_handover` and names the `shifts` the
+ *  stretch still covers. `groups` empty means no closure at all. */
+export interface Closure {
+  date: string;
+  groups: { pattern: string; group: string; label: string }[];
+  label: string;
+  employees: string[];
+  shifts: string[];
+  until_handover: boolean;
 }
 
 /** A recorded availability constraint.

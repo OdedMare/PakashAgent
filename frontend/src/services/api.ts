@@ -592,6 +592,38 @@ export function unassignEmployee(body: {
   });
 }
 
+/** Empty a day's shifts, or the whole period's. **The grid stays.**
+ *
+ *  Distinct from `deleteSchedule`, which removes the period outright. Which
+ *  one a manager wants depends on what they are unhappy with: the week's
+ *  shape comes from the shift vocabulary, and the assignments are what a
+ *  build decided. Clearing takes back the second and keeps the first, so the
+ *  week is still there to fill in again — by hand or by asking the agent. */
+export function clearSchedule(body: {
+  schedule_id: string;
+  slot_date?: string;
+  reason?: string;
+}): Promise<Schedule> {
+  return request<Schedule>(`/api/schedule/${body.schedule_id}/clear`, {
+    method: "POST",
+    body: JSON.stringify({
+      slot_date: body.slot_date ?? "",
+      reason: body.reason ?? "",
+    }),
+  });
+}
+
+/** Remove a period entirely — its slots, its assignments, its progress.
+ *
+ *  The change log survives: history does not disappear because the thing it
+ *  describes did (D4). The week goes back to the empty state, where both
+ *  doors — the agent's build and a blank grid — are offered again. */
+export function deleteSchedule(scheduleId: string): Promise<{ status: string }> {
+  return request<{ status: string }>(`/api/schedule/${scheduleId}`, {
+    method: "DELETE",
+  });
+}
+
 export function publishSchedule(scheduleId: string): Promise<Schedule> {
   return request<Schedule>(`/api/schedule/${scheduleId}/publish`, {
     method: "POST",

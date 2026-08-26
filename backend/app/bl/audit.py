@@ -820,11 +820,21 @@ def _cross_rotation(rows: List[dict], profile: dict) -> List[dict]:
     # rostered. Probing matters because only closure *days* are constrained:
     # an ordinary Tuesday belongs to nobody, and treating every date as part
     # of the coming weekend's closure would flag the whole week.
+    # Which shifts each closing date actually covers. A Sunday is a closure
+    # only until its handover, so a date maps to the shifts the stretch still
+    # holds; None means the whole day. Without this the warning would call
+    # somebody out of turn for a Sunday night the closure had already ended
+    # on -- the day after a weekend belongs to whoever is relieving it.
+    covered: Dict[str, Optional[set]] = {}
     for cycle in cycles:
         for group in _GROUPS_BY_CYCLE.get(cycle, ()):  # noqa: E501
             probe = {"exit_pattern": cycle, "rotation_group": group}
             for row in rotation.closure_days(profile, probe, start, end):
                 closing.setdefault(row["date"], set()).add(cycle)
+                if not row["until_handover"]:
+                    covered[row["date"]] = None
+                elif covered.setdefault(row["date"], set()) is not None:
+                    covered[row["date"]].update(row["shifts"])
     if not closing:
         return []
 
@@ -845,6 +855,11 @@ def _cross_rotation(rows: List[dict], profile: dict) -> List[dict]:
         if cycle not in closing.get(date, set()):
             # A different cycle is closing today; this person's own cycle
             # has no claim on the date, so they are not out of turn.
+            continue
+        limit = covered.get(date)
+        if limit is not None and _text(row.get("shift")) not in limit:
+            # Past the handover on the Sunday a closure ends: the stretch is
+            # over and this shift is nobody's turn in particular.
             continue
         holding = sorted(holders.get(date, set()))
         warnings.append(_warning(

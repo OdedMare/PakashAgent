@@ -34,6 +34,7 @@ free slot comes from the stored grid.
 import datetime
 from typing import Any, Dict, List, Optional
 
+from app.bl import rotation
 from app.bl.audit import audit
 from app.bl.scheduler import effective_availability
 
@@ -46,6 +47,14 @@ _MAX_ALTERNATIVES = 5
 # could take instead. One week: past that it is not "nearby" and the manager
 # is choosing a different week rather than adjusting this one.
 _NEARBY_DAYS = 7
+
+# What "the rotation says nothing about this slot" looks like on the wire.
+# A shape rather than a null so the client renders one branch: no groups
+# means no closure, on an ordinary Tuesday and on an unanchored cycle alike.
+_NO_CLOSURE = {
+    "date": "", "groups": [], "label": "", "employees": [],
+    "until_handover": False,
+}
 
 
 def check(
@@ -84,11 +93,12 @@ def check(
         schedule, profile, shift_name, slot_date, availability,
         moving_assignment_id,
     )
+    closure = closure_of(profile, slot_date, shift_name)
     if not employee:
         return {
             "ok": True, "blocking": False, "reasons": [], "warnings": [],
             "eligible": True, "alternatives": {"employees": [], "slots": []},
-            "candidates": candidates,
+            "candidates": candidates, "closure": closure,
         }
     verdict = _verdict(
         schedule, profile, employee, shift_name, slot_date,
@@ -99,7 +109,39 @@ def check(
         availability=availability,
         moving_assignment_id=moving_assignment_id,
     ) if verdict["reasons"] else {"employees": [], "slots": []},
-        candidates=candidates)
+        candidates=candidates, closure=closure)
+
+
+def closure_of(profile: dict, slot_date: str, shift_name: str = "") -> dict:
+    """Whose closure this slot falls in, for the dialog to say so.
+
+    The rotation is the one fact about a placement the manager cannot read
+    off the grid: nothing on a Thursday says it is סבב ב's Thursday. The
+    warnings already name it *after* a choice is made -- this puts it in
+    front of the choice, which is the whole reason `check()` runs before the
+    click rather than after.
+
+    Empty (`groups: []`) on an ordinary date and on a workplace that never
+    anchored a cycle. Both are "the rotation has nothing to say here", and
+    the caller renders nothing rather than an empty heading.
+    """
+    day = _parse(_iso(slot_date))
+    if day is None:
+        return _NO_CLOSURE
+    found = rotation.by_date(profile, day, day).get(day.isoformat())
+    if not found:
+        return _NO_CLOSURE
+    if found["until_handover"] and _text(shift_name) not in found["shifts"]:
+        # Past the Sunday handover: the stretch is over by this shift, so
+        # naming the weekend here would report a closure that has ended.
+        return _NO_CLOSURE
+    return {
+        "date": found["date"],
+        "groups": found["groups"],
+        "label": found["label"],
+        "employees": found["employees"],
+        "until_handover": found["until_handover"],
+    }
 
 
 def employee_options(
@@ -110,13 +152,23 @@ def employee_options(
     availability: Optional[List[dict]] = None,
     moving_assignment_id: str = "",
 ) -> List[dict]:
-    """Every roster member for a manual picker, with a concrete why-not."""
+    """Every roster member for a manual picker, with a concrete why-not.
+
+    Each option carries the person's rotation and whether they are the ones
+    *in* on this slot. On a closure that is the first thing the manager needs
+    and the last thing the grid shows: "who is free" and "whose weekend is
+    it" are different questions, and a picker that answered only the first
+    invites exactly the cross-rotation placement the cycle exists to
+    prevent. Closers therefore sort to the top of a closure slot, ahead of
+    the fairness ordering that governs an ordinary day.
+    """
     shift_name = _text(shift_name)
     slot_date = _iso(slot_date)
     availability = _effective_availability(
         schedule, profile, availability, slot_date
     )
     load = _hours_by_employee(schedule, profile)
+    day = _parse(slot_date)
     options = []
     for person in _employees(profile):
         name = _text(person.get("name"))
@@ -134,11 +186,35 @@ def employee_options(
             "hours": load.get(name, 0.0),
             "is_shift_manager": bool(person.get("is_shift_manager")),
             "can_train": bool(person.get("can_train")),
+            "rotation": rotation.label(
+                _cycle_of(profile, person),
+                _text(person.get("rotation_group")),
+            ),
+            "closing": bool(
+                day is not None
+                and rotation.holds(profile, person, day, shift_name)
+            ),
         })
     options.sort(key=lambda item: (
-        not item["available"], item["hours"], item["employee"]
+        not item["available"], not item["closing"],
+        item["hours"], item["employee"],
     ))
     return options
+
+
+def _cycle_of(profile: dict, person: dict) -> str:
+    """Which cycle a person turns on, for naming their group.
+
+    A group letter means different things on different cycles -- ג can only
+    be a תלתון -- so the label needs the cycle, not just the letter.
+    """
+    pattern = rotation.exit_pattern(profile, person)
+    if pattern in ("round", "triplet"):
+        return pattern
+    if _text(person.get("rotation_group")) == "ג":
+        return "triplet"
+    mode = _text(((profile or {}).get("workplace") or {}).get("rotation_mode"))
+    return mode if mode in ("round", "triplet") else "round"
 
 
 def _verdict(

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CalendarPlus, CheckCircle2, Copy, GraduationCap, MessageSquareText, PencilLine, ShieldCheck, Trash2, X } from "lucide-react";
+import { AlertTriangle, CalendarPlus, CheckCircle2, Copy, GraduationCap, MessageSquareText, PencilLine, Repeat2, ShieldCheck, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { formatDate, hebrewWeekday } from "@/components/Management/Calendar";
@@ -253,6 +253,24 @@ export function ShiftEditor({
             </label>
           </div>
 
+          {/* Whose closure this slot is, said before the choice rather than
+              warned about after it. On a closure day the picker's ordering
+              is not the whole answer — the people in are a smaller set than
+              the people free, and only this line says which is which. */}
+          {check?.closure?.groups.length ? (
+            <p className="board-editor-closure" role="status">
+              <Repeat2 size={14} aria-hidden="true" />
+              <span>
+                {check.closure.until_handover
+                  ? `${check.closure.label} סוגר/ת עד החילוף של הבוקר`
+                  : `${check.closure.label} סוגר/ת ביום הזה`}
+                {check.closure.employees.length
+                  ? ` — ${check.closure.employees.join(", ")}`
+                  : ""}
+              </span>
+            </p>
+          ) : null}
+
           {check?.candidates.length ? (
             <div className="board-availability" aria-label="זמינות החיילים למשמרת">
               <div className="board-availability-head">
@@ -273,6 +291,7 @@ export function ShiftEditor({
                       <strong>{candidate.employee}</strong>
                       <small>{candidate.available ? `פנוי/ה · ${formatHours(candidate.hours)} בתקופה` : candidate.reasons.join(" ")}</small>
                     </span>
+                    {candidate.closing ? <span className="board-candidate-badge is-closing"><Repeat2 size={12} /> {candidate.rotation || "בסגירה"}</span> : null}
                     {candidate.is_shift_manager ? <span className="board-candidate-badge"><ShieldCheck size={12} /> מפקד/ת</span> : null}
                     {candidate.can_train ? <span className="board-candidate-badge"><GraduationCap size={12} /> חופף/ת</span> : null}
                   </button>

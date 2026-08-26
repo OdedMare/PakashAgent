@@ -32,6 +32,7 @@ from app.api.contracts import (
     Briefing,
     BriefingRequest,
     CheckRequest,
+    ClearRequest,
     ConstraintRequest,
     GenerateDayRequest,
     GenerateRequest,
@@ -581,6 +582,24 @@ def build_router(service, guards) -> APIRouter:
     @router.post("/{schedule_id}/unpublish", response_model=Schedule)
     def unpublish(schedule_id: str, session: dict = Depends(boss)) -> dict:
         return service.unpublish(schedule_id, session["team_id"])
+
+    @router.post("/{schedule_id}/clear", response_model=Schedule)
+    def clear(
+        schedule_id: str,
+        request: ClearRequest,
+        session: dict = Depends(boss),
+    ) -> dict:
+        """Empty a day's shifts, or the period's. The grid itself stays.
+
+        Distinct from `DELETE /{schedule_id}`, which removes the period
+        outright. Clearing keeps the week's shape and empties it, which is
+        what a manager wants after a build they do not like: the slots are
+        the vocabulary's, not the build's.
+        """
+        return service.clear(
+            session["team_id"], schedule_id,
+            slot_date=request.slot_date, reason=request.reason,
+        )
 
     @router.delete("/{schedule_id}")
     def delete(schedule_id: str, session: dict = Depends(boss)) -> dict:

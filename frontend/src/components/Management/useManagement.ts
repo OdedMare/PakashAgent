@@ -9,7 +9,9 @@ import {
   blankSchedule,
   briefManager,
   cancelScheduleGeneration,
+  clearSchedule,
   deleteConstraint,
+  deleteSchedule,
   downloadSchedule,
   generateSchedule,
   generateScheduleDay,
@@ -141,6 +143,16 @@ export interface ManagementState {
     reason?: string;
     schedule_id?: string;
   }) => Promise<void>;
+  /** Empty a day's shifts, or the whole period's. The slot grid stays, so
+   *  the week is still there to fill in again. */
+  clearShifts: (input: {
+    schedule_id: string;
+    slot_date?: string;
+    reason?: string;
+  }) => Promise<void>;
+  /** Delete a period outright. The week returns to the unbuilt state; the
+   *  change log survives it (D4). */
+  removeSchedule: (scheduleId: string) => Promise<void>;
   publish: (scheduleId: string, published: boolean) => Promise<void>;
   /** Download the period as `.xlsx` (D17). */
   exportSchedule: (scheduleId: string) => Promise<void>;
@@ -535,6 +547,38 @@ export function useManagement(): ManagementState {
     [run, withPeriod],
   );
 
+  /** Empty a day's shifts, or the whole week's. The grid itself stays.
+   *
+   *  Not quiet, unlike `assign` and `unassign`: those are one cell each and
+   *  fire per keystroke of a week being typed in, while this is one
+   *  deliberate act that changes the whole day. It is exactly the kind of
+   *  state change the briefing exists to remark on. */
+  const clearShifts = useCallback(
+    async (input: {
+      schedule_id: string;
+      slot_date?: string;
+      reason?: string;
+    }) => {
+      await run(() => clearSchedule(input));
+    },
+    [run],
+  );
+
+  /** Remove a period outright — slots, assignments and all.
+   *
+   *  The heavier of the two: the week goes back to being unbuilt. The change
+   *  log survives it (D4), so what was done to the schedule is still
+   *  answerable after the schedule itself is gone. */
+  const removeSchedule = useCallback(
+    async (scheduleId: string) => {
+      await run(async () => {
+        await deleteSchedule(scheduleId);
+        return null;
+      });
+    },
+    [run],
+  );
+
   /** Publish or withdraw a period.
    *
    *  Publishing briefs *first* and waits for it: this is the last cheap
@@ -841,6 +885,8 @@ export function useManagement(): ManagementState {
     openBlank,
     assign,
     unassign,
+    clearShifts,
+    removeSchedule,
     publish,
     exportSchedule,
     propose,

@@ -53,7 +53,7 @@ from typing import Any, Dict, List, Optional
 
 from app.bl.audit import audit, fairness
 from app.bl.placement import check as check_placement
-from app.bl.placement import suggest_alternatives
+from app.bl.placement import closure_of, suggest_alternatives
 from app.common.errors import AgentError
 from app.common.time_context import israel_today
 
@@ -510,6 +510,12 @@ class ScheduleTools:
             # Where this person could go instead, when the question turns out
             # to be "move them" rather than "replace them".
             "other_slots": alternatives.get("slots") or [],
+            # Whose closure this slot falls in, when it falls in one. The
+            # question "who can replace יוסי this weekend" has a different
+            # right answer on a closure than on a Tuesday: the replacement
+            # comes from the group already in, and an answer that did not
+            # say so would read as a free choice between colleagues.
+            "closure": closure_of(profile, _iso(slot_date), _text(shift_name)),
             "ranked_by": (
                 "לפי שעות מצטברות בתקופה — הקל/ה ביותר ראשון/ה, "
                 "אחרי סינון של כל מי שהשיבוץ היה יוצר אצלו/ה אזהרה."

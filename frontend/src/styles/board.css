@@ -548,14 +548,48 @@
   color: var(--primary);
 }
 
-.board-dayhead-generate {
+/* Whose closure this day is.
+   Deliberately quiet — it is a standing fact about the week rather than a
+   problem, so it borrows neither the accent (today's) nor the warning
+   colour (a gap's). The handover Sunday reads dimmer still: the group is on
+   their way out of it. */
+.board-dayhead-closure {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-top: 0.15rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-soft);
+  font-size: 0.66rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.board-dayhead-closure.is-handover {
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.board-dayhead-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.board-dayhead-generate,
+.board-dayhead-clear {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.25rem;
   min-width: 5.2rem;
   min-height: 2.75rem;
-  margin-top: 0.25rem;
   padding: 0.35rem 0.5rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -575,7 +609,17 @@
   background: var(--primary-soft);
 }
 
-.board-dayhead-generate:focus-visible {
+/* Clearing a day removes work. It is offered plainly and turns red only
+   under the pointer, so it reads as available without competing with the
+   build button beside it. */
+.board-dayhead-clear:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.board-dayhead-generate:focus-visible,
+.board-dayhead-clear:focus-visible {
   outline: none;
   box-shadow: var(--focus);
 }
@@ -1329,6 +1373,30 @@
   background: var(--primary-soft);
   border-radius: 999px;
   font-size: 0.62rem;
+}
+
+/* The rotation badge is not a qualification like מפקד/ת — it says this
+   person is already in this weekend — so it reads in the neutral surface
+   colour rather than borrowing the accent the command badge uses. */
+.board-candidate-badge.is-closing {
+  color: var(--text-soft);
+  background: var(--surface-3);
+}
+
+/* Whose closure the slot being edited falls in. A statement of fact above
+   the picker, styled like the availability note beneath it rather than like
+   a warning: nothing here is wrong yet. */
+.board-editor-closure {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.7rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-soft);
+  font-size: 0.78rem;
 }
 
 .board-assignment-reason {
