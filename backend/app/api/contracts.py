@@ -208,9 +208,19 @@ class Assignment(BaseModel):
 
 
 class GenerationDay(BaseModel):
-    """One checkpoint in a resumable date-range generation."""
+    """One checkpoint in a resumable date-range generation.
+
+    A checkpoint covers a *span* of dates — one in `day` mode, up to a week
+    in `week` mode. `date` remains its first date, so a reader that predates
+    spans still sees what it always saw.
+    """
 
     date: str
+    # The span's last date, equal to `date` on a single-day checkpoint.
+    through: str = ""
+    # Every date this checkpoint covers, enumerated so progress is counted
+    # in days rather than in model calls.
+    dates: List[str] = []
     status: str = "pending"
     attempts: int = 0
     error: str = ""
@@ -226,6 +236,12 @@ class GenerationProgress(BaseModel):
     completed_days: int = 0
     failed_days: int = 0
     days: List[GenerationDay] = []
+    # How wide one model call is for this job: "day" or "week". Stamped when
+    # the period is opened and never re-read, so a manager who changes the
+    # setting mid-build is choosing how the *next* one runs rather than
+    # re-planning the spans of a job already half checkpointed. Empty on a
+    # job opened before the setting existed, which reads as "day".
+    mode: str = ""
     # When a worker last said it was still on this job, UTC ISO-8601. Empty
     # on a job opened before this field existed, which the client reads as
     # "cannot tell" rather than as "stalled".

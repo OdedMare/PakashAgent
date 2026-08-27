@@ -156,6 +156,17 @@ schedules the manager has published.
 Postgres must be reachable at `PAKASH_DATABASE_URL`; the app creates its own
 tables on startup (the schema itself must already exist).
 
+**How fast a schedule builds is a setting.** *הגדרות ← בניית סידור* chooses
+how wide one model call is: `day` (the default) asks for one date at a time
+and verifies and repairs each on its own; `week` asks for up to seven in one
+call, which is several times faster on a slow local model because a week
+costs the scheduler prompt once instead of seven times. Both run the same
+checks — the same candidate lists, response schema, rejection rules and audit
+— so the tradeoff is granularity, not trust: in `week` mode one bad row
+re-answers the whole span. Also settable as
+`PAKASH_SCHEDULE_GENERATION_MODE`. The board says which mode a running build
+is using.
+
 **Set `PAKASH_SESSION_SECRET` in any real deployment.** Left unset it is
 generated per process, so sessions do not survive a restart and break across
 workers.

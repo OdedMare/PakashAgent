@@ -975,3 +975,139 @@ def test_the_slot_grid_is_the_whole_period_not_the_last_chunk():
         _week_profile(), "2026-08-17", "2026-08-30"
     )
     assert len(result["slots"]) == 14
+
+
+# -- what one call costs, and how wide it is -------------------------------
+
+
+def test_a_weekly_total_does_not_buy_a_repair_call_on_every_later_day():
+    """`over_hours` carries no date, so it used to match every day forever.
+
+    One person crossing their weekly ceiling on a Wednesday made the audit
+    report the same finding against Thursday, Friday and every day after —
+    each one triggering a repair call that was told not to touch earlier
+    dates, which is where the hours actually came from. Two model calls per
+    day, for the rest of the week, answering a question the repair could not
+    reach.
+    """
+    profile = dict(PROFILE)
+    profile["employees"] = [
+        dict(PROFILE["employees"][0], max_weekly_hours=1),
+    ]
+    profile["shifts"] = [PROFILE["shifts"][0]]
+    # Monday through Wednesday already worked: eight hours a day against a
+    # one-hour ceiling, so `over_hours` is standing before this day begins.
+    earlier = [
+        {"employee": "דנה", "shift": MORNING, "date": date, "reason": "כיסוי"}
+        for date in ("2026-08-17", "2026-08-18", "2026-08-19")
+    ]
+    llm = _ScriptedLlm([_reply([{
+        "employee_id": "employee-1", "slot_id": "slot-1",
+        "reason": "דנה היחידה שמוסמכת לבוקר",
+    }])])
+
+    result = Scheduler(llm).generate_day(
+        profile, "2026-08-20", already_scheduled=earlier
+    )
+
+    # One call, not two: the finding is real and still reported, but it is
+    # not this day's to fix.
+    assert len(llm.calls) == 1
+    assert result["metrics"]["repaired"] is False
+    assert any(
+        item["code"] == "over_hours" for item in result["warnings"]
+    )
+
+
+def test_the_roster_is_not_sent_twice_in_one_call():
+    """`candidate_employees` is the roster; `profile.employees` repeated it."""
+    llm = _ScriptedLlm([_reply([{
+        "employee_id": "employee-1", "slot_id": "slot-1",
+        "reason": "דנה מוסמכת וזמינה",
+    }])])
+
+    Scheduler(llm).generate_day(PROFILE, "2026-08-17")
+
+    payload = json.loads(llm.calls[0]["user"])
+    assert "employees" not in payload["profile"]
+    # Everything else the interview collected still travels — the field list
+    # is a blacklist of one, not a whitelist that new facts fall out of.
+    assert payload["profile"]["workplace"]["name"] == "מוקד"
+    assert payload["profile"]["rules"]
+    assert {
+        person["name"] for person in payload["candidate_employees"]
+    } == {"דנה", "יוסי", "רון"}
+
+
+def test_a_span_generates_several_dates_in_one_call():
+    llm = _ScriptedLlm([_reply([
+        {"employee_id": "employee-1", "slot_id": "slot-1",
+         "reason": "דנה בבוקר של שני"},
+        {"employee_id": "employee-2", "slot_id": "slot-2",
+         "reason": "יוסי בבוקר של שלישי"},
+    ])])
+
+    result = Scheduler(llm).generate_span(
+        PROFILE, "2026-08-17", "2026-08-18"
+    )
+
+    assert len(llm.calls) == 1
+    assert {row["date"] for row in result["assignments"]} == {
+        "2026-08-17", "2026-08-18",
+    }
+    assert result["metrics"]["date"] == "2026-08-17"
+    assert result["metrics"]["through"] == "2026-08-18"
+
+
+def test_a_span_still_refuses_a_row_outside_its_candidates():
+    """Widening the call does not widen what is accepted back."""
+    llm = _ScriptedLlm([
+        _reply([{
+            "employee_id": "employee-3", "slot_id": "slot-1",
+            "reason": "רון אינו מוסמך לבוקר",
+        }]),
+        _reply([{
+            "employee_id": "employee-1", "slot_id": "slot-1",
+            "reason": "דנה מוסמכת לבוקר",
+        }]),
+    ])
+
+    result = Scheduler(llm).generate_span(
+        PROFILE, "2026-08-17", "2026-08-18"
+    )
+
+    assert [row["employee"] for row in result["assignments"]] == ["דנה"]
+    assert result["metrics"]["rejected"] >= 1
+
+
+def test_day_mode_plans_one_span_per_date_and_week_mode_groups_them():
+    from app.bl.scheduler import MODE_DAY, MODE_WEEK, plan_spans
+
+    daily = plan_spans(PROFILE, "2026-08-17", "2026-08-23", MODE_DAY)
+    assert len(daily) == 7
+    assert all(span["date"] == span["through"] for span in daily)
+
+    weekly = plan_spans(PROFILE, "2026-08-17", "2026-08-23", MODE_WEEK)
+    assert len(weekly) == 1
+    assert weekly[0]["date"] == "2026-08-17"
+    assert weekly[0]["through"] == "2026-08-23"
+    # However wide the call, the dates are still enumerated — progress is
+    # counted in days, not in model calls.
+    assert len(weekly[0]["dates"]) == 7
+
+
+def test_week_mode_splits_a_week_too_big_for_one_answer():
+    """A week is a ceiling, not a promise. Staffing volume splits it."""
+    from app.bl.scheduler import MODE_WEEK, plan_spans
+
+    profile = dict(PROFILE)
+    profile["shifts"] = [dict(PROFILE["shifts"][0], staffing=[{
+        "days": [], "headcount": 40, "required_roles": [],
+    }])]
+
+    spans = plan_spans(profile, "2026-08-17", "2026-08-23", MODE_WEEK)
+
+    assert len(spans) > 1
+    assert [date for span in spans for date in span["dates"]] == [
+        "2026-08-%d" % day for day in range(17, 24)
+    ]

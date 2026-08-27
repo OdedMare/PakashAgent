@@ -320,6 +320,64 @@ class ScheduleRepository(RepositoryBase):
             connection.commit()
         return self.assignments(schedule_id, team_id)
 
+    def replace_span_assignments(
+        self,
+        schedule_id: str,
+        team_id: str,
+        dates: List[str],
+        assignments: List[dict],
+    ) -> List[dict]:
+        """Rewrite the rows on these dates. **Every other date is untouched.**
+
+        What `replace_assignments` does for a whole period, scoped to the
+        dates a generation span just answered — which is the only scope a
+        checkpoint has any business writing.
+
+        Rewriting the period per day was quadratic and lossy at once. A
+        thirty-day build re-deleted and re-inserted every earlier day thirty
+        times over, one `INSERT` per row per day; and because each rewrite
+        minted fresh ids, an `assignment_id` the browser was holding — a drag
+        opened mid-build, an employee's "what changed" row — pointed at a
+        row that no longer existed by the time it was used. Deleting by date
+        fixes both: the work is proportional to the span, and a row nobody
+        touched keeps its identity for the life of the period.
+
+        Same reason rule as `replace_assignments`: a blank one raises (D8).
+        """
+        self._require_schedule(schedule_id, team_id)
+        for item in assignments:
+            if not (item.get("reason") or "").strip():
+                raise AgentError("כל שיבוץ חייב לשאת נימוק של הסוכן")
+        wanted = [date for date in dates if date]
+        if not wanted:
+            return self.assignments(schedule_id, team_id)
+        with connect(self._store) as connection:
+            connection.execute("""
+                DELETE FROM assignments
+                WHERE schedule_id=%s AND team_id=%s AND slot_id IN (
+                    SELECT id FROM shift_slots
+                    WHERE schedule_id=%s AND slot_date = ANY(%s)
+                )
+            """, (schedule_id, team_id, schedule_id, wanted))
+            for item in assignments:
+                connection.execute("""
+                    INSERT INTO assignments (
+                        id, team_id, schedule_id, slot_id, employee, reason,
+                        source
+                    ) VALUES (%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT (slot_id, employee) DO NOTHING
+                """, (
+                    new_id(), team_id, schedule_id, item["slot_id"],
+                    item["employee"], item["reason"].strip(),
+                    item.get("source") or ASSIGNED_BY_AGENT,
+                ))
+            connection.execute(
+                "UPDATE schedules SET updated_at=NOW() WHERE id=%s",
+                (schedule_id,),
+            )
+            connection.commit()
+        return self.assignments(schedule_id, team_id)
+
     def move_assignment(
         self,
         assignment_id: str,

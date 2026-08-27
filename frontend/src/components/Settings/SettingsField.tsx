@@ -84,6 +84,53 @@ export function SettingsToggle({
   );
 }
 
+/** A closed set of choices, where a free-text field would let the boss save a
+ *  value the backend rejects.
+ *
+ *  `hint` renders under the control rather than beside the label, because the
+ *  thing worth saying about a choice is what picking it *does* — and that is a
+ *  sentence, not a parenthetical. */
+export function SettingsSelect({
+  settings,
+  name,
+  label,
+  options,
+  hint,
+}: {
+  settings: SettingsController;
+  name: string;
+  label: string;
+  options: { value: string; label: string }[];
+  hint?: string;
+}) {
+  const current = settings.text(name);
+  return (
+    <>
+      <label className="field-label" htmlFor={`set-${name}`}>
+        {label}
+      </label>
+      <select
+        id={`set-${name}`}
+        className="settings-input"
+        dir="auto"
+        // An unknown stored value (an older save, a hand-edited file) would
+        // otherwise render as a blank control that silently rewrites the
+        // setting on the next save. Falling back to the first option shows
+        // what will actually be used.
+        value={options.some((item) => item.value === current) ? current : options[0]?.value ?? ""}
+        onChange={(event) => settings.set(name, event.target.value)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {hint ? <p className="settings-hint">{hint}</p> : null}
+    </>
+  );
+}
+
 /** An emptied number field sends `null`, not `""` — the backend treats null as
  *  "leave it alone" and would reject an empty string as a bad int. */
 function inputValue(value: string, type?: string) {
