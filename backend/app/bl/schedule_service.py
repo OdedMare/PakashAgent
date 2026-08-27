@@ -319,14 +319,21 @@ class ScheduleService:
             ],
             _shifts(profile),
             _employees(profile),
+            # Carrying `headcount`, so the coverage percentage is measured
+            # against what this period's grid actually asks for rather than
+            # against a requirement recomputed from the current profile.
             slots=[
                 {
                     "shift_name": slot.get("shift_name"),
                     "slot_date": _iso(slot.get("slot_date")),
+                    "headcount": slot.get("headcount"),
                 }
                 for slot in schedule.get("slots") or []
             ],
             warnings=schedule.get("warnings") or [],
+            # The roster's shadow-shift flags, so a trainee does not fill a
+            # seat on the chart that the warning below it still calls empty.
+            profile=profile,
             availability=[
                 {
                     "employee": row.get("employee"),
@@ -2157,11 +2164,21 @@ class ScheduleService:
             # The grid, so a slot with nobody on it is still checked. Without
             # it an entirely unstaffed shift leaves no row to notice and the
             # unfilled warning never fires -- the case most worth reporting.
+            #
+            # `headcount` travels with it because the grid is what the number
+            # was worked out into. Projecting it away left the audit to
+            # recompute the requirement from today's profile, which is a
+            # different number on any shift whose standard changes across the
+            # week and on any period imported from a file.
             slots=[
                 {
                     "shift_name": slot.get("shift_name"),
                     "slot_date": _iso(slot.get("slot_date")),
                     "required_roles": slot.get("required_roles") or [],
+                    "headcount": slot.get("headcount"),
+                    "requires_shift_manager": slot.get(
+                        "requires_shift_manager"
+                    ),
                 }
                 for slot in schedule.get("slots") or []
             ],

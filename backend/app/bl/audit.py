@@ -312,6 +312,62 @@ def load_history(
     )
 
 
+def counts_toward_staffing(person: Optional[dict], profile: Optional[dict]) -> bool:
+    """Whether this person fills one of a slot's seats.
+
+    The one definition of what a shadow shift *is*. Somebody learning the
+    shift stands on it, appears on the board, and accrues the hours — and
+    still leaves the slot needing the people it asked for, which is the whole
+    reason the roster carries the flag.
+
+    Three sources, in order, because they answer progressively vaguer
+    questions. `counts_toward_staffing` on the person is the manager's
+    explicit answer and wins outright, including when it says a trainee *does*
+    count. Failing that, only a trainee is in question at all. And a
+    workplace-wide `training_policy.counts_toward_staffing` settles the
+    trainees nobody ruled on individually.
+
+    Public because four callers need this exact answer and a fifth spelling of
+    it is how the coverage bar ends up disagreeing with the warning printed
+    under it — the same reason `personal_summary` lives beside `_shift_hours`.
+    """
+    person = person if isinstance(person, dict) else {}
+    explicit = person.get("counts_toward_staffing")
+    if isinstance(explicit, bool):
+        return explicit
+    if not person.get("is_trainee"):
+        return True
+    policy = (profile or {}).get("training_policy")
+    return bool(
+        policy.get("counts_toward_staffing") if isinstance(policy, dict)
+        else False
+    )
+
+
+def _seat_counts(
+    rows: List[dict], employees: List[dict], profile: dict
+) -> Dict[tuple, int]:
+    """Filled seats per `(date, shift)`, shadow shifts excluded.
+
+    Not simply `len(rows)`: a trainee on an overlap is at work and is not one
+    of the people the slot asked for. Every reader of "how full is this cell"
+    goes through here so the coverage percentage, the gap list and the
+    unfilled warning cannot give three different answers about one Tuesday.
+    """
+    index = {
+        _text(person.get("name")): person
+        for person in employees or []
+        if isinstance(person, dict) and _text(person.get("name"))
+    }
+    counts: Dict[tuple, int] = {}
+    for row in rows:
+        if not counts_toward_staffing(index.get(row["employee"]), profile):
+            continue
+        key = (row["date"], row["shift"])
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 def _is_night(shift: Optional[dict]) -> bool:
     """Whether the vocabulary marks this shift as a night.
 
@@ -342,6 +398,7 @@ def shift_stats(
     slots: Optional[List[dict]] = None,
     warnings: Optional[List[dict]] = None,
     availability: Optional[List[dict]] = None,
+    profile: Optional[dict] = None,
 ) -> dict:
     """The period in numbers: coverage, load, distribution, and pressure.
 
@@ -371,7 +428,9 @@ def shift_stats(
         "total_hours": round(sum(row["hours"] for row in rows), 2),
         "total_shifts": len(rows),
         "people_working": len(set(row["employee"] for row in rows)),
-        "coverage": _coverage(rows, shifts or [], slots),
+        "coverage": _coverage(
+            rows, shifts or [], slots, employees or [], profile or {}
+        ),
         "by_shift": _stats_by_shift(rows, shift_index),
         "by_day": _stats_by_day(rows, slots),
         "by_employee": _stats_by_employee(rows, employees or []),
@@ -383,7 +442,9 @@ def shift_stats(
 
 
 def _coverage(
-    rows: List[dict], shifts: List[dict], slots: Optional[List[dict]]
+    rows: List[dict], shifts: List[dict], slots: Optional[List[dict]],
+    employees: Optional[List[dict]] = None,
+    profile: Optional[dict] = None,
 ) -> dict:
     """Filled seats against required seats, over the period's grid.
 
@@ -392,11 +453,13 @@ def _coverage(
     understaffing the manager most wants to see. Slots whose headcount the
     profile does not state are left out of both halves rather than assumed to
     need one -- an invented denominator would make the percentage fiction.
+
+    Seats are counted by `_seat_counts`, the same rule `_staffing` uses, so a
+    trainee shadowing a shift does not fill it here while leaving it unfilled
+    two functions down. That disagreement is the one this module says outright
+    is worse than no chart at all.
     """
-    filled: Dict[tuple, int] = {}
-    for row in rows:
-        key = (row["date"], row["shift"])
-        filled[key] = filled.get(key, 0) + 1
+    filled = _seat_counts(rows, employees or [], profile or {})
 
     if slots:
         checked = {
@@ -412,7 +475,9 @@ def _coverage(
     assigned = 0
     unfilled_slots = 0
     for date, shift_name in checked:
-        needed = _headcount_for(shifts, shift_name, _parse_date(date))
+        needed = required_headcount(
+            shifts, shift_name, _parse_date(date), slots
+        )
         if needed is None:
             continue
         count = filled.get((date, shift_name), 0)
@@ -1110,19 +1175,12 @@ def _staffing(
         for person in employees or []
         if isinstance(person, dict) and _text(person.get("name"))
     }
-    training_policy = profile.get("training_policy")
-    training_policy = training_policy if isinstance(training_policy, dict) else {}
-    counted_rows = []
-    for row in rows:
-        person = employee_index.get(row["employee"], {})
-        explicit = person.get("counts_toward_staffing")
-        counts = explicit if isinstance(explicit, bool) else not bool(
-            person.get("is_trainee")
-        ) or bool(training_policy.get("counts_toward_staffing"))
-        if counts:
-            counted_rows.append(row)
+    counted_rows = [
+        row for row in rows
+        if counts_toward_staffing(employee_index.get(row["employee"]), profile)
+    ]
 
-    filled: Dict[tuple, int] = {}
+    filled = _seat_counts(rows, employees or [], profile)
     filled_roles: Dict[tuple, set] = {}
     commanded = {
         (row["date"], row["shift"])
@@ -1131,7 +1189,6 @@ def _staffing(
     }
     for row in counted_rows:
         key = (row["date"], row["shift"])
-        filled[key] = filled.get(key, 0) + 1
         person = employee_index.get(row["employee"], {})
         roles = person.get("roles")
         if not isinstance(roles, list):
@@ -1152,7 +1209,9 @@ def _staffing(
 
     warnings = []
     for date, shift_name in sorted(checked):
-        needed = _headcount_for(shifts, shift_name, _parse_date(date))
+        needed = required_headcount(
+            shifts, shift_name, _parse_date(date), slots
+        )
         if needed is None:
             continue
         count = filled.get((date, shift_name), 0)
@@ -1259,16 +1318,38 @@ def _weekday_key(value: str) -> str:
     return value[4:].strip() if value.startswith("יום ") else value
 
 
-def _headcount_for(
-    shifts: List[dict], shift_name: str, day: Optional[datetime.date]
+def required_headcount(
+    shifts: List[dict], shift_name: str, day: Optional[datetime.date],
+    slots: Optional[List[dict]] = None,
 ) -> Optional[int]:
-    """The headcount this shift needs on this day, or None if unstated.
+    """How many people this slot asks for, or None when nobody ever said.
 
-    `staffing` is a list of per-day-group requirements because the interview
-    asks whether the standard changes between weekdays. A group naming no
-    days is the default for every day the shift runs; a group naming this
-    day's Hebrew weekday wins over it.
+    **The stored grid wins**, exactly as it does for `_required_roles_for`
+    and `_requires_shift_manager`. The grid is what `scheduler.build_slots`
+    already worked the number out into, what the board measures a cell
+    against, and — for an imported week — what the *file* said this shift ran
+    with. Recomputing it from today's profile instead is how a Friday
+    generated to ten seats gets audited against the four the other six days
+    use, and reported overstaffed the moment it was built.
+
+    The profile is the fallback, for a caller holding assignments and no
+    grid. `staffing` is per group of days because the interview asks whether
+    the standard changes across the week: a group naming no days is the
+    default, and one naming this day's weekday wins over it.
     """
+    date = day.isoformat() if day else ""
+    for slot in slots or []:
+        if not isinstance(slot, dict):
+            continue
+        slot_date = _text(slot.get("slot_date")) or _iso_date(
+            slot.get("slot_date")
+        )
+        if slot_date != date or _text(slot.get("shift_name")) != shift_name:
+            continue
+        headcount = slot.get("headcount")
+        if isinstance(headcount, int) and not isinstance(headcount, bool):
+            return headcount
+
     for shift in shifts or []:
         if not isinstance(shift, dict) or _text(shift.get("name")) != shift_name:
             continue
@@ -1276,17 +1357,24 @@ def _headcount_for(
         if not isinstance(staffing, list):
             return None
         fallback = None
-        weekday = _hebrew_weekday(day)
+        # Normalised on both sides, because the interview collects `שישי` and
+        # `יום שישי` as the same day and `scheduler.build_slots` has always
+        # read them that way. Comparing the raw strings here meant every
+        # unprefixed per-day staffing group was silently skipped, and the
+        # audit graded a ten-person Friday against the weekday default.
+        weekday = _weekday_key(_hebrew_weekday(day))
         for group in staffing:
             if not isinstance(group, dict):
                 continue
             days = group.get("days")
             headcount = group.get("headcount")
-            if not isinstance(headcount, int):
+            if not isinstance(headcount, int) or isinstance(headcount, bool):
                 continue
             if not isinstance(days, list) or not days:
                 fallback = headcount
-            elif weekday and weekday in [_text(item) for item in days]:
+            elif weekday and weekday in {
+                _weekday_key(_text(item)) for item in days
+            }:
                 return headcount
         return fallback
     return None
@@ -1391,6 +1479,7 @@ def _text(value: Any) -> str:
 
 __all__ = [
     "audit", "personal_summary", "fairness", "load_history", "shift_stats",
+    "counts_toward_staffing", "required_headcount",
     "OVER_HOURS", "CONSECUTIVE", "SHORT_REST", "DOUBLE_BOOKED",
     "UNAVAILABLE", "UNFILLED", "OVERSTAFFED", "MISSING_ROLE",
     "MISSING_COMMANDER",

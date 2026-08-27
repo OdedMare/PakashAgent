@@ -35,6 +35,7 @@ from app.bl.audit import (
     UNFILLED,
     audit,
     constraint_conflicts,
+    counts_toward_staffing,
     load_history,
 )
 from app.bl import rotation as rotation_cycle
@@ -1044,19 +1045,6 @@ def _rotation_a_blocks(slot: dict, rules: List[dict]) -> bool:
     return False
 
 
-def _counts_toward_staffing(person: dict, profile: dict) -> bool:
-    explicit = person.get("counts_toward_staffing")
-    if isinstance(explicit, bool):
-        return explicit
-    if not person.get("is_trainee"):
-        return True
-    policy = (profile or {}).get("training_policy")
-    return bool(
-        policy.get("counts_toward_staffing")
-        if isinstance(policy, dict) else False
-    )
-
-
 def _role_list(value: Any) -> List[str]:
     if not isinstance(value, list):
         return []
@@ -1087,7 +1075,10 @@ def _candidates(profile: dict, slots: List[dict], availability: List[dict]) -> d
             "exit_pattern": person.get("exit_pattern") or "",
             "rotation_group": person.get("rotation_group") or "",
             "notes": person.get("notes") or "",
-            "counts_toward_staffing": _counts_toward_staffing(person, profile),
+            # The audit's own rule, imported rather than restated: this is
+            # what the model is told a shadow shift means, and the warning it
+            # gets judged by has to mean the same thing.
+            "counts_toward_staffing": counts_toward_staffing(person, profile),
         })
 
     by_slot = {}
@@ -1261,11 +1252,24 @@ def _day_warnings(
     # Do not spend a repair call asking for impossible coverage. If a slot has
     # fewer legal candidates than seats, the honest outcome is an unfilled
     # warning for the manager.
-    fillable = {
-        slot["shift_name"]: len(candidates["by_slot"].get("slot-%d" % index, []))
-        >= max(1, int(slot.get("headcount", 1)))
-        for index, slot in enumerate(slots, 1)
+    #
+    # Counted in the people who actually fill a seat: a slot needing four with
+    # three counting candidates and two trainees available is not fillable,
+    # and asking the model to repair it burns a call it cannot answer.
+    counting = {
+        item["id"] for item in candidates["employees"]
+        if item.get("counts_toward_staffing")
     }
+    fillable = {}
+    for index, slot in enumerate(slots, 1):
+        available = len([
+            employee_id
+            for employee_id in candidates["by_slot"].get("slot-%d" % index, [])
+            if employee_id in counting
+        ])
+        fillable[slot["shift_name"]] = available >= int(
+            slot.get("headcount", 1)
+        )
     return [
         item for item in warnings
         if item.get("code") != UNFILLED or fillable.get(item.get("shift"), False)

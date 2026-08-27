@@ -430,6 +430,27 @@ assignments, so an audit walking only those reports nothing for an entirely
 unstaffed shift — the case the manager most needs told about. The assignments
 are the fallback for callers that have no stored grid.
 
+**A seat has one definition, and it lives here.** How many people a slot asks
+for (`required_headcount`) and whether the person on it fills one
+(`counts_toward_staffing`) are public for the same reason `personal_summary`
+sits beside `_shift_hours`: four readers need those two answers — the unfilled
+warning, the coverage chart, `tools.coverage_gaps` and `simulate._coverage` —
+and a fifth spelling of either is how the bar ends up reading 100% above a
+warning that says the cell is short. Both are pure arithmetic, and both are
+imported rather than restated:
+
+- **The stored grid outranks the profile.** `build_slots` already worked the
+  headcount out per date, the board measures cells against it, and an imported
+  week's grid records what the *file* ran with (D9). Recomputing from today's
+  profile instead is how a Friday generated to ten seats gets graded against
+  the four the rest of the week uses. Callers holding a schedule must therefore
+  carry `headcount` on the slots they project — dropping it silently reinstates
+  the profile fallback.
+- **A shadow shift is somebody at work who is not a seat.** Someone learning
+  the shift appears on the board and accrues the hours, and the slot still needs
+  the people it asked for. Counting bodies reports it covered by the one person
+  there because they cannot yet cover it.
+
 This file is the easiest thing here to get exactly right and the easiest to test.
 Build it early and table-drive its tests.
 

@@ -35,13 +35,24 @@ export function WeekRail({
     const required = (schedule?.slots ?? [])
       .filter((slot) => slot.slot_date === date)
       .reduce((sum, slot) => sum + (slot.headcount || 0), 0);
-    const assigned = (schedule?.assignments ?? []).filter(
-      (assignment) => assignment.date === date,
-    ).length;
     const warnings = (schedule?.warnings ?? []).filter(
       (warning) => warning.date === date && warning.severity === "warning",
     ).length;
-    const missing = Math.max(0, required - assigned);
+    // Seats short, summed from the audit's own per-slot `unfilled` counts
+    // rather than from the number of assignment rows on the date. Two things
+    // that count of bodies gets wrong, and this rail is the one line a
+    // manager reads the whole week off: somebody shadowing a shift is a body
+    // who is not a seat, and a slot doubled up lends its spare body to the
+    // slot beside it — so a day with one shift overstaffed and another
+    // entirely empty filled its bar to 100%.
+    const missing = (schedule?.warnings ?? [])
+      .filter((warning) => warning.code === "unfilled" && warning.date === date)
+      .reduce((sum, warning) => {
+        const short =
+          Number(warning.details?.required) - Number(warning.details?.assigned);
+        return sum + (Number.isFinite(short) ? Math.max(0, short) : 0);
+      }, 0);
+    const assigned = Math.max(0, required - missing);
     const percent = required
       ? Math.min(100, Math.round((assigned / required) * 100))
       : 0;

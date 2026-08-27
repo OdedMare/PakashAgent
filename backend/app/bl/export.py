@@ -121,6 +121,7 @@ def as_workbook(schedule: dict, title: str = "") -> bytes:
         name.fill = header_fill
         name.border = border
         name.alignment = centered
+        lines = 1
         for index, date in enumerate(dates):
             people = days[date].get(shift_name)
             # `None` means this shift does not run that day, which is not the
@@ -131,10 +132,17 @@ def as_workbook(schedule: dict, title: str = "") -> bytes:
                 value = ""
             else:
                 value = "\n".join(people) if people else UNFILLED
+                lines = max(lines, len(people) or 1)
             cell = sheet.cell(row=row, column=index + 2, value=value)
             cell.border = border
             cell.alignment = centered
-        sheet.row_dimensions[row].height = 34
+        # Sized to the fullest cell in the row rather than fixed. A shift run
+        # by four or ten people writes four or ten names into one cell, and a
+        # fixed height silently crops all but the first two -- the exported
+        # week would then show fewer people than the schedule holds, which is
+        # worse than an ugly file. Read back it is unaffected either way:
+        # `importer._split_names` splits the cell on its newlines.
+        sheet.row_dimensions[row].height = max(34, 15 * lines + 8)
 
     stream = io.BytesIO()
     book.save(stream)

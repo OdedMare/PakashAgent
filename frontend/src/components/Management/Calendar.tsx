@@ -3,7 +3,13 @@
 import { AlertTriangle, Moon, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { Assignment, Constraint, Schedule, Slot } from "@/types";
+import type {
+  Assignment,
+  Constraint,
+  Schedule,
+  ScheduleWarning,
+  Slot,
+} from "@/types";
 import { displayDate } from "@/components/DateInput";
 import { constraintBlocksSlot } from "@/lib/constraints";
 
@@ -145,7 +151,21 @@ export function Calendar({
                     </td>
                   );
                 }
-                const short = rows.length < slot.headcount;
+                // How short this cell is, taken from the audit's own count
+                // rather than recomputed from the cards.
+                //
+                // This grid renders on the member and employee surfaces,
+                // which hold no roster — a share link carries no identity
+                // (D10), so there is nothing here that could tell a trainee
+                // shadowing the shift from one of the people it asked for.
+                // Counting the cards would therefore report a cell covered
+                // that the manager's board calls short, and the audit's
+                // `unfilled` warning is already on the cell carrying the
+                // number `bl/audit.py` worked out. No warning means no
+                // shortage — including on a shift whose headcount nobody
+                // ever stated, where inventing one would be fiction.
+                const missing = missingFrom(cellWarnings, shift, date);
+                const short = missing > 0;
                 return (
                   <td
                     key={key}
@@ -207,9 +227,7 @@ export function Calendar({
                         />
                       ))}
                       {short ? (
-                        <span className="calendar-gap">
-                          חסרים {slot.headcount - rows.length}
-                        </span>
+                        <span className="calendar-gap">חסרים {missing}</span>
                       ) : null}
                       {/* D18: the manual path. Present on every editable
                           cell rather than only on empty ones — a slot that
@@ -463,6 +481,34 @@ function ShiftTimes({
       {withTimes.start_time}–{withTimes.end_time}
     </span>
   );
+}
+
+/** How many people this cell is short, per the audit that produced it.
+ *
+ *  `bl/audit.py` writes `{assigned, required}` into an `unfilled` warning's
+ *  `details`, having already decided which of the people on the cell fill one
+ *  of its seats and how many seats this date's slot asks for. Both of those
+ *  are facts this grid cannot see: it holds no roster, and the per-weekday
+ *  staffing that makes a Friday need ten where a Tuesday needs four lives in
+ *  the profile. So the number is read, not recomputed.
+ *
+ *  Whole-day warnings (`shift === ""`) reach this cell too and are skipped:
+ *  they are about the date, not about this shift's staffing.
+ */
+function missingFrom(
+  warnings: ScheduleWarning[],
+  shift: string,
+  date: string,
+): number {
+  for (const warning of warnings) {
+    if (warning.code !== "unfilled") continue;
+    if (warning.shift !== shift || warning.date !== date) continue;
+    const required = Number(warning.details?.required);
+    const assigned = Number(warning.details?.assigned);
+    if (!Number.isFinite(required) || !Number.isFinite(assigned)) continue;
+    return Math.max(0, required - assigned);
+  }
+  return 0;
 }
 
 function uniqueSorted(values: string[]): string[] {

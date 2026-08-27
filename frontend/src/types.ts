@@ -259,6 +259,17 @@ export interface CardPerson {
    *  by default does not count toward its staffing, which is exactly the
    *  thing a manager must not have to hover to discover. */
   is_overlap: boolean;
+  /** Whether this person fills one of a slot's seats.
+   *
+   *  Usually the opposite of `is_overlap`, and deliberately its own field
+   *  rather than derived from it: `counts_toward_staffing` is what the roster
+   *  actually stores and the manager may set it either way — a trainee the
+   *  workplace does count, or a full member held off the standard. The badge
+   *  answers "who is this"; this answers "is the cell still short", and
+   *  `bl/audit.counts_toward_staffing` is the backend's word for the same
+   *  question. A cell counted differently here than there is a board that
+   *  disagrees with the warning printed under it. */
+  counts_toward_staffing: boolean;
 }
 
 /** A manager-selected placement that schedule generation must preserve. */

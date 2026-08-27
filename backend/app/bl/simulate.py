@@ -52,7 +52,7 @@ Nothing here decides whether the change is good. It says what it would do.
 
 from typing import Any, Dict, List, Optional
 
-from app.bl.audit import audit, fairness
+from app.bl.audit import audit, counts_toward_staffing, fairness
 from app.bl.changes import OP_ASSIGN, OP_REMOVE, OP_SWAP
 from app.bl.scheduler import effective_availability
 
@@ -128,7 +128,7 @@ def simulate(
         # up with, and the delta alone hides the ten warnings that were
         # already there.
         "warnings_after": warnings_after,
-        "coverage": _coverage(before, after, slots),
+        "coverage": _coverage(before, after, slots, employees, profile),
         "workload": _workload(fairness_before, fairness_after, touched),
         "affected": sorted(touched),
         "fairness_after": fairness_after,
@@ -199,7 +199,9 @@ def _apply_all(
 
 
 def _coverage(
-    before: List[dict], after: List[dict], slots: List[dict]
+    before: List[dict], after: List[dict], slots: List[dict],
+    employees: Optional[List[dict]] = None,
+    profile: Optional[dict] = None,
 ) -> dict:
     """Required against assigned, before and after.
 
@@ -208,12 +210,26 @@ def _coverage(
     places filled. `audit._staffing` reports the overstaffing as its own
     warning; double-counting it as coverage would make an unstaffed week look
     fine because somebody was tripled up on Sunday.
+
+    A seat is filled by someone who counts toward staffing, read through
+    `audit.counts_toward_staffing`. Moving a trainee onto a shadow shift is a
+    real change with a real hours cost, and it moves coverage by nothing —
+    reporting a gap closed by it would be the simulation promising something
+    the audit will not agree happened.
     """
+    roster = {
+        _text(person.get("name")): person
+        for person in employees or []
+        if isinstance(person, dict) and _text(person.get("name"))
+    }
     required = sum(int(_number(slot.get("headcount"), 1)) for slot in slots)
 
     def filled(rows: List[dict]) -> int:
         counts: Dict[tuple, int] = {}
         for row in rows:
+            employee = _text(row.get("employee"))
+            if not counts_toward_staffing(roster.get(employee), profile):
+                continue
             key = (_text(row.get("shift")), _iso(row.get("date")))
             counts[key] = counts.get(key, 0) + 1
         total = 0
