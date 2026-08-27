@@ -74,7 +74,7 @@ def _build():
     store = RuntimeSettingsStore(env)
     repository = Repository(store)
     llm = OpenAIJsonClient(store)
-    schedules = ScheduleService(repository, llm)
+    schedules = ScheduleService(repository, llm, settings=store)
     interviews = InterviewService(repository, llm)
     return repository, CopilotWorker(
         repository, CopilotService(repository, schedules, interviews)

@@ -22,6 +22,7 @@ the repository, which filters on it. It is never taken from a request body.
 
 import datetime
 import logging
+import time
 from threading import Event, Lock, Thread
 from typing import Any, Dict, List, Optional
 
@@ -40,7 +41,10 @@ from app.bl.profile_service import ProfileService
 from app.bl.planner import PlanningAgent
 from app.bl.simulate import simulate as simulate_operations
 from app.bl.tools import ScheduleTools
-from app.bl.scheduler import Scheduler, build_slots, effective_availability
+from app.bl.scheduler import (
+    MODE_DAY, MODE_WEEK, Scheduler, build_slots, effective_availability,
+    plan_spans,
+)
 from app.common.errors import (
     AgentError, NotFoundError, ProfileIncompleteError,
 )
@@ -111,6 +115,36 @@ _GENERATION_RESUMABLE = (GENERATION_FAILED, GENERATION_CANCELLED)
 # tiny UPDATE, and missing four of them in a row has to mean something.
 GENERATION_HEARTBEAT_SECONDS = 20
 
+# How many times one span is re-asked before the job is called failed.
+#
+# **This is what stops a single blip from costing the whole build.** Every
+# failure here was already checkpointed and retryable — but only by a person
+# noticing and pressing continue, because the worker gave up on the first
+# exception and the browser stopped polling a job marked `failed`. A dropped
+# connection on day twelve of thirty left twenty-nine days of work parked
+# behind a button nobody was watching.
+#
+# Bounded, because the failures that are not transient — a model that rejects
+# the schema, a profile the grid cannot be built from — repeat identically and
+# retrying them only burns the model server. Three is enough for a restarted
+# Ollama or a proxy hiccup and short enough that a real error still surfaces
+# within a minute.
+_MAX_SPAN_ATTEMPTS = 3
+# Waited between attempts, geometric. The failure this is for is a model
+# server that is briefly unavailable — mid-restart, or working through a
+# queue — and answering the same second is how a retry hits exactly the state
+# it backed off from. Capped so the pause never dwarfs the call.
+_RETRY_BASE_SECONDS = 2.0
+_RETRY_MAX_SECONDS = 15.0
+
+# How long a fairness history read is reused across the spans of one build.
+#
+# It reads every *earlier* period, so by construction nothing inside the
+# current build can change it — yet it was re-read, and re-joined, once per
+# generated date. On a month at one call per day that is thirty scans of the
+# team's whole history to compute a tally that was identical every time.
+_HISTORY_CACHE_SECONDS = 300
+
 
 
 def _launch_thread(target, *args) -> None:
@@ -136,8 +170,15 @@ IMPORTED_REASON = "יובא מקובץ סידור קיים"
 
 
 class ScheduleService:
-    def __init__(self, repository, llm, launch=None):
+    def __init__(
+        self, repository, llm, launch=None, settings=None, sleep=None,
+    ):
         self._repository = repository
+        # The live runtime-settings store, or `None`. Optional because most of
+        # this class has no settings to read and every test double would
+        # otherwise have to supply one; `_generation_mode` treats its absence
+        # as the default rather than as an error.
+        self._settings = settings
         self._scheduler = Scheduler(llm)
         self._changes = ChangeAgent(llm)
         self._briefing = BriefingAgent(llm)
@@ -149,8 +190,14 @@ class ScheduleService:
         self._planner = PlanningAgent(llm, self._tools)
         self._profiles = ProfileService(repository)
         self._launch = launch or _launch_thread
+        # Behind the same seam as `_launch`, and for the same reason: a test
+        # exercising the retry must not pay the backoff it exists to describe.
+        self._sleep = sleep or time.sleep
         self._generation_lock = Lock()
         self._active_generations = set()
+        # (team, before) -> (expires_at, rows). See `_HISTORY_CACHE_SECONDS`.
+        self._history_cache = {}
+        self._history_lock = Lock()
 
     # -- reading -----------------------------------------------------------
 
@@ -494,13 +541,23 @@ class ScheduleService:
             self._repository.replace_assignments(
                 schedule["id"], team_id, required
             )
+        # The mode is read once, here, and stored on the job. A manager who
+        # changes the setting while a build is running is choosing how the
+        # *next* one runs — re-planning the spans of a job already half
+        # checkpointed would strand the days it had finished.
+        mode = self._generation_mode()
+        spans = plan_spans(profile, starts_on, ends_on, mode)
         dates = sorted({_iso(slot.get("slot_date")) for slot in stored_slots})
         generation = {
             "status": GENERATION_RUNNING,
-            "current_date": dates[0] if dates else "",
+            "current_date": spans[0]["date"] if spans else "",
+            # Counted in dates, never in spans. The progress bar means "days
+            # of the period", and a week-wide job whose counter moved by seven
+            # at a time would read as a bar that jumps rather than fills.
             "total_days": len(dates),
             "completed_days": 0,
             "failed_days": 0,
+            "mode": mode,
             "instructions": _text(instructions)[:2000],
             "required_assignments": required_assignments or [],
             "notes": [],
@@ -511,13 +568,15 @@ class ScheduleService:
             "cancel_requested": False,
             "days": [
                 {
-                    "date": date,
+                    "date": span["date"],
+                    "through": span["through"],
+                    "dates": span["dates"],
                     "status": "pending",
                     "attempts": 0,
                     "error": "",
                     "metrics": {},
                 }
-                for date in dates
+                for span in spans
             ],
         }
         schedule = self._repository.set_generation(
@@ -567,8 +626,14 @@ class ScheduleService:
             "summaries": [],
             "heartbeat": _now(),
             "cancel_requested": False,
+            # One date, whatever the mode: a manager rebuilding Tuesday asked
+            # for Tuesday, and widening that to its week would silently
+            # re-answer days they did not select.
+            "mode": MODE_DAY,
             "days": [{
                 "date": target,
+                "through": target,
+                "dates": [target],
                 "status": "pending",
                 "attempts": 0,
                 "error": "",
@@ -686,7 +751,21 @@ class ScheduleService:
         stop_beating = self._start_heartbeat(team_id, schedule_id)
         try:
             while True:
-                schedule = self.generate_next(team_id, schedule_id)
+                try:
+                    schedule = self.generate_next(
+                        team_id, schedule_id, light=True
+                    )
+                except Exception as exc:
+                    # A span with attempts left goes back in the queue rather
+                    # than taking the rest of the period down with it. This
+                    # is the whole difference between a dropped connection on
+                    # day twelve costing a pause and costing eighteen days
+                    # parked behind a button nobody is watching.
+                    if not self._requeue_failed_span(
+                        team_id, schedule_id, exc
+                    ):
+                        raise
+                    continue
                 if (schedule.get("generation") or {}).get("status") in (
                     GENERATION_COMPLETE,
                     GENERATION_FAILED,
@@ -761,19 +840,31 @@ class ScheduleService:
         Thread(target=beat, daemon=True).start()
         return stop.set
 
-    def generate_next(self, team_id: str, schedule_id: str) -> dict:
-        """Generate the next pending/failed date and checkpoint the result."""
+    def generate_next(
+        self, team_id: str, schedule_id: str, light: bool = False
+    ) -> dict:
+        """Generate the next pending/failed span and checkpoint the result.
+
+        `light` returns the progress counter instead of the audited period.
+        The background loop is the caller that wants it: it reads one field —
+        whether the job is still running — and `_view` re-audits every slot
+        and assignment in the period to produce it. On a month that was a
+        full audit per generated day, thrown away every time. The HTTP route
+        still asks for the whole schedule, because its caller renders it.
+        """
         schedule = self._repository.get_schedule(schedule_id, team_id)
         generation = dict(schedule.get("generation") or {})
         days = [dict(item) for item in generation.get("days") or []]
         if not days:
             raise AgentError("לסידור הזה אין תהליך יצירה שניתן להמשיך")
         if generation.get("status") == GENERATION_COMPLETE:
-            return self._view(schedule, team_id)
-        # Checked before the day is chosen, not after the model answers: a
+            return self._result(schedule, team_id, light)
+        # Checked before the span is chosen, not after the model answers: a
         # manager who stopped waiting must not pay for one more call.
         if generation.get("cancel_requested"):
-            return self._stop_generation(schedule, team_id, generation, days)
+            return self._stop_generation(
+                schedule, team_id, generation, days, light
+            )
 
         target = next(
             (
@@ -787,14 +878,17 @@ class ScheduleService:
         if target is None:
             generation["status"] = GENERATION_COMPLETE
             self._repository.set_generation(schedule_id, team_id, generation)
-            return self._view(
-                self._repository.get_schedule(schedule_id, team_id), team_id
+            return self._result(
+                self._repository.get_schedule(schedule_id, team_id),
+                team_id, light,
             )
 
         day = _iso(target.get("date"))
+        span_dates = _span_dates(target)
+        attempt = int(target.get("attempts") or 0) + 1
         target.update({
             "status": GENERATION_RUNNING,
-            "attempts": int(target.get("attempts") or 0) + 1,
+            "attempts": attempt,
             "error": "",
         })
         generation.update({
@@ -807,22 +901,26 @@ class ScheduleService:
 
         profile = self._buildable_profile(team_id)
         # What the manager pinned when the job was opened, plus anything they
-        # have placed by hand on this date since. The board stays writable
+        # have placed by hand on these dates since. The board stays writable
         # while a period is being built, so a cell filled in at 10:04 must
-        # survive the day that gets generated at 10:05 -- as a pin the agent
+        # survive the span that gets generated at 10:05 -- as a pin the agent
         # fills around, exactly as a single-day rebuild treats one.
         required = _merged_required_rows(
             [
                 row for row in generation.get("required_assignments") or []
-                if _iso(row.get("date")) == day
+                if _iso(row.get("date")) in span_dates
             ],
-            _manager_rows_on(schedule, day),
+            _manager_rows_in(schedule, span_dates),
         )
+        through = _iso(target.get("through")) or day
         try:
-            result = self._scheduler.generate_day(
+            result = self._scheduler.generate_span(
                 profile,
                 day,
-                availability=self._repository.availability(team_id, day, day),
+                through,
+                availability=self._repository.availability(
+                    team_id, day, through
+                ),
                 history=self._recent_assignments(
                     team_id, _iso(schedule.get("starts_on"))
                 ),
@@ -836,9 +934,9 @@ class ScheduleService:
             )
             fresh = self._repository.get_schedule(schedule_id, team_id)
             rows = _persisted_generation_rows(
-                fresh, result.get("assignments") or [], day
+                fresh, result.get("assignments") or [], span_dates
             )
-            self._repository.replace_assignments(schedule_id, team_id, rows)
+            self._write_span(schedule_id, team_id, span_dates, rows)
             target.update({
                 "status": GENERATION_COMPLETE,
                 "error": "",
@@ -849,6 +947,10 @@ class ScheduleService:
             if summary:
                 generation.setdefault("summaries", []).append(summary)
         except Exception as exc:
+            # Checkpointed as failed and re-raised, exactly as before. One
+            # step is one step: the caller of `/next` asked for a date and
+            # deserves the error. Deciding to *try again* belongs to the
+            # durable loop — see `_requeue_failed_span`.
             target.update({
                 "status": GENERATION_FAILED, "error": str(exc)[:1000],
             })
@@ -856,10 +958,7 @@ class ScheduleService:
                 "status": GENERATION_FAILED,
                 "current_date": day,
                 "heartbeat": _now(),
-                "completed_days": sum(
-                    item.get("status") == GENERATION_COMPLETE
-                    for item in days
-                ),
+                "completed_days": _completed_dates(days),
                 "failed_days": sum(
                     item.get("status") == GENERATION_FAILED for item in days
                 ),
@@ -870,9 +969,7 @@ class ScheduleService:
 
         generation.update({
             "heartbeat": _now(),
-            "completed_days": sum(
-                item.get("status") == GENERATION_COMPLETE for item in days
-            ),
+            "completed_days": _completed_dates(days),
             "failed_days": sum(
                 item.get("status") == GENERATION_FAILED for item in days
             ),
@@ -884,7 +981,7 @@ class ScheduleService:
         if self._cancel_requested(schedule_id, team_id):
             return self._stop_generation(
                 self._repository.get_schedule(schedule_id, team_id),
-                team_id, generation, days,
+                team_id, generation, days, light,
             )
         remaining = next(
             (
@@ -916,12 +1013,63 @@ class ScheduleService:
         schedule = self._repository.set_generation(
             schedule_id, team_id, generation
         )
-        view = self._view(schedule, team_id)
+        view = self._result(schedule, team_id, light)
         view["notes"] = generation.get("notes") or []
         view["summary"] = _text(" ".join(
             generation.get("summaries") or []
         ))[:4000]
         return view
+
+    def _requeue_failed_span(
+        self, team_id: str, schedule_id: str, error: Exception
+    ) -> bool:
+        """Put a failed span back in the queue. False when it is out of tries.
+
+        Bounded on purpose: the failures that are not transient — a model
+        rejecting the schema, a profile with no shifts — repeat identically,
+        and retrying those only burns the model server while the manager
+        waits for an error that was already decided. A cancelled job is never
+        requeued; the manager stopping is not something to recover from.
+        """
+        try:
+            schedule = self._repository.get_schedule(schedule_id, team_id)
+        except Exception:
+            return False
+        generation = dict(schedule.get("generation") or {})
+        if generation.get("cancel_requested"):
+            return False
+        days = [dict(item) for item in generation.get("days") or []]
+        target = next(
+            (
+                item for item in days
+                if item.get("status") == GENERATION_FAILED
+            ),
+            None,
+        )
+        if target is None:
+            return False
+        attempts = int(target.get("attempts") or 0)
+        if attempts >= _MAX_SPAN_ATTEMPTS:
+            return False
+
+        target.update({"status": "pending"})
+        generation.update({
+            "status": GENERATION_RUNNING,
+            "heartbeat": _now(),
+            "failed_days": sum(
+                item.get("status") == GENERATION_FAILED for item in days
+            ),
+            "days": days,
+        })
+        self._repository.set_generation(schedule_id, team_id, generation)
+        _log.warning(
+            "schedule span %s..%s failed (attempt %d/%d), retrying: %s",
+            _iso(target.get("date")),
+            _iso(target.get("through")) or _iso(target.get("date")),
+            attempts, _MAX_SPAN_ATTEMPTS, error,
+        )
+        self._pause_before_retry(attempts)
+        return True
 
     def _cancel_requested(self, schedule_id: str, team_id: str) -> bool:
         """Whether a stop was asked for while a day was being generated.
@@ -936,7 +1084,8 @@ class ScheduleService:
         return bool((schedule.get("generation") or {}).get("cancel_requested"))
 
     def _stop_generation(
-        self, schedule: dict, team_id: str, generation: dict, days: List[dict]
+        self, schedule: dict, team_id: str, generation: dict,
+        days: List[dict], light: bool = False,
     ) -> dict:
         """Park a job the manager stopped, keeping every finished day."""
         for day in days:
@@ -946,19 +1095,17 @@ class ScheduleService:
             "status": GENERATION_CANCELLED,
             "cancel_requested": True,
             "heartbeat": _now(),
-            "completed_days": sum(
-                item.get("status") == GENERATION_COMPLETE for item in days
-            ),
+            "completed_days": _completed_dates(days),
             "failed_days": sum(
                 item.get("status") == GENERATION_FAILED for item in days
             ),
             "days": days,
         })
-        return self._view(
+        return self._result(
             self._repository.set_generation(
                 schedule.get("id"), team_id, generation
             ),
-            team_id,
+            team_id, light,
         )
 
     def create_blank(
@@ -2092,6 +2239,59 @@ class ScheduleService:
 
     # -- helpers -----------------------------------------------------------
 
+    def _result(self, schedule: dict, team_id: str, light: bool) -> dict:
+        """The audited period, or just its progress. See `generate_next`."""
+        if not light:
+            return self._view(schedule, team_id)
+        return {
+            "id": schedule.get("id"),
+            "status": schedule.get("status"),
+            "generation": dict(schedule.get("generation") or {}),
+        }
+
+    def _write_span(
+        self, schedule_id: str, team_id: str, dates: List[str],
+        rows: List[dict],
+    ) -> None:
+        """Persist one span's checkpoint, touching only that span's dates.
+
+        Falls back to rewriting the period on a repository that predates
+        `replace_span_assignments` — an older deployment, a test double —
+        because a checkpoint that raises loses the model answer it was
+        holding, which is the one outcome worse than writing too much.
+        """
+        scoped = getattr(self._repository, "replace_span_assignments", None)
+        if scoped is None:
+            self._repository.replace_assignments(schedule_id, team_id, rows)
+            return
+        wanted = set(dates)
+        scoped(
+            schedule_id, team_id, sorted(wanted),
+            [row for row in rows if row.get("date") in wanted],
+        )
+
+    def _generation_mode(self) -> str:
+        """How wide one model call is for the next build the manager opens.
+
+        Read live from the settings store, so a mode saved in the panel
+        applies to the next period without a restart — the same property the
+        model settings have. No store (a test double, an older composition
+        root) reads as the default: a missing setting is not a reason to run
+        at a width nobody chose.
+        """
+        settings = getattr(self._settings, "get", None)
+        if settings is None:
+            return MODE_DAY
+        mode = getattr(settings(), "schedule_generation_mode", MODE_DAY)
+        return mode if mode in (MODE_DAY, MODE_WEEK) else MODE_DAY
+
+    def _pause_before_retry(self, attempt: int) -> None:
+        """Back off before re-asking. See `_RETRY_BASE_SECONDS`."""
+        self._sleep(min(
+            _RETRY_BASE_SECONDS * (2 ** max(0, attempt - 1)),
+            _RETRY_MAX_SECONDS,
+        ))
+
     def _view(self, schedule: dict, team_id: str) -> dict:
         """A schedule with its warnings attached.
 
@@ -2184,7 +2384,21 @@ class ScheduleService:
 
         The scheduler needs to know who has been carrying the nights, and
         that is not visible inside the period being built.
+
+        **Briefly cached, because nothing a build does can change it.** It
+        reads only periods starting *before* the one being generated, so the
+        answer is identical for every span of a run — and it was recomputed
+        for each one, scanning and joining the team's whole schedule history
+        per generated date. The window is short enough that a period imported
+        or edited alongside a build is picked up on the next read.
         """
+        key = (team_id, before)
+        now = time.monotonic()
+        with self._history_lock:
+            cached = self._history_cache.get(key)
+            if cached and cached[0] > now:
+                return list(cached[1])
+
         rows: List[dict] = []
         for period in self._repository.list_schedules(team_id):
             if _iso(period["starts_on"]) >= before:
@@ -2199,7 +2413,14 @@ class ScheduleService:
             )
             if len(rows) > 300:
                 break
-        return rows
+        with self._history_lock:
+            # Bounded so a long-lived process serving many teams cannot grow
+            # this without limit; the entries are cheap and short-lived, and
+            # dropping the oldest costs one re-read.
+            if len(self._history_cache) > 64:
+                self._history_cache.clear()
+            self._history_cache[key] = (now + _HISTORY_CACHE_SECONDS, rows)
+        return list(rows)
 
 
 def _quiet() -> dict:
@@ -2351,19 +2572,63 @@ def _now() -> str:
     return stamp.replace(microsecond=0, tzinfo=None).isoformat() + "Z"
 
 
-def _manager_rows_on(schedule: dict, day: str) -> List[dict]:
-    """What the manager placed by hand on one date of a running job."""
+def _span_dates(entry: dict) -> List[str]:
+    """The dates one checkpoint entry covers.
+
+    Derived from `date`/`through` when `dates` is absent, so a job opened
+    before spans existed — one already checkpointed and half finished when
+    the code was deployed — resumes as the run of single days it is, rather
+    than failing on a field its stored state never had.
+    """
+    stored = entry.get("dates")
+    if isinstance(stored, list) and stored:
+        return [_iso(item) for item in stored if _iso(item)]
+    first = _iso(entry.get("date"))
+    last = _iso(entry.get("through")) or first
+    try:
+        start = datetime.date.fromisoformat(first)
+        end = datetime.date.fromisoformat(last)
+    except (TypeError, ValueError):
+        return [first] if first else []
+    dates = []
+    while start <= end:
+        dates.append(start.isoformat())
+        start += datetime.timedelta(days=1)
+    return dates
+
+
+def _completed_dates(days: List[dict]) -> int:
+    """Progress in dates, not in model calls. See `start_generation`."""
+    return sum(
+        len(_span_dates(item)) for item in days
+        if item.get("status") == GENERATION_COMPLETE
+    )
+
+
+def _manager_rows_in(schedule: dict, dates) -> List[dict]:
+    """What the manager placed by hand anywhere in a span of a running job.
+
+    These become the span's pins: the agent fills around them and
+    `_persisted_generation_rows` keeps them whether or not the model repeats
+    them, which is what lets the board stay writable while a build runs.
+    """
+    wanted = set(dates)
     return [
         {
             "employee": _text(row.get("employee")),
             "shift": _text(row.get("shift")),
-            "date": day,
+            "date": _iso(row.get("date")),
         }
         for row in schedule.get("assignments") or []
-        if _iso(row.get("date")) == day
+        if _iso(row.get("date")) in wanted
         and row.get("source") == ASSIGNED_BY_MANAGER
         and _text(row.get("employee")) and _text(row.get("shift"))
     ]
+
+
+def _manager_rows_on(schedule: dict, day: str) -> List[dict]:
+    """What the manager placed by hand on one date of a running job."""
+    return _manager_rows_in(schedule, {day})
 
 
 def _merged_required_rows(
@@ -2385,31 +2650,38 @@ def _merged_required_rows(
 
 
 def _persisted_generation_rows(
-    schedule: dict, generated: List[dict], day: str
+    schedule: dict, generated: List[dict], dates
 ) -> List[dict]:
-    """Replace one generated date while preserving every other checkpoint.
+    """Replace the generated dates while preserving every other checkpoint.
 
-    Manager-placed rows on the generated date are kept rather than replaced.
-    They went in as pins the model was told to work around, so dropping the
-    ones it failed to repeat would silently undo a manager's own click --
-    and the board is writable while the job runs, so that click can land
-    between the moment the day was read and the moment it was answered.
+    Manager-placed rows on those dates are kept rather than replaced. They
+    went in as pins the model was told to work around, so dropping the ones
+    it failed to repeat would silently undo a manager's own click -- and the
+    board is writable while the job runs, so that click can land between the
+    moment the span was read and the moment it was answered.
+
+    Returns the **whole period's** rows, each carrying its date. Both writers
+    read what they need: `replace_span_assignments` filters to the span it is
+    deleting, and the whole-period fallback takes the list as it stands. The
+    extra `date` key is ignored by the insert either way.
     """
+    wanted = set(dates)
     rows = [
         {
             "slot_id": row["slot_id"],
             "employee": row["employee"],
             "reason": row["reason"],
             "source": row.get("source") or "agent",
+            "date": _iso(row.get("date")),
         }
         for row in schedule.get("assignments") or []
-        if _iso(row.get("date")) != day
+        if _iso(row.get("date")) not in wanted
         or row.get("source") == ASSIGNED_BY_MANAGER
     ]
     kept = {
         (row.get("employee"), _text(row.get("shift")), _iso(row.get("date")))
         for row in schedule.get("assignments") or []
-        if _iso(row.get("date")) == day
+        if _iso(row.get("date")) in wanted
         and row.get("source") == ASSIGNED_BY_MANAGER
     }
     existing_sources = {
@@ -2435,6 +2707,7 @@ def _persisted_generation_rows(
             "employee": item["employee"],
             "reason": item["reason"],
             "source": existing_sources.get(key, "agent"),
+            "date": _iso(item.get("date")),
         })
     return rows
 

@@ -58,7 +58,10 @@ repository = Repository(store)
 llm = OpenAIJsonClient(store)
 interview_service = InterviewService(repository, llm)
 workspace_service = WorkspaceService(repository)
-schedule_service = ScheduleService(repository, llm)
+# Handed the settings store, not just the repository: `schedule_generation_mode`
+# is read when a period is opened, so a mode saved in the panel applies to the
+# next build with no restart — the same property the model settings have.
+schedule_service = ScheduleService(repository, llm, settings=store)
 profile_service = ProfileService(repository)
 copilot_service = CopilotService(
     repository, schedule_service, interview_service

@@ -450,6 +450,10 @@ export function useManagement(): ManagementState {
         completed_days: 0,
         failed_days: 0,
         days: [],
+        // Left empty deliberately: the mode is the server's to stamp when it
+        // opens the job, and guessing it here would render "בנייה שבועית" for
+        // the second before the first response, on a build that may not be.
+        mode: "",
       });
       await watchGeneration((onProgress, signal) =>
         generateSchedule(input, onProgress, { signal }),

@@ -218,6 +218,12 @@ impression.
   the id, had just told them the cell was fine. `focusPeriod` reports the
   same period upward so the agent's proposals, answers and simulations are
   about the week on screen rather than about today's.
+- **The banner says how wide the build is.** `generation.mode` is stamped by
+  the server when the period is opened, and a `week` build says so under the
+  counter. It is the single biggest factor in how long the manager is about
+  to wait, and the setting that governs it (הגדרות ← בניית סידור) lives two
+  screens away — so the board states it rather than leaving them to infer it
+  from the pace.
 - **A failed build says why.** The per-day `error` is rendered in the banner.
   It is usually the one thing the manager can act on — a model timeout is
   fixed by a setting, not by pressing retry again.
