@@ -540,7 +540,7 @@ def test_generation_run_returns_before_the_model_and_is_polled_with_get():
     assert completed["assignments"][0]["employee"] == "דנה"
 
 
-def test_a_transient_failure_is_retried_without_stopping_the_job():
+def test_generation_does_not_need_model_retries():
     """One bad answer costs a retry, not the rest of the period.
 
     The worker owns this, not the browser: nobody is watching a background
@@ -567,13 +567,14 @@ def test_a_transient_failure_is_retried_without_stopping_the_job():
         "/api/schedule/%s" % started["id"]
     ).json()["generation"]
     assert generation["status"] == "complete"
-    assert generation["days"][0]["attempts"] == 2
+    assert generation["days"][0]["attempts"] == 1
+    assert repo.model_calls == []
 
 
 def test_failed_background_generation_requeues_as_running_for_polling():
     """Once the retries are spent the job parks, and `/run` resumes it."""
     launcher = _DeferredLauncher()
-    app, _ = _build_app(
+    app, repo = _build_app(
         # One more failure than the worker will absorb, so the job reaches
         # `failed` rather than recovering on its own.
         [AgentError("תקלה זמנית")] * 3 + [
@@ -623,7 +624,9 @@ def test_one_existing_day_can_be_rebuilt_with_board_instructions():
     launcher.run_next()
     completed = client.get("/api/schedule/%s" % opened["id"]).json()
     assert completed["assignments"]
-    assert completed["generation"]["instructions"].startswith("זה יום")
+    assert repo.schedules[opened["id"]]["generation"]["instructions"].startswith(
+        "זה יום"
+    )
     assert repo.model_calls == []
 
 
