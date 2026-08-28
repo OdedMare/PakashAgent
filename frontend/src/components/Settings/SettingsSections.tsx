@@ -1,6 +1,10 @@
-import { Bot, Database, RefreshCw } from "lucide-react";
+import { Bot, CalendarRange, Database, RefreshCw } from "lucide-react";
 
-import { SettingsField as Field, SettingsToggle as Toggle } from "./SettingsField";
+import {
+  SettingsField as Field,
+  SettingsSelect as Select,
+  SettingsToggle as Toggle,
+} from "./SettingsField";
 import type { SettingsController, SettingsSection } from "./useSettings";
 
 /** The category rail. Each id matches a key in `SettingsContent` below, so
@@ -11,6 +15,12 @@ const SECTIONS = [
     label: "סוכן ומודל",
     description: "מודל, כתובת בסיס ומפתח API",
     icon: Bot,
+  },
+  {
+    id: "schedule" as const,
+    label: "בניית סידור",
+    description: "כמה ימים הסוכן בונה בכל פנייה",
+    icon: CalendarRange,
   },
   {
     id: "database" as const,
@@ -52,6 +62,7 @@ export function SettingsNavigation({
 export function SettingsContent({ settings }: { settings: SettingsController }) {
   const sections = {
     agent: <AgentSettings settings={settings} />,
+    schedule: <ScheduleSettings settings={settings} />,
     database: <DatabaseSettings settings={settings} />,
   };
   return <div className="settings-content">{sections[settings.activeSection]}</div>;
@@ -113,6 +124,44 @@ function AgentSettings({ settings }: { settings: SettingsController }) {
         optional="שניות; 0 ללא הגבלה"
         placeholder="180"
       />
+    </section>
+  );
+}
+
+/** How wide one scheduling model call is.
+ *
+ *  The values are the backend's own (`GENERATION_MODES` in
+ *  `backend/app/common/config/settings.py`); a third choice added there needs
+ *  a line here, and nothing else — the backend rejects anything it does not
+ *  recognise rather than quietly running at a width nobody chose. */
+const GENERATION_MODES = [
+  { value: "day", label: "יום אחד בכל פנייה — מדויק יותר" },
+  { value: "week", label: "עד שבוע בכל פנייה — מהיר יותר" },
+];
+
+function ScheduleSettings({ settings }: { settings: SettingsController }) {
+  const weekly = settings.text("schedule_generation_mode") === "week";
+  return (
+    <section className="settings-section">
+      <h3>רוחב הפנייה למודל</h3>
+      <Select
+        settings={settings}
+        name="schedule_generation_mode"
+        label="בניית הסידור"
+        options={GENERATION_MODES}
+        hint={
+          weekly
+            ? "הסוכן יבנה עד שבוע שלם בפנייה אחת. מהיר בהרבה — שבוע עולה פנייה אחת במקום שבע — אבל תיקון חוזר בונה מחדש את כל השבוע, ותקלה מפילה את כולו יחד."
+            : "הסוכן יבנה יום אחד בכל פנייה. איטי יותר, ומדויק יותר: כל יום נבדק ומתוקן בנפרד, ויום שנכשל חוזר בלי לפגוע בשכניו."
+        }
+      />
+      <p className="settings-note">
+        {weekly
+          ? "בכל מקרה שבוע הוא תקרה ולא הבטחה: שבוע עמוס מדי לתשובה אחת מפוצל לכמה פניות."
+          : "אפשר לעבור למצב שבועי אם בניית סידור לוקחת יותר מדי זמן."}
+        {" "}
+        המצב נקבע כשלוחצים על בניית סידור — שינוי כאן לא משפיע על בנייה שכבר רצה.
+      </p>
     </section>
   );
 }

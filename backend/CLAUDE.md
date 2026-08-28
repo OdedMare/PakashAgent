@@ -118,6 +118,17 @@ one concern; split rather than append.
   cannot be hallucinated. Pure functions over a roster; trivially unit-testable.
 - **Hard rules are not gates.** They are strong instructions to the model plus a
   loud warning when broken. This is a deliberate, accepted tradeoff — see D1/D3.
+- **How full a slot is has exactly one answer, and `bl/audit.py` owns it.**
+  `required_headcount()` says how many people it asks for — reading the stored
+  grid first, since that is what the week was generated or imported into — and
+  `counts_toward_staffing()` says whether the person standing on it fills one
+  of those seats. `audit`, `shift_stats`, `tools.coverage_gaps`,
+  `simulate._coverage` and the board all go through the pair. A second count
+  anywhere is how a coverage bar comes to read 100% directly above a warning
+  saying the cell is short, and a manager who has seen that once stops
+  believing either number. A shadow shift is where the two counts diverge:
+  somebody learning the shift is at work, is on the board, accrues the hours,
+  and leaves the slot needing everybody it asked for.
 - **Shift names are never hardcoded.** They come from the interview. Any literal
   `"בוקר"` outside a test fixture or a Hebrew vocabulary table is a bug ([D9](../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)).
   On import this means *matched against* the declared vocabulary, not

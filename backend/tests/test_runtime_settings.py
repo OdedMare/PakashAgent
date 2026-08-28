@@ -272,3 +272,28 @@ def test_saving_a_role_model_leaves_the_stored_api_key_alone(store):
     })
     assert store.get().openai_api_key == "sk-real-secret"
     assert store.get().llm_model_advanced == "big-model"
+
+
+# -- how wide a schedule build's model calls are ---------------------------
+
+
+def test_generation_mode_defaults_to_one_day_per_call(store):
+    assert store.get().schedule_generation_mode == "day"
+
+
+def test_generation_mode_can_be_switched_to_weekly(store):
+    store.update({"schedule_generation_mode": "week"})
+    assert store.get().schedule_generation_mode == "week"
+
+
+def test_an_unknown_generation_mode_is_refused_rather_than_defaulted(store):
+    """A width nobody chose is the one outcome this setting exists to stop.
+
+    Quietly folding an unrecognised value to the default would leave a
+    deployment that asked for something else running builds at a width its
+    settings file does not describe.
+    """
+    store.update({"schedule_generation_mode": "week"})
+    with pytest.raises(ValueError):
+        store.update({"schedule_generation_mode": "month"})
+    assert store.get().schedule_generation_mode == "week"

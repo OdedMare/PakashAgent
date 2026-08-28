@@ -310,6 +310,15 @@ export function Management({
                 ? `היצירה הופסקה — ${state.generation?.completed_days ?? 0} מתוך ${state.generation?.total_days ?? 7} ימים נשמרו`
                 : `בונים את הסידור — ${state.generation?.completed_days ?? 0} מתוך ${state.generation?.total_days ?? 7} ימים`}
             </strong>
+            {/* Which width this build is running at. Worth saying on the
+                banner and not only in the settings panel: it is the single
+                biggest factor in how long the manager is about to wait, and
+                the setting that governs it lives two screens away. */}
+            {state.generation?.mode === "week" ? (
+              <span className="schedule-generation-mode">
+                בנייה שבועית — עד שבוע בכל פנייה למודל
+              </span>
+            ) : null}
             {buildState === "failed" && buildError ? (
               <span className="schedule-generation-why">{buildError}</span>
             ) : null}

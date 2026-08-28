@@ -9,7 +9,9 @@ import json
 from dataclasses import asdict, fields, replace
 from pathlib import Path
 
-from app.common.config.settings import Settings
+from app.common.config.settings import (
+    GENERATION_MODES, MODE_DAY, Settings,
+)
 from app.common.runtime_settings.normalizers import (
     MASKED_SECRET,
     extract_url_schema,
@@ -79,6 +81,9 @@ class RuntimeSettingsStore:
             llm_api_key_default=env.llm_api_key_default,
             llm_api_key_advanced=env.llm_api_key_advanced,
             llm_queue_seconds=env.llm_queue_seconds,
+            schedule_generation_mode=_safe_generation_mode(
+                env.schedule_generation_mode
+            ),
         )
         if self._path.exists():
             self._apply(json.loads(self._path.read_text("utf-8")), False)
@@ -167,6 +172,8 @@ class RuntimeSettingsStore:
                     value = max(0, int(value))
                 elif key in _POSITIVE_INTS:
                     value = max(1, int(value))
+                elif key == "schedule_generation_mode":
+                    value = _generation_mode(value)
             except (TypeError, ValueError):
                 if strict:
                     raise
@@ -193,6 +200,31 @@ def _clamp_penalty(value) -> float:
     repetition rather than penalizing it; unusual, but a legitimate ask, so
     they pass through rather than being floored to neutral."""
     return min(2.0, max(0.0, float(value)))
+
+
+def _generation_mode(value) -> str:
+    """One of the two schedule-generation widths, or a rejection.
+
+    Rejected rather than silently folded to the default: the panel offers
+    exactly two choices, so anything else is a typo in an API call, and a
+    build quietly running at a width nobody asked for is the one outcome the
+    setting exists to prevent.
+    """
+    cleaned = str(value or "").strip().lower()
+    if cleaned not in GENERATION_MODES:
+        raise ValueError(
+            "schedule_generation_mode must be one of: %s"
+            % ", ".join(GENERATION_MODES)
+        )
+    return cleaned
+
+
+def _safe_generation_mode(value) -> str:
+    """The env value, never failing startup on a bad one."""
+    try:
+        return _generation_mode(value)
+    except (TypeError, ValueError):
+        return MODE_DAY
 
 
 def _safe_schema(value: str) -> str:

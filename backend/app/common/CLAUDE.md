@@ -29,6 +29,7 @@ Cross-cutting infrastructure. **Ported from AiSummryIO.**
 | `PAKASH_DATABASE_*` | URL plus optional explicit overrides |
 | `PAKASH_SESSION_SECRET` | Signs the workspace session cookie. **Set this in production** — unset, it is generated per process, so sessions die on restart and break across workers. Changing it logs every boss out. |
 | `PAKASH_SESSION_DAYS` | How long a boss stays logged in (default 30) |
+| `PAKASH_SCHEDULE_GENERATION_MODE` | How wide one scheduling model call is: `day` (default, one date per call — verified and repaired on its own) or `week` (up to seven dates per call — several times faster, coarser repair). Live-editable in the panel; read when a period is opened, so a running build keeps the mode it started with |
 
 ## Rules
 

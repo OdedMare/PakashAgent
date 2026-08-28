@@ -259,6 +259,17 @@ export interface CardPerson {
    *  by default does not count toward its staffing, which is exactly the
    *  thing a manager must not have to hover to discover. */
   is_overlap: boolean;
+  /** Whether this person fills one of a slot's seats.
+   *
+   *  Usually the opposite of `is_overlap`, and deliberately its own field
+   *  rather than derived from it: `counts_toward_staffing` is what the roster
+   *  actually stores and the manager may set it either way — a trainee the
+   *  workplace does count, or a full member held off the standard. The badge
+   *  answers "who is this"; this answers "is the cell still short", and
+   *  `bl/audit.counts_toward_staffing` is the backend's word for the same
+   *  question. A cell counted differently here than there is a board that
+   *  disagrees with the warning printed under it. */
+  counts_toward_staffing: boolean;
 }
 
 /** A manager-selected placement that schedule generation must preserve. */
@@ -271,12 +282,23 @@ export interface RequiredAssignment {
 /** How an assignment got into the schedule (D18). */
 export type AssignmentSource = "agent" | "manager" | "imported";
 
+/** One checkpoint of a build: a single date, or — in week mode — a span of up
+ *  to seven. `date` is its first date whatever the width, so everything that
+ *  already read this field keeps working. */
 export interface GenerationDay {
   date: string;
+  /** The span's last date. Equal to `date` on a single-day checkpoint, and
+   *  absent on a job opened before spans existed. */
+  through?: string;
+  /** Every date this checkpoint covers. Progress is counted in these rather
+   *  than in checkpoints, so a week-wide build still fills the bar by days. */
+  dates?: string[];
   status: "pending" | "running" | "complete" | "failed";
   attempts: number;
   error: string;
   metrics: {
+    /** The span's last date, mirroring `through`. */
+    through?: string;
     duration_ms?: number;
     returned?: number;
     accepted?: number;
@@ -298,6 +320,10 @@ export interface GenerationProgress {
   completed_days: number;
   failed_days: number;
   days: GenerationDay[];
+  /** How wide one model call is on this job: `"day"` or `"week"`, chosen in
+   *  the settings panel and stamped when the period was opened. Empty on a
+   *  job opened before the setting existed, which reads as `"day"`. */
+  mode?: "" | "day" | "week";
   /** When a worker last said it was still on this job, UTC ISO-8601.
    *
    *  What separates a slow model from a hung one: with no LLM timeout
