@@ -45,7 +45,7 @@ from app.bl.planner import PlanningAgent
 from app.bl.simulate import simulate as simulate_operations
 from app.bl.tools import ScheduleTools
 from app.bl.scheduler import (
-    MODE_DAY, MODE_WEEK, Scheduler, build_slots, effective_availability,
+    MODE_DAY, MODE_WEEK, build_slots, effective_availability,
     plan_spans,
 )
 from app.common.errors import (
@@ -182,7 +182,6 @@ class ScheduleService:
         # otherwise have to supply one; `_generation_mode` treats its absence
         # as the default rather than as an error.
         self._settings = settings
-        self._scheduler = Scheduler(llm)
         self._changes = ChangeAgent(llm)
         self._briefing = BriefingAgent(llm)
         self._learner = RuleLearner(llm)
@@ -2413,7 +2412,7 @@ class ScheduleService:
         )
 
     def _generation_mode(self) -> str:
-        """How wide one model call is for the next build the manager opens.
+        """How wide one persisted checkpoint is for the next build.
 
         Read live from the settings store, so a mode saved in the panel
         applies to the next period without a restart — the same property the
@@ -2467,12 +2466,6 @@ class ScheduleService:
         profile = self._repository.team_profile(team_id) or {}
         days = rotation.by_date(profile, start, end)
         return [days[date] for date in sorted(days)]
-
-    def _active_preferences(self, team_id: str) -> List[dict]:
-        """Confirmed standing context for every scheduling model call."""
-        if not hasattr(self._repository, "preferences"):
-            return []
-        return self._repository.preferences(team_id, status=PREFERENCE_ACTIVE)
 
     def _audit_rows(
         self, team_id: str, assignments: List[dict], schedule: dict

@@ -100,6 +100,10 @@ def generate_day(
     )
     loads = {row["employee"]: row["hours"] for row in load_rows}
     notes = []
+    # A placement changes only that employee's hours/rest/double-booking
+    # facts. Cache every other person's legality for this date instead of
+    # re-auditing the whole accumulated period once per open seat.
+    legal_cache: Dict[tuple, bool] = {}
 
     # Scarce and specialised slots are filled first. Stable tie breakers make
     # rerunning the same day produce the same result.
@@ -131,9 +135,15 @@ def generate_day(
                 }
                 if _hard_conflict(row, slots, effective):
                     continue
-                if _introduces_blocking(
-                    current, row, shifts, employees, effective, profile, slots
-                ):
+                cache_key = (name, slot["shift_name"], slot["slot_date"])
+                legal = legal_cache.get(cache_key)
+                if legal is None:
+                    legal = not _introduces_blocking(
+                        current, row, shifts, employees, effective, profile,
+                        slots,
+                    )
+                    legal_cache[cache_key] = legal
+                if not legal:
                     continue
                 candidates.append((
                     _candidate_key(current, slot, person, profile,
@@ -151,6 +161,10 @@ def generate_day(
             _, chosen, person = min(candidates, key=lambda item: item[0])
             chosen["reason"] = _reason(profile, person, slot)
             current.append(chosen)
+            legal_cache = {
+                key: value for key, value in legal_cache.items()
+                if key[0] != chosen["employee"]
+            }
             loads[chosen["employee"]] = loads.get(
                 chosen["employee"], 0.0
             ) + _shift_hours(shifts, chosen["shift"])
