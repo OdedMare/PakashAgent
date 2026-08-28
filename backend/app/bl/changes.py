@@ -258,7 +258,7 @@ class ChangeAgent:
             load("schedule_decision"),
             json.dumps(payload, ensure_ascii=False, default=_json_default),
             schema=DAY_DECISION_SCHEMA,
-            flow="changes",
+            flow="schedule_decision",
         )
         if not isinstance(answer, dict):
             raise AgentError("המודל החזיר החלטת שיבוץ לא תקינה")

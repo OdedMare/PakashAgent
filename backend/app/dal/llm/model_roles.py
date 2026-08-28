@@ -55,6 +55,9 @@ _ROLE_KEY_FIELDS = {
 # conversation-shaped and sits on the default.
 _FLOW_ROLES = {
     "scheduler": ADVANCED,
+    # Ranking a few code-generated schedules is short and fully bounded; it
+    # belongs on the fast model, not on the old heavy scheduling model.
+    "schedule_decision": FAST,
     "interview": DEFAULT,
     "changes": DEFAULT,
     "planner": DEFAULT,

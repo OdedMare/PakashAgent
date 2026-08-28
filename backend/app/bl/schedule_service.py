@@ -1914,28 +1914,34 @@ class ScheduleService:
         previewed = bool(operation.get("previewed"))
         preview = operation.get("assignments")
         preview = preview if isinstance(preview, list) else []
-        if previewed:
-            required = _merged_required_rows(required, preview)
-        result = assign_day(
-            profile,
-            day,
-            availability=self._repository.availability(team_id, day, day),
-            history=self._recent_assignments(
+        inputs = {
+            "availability": self._repository.availability(team_id, day, day),
+            "history": self._recent_assignments(
                 team_id, _iso(schedule.get("starts_on"))
             ),
-            required_assignments=required,
-            already_scheduled=[
+            "required_assignments": required,
+            "already_scheduled": [
                 _model_assignment(row)
                 for row in schedule.get("assignments") or []
             ],
-            shift_names=[shift] if shift else None,
-        )
-        if previewed and _assignment_signature(
-            result.get("assignments") or []
-        ) != _assignment_signature(preview):
-            raise AgentError(
-                "הסידור השתנה מאז שהסוכן בדק את ההצעה; יש לבקש הצעה חדשה"
-            )
+            "shift_names": [shift] if shift else None,
+        }
+        if previewed:
+            signature = _assignment_signature(preview)
+            result = next((
+                candidate for candidate in generate_day_candidates(
+                    profile, day, **inputs
+                )
+                if _assignment_signature(
+                    candidate.get("assignments") or []
+                ) == signature
+            ), None)
+            if result is None:
+                raise AgentError(
+                    "הסידור השתנה מאז שהסוכן בדק את ההצעה; יש לבקש הצעה חדשה"
+                )
+        else:
+            result = assign_day(profile, day, **inputs)
         fresh = self._repository.get_schedule(schedule["id"], team_id)
         rows = _persisted_generation_rows(
             fresh, result.get("assignments") or [], day,

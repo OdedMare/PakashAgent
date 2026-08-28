@@ -150,6 +150,11 @@ _MIN_TOTAL_BUDGET_SECONDS = 300
 # *tighter* multiple — but still a multiple, never a flat constant that a
 # slow model would breach on its first attempt.
 _SCHEDULER_BUDGET_MULTIPLIER = 1.5
+# The scheduler preview is already complete when the agent sees it. Ranking
+# three compact alternatives must never turn the central command back into a
+# long-running model job; after this ceiling the deterministic first choice
+# is the supported fallback.
+_SCHEDULE_DECISION_TIMEOUT_SECONDS = 20
 
 
 def read_timeout_for(settings, flow: str) -> int:
@@ -180,6 +185,10 @@ def read_timeout_for(settings, flow: str) -> int:
     """
     if flow == "scheduler":
         return 0
+    if flow == "schedule_decision":
+        configured = getattr(settings, "llm_timeout_seconds", 0) or 0
+        return min(configured, _SCHEDULE_DECISION_TIMEOUT_SECONDS) \
+            if configured > 0 else _SCHEDULE_DECISION_TIMEOUT_SECONDS
     return getattr(settings, "llm_timeout_seconds", 0) or 0
 
 
@@ -204,6 +213,8 @@ def _budget_seconds(settings, flow: str):
         return None
     if flow == "scheduler":
         return max(timeout * _SCHEDULER_BUDGET_MULTIPLIER, timeout + 60)
+    if flow == "schedule_decision":
+        return timeout + 5
     return max(timeout * _BUDGET_MULTIPLIER, _MIN_TOTAL_BUDGET_SECONDS)
 
 # Substrings local servers use when the prompt exceeds the context window.

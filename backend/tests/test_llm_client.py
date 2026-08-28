@@ -614,6 +614,19 @@ def test_building_a_schedule_is_never_cut_off_by_the_timeout():
         assert read_timeout_for(settings, "interview") == timeout, timeout
 
 
+def test_schedule_decision_is_small_and_always_bounded():
+    """Agent ranking must not turn deterministic generation into a wait."""
+    assert read_timeout_for(
+        _Settings(llm_timeout_seconds=0), "schedule_decision"
+    ) == 20
+    assert read_timeout_for(
+        _Settings(llm_timeout_seconds=120), "schedule_decision"
+    ) == 20
+    assert _budget_seconds(
+        _Settings(llm_timeout_seconds=0), "schedule_decision"
+    ) == 25
+
+
 def test_the_scheduler_client_is_built_with_no_read_ceiling():
     """The wiring, not the arithmetic: `complete_json` must hand the flow's
     own ceiling to the client, or the decision above never reaches httpx."""

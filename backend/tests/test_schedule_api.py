@@ -436,6 +436,32 @@ def test_agent_sees_candidates_and_its_choice_is_the_confirmed_schedule():
     assert len(repo.model_calls) == 1
 
 
+def test_a_generated_preview_cannot_be_rewritten_before_confirmation():
+    app, _repo = _build_app([{
+        "candidate": 0,
+        "reply": "החלופה מוכנה לאישור.",
+        "agent_reason": "החלופה חוקית ומאוזנת.",
+    }])
+    client = _client(app)
+    opened = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-23", "ends_on": "2026-08-29",
+    }).json()
+    body = client.post("/api/schedule/propose", json={
+        "request": "תשבץ את שבת", "schedule_id": opened["id"],
+    }).json()
+    body["operations"][0]["assignments"][0]["employee"] = "עובד שהומצא"
+
+    applied = client.post("/api/schedule/apply", json={
+        "schedule_id": opened["id"],
+        "operations": body["operations"],
+        "reason": "",
+        "agent_reason": body["agent_reason"],
+    })
+
+    assert applied.status_code == 502
+    assert "יש לבקש הצעה חדשה" in applied.json()["detail"]
+
+
 def test_manual_assignment_cannot_cross_a_mandatory_round():
     app, repo = _build_app([])
     repo.profiles[TEAM] = {
