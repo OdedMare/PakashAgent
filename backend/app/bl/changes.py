@@ -142,6 +142,17 @@ CHANGE_RESPONSE_SCHEMA = {
     },
 }
 
+DAY_DECISION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["candidate", "reply", "agent_reason"],
+    "properties": {
+        "candidate": {"type": "integer", "minimum": 0, "maximum": 2},
+        "reply": {"type": "string"},
+        "agent_reason": {"type": "string"},
+    },
+}
+
 
 class ChangeAgent:
     """Turn a manager's sentence into a proposal they can confirm."""
@@ -211,6 +222,57 @@ class ChangeAgent:
         if not isinstance(answer, dict):
             raise AgentError("המודל החזיר הצעת שינוי לא תקינה")
         return answer
+
+    def decide_day(
+        self, request: str, day: str, shift: str, candidates: List[dict],
+    ) -> dict:
+        """Choose among schedules that code already generated and audited.
+
+        The model receives no write vocabulary here: its only machine action
+        is an index into the supplied list.  Code retains the exact rows from
+        that candidate, so an invented employee or a rewritten assignment
+        can never cross this boundary.
+        """
+        payload = {
+            "request": _bounded(request),
+            "date": _date(day),
+            "shift": _bounded(shift),
+            "candidates": [
+                {
+                    "index": index,
+                    "assignments": _rows(candidate.get("assignments"), 200),
+                    "workload_hours": _rows(
+                        candidate.get("workload_hours"), 200
+                    ),
+                    "warnings": _rows(candidate.get("warnings"), 100),
+                    "notes": [
+                        _bounded(note)
+                        for note in candidate.get("notes") or []
+                        if _bounded(note)
+                    ][:50],
+                }
+                for index, candidate in enumerate(candidates[:3])
+            ],
+        }
+        answer = self._llm.complete_json(
+            load("schedule_decision"),
+            json.dumps(payload, ensure_ascii=False, default=_json_default),
+            schema=DAY_DECISION_SCHEMA,
+            flow="changes",
+        )
+        if not isinstance(answer, dict):
+            raise AgentError("המודל החזיר החלטת שיבוץ לא תקינה")
+        try:
+            choice = int(answer.get("candidate"))
+        except (TypeError, ValueError):
+            raise AgentError("המודל לא בחר חלופת שיבוץ תקינה")
+        if choice < 0 or choice >= len(candidates[:3]):
+            raise AgentError("המודל בחר חלופת שיבוץ שאינה קיימת")
+        return {
+            "candidate": choice,
+            "reply": _bounded(answer.get("reply")),
+            "agent_reason": _bounded(answer.get("agent_reason")),
+        }
 
 
 def _proposal(
@@ -865,7 +927,7 @@ def _bounded(value: Any, limit: int = _MAX_TEXT_CHARS) -> str:
 
 
 __all__ = [
-    "ChangeAgent", "CHANGE_RESPONSE_SCHEMA",
+    "ChangeAgent", "CHANGE_RESPONSE_SCHEMA", "DAY_DECISION_SCHEMA",
     "OP_ASSIGN", "OP_REMOVE", "OP_SWAP", "OP_GENERATE_DAY",
     "PROFILE_ADD_EMPLOYEE", "PROFILE_UPDATE_EMPLOYEE",
     "PROFILE_ADD_SHIFT", "PROFILE_UPDATE_SHIFT",

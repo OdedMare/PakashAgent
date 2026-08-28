@@ -34,7 +34,10 @@ from app.bl.briefing import (
 from app.bl.changes import (
     ChangeAgent, OP_ASSIGN, OP_GENERATE_DAY, OP_REMOVE, OP_SWAP,
 )
-from app.bl.deterministic_scheduler import generate_day as assign_day
+from app.bl.deterministic_scheduler import (
+    generate_day as assign_day,
+    generate_day_candidates,
+)
 from app.bl.export import as_workbook, filename
 from app.bl.importer import infer, read_grids
 from app.bl.learn import RuleLearner, observe, observe_corrections
@@ -1605,6 +1608,19 @@ class ScheduleService:
             pending_request=pending_request,
         )
         proposal["schedule_id"] = schedule.get("id", "")
+        if schedule and proposal.get("operations") and not (
+            proposal.get("needs_reason") or proposal.get("needs_input")
+        ):
+            for operation in proposal["operations"]:
+                if operation.get("action") != OP_GENERATE_DAY:
+                    continue
+                preview = self._preview_requested_day(
+                    team_id, schedule, operation, request
+                )
+                operation["previewed"] = True
+                operation["assignments"] = preview["assignments"]
+                proposal["reply"] = preview["reply"]
+                proposal["agent_reason"] = preview["agent_reason"]
         # The audit runs against the schedule as the proposal would leave it,
         # so the manager sees the consequence rather than the current state.
         proposal["warnings"] = self._audit_rows(
@@ -1613,6 +1629,63 @@ class ScheduleService:
             schedule,
         ) if schedule else []
         return proposal
+
+    def _preview_requested_day(
+        self, team_id: str, schedule: dict, operation: dict, request: str,
+    ) -> dict:
+        """Run legal alternatives, then let the language agent rank them.
+
+        This is read-only.  The chosen rows travel inside the proposal so the
+        manager confirms the schedule the agent actually inspected, not a
+        fresh and potentially different run after clicking confirm.
+        """
+        day = _iso(operation.get("date"))
+        shift = _text(operation.get("shift"))
+        profile = self._buildable_profile(team_id)
+        _require_rotation_configuration(profile)
+        required = _manager_rows_on(schedule, day)
+        if shift:
+            required = [row for row in required if row.get("shift") == shift]
+        candidates = generate_day_candidates(
+            profile,
+            day,
+            availability=self._repository.availability(team_id, day, day),
+            history=self._recent_assignments(
+                team_id, _iso(schedule.get("starts_on"))
+            ),
+            required_assignments=required,
+            already_scheduled=[
+                _model_assignment(row)
+                for row in schedule.get("assignments") or []
+            ],
+            shift_names=[shift] if shift else None,
+        )
+        chosen = candidates[0]
+        reply = "הרצתי את השיבוץ ובניתי הצעה של %s שיבוצים לאישור." % len(
+            chosen.get("assignments") or []
+        )
+        agent_reason = _text(chosen.get("summary"))
+        try:
+            decision = self._changes.decide_day(
+                request, day, shift, candidates
+            )
+            chosen = candidates[decision["candidate"]]
+            reply = decision["reply"] or reply
+            agent_reason = decision["agent_reason"] or agent_reason
+        except Exception as failure:
+            # Ranking is optional; generation is not.  Provider failures,
+            # malformed JSON and an unconfigured model all retain candidate
+            # zero, while the exact failure remains visible in server logs.
+            _log.warning("day decision agent unavailable: %s", failure)
+            agent_reason = (
+                "הסוכן לא היה זמין לבחירת חלופה; נשמרה חלופת הגיבוי "
+                "הדטרמיניסטית, לאחר בדיקת זמינות, עומס, סבבים ותלתונים."
+            )
+        return {
+            "assignments": chosen.get("assignments") or [],
+            "reply": reply,
+            "agent_reason": agent_reason,
+        }
 
     def apply(
         self,
@@ -1838,6 +1911,11 @@ class ScheduleService:
         required = _manager_rows_on(schedule, day)
         if shift:
             required = [row for row in required if row.get("shift") == shift]
+        previewed = bool(operation.get("previewed"))
+        preview = operation.get("assignments")
+        preview = preview if isinstance(preview, list) else []
+        if previewed:
+            required = _merged_required_rows(required, preview)
         result = assign_day(
             profile,
             day,
@@ -1852,6 +1930,12 @@ class ScheduleService:
             ],
             shift_names=[shift] if shift else None,
         )
+        if previewed and _assignment_signature(
+            result.get("assignments") or []
+        ) != _assignment_signature(preview):
+            raise AgentError(
+                "הסידור השתנה מאז שהסוכן בדק את ההצעה; יש לבקש הצעה חדשה"
+            )
         fresh = self._repository.get_schedule(schedule["id"], team_id)
         rows = _persisted_generation_rows(
             fresh, result.get("assignments") or [], day,
@@ -2706,6 +2790,18 @@ def _model_assignment(row: dict) -> dict:
     }
 
 
+def _assignment_signature(rows: List[dict]) -> tuple:
+    """The exact roster identity of a generated preview, order-independent."""
+    return tuple(sorted(
+        (
+            _text(row.get("employee")),
+            _text(row.get("shift") or row.get("shift_name")),
+            _iso(row.get("date") or row.get("slot_date")),
+        )
+        for row in rows or [] if isinstance(row, dict)
+    ))
+
+
 def _now() -> str:
     """This instant, UTC, as the browser will parse it.
 
@@ -2989,6 +3085,7 @@ def _applied(schedule: dict, operations: List[dict]) -> List[dict]:
             "employee": row.get("employee"),
             "shift": row.get("shift"),
             "date": _iso(row.get("date")),
+            "source": row.get("source"),
         }
         for row in schedule.get("assignments") or []
     ]
@@ -3019,6 +3116,28 @@ def _applied(schedule: dict, operations: List[dict]) -> List[dict]:
                 elif (row["employee"] == other and row["date"] == other_date
                         and row["shift"] == other_shift):
                     row["employee"] = employee
+        elif action == OP_GENERATE_DAY and operation.get("previewed"):
+            rows = [
+                row for row in rows
+                if row["date"] != date
+                or (shift and row["shift"] != shift)
+                or row.get("source") == ASSIGNED_BY_MANAGER
+            ]
+            known = {
+                (row["employee"], row["shift"], row["date"])
+                for row in rows
+            }
+            for offered in operation.get("assignments") or []:
+                item = {
+                    "employee": _text(offered.get("employee")),
+                    "shift": _text(offered.get("shift")),
+                    "date": _iso(offered.get("date")),
+                    "source": SOURCE_AGENT,
+                }
+                key = (item["employee"], item["shift"], item["date"])
+                if all(key) and key not in known:
+                    known.add(key)
+                    rows.append(item)
     return rows
 
 

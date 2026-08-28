@@ -602,6 +602,14 @@ export interface Operation {
   with_employee?: string;
   with_shift?: string;
   with_date?: string;
+  /** Exact day preview selected by the agent; validated again on confirm. */
+  previewed?: boolean;
+  assignments?: Array<{
+    employee: string;
+    shift: string;
+    date: string;
+    reason: string;
+  }>;
 }
 
 export interface ProfileOperation {

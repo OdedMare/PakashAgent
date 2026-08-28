@@ -212,6 +212,9 @@ export function AgentChat({
                     {operation.employee || "כל המשמרות"}
                     {operation.shift ? ` · ${operation.shift}` : ""}
                     {operation.date ? ` · ${formatDate(operation.date)}` : ""}
+                    {operation.action === "generate_day" && operation.previewed
+                      ? ` · ${operation.assignments?.length ?? 0} שיבוצים שנבדקו`
+                      : ""}
                     {operation.with_employee
                       ? ` ⇄ ${operation.with_employee}`
                       : ""}

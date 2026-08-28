@@ -612,6 +612,10 @@ class Operation(BaseModel):
     with_employee: str = ""
     with_shift: str = ""
     with_date: str = ""
+    # A generated day is previewed before confirmation. These are the exact
+    # rows the agent inspected and chose; apply revalidates them before write.
+    previewed: bool = False
+    assignments: List[Dict[str, Any]] = []
 
 
 class ProfileOperation(BaseModel):

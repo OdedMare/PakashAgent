@@ -373,7 +373,7 @@ def _client(app, role=ROLE_BOSS, team=TEAM):
     return client
 
 
-def test_agent_can_build_saturday_without_a_reason_or_model_call():
+def test_day_build_falls_back_when_the_decision_agent_is_unavailable():
     app, repo = _build_app([])
     client = _client(app)
     opened = client.post("/api/schedule/blank", json={
@@ -386,7 +386,9 @@ def test_agent_can_build_saturday_without_a_reason_or_model_call():
     assert proposal.status_code == 200
     body = proposal.json()
     assert body["operations"][0]["action"] == "generate_day"
-    assert repo.model_calls == []
+    assert body["operations"][0]["previewed"] is True
+    assert body["operations"][0]["assignments"]
+    assert len(repo.model_calls) == 1
 
     applied = client.post("/api/schedule/apply", json={
         "schedule_id": opened["id"],
@@ -396,7 +398,42 @@ def test_agent_can_build_saturday_without_a_reason_or_model_call():
     })
     assert applied.status_code == 200
     assert applied.json()["assignments"]
-    assert repo.model_calls == []
+    assert len(repo.model_calls) == 1
+
+
+def test_agent_sees_candidates_and_its_choice_is_the_confirmed_schedule():
+    app, repo = _build_app([{
+        "candidate": 1,
+        "reply": "הרצתי את השיבוץ ובחרתי בחלופה המאוזנת לאישור.",
+        "agent_reason": "בחרתי ביוסי מתוך שתי החלופות החוקיות.",
+    }])
+    client = _client(app)
+    opened = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-23", "ends_on": "2026-08-29",
+    }).json()
+
+    proposal = client.post("/api/schedule/propose", json={
+        "request": "תשבץ את שבת", "schedule_id": opened["id"],
+    })
+    assert proposal.status_code == 200
+    body = proposal.json()
+    operation = body["operations"][0]
+    assert operation["previewed"] is True
+    assert [row["employee"] for row in operation["assignments"]] == ["יוסי"]
+    assert body["agent_reason"] == "בחרתי ביוסי מתוך שתי החלופות החוקיות."
+    assert len(repo.model_calls) == 1
+
+    applied = client.post("/api/schedule/apply", json={
+        "schedule_id": opened["id"],
+        "operations": body["operations"],
+        "reason": "",
+        "agent_reason": body["agent_reason"],
+    })
+    assert applied.status_code == 200
+    assert [row["employee"] for row in applied.json()["assignments"]] == [
+        "יוסי"
+    ]
+    assert len(repo.model_calls) == 1
 
 
 def test_manual_assignment_cannot_cross_a_mandatory_round():

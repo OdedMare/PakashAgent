@@ -7,6 +7,7 @@ and a model outage cannot stop generation.
 """
 
 import datetime
+import hashlib
 import time
 from typing import Any, Dict, List, Optional
 
@@ -40,6 +41,7 @@ def generate_day(
     required_assignments: Optional[List[dict]] = None,
     already_scheduled: Optional[List[dict]] = None,
     shift_names: Optional[List[str]] = None,
+    variant: int = 0,
 ) -> dict:
     """Fill one date without a model call.
 
@@ -147,7 +149,7 @@ def generate_day(
                     continue
                 candidates.append((
                     _candidate_key(current, slot, person, profile,
-                                   loads.get(name, 0.0)),
+                                   loads.get(name, 0.0), variant),
                     row,
                     person,
                 ))
@@ -179,12 +181,61 @@ def generate_day(
         )
         if row.get("date") in (None, "", day)
     ]
-    return _result(day, started, slots, final, notes, warnings)
+    return _result(
+        day, started, slots, final, notes, warnings,
+        workload_hours=[
+            {"employee": name, "hours": round(hours, 2)}
+            for name, hours in sorted(loads.items())
+            if any(row["employee"] == name for row in final)
+        ],
+    )
+
+
+def generate_day_candidates(
+    profile: dict,
+    day: str,
+    availability: Optional[List[dict]] = None,
+    history: Optional[List[dict]] = None,
+    required_assignments: Optional[List[dict]] = None,
+    already_scheduled: Optional[List[dict]] = None,
+    shift_names: Optional[List[str]] = None,
+    count: int = 3,
+) -> List[dict]:
+    """Return a few distinct, fully audited schedules for an agent to rank.
+
+    The variants differ only after mandatory capabilities and the closure
+    cycle have been honoured.  This keeps the model's decision useful while
+    leaving legality, arithmetic and the fallback entirely in code.
+    """
+    results, seen = [], set()
+    for variant in range(max(1, count * 3)):
+        result = generate_day(
+            profile,
+            day,
+            availability=availability,
+            history=history,
+            required_assignments=required_assignments,
+            already_scheduled=already_scheduled,
+            shift_names=shift_names,
+            variant=variant,
+        )
+        signature = tuple(sorted(
+            (row["employee"], row["shift"], row["date"])
+            for row in result.get("assignments") or []
+        ))
+        if signature in seen:
+            continue
+        seen.add(signature)
+        results.append(result)
+        if len(results) >= max(1, count):
+            break
+    return results
 
 
 def _result(
     day: str, started: float, slots: List[dict], assignments: List[dict],
     notes: List[str], warnings: Optional[List[dict]] = None,
+    workload_hours: Optional[List[dict]] = None,
 ) -> dict:
     warnings = warnings or []
     return {
@@ -193,6 +244,7 @@ def _result(
         "notes": notes,
         "summary": "השיבוץ נבנה בקוד לפי זמינות, כשירות, עומס וסבבים מחייבים.",
         "warnings": warnings,
+        "workload_hours": workload_hours or [],
         "metrics": {
             "date": day,
             "status": "complete" if slots else "skipped",
@@ -212,6 +264,7 @@ def _result(
 
 def _candidate_key(
     rows: List[dict], slot: dict, person: dict, profile: dict, hours: float,
+    variant: int,
 ) -> tuple:
     missing_roles = _missing_roles(rows, slot, profile)
     roles = _roles(person)
@@ -230,10 +283,21 @@ def _candidate_key(
     remaining = len(missing_roles) - covers_roles + int(
         manager_missing and not covers_manager
     )
-    return (
+    hard_facts = (
         remaining, not covers_manager, -covers_roles, not closing,
-        float(hours), _text(person.get("name")),
     )
+    name = _text(person.get("name"))
+    if not variant:
+        return hard_facts + (float(hours), name)
+    # Alternative candidates may vary inside the same eight-hour workload
+    # band.  The digest is stable across processes; Python's hash() is not.
+    rank = hashlib.sha256((
+        "%s|%s|%s|%s" % (
+            variant, slot["shift_name"], slot["slot_date"], name,
+        )
+    ).encode("utf-8")
+    ).hexdigest()
+    return hard_facts + (int(float(hours) // 8), rank, float(hours), name)
 
 
 def _introduces_blocking(
@@ -428,4 +492,4 @@ def _text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-__all__ = ["generate_day"]
+__all__ = ["generate_day", "generate_day_candidates"]
