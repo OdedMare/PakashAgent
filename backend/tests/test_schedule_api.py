@@ -885,15 +885,7 @@ class _BlockingLlm:
         return self._answer
 
 
-def test_a_build_held_open_by_the_model_leaves_the_board_usable():
-    """The failure this whole path exists to prevent.
-
-    A model that never answers used to leave the manager with a period stuck
-    at "building day one" and no way forward: the browser polled a `running`
-    job forever and the area was disabled for as long as it did. Three things
-    have to hold instead — the poll must stay cheap and answerable, a shift
-    must still be placeable by hand, and stopping must actually stop.
-    """
+def test_a_model_that_never_answers_cannot_hold_generation_open():
     repository = _FakeScheduleRepo()
     llm = _BlockingLlm(_generation([{
         "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
@@ -917,48 +909,15 @@ def test_a_build_held_open_by_the_model_leaves_the_board_usable():
         "starts_on": "2026-08-17", "ends_on": "2026-08-18",
     }).json()
     client.post("/api/schedule/generate/%s/run" % started["id"])
-    assert llm.entered.wait(10), "the worker never reached the model"
-
-    try:
-        # The poll answers while the model is still thinking, and answers
-        # with the counter rather than the period.
-        progress = client.get(
-            "/api/schedule/%s/progress" % started["id"]
-        ).json()
-        assert progress["generation"]["status"] == "running"
-        assert progress["generation"]["heartbeat"]
-
-        # The board is not locked: a manager can place a shift by hand on a
-        # date the agent has not reached yet.
-        placed = client.post("/api/schedule/assign", json={
-            "shift_name": MORNING, "slot_date": "2026-08-18",
-            "employee": "יוסי", "schedule_id": started["id"],
-        })
-        assert placed.status_code == 200
-
-        stopped = client.post(
-            "/api/schedule/generate/%s/cancel" % started["id"]
-        ).json()
-        assert stopped["generation"]["status"] == "cancelled"
-    finally:
-        llm.release.set()
-
-    # The day in flight is allowed to finish -- it is paid for -- and the
-    # worker takes no further day.
-    deadline = time.time() + 10
+    deadline = time.time() + 2
     while time.time() < deadline:
         state = client.get("/api/schedule/%s/progress" % started["id"]).json()
-        if state["generation"]["status"] == "cancelled":
+        if state["generation"]["status"] == "complete":
             break
-        time.sleep(0.05)
-    assert state["generation"]["status"] == "cancelled"
-    assert len(llm.calls) == 1
-    # And what the manager placed by hand is still there.
-    kept = client.get("/api/schedule/%s" % started["id"]).json()
-    assert any(
-        row["employee"] == "יוסי" and row["source"] == "manager"
-        for row in kept["assignments"]
-    )
+        time.sleep(0.01)
+    assert state["generation"]["status"] == "complete"
+    assert not llm.entered.is_set()
+    assert repository.model_calls == []
 
 
 def _two_periods(client):
@@ -1093,8 +1052,9 @@ def test_a_generated_schedule_carries_its_warnings_and_still_returns_200():
     })
     assert response.status_code == 200
     codes = {warning["code"] for warning in response.json()["warnings"]}
-    assert "consecutive" in codes
-    # The schedule is still there in full, not withheld.
+    # The deterministic engine avoids a provable consecutive-days breach
+    # instead of accepting it from a model and merely reporting it later.
+    assert "consecutive" not in codes
     assert len(response.json()["assignments"]) == 8
 
 
@@ -1133,12 +1093,12 @@ def test_the_overview_carries_the_periods_numbers():
 
     stats = client.get("/api/schedule/overview").json()["stats"]
 
-    assert stats["total_shifts"] == 1
-    assert stats["people_working"] == 1
+    assert stats["total_shifts"] == 2
+    assert stats["people_working"] == 2
     # Everyone on the roster is present, including the person with no
     # shifts -- that zero is the whole point of the per-person chart.
     assert {row["employee"] for row in stats["by_employee"]} == {"דנה", "יוסי"}
-    assert stats["coverage"]["assigned"] == 1
+    assert stats["coverage"]["assigned"] == 2
 
 
 def test_the_overview_carries_zeroed_stats_before_anything_is_built():
@@ -1516,12 +1476,10 @@ def test_constraints_are_scoped_to_the_workspace():
 # -- the change loop -------------------------------------------------------
 
 def test_a_change_without_a_reason_is_answered_by_asking():
-    app, _ = _build_app([
-        _generation([{"employee": "דנה", "shift": MORNING,
-                      "date": "2026-08-17", "reason": "מוסמכת"}]),
-        {"reply": "למה דנה לא מגיעה?", "needs_reason": True,
-         "agent_reason": "", "operations": [], "constraints": []},
-    ])
+    app, _ = _build_app([{
+        "reply": "למה דנה לא מגיעה?", "needs_reason": True,
+        "agent_reason": "", "operations": [], "constraints": [],
+    }])
     client = _client(app)
     client.post("/api/schedule/generate", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-18",
@@ -1536,8 +1494,6 @@ def test_a_change_without_a_reason_is_answered_by_asking():
 def test_proposing_persists_nothing():
     """The two-step contract: a proposal is a proposal until confirmed."""
     app, repo = _build_app([
-        _generation([{"employee": "דנה", "shift": MORNING,
-                      "date": "2026-08-17", "reason": "מוסמכת"}]),
         {"reply": "אציע להוריד את דנה", "needs_reason": False,
          "agent_reason": "דנה חולה, יוסי פנוי",
          "operations": [{"action": "remove", "employee": "דנה",
@@ -1725,8 +1681,10 @@ def test_a_recorded_constraint_shows_up_as_a_warning_when_contradicted():
     body = client.post("/api/schedule/generate", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-18",
     }).json()
-    codes = {warning["code"] for warning in body["warnings"]}
-    assert "unavailable" in codes
+    assert not any(
+        row["employee"] == "דנה" and row["date"] == "2026-08-17"
+        for row in body["assignments"]
+    )
 
 
 def test_restating_a_constraint_replaces_rather_than_duplicates():
@@ -1770,7 +1728,6 @@ def test_the_change_log_is_readable_as_history():
 def test_the_agent_briefs_the_manager_unprompted():
     """The one route the manager did not initiate (D15)."""
     app, _ = _build_app([
-        _generation([]),
         {"headline": "יש חור בשלישי", "quiet": False, "items": [
             {"text": "משמרת בוקר של שלישי ריקה", "kind": "gap",
              "suggestion": "מי יכול לכסות את בוקר שלישי?"},
