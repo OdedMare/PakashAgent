@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-28T12:11:58.937740+00:00",
+  "generated_at": "2026-08-28T17:20:56.427425+00:00",
   "nodes": {
     "backend_app_api_claude_http_layer": {
       "code_fingerprint": "c2084d64a2ac674d58aa41cbe62280c7597ed305ff435279c05f153edf5c49b4",
@@ -12,13 +12,13 @@
           "q": "עכשיו יש לי בעיה אני יוצר סידור אוטומטי אבל המודל מחזיר תשובה חיובית ו200 api אבל ui מחזיר שגיאת רשת 500"
         }
       ],
-      "score": 0.910723409,
+      "score": 0.906219891,
       "source_file": "backend/app/api/CLAUDE.md",
       "status": "tentative",
       "uses": 1
     },
     "backend_app_bl_claude_agent_decides_code_audits": {
-      "code_fingerprint": "62bbb5540cd94eb303ea392b7ec7911c361a62533066a7f136653de1c5b3dc93",
+      "code_fingerprint": "4a3236f29fd5ef3c3156293923486e35ee0b3a4db3e2ed1bceedd77f4998eee8",
       "label": "Agent Decides; Code Audits",
       "last": "2026-08-28T12:08:04.293166+00:00",
       "provenance": [
@@ -48,13 +48,13 @@
           "q": "זה לא יפגע באיכות?"
         }
       ],
-      "score": 5.292172286,
+      "score": 5.26600255,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
       "uses": 6
     },
     "backend_app_bl_claude_interview_workflow": {
-      "code_fingerprint": "62bbb5540cd94eb303ea392b7ec7911c361a62533066a7f136653de1c5b3dc93",
+      "code_fingerprint": "4a3236f29fd5ef3c3156293923486e35ee0b3a4db3e2ed1bceedd77f4998eee8",
       "label": "Interview Workflow",
       "last": "2026-08-24T12:44:20.840181+00:00",
       "provenance": [
@@ -84,13 +84,13 @@
           "q": "בוא נחשוב איך נשפר את חווית הראיון היא משמעותית מאוד"
         }
       ],
-      "score": 12.086335331,
+      "score": 12.026568529,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
       "uses": 14
     },
     "backend_app_bl_claude_layout_inference_importer": {
-      "code_fingerprint": "62bbb5540cd94eb303ea392b7ec7911c361a62533066a7f136653de1c5b3dc93",
+      "code_fingerprint": "4a3236f29fd5ef3c3156293923486e35ee0b3a4db3e2ed1bceedd77f4998eee8",
       "label": "Layout Inference Importer",
       "last": "2026-08-23T19:03:51.003530+00:00",
       "provenance": [
@@ -105,13 +105,13 @@
           "q": "בוא נחשוב איך נשפר את חווית הראיון היא משמעותית מאוד"
         }
       ],
-      "score": 1.793361595,
+      "score": 1.784493441,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
       "uses": 2
     },
     "backend_app_bl_claude_schedule_generation": {
-      "code_fingerprint": "62bbb5540cd94eb303ea392b7ec7911c361a62533066a7f136653de1c5b3dc93",
+      "code_fingerprint": "4a3236f29fd5ef3c3156293923486e35ee0b3a4db3e2ed1bceedd77f4998eee8",
       "label": "Schedule Generation",
       "last": "2026-08-28T12:08:04.293166+00:00",
       "provenance": [
@@ -141,7 +141,7 @@
           "q": "היום הבעיה החמורה היא שהמידע שנשמר בראיון לא עובר במצב לטוב לתהליך בניית הסידור איך אתה מציע שנעשה את זה ונמקסם על זה"
         }
       ],
-      "score": 5.543339992,
+      "score": 5.515928234,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
       "uses": 6
@@ -157,7 +157,7 @@
           "q": "הראיון ארוך וחוזר על שאלות, ויצירת לוח המשמרות הראשוני לפעמים טועה"
         }
       ],
-      "score": 0.896107014,
+      "score": 0.891675775,
       "source_file": "backend/app/dal/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -188,7 +188,7 @@
           "q": "בוא נתכנן איך לממש את זה"
         }
       ],
-      "score": 3.515433798,
+      "score": 3.498050015,
       "source_file": "backend/app/dal/CLAUDE.md",
       "status": "preferred",
       "uses": 4
@@ -224,13 +224,13 @@
           "q": "בוא נתכנן איך לממש את זה"
         }
       ],
-      "score": 7.756433484,
+      "score": 7.718078001,
       "source_file": "backend/app/dal/llm/CLAUDE.md",
       "status": "preferred",
       "uses": 9
     },
     "backend_claude_confirm_before_import_persistence": {
-      "code_fingerprint": "602f1f9e1742bc3c370c99c1a1c8e77ef3d80477dcee08a6063a5172286b298a",
+      "code_fingerprint": "bb4594207a74250657cc2b283fdb9007968834d2a325eade88f5a3bd065c9828",
       "label": "Confirm Before Import Persistence",
       "last": "2026-08-23T19:03:51.003530+00:00",
       "provenance": [
@@ -240,13 +240,13 @@
           "q": "תבנה"
         }
       ],
-      "score": 0.896805673,
+      "score": 0.892370978,
       "source_file": "backend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
     },
     "backend_claude_per_workplace_shift_vocabulary": {
-      "code_fingerprint": "602f1f9e1742bc3c370c99c1a1c8e77ef3d80477dcee08a6063a5172286b298a",
+      "code_fingerprint": "bb4594207a74250657cc2b283fdb9007968834d2a325eade88f5a3bd065c9828",
       "label": "Per-Workplace Shift Vocabulary",
       "last": "2026-08-24T12:37:54.497384+00:00",
       "provenance": [
@@ -266,13 +266,13 @@
           "q": "hey i want to start work the agent init interview here some qusetions that give as the base the do interview from that mock the missing question that you miss then we implament this part"
         }
       ],
-      "score": 2.513635279,
+      "score": 2.501205379,
       "source_file": "backend/CLAUDE.md",
       "status": "preferred",
       "uses": 3
     },
     "backend_claude_runtime_settings": {
-      "code_fingerprint": "602f1f9e1742bc3c370c99c1a1c8e77ef3d80477dcee08a6063a5172286b298a",
+      "code_fingerprint": "bb4594207a74250657cc2b283fdb9007968834d2a325eade88f5a3bd065c9828",
       "label": "Live Runtime Settings",
       "last": "2026-08-20T20:46:01.724923+00:00",
       "provenance": [
@@ -282,7 +282,7 @@
           "q": "in the pakash agent app"
         }
       ],
-      "score": 0.838122226,
+      "score": 0.83397772,
       "source_file": "backend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -298,13 +298,13 @@
           "q": "היום הבעיה החמורה היא שהמידע שנשמר בראיון לא עובר במצב לטוב לתהליך בניית הסידור איך אתה מציע שנעשה את זה ונמקסם על זה"
         }
       ],
-      "score": 0.908638125,
+      "score": 0.904144919,
       "source_file": "docs/DECISIONS.md",
       "status": "tentative",
       "uses": 1
     },
     "frontend_claude_chat_first_frontend": {
-      "code_fingerprint": "e145bbf9d70ab405a54fe18741f5265d153439e73a83e5d649888be6d71f2495",
+      "code_fingerprint": "f5c2e238c14ea17ffaeba290f58e8f92c8ca0b9b54a499ddb281146ab6b7500b",
       "label": "Chat-First Frontend",
       "last": "2026-08-24T15:13:27.098807+00:00",
       "provenance": [
@@ -334,13 +334,13 @@
           "q": "בוא נחשוב איך נשפר את חווית הראיון היא משמעותית מאוד"
         }
       ],
-      "score": 6.26520291,
+      "score": 6.234221547,
       "source_file": "frontend/CLAUDE.md",
       "status": "preferred",
       "uses": 7
     },
     "frontend_claude_read_only_employee_view": {
-      "code_fingerprint": "e145bbf9d70ab405a54fe18741f5265d153439e73a83e5d649888be6d71f2495",
+      "code_fingerprint": "f5c2e238c14ea17ffaeba290f58e8f92c8ca0b9b54a499ddb281146ab6b7500b",
       "label": "Read-Only Employee View",
       "last": "2026-08-22T16:55:41.180609+00:00",
       "provenance": [
@@ -350,13 +350,13 @@
           "q": "תעצב לי tutorial למערכת עם סקרינשוטים והכל לכל פונקציונליות"
         }
       ],
-      "score": 0.874522388,
+      "score": 0.870197884,
       "source_file": "frontend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
     },
     "readme_schedule_import": {
-      "code_fingerprint": "828bc45a7b47d8d9d493ceff2c064d6bad8bbfefa6f0766322d6d832a3a09838",
+      "code_fingerprint": "d35cb8f17772edbfd8dcc828509efc9b2e316868cd8f0b3839dbd99d0dfe9436",
       "label": "Schedule Import from Excel or Documents",
       "last": "2026-08-22T16:55:41.180609+00:00",
       "provenance": [
@@ -366,13 +366,13 @@
           "q": "תעצב לי tutorial למערכת עם סקרינשוטים והכל לכל פונקציונליות"
         }
       ],
-      "score": 0.874522388,
+      "score": 0.870197884,
       "source_file": "README.md",
       "status": "tentative",
       "uses": 1
     },
     "readme_shift_loading_and_generation": {
-      "code_fingerprint": "828bc45a7b47d8d9d493ceff2c064d6bad8bbfefa6f0766322d6d832a3a09838",
+      "code_fingerprint": "d35cb8f17772edbfd8dcc828509efc9b2e316868cd8f0b3839dbd99d0dfe9436",
       "label": "Shift Loading and Generation",
       "last": "2026-08-28T12:08:04.293166+00:00",
       "provenance": [
@@ -392,7 +392,7 @@
           "q": "בשיבוץ למשמרות התשובה מהמודל מגיעה תוך 120 עד 300 שניות תוודא שהui לא מחזיר לי timeout כי עכשיו הוא מחזיר"
         }
       ],
-      "score": 2.827871444,
+      "score": 2.813887649,
       "source_file": "README.md",
       "status": "preferred",
       "uses": 3
