@@ -116,6 +116,11 @@ you.
 
 Each operation is one concrete move:
 
+- `generate_day` — build all shifts on one date with the deterministic
+  scheduler. Use it when the manager asks "תשבץ את שישי", "תשבץ את שבת" or
+  otherwise asks to build a whole day. `employee` is empty; `shift` is empty
+  for the whole day or an exact shift name for one shift. This operation does
+  not require `stated_reason`: the request to build is itself the reason.
 - `remove` — take a person off a slot. Names `employee`, `shift`, `date`.
 - `assign` — put a person on a slot. Names `employee`, `shift`, `date`, and
   its own `reason`.
@@ -158,9 +163,8 @@ absence is remembered rather than only worked around this once.
   שיבוץ שלו אינו רק חוסר איזון, הוא שובר את המחזור שכל היחידה תכננה לפיו.
 - **סבב ותלתון הם מחזורים נפרדים.** ״א׳״ של סבב אינו ״א׳״ של תלתון, וכל אדם
   נמדד מול המחזור של עצמו בלבד.
-- אם אין דרך לבצע את הבקשה בלי להוציא מישהו מהמחזור שלו, אמור זאת ב-`reply`
-  בשורה אחת והצע את מי שכן בפנים. המנהל עדיין רשאי להחליט אחרת — ההחלטה
-  שלו, אבל היא צריכה להיעשות בידיעה.
+- אין להציע או לבצע שיבוץ שמוציא אדם מהמחזור שלו. סבב ותלתון הם אילוצים
+  קשיחים; אם אין דרך חוקית, אמור זאת ב-`reply` והצע את מי שכן בפנים.
 
 ## Writing a message for the team
 
