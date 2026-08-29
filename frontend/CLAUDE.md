@@ -197,10 +197,10 @@ impression.
   download changes nothing for a refetch or a briefing to react to.
 - **Building a period does not lock the area.** `generate` and its two
   siblings report through `state.generating`, never through `state.busy`:
-  a build runs for minutes, and routing it through the helper the board's own
-  controls wait on left the manager unable to place a single shift — or to
-  reach the button that stops it — until it finished, which for a hung model
-  meant forever. While a build runs the board is fully writable (D18), and a
+  a long period still runs asynchronously, and routing it through the helper
+  the board's own controls wait on left the manager unable to place a single
+  shift — or to reach the button that stops it — until it finished, which for
+  a job that had lost its worker meant forever. While a build runs the board is fully writable (D18), and a
   cell filled in by hand becomes a pin the agent fills around.
 - **The poll ends, and says why.** `resumeScheduleGeneration` reads
   `/{id}/progress` rather than the whole period, backs off while one day is

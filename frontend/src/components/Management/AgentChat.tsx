@@ -201,6 +201,17 @@ export function AgentChat({
             </div>
           ) : null}
 
+          {proposal.steps?.length ? (
+            <div className="proposal-reasoning">
+              <span className="proposal-label">הכלים שהסוכן הפעיל</span>
+              <p>
+                {proposal.steps.map((step) =>
+                  DAY_TOOL_LABELS[step.tool] ?? step.tool
+                ).join(" ← ")}
+              </p>
+            </div>
+          ) : null}
+
           {proposal.operations.length ? (
             <ul className="proposal-operations">
               {proposal.operations.map((operation, index) => (
@@ -370,6 +381,12 @@ const ACTION_LABELS: Record<string, string> = {
   assign: "שיבוץ",
   remove: "הסרה",
   swap: "החלפה",
+};
+
+const DAY_TOOL_LABELS: Record<string, string> = {
+  run_scheduler: "הרצת מנוע השיבוץ",
+  inspect_candidate: "בדיקת חלופה",
+  deterministic_fallback: "חלופת גיבוי דטרמיניסטית",
 };
 
 const PROFILE_ACTION_LABELS: Record<string, string> = {

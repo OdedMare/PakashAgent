@@ -14,10 +14,8 @@ decision and recording every reason.
 
 ## Runtime and commands
 
-Python is **3.8.10**, mirroring AiSummryIO. Keep annotations compatible: use
-`Optional`, `List`, `Dict`; do **not** use `X | Y`, `list[str]`, or `match`.
-*(If the deployment target turns out to be newer, this is the one open question
-in DECISIONS.md — resolve it before writing much code.)*
+Python is **3.11**. The runtime was upgraded from 3.8 so the official OpenAI
+Agents SDK can own agent/tool execution.
 
 ```bash
 cd backend
@@ -45,9 +43,12 @@ uvicorn app.main:app --reload
   The manager may also **end it early** (`interview_service.end`), which
   writes the partial draft with a `completeness` record of what it still owes
   ([D22](../docs/DECISIONS.md#d22--the-interview-can-be-ended-early-and-the-profile-says-what-it-owes-️-amends-d18)).
-- `bl/scheduler.py` — generates a schedule; every assignment carries a reason.
-  Builds the slot grid in code (which dates fall in a period is arithmetic) and
-  asks the model only to assign people into it.
+- `bl/deterministic_scheduler.py` — **generates a schedule with no model call.**
+  Builds the slot grid in code, then fills it: scarcest and most specialised
+  slots first, candidates filtered by the blocking checks and ranked by unmet
+  roles, then rotation, then accumulated load. Reproducible; every assignment
+  carries a reason. `bl/scheduler.py` supplies the grid, availability and span
+  planning it runs on.
 - `bl/changes.py` — conversational edits; asks for the boss's reason, proposes a
   replacement with justification, applies on confirmation. Proposes only — it is
   handed no repository, so it cannot write.
@@ -118,6 +119,16 @@ one concern; split rather than append.
   cannot be hallucinated. Pure functions over a roster; trivially unit-testable.
 - **Hard rules are not gates.** They are strong instructions to the model plus a
   loud warning when broken. This is a deliberate, accepted tradeoff — see D1/D3.
+- **Generation is deterministic and calls no model.** Same inputs, same
+  schedule; a model outage cannot stop a build. The assignment loop runs
+  `slots × people` times per date, and it decides on exactly the arithmetic D3
+  assigns to code. Do not put a model call inside it, and do not introduce a
+  random or wall-clock tie breaker. ⚠️ This does mean the build path no longer
+  matches D3's "the agent decides" as written — see the note at the end of
+  [`app/bl/CLAUDE.md`](app/bl/CLAUDE.md) before changing it either way.
+- **A slot that cannot be filled legally stays short, with a note.** The
+  generator never relaxes a blocking check to avoid an empty seat; leaving it
+  visible is what lets the manager decide.
 - **How full a slot is has exactly one answer, and `bl/audit.py` owns it.**
   `required_headcount()` says how many people it asks for — reading the stored
   grid first, since that is what the week was generated or imported into — and
@@ -142,8 +153,8 @@ one concern; split rather than append.
 - **Every assignment carries the agent's reason**; every change carries the boss's
   reason too. Neither is optional — they serve different purposes ([D8](../docs/DECISIONS.md#d8--two-reasons-both-required)).
   Enforced in three places on purpose: `assignments.reason` is `NOT NULL`, the
-  repository refuses a blank one, and `scheduler.py` drops an unreasoned row
-  rather than storing it.
+  repository refuses a blank one, and the generator writes one for every row
+  it places rather than storing an unreasoned one.
 - **A briefing observes; it never acts.** `bl/briefing.py` returns three keys
   and none of them is an operation, so nothing it says can be applied
   ([D15](../docs/DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)).
@@ -167,7 +178,7 @@ one concern; split rather than append.
   the only history there is (D4).
 - **The rotation is enforced where a shift is assigned, and only ever
   advisory afterwards.** `bl/rotation.py` is the single definition of whose
-  closure a date is; `scheduler.py` refuses to store a row contradicting it,
+  closure a date is; the generator will not place a row contradicting it,
   `placement.py` says so before the click, and `audit.py` warns about a
   schedule that already drifted. Refusing a *generated* row is not the audit
   gaining a veto (D3): it is the same class of bound as "a person nobody
@@ -244,7 +255,7 @@ one concern; split rather than append.
   be deciding it had asked enough — the judgement the confirmation turn keeps
   with the manager.
 - **A partial profile reports its gaps; it never blocks.** `completeness` is
-  read by `profile_gaps` and rendered on the board. The scheduler runs on a
+  read by `profile_gaps` and rendered on the board. The generator runs on a
   thin profile and returns a thin schedule — refusing would be the audit
   becoming a gate through a side door (D3/D22).
 - **The tool layer never writes** ([D19](../docs/DECISIONS.md#d19--the-agent-answers-with-tools-asking-and-changing-stay-separate)).

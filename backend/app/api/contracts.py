@@ -652,6 +652,8 @@ class Proposal(BaseModel):
     profile_operations: List[ProfileOperation] = []
     constraints: List[Dict[str, Any]] = []
     warnings: List[Warning] = []
+    # Read-only tools the scheduling agent actually ran before deciding.
+    steps: List[Dict[str, Any]] = []
 
 
 class ApplyRequest(BaseModel):

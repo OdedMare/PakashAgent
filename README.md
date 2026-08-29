@@ -31,6 +31,15 @@ per-day progress, drag a shift (which asks why before it
 moves), talk to the agent about the assignment, record constraints against
 employees, and publish to the team.
 
+**Building a schedule calls no model.** The assignment loop is pure Python
+(`bl/deterministic_scheduler.py`): it fills the scarcest slots first and ranks
+each candidate by unmet role requirements, then the closing rotation, then the
+lightest accumulated load. The same inputs always produce the same schedule, a
+model outage cannot stop a build, and the arithmetic an LLM gets subtly wrong —
+hours, rest, double-booking — is never generated. Hard conflicts filter
+candidates out before ranking, so a slot goes unfilled with an explicit note
+rather than being filled illegally.
+
 **The agent speaks first.** It reads the state on its own and opens the
 conversation — when the manager arrives, after anything changes, before a
 period is published, and periodically in an idle room. It says what it
@@ -85,13 +94,12 @@ and imported back. A message for the group chat is asked of the agent instead
 
 Built: the ported `dal/llm` client, settings and runtime settings, the interview
 and its prompt, the workspace layer (teams, boss login, member share links, route
-guards), `bl/audit.py` and its table-driven tests, `bl/scheduler.py`,
-`bl/changes.py`, `bl/briefing.py`, `bl/export.py`, `bl/placement.py`, the agent's
-tool layer (`bl/tools.py`, `bl/planner.py`, `bl/intent.py`, `bl/simulate.py`),
-the schedule tables, the management HTTP layer, and the RTL UI for all of it.
-
-Not built yet: `bl/importer.py` and the import-confirmation screens — see
-[`docs/BUILD_ORDER.md`](docs/BUILD_ORDER.md) step 6.
+guards), `bl/audit.py` and its table-driven tests,
+`bl/deterministic_scheduler.py`, `bl/changes.py`, `bl/briefing.py`,
+`bl/export.py`, `bl/placement.py`, `bl/importer.py` and its confirmation
+screens, the agent's tool layer (`bl/tools.py`, `bl/planner.py`,
+`bl/intent.py`, `bl/simulate.py`), the schedule tables, the management HTTP
+layer, and the RTL UI for all of it.
 
 Every architectural decision was settled in a design interview and is recorded —
 with its reasoning — in [`docs/DECISIONS.md`](docs/DECISIONS.md). Read that before
@@ -156,16 +164,14 @@ schedules the manager has published.
 Postgres must be reachable at `PAKASH_DATABASE_URL`; the app creates its own
 tables on startup (the schema itself must already exist).
 
-**How fast a schedule builds is a setting.** *הגדרות ← בניית סידור* chooses
-how wide one model call is: `day` (the default) asks for one date at a time
-and verifies and repairs each on its own; `week` asks for up to seven in one
-call, which is several times faster on a slow local model because a week
-costs the scheduler prompt once instead of seven times. Both run the same
-checks — the same candidate lists, response schema, rejection rules and audit
-— so the tradeoff is granularity, not trust: in `week` mode one bad row
-re-answers the whole span. Also settable as
-`PAKASH_SCHEDULE_GENERATION_MODE`. The board says which mode a running build
-is using.
+**How wide one checkpoint is, is a setting.** *הגדרות ← בניית סידור* chooses
+how much of the period one saved step covers: `day` (the default) builds and
+checkpoints one date at a time; `week` covers up to seven. Since generation
+is deterministic and calls no model, this no longer trades speed for
+granularity the way it did when a span cost a prompt — it decides how much
+work a failure or a cancellation can cost, and how finely the manager's
+progress bar advances. Also settable as `PAKASH_SCHEDULE_GENERATION_MODE`.
+The board says which mode a running build is using.
 
 **Set `PAKASH_SESSION_SECRET` in any real deployment.** Left unset it is
 generated per process, so sessions do not survive a restart and break across

@@ -8,11 +8,11 @@ which needs four countable things worked out in order: which period, which of
 asked to do that from a wall of JSON gets it subtly wrong in exactly the way
 `audit.py`'s docstring describes.
 
-So this runs a **loop**: the model picks tools, `bl/tools.py` answers with
-arithmetic, and the results go back for the next turn until the model has
-what it needs to speak. What the model contributes is *which question to ask*
-and *how to say the answer in Hebrew*. What it never contributes is a number,
-a name, or a verdict — those come from the tools, and the prompt forbids
+The OpenAI Agents SDK runs the loop: the model picks tools, `bl/tools.py`
+answers with arithmetic, and the SDK returns the results to the model until it
+has what it needs to speak. What the model contributes is *which question to
+ask* and *how to say the answer in Hebrew*. What it never contributes is a
+number, a name, or a verdict — those come from the tools, and the prompt forbids
 claiming a placement is valid unless a tool said so
 ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
 
@@ -49,6 +49,8 @@ with. The model was writing the sentence around it.
 import json
 from typing import Any, Dict, List, Optional
 
+from pydantic import BaseModel
+
 from app.bl import intent as intent_reader
 from app.bl.prompts import load
 from app.bl.tools import (
@@ -63,6 +65,7 @@ from app.bl.tools import (
 )
 from app.common.errors import AgentError
 from app.common.time_context import israel_today
+from app.dal.llm.agent_tool import AgentTool
 
 _MAX_TEXT_CHARS = 4000
 
@@ -72,61 +75,32 @@ _MAX_TEXT_CHARS = 4000
 # one more tool from spending a manager's afternoon.
 _MAX_TURNS = 3
 
-# How many tools may run in a single turn. Bounded because the model names
-# them and an unbounded list is an unbounded number of repository reads.
-_MAX_CALLS_PER_TURN = 4
-
-_TOOL_CALL_SCHEMA = {
+_TOOL_ARGUMENT_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["tool", "arguments"],
     "properties": {
-        "tool": {"type": "string", "enum": list(TOOL_NAMES)},
-        "arguments": {
-            "type": "object",
-            "additionalProperties": False,
-            "properties": {
-                "employee": {"type": "string"},
-                "shift_name": {"type": "string"},
-                "slot_date": {"type": "string"},
-                "day": {"type": "string"},
-                "starts_on": {"type": "string"},
-                "ends_on": {"type": "string"},
-                "timezone": {"type": "string"},
-                "schedule_id": {"type": "string"},
-                "moving_assignment_id": {"type": "string"},
-            },
-        },
+        "employee": {"type": "string"},
+        "shift_name": {"type": "string"},
+        "slot_date": {"type": "string"},
+        "day": {"type": "string"},
+        "starts_on": {"type": "string"},
+        "ends_on": {"type": "string"},
+        "timezone": {"type": "string"},
+        "schedule_id": {"type": "string"},
+        "moving_assignment_id": {"type": "string"},
     },
 }
 
-PLANNER_RESPONSE_SCHEMA = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": [
-        "done", "answer", "tool_calls", "needs_confirmation", "needs_input",
-    ],
-    "properties": {
-        # The model's own statement that it has what it needs. Bounded in
-        # code by `_MAX_TURNS` regardless, so a model that never sets it
-        # still terminates.
-        "done": {"type": "boolean"},
-        "answer": {"type": "string"},
-        "tool_calls": {
-            "type": "array",
-            "items": _TOOL_CALL_SCHEMA,
-            "maxItems": _MAX_CALLS_PER_TURN,
-        },
-        # True when what is being described *would* change the schedule, so
-        # the manager is told plainly that nothing has happened yet. It is a
-        # label on a sentence, not a queued operation -- there is no
-        # operation anywhere in this schema.
-        "needs_confirmation": {"type": "boolean"},
-        # An ambiguous request is not a failed answer. It is one focused
-        # question that keeps the conversation moving without guessing.
-        "needs_input": {"type": "boolean"},
-    },
-}
+
+class CopilotReply(BaseModel):
+    """The conversational copilot's final, read-only response."""
+
+    answer: str
+    needs_confirmation: bool = False
+    needs_input: bool = False
+
+
+PLANNER_RESPONSE_SCHEMA = CopilotReply.model_json_schema()
 
 
 class PlanningAgent:
@@ -189,49 +163,51 @@ class PlanningAgent:
         pending: str = "",
         reply: str = "",
     ) -> dict:
-        """The tool loop. Model picks, tools answer, repeat until done."""
+        """One SDK-managed agent run over the read-only scheduling tools."""
         results: List[dict] = []
         steps: List[dict] = []
-        answer = ""
-        needs_confirmation = False
-        needs_input = False
 
-        for _ in range(_MAX_TURNS):
-            turn = self._ask({
-                "profile": _profile_for_model(profile),
-                "period": _period_for_model(period),
-                "preferences": _preferences_for_model(preferences),
-                "tools": [
-                    {"name": name, "purpose": TOOL_DESCRIPTIONS[name]}
-                    for name in TOOL_NAMES
-                ],
-                "results": results,
-                "request": request,
-                # What the manager was asked last turn and what they said
-                # back. Handed over so the model continues that request
-                # rather than re-asking it -- a model that cannot see it
-                # answered has no way to tell a clarification from a new
-                # question, and asking twice is the loop this prevents.
-                "asked_last_turn": pending,
-                "answer_to_that": reply,
-            })
-
-            answer = _bounded(turn.get("answer")) or answer
-            needs_confirmation = bool(turn.get("needs_confirmation"))
-            needs_input = bool(turn.get("needs_input"))
-            calls = _calls(turn.get("tool_calls"))
-
-            if not calls or turn.get("done"):
-                break
-
-            for call in calls:
-                outcome = self._tools.run(team_id, call["tool"], call["arguments"])
+        def exposed(name: str) -> AgentTool:
+            def invoke(arguments: dict) -> dict:
+                outcome = self._tools.run(team_id, name, arguments)
                 results.append(outcome)
                 steps.append({
-                    "tool": call["tool"],
-                    "arguments": call["arguments"],
+                    "tool": name,
+                    "arguments": arguments,
                     "ok": bool(outcome.get("ok", True)),
                 })
+                return outcome
+
+            return AgentTool(
+                name=name,
+                description=TOOL_DESCRIPTIONS[name],
+                parameters=_TOOL_ARGUMENT_SCHEMA,
+                invoke=invoke,
+            )
+
+        payload = {
+            "profile": _profile_for_model(profile),
+            "period": _period_for_model(period),
+            "preferences": _preferences_for_model(preferences),
+            "request": request,
+            # What the manager was asked last turn and what they said back.
+            "asked_last_turn": pending,
+            "answer_to_that": reply,
+        }
+        turn = self._llm.run_agent(
+            name="Pakash Copilot",
+            instructions=load("planner"),
+            user=json.dumps(payload, ensure_ascii=False),
+            tools=[exposed(name) for name in TOOL_NAMES],
+            output_type=CopilotReply,
+            flow="planner",
+            max_turns=_MAX_TURNS,
+        )
+        if not isinstance(turn, CopilotReply):
+            raise AgentError("הסוכן החזיר תשובה לא תקינה")
+        answer = _bounded(turn.answer)
+        needs_confirmation = turn.needs_confirmation
+        needs_input = turn.needs_input
 
         return {
             "answer": answer or "לא הצלחתי להרכיב תשובה על סמך מה שבדקתי.",
@@ -249,17 +225,6 @@ class PlanningAgent:
             "used_model": True,
             "understood": True,
         }
-
-    def _ask(self, payload: dict) -> dict:
-        answer = self._llm.complete_json(
-            load("planner"),
-            json.dumps(payload, ensure_ascii=False),
-            schema=PLANNER_RESPONSE_SCHEMA,
-            flow="planner",
-        )
-        if not isinstance(answer, dict):
-            raise AgentError("המודל החזיר תשובה לא תקינה")
-        return answer
 
     # -- without a model ---------------------------------------------------
 
@@ -585,25 +550,6 @@ def _is_question(value: str) -> bool:
     return _text(value).endswith(("?", "؟"))
 
 
-def _calls(offered: Any) -> List[dict]:
-    """Tool calls the model asked for, bounded to ones that exist."""
-    if not isinstance(offered, list):
-        return []
-    calls = []
-    for item in offered[:_MAX_CALLS_PER_TURN]:
-        if not isinstance(item, dict):
-            continue
-        name = _text(item.get("tool"))
-        if name not in TOOL_NAMES:
-            continue
-        arguments = item.get("arguments")
-        calls.append({
-            "tool": name,
-            "arguments": arguments if isinstance(arguments, dict) else {},
-        })
-    return calls
-
-
 def _profile_for_model(profile: dict) -> dict:
     """The workplace as the planner reads it.
 
@@ -683,4 +629,4 @@ def _text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-__all__ = ["PlanningAgent", "PLANNER_RESPONSE_SCHEMA"]
+__all__ = ["CopilotReply", "PlanningAgent", "PLANNER_RESPONSE_SCHEMA"]

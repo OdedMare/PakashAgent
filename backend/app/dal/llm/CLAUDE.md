@@ -68,6 +68,13 @@ takes no sleep) that would cross it.
 `read_timeout_for()` returns 0 for it whatever `llm_timeout_seconds` says, and
 `_budget_seconds()` returns `None` above that.
 
+> **⚠️ No live caller passes `flow="scheduler"` any more.** Building a schedule
+> is deterministic (`bl/deterministic_scheduler.py`) and calls no model; the
+> only remaining caller is the unused `Scheduler` class in `bl/scheduler.py`.
+> The routing, the exemption and the reasoning below are kept because they are
+> correct for any future long advanced-model call — but nothing exercises them
+> today, so treat this section as a design record rather than live behaviour.
+
 This is the one place a configured setting is deliberately not honoured, so
 the reason matters. `llm_timeout_seconds` is a single number covering calls
 that are not comparable: a briefing is a short prompt to the *fast* model and
@@ -124,9 +131,10 @@ what picks the role, so a caller names itself once. A second argument would be
 a second thing to keep in step with the first. `role=` and `model=` override
 it for a one-off; nothing in `bl/` needs either.
 
-`scheduler` is the one advanced flow — it reasons over a whole period of
-slots, people and rules at once, and it is the call the product is judged on.
-`briefing` is a few sentences over facts `audit.py` already computed.
+`scheduler` is the one advanced flow — a long call reasoning over a whole
+period at once. It is currently **unused**: generation moved to code, and the
+class that made this call is no longer constructed. `briefing` is a few
+sentences over facts `audit.py` already computed.
 
 **An unset role falls back to `llm_model`.** That single `or` is the whole
 backward-compatibility story: a deployment that never opens the new settings

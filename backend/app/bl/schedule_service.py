@@ -1621,6 +1621,7 @@ class ScheduleService:
                 operation["assignments"] = preview["assignments"]
                 proposal["reply"] = preview["reply"]
                 proposal["agent_reason"] = preview["agent_reason"]
+                proposal["steps"] = preview["steps"]
         # The audit runs against the schedule as the proposal would leave it,
         # so the manager sees the consequence rather than the current state.
         proposal["warnings"] = self._audit_rows(
@@ -1646,45 +1647,63 @@ class ScheduleService:
         required = _manager_rows_on(schedule, day)
         if shift:
             required = [row for row in required if row.get("shift") == shift]
-        candidates = generate_day_candidates(
-            profile,
-            day,
-            availability=self._repository.availability(team_id, day, day),
-            history=self._recent_assignments(
-                team_id, _iso(schedule.get("starts_on"))
-            ),
-            required_assignments=required,
-            already_scheduled=[
-                _model_assignment(row)
-                for row in schedule.get("assignments") or []
-            ],
-            shift_names=[shift] if shift else None,
-        )
-        chosen = candidates[0]
-        reply = "הרצתי את השיבוץ ובניתי הצעה של %s שיבוצים לאישור." % len(
-            chosen.get("assignments") or []
-        )
-        agent_reason = _text(chosen.get("summary"))
+        candidates: List[dict] = []
+
+        def load_candidates() -> List[dict]:
+            if not candidates:
+                candidates.extend(generate_day_candidates(
+                    profile,
+                    day,
+                    availability=self._repository.availability(
+                        team_id, day, day
+                    ),
+                    history=self._recent_assignments(
+                        team_id, _iso(schedule.get("starts_on"))
+                    ),
+                    required_assignments=required,
+                    already_scheduled=[
+                        _model_assignment(row)
+                        for row in schedule.get("assignments") or []
+                    ],
+                    shift_names=[shift] if shift else None,
+                ))
+            return candidates
+
+        steps = []
         try:
             decision = self._changes.decide_day(
-                request, day, shift, candidates
+                request, day, shift, load_candidates
             )
-            chosen = candidates[decision["candidate"]]
-            reply = decision["reply"] or reply
-            agent_reason = decision["agent_reason"] or agent_reason
+            choices = load_candidates()
+            chosen = choices[decision["candidate"]]
+            reply = decision["reply"] or (
+                "הרצתי את כלי השיבוץ ובדקתי את החלופה שבחרתי לאישור."
+            )
+            agent_reason = decision["agent_reason"] or _text(
+                chosen.get("summary")
+            )
+            steps = decision["steps"]
         except Exception as failure:
             # Ranking is optional; generation is not.  Provider failures,
             # malformed JSON and an unconfigured model all retain candidate
             # zero, while the exact failure remains visible in server logs.
             _log.warning("day decision agent unavailable: %s", failure)
+            chosen = load_candidates()[0]
+            reply = "הרצתי את השיבוץ ובניתי הצעה של %s שיבוצים לאישור." % len(
+                chosen.get("assignments") or []
+            )
             agent_reason = (
                 "הסוכן לא היה זמין לבחירת חלופה; נשמרה חלופת הגיבוי "
                 "הדטרמיניסטית, לאחר בדיקת זמינות, עומס, סבבים ותלתונים."
             )
+            steps = [{
+                "tool": "deterministic_fallback", "arguments": {}, "ok": True,
+            }]
         return {
             "assignments": chosen.get("assignments") or [],
             "reply": reply,
             "agent_reason": agent_reason,
+            "steps": steps,
         }
 
     def apply(

@@ -402,11 +402,22 @@ def test_day_build_falls_back_when_the_decision_agent_is_unavailable():
 
 
 def test_agent_sees_candidates_and_its_choice_is_the_confirmed_schedule():
-    app, repo = _build_app([{
-        "candidate": 1,
-        "reply": "הרצתי את השיבוץ ובחרתי בחלופה המאוזנת לאישור.",
-        "agent_reason": "בחרתי ביוסי מתוך שתי החלופות החוקיות.",
-    }])
+    app, repo = _build_app([
+        {
+            "done": False, "candidate": -1, "reply": "",
+            "agent_reason": "", "tool_calls": [
+                {"tool": "run_scheduler", "index": -1},
+                {"tool": "inspect_candidate", "index": 0},
+                {"tool": "inspect_candidate", "index": 1},
+            ],
+        },
+        {
+            "done": True, "candidate": 1,
+            "reply": "הרצתי את השיבוץ ובחרתי בחלופה המאוזנת לאישור.",
+            "agent_reason": "בחרתי ביוסי מתוך שתי החלופות החוקיות.",
+            "tool_calls": [],
+        },
+    ])
     client = _client(app)
     opened = client.post("/api/schedule/blank", json={
         "starts_on": "2026-08-23", "ends_on": "2026-08-29",
@@ -421,7 +432,13 @@ def test_agent_sees_candidates_and_its_choice_is_the_confirmed_schedule():
     assert operation["previewed"] is True
     assert [row["employee"] for row in operation["assignments"]] == ["יוסי"]
     assert body["agent_reason"] == "בחרתי ביוסי מתוך שתי החלופות החוקיות."
-    assert len(repo.model_calls) == 1
+    assert [step["tool"] for step in body["steps"]] == [
+        "run_scheduler", "inspect_candidate", "inspect_candidate",
+    ]
+    assert len(repo.model_calls) == 2
+    second_turn = json.loads(repo.model_calls[1]["user"])
+    assert second_turn["results"][0]["tool"] == "run_scheduler"
+    assert second_turn["results"][2]["index"] == 1
 
     applied = client.post("/api/schedule/apply", json={
         "schedule_id": opened["id"],
@@ -433,15 +450,25 @@ def test_agent_sees_candidates_and_its_choice_is_the_confirmed_schedule():
     assert [row["employee"] for row in applied.json()["assignments"]] == [
         "יוסי"
     ]
-    assert len(repo.model_calls) == 1
+    assert len(repo.model_calls) == 2
 
 
 def test_a_generated_preview_cannot_be_rewritten_before_confirmation():
-    app, _repo = _build_app([{
-        "candidate": 0,
-        "reply": "החלופה מוכנה לאישור.",
-        "agent_reason": "החלופה חוקית ומאוזנת.",
-    }])
+    app, _repo = _build_app([
+        {
+            "done": False, "candidate": -1, "reply": "",
+            "agent_reason": "", "tool_calls": [
+                {"tool": "run_scheduler", "index": -1},
+                {"tool": "inspect_candidate", "index": 0},
+            ],
+        },
+        {
+            "done": True, "candidate": 0,
+            "reply": "החלופה מוכנה לאישור.",
+            "agent_reason": "החלופה חוקית ומאוזנת.",
+            "tool_calls": [],
+        },
+    ])
     client = _client(app)
     opened = client.post("/api/schedule/blank", json={
         "starts_on": "2026-08-23", "ends_on": "2026-08-29",

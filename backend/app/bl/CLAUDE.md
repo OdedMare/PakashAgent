@@ -6,15 +6,16 @@ directly — it goes through the repository and the LLM client it was constructe
 with.
 
 Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
-`audit.py`, `scheduler.py`, `changes.py`, `briefing.py`, `export.py`,
-`schedule_service.py`, `prompts/`. Only `importer.py` remains.
+`audit.py`, `deterministic_scheduler.py`, `changes.py`, `briefing.py`,
+`export.py`, `schedule_service.py`, `importer.py`, `prompts/`.
 
 | File | Owns |
 |---|---|
 | `interview.py` | The intro interview — workplace profile, employees, rules, shift vocabulary |
 | `interview_service.py` | Persistence around it: sessions, turns, resume, completion |
 | `workspace_service.py` | Workspace rules: entering a team, roles, the share link |
-| `scheduler.py` | Checkpointed range generation, one date or one week per call; every assignment carries a reason |
+| `deterministic_scheduler.py` | **The assignment loop. Pure Python, no LLM.** Fills one date; every assignment carries a reason |
+| `scheduler.py` | The slot grid (`build_slots`), availability resolution and span planning the loop above runs on |
 | `changes.py` | Conversational edits and the change log |
 | `briefing.py` | **The agent speaking first.** Observes; proposes nothing that lands |
 | `schedule_service.py` | Persistence and orchestration around all three: propose, confirm, apply |
@@ -33,11 +34,21 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 
 The agent decides. Code audits. ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-))
 
-Everything except `audit.py` is model-driven and returns natural language the boss
-reads. `audit.py` is the opposite: no model, no prose, just arithmetic over a
-roster returning a list of warnings. That split is deliberate and load-bearing —
-an LLM asked "has anyone exceeded 5 shifts?" is doing arithmetic by generation,
-and a wrong answer looks identical to a right one.
+The model-driven half — `interview.py`, `changes.py`, `briefing.py`,
+`learn.py`, `planner.py`'s loop — reads a manager's sentence and writes Hebrew
+back. The other half computes: `audit.py`, `tools.py`, `intent.py`,
+`simulate.py`, `placement.py`, `rotation.py` and `deterministic_scheduler.py`
+take no model at all. That split is deliberate and load-bearing — an LLM asked
+"has anyone exceeded 5 shifts?" is doing arithmetic by generation, and a wrong
+answer looks identical to a right one.
+
+**⚠️ The line has moved since D3 was written, and D3 has not caught up.** D3
+says the agent makes every scheduling decision and code only audits. Building a
+period no longer works that way: `deterministic_scheduler.py` picks who works,
+and the model is not consulted. The rest of D3 still holds exactly — the audit
+over a stored schedule is advisory, hard rules are not gates, and the manager
+can overrule anything. Anyone changing generation should read this gap as
+unresolved rather than settled; see the note at the end of this file.
 
 ## `interview.py`
 
@@ -139,59 +150,72 @@ had rather than the empty one their browser happened to keep. The draft handed
 to the model is read back from the session, never taken from the request, so a
 stale client copy cannot rewrite what was already agreed.
 
-## `scheduler.py`
+## `deterministic_scheduler.py`
 
-Feeds the profile, rules, availability, and the **fairness tally** to
-`complete_json`; gets back assignments **each with its own `reason`**. The reason is not optional
-decoration — it is shown to the boss at confirmation time and is the mechanism by
-which a bad call gets caught while it's still cheap ([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)).
+**Pure Python. No LLM call, ever.** This owns the central assignment loop:
+`generate_day()` fills one date's slot grid, and the same inputs always
+produce the same schedule. A model outage cannot stop a build.
+
+Every assignment still carries its own `reason` — written by `_reason()` from
+the profile facts that justified the pick (the role it covered, the rotation
+it belongs to). The reason is not optional decoration: it is shown to the boss
+at confirmation time and is how a bad call gets caught while it is still cheap
+([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)).
 
 Handles both generation and schedules the boss authored or imported — they share
 one representation ([D6](../../../docs/DECISIONS.md#d6--the-boss-can-author-or-generate)).
 
-**Past assignments are counted, not sent.** The scheduler used to hand the
-model several hundred raw history rows and let it work out who had been taking
-the nights. That was wrong twice: on a two-week period those rows were roughly
-60% of the entire prompt — crowding out the period actually being built, on
-models whose context is the binding constraint — and counting them is code's
-job under [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-).
-`audit.load_history()` now does the arithmetic and the model receives the
-tally: ~9,100 tokens of rows become ~470 of counts.
+**Why code and not the model.** Filling a slot is arithmetic over a roster —
+hours, rest windows, double-booking, consecutive runs — and that is the one
+thing an LLM gets subtly wrong in a way that reads exactly like getting it
+right ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-),
+and the same argument `audit.py` and `tools.py` make). The loop also runs
+`slots × people` times per date, so a model in it would be the largest cost in
+the product for the answer least suited to it.
 
-This is the same move `briefing.py` already makes with `warnings` and
-`fairness`. Reducing the prompt is the side benefit; the reason it belongs on
-this side of the line is that a model asked "who worked the most nights" is
-doing arithmetic by generation, and a wrong answer looks exactly like a right
-one.
+**Order of filling is deliberate.** Slots sort by how few legal candidates they
+have, then by whether they demand specific roles, then a shift manager. Scarce
+and specialised seats are filled while there is still a roster to fill them
+from, and the tie breakers are stable so rerunning a date reproduces it.
 
-**How wide one call is, is a setting.** `schedule_generation_mode` chooses
-between `day` — one date per model call, the default — and `week`, which asks
-for up to seven in one. Both run the *same* pipeline (`generate_span`): the
-same candidate lists, the same response schema, the same rejection rules, the
-same audit. Nothing is trusted in `week` that `day` would not trust. What
-changes is the granularity of the repair (a bad row re-answers the whole span)
-and the cost of a failure. `plan_spans` divides the period, and a week is a
-ceiling rather than a promise — a span never crosses seven days nor carries
-more staffing demand than one answer can hold.
+**Ranking is lexicographic, not a weighted score.** `_candidate_key` returns a
+tuple: unmet mandatory roles first, then the missing shift manager, then the
+closing group (`rotation.holds`), then the lightest accumulated load, then the
+name. A tuple is auditable in a way a tuned weight sum is not — "why her" has
+an answer you can read off the first field that differed.
 
-**A repair call is only ever asked for what a repair could fix.** The audit
-finding that carries no date — `over_hours`, a weekly total — is reported
-beside the schedule but excluded from `_span_warnings`, because the repair
-instruction forbids touching earlier dates and the hours came from there.
-Before that distinction, one person crossing their ceiling on a Wednesday
-bought a second model call on every remaining day of the week, none of which
-could clear it.
+**Legality is a filter, not a penalty.** `_hard_conflict` and
+`_introduces_blocking` remove candidates *before* ranking, against the blocking
+codes (`CONSECUTIVE`, `CROSS_ROTATION`, `DOUBLE_BOOKED`, `OVER_HOURS`,
+`SHORT_REST`, `UNAVAILABLE`). When nothing legal remains the slot stays short
+with an explicit note — the engine never fills a seat illegally to avoid an
+empty one. Manager pins are validated the same way and raise rather than being
+quietly dropped.
 
-**The roster is sent once per call, not twice.** `candidate_employees` is the
-authoritative list — filtered to who is legally available, keyed by the ids
-the schema accepts — so `_profile_beside_candidates` drops `employees` from
-the profile beside it. A blacklist of one key, never a whitelist: a field list
-here is how newly collected interview facts silently stop travelling.
+**⚠️ This is not the audit becoming a gate.** `audit.py` is still advisory over
+a stored period, and the manager may still place anything by hand (D18) and
+publish over every warning (D1/D3). What is filtered here is only which
+candidate the *generator* picks on its own.
+
+**The legality cache is order-dependent by design.** `legal_cache` memoises
+per-candidate legality for the date; after a placement only that employee's
+entries are dropped, because a placement changes only their own hours, rest and
+double-booking facts. That holds for the blocking codes above. **A future
+constraint relating two different employees — "these two never together" —
+would silently read a stale entry**, so such a rule must invalidate the whole
+cache rather than one name.
+
+**How wide one checkpoint is, is a setting.** `schedule_generation_mode` chooses
+between `day` (the default) and `week`, and `plan_spans` divides the period.
+Generation costs no prompt, so this no longer trades speed for granularity as
+it did when a span was a model call: it decides how much work one failure or
+one cancellation can throw away, and how finely progress advances. A week is a
+ceiling rather than a promise — a span never crosses seven days.
 
 **Interactive generation is one checkpoint per request.**
 `ScheduleService.start_generation()` stores the whole slot grid, plans the
 spans for the configured mode, and writes a JSON checkpoint on the draft;
-`/generate/{id}/next` calls `generate_span()` once. The browser repeats that
+`/generate/{id}/next` builds one span once. The browser repeats that
 request for a single date or an arbitrary range. A failed span is marked
 `failed` and the same endpoint retries it, so completed neighbours survive a
 timeout or refresh.
@@ -227,8 +251,8 @@ Two fields make that poll terminate:
   means the job has lost its worker (a restarted process, a killed thread).
   `POST /run` adopts such a job and resumes it from the first unfinished day.
 - `cancel_requested`, set by `/generate/{id}/cancel`. Cooperative rather than
-  forceful: a model call in flight cannot be interrupted, so the worker stops
-  at the next day boundary and every finished day is kept. The period is an
+  forceful: the worker stops at the next day boundary and every finished day
+  is kept. The period is an
   ordinary draft immediately, and `/run` resumes it later.
 
 **The board stays writable while a job runs**, which is what makes the two
@@ -340,7 +364,7 @@ anchor dates and first groups. Legacy profiles fall back to
 rather than guess a phase that puts the wrong group in.
 
 Read by four callers, which is the point of it being one module:
-`scheduler.py` turns it into hard availability rows and refuses assignments
+`scheduler.py` turns it into hard availability rows and the loop refuses assignments
 that contradict them, `audit.py` warns about a schedule that already drifted
 (`cross_rotation`), `placement.py` tells the board whose closure a slot is
 before the manager clicks, and `changes.py` hands the same schedule to the
@@ -457,7 +481,7 @@ shift vocabulary rather than assuming.
 `fairness()` and `load_history()` answer two different questions from the same
 arithmetic. `fairness()` compares hours inside the period on screen;
 `load_history()` looks *backwards* across past periods at who has carried the
-nights and the weekends, and is what `scheduler.py` reasons from when deciding
+nights and the weekends, and is what the assignment loop ranks on when deciding
 whose turn the next one is. Both keep people with nothing on the roster — a
 zero is the most useful row in either table, and an absent row reads as missing
 data. Neither decides anything.
@@ -500,7 +524,7 @@ Build it early and table-drive its tests.
 
 ## `schedule_service.py`
 
-Owns what `scheduler.py`, `changes.py` and `audit.py` deliberately do not: the
+Owns what the scheduler, `changes.py` and `audit.py` deliberately do not: the
 repository, and the order things happen in.
 
 Two shapes are load-bearing:
@@ -563,7 +587,8 @@ confirmation** ([D7](../../../docs/DECISIONS.md#d7--import-infers-layout-boss-co
 
 - `audit.py` warns; it never blocks, rewrites, or vetoes.
 - `audit.py` contains no LLM call, ever.
-- `tools.py`, `intent.py` and `simulate.py` contain no LLM call, ever.
+- `tools.py`, `intent.py`, `simulate.py`, `rotation.py`, `placement.py` and
+  `deterministic_scheduler.py` contain no LLM call, ever.
 - Nothing on the answering or simulating path writes. `tools.py` reads;
   `planner.py` and `simulate.py` are handed no repository to write with.
 - An answer carries no operations, and a simulation is approved through the
@@ -575,3 +600,31 @@ confirmation** ([D7](../../../docs/DECISIONS.md#d7--import-infers-layout-boss-co
 - Imports are confirmed before they persist.
 - Business logic stays here; SQL stays in `dal/repository/`; model calls go
   through `dal/llm/`.
+- Generation stays deterministic and reproducible: no model call in the
+  assignment loop, and no wall-clock or random tie breaker.
+- A slot that cannot be filled legally is left short with a note. Never fill a
+  seat by relaxing a blocking check.
+
+## Unresolved: generation versus D3
+
+Two things a future change should know rather than discover.
+
+**The docs and the code disagree about who schedules.**
+[D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-) states
+the agent decides and code only audits. Generation is now deterministic, so for
+the *build* path that is no longer what happens. This was not written down as a
+decision when the engine landed, and D3 has not been amended. Whoever revisits
+it should either amend D3 or record a new decision — not quietly widen the gap.
+
+**The manager's `instructions` are collected and never reach the loop.**
+`GenerateRequest.instructions` is stored on the job and written to the change
+log, but `generate_day()` has no parameter for it and reads no preferences or
+learned rules. So *"דנה בבחינות השבוע, תעמיס פחות"* changes the log and not the
+schedule. If a model is put back into generation, this is the place it belongs:
+translating a sentence into ranking hints **once per period**, ahead of the
+loop, where a hint can reorder candidates but never outrank a blocking check.
+
+**`scheduler.py` still holds a `Scheduler` class that nothing constructs.** It
+is the old model-driven pipeline. `build_slots`, `effective_availability` and
+`plan_spans` in that module are live; the class is not. Do not extend it
+without reviving it deliberately.

@@ -644,6 +644,12 @@ export interface Proposal {
   profile_operations: ProfileOperation[];
   constraints: Record<string, unknown>[];
   warnings: ScheduleWarning[];
+  /** Read-only tools the scheduling agent ran before choosing the preview. */
+  steps?: Array<{
+    tool: string;
+    arguments: Record<string, unknown>;
+    ok: boolean;
+  }>;
 }
 
 /* -- the agent speaking first (D15) ---------------------------------------

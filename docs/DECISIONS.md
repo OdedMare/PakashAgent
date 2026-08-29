@@ -735,7 +735,6 @@ having been unclear, and asking would repeat on every retry.
 
 ## Open
 
-- **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment
-  constraint there. Mirroring it unless PakashAgent targets a newer environment —
-  the boss hasn't answered. If 3.8.10 holds: no `X | Y`, no `list[str]`, no
-  `match`; use `Optional`, `List`, `Dict`.
+- **Python version.** PakashAgent uses **Python 3.11**. It originally mirrored
+  AiSummryIO's EOL 3.8.10 runtime, then moved to 3.11 so the official OpenAI
+  Agents SDK could own agent/tool execution.

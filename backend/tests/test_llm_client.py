@@ -16,6 +16,7 @@ from app.dal.llm.model_id_extractor import extract_model_ids
 from app.dal.llm.openai_client import (
     OpenAIJsonClient,
     _budget_seconds,
+    _queue_seconds,
     read_timeout_for,
 )
 
@@ -618,13 +619,16 @@ def test_schedule_decision_is_small_and_always_bounded():
     """Agent ranking must not turn deterministic generation into a wait."""
     assert read_timeout_for(
         _Settings(llm_timeout_seconds=0), "schedule_decision"
-    ) == 20
+    ) == 6
     assert read_timeout_for(
         _Settings(llm_timeout_seconds=120), "schedule_decision"
-    ) == 20
+    ) == 6
     assert _budget_seconds(
         _Settings(llm_timeout_seconds=0), "schedule_decision"
-    ) == 25
+    ) == 8
+    assert _queue_seconds(
+        _Settings(llm_queue_seconds=180), "schedule_decision"
+    ) == 2
 
 
 def test_the_scheduler_client_is_built_with_no_read_ceiling():

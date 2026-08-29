@@ -6,11 +6,10 @@ team's interviews asks here rather than filtering in `bl/`, so a forgotten
 WHERE clause cannot become a data leak between workplaces.
 
 Passwords are hashed with `hashlib.scrypt` from the standard library. bcrypt
-or argon2 would be the usual choice, but both are dependencies, and this
-backend pins Python 3.8.10 against an EOL Debian image where every wheel that
-needs compiling is a real cost (docs/BUILD_ORDER.md). scrypt is memory-hard,
-ships with CPython, and is a genuine password hash -- unlike the SHA-256 that
-usually gets reached for when a project wants to avoid a dependency.
+or argon2 would be the usual choice, but neither is needed here. scrypt is
+memory-hard, ships with CPython, and is a genuine password hash -- unlike the
+SHA-256 that usually gets reached for when a project wants to avoid a
+dependency.
 """
 
 import hashlib

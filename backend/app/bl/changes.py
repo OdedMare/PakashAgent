@@ -23,7 +23,7 @@ and "the manager agreed" as two separate, auditable events.
 import datetime
 import json
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from app.bl import rotation
 from app.bl.prompts import load
@@ -142,14 +142,38 @@ CHANGE_RESPONSE_SCHEMA = {
     },
 }
 
+_DAY_RUN_SCHEDULER = "run_scheduler"
+_DAY_INSPECT_CANDIDATE = "inspect_candidate"
+_DAY_TOOLS = (_DAY_RUN_SCHEDULER, _DAY_INSPECT_CANDIDATE)
+_DAY_MAX_TURNS = 3
+_DAY_MAX_CALLS = 4
+
+_DAY_TOOL_CALL_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["tool", "index"],
+    "properties": {
+        "tool": {"type": "string", "enum": list(_DAY_TOOLS)},
+        # -1 for run_scheduler; 0..2 for inspect_candidate.
+        "index": {"type": "integer", "minimum": -1, "maximum": 2},
+    },
+}
+
 DAY_DECISION_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["candidate", "reply", "agent_reason"],
+    "required": [
+        "done", "candidate", "reply", "agent_reason", "tool_calls",
+    ],
     "properties": {
-        "candidate": {"type": "integer", "minimum": 0, "maximum": 2},
+        "done": {"type": "boolean"},
+        "candidate": {"type": "integer", "minimum": -1, "maximum": 2},
         "reply": {"type": "string"},
         "agent_reason": {"type": "string"},
+        "tool_calls": {
+            "type": "array", "items": _DAY_TOOL_CALL_SCHEMA,
+            "maxItems": _DAY_MAX_CALLS,
+        },
     },
 }
 
@@ -224,55 +248,94 @@ class ChangeAgent:
         return answer
 
     def decide_day(
-        self, request: str, day: str, shift: str, candidates: List[dict],
+        self, request: str, day: str, shift: str,
+        load_candidates: Callable[[], List[dict]],
     ) -> dict:
-        """Choose among schedules that code already generated and audited.
+        """Run read-only scheduling tools, inspect, then choose one result.
 
-        The model receives no write vocabulary here: its only machine action
-        is an index into the supplied list.  Code retains the exact rows from
-        that candidate, so an invented employee or a rewritten assignment
-        can never cross this boundary.
+        The model controls the read loop, but never receives a write tool. Its
+        final machine action is still only an index into code-owned results.
         """
-        payload = {
-            "request": _bounded(request),
-            "date": _date(day),
-            "shift": _bounded(shift),
-            "candidates": [
-                {
-                    "index": index,
-                    "assignments": _rows(candidate.get("assignments"), 200),
-                    "workload_hours": _rows(
-                        candidate.get("workload_hours"), 200
-                    ),
-                    "warnings": _rows(candidate.get("warnings"), 100),
-                    "notes": [
-                        _bounded(note)
-                        for note in candidate.get("notes") or []
-                        if _bounded(note)
-                    ][:50],
+        candidates: List[dict] = []
+        results: List[dict] = []
+        steps: List[dict] = []
+        inspected = set()
+
+        for _ in range(_DAY_MAX_TURNS):
+            inspected_before_turn = set(inspected)
+            answer = self._llm.complete_json(
+                load("schedule_decision"),
+                json.dumps({
+                    "request": _bounded(request),
+                    "date": _date(day),
+                    "shift": _bounded(shift),
+                    "tools": [
+                        {
+                            "name": _DAY_RUN_SCHEDULER,
+                            "purpose": "בנה עד שלוש חלופות חוקיות ומסוכמות",
+                        },
+                        {
+                            "name": _DAY_INSPECT_CANDIDATE,
+                            "purpose": "פתח חלופה אחת עם שיבוצים ואזהרות",
+                        },
+                    ],
+                    "results": results,
+                }, ensure_ascii=False, default=_json_default),
+                schema=DAY_DECISION_SCHEMA,
+                flow="schedule_decision",
+            )
+            if not isinstance(answer, dict):
+                raise AgentError("המודל החזיר החלטת שיבוץ לא תקינה")
+
+            calls = _day_tool_calls(answer.get("tool_calls"))
+            for call in calls:
+                tool = call["tool"]
+                index = call["index"]
+                if tool == _DAY_RUN_SCHEDULER:
+                    candidates = list(load_candidates())[:3]
+                    outcome = {
+                        "tool": tool,
+                        "ok": True,
+                        "candidates": [
+                            _candidate_summary(candidate, position)
+                            for position, candidate in enumerate(candidates)
+                        ],
+                    }
+                elif not candidates or not 0 <= index < len(candidates):
+                    outcome = {
+                        "tool": tool, "index": index, "ok": False,
+                        "error": "צריך להריץ קודם את כלי השיבוץ",
+                    }
+                else:
+                    inspected.add(index)
+                    outcome = dict(
+                        _candidate_detail(candidates[index], index),
+                        tool=tool, ok=True,
+                    )
+                results.append(outcome)
+                steps.append({
+                    "tool": tool,
+                    "arguments": {"index": index} if index >= 0 else {},
+                    "ok": bool(outcome.get("ok")),
+                })
+
+            if answer.get("done"):
+                try:
+                    choice = int(answer.get("candidate"))
+                except (TypeError, ValueError):
+                    raise AgentError("המודל לא בחר חלופת שיבוץ תקינה")
+                if choice not in inspected_before_turn:
+                    raise AgentError("הסוכן ניסה לבחור חלופה בלי לבדוק אותה")
+                return {
+                    "candidate": choice,
+                    "reply": _bounded(answer.get("reply")),
+                    "agent_reason": _bounded(answer.get("agent_reason")),
+                    "steps": steps,
                 }
-                for index, candidate in enumerate(candidates[:3])
-            ],
-        }
-        answer = self._llm.complete_json(
-            load("schedule_decision"),
-            json.dumps(payload, ensure_ascii=False, default=_json_default),
-            schema=DAY_DECISION_SCHEMA,
-            flow="schedule_decision",
-        )
-        if not isinstance(answer, dict):
-            raise AgentError("המודל החזיר החלטת שיבוץ לא תקינה")
-        try:
-            choice = int(answer.get("candidate"))
-        except (TypeError, ValueError):
-            raise AgentError("המודל לא בחר חלופת שיבוץ תקינה")
-        if choice < 0 or choice >= len(candidates[:3]):
-            raise AgentError("המודל בחר חלופת שיבוץ שאינה קיימת")
-        return {
-            "candidate": choice,
-            "reply": _bounded(answer.get("reply")),
-            "agent_reason": _bounded(answer.get("agent_reason")),
-        }
+            if not calls:
+                raise AgentError("הסוכן לא הפעיל כלי ולא השלים החלטה")
+
+        raise AgentError("הסוכן לא השלים החלטת שיבוץ בזמן")
 
 
 def _proposal(
@@ -898,6 +961,51 @@ def _rows(rows: Any, limit: int = 200) -> List[dict]:
     if not isinstance(rows, list):
         return []
     return [row for row in rows if isinstance(row, dict)][-limit:]
+
+
+def _day_tool_calls(offered: Any) -> List[dict]:
+    if not isinstance(offered, list):
+        return []
+    calls = []
+    for row in offered[:_DAY_MAX_CALLS]:
+        if not isinstance(row, dict) or row.get("tool") not in _DAY_TOOLS:
+            continue
+        try:
+            index = int(row.get("index", -1))
+        except (TypeError, ValueError):
+            continue
+        if -1 <= index <= 2:
+            if row["tool"] == _DAY_RUN_SCHEDULER:
+                index = -1
+            calls.append({"tool": row["tool"], "index": index})
+    return calls
+
+
+def _candidate_summary(candidate: dict, index: int) -> dict:
+    hours = [
+        float(row.get("hours")) for row in candidate.get("workload_hours") or []
+        if isinstance(row, dict) and isinstance(row.get("hours"), (int, float))
+    ]
+    return {
+        "index": index,
+        "assignments": len(candidate.get("assignments") or []),
+        "warnings": len(candidate.get("warnings") or []),
+        "notes": len(candidate.get("notes") or []),
+        "workload_spread": round(max(hours) - min(hours), 2) if hours else 0,
+    }
+
+
+def _candidate_detail(candidate: dict, index: int) -> dict:
+    return {
+        "index": index,
+        "assignments": _rows(candidate.get("assignments"), 200),
+        "workload_hours": _rows(candidate.get("workload_hours"), 200),
+        "warnings": _rows(candidate.get("warnings"), 100),
+        "notes": [
+            _bounded(note) for note in candidate.get("notes") or []
+            if _bounded(note)
+        ][:50],
+    }
 
 
 def _date(value: Any) -> str:

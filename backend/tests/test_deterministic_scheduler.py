@@ -76,6 +76,49 @@ class _UnavailableModel:
         raise AssertionError("the Friday/Saturday command must not call a model")
 
 
+class _DecisionModel:
+    def __init__(self, answer):
+        self.answer = answer
+        self.calls = 0
+
+    def complete_json(self, *args, **kwargs):
+        self.calls += 1
+        return self.answer
+
+
+def test_decision_agent_cannot_choose_a_candidate_it_did_not_inspect():
+    model = _DecisionModel({
+        "done": True, "candidate": 0, "reply": "בחרתי",
+        "agent_reason": "נראה טוב", "tool_calls": [],
+    })
+
+    with pytest.raises(AgentError, match="בלי לבדוק"):
+        ChangeAgent(model).decide_day(
+            "תשבץ את שבת", "2026-08-29", "", lambda: [{
+                "assignments": [], "warnings": [], "notes": [],
+                "workload_hours": [],
+            }]
+        )
+
+
+def test_decision_tool_loop_is_bounded():
+    model = _DecisionModel({
+        "done": False, "candidate": -1, "reply": "",
+        "agent_reason": "", "tool_calls": [{
+            "tool": "run_scheduler", "index": -1,
+        }],
+    })
+
+    with pytest.raises(AgentError, match="בזמן"):
+        ChangeAgent(model).decide_day(
+            "תשבץ את שבת", "2026-08-29", "", lambda: [{
+                "assignments": [], "warnings": [], "notes": [],
+                "workload_hours": [],
+            }]
+        )
+    assert model.calls == 3
+
+
 @pytest.mark.parametrize(
     ("command", "date"),
     [("תשבץ את שבת", "2026-08-29"), ("תשבץ את יום שישי", "2026-08-28")],

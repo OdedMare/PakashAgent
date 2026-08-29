@@ -60,21 +60,14 @@ including one deliberate tradeoff that looks like a bug), then
 
 ## Resolve before writing much code
 
-**Python version — decided: stay on 3.8.10.** The boss chose to mirror
-AiSummryIO's target, so no `X | Y`, no `list[str]`, no `match`; use `Optional`,
-`List`, `Dict`. `backend/Dockerfile` builds on `python:3.8.10-slim` to match.
+**Python version — decided: use 3.11.** The backend moved off 3.8 so the
+official OpenAI Agents SDK can own agent/tool execution.
 
-*Caveat worth knowing:* the local `backend/.venv` runs 3.13, so the test suite
-passing there does not prove 3.8 compatibility. `vermin -t=3.8 app/` checks the
-syntax; `docker build ./backend` is what proves the pinned dependencies actually
-resolve. Both pass today, and every module imports under 3.8.10 in the image.
+`backend/Dockerfile` is the compatibility proof and builds on
+`python:3.11-slim`.
 
-The pin is not free, and `backend/Dockerfile` is where the bill lands: the
-3.8.10 image is Debian buster, which is past EOL, so apt has to be pointed at
-`archive.debian.org`, and `pydantic-settings` pulls `backports.zoneinfo`, which
-has no aarch64 wheel for 3.8 and needs `gcc` to compile. None of that is wrong,
-but it is all sunk cost if the deployment target turns out to be newer — worth
-re-asking the boss once before more code depends on it.
+The former 3.8.10/Debian buster compatibility work was removed with the
+runtime upgrade.
 
 ## Steps
 

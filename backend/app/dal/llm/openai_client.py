@@ -33,17 +33,22 @@ Errors leaving this package are `AgentError` in Hebrew. Nothing in
 be hallucinated (D3).
 """
 
+import asyncio
 import json
 import logging
 import threading
 import time
-from typing import List, Optional
+from typing import Any, List, Optional, Type
 
 import httpx
-from openai import APITimeoutError, BadRequestError, OpenAI
+from agents import Agent, FunctionTool, ModelSettings, RunConfig, Runner
+from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
+from openai import APITimeoutError, AsyncOpenAI, BadRequestError, OpenAI
+from pydantic import BaseModel
 
 from app.common.errors import AgentError
 from app.common.time_context import agent_time_context
+from app.dal.llm.agent_tool import AgentTool
 from app.dal.llm.completion_retry import create_with_retry
 from app.dal.llm.json_response_parser import extract_json
 from app.dal.llm.message_merger import merge_system_into_user
@@ -111,12 +116,15 @@ def _slots(settings):
 
 
 _DEFAULT_QUEUE_SECONDS = 180
+_SCHEDULE_DECISION_QUEUE_SECONDS = 2
 
 
 def _queue_seconds(settings, flow: str):
     """How long interactive work may wait for a slot; builds wait forever."""
     if priority_for_flow(flow) != INTERACTIVE:
         return None
+    if flow == "schedule_decision":
+        return _SCHEDULE_DECISION_QUEUE_SECONDS
     try:
         seconds = int(getattr(
             settings, "llm_queue_seconds", _DEFAULT_QUEUE_SECONDS
@@ -154,7 +162,7 @@ _SCHEDULER_BUDGET_MULTIPLIER = 1.5
 # three compact alternatives must never turn the central command back into a
 # long-running model job; after this ceiling the deterministic first choice
 # is the supported fallback.
-_SCHEDULE_DECISION_TIMEOUT_SECONDS = 20
+_SCHEDULE_DECISION_TIMEOUT_SECONDS = 6
 
 
 def read_timeout_for(settings, flow: str) -> int:
@@ -214,7 +222,7 @@ def _budget_seconds(settings, flow: str):
     if flow == "scheduler":
         return max(timeout * _SCHEDULER_BUDGET_MULTIPLIER, timeout + 60)
     if flow == "schedule_decision":
-        return timeout + 5
+        return timeout + 2
     return max(timeout * _BUDGET_MULTIPLIER, _MIN_TOTAL_BUDGET_SECONDS)
 
 # Substrings local servers use when the prompt exceeds the context window.
@@ -299,6 +307,113 @@ class OpenAIJsonClient:
     def __init__(self, settings_store):
         self._store = settings_store
         self._cached_clients = {}
+        self._cached_async_clients = {}
+
+    def run_agent(
+        self,
+        name: str,
+        instructions: str,
+        user: str,
+        tools: List[AgentTool],
+        output_type: Type[BaseModel],
+        flow: str = "",
+        max_turns: int = 4,
+    ) -> BaseModel:
+        """Run one real Agents SDK turn against the live configured model.
+
+        The SDK owns the model/tool loop. Business code supplies only bounded,
+        deterministic tools, and keeps any write or approval boundary outside
+        this method.
+        """
+        started = time.monotonic()
+        settings = self._store.get()
+        chosen_role = role_for_flow(flow)
+        chosen_model = resolve_model(settings, chosen_role)
+        chosen_base_url = resolve_base_url(settings, chosen_role)
+        chosen_api_key = resolve_api_key(settings, chosen_role)
+        if not chosen_api_key and not chosen_base_url:
+            raise AgentError("לא הוגדר מפתח API או שרת תואם OpenAI")
+
+        timeout = read_timeout_for(settings, flow)
+        client = self._async_client_for(
+            chosen_api_key, chosen_base_url, timeout,
+        )
+        model = OpenAIChatCompletionsModel(
+            model=chosen_model,
+            openai_client=client,
+        )
+        sdk_tools = [self._sdk_tool(tool) for tool in tools]
+        max_tokens = (
+            _DIET_MAX_COMPLETION_TOKENS if settings.llm_diet_mode else None
+        )
+        penalty = getattr(
+            settings, "llm_repetition_penalty", _NEUTRAL_PENALTY
+        )
+        extra_body = None
+        if abs(penalty - _NEUTRAL_PENALTY) > 1e-9:
+            extra_body = {"repetition_penalty": penalty}
+        agent = Agent(
+            name=name,
+            instructions=instructions.rstrip() + "\n\n" + agent_time_context(),
+            model=model,
+            model_settings=ModelSettings(
+                max_tokens=max_tokens,
+                parallel_tool_calls=False,
+                extra_body=extra_body,
+            ),
+            tools=sdk_tools,
+            output_type=output_type,
+        )
+
+        async def execute():
+            return await Runner.run(
+                agent,
+                user,
+                max_turns=max_turns,
+                # Employee names and manager reasons must not leave through
+                # the SDK tracing channel. Pakash logs counts and timings only.
+                run_config=RunConfig(tracing_disabled=True),
+            )
+
+        budget = _budget_seconds(settings, flow)
+        try:
+            with _slots(settings).reserve(
+                priority_for_flow(flow), _queue_seconds(settings, flow)
+            ):
+                if budget is None:
+                    result = asyncio.run(execute())
+                else:
+                    async def bounded():
+                        return await asyncio.wait_for(execute(), timeout=budget)
+
+                    result = asyncio.run(bounded())
+        except ModelBusy:
+            raise AgentError(
+                "המודל תפוס כרגע בעבודה אחרת. נסו שוב בעוד רגע."
+            )
+        except (asyncio.TimeoutError, APITimeoutError):
+            raise AgentError(
+                "הסוכן לא הספיק לענות בתוך מגבלת הזמן שהוגדרה."
+            )
+        except AgentError:
+            raise
+        except Exception as exc:
+            raise AgentError("שגיאת סוכן: " + str(exc))
+
+        usage = result.context_wrapper.usage
+        counts = {
+            "prompt_tokens": usage.input_tokens,
+            "completion_tokens": usage.output_tokens,
+            "total_tokens": usage.total_tokens,
+        }
+        _log_call(
+            flow, chosen_model, counts, started,
+            max(0, usage.requests - 1), role=chosen_role,
+        )
+        output = result.final_output
+        if not isinstance(output, output_type):
+            raise AgentError("הסוכן החזיר תשובה לא תקינה")
+        return output
 
     def complete_json(
         self, system: str, user: str, schema=None, flow: str = "",
@@ -463,6 +578,34 @@ class OpenAIJsonClient:
                 timeout=_httpx_timeout(timeout),
             )
         return self._cached_clients[cache_key]
+
+    def _async_client_for(self, api_key, base_url, timeout):
+        """The Agents SDK uses AsyncOpenAI; cache it by the same live route."""
+        cache_key = (api_key, base_url, timeout)
+        if cache_key not in self._cached_async_clients:
+            self._cached_async_clients[cache_key] = AsyncOpenAI(
+                api_key=api_key or _LOCAL_SERVER_KEY_PLACEHOLDER,
+                base_url=base_url or None,
+                timeout=_httpx_timeout(timeout),
+            )
+        return self._cached_async_clients[cache_key]
+
+    @staticmethod
+    def _sdk_tool(tool: AgentTool) -> FunctionTool:
+        async def invoke(_context, arguments: str):
+            try:
+                parsed = json.loads(arguments) if arguments else {}
+            except json.JSONDecodeError:
+                parsed = {}
+            return tool.invoke(parsed if isinstance(parsed, dict) else {})
+
+        return FunctionTool(
+            name=tool.name,
+            description=tool.description,
+            params_json_schema=tool.parameters,
+            on_invoke_tool=invoke,
+            strict_json_schema=tool.strict,
+        )
 
     @staticmethod
     def _complete(
