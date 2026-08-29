@@ -194,7 +194,10 @@ class PlanningAgent:
             "asked_last_turn": pending,
             "answer_to_that": reply,
         }
-        turn = self._llm.run_agent(
+        run_agent = getattr(self._llm, "run_agent", None)
+        if not callable(run_agent):
+            raise AgentError("לא הוגדר מנגנון סוכן")
+        turn = run_agent(
             name="Pakash Copilot",
             instructions=load("planner"),
             user=json.dumps(payload, ensure_ascii=False),

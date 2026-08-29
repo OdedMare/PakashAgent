@@ -25,10 +25,13 @@ import json
 import re
 from typing import Any, Callable, Dict, List, Optional
 
+from pydantic import BaseModel, Field
+
 from app.bl import rotation
 from app.bl.prompts import load
 from app.bl.tools import resolve_employee
 from app.common.errors import AgentError
+from app.dal.llm.agent_tool import AgentTool
 
 _MAX_TEXT_CHARS = 4000
 _MAX_OPERATIONS = 40
@@ -144,38 +147,16 @@ CHANGE_RESPONSE_SCHEMA = {
 
 _DAY_RUN_SCHEDULER = "run_scheduler"
 _DAY_INSPECT_CANDIDATE = "inspect_candidate"
-_DAY_TOOLS = (_DAY_RUN_SCHEDULER, _DAY_INSPECT_CANDIDATE)
-_DAY_MAX_TURNS = 3
-_DAY_MAX_CALLS = 4
+_DAY_MAX_TURNS = 4
 
-_DAY_TOOL_CALL_SCHEMA = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["tool", "index"],
-    "properties": {
-        "tool": {"type": "string", "enum": list(_DAY_TOOLS)},
-        # -1 for run_scheduler; 0..2 for inspect_candidate.
-        "index": {"type": "integer", "minimum": -1, "maximum": 2},
-    },
-}
 
-DAY_DECISION_SCHEMA = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": [
-        "done", "candidate", "reply", "agent_reason", "tool_calls",
-    ],
-    "properties": {
-        "done": {"type": "boolean"},
-        "candidate": {"type": "integer", "minimum": -1, "maximum": 2},
-        "reply": {"type": "string"},
-        "agent_reason": {"type": "string"},
-        "tool_calls": {
-            "type": "array", "items": _DAY_TOOL_CALL_SCHEMA,
-            "maxItems": _DAY_MAX_CALLS,
-        },
-    },
-}
+class DayDecision(BaseModel):
+    candidate: int = Field(ge=0, le=2)
+    reply: str
+    agent_reason: str
+
+
+DAY_DECISION_SCHEMA = DayDecision.model_json_schema()
 
 
 class ChangeAgent:
@@ -257,85 +238,96 @@ class ChangeAgent:
         final machine action is still only an index into code-owned results.
         """
         candidates: List[dict] = []
-        results: List[dict] = []
         steps: List[dict] = []
         inspected = set()
 
-        for _ in range(_DAY_MAX_TURNS):
-            inspected_before_turn = set(inspected)
-            answer = self._llm.complete_json(
-                load("schedule_decision"),
-                json.dumps({
-                    "request": _bounded(request),
-                    "date": _date(day),
-                    "shift": _bounded(shift),
-                    "tools": [
-                        {
-                            "name": _DAY_RUN_SCHEDULER,
-                            "purpose": "בנה עד שלוש חלופות חוקיות ומסוכמות",
-                        },
-                        {
-                            "name": _DAY_INSPECT_CANDIDATE,
-                            "purpose": "פתח חלופה אחת עם שיבוצים ואזהרות",
-                        },
-                    ],
-                    "results": results,
-                }, ensure_ascii=False, default=_json_default),
-                schema=DAY_DECISION_SCHEMA,
-                flow="schedule_decision",
-            )
-            if not isinstance(answer, dict):
-                raise AgentError("המודל החזיר החלטת שיבוץ לא תקינה")
+        def run_scheduler(_arguments: dict) -> dict:
+            if not candidates:
+                candidates.extend(list(load_candidates())[:3])
+            steps.append({
+                "tool": _DAY_RUN_SCHEDULER, "arguments": {}, "ok": True,
+            })
+            return {
+                "ok": True,
+                "candidates": [
+                    _candidate_summary(candidate, position)
+                    for position, candidate in enumerate(candidates)
+                ],
+            }
 
-            calls = _day_tool_calls(answer.get("tool_calls"))
-            for call in calls:
-                tool = call["tool"]
-                index = call["index"]
-                if tool == _DAY_RUN_SCHEDULER:
-                    candidates = list(load_candidates())[:3]
-                    outcome = {
-                        "tool": tool,
-                        "ok": True,
-                        "candidates": [
-                            _candidate_summary(candidate, position)
-                            for position, candidate in enumerate(candidates)
-                        ],
-                    }
-                elif not candidates or not 0 <= index < len(candidates):
-                    outcome = {
-                        "tool": tool, "index": index, "ok": False,
-                        "error": "צריך להריץ קודם את כלי השיבוץ",
-                    }
-                else:
-                    inspected.add(index)
-                    outcome = dict(
-                        _candidate_detail(candidates[index], index),
-                        tool=tool, ok=True,
-                    )
-                results.append(outcome)
-                steps.append({
-                    "tool": tool,
-                    "arguments": {"index": index} if index >= 0 else {},
-                    "ok": bool(outcome.get("ok")),
-                })
-
-            if answer.get("done"):
-                try:
-                    choice = int(answer.get("candidate"))
-                except (TypeError, ValueError):
-                    raise AgentError("המודל לא בחר חלופת שיבוץ תקינה")
-                if choice not in inspected_before_turn:
-                    raise AgentError("הסוכן ניסה לבחור חלופה בלי לבדוק אותה")
-                return {
-                    "candidate": choice,
-                    "reply": _bounded(answer.get("reply")),
-                    "agent_reason": _bounded(answer.get("agent_reason")),
-                    "steps": steps,
+        def inspect_candidate(arguments: dict) -> dict:
+            try:
+                index = int(arguments.get("index"))
+            except (TypeError, ValueError):
+                index = -1
+            if not candidates or not 0 <= index < len(candidates):
+                outcome = {
+                    "ok": False,
+                    "error": "צריך להריץ קודם את כלי השיבוץ ולבחור אינדקס קיים",
                 }
-            if not calls:
-                raise AgentError("הסוכן לא הפעיל כלי ולא השלים החלטה")
+            else:
+                inspected.add(index)
+                outcome = dict(
+                    _candidate_detail(candidates[index], index), ok=True,
+                )
+            steps.append({
+                "tool": _DAY_INSPECT_CANDIDATE,
+                "arguments": {"index": index},
+                "ok": bool(outcome.get("ok")),
+            })
+            return outcome
 
-        raise AgentError("הסוכן לא השלים החלטת שיבוץ בזמן")
+        answer = self._llm.run_agent(
+            name="Pakash Day Scheduler",
+            instructions=load("schedule_decision"),
+            user=json.dumps({
+                "request": _bounded(request),
+                "date": _date(day),
+                "shift": _bounded(shift),
+            }, ensure_ascii=False, default=_json_default),
+            tools=[
+                AgentTool(
+                    name=_DAY_RUN_SCHEDULER,
+                    description="בנה עד שלוש חלופות חוקיות ומסוכמות",
+                    parameters={
+                        "type": "object", "properties": {},
+                        "additionalProperties": False,
+                    },
+                    invoke=run_scheduler,
+                    strict=True,
+                ),
+                AgentTool(
+                    name=_DAY_INSPECT_CANDIDATE,
+                    description="פתח חלופה אחת עם שיבוצים ואזהרות",
+                    parameters={
+                        "type": "object",
+                        "properties": {
+                            "index": {
+                                "type": "integer", "minimum": 0,
+                                "maximum": 2,
+                            },
+                        },
+                        "required": ["index"],
+                        "additionalProperties": False,
+                    },
+                    invoke=inspect_candidate,
+                    strict=True,
+                ),
+            ],
+            output_type=DayDecision,
+            flow="schedule_decision",
+            max_turns=_DAY_MAX_TURNS,
+        )
+        if not isinstance(answer, DayDecision):
+            raise AgentError("הסוכן החזיר החלטת שיבוץ לא תקינה")
+        if answer.candidate not in inspected:
+            raise AgentError("הסוכן ניסה לבחור חלופה בלי לבדוק אותה")
+        return {
+            "candidate": answer.candidate,
+            "reply": _bounded(answer.reply),
+            "agent_reason": _bounded(answer.agent_reason),
+            "steps": steps,
+        }
 
 
 def _proposal(
@@ -963,24 +955,6 @@ def _rows(rows: Any, limit: int = 200) -> List[dict]:
     return [row for row in rows if isinstance(row, dict)][-limit:]
 
 
-def _day_tool_calls(offered: Any) -> List[dict]:
-    if not isinstance(offered, list):
-        return []
-    calls = []
-    for row in offered[:_DAY_MAX_CALLS]:
-        if not isinstance(row, dict) or row.get("tool") not in _DAY_TOOLS:
-            continue
-        try:
-            index = int(row.get("index", -1))
-        except (TypeError, ValueError):
-            continue
-        if -1 <= index <= 2:
-            if row["tool"] == _DAY_RUN_SCHEDULER:
-                index = -1
-            calls.append({"tool": row["tool"], "index": index})
-    return calls
-
-
 def _candidate_summary(candidate: dict, index: int) -> dict:
     hours = [
         float(row.get("hours")) for row in candidate.get("workload_hours") or []
@@ -1036,6 +1010,7 @@ def _bounded(value: Any, limit: int = _MAX_TEXT_CHARS) -> str:
 
 __all__ = [
     "ChangeAgent", "CHANGE_RESPONSE_SCHEMA", "DAY_DECISION_SCHEMA",
+    "DayDecision",
     "OP_ASSIGN", "OP_REMOVE", "OP_SWAP", "OP_GENERATE_DAY",
     "PROFILE_ADD_EMPLOYEE", "PROFILE_UPDATE_EMPLOYEE",
     "PROFILE_ADD_SHIFT", "PROFILE_UPDATE_SHIFT",

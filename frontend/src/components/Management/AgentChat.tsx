@@ -16,7 +16,7 @@ import type { AgentAnswer, Operation, Proposal, Simulation } from "@/types";
 import { AgentAnswer as AgentAnswerBubble } from "./AgentAnswer";
 import { formatDate } from "./Calendar";
 
-/** Talking to the agent about the schedule — the way changes actually happen.
+/** Talking to the copilot about the schedule — the way changes actually happen.
  *
  *  The loop is deliberately two steps
  *  ([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)):
@@ -116,17 +116,17 @@ export function AgentChat({
   );
 
   return (
-    <section className="agent-chat" aria-label="שיחה עם הסוכן">
+    <section className="agent-chat" aria-label="שיחה עם קו־פיילוט">
       <header className="agent-chat-header">
         <span className="brand-mark" aria-hidden="true">
           <Sparkles size={15} />
         </span>
         <div>
-          <h3>שיחה עם הסוכן</h3>
+          <h3>קו־פיילוט</h3>
           <p>
             {hasSchedule
-              ? "אפשר להתייעץ על הצוות והסידור, או לבקש שינוי לאישור."
-              : "אפשר להתייעץ על הצוות, להוסיף עובדים ולהגדיר משמרות."}
+              ? "אפשר לשוחח על הצוות והסידור, או לבקש שינוי לאישור."
+              : "אפשר לשוחח על הצוות, להוסיף עובדים ולהגדיר משמרות."}
           </p>
         </div>
       </header>

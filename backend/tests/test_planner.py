@@ -122,6 +122,8 @@ class _NoModel:
     def complete_json(self, *args, **kwargs):
         raise AgentError("לא הוגדר מפתח API או שרת תואם OpenAI")
 
+    run_agent = complete_json
+
 
 class _ScriptedModel:
     """Replays prepared turns, recording what it was asked."""
@@ -130,12 +132,24 @@ class _ScriptedModel:
         self._turns = list(turns)
         self.calls = []
 
-    def complete_json(self, prompt, payload, schema=None, flow=None):
-        self.calls.append(payload)
-        if not self._turns:
-            return {"done": True, "answer": "סיימתי.", "tool_calls": [],
-                    "needs_confirmation": False}
-        return self._turns.pop(0)
+    def run_agent(self, *, user, tools, output_type, max_turns, **kwargs):
+        self.calls.append(user)
+        available = {tool.name: tool for tool in tools}
+        for _ in range(max_turns):
+            turn = self._turns.pop(0) if self._turns else {
+                "done": True, "answer": "סיימתי.",
+            }
+            for call in turn.get("tool_calls", []):
+                tool = available.get(call.get("tool"))
+                if tool:
+                    tool.invoke(call.get("arguments") or {})
+            if turn.get("done"):
+                return output_type(
+                    answer=turn.get("answer", ""),
+                    needs_confirmation=turn.get("needs_confirmation", False),
+                    needs_input=turn.get("needs_input", False),
+                )
+        raise AgentError("הסוכן לא השלים תשובה בזמן")
 
 
 @pytest.fixture
@@ -403,7 +417,7 @@ def test_a_broken_model_falls_back_rather_than_failing(repo, tools):
     """A model that answers with rubbish is the same case as none at all."""
 
     class _Broken:
-        def complete_json(self, *args, **kwargs):
+        def run_agent(self, *args, **kwargs):
             raise AgentError("המודל החזיר JSON לא תקין פעמיים")
 
     answer = PlanningAgent(_Broken(), tools).answer(

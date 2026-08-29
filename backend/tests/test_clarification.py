@@ -418,11 +418,24 @@ class _ScriptedModel:
         self._turns = list(turns)
         self.calls = []
 
-    def complete_json(self, prompt, payload, schema=None, flow=None):
-        self.calls.append(payload)
-        if not self._turns:
-            raise AssertionError("model called more times than scripted")
-        return self._turns.pop(0)
+    def run_agent(self, *, user, tools, output_type, max_turns, **kwargs):
+        self.calls.append(user)
+        available = {tool.name: tool for tool in tools}
+        for _ in range(max_turns):
+            if not self._turns:
+                raise AssertionError("model called more times than scripted")
+            turn = self._turns.pop(0)
+            for call in turn.get("tool_calls", []):
+                tool = available.get(call.get("tool"))
+                if tool:
+                    tool.invoke(call.get("arguments") or {})
+            if turn.get("done"):
+                return output_type(
+                    answer=turn.get("answer", ""),
+                    needs_confirmation=turn.get("needs_confirmation", False),
+                    needs_input=turn.get("needs_input", False),
+                )
+        raise AgentError("הסוכן לא השלים תשובה בזמן")
 
 
 class _NoModel:
@@ -430,6 +443,8 @@ class _NoModel:
 
     def complete_json(self, *args, **kwargs):
         raise AgentError("לא הוגדר מפתח API או שרת תואם OpenAI")
+
+    run_agent = complete_json
 
 
 @pytest.fixture

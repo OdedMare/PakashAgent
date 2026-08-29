@@ -81,9 +81,24 @@ class _DecisionModel:
         self.answer = answer
         self.calls = 0
 
-    def complete_json(self, *args, **kwargs):
+    def run_agent(self, *, tools, output_type, max_turns, **kwargs):
         self.calls += 1
-        return self.answer
+        self.max_turns = max_turns
+        available = {tool.name: tool for tool in tools}
+        for call in self.answer.get("tool_calls", []):
+            tool = available.get(call.get("tool"))
+            if tool:
+                arguments = call.get("arguments") or {}
+                if "index" in call:
+                    arguments = {"index": call["index"]}
+                tool.invoke(arguments)
+        if not self.answer.get("done"):
+            raise AgentError("הסוכן לא השלים החלטת שיבוץ בזמן")
+        return output_type(
+            candidate=self.answer.get("candidate"),
+            reply=self.answer.get("reply", ""),
+            agent_reason=self.answer.get("agent_reason", ""),
+        )
 
 
 def test_decision_agent_cannot_choose_a_candidate_it_did_not_inspect():
@@ -116,7 +131,8 @@ def test_decision_tool_loop_is_bounded():
                 "workload_hours": [],
             }]
         )
-    assert model.calls == 3
+    assert model.calls == 1
+    assert model.max_turns == 4
 
 
 @pytest.mark.parametrize(

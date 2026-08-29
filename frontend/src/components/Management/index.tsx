@@ -510,7 +510,7 @@ export function Management({
             <ManagerTab
               active={section === "agent"}
               icon={<Sparkles size={15} />}
-              label="סוכן"
+              label="קו־פיילוט"
               count={copilotPending}
               onClick={() => setSection("agent")}
             />
