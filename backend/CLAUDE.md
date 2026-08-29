@@ -43,12 +43,9 @@ uvicorn app.main:app --reload
   The manager may also **end it early** (`interview_service.end`), which
   writes the partial draft with a `completeness` record of what it still owes
   ([D22](../docs/DECISIONS.md#d22--the-interview-can-be-ended-early-and-the-profile-says-what-it-owes-️-amends-d18)).
-- `bl/deterministic_scheduler.py` — **generates a schedule with no model call.**
-  Builds the slot grid in code, then fills it: scarcest and most specialised
-  slots first, candidates filtered by the blocking checks and ranked by unmet
-  roles, then rotation, then accumulated load. Reproducible; every assignment
-  carries a reason. `bl/scheduler.py` supplies the grid, availability and span
-  planning it runs on.
+- `bl/deterministic_scheduler.py` — **builds audited day candidates with no
+  model call.** Candidate zero is the stable fallback; an optional second
+  candidate may carry explicit warnings for the agent to weigh.
 - `bl/changes.py` — conversational edits; asks for the boss's reason, proposes a
   replacement with justification, applies on confirmation. Proposes only — it is
   handed no repository, so it cannot write.
@@ -92,8 +89,9 @@ uvicorn app.main:app --reload
   `coverage_gaps`, `validate_placement`, `find_replacements`,
   `publish_readiness`, `profile_gaps`). No LLM call anywhere in the file, and
   no write: it holds a repository and uses it for reads only (D19).
-- `bl/planner.py` — the loop that runs them. The model picks tools, the
-  tools answer with arithmetic, the results go back. Falls back to
+- `bl/planner.py` — the conversational copilot. The Agents SDK Runner owns the
+  tool loop; the model picks tools, they answer with arithmetic, and the SDK
+  returns the results. Falls back to
   `bl/intent.py` when no model is reachable, so the same questions are
   answered with nothing configured.
 - `bl/intent.py` — **reading a Hebrew sentence with no model.** Keyword
@@ -119,16 +117,11 @@ one concern; split rather than append.
   cannot be hallucinated. Pure functions over a roster; trivially unit-testable.
 - **Hard rules are not gates.** They are strong instructions to the model plus a
   loud warning when broken. This is a deliberate, accepted tradeoff — see D1/D3.
-- **Generation is deterministic and calls no model.** Same inputs, same
-  schedule; a model outage cannot stop a build. The assignment loop runs
-  `slots × people` times per date, and it decides on exactly the arithmetic D3
-  assigns to code. Do not put a model call inside it, and do not introduce a
-  random or wall-clock tie breaker. ⚠️ This does mean the build path no longer
-  matches D3's "the agent decides" as written — see the note at the end of
-  [`app/bl/CLAUDE.md`](app/bl/CLAUDE.md) before changing it either way.
-- **A slot that cannot be filled legally stays short, with a note.** The
-  generator never relaxes a blocking check to avoid an empty seat; leaving it
-  visible is what lets the manager decide.
+- **Generation is agent-decided over deterministic evidence.** Per date,
+  Python builds at most two audited candidates and the Agents SDK lets the
+  agent inspect and choose. A warning is not a gate: the agent may choose the
+  warned candidate only with a reason. Candidate zero is the deterministic
+  fallback when the model is unavailable, so an outage cannot stop a build.
 - **How full a slot is has exactly one answer, and `bl/audit.py` owns it.**
   `required_headcount()` says how many people it asks for — reading the stored
   grid first, since that is what the week was generated or imported into — and

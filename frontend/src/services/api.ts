@@ -1098,8 +1098,8 @@ export function confirmImport(body: {
  *  The multi-step half of the agent: the Agents SDK runner lets the copilot
  *  pick read-only tools, the backend answers each with arithmetic, and the
  *  runner returns those results to the conversation. There is no operation
- *  in the response, so nothing an
- *  answer says can be applied — a question that wants a change comes back
+ *  in the response, so nothing an answer says can be applied — a question
+ *  that wants a change comes back
  *  with `needs_confirmation` and still goes through propose-then-confirm.
  *
  *  It answers with no model configured, via the deterministic reader, and

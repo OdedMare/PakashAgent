@@ -12,7 +12,8 @@ three are per role, so different kinds of work can run on different providers.
 
 | File | Role |
 |---|---|
-| `openai_client.py` | `OpenAIJsonClient` — the only class callers use |
+| `openai_client.py` | `OpenAIJsonClient` — JSON calls plus the Agents SDK runner |
+| `agent_tool.py` | Small business-layer tool descriptor adapted to SDK `FunctionTool` |
 | `completion_retry.py` | Transient-failure retry with exponential backoff |
 | `json_response_parser.py` | `extract_json` — strips fences, finds the object |
 | `message_merger.py` | Folds the system prompt into the user turn |
@@ -21,6 +22,20 @@ three are per role, so different kinds of work can run on different providers.
 
 Each helper is separate because each handles a different failure of
 "OpenAI-compatible" servers that are only approximately compatible.
+
+## `run_agent(...) -> BaseModel`
+
+The conversational copilot and day-candidate chooser use the official Agents
+SDK `Runner`; business code no longer owns a Python model/tool loop. The method
+reads the same live role, model, URL, key, timeout and concurrency settings as
+`complete_json`, then wraps the selected connection in
+`OpenAIChatCompletionsModel` so local OpenAI-compatible servers remain valid.
+
+Callers provide only `AgentTool` values backed by deterministic business
+functions and a Pydantic final-output type. Parallel tool calls are disabled,
+the SDK turn count and the existing wall-clock budget are bounded, and SDK
+tracing is disabled because prompts can contain employee names and manager
+reasons. Writes and approvals remain outside the runner.
 
 ## `complete_json(system, user, schema=None, flow="", role="", model="") -> dict`
 

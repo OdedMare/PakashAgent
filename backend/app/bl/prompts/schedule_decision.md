@@ -14,7 +14,10 @@ The only operations available are the attached read-only tools.
 
 ## Tools
 
-- `run_scheduler` builds and audits up to three alternatives.
+- `run_scheduler` builds and audits up to three alternatives. Candidate 0 is
+  always the conservative fallback. Another candidate may contain explicit
+  warnings so you can make a justified exception when the manager's request
+  or workplace context warrants it.
 - `inspect_candidate` opens one returned candidate. Use its exact index.
 
 Run the scheduler before inspecting a candidate. A missing index is returned as
@@ -35,9 +38,12 @@ Prefer, in this order:
 3. the more balanced workload;
 4. clearer fit between the assignment reasons and the requested day.
 
-Rotation and triplet rules are mandatory. Code enforces them in every tool;
-never suggest bypassing them. If every candidate has a gap, choose the least
-risky one and say plainly what remains uncovered.
+Warnings are advisory facts, not gates. You may select a candidate with a
+warning, including availability, rest, hours or rotation, only when its tool
+result makes the trade-off visible and `agent_reason` names the warning and
+why the exception is preferable. Never invent an employee, shift or date. If
+every candidate has a gap, choose the least risky one and say plainly what
+remains uncovered.
 
 In `reply`, tell the manager what you ran, what you inspected, and what you
 recommend for confirmation. In `agent_reason`, compare the chosen candidate

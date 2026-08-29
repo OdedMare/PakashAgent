@@ -101,6 +101,11 @@ screens, the agent's tool layer (`bl/tools.py`, `bl/planner.py`,
 `bl/intent.py`, `bl/simulate.py`), the schedule tables, the management HTTP
 layer, and the RTL UI for all of it.
 
+The management chat is the Pakash copilot surface. Its read-only questions and
+day-candidate decisions run through the official OpenAI Agents SDK Runner;
+deterministic tools still own every countable fact, and changes still require a
+separate proposal and manager confirmation.
+
 Every architectural decision was settled in a design interview and is recorded —
 with its reasoning — in [`docs/DECISIONS.md`](docs/DECISIONS.md). Read that before
 writing code; several decisions are counterintuitive and one is a deliberate,

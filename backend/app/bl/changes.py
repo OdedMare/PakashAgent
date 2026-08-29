@@ -231,6 +231,7 @@ class ChangeAgent:
     def decide_day(
         self, request: str, day: str, shift: str,
         load_candidates: Callable[[], List[dict]],
+        preferences: Optional[List[str]] = None,
     ) -> dict:
         """Run read-only scheduling tools, inspect, then choose one result.
 
@@ -284,6 +285,13 @@ class ChangeAgent:
                 "request": _bounded(request),
                 "date": _date(day),
                 "shift": _bounded(shift),
+                # Text only, capped for small/free models. The Python tools
+                # already carry the arithmetic; these are the judgment calls
+                # the model actually needs to read.
+                "preferences": [
+                    _bounded(item, 300) for item in preferences or []
+                    if _bounded(item, 300)
+                ][:12],
             }, ensure_ascii=False, default=_json_default),
             tools=[
                 AgentTool(

@@ -91,7 +91,8 @@ import screen. All surfaces exist.
 | Interview | The intro conversation, one question per turn — `src/components/Interview/` |
 | Management | The manager's control room — `src/components/Management/` |
 | Schedule | The living grid for a period, RTL — `Management/Calendar.tsx` |
-| Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `ConfirmMove.tsx` |
+| Copilot chat | Read-only agent answers and confirmed change requests — `Management/AgentChat.tsx` |
+| Change confirm | The copilot's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `ConfirmMove.tsx` |
 | Briefing | What the agent noticed unprompted — `Management/Briefing.tsx` |
 | Copilot inbox | Durable observations, proposals, failures, permissions and audit — `Management/CopilotInbox.tsx` |
 | Agent answer | What the agent found when *asked* — `Management/AgentAnswer.tsx` |

@@ -3,7 +3,7 @@
 import pytest
 
 from app.bl.changes import ChangeAgent, OP_GENERATE_DAY
-from app.bl.deterministic_scheduler import generate_day
+from app.bl.deterministic_scheduler import generate_day, generate_day_candidates
 from app.common.errors import AgentError
 
 
@@ -69,6 +69,29 @@ def test_declared_rotation_without_an_anchor_blocks_generation():
 
     with pytest.raises(AgentError, match="תלתון"):
         generate_day(profile, "2026-08-29")
+
+
+def test_agent_options_include_an_audited_exception_not_a_silent_override():
+    profile = _profile()
+    unavailable = [
+        {
+            "employee": row["name"], "date": "2026-08-29",
+            "shift": SHIFT, "available": False, "is_hard": True,
+            "reason": "לא זמין",
+        }
+        for row in profile["employees"]
+    ]
+
+    candidates = generate_day_candidates(
+        profile, "2026-08-29", availability=unavailable, count=2,
+        include_warning_candidate=True,
+    )
+
+    assert candidates[0]["assignments"] == []
+    assert candidates[1]["assignments"]
+    assert {warning["code"] for warning in candidates[1]["warnings"]} >= {
+        "unavailable",
+    }
 
 
 class _UnavailableModel:

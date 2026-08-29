@@ -1,8 +1,8 @@
 """Persistence and orchestration around the schedule.
 
-`Scheduler` decides who works; `ChangeAgent` decides what a request means;
-`audit` recomputes the countable facts. This decides what to remember and in
-what order to do things — which is why it, and not they, owns the repository.
+`ChangeAgent` chooses among Python-built day plans; `audit` recomputes the
+countable facts. This decides what to remember and in what order to do things
+— which is why it, and not they, owns the repository.
 
 Two shapes are load-bearing here:
 
@@ -480,11 +480,13 @@ class ScheduleService:
         assignments, notes = [], []
         summaries = []
         history = self._recent_assignments(team_id, starts_on)
+        preferences = self._generation_preferences(team_id)
         day = datetime.date.fromisoformat(starts_on)
         end = datetime.date.fromisoformat(ends_on)
         while day <= end:
             date = day.isoformat()
-            result = assign_day(
+            result = self._generate_day_with_agent(
+                team_id,
                 profile,
                 date,
                 availability=self._repository.availability(team_id, date, date),
@@ -494,6 +496,8 @@ class ScheduleService:
                     if _iso(row.get("date")) == date
                 ],
                 already_scheduled=assignments,
+                instructions=instructions,
+                preferences=preferences,
             )
             assignments.extend(result.get("assignments") or [])
             notes.extend(result.get("notes") or [])
@@ -540,6 +544,106 @@ class ScheduleService:
         view["notes"] = result["notes"]
         view["summary"] = result["summary"]
         return view
+
+    def _generate_day_with_agent(
+        self,
+        team_id: str,
+        profile: dict,
+        day: str,
+        availability: Optional[List[dict]] = None,
+        history: Optional[List[dict]] = None,
+        required_assignments: Optional[List[dict]] = None,
+        already_scheduled: Optional[List[dict]] = None,
+        shift_names: Optional[List[str]] = None,
+        instructions: str = "",
+        preferences: Optional[List[str]] = None,
+    ) -> dict:
+        """Let the agent choose between Python-built, audited day plans.
+
+        Two candidates keep the payload useful for small models: candidate 0
+        is the deterministic fallback; candidate 1 may carry explicit audit
+        warnings and is the route for an explained exception. Tools are
+        read-only and the chosen rows return here before anything is stored.
+        """
+        candidates = generate_day_candidates(
+            profile,
+            day,
+            availability=availability,
+            history=history,
+            required_assignments=required_assignments,
+            already_scheduled=already_scheduled,
+            shift_names=shift_names,
+            count=2,
+            include_warning_candidate=True,
+        )
+        if not candidates:
+            return assign_day(
+                profile,
+                day,
+                availability=availability,
+                history=history,
+                required_assignments=required_assignments,
+                already_scheduled=already_scheduled,
+                shift_names=shift_names,
+            )
+
+        request = _text(instructions) or "בנה את השיבוץ הטוב ביותר ליום הזה"
+        shift = _text((shift_names or [""])[0]) if len(
+            shift_names or []
+        ) == 1 else ""
+        try:
+            decision = self._changes.decide_day(
+                request,
+                day,
+                shift,
+                lambda: candidates,
+                preferences=preferences,
+            )
+            chosen = dict(candidates[decision["candidate"]])
+            if chosen.get("warnings") and not decision["agent_reason"]:
+                raise AgentError(
+                    "הסוכן בחר חלופה עם אזהרות בלי להסביר את החריגה"
+                )
+            chosen["summary"] = decision["agent_reason"] or _text(
+                chosen.get("summary")
+            )
+            chosen["steps"] = decision["steps"]
+            metrics = dict(chosen.get("metrics") or {})
+            metrics.update({
+                "engine": "agent",
+                "selected_candidate": decision["candidate"],
+            })
+            chosen["metrics"] = metrics
+            return chosen
+        except Exception as failure:
+            # Model access is optional; the first candidate is deliberately
+            # built before the call so a free-provider outage cannot stop a
+            # checkpoint or cost a second scheduling pass.
+            _log.warning("generation decision agent unavailable: %s", failure)
+            chosen = dict(candidates[0])
+            metrics = dict(chosen.get("metrics") or {})
+            metrics["engine"] = "deterministic_fallback"
+            chosen["metrics"] = metrics
+            chosen["steps"] = [{
+                "tool": "deterministic_fallback", "arguments": {},
+                "ok": True,
+            }]
+            return chosen
+
+    def _generation_preferences(self, team_id: str) -> List[str]:
+        """Active preference text only, bounded before it reaches a model."""
+        if not hasattr(self._repository, "preferences"):
+            return []
+        try:
+            return [
+                _text(row.get("text"))[:300]
+                for row in self._repository.preferences(
+                    team_id, status=PREFERENCE_ACTIVE
+                )
+                if _text(row.get("text"))
+            ][:12]
+        except Exception:
+            return []
 
     def start_generation(
         self,
@@ -947,8 +1051,8 @@ class ScheduleService:
         through = _iso(target.get("through")) or day
         try:
             _require_rotation_configuration(profile)
-            # One deterministic pass per date of the span. `generate_day`
-            # fills a single date, so the span is walked here and each day
+            # One bounded agent decision per date of the span. Python builds
+            # the audited candidates, so the span is walked here and each day
             # sees the ones before it through `already_scheduled` -- that is
             # what keeps rest, hours and fairness honest across the span,
             # exactly as the whole-period build does.
@@ -962,8 +1066,10 @@ class ScheduleService:
             ]
             assignments, notes, summaries = [], [], []
             metrics: dict = {}
+            preferences = self._generation_preferences(team_id)
             for date in sorted(span_dates):
-                step = assign_day(
+                step = self._generate_day_with_agent(
+                    team_id,
                     profile,
                     date,
                     availability=[
@@ -976,6 +1082,8 @@ class ScheduleService:
                         if _iso(row.get("date")) == date
                     ],
                     already_scheduled=committed + assignments,
+                    instructions=_text(generation.get("instructions")),
+                    preferences=preferences,
                 )
                 assignments.extend(step.get("assignments") or [])
                 notes.extend(step.get("notes") or [])
@@ -1666,13 +1774,16 @@ class ScheduleService:
                         for row in schedule.get("assignments") or []
                     ],
                     shift_names=[shift] if shift else None,
+                    count=2,
+                    include_warning_candidate=True,
                 ))
             return candidates
 
         steps = []
         try:
             decision = self._changes.decide_day(
-                request, day, shift, load_candidates
+                request, day, shift, load_candidates,
+                preferences=self._generation_preferences(team_id),
             )
             choices = load_candidates()
             chosen = choices[decision["candidate"]]

@@ -14,7 +14,7 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | `interview.py` | The intro interview — workplace profile, employees, rules, shift vocabulary |
 | `interview_service.py` | Persistence around it: sessions, turns, resume, completion |
 | `workspace_service.py` | Workspace rules: entering a team, roles, the share link |
-| `deterministic_scheduler.py` | **The assignment loop. Pure Python, no LLM.** Fills one date; every assignment carries a reason |
+| `deterministic_scheduler.py` | **Audited day candidates. Pure Python, no LLM.** Candidate zero is the stable fallback |
 | `scheduler.py` | The slot grid (`build_slots`), availability resolution and span planning the loop above runs on |
 | `changes.py` | Conversational edits and the change log |
 | `briefing.py` | **The agent speaking first.** Observes; proposes nothing that lands |
@@ -23,7 +23,7 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | `export.py` | **A period out as `.xlsx`.** Pure functions, no model, no repository |
 | `importer.py` | Excel/doc ingest with layout inference |
 | `tools.py` | **The named questions the agent may ask. Pure Python, no LLM, no write** — including `profile_gaps`, what the interview never taught |
-| `planner.py` | The tool loop, with a deterministic fallback when no model is reachable |
+| `planner.py` | Agents SDK copilot over read-only tools, with a deterministic fallback |
 | `intent.py` | **Reading a Hebrew sentence with no model.** Seven shapes; never guesses |
 | `simulate.py` | **What a change would do.** No model, no repository, persists nothing |
 | `rotation.py` | **Whose closure a date is.** Pure arithmetic off separate round/triplet anchors; no model |
@@ -42,13 +42,10 @@ take no model at all. That split is deliberate and load-bearing — an LLM asked
 "has anyone exceeded 5 shifts?" is doing arithmetic by generation, and a wrong
 answer looks identical to a right one.
 
-**⚠️ The line has moved since D3 was written, and D3 has not caught up.** D3
-says the agent makes every scheduling decision and code only audits. Building a
-period no longer works that way: `deterministic_scheduler.py` picks who works,
-and the model is not consulted. The rest of D3 still holds exactly — the audit
-over a stored schedule is advisory, hard rules are not gates, and the manager
-can overrule anything. Anyone changing generation should read this gap as
-unresolved rather than settled; see the note at the end of this file.
+Generation follows the same division: `deterministic_scheduler.py` computes a
+small audited candidate set; the SDK-managed day agent invokes those read-only
+tools, inspects the evidence and chooses. Candidate zero remains a model-free
+fallback.
 
 ## `interview.py`
 
@@ -152,9 +149,9 @@ stale client copy cannot rewrite what was already agreed.
 
 ## `deterministic_scheduler.py`
 
-**Pure Python. No LLM call, ever.** This owns the central assignment loop:
-`generate_day()` fills one date's slot grid, and the same inputs always
-produce the same schedule. A model outage cannot stop a build.
+**Pure Python. No LLM call, ever.** This builds the day plans the agent can
+inspect. `generate_day()` produces the stable conservative plan and
+`generate_day_candidates()` optionally adds one audited warning-bearing plan.
 
 Every assignment still carries its own `reason` — written by `_reason()` from
 the profile facts that justified the pick (the role it covered, the rotation
@@ -184,13 +181,14 @@ closing group (`rotation.holds`), then the lightest accumulated load, then the
 name. A tuple is auditable in a way a tuned weight sum is not — "why her" has
 an answer you can read off the first field that differed.
 
-**Legality is a filter, not a penalty.** `_hard_conflict` and
+The conservative candidate treats legality as a filter. `_hard_conflict` and
 `_introduces_blocking` remove candidates *before* ranking, against the blocking
 codes (`CONSECUTIVE`, `CROSS_ROTATION`, `DOUBLE_BOOKED`, `OVER_HOURS`,
 `SHORT_REST`, `UNAVAILABLE`). When nothing legal remains the slot stays short
 with an explicit note — the engine never fills a seat illegally to avoid an
 empty one. Manager pins are validated the same way and raise rather than being
-quietly dropped.
+quietly dropped. The optional agent candidate may retain those placements, but
+the same audit warnings travel with it; the agent must explain any such choice.
 
 **⚠️ This is not the audit becoming a gate.** `audit.py` is still advisory over
 a stored period, and the manager may still place anything by hand (D18) and
@@ -207,10 +205,9 @@ cache rather than one name.
 
 **How wide one checkpoint is, is a setting.** `schedule_generation_mode` chooses
 between `day` (the default) and `week`, and `plan_spans` divides the period.
-Generation costs no prompt, so this no longer trades speed for granularity as
-it did when a span was a model call: it decides how much work one failure or
-one cancellation can throw away, and how finely progress advances. A week is a
-ceiling rather than a promise — a span never crosses seven days.
+Each date costs one bounded agent run, even inside a week checkpoint. The mode
+therefore decides how much work one failure or cancellation can throw away and
+how finely progress advances; a span never crosses seven days.
 
 **Interactive generation is one checkpoint per request.**
 `ScheduleService.start_generation()` stores the whole slot grid, plans the
@@ -339,6 +336,12 @@ deliberately not a parsed pending-intent record, since the sentence is what
 the model already reads and a structured duplicate is a second thing to keep
 in sync. Cleared as soon as the request is carried out.
 
+For a spoken Friday/Saturday build, `ChangeAgent.decide_day` is a second
+SDK-managed agent run. It can call only `run_scheduler` and
+`inspect_candidate`; both are deterministic and read-only. Its final typed
+answer is only the index of a candidate it actually inspected plus the Hebrew
+reply and reason. Candidate data and the eventual write remain code-owned.
+
 ## `rotation.py` — whose weekend it is
 
 A closure (`סגירה`) is not another shift to balance. It is a stretch one
@@ -414,6 +417,11 @@ So the questions are **named**, and each is answered by arithmetic:
 `find_replacements`, `publish_readiness`, `profile_gaps`. The model picks
 which to call and writes the Hebrew around the result; it never supplies a number, a name or a
 verdict.
+
+The model/tool loop itself belongs to the official Agents SDK `Runner`, not to
+`planner.py`. `planner.py` exposes bounded `AgentTool` adapters and receives a
+typed `CopilotReply`; the runner feeds tool results back to the model and
+enforces the maximum turn count.
 
 **Nothing in this path writes.** `tools.py` holds a repository and reads from
 it. `planner.py` holds the *tools*, not the repository. The response schema
@@ -600,29 +608,19 @@ confirmation** ([D7](../../../docs/DECISIONS.md#d7--import-infers-layout-boss-co
 - Imports are confirmed before they persist.
 - Business logic stays here; SQL stays in `dal/repository/`; model calls go
   through `dal/llm/`.
-- Generation stays deterministic and reproducible: no model call in the
-  assignment loop, and no wall-clock or random tie breaker.
-- A slot that cannot be filled legally is left short with a note. Never fill a
-  seat by relaxing a blocking check.
+- Generation exposes at most two deterministic, audited candidates per date;
+  the agent chooses, and candidate zero is the outage fallback.
+- A warned candidate may be chosen only with the agent's visible reason.
 
-## Unresolved: generation versus D3
+## Generation and D3
 
-Two things a future change should know rather than discover.
-
-**The docs and the code disagree about who schedules.**
-[D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-) states
-the agent decides and code only audits. Generation is now deterministic, so for
-the *build* path that is no longer what happens. This was not written down as a
-decision when the engine landed, and D3 has not been amended. Whoever revisits
-it should either amend D3 or record a new decision — not quietly widen the gap.
-
-**The manager's `instructions` are collected and never reach the loop.**
-`GenerateRequest.instructions` is stored on the job and written to the change
-log, but `generate_day()` has no parameter for it and reads no preferences or
-learned rules. So *"דנה בבחינות השבוע, תעמיס פחות"* changes the log and not the
-schedule. If a model is put back into generation, this is the place it belongs:
-translating a sentence into ranking hints **once per period**, ahead of the
-loop, where a hint can reorder candidates but never outrank a blocking check.
+The previous deterministic-only build contradicted D3. The live path now sends
+the manager's instructions and at most twelve active preference sentences to a
+bounded day agent. Python still owns roster arithmetic, candidate construction
+and audit warnings; the agent owns the choice and explanation. It receives no
+write tool, and `ScheduleService` persists only the returned candidate after
+the run completes. On any provider, schema or turn-limit failure it stores the
+already-built conservative candidate zero.
 
 **`scheduler.py` still holds a `Scheduler` class that nothing constructs.** It
 is the old model-driven pipeline. `build_slots`, `effective_availability` and

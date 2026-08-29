@@ -46,6 +46,11 @@ advisory. So "hard" means *a strong instruction to the model plus a loud warning
 when broken* — **not a gate**. The boss was told this explicitly and chose it.
 Do not "fix" it by making the audit blocking.
 
+Generation implements this as a bounded tool loop per date: Python builds and
+audits at most two candidates, including an optional warning-bearing exception,
+and the agent inspects and chooses. It receives no write tool. Candidate zero
+is stored as the deterministic fallback when the provider is unavailable.
+
 ## D4 — Living schedule, not versioned
 
 One current schedule per period, edited in place, plus an **append-only change

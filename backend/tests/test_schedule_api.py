@@ -319,6 +319,7 @@ class _ScriptedLlm:
     def __init__(self, answers=None):
         self._answers = list(answers or [])
         self.calls = []
+        self.agent_tool_results = []
 
     def complete_json(self, system, user, schema=None, flow=""):
         self.calls.append({"system": system, "user": user, "schema": schema})
@@ -328,6 +329,42 @@ class _ScriptedLlm:
         if isinstance(answer, Exception):
             raise answer
         return answer
+
+    def run_agent(
+        self, *, instructions, user, tools, output_type, max_turns, **kwargs,
+    ):
+        self.calls.append({"system": instructions, "user": user,
+                           "agent": True})
+        available = {tool.name: tool for tool in tools}
+        for _ in range(max_turns):
+            if not self._answers:
+                raise AssertionError("model called more times than scripted")
+            # Most tests below script another flow's JSON completion after
+            # opening a generated schedule. Leave that answer for
+            # `complete_json`; agent-shaped fixtures opt in explicitly.
+            peek = self._answers[0]
+            if isinstance(peek, dict) and not any(
+                key in peek for key in ("done", "tool_calls", "candidate")
+            ):
+                raise AgentError("לא הוגדרה תשובת agent בטסט")
+            answer = self._answers.pop(0)
+            if isinstance(answer, Exception):
+                raise answer
+            for call in answer.get("tool_calls", []):
+                tool = available.get(call.get("tool"))
+                if not tool:
+                    continue
+                arguments = call.get("arguments") or {}
+                if "index" in call and call["index"] >= 0:
+                    arguments = {"index": call["index"]}
+                self.agent_tool_results.append(tool.invoke(arguments))
+            if answer.get("done"):
+                return output_type(
+                    candidate=answer.get("candidate"),
+                    reply=answer.get("reply", ""),
+                    agent_reason=answer.get("agent_reason", ""),
+                )
+        raise AgentError("הסוכן לא השלים החלטה בזמן")
 
 
 def _generation(assignments, notes=None):
@@ -339,6 +376,7 @@ def _build_app(answers=None, launch=None, settings=None):
     repository = _FakeScheduleRepo()
     llm = _ScriptedLlm(answers)
     repository.model_calls = llm.calls
+    repository.agent_tool_results = llm.agent_tool_results
     guards = Guards(SECRET)
     app = FastAPI()
     app.include_router(
@@ -435,10 +473,9 @@ def test_agent_sees_candidates_and_its_choice_is_the_confirmed_schedule():
     assert [step["tool"] for step in body["steps"]] == [
         "run_scheduler", "inspect_candidate", "inspect_candidate",
     ]
-    assert len(repo.model_calls) == 2
-    second_turn = json.loads(repo.model_calls[1]["user"])
-    assert second_turn["results"][0]["tool"] == "run_scheduler"
-    assert second_turn["results"][2]["index"] == 1
+    assert len(repo.model_calls) == 1
+    assert repo.agent_tool_results[0]["candidates"]
+    assert repo.agent_tool_results[2]["index"] == 1
 
     applied = client.post("/api/schedule/apply", json={
         "schedule_id": opened["id"],
@@ -450,7 +487,7 @@ def test_agent_sees_candidates_and_its_choice_is_the_confirmed_schedule():
     assert [row["employee"] for row in applied.json()["assignments"]] == [
         "יוסי"
     ]
-    assert len(repo.model_calls) == 2
+    assert len(repo.model_calls) == 1
 
 
 def test_a_generated_preview_cannot_be_rewritten_before_confirmation():
@@ -546,10 +583,10 @@ def test_generating_stores_a_draft_with_reasons():
     body = response.json()
     assert body["status"] == "draft"
     assert "זמינות" in body["assignments"][0]["reason"]
-    assert repo.model_calls == []
+    assert len(repo.model_calls) == 2
 
 
-def test_generation_does_not_wait_for_a_model_to_read_soft_preferences():
+def test_generation_reads_only_active_soft_preferences_for_the_agent():
     app, repo = _build_app([])
     repo.preference_rows = [
         {
@@ -568,7 +605,41 @@ def test_generation_does_not_wait_for_a_model_to_read_soft_preferences():
 
     assert response.status_code == 200
     assert response.json()["assignments"]
-    assert repo.model_calls == []
+    assert len(repo.model_calls) == 1
+    context = json.loads(repo.model_calls[0]["user"])
+    assert context["preferences"] == ["דנה מעדיפה בקרים"]
+
+
+def test_generation_agent_runs_python_tools_and_sees_compact_context():
+    app, repo = _build_app([{
+        "tool_calls": [
+            {"tool": "run_scheduler"},
+            {"tool": "inspect_candidate", "index": 0},
+        ],
+        "done": True,
+        "candidate": 0,
+        "reply": "בדקתי ובחרתי חלופה",
+        "agent_reason": "החלופה השנייה מאזנת טוב יותר את היום",
+    }])
+    repo.preference_rows = [{
+        "team_id": TEAM, "status": "active", "kind": "employee",
+        "subject": "יוסי", "text": "להעדיף את יוסי כשאפשר",
+    }]
+
+    response = _client(app).post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+        "instructions": "לשמור את דנה למשמרת הערב",
+    })
+
+    assert response.status_code == 200
+    assert len(repo.model_calls) == 1
+    context = json.loads(repo.model_calls[0]["user"])
+    assert context["request"] == "לשמור את דנה למשמרת הערב"
+    assert context["preferences"] == ["להעדיף את יוסי כשאפשר"]
+    assert repo.agent_tool_results[0]["candidates"]
+    assert repo.agent_tool_results[1]["index"] == 0
+    assert repo.agent_tool_results[1]["warnings"] == []
+    assert "החלופה השנייה" in response.json()["summary"]
 
 
 def test_generating_enforces_the_managers_required_assignment():
@@ -658,7 +729,7 @@ def test_generation_does_not_need_model_retries():
     ).json()["generation"]
     assert generation["status"] == "complete"
     assert generation["days"][0]["attempts"] == 1
-    assert repo.model_calls == []
+    assert len(repo.model_calls) == 1
 
 
 def test_failed_background_generation_requeues_as_running_for_polling():
@@ -686,7 +757,7 @@ def test_failed_background_generation_requeues_as_running_for_polling():
     assert client.get("/api/schedule/%s" % started["id"]).json()[
         "generation"
     ]["status"] == "complete"
-    assert repo.model_calls == []
+    assert len(repo.model_calls) == 1
 
 
 def test_one_existing_day_can_be_rebuilt_with_board_instructions():
@@ -717,7 +788,7 @@ def test_one_existing_day_can_be_rebuilt_with_board_instructions():
     assert repo.schedules[opened["id"]]["generation"]["instructions"].startswith(
         "זה יום"
     )
-    assert repo.model_calls == []
+    assert len(repo.model_calls) == 1
 
 
 def test_progressive_long_range_is_one_persisted_request_per_day():
@@ -771,7 +842,7 @@ def test_a_day_completes_even_when_the_model_would_fail():
     assert completed.status_code == 200
     assert completed.json()["generation"]["status"] == "complete"
     assert completed.json()["generation"]["days"][0]["attempts"] == 1
-    assert repo.model_calls == []
+    assert len(repo.model_calls) == 1
 
 
 def test_progress_answers_the_poll_without_rebuilding_the_grid():
@@ -953,7 +1024,7 @@ def test_a_hand_placed_shift_survives_the_day_being_generated():
 
     placed = {row["employee"]: row["source"] for row in built["assignments"]}
     assert placed["יוסי"] == "manager"
-    assert repo.model_calls == []
+    assert len(repo.model_calls) == 1
 
 
 class _BlockingLlm:
@@ -977,8 +1048,20 @@ class _BlockingLlm:
         self.release.wait(10)
         return self._answer
 
+    def run_agent(self, *, instructions, user, tools, output_type, **kwargs):
+        self.calls.append({"system": instructions, "user": user,
+                           "agent": True})
+        available = {tool.name: tool for tool in tools}
+        available["run_scheduler"].invoke({})
+        available["inspect_candidate"].invoke({"index": 0})
+        self.entered.set()
+        self.release.wait(10)
+        return output_type(
+            candidate=0, reply="בחרתי", agent_reason="החלופה השמרנית",
+        )
 
-def test_a_model_that_never_answers_cannot_hold_generation_open():
+
+def test_agent_generation_runs_behind_the_short_http_request():
     repository = _FakeScheduleRepo()
     llm = _BlockingLlm(_generation([{
         "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
@@ -1002,6 +1085,11 @@ def test_a_model_that_never_answers_cannot_hold_generation_open():
         "starts_on": "2026-08-17", "ends_on": "2026-08-18",
     }).json()
     client.post("/api/schedule/generate/%s/run" % started["id"])
+    assert llm.entered.wait(2)
+    state = client.get("/api/schedule/%s/progress" % started["id"]).json()
+    assert state["generation"]["status"] == "running"
+
+    llm.release.set()
     deadline = time.time() + 2
     while time.time() < deadline:
         state = client.get("/api/schedule/%s/progress" % started["id"]).json()
@@ -1009,8 +1097,7 @@ def test_a_model_that_never_answers_cannot_hold_generation_open():
             break
         time.sleep(0.01)
     assert state["generation"]["status"] == "complete"
-    assert not llm.entered.is_set()
-    assert repository.model_calls == []
+    assert len(repository.model_calls) == 2
 
 
 def _two_periods(client):

@@ -4,12 +4,15 @@ Driven by a fake OpenAI client — no server, no network.
 """
 
 import json
+from types import SimpleNamespace
 
 import httpx
 import pytest
 from openai import BadRequestError
+from pydantic import BaseModel
 
 from app.common.errors import AgentError
+from app.dal.llm.agent_tool import AgentTool
 from app.dal.llm.json_response_parser import extract_json
 from app.dal.llm.message_merger import merge_system_into_user
 from app.dal.llm.model_id_extractor import extract_model_ids
@@ -63,6 +66,10 @@ class _Response:
         self.usage = _Usage() if usage else None
 
 
+class _AgentReply(BaseModel):
+    answer: str
+
+
 def _bad_request(message="unsupported"):
     request = httpx.Request("POST", "http://localhost:11434/v1/chat/completions")
     response = httpx.Response(400, request=request)
@@ -101,6 +108,58 @@ def _client(script, settings=None, monkeypatch=None):
     # Bypass the real OpenAI constructor and the connection cache.
     llm._client_for = lambda *args, **kwargs: fake
     return llm, fake
+
+
+def test_agent_runner_owns_the_tool_loop(monkeypatch):
+    invoked = []
+    captured = {}
+
+    async def fake_run(agent, user, **kwargs):
+        captured.update(agent=agent, user=user, kwargs=kwargs)
+        result = await agent.tools[0].on_invoke_tool(None, '{"value": "דנה"}')
+        captured["tool_result"] = result
+        usage = SimpleNamespace(
+            input_tokens=12, output_tokens=4, total_tokens=16, requests=2,
+        )
+        return SimpleNamespace(
+            context_wrapper=SimpleNamespace(usage=usage),
+            final_output=_AgentReply(answer="נבדק"),
+        )
+
+    monkeypatch.setattr(
+        "app.dal.llm.openai_client.Runner.run", fake_run,
+    )
+    monkeypatch.setattr(
+        "app.dal.llm.openai_client.agent_time_context", lambda: "NOW",
+    )
+    llm = OpenAIJsonClient(_Store(_Settings()))
+    reply = llm.run_agent(
+        name="Test Copilot",
+        instructions="Use the tool.",
+        user="question",
+        tools=[AgentTool(
+            name="lookup",
+            description="Lookup one employee",
+            parameters={
+                "type": "object",
+                "properties": {"value": {"type": "string"}},
+                "required": ["value"],
+                "additionalProperties": False,
+            },
+            invoke=lambda arguments: invoked.append(arguments) or {"ok": True},
+            strict=True,
+        )],
+        output_type=_AgentReply,
+        flow="planner",
+        max_turns=3,
+    )
+
+    assert reply.answer == "נבדק"
+    assert invoked == [{"value": "דנה"}]
+    assert captured["tool_result"] == {"ok": True}
+    assert captured["agent"].instructions.endswith("\n\nNOW")
+    assert captured["kwargs"]["max_turns"] == 3
+    assert captured["kwargs"]["run_config"].tracing_disabled is True
 
 
 # --- the degradation ladder ------------------------------------------------

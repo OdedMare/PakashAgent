@@ -38,7 +38,7 @@ import json
 import logging
 import threading
 import time
-from typing import Any, List, Optional, Type
+from typing import List, Optional, Type
 
 import httpx
 from agents import Agent, FunctionTool, ModelSettings, RunConfig, Runner
@@ -302,7 +302,7 @@ def _httpx_timeout(timeout) -> httpx.Timeout:
 
 
 class OpenAIJsonClient:
-    """The only class callers use. `complete_json` is the method that matters."""
+    """Live-settings entry point for JSON completions and SDK agent runs."""
 
     def __init__(self, settings_store):
         self._store = settings_store

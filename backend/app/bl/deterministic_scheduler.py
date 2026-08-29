@@ -1,9 +1,9 @@
-"""Fast, deterministic assignment of people into an existing slot grid.
+"""Fast, deterministic day candidates for the scheduling agent.
 
 Language models can interpret a manager's sentence, but they are a poor
-place to perform arithmetic and constraint enforcement. This module owns the
-central scheduling loop: the same inputs always produce the same schedule,
-and a model outage cannot stop generation.
+place to perform arithmetic and constraint enforcement. This module builds
+and audits the small candidate set the agent chooses from. Candidate zero is
+stable, so a model outage cannot stop generation.
 """
 
 import datetime
@@ -42,6 +42,7 @@ def generate_day(
     already_scheduled: Optional[List[dict]] = None,
     shift_names: Optional[List[str]] = None,
     variant: int = 0,
+    allow_warnings: bool = False,
 ) -> dict:
     """Fill one date without a model call.
 
@@ -135,7 +136,9 @@ def generate_day(
                     "date": slot["slot_date"],
                     "reason": "",
                 }
-                if _hard_conflict(row, slots, effective):
+                if not allow_warnings and _hard_conflict(
+                    row, slots, effective
+                ):
                     continue
                 cache_key = (name, slot["shift_name"], slot["slot_date"])
                 legal = legal_cache.get(cache_key)
@@ -145,7 +148,7 @@ def generate_day(
                         slots,
                     )
                     legal_cache[cache_key] = legal
-                if not legal:
+                if not allow_warnings and not legal:
                     continue
                 candidates.append((
                     _candidate_key(current, slot, person, profile,
@@ -200,15 +203,23 @@ def generate_day_candidates(
     already_scheduled: Optional[List[dict]] = None,
     shift_names: Optional[List[str]] = None,
     count: int = 3,
+    include_warning_candidate: bool = False,
 ) -> List[dict]:
     """Return a few distinct, fully audited schedules for an agent to rank.
 
-    The variants differ only after mandatory capabilities and the closure
-    cycle have been honoured.  This keeps the model's decision useful while
-    leaving legality, arithmetic and the fallback entirely in code.
+    The first result is always the conservative deterministic fallback. When
+    requested, the last variant may cross an availability, rest, hours or
+    rotation rule; the audit stays attached so the agent can make and explain
+    that trade-off rather than Python silently making it on the agent's
+    behalf. Roster and shift identities remain structural and are never
+    invented.
     """
     results, seen = [], set()
-    for variant in range(max(1, count * 3)):
+    wanted = max(1, count)
+    conservative = wanted - 1 if include_warning_candidate and wanted > 1 \
+        else wanted
+
+    def add(variant: int, allow_warnings: bool = False) -> None:
         result = generate_day(
             profile,
             day,
@@ -218,17 +229,26 @@ def generate_day_candidates(
             already_scheduled=already_scheduled,
             shift_names=shift_names,
             variant=variant,
+            allow_warnings=allow_warnings,
         )
         signature = tuple(sorted(
             (row["employee"], row["shift"], row["date"])
             for row in result.get("assignments") or []
         ))
         if signature in seen:
-            continue
+            return
         seen.add(signature)
         results.append(result)
-        if len(results) >= max(1, count):
+
+    for variant in range(max(1, conservative * 3)):
+        add(variant)
+        if len(results) >= conservative:
             break
+    if include_warning_candidate:
+        for variant in range(max(1, wanted * 2)):
+            add(variant, allow_warnings=True)
+            if len(results) >= wanted:
+                break
     return results
 
 
