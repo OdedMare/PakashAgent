@@ -733,6 +733,80 @@ answers. The deterministic fallback still answers the question rather than
 asking what the manager meant — an unreachable model is not the manager
 having been unclear, and asking would repeat on every retry.
 
+## D25 — The agent assigns, the tools count, and the engine is the floor ⚠️
+
+**Who works is the agent's decision again**, which restores
+[D3](#d3--the-agent-decides-code-only-audits-) on the build path after a
+spell in which code chose and the agent only watched. `bl/assignment_agent.py` fills
+one date by running named tools that answer in pure Python — which slots are
+still short, who may legally take each one, what a placement would cost, how
+the hours stand — and then *choosing*. It is
+[D19](#d19--the-agent-answers-with-tools-asking-and-changing-stay-separate)'s
+shape applied to building rather than to answering.
+
+*Why not leave it to the engine:* a deterministic scheduler fills a day by
+ranking — scarcest capability, then the closing group, then the lightest
+load. That is fast, repeatable and completely blind to the half of this
+product that is written in Hebrew: *"אחרי סגירה נותנים יום קל"*, *"בערב תמיד
+מישהו ותיק"*, *"יוסי לא עם רון"*. Those are the manager's own sentences
+([D2](#d2--rules-stay-natural-language)) and standing preferences
+([D21](#d21--the-agent-remembers-preferences-and-every-one-of-them-is-visible)),
+and no ranking function can read one. A schedule that ignores them is wrong
+in a way no warning catches, because nothing countable is out of place.
+
+**Blocked and expensive are different, and only one of them is code's call.**
+
+- Code refuses an **unusable** row and hands the reason back: a person or
+  shift nobody declared, somebody not qualified, a hard constraint, a closure
+  belonging to another group, one person in two places, a row with no reason
+  ([D8](#d8--two-reasons-both-required)). This is the bound `scheduler.py`
+  always applied — the same class as "a person who does not exist" — and the
+  agent gets one corrected turn rather than a silently shortened schedule.
+- The agent may take an **expensive** row: a sixth consecutive day, hours
+  past the ceiling, a short rest, a soft preference overridden. That is
+  exactly the judgment [D3](#d3--the-agent-decides-code-only-audits-) keeps
+  on its side of the line, and D1's accepted tradeoff is what makes it
+  possible.
+
+**Every trade is loud.** Each cost the agent accepts becomes an *alert*
+carrying the agent's own reason, whether or not the agent mentioned it, and
+so does every slot left short and every row code refused in the final answer.
+Alerts ride along on the schedule as the warnings do, reach the manager's
+copilot inbox so they survive a closed browser
+([D23](#d23--the-copilot-is-durable-permissioned-and-reversible)), and are
+handed to the briefing so the agent can raise them in its own words
+([D15](#d15--the-agent-speaks-first-but-still-never-writes)).
+
+**An alert is not a warning.** `bl/audit.py` recomputes what is true of the
+schedule as stored; an alert records what happened *while it was being
+built*. A manager reading "דנה עוברת את התקרה" needs to know whether that is
+a fact about the grid or a trade somebody made on purpose, and merging the
+two lists loses precisely that. Neither blocks anything.
+
+**⚠️ This does not make the audit a gate**, and refusing an unusable row is
+not the audit gaining a veto — it is the bound already stated for the
+rotation in D3's own terms. `validate_placement` still returns
+`blocking: False`, the publish button stays live over every warning and
+every alert, and the manager may still place by hand anything either list
+complains about.
+
+**The deterministic engine stays, as the floor.**
+`bl/deterministic_scheduler.py` runs when no model is configured — the
+deployment default — when the model is unreachable, and when the agent's
+answer cannot be used at all. `README.md` promises the product builds a week
+with nothing configured, so the fallback is a supported path rather than an
+error path, and `metrics.engine` says which one ran rather than leaving the
+manager to guess. Both engines take their legality, their ranking and their
+hour tally from `bl/assignment_tools.py`: two implementations of "who may
+stand on this slot" is how a day rebuilt tomorrow comes out legal only once.
+
+**A date is the unit of a decision.** The agent is handed one date's
+candidate lists and audited against that date, whatever
+`schedule_generation_mode` says — the mode chooses how wide a *checkpoint*
+is, not how wide a decision is. A week in one call would cost one bad row
+the whole span's repair, and the candidate lists are what make the answer
+checkable in the first place.
+
 ## Open
 
 - **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment

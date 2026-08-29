@@ -40,6 +40,7 @@ import { SimulationPanel } from "./SimulationPanel";
 import { SwapInbox } from "./SwapInbox";
 import { Stats } from "./Stats";
 import { TeamPanel } from "./TeamPanel";
+import { Alerts } from "./Alerts";
 import { Warnings } from "./Warnings";
 import { useManagement } from "./useManagement";
 
@@ -625,6 +626,7 @@ export function Management({
               טעינת סידור קיים
             </button>
             {schedule?.notes?.length ? <ul className="schedule-notes">{schedule.notes.map((note, index) => <li key={index}>{note}</li>)}</ul> : null}
+            {schedule ? <Alerts alerts={schedule.alerts ?? []} /> : null}
             {schedule ? <Warnings warnings={schedule.warnings} /> : null}
             {overview?.stats ? <Stats stats={overview.stats} /> : null}
             <History entries={overview?.changes ?? []} />
@@ -698,8 +700,11 @@ function ManagerAnalytics({
               <span>מה דורש מבט</span>
               <h2>התראות התקופה</h2>
             </div>
-            <strong>{schedule.warnings.length}</strong>
+            <strong>
+              {schedule.warnings.length + (schedule.alerts?.length ?? 0)}
+            </strong>
           </div>
+          <Alerts alerts={schedule.alerts ?? []} />
           <Warnings warnings={schedule.warnings} />
         </section>
       ) : null}

@@ -185,5 +185,6 @@ def test_every_flow_the_backend_actually_passes_is_mapped():
 
 
 _MAPPED = {
-    "scheduler", "interview", "changes", "planner", "learn", "briefing",
+    "assignment", "scheduler", "interview", "changes", "planner", "learn",
+    "briefing",
 }

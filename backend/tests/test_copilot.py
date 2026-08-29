@@ -62,6 +62,12 @@ class _Schedules:
                 "code": "understaffed", "message": "חסר עובד",
                 "employee": "", "date": "2026-08-21", "shift": "לילה",
             }],
+            "alerts": [{
+                "code": "rule_traded", "severity": "warning",
+                "message": "שיבצתי את דנה בניגוד להעדפה שלה כי לא נשאר אף אחד",
+                "employee": "דנה", "date": "2026-08-21", "shift": "לילה",
+                "source": "agent",
+            }],
         }
 
 
@@ -86,9 +92,12 @@ def test_scan_creates_interview_and_schedule_proposals():
     created = service.scan("team", "job")
 
     assert [item["action_type"] for item in created] == [
-        "follow_up_interview", "schedule_repair",
+        "follow_up_interview", "schedule_repair", "schedule_repair",
     ]
     assert all(item["kind"] == "proposal" for item in created)
+    # What the agent raised while building, then what the audit recomputes.
+    assert created[1]["payload"]["alert"]["code"] == "rule_traded"
+    assert created[2]["payload"]["warning"]["code"] == "understaffed"
     assert created[1]["payload"]["schedule_id"] == "schedule-1"
 
 
@@ -121,3 +130,37 @@ def test_rollback_removes_an_untouched_follow_up_and_keeps_an_audit_state():
     assert repo.transitions[-1][4] == {
         "ok": True, "check": "side_effect_removed",
     }
+
+
+def test_an_agent_alert_reaches_the_manager_inbox():
+    """A decision the agent wants made survives the browser being closed.
+
+    The alert is raised while a period is built and would otherwise live
+    only on the response that carried that build. The copilot is what makes
+    it durable — and it lands as a proposal, never as an action: what to do
+    about a rule the agent traded away is the manager's call (D8).
+    """
+    service, repo, _ = _service()
+
+    service.scan("team-a")
+
+    item = next(
+        row for row in repo.created
+        if row["fingerprint"].startswith("alert:")
+    )
+    assert item["action_type"] == "schedule_repair"
+    assert item["kind"] == "proposal"
+    assert "בניגוד להעדפה" in item["detail"]
+    assert item["payload"]["alert"]["employee"] == "דנה"
+
+
+def test_the_same_alert_is_not_filed_twice():
+    """Deduplicated by fingerprint like every other item the scan leaves."""
+    service, repo, _ = _service()
+
+    service.scan("team-a")
+    first = len(repo.created)
+    repo.create_copilot_item = lambda *args, **kwargs: None
+    service.scan("team-a")
+
+    assert len(repo.created) == first

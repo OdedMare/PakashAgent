@@ -224,6 +224,15 @@ impression.
   to wait, and the setting that governs it (הגדרות ← בניית סידור) lives two
   screens away — so the board states it rather than leaving them to infer it
   from the pace.
+- **The agent's alerts are their own card, beside the warnings and never
+  merged into them.** `Management/Alerts.tsx` renders what the agent flagged
+  while it built the period — a rule it traded away and why, a shift nobody
+  legal could take
+  ([D25](../docs/DECISIONS.md#d25--the-agent-assigns-the-tools-count-and-the-engine-is-the-floor-)).
+  The two lists answer different questions: a warning is what is true of the
+  schedule as it stands, an alert is a decision somebody made on purpose, and
+  a manager reading "דנה עוברת את התקרה" needs to know which. Non-blocking
+  like the warnings — the publish button stays live over both.
 - **A failed build says why.** The per-day `error` is rendered in the banner.
   It is usually the one thing the manager can act on — a model timeout is
   fixed by a setting, not by pressing retry again.

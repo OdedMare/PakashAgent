@@ -48,12 +48,14 @@ _ROLE_KEY_FIELDS = {
 # telemetry, so routing rides on the argument that exists rather than adding
 # a second one every call site would have to repeat and could disagree with.
 #
-# `scheduler` is the one advanced flow: it reasons over a whole period of
-# slots, people and rules at once, and it is the call whose quality the
-# product is actually judged on. `briefing` is fast because it is a few
-# sentences over facts `bl/audit.py` already computed. Everything else is
-# conversation-shaped and sits on the default.
+# `assignment` and `scheduler` are the advanced flows: they decide who works,
+# weighing the workplace's own rules against candidate lists, hours and the
+# closure cycle at once, and they are the calls whose quality the product is
+# actually judged on. `briefing` is fast because it is a few sentences over
+# facts `bl/audit.py` already computed. Everything else is conversation-shaped
+# and sits on the default.
 _FLOW_ROLES = {
+    "assignment": ADVANCED,
     "scheduler": ADVANCED,
     "interview": DEFAULT,
     "changes": DEFAULT,

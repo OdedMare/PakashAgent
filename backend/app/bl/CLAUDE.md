@@ -14,7 +14,10 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | `interview.py` | The intro interview — workplace profile, employees, rules, shift vocabulary |
 | `interview_service.py` | Persistence around it: sessions, turns, resume, completion |
 | `workspace_service.py` | Workspace rules: entering a team, roles, the share link |
-| `scheduler.py` | Checkpointed range generation, one date or one week per call; every assignment carries a reason |
+| `assignment_agent.py` | **The agent that assigns.** Runs the tools, decides who works, and raises an alert for every rule it trades away |
+| `assignment_tools.py` | **What can be asked about one date. Pure Python, no LLM, no repository** — and the one definition of who may legally stand on a slot |
+| `deterministic_scheduler.py` | **The floor.** Fills a date by ranking, with no model at all |
+| `scheduler.py` | The slot grid, the rotation's effective availability, the span planner; and the older model-driven period scheduler |
 | `changes.py` | Conversational edits and the change log |
 | `briefing.py` | **The agent speaking first.** Observes; proposes nothing that lands |
 | `schedule_service.py` | Persistence and orchestration around all three: propose, confirm, apply |
@@ -266,6 +269,53 @@ incomplete information, and it was told what was already scheduled.
 The audit still sees the merged period, never the chunks — a run of
 consecutive shifts crossing a boundary is caught exactly as one inside a week
 is.
+
+## `assignment_agent.py`, `assignment_tools.py`, `deterministic_scheduler.py`
+
+**Who works is the agent's decision**
+([D25](../../../docs/DECISIONS.md#d25--the-agent-assigns-the-tools-count-and-the-engine-is-the-floor-)).
+`assignment_agent.py` fills one date by asking named tools — `open_slots`,
+`candidates`, `check_placement`, `workload` — and then choosing. It is
+`planner.py`'s shape pointed at building instead of at answering, and the
+reason it exists is the half of this product that is written in Hebrew: a
+ranking function cannot read *"אחרי סגירה נותנים יום קל"*.
+
+**Blocked and expensive are different, and only one is code's call.** An
+unusable row is refused and the reason handed *back* to the agent for one
+corrected turn — a person or shift nobody declared, somebody unqualified, a
+hard constraint, another group's closure, one person twice, a row with no
+reason (D8). An expensive row is the agent's to take: a sixth consecutive
+day, hours past the ceiling, a short rest, a soft preference overridden.
+Moving the second list into the first is the audit becoming a gate through a
+side door (D1/D3).
+
+**Every trade is loud.** Each accepted cost becomes an alert carrying the
+agent's own reason, whether or not the agent mentioned it, and so does every
+slot left short and every row still refused in the final answer. Alerts ride
+along on the schedule like warnings, reach the copilot inbox (D23) and the
+briefing (D15) — and gate nothing. They are not warnings: `audit.py`
+recomputes what is true of the stored schedule, an alert records what
+happened while it was being built.
+
+**One repair, then the day stands.** A second answer that is still short is
+the agent saying the day is short, and asking again turns a decision into a
+loop. What it left comes back as an alert naming who was free for it.
+
+**`assignment_tools.py` holds no repository and no model.** Persisting
+nothing is a property of the wiring, like `simulate.py` — and `run()`, the
+dispatch the model reaches, exposes only the four read-only questions.
+Applying an answer is `apply()`, which the loop calls and the model cannot
+name.
+
+**Both engines share it.** `deterministic_scheduler.py` takes its legality,
+its ranking and its hour tally from the same functions the agent's candidate
+lists are built from. Two implementations of "who may stand on this slot" is
+how a day the manager rebuilds comes out legal only once.
+
+**The engine is the floor, not an error path.** No model is configured in the
+default deployment, so `schedule_service._assign_day` catches `AgentError`
+and runs it — for an unreachable model, an unusable answer, and nothing
+configured alike. `metrics.engine` says which side built the day.
 
 ## `changes.py`
 
@@ -562,6 +612,13 @@ confirmation** ([D7](../../../docs/DECISIONS.md#d7--import-infers-layout-boss-co
 ## Rules
 
 - `audit.py` warns; it never blocks, rewrites, or vetoes.
+- The agent assigns; code refuses only rows that cannot stand, and hands the
+  reason back rather than dropping the row.
+- A cost the agent accepts is stored *and* alerted. Silence about a traded
+  rule is the failure D1's tradeoff was accepted against.
+- `assignment_tools.py` contains no LLM call and no repository, ever.
+- A build always produces a schedule: `_assign_day` falls through to
+  `deterministic_scheduler.generate_day`.
 - `audit.py` contains no LLM call, ever.
 - `tools.py`, `intent.py` and `simulate.py` contain no LLM call, ever.
 - Nothing on the answering or simulating path writes. `tools.py` reads;

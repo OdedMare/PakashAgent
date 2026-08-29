@@ -111,6 +111,7 @@ class BriefingAgent:
         last_said: Optional[List[str]] = None,
         readiness: Optional[dict] = None,
         gaps: Optional[List[dict]] = None,
+        alerts: Optional[List[dict]] = None,
     ) -> dict:
         """One briefing. Persists nothing and changes nothing."""
         payload = {
@@ -119,6 +120,14 @@ class BriefingAgent:
             "schedule": _schedule_for_model(schedule),
             # Handed over as computed facts, not as something to check.
             "warnings": _rows(warnings, 60),
+            # What the agent flagged while it built this period: a rule it
+            # traded away, a shift nobody legal could take, a pin that
+            # forced everything around it. Separate from `warnings` because
+            # they answer different questions -- a warning is what is true
+            # of the schedule now, an alert is what the agent decided and
+            # wants a person to look at (D25). Speaking first is the moment
+            # to raise one, and saying it again every turn is not.
+            "alerts": _rows(alerts, 40),
             "fairness": fairness if isinstance(fairness, dict) else {},
             # What stands between this period and the team seeing it, and
             # the unstaffed slots behind it. Both already counted by

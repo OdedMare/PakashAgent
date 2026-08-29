@@ -26,6 +26,7 @@ import time
 from threading import Event, Lock, Thread
 from typing import Any, Dict, List, Optional
 
+from app.bl.assignment_agent import AssignmentAgent
 from app.bl.audit import audit, constraint_conflicts, fairness, shift_stats
 from app.bl.briefing import (
     BriefingAgent,
@@ -103,6 +104,11 @@ GENERATION_FAILED = "failed"
 # the same way -- from the first day that is not already complete.
 GENERATION_CANCELLED = "cancelled"
 _GENERATION_RESUMABLE = (GENERATION_FAILED, GENERATION_CANCELLED)
+
+# How many build alerts one period keeps. A month of daily builds produces
+# more of them than anybody reads, and the newest are the ones about the
+# schedule as it now stands.
+_MAX_ALERTS = 200
 
 # How often a worker says it is still there.
 #
@@ -183,6 +189,10 @@ class ScheduleService:
         # as the default rather than as an error.
         self._settings = settings
         self._scheduler = Scheduler(llm)
+        # The agent that does the assigning. It runs the pure-Python tools in
+        # `bl/assignment_tools.py` and decides; `assign_day` below is the
+        # floor it falls back to (D25).
+        self._assigner = AssignmentAgent(llm)
         self._changes = ChangeAgent(llm)
         self._briefing = BriefingAgent(llm)
         self._learner = RuleLearner(llm)
@@ -455,6 +465,85 @@ class ScheduleService:
         )
 
 
+    def _assign_day(
+        self,
+        team_id: str,
+        profile: dict,
+        day: str,
+        availability: Optional[List[dict]] = None,
+        history: Optional[List[dict]] = None,
+        required_assignments: Optional[List[dict]] = None,
+        already_scheduled: Optional[List[dict]] = None,
+        shift_names: Optional[List[str]] = None,
+        instructions: str = "",
+    ) -> dict:
+        """One date, assigned by the agent — or by the engine when it cannot.
+
+        The single seam every build goes through, so the whole-period path,
+        the background span job and a one-day rebuild can never disagree
+        about who decides. The agent runs the tools in
+        `bl/assignment_tools.py` and chooses; the deterministic engine below
+        it fills the same date by ranking
+        ([D25](../../../docs/DECISIONS.md#d25--the-agent-assigns-the-tools-count-and-the-engine-is-the-floor-)).
+
+        The fallback is not an error path. No model is configured in the
+        default deployment, and `README.md` promises the product still builds
+        a week — so an unreachable model, an unusable answer and nothing
+        configured at all take the same road, and the manager is told which
+        engine ran through `metrics.engine` rather than left to guess. Input
+        the *engine* also refuses — a pin that cannot stand, a rotation that
+        was never configured — raises out of it exactly as before.
+        """
+        try:
+            return self._assigner.generate_day(
+                profile,
+                day,
+                availability=availability,
+                history=history,
+                required_assignments=required_assignments,
+                already_scheduled=already_scheduled,
+                shift_names=shift_names,
+                instructions=instructions,
+                preferences=self._active_preferences(team_id),
+            )
+        except AgentError as exc:
+            _log.info(
+                "assignment agent unavailable for %s, using the engine: %s",
+                day, exc,
+            )
+            return assign_day(
+                profile,
+                day,
+                availability=availability,
+                history=history,
+                required_assignments=required_assignments,
+                already_scheduled=already_scheduled,
+                shift_names=shift_names,
+            )
+
+    def _record_alerts(
+        self, schedule_id: str, team_id: str, dates: List[str],
+        alerts: List[dict],
+    ) -> None:
+        """Keep this build's alerts on the schedule, replacing those dates'.
+
+        Stored on the `generation` document because that is where a build
+        already records what it did, and read back by `_view` so every
+        response carrying a schedule carries them — the same ride-along the
+        warnings have. Replacing rather than appending is what makes a
+        rebuilt day honest: an alert about a gap the rebuild just filled
+        would otherwise outlive the gap.
+        """
+        try:
+            schedule = self._repository.get_schedule(schedule_id, team_id)
+        except Exception:
+            return
+        generation = dict(schedule.get("generation") or {})
+        generation["alerts"] = _merged_alerts(
+            generation.get("alerts"), dates, alerts
+        )
+        self._repository.set_generation(schedule_id, team_id, generation)
+
     def generate(
         self,
         team_id: str,
@@ -480,9 +569,11 @@ class ScheduleService:
         history = self._recent_assignments(team_id, starts_on)
         day = datetime.date.fromisoformat(starts_on)
         end = datetime.date.fromisoformat(ends_on)
+        alerts = []
         while day <= end:
             date = day.isoformat()
-            result = assign_day(
+            result = self._assign_day(
+                team_id,
                 profile,
                 date,
                 availability=self._repository.availability(team_id, date, date),
@@ -492,9 +583,11 @@ class ScheduleService:
                     if _iso(row.get("date")) == date
                 ],
                 already_scheduled=assignments,
+                instructions=instructions,
             )
             assignments.extend(result.get("assignments") or [])
             notes.extend(result.get("notes") or [])
+            alerts.extend(result.get("alerts") or [])
             if result.get("summary"):
                 summaries.append(result["summary"])
             day += datetime.timedelta(days=1)
@@ -502,6 +595,7 @@ class ScheduleService:
             "slots": slots,
             "assignments": assignments,
             "notes": notes,
+            "alerts": alerts,
             "summary": _text(" ".join(summaries))[:4000],
         }
 
@@ -526,6 +620,10 @@ class ScheduleService:
                 "reason": item["reason"],
             })
         self._repository.replace_assignments(schedule["id"], team_id, rows)
+        self._record_alerts(
+            schedule["id"], team_id,
+            _dates_between(starts_on, ends_on), result["alerts"],
+        )
         self._repository.append_change(
             team_id, ACTION_GENERATED, schedule_id=schedule["id"],
             reason=instructions,
@@ -958,10 +1056,11 @@ class ScheduleService:
                 _model_assignment(row)
                 for row in schedule.get("assignments") or []
             ]
-            assignments, notes, summaries = [], [], []
+            assignments, notes, summaries, alerts = [], [], [], []
             metrics: dict = {}
             for date in sorted(span_dates):
-                step = assign_day(
+                step = self._assign_day(
+                    team_id,
                     profile,
                     date,
                     availability=[
@@ -974,15 +1073,18 @@ class ScheduleService:
                         if _iso(row.get("date")) == date
                     ],
                     already_scheduled=committed + assignments,
+                    instructions=_text(generation.get("instructions")),
                 )
                 assignments.extend(step.get("assignments") or [])
                 notes.extend(step.get("notes") or [])
+                alerts.extend(step.get("alerts") or [])
                 if step.get("summary"):
                     summaries.append(step["summary"])
                 metrics = step.get("metrics") or metrics
             result = {
                 "assignments": assignments,
                 "notes": notes,
+                "alerts": alerts,
                 "summary": _text(" ".join(summaries))[:4000],
                 "metrics": metrics,
             }
@@ -991,6 +1093,14 @@ class ScheduleService:
                 fresh, result.get("assignments") or [], span_dates
             )
             self._write_span(schedule_id, team_id, span_dates, rows)
+            # Onto the same document the rest of this checkpoint lands on,
+            # and before it is written below: `_record_alerts` reads the
+            # stored generation back, so it has to run while `generation`
+            # here is still the copy about to be saved.
+            generation["alerts"] = _merged_alerts(
+                generation.get("alerts"), span_dates,
+                result.get("alerts") or [],
+            )
             target.update({
                 "status": GENERATION_COMPLETE,
                 "error": "",
@@ -1839,7 +1949,8 @@ class ScheduleService:
         required = _manager_rows_on(schedule, day)
         if shift:
             required = [row for row in required if row.get("shift") == shift]
-        result = assign_day(
+        result = self._assign_day(
+            team_id,
             profile,
             day,
             availability=self._repository.availability(team_id, day, day),
@@ -1852,6 +1963,7 @@ class ScheduleService:
                 for row in schedule.get("assignments") or []
             ],
             shift_names=[shift] if shift else None,
+            instructions=_text(reason) or _text(operation.get("reason")),
         )
         fresh = self._repository.get_schedule(schedule["id"], team_id)
         rows = _persisted_generation_rows(
@@ -1859,6 +1971,9 @@ class ScheduleService:
             shift_names=[shift] if shift else None,
         )
         self._repository.replace_assignments(schedule["id"], team_id, rows)
+        self._record_alerts(
+            schedule["id"], team_id, [day], result.get("alerts") or []
+        )
         self._repository.append_change(
             team_id,
             ACTION_GENERATED,
@@ -2315,6 +2430,7 @@ class ScheduleService:
         schedule = self.current(team_id)
         window = _window(schedule)
         warnings = (schedule or {}).get("warnings") or []
+        alerts = (schedule or {}).get("alerts") or []
         # Publishing state and the unstaffed slots, counted by the same
         # read-only tools the answering path uses (D19). Read here rather
         # than left for the model to ask about: a briefing gets one call and
@@ -2349,6 +2465,7 @@ class ScheduleService:
                 last_said=last_said,
                 readiness=readiness,
                 gaps=gaps,
+                alerts=alerts,
             )
         except Exception:
             return _quiet()
@@ -2445,6 +2562,14 @@ class ScheduleService:
         schedule["warnings"] = self._audit_rows(
             team_id, schedule.get("assignments") or [], schedule
         )
+        # What the agent flagged while it was building, read back off the
+        # build's own record. Warnings say what is true of the schedule now;
+        # an alert says what the agent decided and what it wants the manager
+        # to look at (D25). Both ride along, and neither gates anything.
+        schedule["alerts"] = [
+            row for row in (schedule.get("generation") or {}).get("alerts")
+            or [] if isinstance(row, dict)
+        ]
         schedule["closures"] = self._closures(team_id, schedule)
         return _dated(schedule)
 
@@ -2748,6 +2873,37 @@ def _span_dates(entry: dict) -> List[str]:
         dates.append(start.isoformat())
         start += datetime.timedelta(days=1)
     return dates
+
+
+def _dates_between(starts_on: str, ends_on: str) -> List[str]:
+    """Every date in a period, as ISO strings. Arithmetic, not a query."""
+    try:
+        start = datetime.date.fromisoformat(_iso(starts_on))
+        end = datetime.date.fromisoformat(_iso(ends_on))
+    except (TypeError, ValueError):
+        return []
+    dates = []
+    while start <= end:
+        dates.append(start.isoformat())
+        start += datetime.timedelta(days=1)
+    return dates
+
+
+def _merged_alerts(
+    existing: Any, dates: List[str], alerts: List[dict]
+) -> List[dict]:
+    """This build's alerts, replacing whatever the same dates said before.
+
+    A rebuilt day that now fills its evening shift must not keep yesterday's
+    alert saying it is short: an alert describes the state a build left, so
+    a build over the same dates replaces it rather than adding to it.
+    """
+    covered = {_iso(date) for date in dates if _iso(date)}
+    kept = [
+        row for row in existing or []
+        if isinstance(row, dict) and _iso(row.get("date")) not in covered
+    ]
+    return (kept + list(alerts or []))[-_MAX_ALERTS:]
 
 
 def _completed_dates(days: List[dict]) -> int:

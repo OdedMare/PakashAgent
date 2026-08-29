@@ -45,9 +45,25 @@ uvicorn app.main:app --reload
   The manager may also **end it early** (`interview_service.end`), which
   writes the partial draft with a `completeness` record of what it still owes
   ([D22](../docs/DECISIONS.md#d22--the-interview-can-be-ended-early-and-the-profile-says-what-it-owes-️-amends-d18)).
-- `bl/scheduler.py` — generates a schedule; every assignment carries a reason.
-  Builds the slot grid in code (which dates fall in a period is arithmetic) and
-  asks the model only to assign people into it.
+- `bl/assignment_agent.py` — **the agent that does the assigning.** Fills one
+  date by running the tools below and deciding, weighing the rules the
+  manager stated in their own words. Code refuses an unusable row and hands
+  the reason back for one corrected turn; a cost the agent accepts, a slot it
+  leaves short and a row still refused at the end all come back as **alerts**
+  ([D25](../docs/DECISIONS.md#d25--the-agent-assigns-the-tools-count-and-the-engine-is-the-floor-)).
+- `bl/assignment_tools.py` — **the questions it may ask about one date,
+  answered in pure Python.** No LLM call and no repository: `open_slots`,
+  `candidates` (who may take a slot, who may not and why, and what each
+  option costs), `check_placement`, `workload`. Both engines take their
+  legality, ranking and hour tally from here, so "who may stand on this slot"
+  has one answer.
+- `bl/deterministic_scheduler.py` — the floor under the agent. Fills a date by
+  ranking, with no model at all: it runs when none is configured (the
+  deployment default), when the model is unreachable, and when the agent's
+  answer cannot be used.
+- `bl/scheduler.py` — the slot grid (`build_slots`), the rotation's effective
+  availability, and the span planner every build reads. Also the older
+  model-driven period scheduler kept for backward-compatible API consumers.
 - `bl/changes.py` — conversational edits; asks for the boss's reason, proposes a
   replacement with justification, applies on confirmation. Proposes only — it is
   handed no repository, so it cannot write.
@@ -118,6 +134,27 @@ one concern; split rather than append.
   cannot be hallucinated. Pure functions over a roster; trivially unit-testable.
 - **Hard rules are not gates.** They are strong instructions to the model plus a
   loud warning when broken. This is a deliberate, accepted tradeoff — see D1/D3.
+- **The agent assigns; code refuses only what cannot stand**
+  ([D25](../docs/DECISIONS.md#d25--the-agent-assigns-the-tools-count-and-the-engine-is-the-floor-)).
+  An unusable row — a person or shift nobody declared, somebody unqualified,
+  a hard constraint, another group's closure, one person twice, no reason —
+  is refused and the reason is handed *back to the agent*, which is the same
+  bound `scheduler.py` always applied. A merely expensive row is the agent's
+  to take: a sixth consecutive day, hours past the ceiling, a short rest, a
+  soft preference overridden. Widening the refusals to those is the audit
+  becoming a gate through a side door.
+- **Every trade the agent makes is loud.** Each accepted cost becomes an
+  alert carrying the agent's own reason whether or not the agent mentioned
+  it, and so does every slot left short. An alert is not a warning: `audit.py`
+  recomputes what is true of the stored schedule, an alert records what
+  happened while it was being built. They ride along on the schedule, reach
+  the copilot inbox, and are handed to the briefing — and none of them gates
+  a publish.
+- **A build always produces a schedule.** `_assign_day` is the one seam every
+  build goes through, and an `AgentError` out of the agent runs
+  `deterministic_scheduler.generate_day` instead. No model is configured in
+  the default deployment, so the fallback is a supported path rather than an
+  error path; `metrics.engine` says which side built the day.
 - **How full a slot is has exactly one answer, and `bl/audit.py` owns it.**
   `required_headcount()` says how many people it asks for — reading the stored
   grid first, since that is what the week was generated or imported into — and

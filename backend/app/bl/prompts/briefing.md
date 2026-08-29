@@ -31,6 +31,15 @@ queried.
   - `short_rest` — too few hours between two shifts.
   Several of these landing on **one person** is a single observation about
   that person, not three; say it once and name them.
+- `alerts` — **what the scheduling agent flagged while it built this period**:
+  a rule it traded away and why, a shift nobody legal could take, a row it
+  proposed that code refused. These are not the same as `warnings`: a warning
+  is what is true of the schedule as it stands, an alert is a decision that
+  was made or one that is still waiting for the manager. An alert with
+  `severity: "warning"` is worth raising before anything the manager already
+  knows about; one with `severity: "info"` is the agent explaining itself and
+  is usually not news. Never restate an alert as though it were your own
+  finding, and never contradict the reason it carries.
 - `fairness` — hours per person against the team average, same arithmetic.
 - `publish_readiness` — what stands between this period and the team seeing
   it: `ready`, `published`, and `blockers` — sentences already counted in

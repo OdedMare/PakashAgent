@@ -204,6 +204,26 @@ export interface ScheduleWarning {
   details: Record<string, unknown>;
 }
 
+/** One thing the scheduling agent wants the manager to look at.
+ *
+ *  Not a `ScheduleWarning`. A warning is recomputed from the stored schedule
+ *  every time it is read; an alert records what happened *while the period
+ *  was being built* — a rule the agent traded away and why, a shift nobody
+ *  legal could take, a row it proposed that code refused (D25). Like a
+ *  warning it is advisory and gates nothing.
+ *
+ *  `source` says which side raised it: `agent` for its own words, `code` for
+ *  one raised on its behalf when it accepted a cost or left a slot short. */
+export interface ScheduleAlert {
+  code: string;
+  severity: "warning" | "info";
+  message: string;
+  employee: string;
+  shift: string;
+  date: string;
+  source: "agent" | "code" | string;
+}
+
 /** One shift on one date — the thing a person is assigned into. */
 export interface Slot {
   id: string;
@@ -356,6 +376,9 @@ export interface Schedule {
   slots: Slot[];
   assignments: Assignment[];
   warnings: ScheduleWarning[];
+  /** What the agent flagged while building this period. Optional because a
+   *  period built before alerts existed simply has none. */
+  alerts?: ScheduleAlert[];
   /** Which of this period's dates are somebody's closure. Computed by
    *  `bl/rotation.py` and read here — the cycle is arithmetic (D3), and a
    *  second implementation of it in the browser would drift from the one the

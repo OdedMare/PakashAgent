@@ -59,6 +59,9 @@ class _FakeScheduleRepo:
         self.changes = []
         self.requests = []
         self.preference_rows = []
+        # How many of the next checkpoint writes should fail. See
+        # `replace_span_assignments`.
+        self.failing_writes = 0
         self.profiles = {TEAM: PROFILE, OTHER_TEAM: PROFILE}
         self._n = 0
 
@@ -179,6 +182,13 @@ class _FakeScheduleRepo:
 
     def replace_span_assignments(self, schedule_id, team_id, dates,
                                  assignments):
+        # How a span fails now that neither engine can. A model that will not
+        # answer is absorbed by the deterministic fallback (D25), so the
+        # retry machinery has to be provoked by something that is genuinely
+        # not recoverable in-place: the checkpoint write itself.
+        if self.failing_writes:
+            self.failing_writes -= 1
+            raise AgentError("תקלה זמנית בשמירת המקטע")
         # Rows on other dates keep their identity, exactly as the real
         # DELETE ... WHERE slot_date = ANY(...) leaves them alone. Tests that
         # hold an assignment id across a checkpoint depend on that.
@@ -315,13 +325,77 @@ class _FakeScheduleRepo:
         return rows
 
 
+class _Build:
+    """One schedule the model would build, served to the agent a date at a time.
+
+    `bl/assignment_agent.py` asks for one date per call, so a test that means
+    "this is the roster the model produces for the period" would otherwise
+    have to repeat itself once per day and know how many turns each date
+    takes. This stays at the head of the script for as long as assignment
+    calls keep coming, answering each with the rows it holds for *that* date,
+    and steps aside as soon as a different flow asks for something.
+    """
+
+    def __init__(self, assignments, notes=None, alerts=None, limit=None):
+        self.assignments = list(assignments or [])
+        self.notes = list(notes or [])
+        self.alerts = list(alerts or [])
+        # How many dates this build answers for before the next scripted
+        # answer takes over. Unbounded by default -- a test scripting "the
+        # roster for this period" means the whole period -- and set only
+        # where one test needs two builds in a row, such as a day rebuilt
+        # after the week it was part of.
+        self.limit = limit
+
+    def spent(self):
+        if self.limit is None:
+            return False
+        self.limit -= 1
+        return self.limit <= 0
+
+    def answer(self, payload):
+        date = payload.get("date")
+        return {
+            "done": True,
+            "tool_calls": [],
+            "assignments": [
+                {"employee": row["employee"], "shift": row["shift"],
+                 "reason": row.get("reason") or "בחירת הסוכן"}
+                for row in self.assignments if row.get("date") == date
+            ],
+            "alerts": list(self.alerts),
+            "notes": self.notes,
+            "summary": "סידור השבוע",
+        }
+
+
 class _ScriptedLlm:
+    """Answers in order. An empty script is a workspace with no model at all.
+
+    That distinction is the product's, not the double's: nothing is
+    configured in the default deployment, so `_build_app([])` has to behave
+    like an unreachable model — an `AgentError`, which every caller already
+    knows how to fall back from — rather than like a test that forgot to
+    script something.
+    """
+
     def __init__(self, answers=None):
         self._answers = list(answers or [])
+        self._configured = bool(answers)
         self.calls = []
 
     def complete_json(self, system, user, schema=None, flow=""):
         self.calls.append({"system": system, "user": user, "schema": schema})
+        if not self._configured:
+            raise AgentError("לא הוגדר חיבור למודל")
+        if self._answers and isinstance(self._answers[0], _Build):
+            if flow == "assignment":
+                build = self._answers[0]
+                answer = build.answer(json.loads(user))
+                if build.spent():
+                    self._answers.pop(0)
+                return answer
+            self._answers.pop(0)
         if not self._answers:
             raise AssertionError("model called more times than scripted")
         answer = self._answers.pop(0)
@@ -330,9 +404,8 @@ class _ScriptedLlm:
         return answer
 
 
-def _generation(assignments, notes=None):
-    return {"assignments": assignments, "notes": notes or [],
-            "summary": "סידור השבוע"}
+def _generation(assignments, notes=None, alerts=None, limit=None):
+    return _Build(assignments, notes, alerts, limit)
 
 
 def _build_app(answers=None, launch=None, settings=None):
@@ -373,7 +446,13 @@ def _client(app, role=ROLE_BOSS, team=TEAM):
     return client
 
 
-def test_agent_can_build_saturday_without_a_reason_or_model_call():
+def test_agent_can_build_saturday_without_a_reason_or_a_model():
+    """Asking for it costs no model call, and neither does carrying it out.
+
+    The request is read by `bl/intent.py`, and with nothing configured the
+    build itself falls back to the deterministic engine — so this whole path
+    runs on a workspace that has no model at all (D25).
+    """
     app, repo = _build_app([])
     client = _client(app)
     opened = client.post("/api/schedule/blank", json={
@@ -396,7 +475,7 @@ def test_agent_can_build_saturday_without_a_reason_or_model_call():
     })
     assert applied.status_code == 200
     assert applied.json()["assignments"]
-    assert repo.model_calls == []
+    assert all(row["reason"] for row in applied.json()["assignments"])
 
 
 def test_manual_assignment_cannot_cross_a_mandatory_round():
@@ -448,6 +527,7 @@ class _DeferredLauncher:
 # -- generating ------------------------------------------------------------
 
 def test_generating_stores_a_draft_with_reasons():
+    """With no model configured the engine builds it, reasons and all (D8)."""
     app, repo = _build_app([])
     response = _client(app).post("/api/schedule/generate", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-18",
@@ -456,11 +536,14 @@ def test_generating_stores_a_draft_with_reasons():
     body = response.json()
     assert body["status"] == "draft"
     assert "זמינות" in body["assignments"][0]["reason"]
-    assert repo.model_calls == []
 
 
-def test_generation_does_not_wait_for_a_model_to_read_soft_preferences():
-    app, repo = _build_app([])
+def test_the_agent_is_handed_the_confirmed_preferences_and_only_those():
+    """A suggested preference is inert until the manager approves it (D21)."""
+    app, repo = _build_app([_generation([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "דנה מעדיפה בקרים",
+    }])])
     repo.preference_rows = [
         {
             "team_id": TEAM, "status": "active", "kind": "employee",
@@ -477,8 +560,21 @@ def test_generation_does_not_wait_for_a_model_to_read_soft_preferences():
     })
 
     assert response.status_code == 200
+    assert response.json()["assignments"][0]["employee"] == "דנה"
+    sent = json.loads(repo.model_calls[0]["user"])["preferences"]
+    assert [row["text"] for row in sent] == ["דנה מעדיפה בקרים"]
+
+
+def test_a_period_is_still_built_when_no_model_is_configured():
+    """The floor under the agent, and the deployment default (D25)."""
+    app, repo = _build_app([])
+
+    response = _client(app).post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    })
+
+    assert response.status_code == 200
     assert response.json()["assignments"]
-    assert repo.model_calls == []
 
 
 def test_generating_enforces_the_managers_required_assignment():
@@ -548,18 +644,16 @@ def test_a_transient_failure_is_retried_without_stopping_the_job():
     for a person who may not come back for an hour.
     """
     launcher = _DeferredLauncher()
-    app, repo = _build_app([
-        AgentError("תקלה זמנית"),
-        _generation([{
-            "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-            "reason": "הניסיון החוזר הצליח",
-        }]),
-    ], launch=launcher)
+    app, repo = _build_app([_generation([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "הניסיון החוזר הצליח",
+    }])], launch=launcher)
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-17",
     }).json()
 
+    repo.failing_writes = 1
     client.post("/api/schedule/generate/%s/run" % started["id"])
     launcher.run_next()
 
@@ -573,17 +667,13 @@ def test_a_transient_failure_is_retried_without_stopping_the_job():
 def test_failed_background_generation_requeues_as_running_for_polling():
     """Once the retries are spent the job parks, and `/run` resumes it."""
     launcher = _DeferredLauncher()
-    app, _ = _build_app(
-        # One more failure than the worker will absorb, so the job reaches
-        # `failed` rather than recovering on its own.
-        [AgentError("תקלה זמנית")] * 3 + [
-            _generation([{
-                "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-                "reason": "הניסיון החוזר הצליח",
-            }]),
-        ],
-        launch=launcher,
-    )
+    app, repo = _build_app([_generation([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "הניסיון החוזר הצליח",
+    }])], launch=launcher)
+    # One more failure than the worker will absorb, so the job reaches
+    # `failed` rather than recovering on its own.
+    repo.failing_writes = 3
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-17",
@@ -594,8 +684,15 @@ def test_failed_background_generation_requeues_as_running_for_polling():
     launcher.run_next()
     assert client.get("/api/schedule/%s" % started["id"]).json()[
         "generation"
-    ]["status"] == "complete"
-    assert repo.model_calls == []
+    ]["status"] == "failed"
+
+    # The manager presses build again. The job resumes from the day that
+    # never landed rather than starting the period over.
+    client.post(path)
+    launcher.run_next()
+    finished = client.get("/api/schedule/%s" % started["id"]).json()
+    assert finished["generation"]["status"] == "complete"
+    assert finished["assignments"][0]["employee"] == "דנה"
 
 
 def test_one_existing_day_can_be_rebuilt_with_board_instructions():
@@ -619,12 +716,17 @@ def test_one_existing_day_can_be_rebuilt_with_board_instructions():
     client.post("/api/schedule/generate/%s/run" % opened["id"])
 
     assert prepared["generation"]["total_days"] == 1
+    # Opening the job costs nothing: the model is asked when the day is
+    # actually built, which is what `/run` does below.
     assert repo.model_calls == []
     launcher.run_next()
     completed = client.get("/api/schedule/%s" % opened["id"]).json()
-    assert completed["assignments"]
+    assert completed["assignments"][0]["employee"] == "יוסי"
     assert completed["generation"]["instructions"].startswith("זה יום")
-    assert repo.model_calls == []
+    # And they reach the agent in the manager's own words, which is the
+    # whole reason a build takes instructions at all.
+    sent = json.loads(repo.model_calls[0]["user"])
+    assert sent["instructions"].startswith("זה יום")
 
 
 def test_progressive_long_range_is_one_persisted_request_per_day():
@@ -661,13 +763,12 @@ def test_progressive_long_range_is_one_persisted_request_per_day():
 
 
 def test_a_day_completes_even_when_the_model_would_fail():
-    app, repo = _build_app([
-        AgentError("תקלה זמנית"),
-        _generation([{
-            "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-            "reason": "ניסיון חוזר הצליח",
-        }]),
-    ])
+    """A model outage costs the manager the agent's judgment, not their day.
+
+    The span does not fail and is not retried: `_assign_day` falls through
+    to the deterministic engine, which needs nothing configured (D25).
+    """
+    app, repo = _build_app([AgentError("תקלה זמנית")])
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-17",
@@ -678,7 +779,7 @@ def test_a_day_completes_even_when_the_model_would_fail():
     assert completed.status_code == 200
     assert completed.json()["generation"]["status"] == "complete"
     assert completed.json()["generation"]["days"][0]["attempts"] == 1
-    assert repo.model_calls == []
+    assert completed.json()["assignments"]
 
 
 def test_progress_answers_the_poll_without_rebuilding_the_grid():
@@ -860,7 +961,10 @@ def test_a_hand_placed_shift_survives_the_day_being_generated():
 
     placed = {row["employee"]: row["source"] for row in built["assignments"]}
     assert placed["יוסי"] == "manager"
-    assert repo.model_calls == []
+    # And the agent was told about it rather than left to rediscover it: the
+    # pin is standing on the slot before the first turn is asked for.
+    sent = json.loads(repo.model_calls[0]["user"])
+    assert sent["open_slots"][0]["assigned"] == ["יוסי"]
 
 
 class _BlockingLlm:
@@ -1128,7 +1232,7 @@ def test_the_overview_carries_the_periods_numbers():
     ])])
     client = _client(app)
     client.post("/api/schedule/generate", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
     })
 
     stats = client.get("/api/schedule/overview").json()["stats"]
@@ -1712,19 +1816,30 @@ def test_an_invalid_constraint_time_is_rejected():
 
 
 def test_a_recorded_constraint_shows_up_as_a_warning_when_contradicted():
-    """The audit reads a constraint with no shift as covering the whole day."""
+    """The audit reads a constraint with no shift as covering the whole day.
+
+    Recorded *after* the period was built, which is the case that produces
+    the warning: neither engine will place somebody against a hard
+    constraint it was told about, so a schedule that contradicts one is a
+    schedule the constraint arrived too late for — exactly what an advisory
+    warning is for (D3).
+    """
     app, _ = _build_app([_generation([
         {"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
          "reason": "כיסוי"},
     ])])
     client = _client(app)
+    created = client.post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+    assert created["assignments"][0]["employee"] == "דנה"
+
     client.post("/api/schedule/constraints", json={
         "employee": "דנה", "constraint_date": "2026-08-17",
         "reason": "מילואים",
     })
-    body = client.post("/api/schedule/generate", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
-    }).json()
+
+    body = client.get("/api/schedule/%s" % created["id"]).json()
     codes = {warning["code"] for warning in body["warnings"]}
     assert "unavailable" in codes
 
@@ -2416,12 +2531,18 @@ class _FakeSettings:
         return SimpleNamespace(schedule_generation_mode=self._mode)
 
 
-def test_week_mode_builds_a_week_in_one_model_call():
+def test_week_mode_builds_a_week_in_one_checkpoint():
+    """The mode chooses how wide a *checkpoint* is, not how wide a decision is.
+
+    The agent decides one date at a time whatever the mode says — a day is
+    the unit it can be handed candidate lists and audited against (D25) — so
+    `week` buys one stored checkpoint per week rather than one model call
+    per week. Progress is still counted in dates.
+    """
     launcher = _DeferredLauncher()
-    # A complete, legal week in one answer: every slot staffed, and the two
-    # of them alternating so neither runs past the consecutive-days ceiling.
-    # Nothing left for a repair call to chase, which is what makes "one model
-    # call" the claim this test is actually making.
+    # A complete, legal week: every slot staffed, and the two of them
+    # alternating so neither runs past the consecutive-days ceiling. Nothing
+    # left for a repair call to chase on any date.
     week = [
         {
             "employee": "דנה" if day % 2 else "יוסי",
@@ -2431,7 +2552,7 @@ def test_week_mode_builds_a_week_in_one_model_call():
         }
         for day in range(17, 24)
     ]
-    app, _ = _build_app(
+    app, repo = _build_app(
         [_generation(week)],
         launch=launcher,
         settings=_FakeSettings("week"),
@@ -2454,6 +2575,9 @@ def test_week_mode_builds_a_week_in_one_model_call():
     assert body["generation"]["status"] == "complete"
     assert body["generation"]["completed_days"] == 7
     assert len({row["date"] for row in body["assignments"]}) == 7
+    # One checkpoint, seven decisions.
+    assert len(body["generation"]["days"]) == 1
+    assert len(repo.model_calls) == 7
 
 
 def test_day_mode_is_the_default_and_asks_once_per_date():
@@ -2521,3 +2645,72 @@ def test_a_checkpoint_leaves_earlier_days_rows_alone():
     )
 
     assert still["id"] == monday["id"]
+
+
+def test_the_agents_alerts_ride_along_on_the_period_and_survive_a_refetch():
+    """An alert reaches the manager wherever the schedule does (D25).
+
+    It is raised inside a build they were not watching, so it has to outlive
+    the response that carried it — the board is read again tomorrow, and the
+    copilot reads the same field to file it in the inbox.
+    """
+    app, _ = _build_app([_generation(
+        [{"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+          "reason": "אין אף אחד אחר שמוסמך לבוקר"}],
+        alerts=[{
+            "severity": "warning",
+            "message": "דנה עובדת שישי ברציפות; כדאי להחליף אותה בשבוע הבא",
+            "employee": "דנה", "shift": MORNING,
+        }],
+    )])
+    client = _client(app)
+
+    created = client.post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+
+    assert created["alerts"][0]["source"] == "agent"
+    assert "שישי ברציפות" in created["alerts"][0]["message"]
+    # Advisory like a warning: the period is a plain 200 and still publishes.
+    assert client.post(
+        "/api/schedule/%s/publish" % created["id"]
+    ).status_code == 200
+    again = client.get("/api/schedule/%s" % created["id"]).json()
+    assert again["alerts"] == created["alerts"]
+
+
+def test_rebuilding_a_day_replaces_that_days_alerts():
+    """An alert describes the state a build left, so a rebuild replaces it.
+
+    Otherwise yesterday's "the evening is short" outlives the rebuild that
+    filled it, and the manager learns to ignore the list.
+    """
+    launcher = _DeferredLauncher()
+    app, _ = _build_app([
+        _generation(
+            [{"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+              "reason": "כיסוי"}],
+            alerts=[{"severity": "warning", "message": "שיבוץ דחוק"}],
+            limit=1,
+        ),
+        _generation([{
+            "employee": "יוסי", "shift": MORNING, "date": "2026-08-17",
+            "reason": "יוסי פנוי והאיזון מתאים",
+        }]),
+    ], launch=launcher)
+    client = _client(app)
+    created = client.post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+    assert created["alerts"]
+
+    client.post(
+        "/api/schedule/generate/%s/day/start" % created["id"],
+        json={"date": "2026-08-17"},
+    )
+    client.post("/api/schedule/generate/%s/run" % created["id"])
+    launcher.run_next()
+
+    rebuilt = client.get("/api/schedule/%s" % created["id"]).json()
+    assert rebuilt["assignments"][0]["employee"] == "יוסי"
+    assert rebuilt["alerts"] == []

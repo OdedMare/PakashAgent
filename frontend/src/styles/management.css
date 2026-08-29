@@ -591,6 +591,55 @@
   border-top: none;
 }
 
+/* The agent's own alerts, beside the audit's warnings and never mistaken
+   for them: same shape, its own voice. */
+.alerts {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--accent, var(--warning));
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+}
+
+.alerts h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.92rem;
+}
+
+.alerts ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.alert-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 0.35rem 0;
+  font-size: 0.85rem;
+  color: var(--text-soft);
+  border-top: 1px solid var(--border);
+}
+
+.alert-row.notice {
+  color: var(--text-muted);
+}
+
+.alert-row:first-child {
+  border-top: none;
+}
+
+.alert-where {
+  margin-inline-start: 0.4rem;
+  font-size: 0.75rem;
+  font-style: normal;
+  color: var(--text-muted);
+}
+
 .schedule-notes {
   list-style: disc;
   margin: 0;

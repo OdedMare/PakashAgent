@@ -175,6 +175,30 @@ class Warning(BaseModel):
     details: Dict[str, Any] = {}
 
 
+class Alert(BaseModel):
+    """One thing the agent wants the manager to look at, or to know it did.
+
+    Distinct from `Warning` on purpose. A warning is recomputed from the
+    stored schedule every time it is read; an alert is a record of what
+    happened *while the schedule was being built* — a rule the agent traded
+    away and why, a shift nobody legal could take, a row it proposed that
+    code refused. Neither one blocks anything
+    ([D25](../../docs/DECISIONS.md#d25--the-agent-assigns-the-tools-count-and-the-engine-is-the-floor-)).
+
+    `source` says which side raised it: `agent` for the agent's own words,
+    `code` for one raised on its behalf when it accepted a cost or left a
+    slot short.
+    """
+
+    code: str = ""
+    severity: str = "warning"
+    message: str
+    employee: str = ""
+    shift: str = ""
+    date: str = ""
+    source: str = ""
+
+
 class Slot(BaseModel):
     """One shift on one date — the thing a person is assigned into."""
 
@@ -231,6 +255,11 @@ class GenerationProgress(BaseModel):
     """Persistent progress for a schedule produced one date at a time."""
 
     status: str = ""
+    # What the manager asked this build for, in their own words. Stored when
+    # the job is opened and echoed back so the board can say which
+    # instructions a running build is working under -- and so a build resumed
+    # tomorrow is still the one the manager described today.
+    instructions: str = ""
     current_date: str = ""
     total_days: int = 0
     completed_days: int = 0
@@ -304,6 +333,9 @@ class Schedule(BaseModel):
     slots: List[Slot] = []
     assignments: List[Assignment] = []
     warnings: List[Warning] = []
+    # What the agent flagged while building this period. Rides along exactly
+    # as the warnings do, and gates nothing (D3/D25).
+    alerts: List[Alert] = []
     # Which dates in this period are somebody's closure. Computed once here
     # rather than in the browser: which group closes on 12/09 is arithmetic
     # (D3), and a second implementation of the cycle in TypeScript would

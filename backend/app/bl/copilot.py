@@ -1,4 +1,12 @@
-"""The durable copilot's deterministic observation and action boundary."""
+"""The durable copilot's deterministic observation and action boundary.
+
+Reads two lists off the current period and leaves an inbox item for each:
+the audit's `warnings`, recomputed from the schedule as stored, and the
+`alerts` the assignment agent raised while building it
+([D25](../../../docs/DECISIONS.md#d25--the-agent-assigns-the-tools-count-and-the-engine-is-the-floor-)).
+Neither is acted on here — an item is a proposal the manager approves, and
+schedule repair stays a proposal because D8 wants their reason first.
+"""
 
 import datetime
 from typing import List, Optional
@@ -58,6 +66,32 @@ class CopilotService:
                 created.append(item)
 
         schedule = self._schedules.current(team_id)
+        # What the agent flagged while it was building, before what the audit
+        # recomputes afterwards: an alert is the agent asking the manager to
+        # decide something, and it should not sit behind a list of warnings
+        # about the same period. Both land as `schedule_repair` proposals --
+        # a rule traded away and a slot left short are the same kind of thing
+        # to the manager, whichever side noticed it.
+        for alert in (schedule or {}).get("alerts") or []:
+            fingerprint = "alert:%s:%s:%s:%s:%s" % (
+                (schedule or {}).get("id", ""), alert.get("code", "alert"),
+                alert.get("employee", ""), alert.get("date", ""),
+                alert.get("shift", ""),
+            )
+            message = alert.get("message") or "הסוכן העלה נקודה בסידור"
+            item = self._create(
+                team_id, fingerprint, ACTION_SCHEDULE_REPAIR,
+                "הסוכן מבקש החלטה על הסידור", message,
+                {
+                    "suggestion": "החלט מה לעשות עם ההתרעה: %s" % message,
+                    "alert": alert,
+                    "schedule_id": (schedule or {}).get("id"),
+                },
+                job_id,
+            )
+            if item:
+                created.append(item)
+
         for warning in (schedule or {}).get("warnings") or []:
             fingerprint = "schedule:%s:%s:%s:%s:%s" % (
                 schedule.get("id", ""), warning.get("code", "warning"),

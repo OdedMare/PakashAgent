@@ -31,6 +31,22 @@ per-day progress, drag a shift (which asks why before it
 moves), talk to the agent about the assignment, record constraints against
 employees, and publish to the team.
 
+**The agent does the assigning, and code answers everything countable.**
+Building a day is an agent running pure-Python tools — which slots are short,
+who may legally take each one, what a placement would cost, how the hours
+stand — and then *choosing*, with a reason on every row. Code refuses a row
+that cannot stand (a hard constraint, another group's closure, somebody
+unqualified, nobody's reason) and hands the sentence back for one corrected
+turn; a row that is merely expensive is the agent's to take, because that is
+the judgment the whole product is built around. **Anything it trades away is
+said out loud:** every accepted cost and every shift left short comes back as
+an alert carrying the agent's own reason, beside the schedule, in the
+manager's inbox, and in the agent's own opening words
+([D25](docs/DECISIONS.md#d25--the-agent-assigns-the-tools-count-and-the-engine-is-the-floor-)).
+A deterministic engine underneath fills the same day by ranking when no model
+is configured or the agent cannot answer, so a model outage costs the manager
+judgment rather than a schedule.
+
 **The agent speaks first.** It reads the state on its own and opens the
 conversation — when the manager arrives, after anything changes, before a
 period is published, and periodically in an idle room. It says what it
@@ -86,7 +102,9 @@ and imported back. A message for the group chat is asked of the agent instead
 Built: the ported `dal/llm` client, settings and runtime settings, the interview
 and its prompt, the workspace layer (teams, boss login, member share links, route
 guards), `bl/audit.py` and its table-driven tests, `bl/scheduler.py`,
-`bl/changes.py`, `bl/briefing.py`, `bl/export.py`, `bl/placement.py`, the agent's
+`bl/changes.py`, `bl/briefing.py`, `bl/export.py`, `bl/placement.py`, the
+assignment agent and its tools (`bl/assignment_agent.py`,
+`bl/assignment_tools.py`, `bl/deterministic_scheduler.py`), the agent's
 tool layer (`bl/tools.py`, `bl/planner.py`, `bl/intent.py`, `bl/simulate.py`),
 the schedule tables, the management HTTP layer, and the RTL UI for all of it.
 
@@ -156,16 +174,14 @@ schedules the manager has published.
 Postgres must be reachable at `PAKASH_DATABASE_URL`; the app creates its own
 tables on startup (the schema itself must already exist).
 
-**How fast a schedule builds is a setting.** *הגדרות ← בניית סידור* chooses
-how wide one model call is: `day` (the default) asks for one date at a time
-and verifies and repairs each on its own; `week` asks for up to seven in one
-call, which is several times faster on a slow local model because a week
-costs the scheduler prompt once instead of seven times. Both run the same
-checks — the same candidate lists, response schema, rejection rules and audit
-— so the tradeoff is granularity, not trust: in `week` mode one bad row
-re-answers the whole span. Also settable as
-`PAKASH_SCHEDULE_GENERATION_MODE`. The board says which mode a running build
-is using.
+**How a build is checkpointed is a setting.** *הגדרות ← בניית סידור* chooses
+how wide one stored checkpoint is: `day` (the default) checkpoints each date on
+its own; `week` covers up to seven dates in one, which means fewer writes and
+fewer round trips on a long period. It does not change *who decides or how
+wide a decision is*: the agent is handed one date's candidate lists and
+audited against that date either way, because a day is the unit an answer can
+be checked in. Also settable as `PAKASH_SCHEDULE_GENERATION_MODE`. The board
+says which mode a running build is using.
 
 **Set `PAKASH_SESSION_SECRET` in any real deployment.** Left unset it is
 generated per process, so sessions do not survive a restart and break across

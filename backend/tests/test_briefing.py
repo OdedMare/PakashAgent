@@ -268,3 +268,32 @@ def test_a_malformed_model_answer_raises():
 
     with pytest.raises(AgentError):
         agent.brief(TRIGGER_OPENED, PROFILE)
+
+
+def test_the_agents_build_alerts_reach_the_conversation():
+    """What the agent decided while building is what it opens with.
+
+    The alert is raised inside a build the manager was not watching, so the
+    briefing is where it reaches them in words — beside, and distinct from,
+    the audit's warnings about the same period (D25).
+    """
+    llm = _ScriptedLlm([_answer(items=[_item()], quiet=False)])
+
+    BriefingAgent(llm).brief(
+        TRIGGER_OPENED, PROFILE, schedule=SCHEDULE,
+        warnings=[{
+            "code": "unfilled", "severity": "warning",
+            "message": "בוקר שלישי ריק", "date": "2026-08-18",
+        }],
+        alerts=[{
+            "code": "rule_traded", "severity": "warning",
+            "message": "שיבצתי את דנה יום שישי ברציפות כי לא נשאר אף אחד",
+            "employee": "דנה", "date": "2026-08-17", "shift": MORNING,
+            "source": "agent",
+        }],
+    )
+
+    payload = json.loads(llm.calls[0]["user"])
+    assert payload["alerts"][0]["code"] == "rule_traded"
+    # Not folded into the warnings: they answer different questions.
+    assert [row["code"] for row in payload["warnings"]] == ["unfilled"]
