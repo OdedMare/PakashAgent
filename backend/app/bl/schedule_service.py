@@ -1037,6 +1037,58 @@ class ScheduleService:
         ))[:4000]
         return view
 
+    def _assign_span_deterministically(
+        self, team_id: str, schedule: dict, profile: dict, day: str,
+        through: str, span_dates, required: List[dict],
+    ) -> dict:
+        """Fill a span in code when the model is unreachable.
+
+        Not a second opinion on the model's answer -- only what runs when
+        there is no answer at all. One pass per date, each seeing the ones
+        before it through `already_scheduled`, so rest, hours and fairness
+        hold across the span exactly as the model path keeps them.
+        """
+        _log.warning(
+            "schedule span=%s..%s falling back to the deterministic engine",
+            day, through,
+        )
+        availability = self._repository.availability(team_id, day, through)
+        history = self._recent_assignments(
+            team_id, _iso(schedule.get("starts_on"))
+        )
+        committed = [
+            _model_assignment(row)
+            for row in schedule.get("assignments") or []
+        ]
+        assignments, notes, summaries = [], [], []
+        metrics: dict = {}
+        for date in sorted(span_dates):
+            step = assign_day(
+                profile,
+                date,
+                availability=[
+                    row for row in availability
+                    if _iso(row.get("date")) == date
+                ],
+                history=history,
+                required_assignments=[
+                    row for row in required
+                    if _iso(row.get("date")) == date
+                ],
+                already_scheduled=committed + assignments,
+            )
+            assignments.extend(step.get("assignments") or [])
+            notes.extend(step.get("notes") or [])
+            if step.get("summary"):
+                summaries.append(step["summary"])
+            metrics = step.get("metrics") or metrics
+        return {
+            "assignments": assignments,
+            "notes": notes,
+            "summary": _text(" ".join(summaries))[:4000],
+            "metrics": metrics,
+        }
+
     def _requeue_failed_span(
         self, team_id: str, schedule_id: str, error: Exception
     ) -> bool:
