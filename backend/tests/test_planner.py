@@ -123,6 +123,13 @@ class _NoModel:
         raise AgentError("לא הוגדר מפתח API או שרת תואם OpenAI")
 
 
+class _BrokenAdapter:
+    """A compatible provider that fails before it can shape its error."""
+
+    def complete_json(self, *args, **kwargs):
+        raise RuntimeError("adapter setup failed")
+
+
 class _ScriptedModel:
     """Replays prepared turns, recording what it was asked."""
 
@@ -244,6 +251,16 @@ def test_answering_never_writes(repo, tools):
 def test_an_empty_request_is_refused(repo, tools):
     with pytest.raises(AgentError):
         PlanningAgent(_ScriptedModel([]), tools).answer(TEAM, "   ", PROFILE)
+
+
+def test_an_unexpected_adapter_failure_uses_the_no_model_fallback(repo, tools):
+    answer = PlanningAgent(_BrokenAdapter(), tools).answer(
+        TEAM, "מי בצוות", PROFILE,
+    )
+
+    assert answer["used_model"] is False
+    assert answer["understood"] is True
+    assert "3" in answer["answer"]
 
 
 def test_only_active_preferences_reach_the_model(repo, tools):

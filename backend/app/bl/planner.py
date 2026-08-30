@@ -251,12 +251,21 @@ class PlanningAgent:
         }
 
     def _ask(self, payload: dict) -> dict:
-        answer = self._llm.complete_json(
-            load("planner"),
-            json.dumps(payload, ensure_ascii=False),
-            schema=PLANNER_RESPONSE_SCHEMA,
-            flow="planner",
-        )
+        try:
+            answer = self._llm.complete_json(
+                load("planner"),
+                json.dumps(payload, ensure_ascii=False),
+                schema=PLANNER_RESPONSE_SCHEMA,
+                flow="planner",
+            )
+        except AgentError:
+            raise
+        except Exception as exc:
+            # `OpenAIJsonClient` already guarantees `AgentError`, but keeping
+            # that contract here protects the boss assistant when a custom
+            # compatible adapter fails during setup. `answer()` can then use
+            # its deterministic tools instead of returning HTTP 500.
+            raise AgentError("המודל לא זמין כרגע") from exc
         if not isinstance(answer, dict):
             raise AgentError("המודל החזיר תשובה לא תקינה")
         return answer

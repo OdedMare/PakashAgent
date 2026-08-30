@@ -319,17 +319,32 @@ class OpenAIJsonClient:
         panel applies to the very next call with no restart.
         """
         started = time.monotonic()
-        settings = self._store.get()
         chosen_role = role or role_for_flow(flow)
-        chosen_model = resolve_model(settings, chosen_role, model)
-        chosen_base_url = resolve_base_url(settings, chosen_role)
-        chosen_api_key = resolve_api_key(settings, chosen_role)
-        if not chosen_api_key and not chosen_base_url:
-            raise AgentError("לא הוגדר מפתח API או שרת תואם OpenAI")
-        client = self._client_for(
-            chosen_api_key, chosen_base_url,
-            read_timeout_for(settings, flow),
-        )
+        try:
+            settings = self._store.get()
+            chosen_model = resolve_model(settings, chosen_role, model)
+            chosen_base_url = resolve_base_url(settings, chosen_role)
+            chosen_api_key = resolve_api_key(settings, chosen_role)
+            if not chosen_api_key and not chosen_base_url:
+                raise AgentError("לא הוגדר מפתח API או שרת תואם OpenAI")
+            client = self._client_for(
+                chosen_api_key, chosen_base_url,
+                read_timeout_for(settings, flow),
+            )
+        except AgentError:
+            raise
+        except Exception as exc:
+            # Client construction happens before `_complete`, whose broad
+            # wrapper normally turns provider failures into `AgentError`.
+            # A malformed endpoint or an SDK initialization failure must not
+            # escape that boundary as an anonymous HTTP 500.
+            _log.exception(
+                "llm setup failed flow=%s role=%s", flow or "unknown",
+                chosen_role,
+            )
+            raise AgentError(
+                "לא ניתן להכין חיבור למודל. בדקו את הגדרות הספק."
+            ) from exc
         messages = [
             {
                 "role": "system",

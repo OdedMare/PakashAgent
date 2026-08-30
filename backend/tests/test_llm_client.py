@@ -256,6 +256,18 @@ def test_neither_key_nor_base_url_is_a_hebrew_configuration_error():
     assert "API" in str(caught.value)
 
 
+def test_client_setup_failure_is_an_agent_error_not_a_500():
+    llm, _ = _client([])
+    llm._client_for = lambda *args, **kwargs: (_ for _ in ()).throw(
+        ValueError("invalid provider URL")
+    )
+
+    with pytest.raises(AgentError) as caught:
+        llm.complete_json("sys", "usr", flow="planner")
+
+    assert "חיבור למודל" in str(caught.value)
+
+
 # --- helpers ---------------------------------------------------------------
 
 def test_extract_json_strips_a_markdown_fence():
