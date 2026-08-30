@@ -156,58 +156,6 @@ def cycle(profile: dict, pattern: str = "round") -> Optional[dict]:
     }
 
 
-def configuration_errors(profile: dict) -> List[str]:
-    """Missing facts that make a declared round/triplet unenforceable.
-
-    A lettered group without an anchored cycle is not a soft profile gap: it
-    leaves the server unable to know whose weekend Friday or Saturday is.
-    Generation and every assignment write call this before changing the
-    schedule, so a missing phase can never silently degrade into "no
-    rotation".
-    """
-    required = set()
-    errors = []
-    workplace = (profile or {}).get("workplace") or {}
-    for person in _people(profile):
-        name = _text(person.get("name"))
-        group = _text(person.get("rotation_group"))
-        declared = _text(person.get("exit_pattern")) or _text(
-            workplace.get("rotation_mode")
-        )
-        # `exit_pattern()` deliberately defaults to round for old arithmetic
-        # callers. Configuration validation must not interpret total silence
-        # as a declared rotation and reject ordinary civilian rosters.
-        if not declared and not group:
-            continue
-        pattern = declared or _cycle_of_group(profile, group)
-        if pattern in _GROUPED_PATTERNS and not group:
-            errors.append(
-                "לא הוגדרה קבוצת %s עבור %s"
-                % (_CYCLE_LABELS.get(pattern, "סבב"), name)
-            )
-            continue
-        if not group:
-            continue
-        lookup = pattern if pattern in _GROUPED_PATTERNS else _cycle_of_group(
-            profile, group
-        )
-        required.add(lookup)
-        groups = _groups_for(lookup) or ()
-        if group not in groups:
-            errors.append(
-                "הקבוצה %s של %s אינה שייכת ל%s"
-                % (group, name, _CYCLE_LABELS.get(lookup, "סבב"))
-            )
-
-    for pattern in sorted(required):
-        if cycle(profile, pattern) is None:
-            errors.append(
-                "לא הוגדר עוגן סגירה ל%s (תאריך וקבוצה ראשונה)"
-                % _CYCLE_LABELS.get(pattern, "סבב")
-            )
-    return errors
-
-
 def closing_group(
     profile: dict, day: datetime.date, pattern: str = "round"
 ) -> Optional[str]:

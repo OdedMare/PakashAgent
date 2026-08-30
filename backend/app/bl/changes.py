@@ -22,7 +22,6 @@ and "the manager agreed" as two separate, auditable events.
 
 import datetime
 import json
-import re
 from typing import Any, Dict, List, Optional
 
 from app.bl import rotation
@@ -40,8 +39,7 @@ _MAX_OPERATIONS = 40
 OP_ASSIGN = "assign"
 OP_REMOVE = "remove"
 OP_SWAP = "swap"
-OP_GENERATE_DAY = "generate_day"
-_OPERATIONS = (OP_ASSIGN, OP_REMOVE, OP_SWAP, OP_GENERATE_DAY)
+_OPERATIONS = (OP_ASSIGN, OP_REMOVE, OP_SWAP)
 PROFILE_ADD_EMPLOYEE = "add_employee"
 PROFILE_UPDATE_EMPLOYEE = "update_employee"
 PROFILE_ADD_SHIFT = "add_shift"
@@ -171,9 +169,6 @@ class ChangeAgent:
             raise AgentError("הבקשה אינה יכולה להיות ריקה")
         pending = _bounded(pending_request)
         resolved = _resume(pending, text)
-        quick = _day_generation_proposal(profile, schedule, resolved)
-        if quick is not None:
-            return quick
         payload = {
             "profile": _profile_for_model(profile),
             "schedule": _schedule_for_model(schedule),
@@ -244,15 +239,8 @@ def _proposal(
     # missing one.
     unresolved = _unresolved_people(operations, profile)
 
-    change_operations = [
-        row for row in operations if row.get("action") != OP_GENERATE_DAY
-    ]
-    only_generation = bool(operations) and not change_operations
-    needs_reason = (
-        bool(answer.get("needs_reason")) and not stated_reason
-        and not only_generation
-    )
-    if change_operations and not stated_reason and not answer.get("agent_reason"):
+    needs_reason = bool(answer.get("needs_reason")) and not stated_reason
+    if operations and not stated_reason and not answer.get("agent_reason"):
         needs_reason = True
 
     # An operation held back for naming several possible shifts is a
@@ -474,26 +462,7 @@ def _operations(offered: Any, schedule: dict) -> tuple:
         action = _bounded(item.get("action"))
         employee = _bounded(item.get("employee"))
         date = _date(item.get("date"))
-        if action not in _OPERATIONS or not date:
-            continue
-        if action == OP_GENERATE_DAY:
-            shift = _bounded(item.get("shift"))
-            if not any(day == date and (not shift or name == shift)
-                       for name, day in slots):
-                dropped.append({
-                    "action": action, "employee": "", "shift": shift,
-                    "date": date, "why": "no_slot", "options": [],
-                })
-                continue
-            operations.append({
-                "action": action,
-                "employee": "",
-                "shift": shift,
-                "date": date,
-                "reason": _bounded(item.get("reason")),
-            })
-            continue
-        if not employee:
+        if action not in _OPERATIONS or not employee or not date:
             continue
         shift, why = _resolve_shift(
             action, employee, _bounded(item.get("shift")), date,
@@ -611,96 +580,6 @@ def _shift_options(
     if action == OP_REMOVE:
         return sorted(rostered.get((employee, date), []))
     return sorted({name for name, day in slots if day == date})
-
-
-def _day_generation_proposal(
-    profile: dict, schedule: dict, request: str
-) -> Optional[dict]:
-    """Recognise the core "schedule Friday/Saturday" command without LLM.
-
-    This is intentionally narrow. It makes the product's most important
-    command available during a model outage, while every richer sentence
-    still goes through the language agent.
-    """
-    text = _bounded(request)
-    if not text or not any(
-        verb in text for verb in ("תשבץ", "שבץ", "תבנה", "בנה", "תסדר")
-    ):
-        return None
-    if any(
-        _bounded(person.get("name")) in text
-        for person in (profile or {}).get("employees") or []
-        if isinstance(person, dict) and _bounded(person.get("name"))
-    ):
-        # "שבץ את דנה בשישי" is an individual assignment, not a request to
-        # rebuild the whole day.
-        return None
-
-    weekday = None
-    if re.search(r"(?:יום\s+)?שישי", text):
-        weekday = 4
-    elif "שבת" in text:
-        weekday = 5
-    explicit = re.search(r"\b\d{4}-\d{2}-\d{2}\b", text)
-    slots = (schedule or {}).get("slots") or []
-    dates = sorted({
-        _date(slot.get("slot_date")) for slot in slots
-        if isinstance(slot, dict) and _date(slot.get("slot_date"))
-    })
-    if explicit:
-        dates = [date for date in dates if date == explicit.group(0)]
-    elif weekday is not None:
-        dates = [
-            date for date in dates
-            if datetime.date.fromisoformat(date).weekday() == weekday
-        ]
-    else:
-        return None
-    if len(dates) != 1:
-        return {
-            "reply": (
-                "יש בתקופה יותר מתאריך אחד שמתאים. לאיזה תאריך לשבץ?"
-                if dates else "היום שביקשת אינו נמצא בתקופת הסידור הפתוחה."
-            ),
-            "needs_reason": False,
-            "needs_input": bool(dates),
-            "pending_request": text if dates else "",
-            "agent_reason": "",
-            "stated_reason": "",
-            "operations": [],
-            "profile_operations": [],
-            "constraints": [],
-        }
-
-    shift_names = [
-        _bounded(row.get("name"))
-        for row in (profile or {}).get("shifts") or []
-        if isinstance(row, dict) and _bounded(row.get("name")) in text
-    ]
-    shift = shift_names[0] if len(shift_names) == 1 else ""
-    date = dates[0]
-    return {
-        "reply": "אבנה מחדש את %s%s לפי התקן, הזמינות והסבבים המחייבים." % (
-            date, " במשמרת %s" % shift if shift else "",
-        ),
-        "needs_reason": False,
-        "needs_input": False,
-        "pending_request": "",
-        "agent_reason": (
-            "המנוע הדטרמיניסטי ימלא את היום בלי קריאת מודל, ויחסום חריגה "
-            "מסבב או מתלתון."
-        ),
-        "stated_reason": "",
-        "operations": [{
-            "action": OP_GENERATE_DAY,
-            "employee": "",
-            "shift": shift,
-            "date": date,
-            "reason": "בקשת המנהל לבנות את היום",
-        }],
-        "profile_operations": [],
-        "constraints": [],
-    }
 
 
 def _profile_operations(offered: Any, profile: dict) -> List[dict]:
@@ -866,7 +745,7 @@ def _bounded(value: Any, limit: int = _MAX_TEXT_CHARS) -> str:
 
 __all__ = [
     "ChangeAgent", "CHANGE_RESPONSE_SCHEMA",
-    "OP_ASSIGN", "OP_REMOVE", "OP_SWAP", "OP_GENERATE_DAY",
+    "OP_ASSIGN", "OP_REMOVE", "OP_SWAP",
     "PROFILE_ADD_EMPLOYEE", "PROFILE_UPDATE_EMPLOYEE",
     "PROFILE_ADD_SHIFT", "PROFILE_UPDATE_SHIFT",
 ]

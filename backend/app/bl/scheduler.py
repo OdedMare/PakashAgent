@@ -861,10 +861,9 @@ def effective_availability(
 ) -> List[dict]:
     """Dated constraints plus structured recurring constraints from interview.
 
-    Explicit dated rows win over recurring interview rules. They never erase
-    a derived round/triplet row: a manager may add availability information,
-    but cannot accidentally re-phase the mandatory rotation with one dated
-    exception.
+    Explicit dated rows win for the same person, date and shift. A recurring
+    all-shifts rule is expanded per declared shift, which lets one dated shift
+    exception override only that occurrence.
     """
     start, end = _parse_date(starts_on), _parse_date(ends_on)
     explicit = []
@@ -899,8 +898,10 @@ def effective_availability(
         for shift in (profile or {}).get("shifts") or []
         if isinstance(shift, dict) and _bounded(shift.get("name"))
     ]
-    rotation = _rotation_availability(profile, start, end, set())
-    closure = _closure_availability(profile, start, end, set())
+    rotation = _rotation_availability(
+        profile, start, end, explicit_keys
+    )
+    closure = _closure_availability(profile, start, end, explicit_keys)
     recurring = []
     for person in (profile or {}).get("employees") or []:
         if not isinstance(person, dict):

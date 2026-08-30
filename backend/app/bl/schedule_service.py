@@ -26,15 +26,12 @@ import time
 from threading import Event, Lock, Thread
 from typing import Any, Dict, List, Optional
 
-from app.bl.audit import audit, constraint_conflicts, fairness, shift_stats
+from app.bl.audit import audit, fairness, shift_stats
 from app.bl.briefing import (
     BriefingAgent,
     TRIGGER_OPENED,
 )
-from app.bl.changes import (
-    ChangeAgent, OP_ASSIGN, OP_GENERATE_DAY, OP_REMOVE, OP_SWAP,
-)
-from app.bl.deterministic_scheduler import generate_day as assign_day
+from app.bl.changes import ChangeAgent, OP_ASSIGN, OP_REMOVE, OP_SWAP
 from app.bl.export import as_workbook, filename
 from app.bl.importer import infer, read_grids
 from app.bl.learn import RuleLearner, observe, observe_corrections
@@ -473,37 +470,18 @@ class ScheduleService:
         if not starts_on or not ends_on:
             starts_on, ends_on = week_bounds()
 
-        _require_rotation_configuration(profile)
-        slots = build_slots(profile, starts_on, ends_on)
-        assignments, notes = [], []
-        summaries = []
-        history = self._recent_assignments(team_id, starts_on)
-        day = datetime.date.fromisoformat(starts_on)
-        end = datetime.date.fromisoformat(ends_on)
-        while day <= end:
-            date = day.isoformat()
-            result = assign_day(
-                profile,
-                date,
-                availability=self._repository.availability(team_id, date, date),
-                history=history,
-                required_assignments=[
-                    row for row in required_assignments or []
-                    if _iso(row.get("date")) == date
-                ],
-                already_scheduled=assignments,
-            )
-            assignments.extend(result.get("assignments") or [])
-            notes.extend(result.get("notes") or [])
-            if result.get("summary"):
-                summaries.append(result["summary"])
-            day += datetime.timedelta(days=1)
-        result = {
-            "slots": slots,
-            "assignments": assignments,
-            "notes": notes,
-            "summary": _text(" ".join(summaries))[:4000],
-        }
+        result = self._scheduler.generate(
+            profile,
+            starts_on,
+            ends_on,
+            availability=self._repository.availability(
+                team_id, starts_on, ends_on
+            ),
+            history=self._recent_assignments(team_id, starts_on),
+            instructions=instructions,
+            required_assignments=required_assignments,
+            preferences=self._active_preferences(team_id),
+        )
 
         schedule = self._repository.create_schedule(
             team_id, starts_on, ends_on
@@ -549,7 +527,6 @@ class ScheduleService:
     ) -> dict:
         """Open a persistent range job; each later request generates one day."""
         profile = self._buildable_profile(team_id)
-        _require_rotation_configuration(profile)
         if not starts_on or not ends_on:
             starts_on, ends_on = week_bounds()
         slots = build_slots(profile, starts_on, ends_on)
@@ -944,6 +921,7 @@ class ScheduleService:
         )
         through = _iso(target.get("through")) or day
         try:
+<<<<<<< HEAD
             _require_rotation_configuration(profile)
             # One deterministic pass per date of the span. `generate_day`
             # fills a single date, so the span is walked here and each day
@@ -953,6 +931,22 @@ class ScheduleService:
             availability = self._repository.availability(team_id, day, through)
             history = self._recent_assignments(
                 team_id, _iso(schedule.get("starts_on"))
+=======
+            result = self._scheduler.generate_day(
+                profile,
+                day,
+                availability=self._repository.availability(team_id, day, day),
+                history=self._recent_assignments(
+                    team_id, _iso(schedule.get("starts_on"))
+                ),
+                instructions=generation.get("instructions") or "",
+                required_assignments=required,
+                already_scheduled=[
+                    _model_assignment(row)
+                    for row in schedule.get("assignments") or []
+                ],
+                preferences=self._active_preferences(team_id),
+>>>>>>> parent of ed3a635 (feat: Implement deterministic scheduling engine for daily shift generation)
             )
             committed = [
                 _model_assignment(row)
@@ -1433,8 +1427,6 @@ class ScheduleService:
         )
         if slot is None:
             raise NotFoundError("המשמרת לא נמצאה בסידור")
-        profile = self._repository.team_profile(team_id) or {}
-        _require_rotation_placement(profile, employee, slot)
 
         stated = (reason or "").strip()
         row = self._repository.add_assignment(
@@ -1632,13 +1624,7 @@ class ScheduleService:
         ([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)).
         """
         profile_operations = profile_operations or []
-        day_operations = [
-            row for row in operations or []
-            if (row or {}).get("action") == OP_GENERATE_DAY
-        ]
-        if day_operations and len(day_operations) != len(operations or []):
-            raise AgentError("יש לאשר בניית יום ושינויים נקודתיים בנפרד")
-        if operations and not day_operations and not (reason or "").strip():
+        if operations and not (reason or "").strip():
             raise AgentError("צריך לציין סיבה לשינוי")
         if operations and profile_operations:
             raise AgentError("יש לאשר שינויי צוות ושינויי סידור בנפרד")
@@ -1651,13 +1637,6 @@ class ScheduleService:
                 return self._view(schedule, team_id)
             return {"status": "ok", "profile": profile}
         schedule = self._repository.get_schedule(schedule_id, team_id)
-        if day_operations:
-            for operation in day_operations:
-                self._generate_requested_day(
-                    team_id, schedule, operation, reason, agent_reason
-                )
-                schedule = self._repository.get_schedule(schedule_id, team_id)
-            return self._view(schedule, team_id)
         applied = 0
         for operation in operations or []:
             applied += self._apply_one(
@@ -1709,12 +1688,6 @@ class ScheduleService:
         if slot is None:
             raise NotFoundError("המשמרת לא נמצאה בסידור")
         previous = _find_assignment(schedule, assignment_id)
-        if previous is None:
-            raise NotFoundError("השיבוץ לא נמצא")
-        profile = self._repository.team_profile(team_id) or {}
-        _require_rotation_placement(
-            profile, previous.get("employee") or "", slot
-        )
         moved = self._repository.move_assignment(
             assignment_id, team_id, slot["id"],
             reason=agent_reason or reason,
@@ -1765,8 +1738,6 @@ class ScheduleService:
             )
             if slot is None:
                 return 0
-            profile = self._repository.team_profile(team_id) or {}
-            _require_rotation_placement(profile, employee, slot)
             self._repository.add_assignment(
                 schedule["id"], team_id, slot["id"], employee,
                 own_reason or reason,
@@ -1786,13 +1757,6 @@ class ScheduleService:
             second = _match(schedule, other, other_shift, other_date)
             if first is None or second is None:
                 return 0
-            profile = self._repository.team_profile(team_id) or {}
-            _require_rotation_placement(profile, employee, {
-                "shift_name": other_shift, "slot_date": other_date,
-            })
-            _require_rotation_placement(profile, other, {
-                "shift_name": shift, "slot_date": date,
-            })
             self._repository.move_assignment(
                 first["id"], team_id, second["slot_id"],
                 reason=own_reason or reason,
@@ -1810,64 +1774,6 @@ class ScheduleService:
             return 1
 
         return 0
-
-    def _generate_requested_day(
-        self,
-        team_id: str,
-        schedule: dict,
-        operation: dict,
-        reason: str,
-        agent_reason: str,
-    ) -> None:
-        """Apply the agent's confirmed request to build one day."""
-        day = _iso(operation.get("date"))
-        shift = _text(operation.get("shift"))
-        if not day or not (
-            _iso(schedule.get("starts_on")) <= day
-            <= _iso(schedule.get("ends_on"))
-        ):
-            raise AgentError("התאריך המבוקש אינו בתקופת הסידור")
-        if shift and not any(
-            _text(slot.get("shift_name")) == shift
-            and _iso(slot.get("slot_date")) == day
-            for slot in schedule.get("slots") or []
-        ):
-            raise AgentError("המשמרת המבוקשת אינה קיימת בתאריך הזה")
-
-        profile = self._buildable_profile(team_id)
-        _require_rotation_configuration(profile)
-        required = _manager_rows_on(schedule, day)
-        if shift:
-            required = [row for row in required if row.get("shift") == shift]
-        result = assign_day(
-            profile,
-            day,
-            availability=self._repository.availability(team_id, day, day),
-            history=self._recent_assignments(
-                team_id, _iso(schedule.get("starts_on"))
-            ),
-            required_assignments=required,
-            already_scheduled=[
-                _model_assignment(row)
-                for row in schedule.get("assignments") or []
-            ],
-            shift_names=[shift] if shift else None,
-        )
-        fresh = self._repository.get_schedule(schedule["id"], team_id)
-        rows = _persisted_generation_rows(
-            fresh, result.get("assignments") or [], day,
-            shift_names=[shift] if shift else None,
-        )
-        self._repository.replace_assignments(schedule["id"], team_id, rows)
-        self._repository.append_change(
-            team_id,
-            ACTION_GENERATED,
-            schedule_id=schedule["id"],
-            slot_date=day,
-            shift_name=shift,
-            reason=_text(reason) or _text(operation.get("reason")),
-            agent_reason=_text(agent_reason) or _text(result.get("summary")),
-        )
 
     # -- constraints -------------------------------------------------------
 
@@ -2690,7 +2596,6 @@ def _generation_required_rows(
         slot = slot_index.get((shift, date))
         if slot is None:
             raise AgentError("המשמרת שנבחרה לשיבוץ החובה אינה קיימת בטווח הזה")
-        _require_rotation_placement(profile, employee, slot)
         key = (employee, shift, date)
         if key in seen:
             continue
@@ -2897,58 +2802,6 @@ def _nothing_applied(operations: List[dict]) -> str:
         "לא נמצא שיבוץ של %s ל%s בתאריך %s, אז לא בוצע שינוי."
         % (employee, shift or "אותו יום", date)
     )
-
-
-def _require_rotation_configuration(profile: dict) -> None:
-    errors = rotation.configuration_errors(profile)
-    if errors:
-        raise AgentError(
-            "חובה להשלים את הגדרת הסבבים והתלתונים לפני שיבוץ: %s."
-            % "; ".join(errors)
-        )
-
-
-def _require_rotation_placement(
-    profile: dict, employee: str, slot: dict
-) -> None:
-    """Hard write-boundary guard for every manual or conversational move."""
-    _require_rotation_configuration(profile)
-    date = _iso(slot.get("slot_date") or slot.get("date"))
-    shift_name = _text(slot.get("shift_name") or slot.get("shift"))
-    person = next(
-        (
-            row for row in (profile or {}).get("employees") or []
-            if isinstance(row, dict) and _text(row.get("name")) == employee
-        ),
-        {},
-    )
-    if not person or not date or not shift_name:
-        return
-    shift = next(
-        (
-            row for row in (profile or {}).get("shifts") or []
-            if isinstance(row, dict) and _text(row.get("name")) == shift_name
-        ),
-        {},
-    )
-    assignment = {
-        "employee": employee,
-        "date": date,
-        "shift": shift_name,
-        "start_time": shift.get("start_time"),
-        "end_time": shift.get("end_time"),
-    }
-    derived = effective_availability(profile, [], date, date)
-    if any(
-        row.get("source") in ("rotation", "closure")
-        and row.get("is_hard", True) is not False
-        and constraint_conflicts(assignment, row)
-        for row in derived if isinstance(row, dict)
-    ):
-        raise AgentError(
-            "השיבוץ של %s ב-%s סותר סבב או תלתון מחייב ולא ניתן לביצוע"
-            % (employee, date)
-        )
 
 
 def _match(

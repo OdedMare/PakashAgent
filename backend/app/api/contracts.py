@@ -605,7 +605,7 @@ class Operation(BaseModel):
     """One concrete move inside a proposal."""
 
     action: str
-    employee: str = ""
+    employee: str
     shift: str = ""
     date: str
     reason: str = ""
@@ -663,10 +663,7 @@ class ApplyRequest(BaseModel):
     def validate_kind(self):
         if self.profile_operations:
             return self
-        day_generation = bool(self.operations) and all(
-            operation.action == "generate_day" for operation in self.operations
-        )
-        if not self.schedule_id or (not day_generation and not self.reason.strip()):
+        if not self.schedule_id or not self.reason.strip():
             raise ValueError("schedule_id and reason are required")
         return self
 

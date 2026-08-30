@@ -111,9 +111,6 @@ export function AgentChat({
   const confirmReason = (proposal?.stated_reason || reason).trim();
   const hasScheduleOperations = Boolean(proposal?.operations.length);
   const hasProfileOperations = Boolean(proposal?.profile_operations.length);
-  const scheduleReasonRequired = Boolean(
-    proposal?.operations.some((operation) => operation.action !== "generate_day"),
-  );
 
   return (
     <section className="agent-chat" aria-label="שיחה עם הסוכן">
@@ -209,7 +206,7 @@ export function AgentChat({
                     {ACTION_LABELS[operation.action] ?? operation.action}
                   </span>
                   <span>
-                    {operation.employee || "כל המשמרות"}
+                    {operation.employee}
                     {operation.shift ? ` · ${operation.shift}` : ""}
                     {operation.date ? ` · ${formatDate(operation.date)}` : ""}
                     {operation.with_employee
@@ -253,9 +250,7 @@ export function AgentChat({
             {/* See the consequences before committing to them. Writes
                 nothing, exactly as the proposal itself has written nothing —
                 this is a way to look harder, not a third path to a change. */}
-            {proposal.operations.some(
-              (operation) => operation.action !== "generate_day",
-            ) && onSimulate ? (
+            {proposal.operations.length && onSimulate ? (
               <button
                 type="button"
                 className="ghost-button"
@@ -274,9 +269,7 @@ export function AgentChat({
                 onClick={() => onConfirm(confirmReason)}
                 disabled={
                   busy ||
-                  (hasScheduleOperations && (
-                    writeLocked || (scheduleReasonRequired && !confirmReason)
-                  ))
+                  (hasScheduleOperations && (writeLocked || !confirmReason))
                 }
               >
                 <Check size={14} />
@@ -321,7 +314,7 @@ export function AgentChat({
             needsInput
               ? "התשובה לשאלה של הסוכן — אין צורך לחזור על הבקשה"
               : hasSchedule
-                ? "למשל: תשבץ את שבת, או: דנה חולה ביום חמישי"
+                ? "למשל: דנה חולה ביום חמישי"
                 : "למשל: תוסיף את מאיה לצוות בתפקיד אחראית משמרת"
           }
           disabled={busy}
@@ -363,7 +356,6 @@ export function AgentChat({
 }
 
 const ACTION_LABELS: Record<string, string> = {
-  generate_day: "בניית יום",
   assign: "שיבוץ",
   remove: "הסרה",
   swap: "החלפה",

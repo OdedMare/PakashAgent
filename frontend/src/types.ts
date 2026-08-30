@@ -594,7 +594,7 @@ export interface ManagementOverview {
 
 /** One concrete move inside a proposal. */
 export interface Operation {
-  action: "assign" | "remove" | "swap" | "generate_day";
+  action: "assign" | "remove" | "swap";
   employee: string;
   shift: string;
   date: string;
