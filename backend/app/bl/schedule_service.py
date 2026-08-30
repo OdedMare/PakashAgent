@@ -32,7 +32,6 @@ from app.bl.briefing import (
     TRIGGER_OPENED,
 )
 from app.bl.changes import ChangeAgent, OP_ASSIGN, OP_REMOVE, OP_SWAP
-from app.bl.deterministic_scheduler import generate_day as assign_day
 from app.bl.export import as_workbook, filename
 from app.bl.importer import infer, read_grids
 from app.bl.learn import RuleLearner, observe, observe_corrections
@@ -922,34 +921,24 @@ class ScheduleService:
         )
         through = _iso(target.get("through")) or day
         try:
-            # The model assigns; `generate_span` bounds and verifies what it
-            # returns (D3). The deterministic engine is the outage path only:
-            # a build already half checkpointed must not strand on a model
-            # that went away mid-period.
-            try:
-                result = self._scheduler.generate_span(
-                    profile,
-                    day,
-                    through,
-                    availability=self._repository.availability(
-                        team_id, day, through
-                    ),
-                    history=self._recent_assignments(
-                        team_id, _iso(schedule.get("starts_on"))
-                    ),
-                    instructions=generation.get("instructions") or "",
-                    required_assignments=required,
-                    already_scheduled=[
-                        _model_assignment(row)
-                        for row in schedule.get("assignments") or []
-                    ],
-                    preferences=self._active_preferences(team_id),
-                )
-            except AgentError:
-                result = self._assign_span_deterministically(
-                    team_id, schedule, profile, day, through,
-                    span_dates, required,
-                )
+            result = self._scheduler.generate_span(
+                profile,
+                day,
+                through,
+                availability=self._repository.availability(
+                    team_id, day, through
+                ),
+                history=self._recent_assignments(
+                    team_id, _iso(schedule.get("starts_on"))
+                ),
+                instructions=generation.get("instructions") or "",
+                required_assignments=required,
+                already_scheduled=[
+                    _model_assignment(row)
+                    for row in schedule.get("assignments") or []
+                ],
+                preferences=self._active_preferences(team_id),
+            )
             fresh = self._repository.get_schedule(schedule_id, team_id)
             rows = _persisted_generation_rows(
                 fresh, result.get("assignments") or [], span_dates
@@ -1037,58 +1026,6 @@ class ScheduleService:
             generation.get("summaries") or []
         ))[:4000]
         return view
-
-    def _assign_span_deterministically(
-        self, team_id: str, schedule: dict, profile: dict, day: str,
-        through: str, span_dates, required: List[dict],
-    ) -> dict:
-        """Fill a span in code when the model is unreachable.
-
-        Not a second opinion on the model's answer -- only what runs when
-        there is no answer at all. One pass per date, each seeing the ones
-        before it through `already_scheduled`, so rest, hours and fairness
-        hold across the span exactly as the model path keeps them.
-        """
-        _log.warning(
-            "schedule span=%s..%s falling back to the deterministic engine",
-            day, through,
-        )
-        availability = self._repository.availability(team_id, day, through)
-        history = self._recent_assignments(
-            team_id, _iso(schedule.get("starts_on"))
-        )
-        committed = [
-            _model_assignment(row)
-            for row in schedule.get("assignments") or []
-        ]
-        assignments, notes, summaries = [], [], []
-        metrics: dict = {}
-        for date in sorted(span_dates):
-            step = assign_day(
-                profile,
-                date,
-                availability=[
-                    row for row in availability
-                    if _iso(row.get("date")) == date
-                ],
-                history=history,
-                required_assignments=[
-                    row for row in required
-                    if _iso(row.get("date")) == date
-                ],
-                already_scheduled=committed + assignments,
-            )
-            assignments.extend(step.get("assignments") or [])
-            notes.extend(step.get("notes") or [])
-            if step.get("summary"):
-                summaries.append(step["summary"])
-            metrics = step.get("metrics") or metrics
-        return {
-            "assignments": assignments,
-            "notes": notes,
-            "summary": _text(" ".join(summaries))[:4000],
-            "metrics": metrics,
-        }
 
     def _requeue_failed_span(
         self, team_id: str, schedule_id: str, error: Exception
@@ -2730,8 +2667,7 @@ def _merged_required_rows(
 
 
 def _persisted_generation_rows(
-    schedule: dict, generated: List[dict], dates,
-    shift_names: Optional[List[str]] = None,
+    schedule: dict, generated: List[dict], dates
 ) -> List[dict]:
     """Replace the generated dates while preserving every other checkpoint.
 
@@ -2746,12 +2682,7 @@ def _persisted_generation_rows(
     deleting, and the whole-period fallback takes the list as it stands. The
     extra `date` key is ignored by the insert either way.
     """
-    # `dates` is the span being rebuilt -- one date for a single-day
-    # rebuild, several for a background span. `shift_names`, when given,
-    # narrows that to named shifts so rebuilding one shift leaves the rest
-    # of its date alone.
-    wanted = {dates} if isinstance(dates, str) else set(dates)
-    shifts = {_text(name) for name in shift_names or [] if _text(name)}
+    wanted = set(dates)
     rows = [
         {
             "slot_id": row["slot_id"],
@@ -2762,14 +2693,12 @@ def _persisted_generation_rows(
         }
         for row in schedule.get("assignments") or []
         if _iso(row.get("date")) not in wanted
-        or (shifts and _text(row.get("shift")) not in shifts)
         or row.get("source") == ASSIGNED_BY_MANAGER
     ]
     kept = {
         (row.get("employee"), _text(row.get("shift")), _iso(row.get("date")))
         for row in schedule.get("assignments") or []
         if _iso(row.get("date")) in wanted
-        and (not shifts or _text(row.get("shift")) in shifts)
         and row.get("source") == ASSIGNED_BY_MANAGER
     }
     existing_sources = {

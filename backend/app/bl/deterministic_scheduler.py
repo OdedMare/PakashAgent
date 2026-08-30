@@ -1,9 +1,11 @@
 """Fast, deterministic assignment of people into an existing slot grid.
 
-Language models can interpret a manager's sentence, but they are a poor
-place to perform arithmetic and constraint enforcement. This module owns the
-central scheduling loop: the same inputs always produce the same schedule,
-and a model outage cannot stop generation.
+**Not wired into generation.** The model assigns and `scheduler.py` bounds
+what it returns ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-));
+an outage parks the job for a person to resume rather than quietly building
+a schedule the model never saw. This module is kept as a worked reference
+for that arithmetic — the same inputs always produce the same schedule — and
+is covered by its own tests, but nothing in the service imports it.
 """
 
 import datetime
