@@ -286,6 +286,7 @@ export function AgentChat({
             answer={answer}
             busy={answerBusy}
             onDismiss={onDismissAnswer}
+            onAnswer={onAsk}
             onContinue={() =>
               document.getElementById("agent-composer-input")?.focus()
             }
@@ -299,7 +300,8 @@ export function AgentChat({
           event.preventDefault();
           const text = request.trim();
           if (!text || busy) return;
-          onPropose(text);
+          if (answer?.needs_input && !proposal && onAsk) onAsk(text);
+          else onPropose(text);
           setRequest("");
           setReason("");
         }}

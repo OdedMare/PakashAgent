@@ -991,6 +991,9 @@ export interface AgentAnswer {
   needs_confirmation: boolean;
   /** The answer is a focused question and the conversation should continue. */
   needs_input: boolean;
+  /** One focused question with the agent's recommendation and clickable
+   *  full-sentence answers. Null for a completed answer. */
+  question: Question | null;
   /** What that question is a question *about*, echoed back so the manager's
    *  reply continues it rather than being read as a new question. Empty
    *  whenever the agent is not waiting on an answer. */

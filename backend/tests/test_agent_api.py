@@ -233,6 +233,36 @@ def test_an_empty_question_is_refused_by_the_contract():
     assert response.status_code == 422
 
 
+def test_follow_up_options_survive_the_http_contract():
+    llm = _ScriptedLlm([{
+        "done": True,
+        "answer": "צריך לדייק יום.",
+        "question": {
+            "question": "לאיזה יום התכוונת?",
+            "recommendation": "התכוונתי ליום שלישי.",
+            "why": "היום קובע איזו משמרת תיבדק.",
+            "options": [
+                {"label": "שלישי", "answer": "התכוונתי ליום שלישי."},
+                {"label": "רביעי", "answer": "התכוונתי ליום רביעי."},
+            ],
+        },
+        "needs_input": True,
+        "needs_confirmation": False,
+        "tool_calls": [],
+    }])
+    app, repo = _build_app(llm)
+    _seed(repo)
+
+    response = _client(app).post(
+        "/api/schedule/ask", json={"request": "מי עובד באמצע השבוע"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["question"]["recommendation"] == "התכוונתי ליום שלישי."
+    assert body["question"]["options"][1]["answer"] == "התכוונתי ליום רביעי."
+
+
 # -- tools directly --------------------------------------------------------
 
 

@@ -2488,6 +2488,89 @@
   margin-top: 0.45rem;
 }
 
+.agent-question {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+  padding: 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 42%, var(--border));
+  border-inline-start: 3px solid var(--primary);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.agent-question-text,
+.agent-question-why {
+  margin: 0;
+}
+
+.agent-question-text {
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.agent-question-why,
+.agent-question-other {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.agent-question-options {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.15rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-question-options button {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  text-align: start;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: border-color 180ms ease, background 180ms ease, color 180ms ease;
+}
+
+.agent-question-options button.recommended {
+  border-color: color-mix(in srgb, var(--primary) 38%, transparent);
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.agent-question-options button:hover {
+  border-color: var(--primary);
+}
+
+.agent-question-options button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.agent-question-options button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.agent-question-options button small {
+  margin-inline-start: auto;
+}
+
+.agent-question-other {
+  list-style: none;
+}
+
 /* "Nothing has happened yet", said outright rather than implied by the
    absence of a button (D8/D12). */
 .agent-answer-note {

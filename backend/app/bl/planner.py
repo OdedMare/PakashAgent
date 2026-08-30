@@ -75,6 +75,8 @@ _MAX_TURNS = 3
 # How many tools may run in a single turn. Bounded because the model names
 # them and an unbounded list is an unbounded number of repository reads.
 _MAX_CALLS_PER_TURN = 4
+_MAX_OPTIONS = 4
+_MAX_OPTION_LABEL_CHARS = 120
 
 _TOOL_CALL_SCHEMA = {
     "type": "object",
@@ -100,11 +102,36 @@ _TOOL_CALL_SCHEMA = {
     },
 }
 
+_QUESTION_SCHEMA = {
+    "type": ["object", "null"],
+    "additionalProperties": False,
+    "required": ["question", "recommendation", "why", "options"],
+    "properties": {
+        "question": {"type": "string"},
+        "recommendation": {"type": "string"},
+        "why": {"type": "string"},
+        "options": {
+            "type": "array",
+            "maxItems": _MAX_OPTIONS,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["label", "answer"],
+                "properties": {
+                    "label": {"type": "string"},
+                    "answer": {"type": "string"},
+                },
+            },
+        },
+    },
+}
+
 PLANNER_RESPONSE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "required": [
-        "done", "answer", "tool_calls", "needs_confirmation", "needs_input",
+        "done", "answer", "question", "tool_calls", "needs_confirmation",
+        "needs_input",
     ],
     "properties": {
         # The model's own statement that it has what it needs. Bounded in
@@ -112,6 +139,7 @@ PLANNER_RESPONSE_SCHEMA = {
         # still terminates.
         "done": {"type": "boolean"},
         "answer": {"type": "string"},
+        "question": _QUESTION_SCHEMA,
         "tool_calls": {
             "type": "array",
             "items": _TOOL_CALL_SCHEMA,
@@ -193,6 +221,7 @@ class PlanningAgent:
         results: List[dict] = []
         steps: List[dict] = []
         answer = ""
+        question = None
         needs_confirmation = False
         needs_input = False
 
@@ -217,12 +246,17 @@ class PlanningAgent:
             })
 
             answer = _bounded(turn.get("answer")) or answer
+            question = _question(turn.get("question"))
             needs_confirmation = bool(turn.get("needs_confirmation"))
-            needs_input = bool(turn.get("needs_input"))
+            needs_input = bool(turn.get("needs_input")) or question is not None
             calls = _calls(turn.get("tool_calls"))
 
             if not calls or turn.get("done"):
                 break
+
+            # Tool calls are an internal turn, not a question for the boss.
+            question = None
+            needs_input = False
 
             for call in calls:
                 outcome = self._tools.run(team_id, call["tool"], call["arguments"])
@@ -243,6 +277,7 @@ class PlanningAgent:
             "results": results,
             "needs_confirmation": needs_confirmation,
             "needs_input": needs_input,
+            "question": question,
             # Carried back only while a question is open, so the client has
             # nothing stale to echo once the answer has landed.
             "pending_request": request if needs_input else "",
@@ -314,6 +349,7 @@ class PlanningAgent:
                 "results": [],
                 "needs_confirmation": False,
                 "needs_input": True,
+                "question": None,
                 # Nothing to resume: the sentence was never placed, so there
                 # is no intent for an answer to continue. Echoing it back
                 # would make the next turn read as a clarification of a
@@ -332,6 +368,12 @@ class PlanningAgent:
             "results": results,
             "needs_confirmation": needs_confirmation,
             "needs_input": asking,
+            "question": {
+                "question": answer,
+                "recommendation": "",
+                "why": "",
+                "options": [],
+            } if asking else None,
             "pending_request": request if asking else "",
             "used_model": False,
             "understood": True,
@@ -611,6 +653,38 @@ def _calls(offered: Any) -> List[dict]:
             "arguments": arguments if isinstance(arguments, dict) else {},
         })
     return calls
+
+
+def _question(offered: Any) -> Optional[dict]:
+    """One bounded FDE-style question, or none for a completed answer."""
+    if not isinstance(offered, dict):
+        return None
+    asked = _bounded(offered.get("question"))
+    if not asked:
+        return None
+    return {
+        "question": asked,
+        "recommendation": _bounded(offered.get("recommendation")),
+        "why": _bounded(offered.get("why")),
+        "options": _options(offered.get("options")),
+    }
+
+
+def _options(offered: Any) -> List[dict]:
+    """Concrete, deduplicated answers; one item is not a meaningful menu."""
+    if not isinstance(offered, list):
+        return []
+    options, seen = [], set()
+    for item in offered[:_MAX_OPTIONS]:
+        if not isinstance(item, dict):
+            continue
+        label = _bounded(item.get("label"), _MAX_OPTION_LABEL_CHARS)
+        answer = _bounded(item.get("answer"))
+        if not label or not answer or label in seen:
+            continue
+        seen.add(label)
+        options.append({"label": label, "answer": answer})
+    return options if len(options) > 1 else []
 
 
 def _profile_for_model(profile: dict) -> dict:

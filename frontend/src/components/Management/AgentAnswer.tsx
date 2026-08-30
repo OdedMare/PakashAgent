@@ -6,6 +6,7 @@ import {
   Cpu,
   Info,
   Search,
+  ThumbsUp,
   Wrench,
 } from "lucide-react";
 
@@ -41,11 +42,14 @@ export function AgentAnswer({
   busy,
   onDismiss,
   onContinue,
+  onAnswer,
 }: {
   answer: AgentAnswerRow | null;
   busy: boolean;
   onDismiss: () => void;
   onContinue?: () => void;
+  /** Sends an option's full answer through the same read-only ask flow. */
+  onAnswer?: (text: string) => void;
 }) {
   if (busy && !answer) {
     return (
@@ -92,11 +96,49 @@ export function AgentAnswer({
       {/* Newline-separated: the deterministic answers are built as lists of
           Hebrew lines and collapsing them into one paragraph would lose the
           per-shift structure that makes them readable. */}
-      <div className="agent-answer-body">
-        {answer.answer.split("\n").map((line, index) => (
-          <p key={index}>{line}</p>
-        ))}
-      </div>
+      {answer.answer && answer.answer !== answer.question?.question ? (
+        <div className="agent-answer-body">
+          {answer.answer.split("\n").map((line, index) => (
+            <p key={index}>{line}</p>
+          ))}
+        </div>
+      ) : null}
+
+      {answer.question ? (
+        <div className="agent-question" role="group" aria-label="אפשרויות תשובה">
+          <p className="agent-question-text">{answer.question.question}</p>
+          {answer.question.why ? (
+            <p className="agent-question-why">{answer.question.why}</p>
+          ) : null}
+          {answer.question.options.length ? (
+            <ul className="agent-question-options">
+              {answer.question.options.map((option, index) => (
+                <li key={`${option.label}-${index}`}>
+                  <button
+                    type="button"
+                    className={index === 0 ? "recommended" : ""}
+                    onClick={() => onAnswer?.(option.answer)}
+                    disabled={!onAnswer}
+                  >
+                    {index === 0 ? <ThumbsUp size={13} aria-hidden="true" /> : null}
+                    <span>{option.label}</span>
+                    {index === 0 ? <small>מומלץ</small> : null}
+                  </button>
+                </li>
+              ))}
+              <li className="agent-question-other">או כתבו תשובה משלכם</li>
+            </ul>
+          ) : answer.question.recommendation && onAnswer ? (
+            <button
+              type="button"
+              className="agent-answer-continue"
+              onClick={() => onAnswer(answer.question!.recommendation)}
+            >
+              <ThumbsUp size={13} aria-hidden="true" /> קבלת ההמלצה
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {answer.needs_input && onContinue ? (
         <button

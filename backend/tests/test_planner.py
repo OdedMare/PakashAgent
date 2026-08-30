@@ -217,6 +217,33 @@ def test_the_loop_is_bounded_when_the_model_never_finishes(repo, tools):
     assert len(answer["steps"]) <= 3
 
 
+def test_a_question_carries_recommended_clickable_options(repo, tools):
+    model = _ScriptedModel([{
+        "done": True,
+        "answer": "צריך לבחור את היום שהתכוונת אליו.",
+        "question": {
+            "question": "לאיזה יום התכוונת?",
+            "recommendation": "התכוונתי ליום שלישי, 25.8.",
+            "why": "בחירת יום אחר תשנה את המשמרת שנבדוק.",
+            "options": [
+                {"label": "שלישי 25.8", "answer": "התכוונתי ליום שלישי, 25.8."},
+                {"label": "רביעי 26.8", "answer": "התכוונתי ליום רביעי, 26.8."},
+            ],
+        },
+        "needs_input": True,
+        "needs_confirmation": False,
+        "tool_calls": [],
+    }])
+
+    answer = PlanningAgent(model, tools).answer(TEAM, "מי עובד באמצע השבוע", PROFILE)
+
+    assert answer["needs_input"] is True
+    assert answer["question"]["options"][0] == {
+        "label": "שלישי 25.8",
+        "answer": "התכוונתי ליום שלישי, 25.8.",
+    }
+
+
 def test_a_tool_the_menu_does_not_have_is_never_run(repo, tools):
     model = _ScriptedModel([
         {

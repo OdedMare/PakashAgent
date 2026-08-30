@@ -1107,6 +1107,9 @@ class AgentAnswer(BaseModel):
     # True when the agent is asking one focused follow-up rather than closing
     # the conversation with an answer.
     needs_input: bool = False
+    # The FDE-style structured question. Options carry full answers, so a
+    # click and a typed reply continue the same conversation identically.
+    question: Optional[Question] = None
     # What the follow-up is a follow-up *to*. Set only beside a question, so
     # the manager's answer continues that request rather than replacing it.
     pending_request: str = ""
