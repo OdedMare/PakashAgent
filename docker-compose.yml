@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: pakash
       POSTGRES_USER: pakash
@@ -15,6 +16,7 @@ services:
 
   backend:
     build: ./backend
+    restart: unless-stopped
     environment:
       PAKASH_DATABASE_URL: ${PAKASH_DATABASE_URL:-postgresql://pakash:pakash@db:5432/pakash}
       PAKASH_DATABASE_SCHEMA: ${PAKASH_DATABASE_SCHEMA:-pakash}
@@ -85,6 +87,7 @@ services:
       # to be known at build time, not just in the running container.
       args:
         BACKEND_URL: http://backend:8000
+    restart: unless-stopped
     environment:
       BACKEND_URL: http://backend:8000
     ports:
