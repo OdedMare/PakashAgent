@@ -487,7 +487,6 @@ def test_generation_run_returns_before_the_model_and_is_polled_with_get():
     assert completed["assignments"][0]["employee"] == "דנה"
 
 
-<<<<<<< HEAD
 def test_a_transient_failure_is_retried_without_stopping_the_job():
     """One bad answer costs a retry, not the rest of the period.
 
@@ -495,9 +494,6 @@ def test_a_transient_failure_is_retried_without_stopping_the_job():
     build, so a job that parks itself on the first blip is a job that waits
     for a person who may not come back for an hour.
     """
-=======
-def test_failed_background_generation_requeues_as_running_for_polling():
->>>>>>> parent of ed3a635 (feat: Implement deterministic scheduling engine for daily shift generation)
     launcher = _DeferredLauncher()
     app, _ = _build_app([
         AgentError("תקלה זמנית"),

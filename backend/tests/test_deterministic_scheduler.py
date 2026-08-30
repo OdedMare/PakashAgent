@@ -1,8 +1,10 @@
-"""The central scheduler is code: fast, repeatable and rotation-safe."""
+"""The outage fallback: fast, repeatable and rotation-safe.
+
+The model assigns (D3); this engine runs only when it cannot be reached.
+"""
 
 import pytest
 
-from app.bl.changes import ChangeAgent, OP_GENERATE_DAY
 from app.bl.deterministic_scheduler import generate_day
 from app.common.errors import AgentError
 
@@ -69,37 +71,3 @@ def test_declared_rotation_without_an_anchor_blocks_generation():
 
     with pytest.raises(AgentError, match="תלתון"):
         generate_day(profile, "2026-08-29")
-
-
-class _UnavailableModel:
-    def complete_json(self, *args, **kwargs):
-        raise AssertionError("the Friday/Saturday command must not call a model")
-
-
-@pytest.mark.parametrize(
-    ("command", "date"),
-    [("תשבץ את שבת", "2026-08-29"), ("תשבץ את יום שישי", "2026-08-28")],
-)
-def test_agent_understands_day_generation_without_a_model(command, date):
-    schedule = {
-        "starts_on": "2026-08-23",
-        "ends_on": "2026-08-29",
-        "slots": [
-            {"shift_name": SHIFT, "slot_date": "2026-08-28"},
-            {"shift_name": SHIFT, "slot_date": "2026-08-29"},
-        ],
-        "assignments": [],
-    }
-
-    proposal = ChangeAgent(_UnavailableModel()).propose(
-        _profile(), schedule, command
-    )
-
-    assert proposal["needs_reason"] is False
-    assert proposal["operations"] == [{
-        "action": OP_GENERATE_DAY,
-        "employee": "",
-        "shift": "",
-        "date": date,
-        "reason": "בקשת המנהל לבנות את היום",
-    }]

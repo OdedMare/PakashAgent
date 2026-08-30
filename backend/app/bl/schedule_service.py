@@ -32,6 +32,7 @@ from app.bl.briefing import (
     TRIGGER_OPENED,
 )
 from app.bl.changes import ChangeAgent, OP_ASSIGN, OP_REMOVE, OP_SWAP
+from app.bl.deterministic_scheduler import generate_day as assign_day
 from app.bl.export import as_workbook, filename
 from app.bl.importer import infer, read_grids
 from app.bl.learn import RuleLearner, observe, observe_corrections
