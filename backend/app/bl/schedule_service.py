@@ -921,65 +921,34 @@ class ScheduleService:
         )
         through = _iso(target.get("through")) or day
         try:
-<<<<<<< HEAD
-            _require_rotation_configuration(profile)
-            # One deterministic pass per date of the span. `generate_day`
-            # fills a single date, so the span is walked here and each day
-            # sees the ones before it through `already_scheduled` -- that is
-            # what keeps rest, hours and fairness honest across the span,
-            # exactly as the whole-period build does.
-            availability = self._repository.availability(team_id, day, through)
-            history = self._recent_assignments(
-                team_id, _iso(schedule.get("starts_on"))
-=======
-            result = self._scheduler.generate_day(
-                profile,
-                day,
-                availability=self._repository.availability(team_id, day, day),
-                history=self._recent_assignments(
-                    team_id, _iso(schedule.get("starts_on"))
-                ),
-                instructions=generation.get("instructions") or "",
-                required_assignments=required,
-                already_scheduled=[
-                    _model_assignment(row)
-                    for row in schedule.get("assignments") or []
-                ],
-                preferences=self._active_preferences(team_id),
->>>>>>> parent of ed3a635 (feat: Implement deterministic scheduling engine for daily shift generation)
-            )
-            committed = [
-                _model_assignment(row)
-                for row in schedule.get("assignments") or []
-            ]
-            assignments, notes, summaries = [], [], []
-            metrics: dict = {}
-            for date in sorted(span_dates):
-                step = assign_day(
+            # The model assigns; `generate_span` bounds and verifies what it
+            # returns (D3). The deterministic engine is the outage path only:
+            # a build already half checkpointed must not strand on a model
+            # that went away mid-period.
+            try:
+                result = self._scheduler.generate_span(
                     profile,
-                    date,
-                    availability=[
-                        row for row in availability
-                        if _iso(row.get("date")) == date
+                    day,
+                    through,
+                    availability=self._repository.availability(
+                        team_id, day, through
+                    ),
+                    history=self._recent_assignments(
+                        team_id, _iso(schedule.get("starts_on"))
+                    ),
+                    instructions=generation.get("instructions") or "",
+                    required_assignments=required,
+                    already_scheduled=[
+                        _model_assignment(row)
+                        for row in schedule.get("assignments") or []
                     ],
-                    history=history,
-                    required_assignments=[
-                        row for row in required
-                        if _iso(row.get("date")) == date
-                    ],
-                    already_scheduled=committed + assignments,
+                    preferences=self._active_preferences(team_id),
                 )
-                assignments.extend(step.get("assignments") or [])
-                notes.extend(step.get("notes") or [])
-                if step.get("summary"):
-                    summaries.append(step["summary"])
-                metrics = step.get("metrics") or metrics
-            result = {
-                "assignments": assignments,
-                "notes": notes,
-                "summary": _text(" ".join(summaries))[:4000],
-                "metrics": metrics,
-            }
+            except AgentError:
+                result = self._assign_span_deterministically(
+                    team_id, schedule, profile, day, through,
+                    span_dates, required,
+                )
             fresh = self._repository.get_schedule(schedule_id, team_id)
             rows = _persisted_generation_rows(
                 fresh, result.get("assignments") or [], span_dates
