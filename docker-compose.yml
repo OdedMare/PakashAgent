@@ -41,6 +41,12 @@ services:
       # cannot be changed from the settings panel. 1 suits Ollama; raise it
       # for a batching server (vLLM, TGI).
       PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-1}
+      # How wide one scheduling model call is: `day` or `week`. `day` is the
+      # accurate default -- each date is verified and repaired on its own.
+      # `week` builds up to seven days per call, which is several times
+      # faster on a slow local model, at the cost of re-answering the whole
+      # span when one row is wrong. Also editable live in the settings panel.
+      PAKASH_SCHEDULE_GENERATION_MODE: ${PAKASH_SCHEDULE_GENERATION_MODE:-day}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -70,6 +76,7 @@ services:
       PAKASH_LLM_TIMEOUT_SECONDS: ${PAKASH_LLM_TIMEOUT_SECONDS:-0}
       PAKASH_LLM_QUEUE_SECONDS: ${PAKASH_LLM_QUEUE_SECONDS:-180}
       PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-1}
+      PAKASH_SCHEDULE_GENERATION_MODE: ${PAKASH_SCHEDULE_GENERATION_MODE:-day}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       PAKASH_COPILOT_SCAN_SECONDS: ${PAKASH_COPILOT_SCAN_SECONDS:-1800}
     extra_hosts:

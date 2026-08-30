@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 
 import { getSettings, probeModels, updateSettings } from "@/services/api";
 
-export type SettingsSection = "agent" | "database";
+export type SettingsSection = "agent" | "schedule" | "database";
 
 /** What the backend returns in place of a stored secret, and what it accepts
  *  back to mean "unchanged". Must match `MASKED_SECRET` in

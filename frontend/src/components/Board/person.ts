@@ -54,4 +54,27 @@ export const EMPTY_PERSON: CardPerson = {
   rotation: "",
   is_shift_manager: false,
   is_overlap: false,
+  // Somebody the roster no longer carries is still standing on that Tuesday
+  // and still one of the people who were on it. Counting them out would make
+  // a past week that was fully staffed read as short of the people who
+  // actually worked it.
+  counts_toward_staffing: true,
 };
+
+/** Whether a roster row fills one of a slot's seats.
+ *
+ *  Mirrors `bl/audit.counts_toward_staffing`, in the same order and for the
+ *  same reason: the explicit field is the manager's answer and wins, and
+ *  `service_type === "overlap"` is only the fallback for a row that never
+ *  got one. Someone shadowing a shift is at work and still leaves it needing
+ *  the people it asked for.
+ */
+export function fillsASeat(row: {
+  counts_toward_staffing?: unknown;
+  service_type?: unknown;
+}): boolean {
+  if (typeof row.counts_toward_staffing === "boolean") {
+    return row.counts_toward_staffing;
+  }
+  return row.service_type !== "overlap";
+}

@@ -35,10 +35,14 @@ from app.bl.audit import (
     UNFILLED,
     audit,
     constraint_conflicts,
+    counts_toward_staffing,
     load_history,
 )
 from app.bl import rotation as rotation_cycle
 from app.bl.prompts import load
+from app.common.config.settings import (
+    GENERATION_MODES, MODE_DAY, MODE_WEEK,
+)
 from app.common.errors import AgentError
 
 # A period bigger than this is not a shift schedule, it is an import. Bounded
@@ -80,6 +84,25 @@ _REPAIRABLE_WARNING_CODES = frozenset({
 # the exact unfairness it exists to prevent.
 _CHUNK_DAYS = 7
 _MAX_ASSIGNMENTS_PER_CHUNK = 14
+
+# How a period is divided into model calls, re-exported from the layer that
+# owns the vocabulary. `MODE_DAY` asks for one date at a time -- the most
+# verifiable unit, because every row is checked against that date's own
+# candidate lists and repaired in isolation. `MODE_WEEK` asks for up to a week
+# in one call, which costs the scheduler prompt once instead of seven times,
+# at the price of a coarser repair: one bad row sends the whole span back.
+#
+# Both run the identical pipeline (`generate_span`); the mode chooses only how
+# wide each call is. That is why this is a setting rather than two code paths.
+
+# The staffing demand one span may carry in week mode. Far above
+# `_MAX_ASSIGNMENTS_PER_CHUNK` because the daily path's response schema pins
+# every row to an enumerated slot and an enumerated candidate, so the model is
+# not free to invent rows the way the legacy free-text path was -- the ceiling
+# is about how much one answer can hold, not about how much can be trusted.
+# A week that needs more than this is split, which is why week mode is a
+# ceiling rather than a promise of exactly seven days.
+_MAX_ASSIGNMENTS_PER_SPAN = 70
 
 # Hebrew weekdays, matching how the interview collects `days` on a shift and
 # how the source files write them. Hebrew is data here, not presentation.
@@ -233,34 +256,79 @@ class Scheduler:
     ) -> dict:
         """Generate and verify exactly one date.
 
-        Long ranges call this once per date, in order. Earlier dates are
-        supplied through ``already_scheduled`` so rest and cumulative load do
-        not reset at midnight. One repair call is allowed when deterministic
+        The one-date case of `generate_span`, kept as its own name because it
+        is what every caller outside the range job asks for and reads better
+        than a span whose ends are equal.
+        """
+        return self.generate_span(
+            profile, day, day,
+            availability=availability,
+            history=history,
+            instructions=instructions,
+            required_assignments=required_assignments,
+            already_scheduled=already_scheduled,
+            preferences=preferences,
+        )
+
+    def generate_span(
+        self,
+        profile: dict,
+        starts_on: str,
+        ends_on: str,
+        availability: Optional[List[dict]] = None,
+        history: Optional[List[dict]] = None,
+        instructions: str = "",
+        required_assignments: Optional[List[dict]] = None,
+        already_scheduled: Optional[List[dict]] = None,
+        preferences: Optional[List[dict]] = None,
+    ) -> dict:
+        """Generate and verify one contiguous stretch of dates.
+
+        A range job calls this once per span, in order — one date at a time in
+        `MODE_DAY`, up to a week in `MODE_WEEK`. Earlier spans are supplied
+        through ``already_scheduled`` so rest and cumulative load do not reset
+        at a span boundary. One repair call is allowed when deterministic
         checks find a contradiction or the model returned unusable rows.
+
+        Widening the span does not weaken any check: the candidate lists, the
+        response schema, the rejection rules and the audit are all built over
+        whatever dates this call covers, so a week is verified exactly as
+        seven separate days are. What it changes is the *granularity of the
+        repair* — one bad row sends the whole span back rather than one date —
+        and the price of a failure, which is why the mode is the manager's
+        choice rather than this module's.
         """
         started = time.monotonic()
-        slots = build_slots(profile, day, day)
+        slots = build_slots(profile, starts_on, ends_on)
         if not slots:
             return {
                 "slots": [], "assignments": [], "notes": [], "summary": "",
-                "metrics": _metrics(day, started, status="skipped"),
+                "metrics": _metrics(
+                    starts_on, started, status="skipped", through=ends_on
+                ),
             }
 
         profile = profile if isinstance(profile, dict) else {}
         shifts = profile.get("shifts") or []
         employees = profile.get("employees") or []
-        availability = effective_availability(profile, availability, day, day)
+        dates = {slot["slot_date"] for slot in slots}
+        availability = effective_availability(
+            profile, availability, starts_on, ends_on
+        )
         committed = _bounded_rows(already_scheduled)
         required = _required_assignments(
             required_assignments, slots, profile
         )
         candidates = _candidates(profile, slots, availability)
         payload = {
-            "profile": _profile_for_model(profile),
+            # Without `employees`: `candidate_employees` below is the same
+            # roster, filtered and keyed by the ids the schema accepts, and
+            # sending both put the whole staff list in the request twice.
+            "profile": _profile_beside_candidates(profile),
             "preferences": _preferences_for_model(preferences),
             "period": {
-                "starts_on": day,
-                "ends_on": day,
+                "starts_on": starts_on,
+                "ends_on": ends_on,
                 "slots": [
                     _slot_for_model(slot, index, candidates)
                     for index, slot in enumerate(slots, 1)
@@ -271,19 +339,23 @@ class Scheduler:
             # The closure cycle, already worked out. Handed over as a fact so
             # the model reads whose weekend it is rather than deriving a
             # phase it has no way to check.
-            "closures": _closures_for_model(profile, day, day),
+            "closures": _closures_for_model(profile, starts_on, ends_on),
             "fairness": load_history(
                 _bounded_rows(history, _MAX_HISTORY_ROWS)
-                + [row for row in committed if _bounded(row.get("date")) < day]
+                + [
+                    row for row in committed
+                    if _bounded(row.get("date")) < starts_on
+                ]
                 + required,
                 shifts,
                 employees,
             ),
-            # Only yesterday is needed verbatim for cross-midnight rest. Load
-            # totals above carry the rest of the range without making this
-            # list grow on every day of a long schedule.
+            # Only the day before the span is needed verbatim, for
+            # cross-midnight rest. Load totals above carry the rest of the
+            # range without making this list grow on every day of a long
+            # schedule.
             "already_scheduled": _merge(
-                _previous_day(committed, day),
+                _previous_day(committed, starts_on),
                 _committed_for_model(required),
             ),
             "required_assignments": _committed_for_model(required),
@@ -295,9 +367,9 @@ class Scheduler:
             answer.get("assignments"), slots, profile, candidates,
             availability,
         )
-        current = _replace_day(committed, required + accepted, day)
-        warnings = _day_warnings(
-            current, slots, profile, availability, candidates, day
+        current = _replace_span(committed, required + accepted, dates)
+        warnings = _span_warnings(
+            current, slots, profile, availability, candidates, dates
         )
         repaired = False
 
@@ -307,8 +379,8 @@ class Scheduler:
                 "rejected_rows": rejected,
                 "warnings": [item["message"] for item in warnings],
                 "instruction": (
-                    "החזר מחדש את כל השיבוצים ליום הזה בלבד. "
-                    "תקן את הבעיות המפורטות ואל תשנה ימים קודמים."
+                    "החזר מחדש את כל השיבוצים לתאריכים האלה בלבד. "
+                    "תקן את הבעיות המפורטות ואל תשנה תאריכים קודמים."
                 ),
             }
             repaired_answer = self._ask(
@@ -322,11 +394,12 @@ class Scheduler:
                 repaired_answer.get("assignments"), slots, profile,
                 candidates, availability,
             )
-            repaired_current = _replace_day(
-                committed, required + repaired_rows, day
+            repaired_current = _replace_span(
+                committed, required + repaired_rows, dates
             )
-            repaired_warnings = _day_warnings(
-                repaired_current, slots, profile, availability, candidates, day
+            repaired_warnings = _span_warnings(
+                repaired_current, slots, profile, availability, candidates,
+                dates,
             )
             # A repair is another model answer, not proof of improvement.
             # Keep the first answer when the second introduces more concrete
@@ -339,9 +412,9 @@ class Scheduler:
             rejected.extend(repair_rejected)
             repaired = True
 
-        final_rows = [row for row in current if row.get("date") == day]
-        final_warnings = _audit_for_day(
-            current, slots, profile, availability, day
+        final_rows = [row for row in current if row.get("date") in dates]
+        final_warnings = _audit_for_span(
+            current, slots, profile, availability, dates
         )
         notes = _lines(answer.get("notes"))
         if rejected:
@@ -349,9 +422,10 @@ class Scheduler:
                 "%d שיבוצים לא תקינים שהחזיר המודל לא נשמרו." % len(rejected)
             )
         metrics = _metrics(
-            day,
+            starts_on,
             started,
             status="complete",
+            through=ends_on,
             returned=len(answer.get("assignments") or []),
             accepted=len(final_rows),
             rejected=len(rejected),
@@ -360,11 +434,11 @@ class Scheduler:
             usage=usage,
         )
         _log.info(
-            "schedule day=%s status=%s assignments=%d rejected=%d "
+            "schedule span=%s..%s status=%s assignments=%d rejected=%d "
             "warnings=%d repaired=%s tokens=%d duration_ms=%d",
-            day, metrics["status"], metrics["accepted"], metrics["rejected"],
-            metrics["warnings"], metrics["repaired"], metrics["total_tokens"],
-            metrics["duration_ms"],
+            starts_on, ends_on, metrics["status"], metrics["accepted"],
+            metrics["rejected"], metrics["warnings"], metrics["repaired"],
+            metrics["total_tokens"], metrics["duration_ms"],
         )
         return {
             "slots": slots,
@@ -387,7 +461,39 @@ class Scheduler:
         return answer
 
 
-def _chunks(slots: List[dict]) -> List[List[dict]]:
+def plan_spans(
+    profile: dict, starts_on: str, ends_on: str, mode: str = MODE_DAY
+) -> List[dict]:
+    """The date ranges a range job will ask the model for, one call each.
+
+    Returned as `{"date", "through", "dates"}` rather than a pair, because
+    the caller counts progress in *dates* however wide a call is: a manager
+    watching "4 of 14 days" must not see the bar jump by seven because the
+    unit of work changed underneath them.
+
+    In `MODE_DAY` every span is one date. In `MODE_WEEK` the same `_chunks`
+    that bounds the legacy path bounds this one, so a week is a ceiling and
+    not a promise: a span never crosses seven days, and a week whose staffing
+    demand would not fit one answer is split rather than truncated.
+    """
+    slots = build_slots(profile, starts_on, ends_on)
+    if mode != MODE_WEEK:
+        return [
+            {"date": date, "through": date, "dates": [date]}
+            for date in sorted({slot["slot_date"] for slot in slots})
+        ]
+    spans = []
+    for chunk in _chunks(slots, _MAX_ASSIGNMENTS_PER_SPAN):
+        dates = sorted({slot["slot_date"] for slot in chunk})
+        spans.append({
+            "date": dates[0], "through": dates[-1], "dates": dates,
+        })
+    return spans
+
+
+def _chunks(
+    slots: List[dict], demand_limit: int = _MAX_ASSIGNMENTS_PER_CHUNK
+) -> List[List[dict]]:
     """Split the grid without dividing a day or overloading one model call.
 
     Split on dates rather than on slot count, so a day is never divided across
@@ -413,7 +519,7 @@ def _chunks(slots: List[dict]) -> List[List[dict]]:
         day_demand = sum(max(1, slot.get("headcount", 1)) for slot in day_slots)
         if chunk and (
             days >= _CHUNK_DAYS
-            or demand + day_demand > _MAX_ASSIGNMENTS_PER_CHUNK
+            or demand + day_demand > demand_limit
         ):
             chunks.append(chunk)
             chunk = []
@@ -681,6 +787,29 @@ def _profile_for_model(profile: dict) -> dict:
     return profile if isinstance(profile, dict) else {}
 
 
+def _profile_beside_candidates(profile: dict) -> dict:
+    """The profile as the span path sends it: everything except the roster.
+
+    `candidate_employees` already carries every employee, in the same call,
+    filtered to those legally available for these slots and keyed by the ids
+    the response schema will accept. Sending `employees` as well repeats the
+    entire roster verbatim — on a thirty-person team that measured at roughly
+    a third of the request — and the duplicate is the copy the model must
+    *not* choose from, since a name outside the candidate lists is rejected
+    on the way back anyway.
+
+    A blacklist of exactly one key rather than a field list, for the reason
+    `_profile_for_model` gives above: a whitelist here is how newly collected
+    interview facts disappear until two contracts are updated. Everything the
+    interview ever learns still travels, minus the one list sent twice.
+    """
+    if not isinstance(profile, dict):
+        return {}
+    return {
+        key: value for key, value in profile.items() if key != "employees"
+    }
+
+
 def _preferences_for_model(preferences: Any) -> List[dict]:
     """Confirmed standing preferences, kept distinct from hard rules."""
     shaped = []
@@ -732,9 +861,10 @@ def effective_availability(
 ) -> List[dict]:
     """Dated constraints plus structured recurring constraints from interview.
 
-    Explicit dated rows win for the same person, date and shift. A recurring
-    all-shifts rule is expanded per declared shift, which lets one dated shift
-    exception override only that occurrence.
+    Explicit dated rows win over recurring interview rules. They never erase
+    a derived round/triplet row: a manager may add availability information,
+    but cannot accidentally re-phase the mandatory rotation with one dated
+    exception.
     """
     start, end = _parse_date(starts_on), _parse_date(ends_on)
     explicit = []
@@ -769,10 +899,8 @@ def effective_availability(
         for shift in (profile or {}).get("shifts") or []
         if isinstance(shift, dict) and _bounded(shift.get("name"))
     ]
-    rotation = _rotation_availability(
-        profile, start, end, explicit_keys
-    )
-    closure = _closure_availability(profile, start, end, explicit_keys)
+    rotation = _rotation_availability(profile, start, end, set())
+    closure = _closure_availability(profile, start, end, set())
     recurring = []
     for person in (profile or {}).get("employees") or []:
         if not isinstance(person, dict):
@@ -1044,19 +1172,6 @@ def _rotation_a_blocks(slot: dict, rules: List[dict]) -> bool:
     return False
 
 
-def _counts_toward_staffing(person: dict, profile: dict) -> bool:
-    explicit = person.get("counts_toward_staffing")
-    if isinstance(explicit, bool):
-        return explicit
-    if not person.get("is_trainee"):
-        return True
-    policy = (profile or {}).get("training_policy")
-    return bool(
-        policy.get("counts_toward_staffing")
-        if isinstance(policy, dict) else False
-    )
-
-
 def _role_list(value: Any) -> List[str]:
     if not isinstance(value, list):
         return []
@@ -1087,7 +1202,10 @@ def _candidates(profile: dict, slots: List[dict], availability: List[dict]) -> d
             "exit_pattern": person.get("exit_pattern") or "",
             "rotation_group": person.get("rotation_group") or "",
             "notes": person.get("notes") or "",
-            "counts_toward_staffing": _counts_toward_staffing(person, profile),
+            # The audit's own rule, imported rather than restated: this is
+            # what the model is told a shadow shift means, and the warning it
+            # gets judged by has to mean the same thing.
+            "counts_toward_staffing": counts_toward_staffing(person, profile),
         })
 
     by_slot = {}
@@ -1213,10 +1331,22 @@ def _read_day_assignments(
     return accepted, rejected
 
 
-def _replace_day(existing: List[dict], incoming: List[dict], day: str) -> List[dict]:
+def _replace_span(
+    existing: List[dict], incoming: List[dict], dates: set
+) -> List[dict]:
+    """What the roster looks like with these dates re-decided.
+
+    Everything outside the span is kept exactly as it was — a span is
+    re-answerable in isolation, which is what makes a failed one retryable
+    without disturbing its neighbours.
+    """
     return _merge(
-        [row for row in existing if row.get("date") != day], incoming
+        [row for row in existing if row.get("date") not in dates], incoming
     )
+
+
+def _replace_day(existing: List[dict], incoming: List[dict], day: str) -> List[dict]:
+    return _replace_span(existing, incoming, {day})
 
 
 def _previous_day(assignments: List[dict], day: str) -> List[dict]:
@@ -1229,10 +1359,17 @@ def _previous_day(assignments: List[dict], day: str) -> List[dict]:
     ])
 
 
-def _audit_for_day(
+def _audit_for_span(
     assignments: List[dict], slots: List[dict], profile: dict,
-    availability: List[dict], day: str,
+    availability: List[dict], dates: set,
 ) -> List[dict]:
+    """Every warning that belongs to the dates just generated.
+
+    A finding carrying no date at all is kept: it is true of the period the
+    span sits in, and the manager reads these beside the schedule. What it is
+    *not* is a finding about these dates — see `_span_warnings`, which is the
+    caller that has to tell the difference.
+    """
     warnings = audit(
         assignments,
         (profile or {}).get("shifts") or [],
@@ -1243,32 +1380,64 @@ def _audit_for_day(
     )
     return [
         item for item in warnings
-        if item.get("date") in ("", day, None)
+        if not item.get("date") or _bounded(item.get("date")) in dates
     ]
 
 
-def _day_warnings(
+def _span_warnings(
     assignments: List[dict], slots: List[dict], profile: dict,
-    availability: List[dict], candidates: dict, day: str,
+    availability: List[dict], candidates: dict, dates: set,
 ) -> List[dict]:
+    """The subset a repair call could actually fix. Nothing else is worth one.
+
+    **A finding with no date is not one of them.** `OVER_HOURS` is the case
+    that matters: it is a *weekly* total, so it carries an employee and a
+    week but no date, and it is produced by the days already committed rather
+    than by the span being generated now. `_audit_for_span` keeps it (it is
+    true, and the manager should see it), and this drops it, because the
+    repair instruction says in so many words not to touch earlier dates —
+    so asking is a second model call that cannot succeed.
+
+    Before this distinction existed, one person crossing their weekly ceiling
+    on a Wednesday bought a repair call on every remaining day of that week,
+    for the rest of the period, none of which could ever clear it. On a month
+    that is most of the build time, spent on a question already answered.
+    """
     warnings = [
-        item for item in _audit_for_day(
-            assignments, slots, profile, availability, day
+        item for item in _audit_for_span(
+            assignments, slots, profile, availability, dates
         )
         if item.get("code") in _REPAIRABLE_WARNING_CODES
         and item.get("severity") == "warning"
+        and _bounded(item.get("date")) in dates
     ]
     # Do not spend a repair call asking for impossible coverage. If a slot has
     # fewer legal candidates than seats, the honest outcome is an unfilled
     # warning for the manager.
-    fillable = {
-        slot["shift_name"]: len(candidates["by_slot"].get("slot-%d" % index, []))
-        >= max(1, int(slot.get("headcount", 1)))
-        for index, slot in enumerate(slots, 1)
+    #
+    # Counted in the people who actually fill a seat: a slot needing four with
+    # three counting candidates and two trainees available is not fillable,
+    # and asking the model to repair it burns a call it cannot answer.
+    counting = {
+        item["id"] for item in candidates["employees"]
+        if item.get("counts_toward_staffing")
     }
+    fillable = {}
+    for index, slot in enumerate(slots, 1):
+        available = len([
+            employee_id
+            for employee_id in candidates["by_slot"].get("slot-%d" % index, [])
+            if employee_id in counting
+        ])
+        fillable[(slot["shift_name"], slot["slot_date"])] = available >= int(
+            slot.get("headcount", 1)
+        )
     return [
         item for item in warnings
-        if item.get("code") != UNFILLED or fillable.get(item.get("shift"), False)
+        if item.get("code") != UNFILLED
+        or fillable.get(
+            (item.get("shift"), _bounded(item.get("date"))), False
+        )
     ]
 
 
@@ -1276,9 +1445,13 @@ def _metrics(
     day: str, started: float, status: str, returned: int = 0,
     accepted: int = 0, rejected: int = 0, warnings: int = 0,
     repaired: bool = False, usage: Optional[dict] = None,
+    through: str = "",
 ) -> dict:
     return {
         "date": day,
+        # The last date this call covered. Equal to `date` on a single day,
+        # so a reader that only knows about days still reads it correctly.
+        "through": through or day,
         "status": status,
         "duration_ms": int((time.monotonic() - started) * 1000),
         "returned": returned,
@@ -1328,5 +1501,6 @@ def _date_text(value: Any) -> str:
 
 __all__ = [
     "Scheduler", "SCHEDULE_RESPONSE_SCHEMA", "build_slots",
-    "effective_availability",
+    "effective_availability", "plan_spans",
+    "GENERATION_MODES", "MODE_DAY", "MODE_WEEK",
 ]

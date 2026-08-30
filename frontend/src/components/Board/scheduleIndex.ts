@@ -1,6 +1,12 @@
 "use client";
 
-import type { Assignment, Schedule, ScheduleWarning, Slot } from "@/types";
+import type {
+  Assignment,
+  CardPerson,
+  Schedule,
+  ScheduleWarning,
+  Slot,
+} from "@/types";
 
 import { touchKey as key } from "./agentTouch";
 
@@ -37,6 +43,14 @@ export interface ScheduleIndex {
    *  is measured against. A cell filtered down to one person must not start
    *  claiming it is short of the other two. */
   assignedCount: (shift: string, date: string) => number;
+  /** How many of this cell's seats are filled, ignoring any filter.
+   *
+   *  Not the same number as `assignedCount`: somebody shadowing the shift is
+   *  standing on it and is not one of the people it asked for, so a cell can
+   *  hold five cards and still be a seat short. This is the number the "חסרים"
+   *  badge and the coverage rail are measured against, because it is the one
+   *  `bl/audit.py` computes the unfilled warning from. */
+  filledSeats: (shift: string, date: string) => number;
   /** Assigned and required across one day, for the column head. */
   dayCoverage: (date: string) => { assigned: number; required: number };
   /** The shift vocabulary in the order the slots declare it (D9).
@@ -51,9 +65,17 @@ export interface ScheduleIndex {
 const NO_ASSIGNMENTS: Assignment[] = [];
 const NO_WARNINGS: ScheduleWarning[] = [];
 
-export function buildScheduleIndex(schedule: Schedule | null): ScheduleIndex {
+export function buildScheduleIndex(
+  schedule: Schedule | null,
+  /** The roster, for the one fact the assignments do not carry: whether the
+   *  person on a card fills a seat. Optional so a caller that has not loaded
+   *  the roster yet still gets a usable index — everybody counts, which is
+   *  what the board did before shadow shifts were counted at all. */
+  people: Record<string, CardPerson> = {},
+): ScheduleIndex {
   const slots = new Map<string, Slot>();
   const assignments = new Map<string, Assignment[]>();
+  const seats = new Map<string, number>();
   const warnings = new Map<string, ScheduleWarning[]>();
   const byDay = new Map<string, { assigned: number; required: number }>();
   // The vocabulary in the order the slots name it, kept as-is. Never sorted
@@ -81,8 +103,20 @@ export function buildScheduleIndex(schedule: Schedule | null): ScheduleIndex {
   }
 
   for (const row of schedule?.assignments ?? []) {
-    push(assignments, key(row.shift, row.date), row);
-    day(row.date).assigned += 1;
+    const at = key(row.shift, row.date);
+    push(assignments, at, row);
+    if (people[row.employee]?.counts_toward_staffing !== false) {
+      seats.set(at, (seats.get(at) ?? 0) + 1);
+    }
+  }
+
+  // Filled seats against required seats, per day. Capped per cell, so a shift
+  // somebody was doubled up on does not lend its spare body to the shift next
+  // to it and report a short day as covered — the same cap
+  // `simulate._coverage` applies, for the same reason.
+  for (const [at, slot] of slots) {
+    const filled = Math.min(seats.get(at) ?? 0, slot.headcount || 0);
+    day(slot.slot_date).assigned += filled;
   }
 
   // A warning with an empty `shift` is about the whole day, so it is filed
@@ -107,6 +141,7 @@ export function buildScheduleIndex(schedule: Schedule | null): ScheduleIndex {
     warnings: (shift, date) => warnings.get(key(shift, date)) ?? NO_WARNINGS,
     assignedCount: (shift, date) =>
       (assignments.get(key(shift, date)) ?? NO_ASSIGNMENTS).length,
+    filledSeats: (shift, date) => seats.get(key(shift, date)) ?? 0,
     dayCoverage: (date) => byDay.get(date) ?? { assigned: 0, required: 0 },
     shifts: shiftOrder,
   };

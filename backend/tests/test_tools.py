@@ -358,6 +358,32 @@ def test_a_full_period_reports_no_gaps(repo, tools):
     assert answer["total_gaps"] == 0 and answer["gaps"] == []
 
 
+def test_a_trainee_shadowing_a_shift_does_not_close_its_gap(repo, tools):
+    """The gap list counts seats, not bodies — `audit.py`'s rule.
+
+    Somebody learning the shift is standing on it and is still not one of the
+    people it asked for. Answering "no gaps" here would tell the manager a
+    slot is covered by the one person there because they cannot yet cover it,
+    and the audit under the same schedule would still call it short.
+    """
+    trainee = "מתלמד"
+    repo.profiles[TEAM] = dict(PROFILE, employees=PROFILE["employees"] + [
+        {"name": trainee, "role": "מוקדן", "is_trainee": True,
+         "counts_toward_staffing": False},
+    ])
+    _schedule(repo, assignments=[
+        {"employee": DANA, "shift": MORNING, "date": "2026-08-17"},
+        {"employee": trainee, "shift": EVENING, "date": "2026-08-17"},
+    ])
+
+    answer = tools.run(TEAM, TOOL_COVERAGE_GAPS, {
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    })
+    evening = [row for row in answer["gaps"] if row["shift"] == EVENING]
+    assert len(evening) == 1
+    assert evening[0]["assigned"] == 0 and evening[0]["missing"] == 1
+
+
 # -- validating ------------------------------------------------------------
 
 

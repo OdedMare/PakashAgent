@@ -5,8 +5,10 @@ the manager taught you in the intro interview.
 
 ## What you are given
 
-- `profile` — the workplace: its shift vocabulary, employees, rules, and the
-  policies the manager stated in their own words.
+- `profile` — the workplace: its shift vocabulary, rules, and the policies the
+  manager stated in their own words. On the checkpointed path it carries no
+  `employees` list; `candidate_employees` below is the roster, and it is the
+  only one you may choose from.
 - `preferences` — confirmed standing preferences, as context rather than hard
   rules. Honor them when possible and name a trade-off in `notes`.
 - `period` — the dates this schedule covers, and the slots that need filling.
@@ -21,7 +23,7 @@ the manager taught you in the intro interview.
   mean the person genuinely has none, not that data is missing. Empty on a
   first schedule.
 - `already_scheduled` — assignments already placed **for this same period**,
-  when a long period is being built a week at a time. Empty on a short one.
+  when it is being built a stretch at a time. Empty on a short one.
   These are settled: do not re-assign those slots and do not contradict them.
   They are your own earlier decisions, and the `fairness` counts you were
   given already include them.
@@ -29,7 +31,7 @@ the manager taught you in the intro interview.
   generation. They are already included in `already_scheduled`; preserve them
   exactly and build the rest of the roster around them.
 - `candidate_employees` — when present, the exact prompt-local employee ids
-  and names available to this daily call. Their `role` is the role recorded
+  and names available to this call. Their `role` is the role recorded
   in the interview; use it when a slot requires a specific role. It also
   carries each person's exit pattern/group, notes, whether they may command a
   shift, and whether they are qualified to train. Each slot also carries
@@ -39,7 +41,8 @@ the manager taught you in the intro interview.
   and `days`, listing exactly who is held on each date. Do not derive the
   cycle yourself and do not re-count the weeks — this is the answer.
 - `repair` — when present, code audited your first answer and found concrete
-  rejected rows or warnings. Return the complete corrected day, not a patch.
+  rejected rows or warnings. Return the complete corrected roster **for every
+  date in `period`**, not a patch, and change nothing outside those dates.
 
 ## What you produce
 
@@ -142,10 +145,11 @@ Respect these without being told again:
 
 ## Shift names
 
-Use the exact shift names from `profile.shifts` and the exact employee names
-from `profile.employees`. Never invent a name, never translate one, and never
-carry a name over from another workplace. A name you did not receive is a
-name that will not match anything downstream.
+Use the exact shift names from `profile.shifts`, and the exact employee names
+from `candidate_employees` — or from `profile.employees` when that is the only
+roster you were given. Never invent a name, never translate one, and never
+carry a name over from another workplace. A name you did not receive is a name
+that will not match anything downstream.
 
 ## Notes
 

@@ -43,7 +43,7 @@ import { CoverageBar } from "./CoverageBar";
 import { FilterBar } from "./FilterBar";
 import { GenerateDialog } from "./GenerateDialog";
 import { GenerateDayDialog } from "./GenerateDayDialog";
-import { rotationLabel } from "./person";
+import { fillsASeat, rotationLabel } from "./person";
 import { orderByHours } from "./shiftOrder";
 import { EditorTarget, ShiftEditor } from "./ShiftEditor";
 import { WeekNav } from "./WeekNav";
@@ -280,6 +280,7 @@ export function Board({
         rotation: rotationLabel(row.exit_pattern, row.rotation_group),
         is_shift_manager: Boolean(row.is_shift_manager),
         is_overlap: row.service_type === "overlap",
+        counts_toward_staffing: fillsASeat(row),
       };
     }
     return map;
@@ -406,8 +407,11 @@ export function Board({
   // because that count walks the slot and assignment lists, and it has no
   // reason to run again while neither changed.
   const shownStats = useMemo(
-    () => (schedule && schedule.id !== current?.id ? statsFor(schedule) : stats),
-    [schedule, current?.id, stats],
+    () =>
+      schedule && schedule.id !== current?.id
+        ? statsFor(schedule, people)
+        : stats,
+    [schedule, current?.id, stats, people],
   );
 
   return (
@@ -876,22 +880,39 @@ function covers(schedule: Schedule, start: string, end: string): boolean {
  *  the profile's shift lengths and weights, and guessing those in the
  *  browser is exactly the second implementation the stats panel exists to
  *  avoid. The four tiles that would be fiction read zero rather than wrong. */
-function statsFor(schedule: Schedule): ShiftStats {
+function statsFor(
+  schedule: Schedule,
+  people: Record<string, CardPerson>,
+): ShiftStats {
   const required = schedule.slots.reduce(
     (total, slot) => total + (slot.headcount || 0),
     0,
   );
-  const assigned = schedule.assignments.length;
-  const unfilled = schedule.slots.filter(
-    (slot) =>
-      schedule.assignments.filter(
-        (row) => row.shift === slot.shift_name && row.date === slot.slot_date,
-      ).length < (slot.headcount || 0),
-  ).length;
+  // Seats per cell, shadow shifts excluded — `audit._coverage`'s arithmetic,
+  // since these tiles sit beside the ones that panel renders and two numbers
+  // for one week is worse than one week with no numbers.
+  const seats = new Map<string, number>();
+  for (const row of schedule.assignments) {
+    if (people[row.employee]?.counts_toward_staffing === false) continue;
+    const at = `${row.shift}|${row.date}`;
+    seats.set(at, (seats.get(at) ?? 0) + 1);
+  }
+
+  let assigned = 0;
+  let unfilled = 0;
+  for (const slot of schedule.slots) {
+    const filled = seats.get(`${slot.shift_name}|${slot.slot_date}`) ?? 0;
+    const needed = slot.headcount || 0;
+    // Capped: three people on a one-person shift is one place covered and two
+    // overstaffed, not three places filled. Uncapped, an overstaffed Sunday
+    // paid for an unstaffed Monday and the week read as fully covered.
+    assigned += Math.min(filled, needed);
+    if (filled < needed) unfilled += 1;
+  }
 
   return {
     ...EMPTY_STATS,
-    total_shifts: assigned,
+    total_shifts: schedule.assignments.length,
     people_working: new Set(schedule.assignments.map((row) => row.employee))
       .size,
     coverage: {

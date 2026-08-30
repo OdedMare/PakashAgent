@@ -52,7 +52,7 @@ import datetime
 from typing import Any, Dict, List, Optional
 
 from app.bl import rotation
-from app.bl.audit import audit, fairness
+from app.bl.audit import audit, counts_toward_staffing, fairness
 from app.bl.placement import check as check_placement
 from app.bl.placement import closure_of, suggest_alternatives
 from app.common.errors import AgentError
@@ -362,8 +362,21 @@ class ScheduleTools:
         first = _iso(starts_on)
         last = _iso(ends_on)
 
+        # Seats, not bodies. Somebody shadowing the shift is standing there
+        # and is still not one of the people it asked for, so counting them
+        # would answer "no gaps" about a slot the audit calls short --
+        # `audit.counts_toward_staffing` is the one rule both read.
+        roster = {
+            _text(person.get("name")): person
+            for person in _employees(profile)
+            if _text(person.get("name"))
+        }
         counts: Dict[tuple, int] = {}
         for row in schedule.get("assignments") or []:
+            if not counts_toward_staffing(
+                roster.get(_text(row.get("employee"))), profile
+            ):
+                continue
             key = (_text(row.get("shift")), _iso(row.get("date")))
             counts[key] = counts.get(key, 0) + 1
 

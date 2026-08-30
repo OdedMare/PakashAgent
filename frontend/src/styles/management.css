@@ -59,6 +59,14 @@
   font-size: 0.8rem;
 }
 
+/* How wide this build's model calls are. Quieter than the counter above it —
+   it is context for the wait, not the progress itself. */
+.schedule-generation-mode {
+  flex-basis: 100%;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
 .schedule-generation-note {
   color: var(--text-muted);
 }

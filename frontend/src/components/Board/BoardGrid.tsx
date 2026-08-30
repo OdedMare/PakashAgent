@@ -169,7 +169,10 @@ export function BoardGrid({
 
   // The week bucketed by cell, once. Every lookup below reads from this
   // instead of walking the assignment, slot and warning lists per cell.
-  const index = useMemo(() => buildScheduleIndex(schedule), [schedule]);
+  const index = useMemo(
+    () => buildScheduleIndex(schedule, people),
+    [schedule, people],
+  );
 
   // Whose closure each date is, keyed for the column heads. Read off the
   // schedule rather than derived here: which group closes on 12/09 is
@@ -664,7 +667,16 @@ function BoardRow({
         const key = touchKey(shift, date);
         const cards = cardsFor(shift, date);
         const warnings = index.warnings(shift, date);
-        const short = slot ? cards.length < slot.headcount : false;
+        // Measured in filled seats, never in rendered cards. Two separate
+        // reasons the two differ, and each on its own produced a badge that
+        // lied: the cards are a *filtered view*, so a role filter made every
+        // full cell claim it was short of the people it had just hidden; and
+        // somebody shadowing the shift is a card who is not a seat, so a cell
+        // with its trainee on it read as covered while the audit underneath
+        // still called it short.
+        const filled = slot ? index.filledSeats(shift, date) : 0;
+        const missing = slot ? slot.headcount - filled : 0;
+        const short = missing > 0;
         // What the agent has said about this cell, if anything. A cell may
         // be touched by more than one source at once -- a simulation and
         // the answer that led to it -- and the strongest wins the outline,
@@ -683,10 +695,10 @@ function BoardRow({
 
         // Focus filters hide whole cells rather than dimming them: "רק
         // חוסרים" exists to make a short week scannable, and a board still
-        // showing every full cell at 40% opacity is not scannable.
-        const shortOfHeadcount =
-          index.assignedCount(shift, date) < slot.headcount;
-        if (filters.unassignedOnly && !shortOfHeadcount) {
+        // showing every full cell at 40% opacity is not scannable. `short` is
+        // the same seat count the badge uses, so the filter keeps exactly the
+        // cells that are wearing one.
+        if (filters.unassignedOnly && !short) {
           return <div key={key} className="board-cell is-filtered" />;
         }
         if (filters.conflictsOnly && !warnings.length) {
@@ -811,7 +823,7 @@ function BoardRow({
             {short ? (
               <span className="board-gap">
                 <AlertTriangle size={11} />
-                חסרים {slot.headcount - cards.length}
+                חסרים {missing}
               </span>
             ) : null}
 

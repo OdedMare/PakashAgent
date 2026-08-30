@@ -14,7 +14,7 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | `interview.py` | The intro interview — workplace profile, employees, rules, shift vocabulary |
 | `interview_service.py` | Persistence around it: sessions, turns, resume, completion |
 | `workspace_service.py` | Workspace rules: entering a team, roles, the share link |
-| `scheduler.py` | Daily/checkpointed range generation; every assignment carries a reason |
+| `scheduler.py` | Checkpointed range generation, one date or one week per call; every assignment carries a reason |
 | `changes.py` | Conversational edits and the change log |
 | `briefing.py` | **The agent speaking first.** Observes; proposes nothing that lands |
 | `schedule_service.py` | Persistence and orchestration around all three: propose, confirm, apply |
@@ -164,12 +164,56 @@ this side of the line is that a model asked "who worked the most nights" is
 doing arithmetic by generation, and a wrong answer looks exactly like a right
 one.
 
-**Interactive generation is one date per request.**
-`ScheduleService.start_generation()` stores the whole slot grid and a JSON
-checkpoint on the draft; `/generate/{id}/next` calls `generate_day()` once.
-The browser repeats that request for a single date or an arbitrary range. A
-failed date is marked `failed` and the same endpoint retries it, so completed
-neighbours survive a timeout or refresh.
+**How wide one call is, is a setting.** `schedule_generation_mode` chooses
+between `day` — one date per model call, the default — and `week`, which asks
+for up to seven in one. Both run the *same* pipeline (`generate_span`): the
+same candidate lists, the same response schema, the same rejection rules, the
+same audit. Nothing is trusted in `week` that `day` would not trust. What
+changes is the granularity of the repair (a bad row re-answers the whole span)
+and the cost of a failure. `plan_spans` divides the period, and a week is a
+ceiling rather than a promise — a span never crosses seven days nor carries
+more staffing demand than one answer can hold.
+
+**A repair call is only ever asked for what a repair could fix.** The audit
+finding that carries no date — `over_hours`, a weekly total — is reported
+beside the schedule but excluded from `_span_warnings`, because the repair
+instruction forbids touching earlier dates and the hours came from there.
+Before that distinction, one person crossing their ceiling on a Wednesday
+bought a second model call on every remaining day of the week, none of which
+could clear it.
+
+**The roster is sent once per call, not twice.** `candidate_employees` is the
+authoritative list — filtered to who is legally available, keyed by the ids
+the schema accepts — so `_profile_beside_candidates` drops `employees` from
+the profile beside it. A blacklist of one key, never a whitelist: a field list
+here is how newly collected interview facts silently stop travelling.
+
+**Interactive generation is one checkpoint per request.**
+`ScheduleService.start_generation()` stores the whole slot grid, plans the
+spans for the configured mode, and writes a JSON checkpoint on the draft;
+`/generate/{id}/next` calls `generate_span()` once. The browser repeats that
+request for a single date or an arbitrary range. A failed span is marked
+`failed` and the same endpoint retries it, so completed neighbours survive a
+timeout or refresh.
+
+Progress is counted in **dates**, never in checkpoints: `total_days` and
+`completed_days` measure the period, so a week-wide build fills the manager's
+bar day by day rather than jumping by seven.
+
+**A transient failure costs a pause, not the period.** `generate_next` still
+checkpoints a failed span and raises — one step is one step, and `/next`
+answers its caller with the error. The *durable loop* is what decides to try
+again: `_requeue_failed_span` puts a span with attempts left back in the queue
+and backs off, up to `_MAX_SPAN_ATTEMPTS`. Nobody is watching a background
+build, so a job that parked itself on the first blip waited for a person who
+might not return for an hour. Bounded, because the failures that are not
+transient repeat identically.
+
+**A checkpoint writes only its own dates.** `replace_span_assignments` deletes
+by date rather than rebuilding the period, which was quadratic (a thirty-day
+build re-inserted every earlier day thirty times) and lossy: each rewrite
+minted fresh ids, so an `assignment_id` the browser was holding pointed at
+nothing by the time it was used.
 
 **A running job says so, and can be stopped.** `/generate/{id}/run` launches
 a worker and returns; `GET /{id}/progress` is what the browser polls, and it
@@ -429,6 +473,27 @@ well as the assignments. A slot with nobody on it leaves no row among the
 assignments, so an audit walking only those reports nothing for an entirely
 unstaffed shift — the case the manager most needs told about. The assignments
 are the fallback for callers that have no stored grid.
+
+**A seat has one definition, and it lives here.** How many people a slot asks
+for (`required_headcount`) and whether the person on it fills one
+(`counts_toward_staffing`) are public for the same reason `personal_summary`
+sits beside `_shift_hours`: four readers need those two answers — the unfilled
+warning, the coverage chart, `tools.coverage_gaps` and `simulate._coverage` —
+and a fifth spelling of either is how the bar ends up reading 100% above a
+warning that says the cell is short. Both are pure arithmetic, and both are
+imported rather than restated:
+
+- **The stored grid outranks the profile.** `build_slots` already worked the
+  headcount out per date, the board measures cells against it, and an imported
+  week's grid records what the *file* ran with (D9). Recomputing from today's
+  profile instead is how a Friday generated to ten seats gets graded against
+  the four the rest of the week uses. Callers holding a schedule must therefore
+  carry `headcount` on the slots they project — dropping it silently reinstates
+  the profile fallback.
+- **A shadow shift is somebody at work who is not a seat.** Someone learning
+  the shift appears on the board and accrues the hours, and the slot still needs
+  the people it asked for. Counting bodies reports it covered by the one person
+  there because they cannot yet cover it.
 
 This file is the easiest thing here to get exactly right and the easiest to test.
 Build it early and table-drive its tests.
