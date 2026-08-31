@@ -33,6 +33,7 @@ def test_env_defaults_are_the_starting_point(store):
     assert settings.llm_base_url == "http://localhost:11434/v1"
     # 0 means "no timeout": the UI decides when to stop waiting.
     assert settings.llm_timeout_seconds == 0
+    assert settings.llm_queue_seconds == 0
     # 0 means "do not send repetition_penalty at all".
     assert settings.llm_repetition_penalty == 0.0
 

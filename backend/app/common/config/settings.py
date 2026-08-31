@@ -123,13 +123,13 @@ class Settings(BaseSettings):
     positive value here if that ever happens; it should be comfortably above
     the slowest real answer, not a round number that feels safe."""
 
-    llm_queue_seconds: int = 180
+    llm_queue_seconds: int = 0
     """Maximum time interactive work may wait for a model slot.
 
-    This bounds only the queue, where no answer is being generated yet. A
-    schedule build is background work and keeps waiting; chat falls back to
-    its deterministic tools before a browser or proxy turns the wait into a
-    bodyless 500. 0 removes the queue limit."""
+    This bounds only the queue, where no answer is being generated yet.
+    **0 — the default — removes the queue limit**, just like the model-call
+    timeout above. Set a positive value only when interactive work should
+    deliberately give up while another generation owns the model slot."""
 
     # The shipped endpoint is Ollama, which serves one generation at a time.
     # vLLM/TGI deployments should raise this explicitly for batching.
