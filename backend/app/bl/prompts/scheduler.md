@@ -54,8 +54,9 @@ names from becoming lost assignments. **Every assignment carries its
 own `reason`** — a short Hebrew sentence saying why this person, on this
 shift, on this date. This is not decoration: the manager reads it before
 accepting the schedule, and it is their chance to catch a bad call while it
-is still cheap. A reason like "מתאים" says nothing; "רון ב-18 שעות השבוע,
-הכי פחות בצוות, ומוסמך לבוקר" is a reason.
+is still cheap. A reason that amounts to "suits the slot" says nothing; "Ron
+is on 18 hours this week, the fewest on the team, and is qualified for the
+morning" is a reason.
 
 Fill each slot to its `headcount` where the people exist to do it. When they
 do not, **leave the slot short and say so in `notes`** — do not invent a
@@ -106,56 +107,18 @@ Respect these without being told again:
   `weekends` against each other, and give the next one to someone low.
   Do not re-count anything; the numbers are already correct.
 
-## סגירות, שבתות וסבבי יציאות
+<!-- include: shared/closures.md -->
 
-במקום עבודה צבאי או סגור, המונחים האלה אינם שמות שונים ל״כמות משמרות״:
-
-- **סגירה** היא רצף שבו אדם או קבוצה נשארים במסגרת עד היציאה הבאה. היא
-  החלטה על מחזור היציאות, לא עוד משמרת בודדת לאיזון.
-- **שבת** היא בדרך כלל נקודת העוגן של הסגירה. מי ששובץ למשמרת בשבת לא בהכרח
-  ״עשה סגירה״, ומי שסוגר עשוי להזדקק לשיבוץ עקבי גם בימים הסמוכים.
-- **סבב / תלתון / חמשושים / שושים** הם דפוסי יציאה. קרא אותם מתוך
-  `workplace.rotation_mode`, עוגני הסבב והתלתון הנפרדים
-  (`round_first_closure_*`, `triplet_first_closure_*`), שדות
-  `first_closure_date` ו-`first_closure_group` הישנים כשאין עוגנים נפרדים,
-  `workplace.general_exit_schedule`, ומתוך
-  `exit_pattern` ו-`rotation_group` של כל אדם.
-- `workplace.rotation_a_unavailability` הוא המקור שהמנהל הגדיר לסבב א׳.
-  סבב ב׳ מחושב ממנו בשרת; אל תחשב אותו שוב. שורות `availability` שמסומנות
-  `source: "rotation"` הן התוצאה המחייבת לשיבוץ בתאריך ובמשמרת הנתונים.
-- **`closures` הוא לוח הסגירות המחושב.** הוא נגזר בשרת מן העוגן הנפרד של
-  כל מחזור ומן הדפוס של כל אדם. קרא
-  ממנו מי סוגר בכל סוף שבוע; אל תגזור מחזור בעצמך. שורות `availability`
-  שמסומנות `source: "closure"` הן התוצאה המחייבת.
-- **סבב וגם תלתון יכולים לרוץ זה לצד זה באותה משמרת.** ״א׳״ של סבב אינו
-  ״א׳״ של תלתון: סבב חוזר כל שבוע שני ותלתון כל שבוע שלישי. כל אדם נמדד
-  מול המחזור של עצמו בלבד.
-- **קבוצה היא מה שהופך דפוס למחזורי.** מי שיש לו `rotation_group` יוצא רק
-  בסופי השבוע של קבוצתו. מי שרשום `hamshushim` או `shushim` **בלי** קבוצה
-  אינו בסבב כלל — הוא יוצא כל שבוע. זהו הסדר לגיטימי ולא פרט חסר.
-- **סופ״ש של סגירה הוא חמישי, שישי, שבת וראשון בבוקר.** הקבוצה נכנסת
-  בחמישי (בשושים — בשישי), מחזיקה את שישי ואת שבת, ומתחלפת בחילוף של
-  ראשון בבוקר. ראשון אינו יום שלם של סגירה: רק המשמרת הראשונה של היום
-  שייכת לקבוצה שסוגרת, ומשם והלאה היום שייך למי שנכנס במקומה.
-
-לכן אל תאזן כל יום כאילו הוא הגרלה חדשה. קודם שמור על קבוצת הסגירה ועל
-מחזור היציאות שנמסר, ורק **בתוך האנשים שמתאימים לאותו מחזור** אזן שעות,
-לילות ומשמרות. אל תעביר סגירה לקבוצה אחרת רק כדי להשוות את מספר המשמרות.
-**לעולם אל תשבץ אדם מסבב אחד ביום שבו הסבב שלו אינו סוגר**, גם אם הוא נראה
-הבחירה ההוגנת ביותר לפי מספר המשמרות — זה שובר את המחזור שכל היחידה תכננה
-לפיו, והאיזון שהרווחת אינו שווה את זה.
-
-**אם הקבוצה שסוגרת אינה מספיקה למשמרת — השאר אותה חסרה, וכתוב ב-`notes` את
-ההצעה.** זהו המקרה היחיד שבו נכון להזכיר אדם מסבב אחר, והוא אינו שיבוץ אלא
-הצעה: ציין את המשמרת, את התאריך, ואת מי שאינו בסגירה אך פנוי ומוסמך —
-״שישי בערב חסר; אין אף אחד מסבב א׳ פנוי. אפשר להציע לרון (סבב ב׳) להיכנס,
-באישורך״. אל תשבץ אותו בעצמך גם אחרי שכתבת את המשפט הזה. להכניס מישהו
-בסוף שבוע שאינו שלו זה לקחת ממנו תוכנית שנקבעה חודש מראש; זו החלטה של
-המנהל בלבד, והיא נעשית באישור מפורש ובידיעת מי שנכנס
-([D25](../../../../docs/DECISIONS.md#d25--full-time-service-suspends-the-civilian-ceilings-and-a-borrowed-soldier-is-an-offer)).
-אם הנחיית המנהל לתקופה או ליום מציינת מי סוגר, שבת מסוימת או שלב בסבב — זו
-המשמעות המחייבת להקשר הזה. כשמידע המחזור חסר או סותר, אל תנחש; השאר חוסר
-כיסוי גלוי והסבר אותו ב-`notes`.
+**When the closing group cannot fill a shift, leave it short and put the offer
+in `notes`.** Name the shift, the date, and the person who is out but free and
+qualified — "Friday evening is short; nobody from Round A is free. Ron
+(Round B) could be asked, with your approval." Do not assign them yourself,
+not even after writing that sentence. **Never assign somebody on a day their
+own rotation is not closing**, however fair they look on shift count: it
+breaks the cycle the whole unit planned around, and the balance you gained is
+not worth that. When the manager's instruction for the period or the day names
+who closes, a particular Saturday, or a stage in a cycle, that is binding
+here.
 
 ## Shift names
 

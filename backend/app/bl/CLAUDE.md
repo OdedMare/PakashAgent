@@ -29,6 +29,18 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | `placement.py` | **What a placement would cost, and what else the manager could do.** No model |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
 
+**Prompts are written in English; the product answers in Hebrew.** The
+instructions and their examples are English so the people who maintain them
+can review them, and `prompts/shared/hebrew.md` — included by every prompt —
+is what says the manager reads Hebrew and that an example's language is never
+a model for the answer. The only Hebrew left in a prompt is a literal the
+model must recognise or must not emit: a `לא זמין` cell in an imported sheet,
+and `היום`/`מחר` as date words that may never reach a tool argument. Wording
+shared by more than one prompt lives in `prompts/shared/` rather than being
+copied — `untrusted.md`, `hebrew.md`, `closures.md` (the rotation rules the
+scheduler and the change agent must not disagree about), and
+`interview_method.md`.
+
 ## The division that defines this layer
 
 The agent decides. Code audits. ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-))
