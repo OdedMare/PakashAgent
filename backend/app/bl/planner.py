@@ -387,6 +387,23 @@ class PlanningAgent:
 
             candidates = found.get("candidates") or []
             if not candidates:
+                # Nobody inside the closure. That is not the end of the
+                # answer in a unit that rotates: `borrow` names the people
+                # the manager could ask, and saying only "nobody" would hide
+                # a real option behind an arithmetic no (D25).
+                borrow = found.get("borrow") or []
+                if borrow:
+                    offered = "‏, ".join(
+                        "%s (%s)" % (item["employee"], item["rotation"])
+                        if item.get("rotation") else item["employee"]
+                        for item in borrow
+                    )
+                    lines.append(
+                        "· %s ב-%s: אין אף אחד מהסגירה. אפשר להציע ל%s "
+                        "להיכנס — רק באישורך ובידיעתו."
+                        % (row["shift"], row["date"], offered)
+                    )
+                    continue
                 lines.append(
                     "· %s ב-%s: לא נמצא מי שיכול/ה לקחת בלי ליצור אזהרה."
                     % (row["shift"], row["date"])

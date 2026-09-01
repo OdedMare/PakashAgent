@@ -17,7 +17,12 @@ Three things here are the point of the feature and are asserted directly:
 
 import pytest
 
-from app.bl.placement import check, suggest_alternatives
+from app.bl.placement import (
+    borrow_offers,
+    check,
+    employee_options,
+    suggest_alternatives,
+)
 
 MORNING = "בוקר"
 EVENING = "צהריים"
@@ -127,7 +132,9 @@ def test_a_free_slot_and_a_qualified_person_is_ok():
     assert result["eligible"] is True
     # Nothing to offer when nothing is wrong: a list of alternatives beside a
     # clean result would read as a suggestion to reconsider.
-    assert result["alternatives"] == {"employees": [], "slots": []}
+    assert result["alternatives"] == {
+        "employees": [], "slots": [], "borrow": [],
+    }
 
 
 def test_nothing_ever_blocks():
@@ -327,6 +334,130 @@ def test_a_warning_carries_its_alternatives():
     )
     assert result["ok"] is False
     assert result["alternatives"]["employees"], "a reason without a way out"
+
+
+# -- borrowing across the rotation (D25) -----------------------------------
+#
+# A closure belongs to one group, and every other list in `placement.py`
+# stops at that boundary. When the group that is in cannot fill a slot, the
+# honest answer is not "nobody" but "nobody whose weekend this is" — so the
+# people from the other cycle come back as offers the manager may make,
+# never as placements the agent made.
+
+# 2026-08-29 is a Saturday, so the anchor needs no normalising. סבב א holds
+# that weekend and 2026-08-13/14/15/16 (the weekend of 2026-08-15) belongs
+# to ב by the same two-week cycle.
+CLOSING_PROFILE = dict(
+    PROFILE,
+    workplace={
+        "name": "פלוגה", "rotation_mode": "round",
+        "first_closure_date": "2026-08-29", "first_closure_group": "א",
+    },
+    employees=[
+        {"name": DANA, "eligible_shifts": [MORNING],
+         "exit_pattern": "round", "rotation_group": "ב"},
+        {"name": YOSSI, "eligible_shifts": [MORNING, EVENING],
+         "exit_pattern": "round", "rotation_group": "ב"},
+        {"name": RON, "eligible_shifts": [MORNING, EVENING],
+         "exit_pattern": "round", "rotation_group": "א"},
+    ],
+)
+
+# The Friday of a weekend סבב א is holding: רון is in, דנה and יוסי are out.
+# Counted from the anchor two weekends later — 08-29 is א, so 08-22 is ב and
+# 08-15 is א again.
+CLOSURE_FRIDAY = "2026-08-14"
+
+
+def _closure_schedule(assignments=()):
+    return _schedule(
+        assignments,
+        dates=("2026-08-13", CLOSURE_FRIDAY, "2026-08-15"),
+    )
+
+
+def test_a_soldier_from_the_other_cycle_is_offered_not_placed():
+    """יוסי is סבב ב on a weekend א is holding.
+
+    Nothing about him is wrong except the rotation, which is exactly the
+    thing only the manager may spend. דנה is out of the list for an ordinary
+    reason instead: she is not defined for the evening shift at all.
+    """
+    offers = borrow_offers(
+        _closure_schedule(), CLOSING_PROFILE, EVENING, CLOSURE_FRIDAY,
+    )
+    assert [row["employee"] for row in offers] == [YOSSI]
+    assert offers[0]["requires_approval"] is True
+    assert "רק באישורך" in offers[0]["why"]
+
+
+def test_the_group_that_is_in_is_never_called_a_borrow():
+    """רון is סבב א and it is his weekend.
+
+    Offering him as a favour would invent one, and would teach the manager
+    that the cycle is something to be worked around rather than kept.
+    """
+    offers = borrow_offers(
+        _closure_schedule(), CLOSING_PROFILE, EVENING, CLOSURE_FRIDAY,
+    )
+    assert RON not in [row["employee"] for row in offers]
+
+
+def test_a_borrow_is_only_ever_about_the_rotation():
+    """Somebody with a constraint of their own is not offered.
+
+    A borrow trades one thing. A manager who approved this one would be
+    approving a doctor's appointment they were never shown.
+    """
+    offers = borrow_offers(
+        _closure_schedule(), CLOSING_PROFILE, EVENING, CLOSURE_FRIDAY,
+        availability=[{
+            "employee": YOSSI, "date": CLOSURE_FRIDAY, "shift": "",
+            "available": False, "is_hard": True, "reason": "רופא",
+        }],
+    )
+    assert offers == []
+
+
+def test_nothing_is_borrowed_on_an_ordinary_date():
+    """No closure, nobody kept off by one, nothing to ask for."""
+    assert borrow_offers(
+        _schedule(), CLOSING_PROFILE, EVENING, "2026-08-17",
+    ) == []
+
+
+def test_a_workplace_with_no_cycle_never_borrows():
+    """Without an anchored rotation there is no boundary to cross."""
+    assert borrow_offers(
+        _schedule(), PROFILE, EVENING, "2026-08-17",
+    ) == []
+
+
+def test_the_picker_marks_who_could_be_brought_in():
+    """The manual picker says "not available" about two different things.
+
+    Somebody out on their own constraint and somebody out because it is not
+    their weekend both fail the check; only one of them is a person the
+    manager can still choose to ask.
+    """
+    options = {
+        row["employee"]: row for row in employee_options(
+            _closure_schedule(), CLOSING_PROFILE, EVENING, CLOSURE_FRIDAY,
+        )
+    }
+    assert options[YOSSI]["available"] is False
+    assert options[YOSSI]["borrow"] is True
+    assert options[RON]["closing"] is True
+    assert options[RON]["borrow"] is False
+
+
+def test_alternatives_keep_the_borrow_apart_from_the_free_colleagues():
+    """Two lists, because they are two different offers."""
+    found = suggest_alternatives(
+        _closure_schedule(), CLOSING_PROFILE, RON, EVENING, CLOSURE_FRIDAY,
+    )
+    assert [row["employee"] for row in found["borrow"]] == [YOSSI]
+    assert YOSSI not in [row["employee"] for row in found["employees"]]
 
 
 # -- Hebrew is data (D9/FILE_FORMATS) --------------------------------------

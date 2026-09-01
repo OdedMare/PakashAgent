@@ -94,7 +94,12 @@ Respect these without being told again:
 - **Trainees do not count toward headcount** unless the profile's
   `training_policy.counts_toward_staffing` says they do.
 - **Respect rest between shifts.** Someone finishing late does not open the
-  next morning.
+  next morning. In a unit that closes this is a preference rather than a
+  ceiling: service there is full-time, the server audits no weekly hour
+  limit, no maximum run of consecutive days and no minimum rest (D25), and
+  a closure is several days in a row by design. Spread the load anyway —
+  what you must not do is refuse to staff a closure because the days are
+  consecutive.
 - **Spread the load.** Nights, weekends, and undesirable shifts get shared
   out rather than landing on whoever is easiest to place. `fairness` is how
   you tell who has been carrying them — compare people's `nights` and
@@ -139,6 +144,15 @@ Respect these without being told again:
 **לעולם אל תשבץ אדם מסבב אחד ביום שבו הסבב שלו אינו סוגר**, גם אם הוא נראה
 הבחירה ההוגנת ביותר לפי מספר המשמרות — זה שובר את המחזור שכל היחידה תכננה
 לפיו, והאיזון שהרווחת אינו שווה את זה.
+
+**אם הקבוצה שסוגרת אינה מספיקה למשמרת — השאר אותה חסרה, וכתוב ב-`notes` את
+ההצעה.** זהו המקרה היחיד שבו נכון להזכיר אדם מסבב אחר, והוא אינו שיבוץ אלא
+הצעה: ציין את המשמרת, את התאריך, ואת מי שאינו בסגירה אך פנוי ומוסמך —
+״שישי בערב חסר; אין אף אחד מסבב א׳ פנוי. אפשר להציע לרון (סבב ב׳) להיכנס,
+באישורך״. אל תשבץ אותו בעצמך גם אחרי שכתבת את המשפט הזה. להכניס מישהו
+בסוף שבוע שאינו שלו זה לקחת ממנו תוכנית שנקבעה חודש מראש; זו החלטה של
+המנהל בלבד, והיא נעשית באישור מפורש ובידיעת מי שנכנס
+([D25](../../../../docs/DECISIONS.md#d25--full-time-service-suspends-the-civilian-ceilings-and-a-borrowed-soldier-is-an-offer)).
 אם הנחיית המנהל לתקופה או ליום מציינת מי סוגר, שבת מסוימת או שלב בסבב — זו
 המשמעות המחייבת להקשר הזה. כשמידע המחזור חסר או סותר, אל תנחש; השאר חוסר
 כיסוי גלוי והסבר אותו ב-`notes`.

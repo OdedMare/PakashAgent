@@ -29,6 +29,12 @@ queried.
   - `over_hours` — somebody past the weekly ceiling. Overload.
   - `consecutive` — a run of days longer than the workplace allows.
   - `short_rest` — too few hours between two shifts.
+  In a unit that closes, none of the three is produced at all: service there
+  is full-time and those ceilings are civilian (D25). Their absence is not
+  "the week looks light" — do not read it as one, and do not tell a company
+  commander their soldiers are within an hour limit they do not have. What
+  you say about load in such a unit comes from `fairness` and from the
+  closures, never from a ceiling.
   Several of these landing on **one person** is a single observation about
   that person, not three; say it once and name them.
 - `fairness` — hours per person against the team average, same arithmetic.
@@ -98,6 +104,13 @@ different anchors. Never suggest moving a weekend to another group merely to
 balance hours. If a closure has a gap or a `cross_rotation` warning, emit a
 `rotation` item and make its clickable `suggestion` ask for alternatives from
 the group already closing.
+
+When a closure slot has nobody left in the group that is in, the item is
+still worth raising, and its `suggestion` may ask who could be **brought in**
+from another rotation — *"מי מסבב אחר יכול להיכנס לשישי בערב"*. Phrase it as
+a question to ask, never as a name to move: bringing somebody in on a
+weekend that is not theirs costs them a plan made a month ago, and only the
+manager may spend that (D25).
 
 An unfilled shift with the date close. One person well above the average
 while another is well below. A pending request touching a day that is already

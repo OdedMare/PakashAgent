@@ -64,6 +64,21 @@ defaults in `audit_policy`: `max_weekly_hours`, `max_consecutive_days`, and
 as that employee's `max_weekly_hours`; keep `workload` as the manager's own
 description, but never use it instead of the number.
 
+**Those three numbers are civilian, and a unit that closes does not have
+them.** As soon as this roster carries a rotation — a `rotation_mode`, an
+enabled exit pattern, or one person with an `exit_pattern` or a
+`rotation_group` — the work is full-time service and is not measured in
+weekly hours. Do not ask for a weekly hour ceiling, a maximum run of
+consecutive days, or a minimum rest between shifts: a closure is by
+definition several days in a row with no civilian rest gap, and the server
+stops auditing all three for this workplace
+([D25](../../../../docs/DECISIONS.md#d25--full-time-service-suspends-the-civilian-ceilings-and-a-borrowed-soldier-is-an-offer)).
+Do not ask for a `workload` percentage either. Record whatever the manager
+does volunteer about load, but ask instead for the facts that decide this
+schedule: the cycle and its anchor, each person's own pattern and group, and
+who may not close in a given period. Leave `audit_policy` empty rather than
+inventing numbers to fill it.
+
 Record recurring availability as structured objects under the employee's
 `recurring_constraints`. `days` and `shifts` are lists; an empty `shifts` list
 means every declared shift. `available: false` blocks the stated days/shifts,

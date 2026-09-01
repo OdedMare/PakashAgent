@@ -456,3 +456,43 @@ def test_the_audit_is_silent_when_the_cycle_was_never_anchored():
         warning for warning in audit(rows, shifts, employees, profile=profile)
         if warning["code"] == CROSS_ROTATION
     ] == []
+
+
+# -- full-time service (D25) -----------------------------------------------
+
+
+def test_a_unit_that_closes_is_read_as_full_time_service():
+    """The rotation is what says so; nobody is asked a second time.
+
+    Any one of the three facts the interview already collects is enough: the
+    workplace's own mode, the optional patterns it enabled, or a roster where
+    somebody carries a pattern or a group.
+    """
+    assert rotation.full_time_unit(_profile([{"name": "דנה"}])) is True
+    assert rotation.full_time_unit({
+        "workplace": {"name": "פלוגה", "enabled_exit_patterns": ["shushim"]},
+        "employees": [{"name": "דנה"}],
+    }) is True
+    assert rotation.full_time_unit({
+        "workplace": {"name": "פלוגה"},
+        "employees": [{"name": "דנה", "exit_pattern": "hamshushim"}],
+    }) is True
+    assert rotation.full_time_unit({
+        "workplace": {"name": "פלוגה"},
+        "employees": [{"name": "דנה", "rotation_group": "א"}],
+    }) is True
+
+
+def test_a_civilian_roster_is_not_full_time_service():
+    """No rotation anywhere, so the civilian ceilings still describe it.
+
+    This is the half that keeps the suspension narrow: `audit.py` drops the
+    weekly ceiling, the run length and the rest minimum only for a workplace
+    that actually closes.
+    """
+    assert rotation.full_time_unit({
+        "workplace": {"name": "מוקד"},
+        "employees": [{"name": "דנה"}, {"name": "יוסי"}],
+    }) is False
+    assert rotation.full_time_unit({}) is False
+    assert rotation.full_time_unit({"workplace": None, "employees": None}) is False

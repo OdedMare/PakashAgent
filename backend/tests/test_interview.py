@@ -14,6 +14,7 @@ import pytest
 
 from app.bl.interview import (
     CORE_TOPIC_IDS, INTERVIEW_TOPICS, IntroInterview, empty_draft,
+    missing_topics,
 )
 from app.common.errors import AgentError
 
@@ -386,6 +387,56 @@ def test_a_profile_missing_a_required_topic_is_not_ready():
 
     assert result["ready"] is False
     assert "לא הוגדר אף סוג משמרת." in result["open_points"]
+
+
+def test_a_military_unit_is_not_asked_for_a_weekly_hour_ceiling():
+    """A unit that closes is full-time service (D25).
+
+    The three civilian numbers are not audited for it at all, so holding the
+    interview open until the manager supplies them would be asking for
+    figures nothing will ever read — and would put a question to a company
+    commander that has no answer.
+    """
+    draft = dict(_complete_profile(), audit_policy={})
+    draft["workplace"] = dict(
+        draft["workplace"],
+        rotation_mode="round",
+        round_first_closure_date="2026-08-29",
+        round_first_closure_group="א",
+    )
+    draft["employees"] = [
+        {"name": "דנה", "exit_pattern": "round", "rotation_group": "א"},
+    ]
+
+    assert missing_topics(draft) == []
+
+
+def test_a_military_unit_owes_its_closure_anchor_instead():
+    """What this workplace cannot run without is whose weekend it is.
+
+    Unanchored, the server does not know which group holds Saturday — the
+    first scheduling fact here, and one the interview must not close over.
+    """
+    draft = dict(_complete_profile(), audit_policy={})
+    draft["workplace"] = dict(draft["workplace"], rotation_mode="round")
+    draft["employees"] = [
+        {"name": "דנה", "exit_pattern": "round", "rotation_group": "א"},
+    ]
+
+    points = missing_topics(draft)
+    assert any("עוגן סגירה" in point for point in points)
+    assert not any("תקרת שעות" in point for point in points)
+
+
+def test_a_civilian_roster_is_still_asked_for_all_three_numbers():
+    """The suspension belongs to the rotation, not to everybody."""
+    draft = dict(_complete_profile(), audit_policy={})
+
+    assert missing_topics(draft) == [
+        "חסרה תקרת שעות שבועית.",
+        "חסר מספר ימי העבודה הרצופים המרבי.",
+        "חסר זמן המנוחה המזערי בין משמרות.",
+    ]
 
 
 def test_usage_rides_through_the_turn():

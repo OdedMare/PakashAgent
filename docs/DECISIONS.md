@@ -733,6 +733,75 @@ answers. The deterministic fallback still answers the question rather than
 asking what the manager meant — an unreachable model is not the manager
 having been unclear, and asking would repeat on every retry.
 
+## D25 — Full-time service suspends the civilian ceilings, and a borrowed soldier is an offer
+
+A unit that closes is not a job measured in weekly hours, and the schedule
+must stop pretending otherwise. Two things follow, and they are one decision
+because they are the same fact seen from two sides: **the rotation, not the
+week, is what this workplace spends.**
+
+**The three civilian ceilings do not describe a unit that closes.**
+`max_weekly_hours`, `max_consecutive_days` and `min_rest_hours` are facts
+about a job someone goes home from. A soldier on a סגירה is *in* — Thursday
+through the Sunday handover, with no eight-hour gap between shifts that a
+civilian rest rule would recognise. So `audit.py` stops producing
+`over_hours` and `consecutive` for such a workplace entirely, and drops the
+rest minimum to zero. Reporting them would report the rotation as a violation
+of itself, every week, on every soldier — a page of warnings saying only
+"this unit closes", which is the state the manager already knows and the
+noise that teaches them to stop reading warnings at all.
+
+**What survives is the impossible, not the merely hard.** The rest check is
+lowered rather than switched off, because a negative gap is not a short rest:
+nobody can stand two overlapping shifts, and being full-time does not make
+them able to. That case is reported as the overlap it is.
+
+**The unit is derived, never asked.** A workplace runs a closure rotation if
+it declares a `rotation_mode`, enables an exit pattern, or carries one person
+with an `exit_pattern` or a `rotation_group` — all facts the intro interview
+already collects (`rotation.full_time_unit`). Asking the manager "and is this
+the army?" would ask them to restate what they said, and would let the two
+answers disagree. The interview stops asking for the three numbers in such a
+unit and asks for the cycle's anchors instead: whose weekend Saturday is, is
+the first scheduling fact here, and it is the one the scheduler cannot run
+without.
+
+*The narrow half:* an ordinary civilian roster is untouched. No rotation, no
+suspension — every ceiling means exactly what it meant before, which is what
+keeps this from being "the audit got weaker".
+
+**A soldier from another rotation may be offered, never placed.** The other
+side of the same fact. A closure belongs to one group, and until now every
+candidate list stopped at that boundary: someone from the group that is out
+warns twice over and is filtered away, so a shift the closing group cannot
+fill came back as "nobody". That is arithmetically true and practically
+false — there *is* somebody, they are simply on their exit.
+
+So `placement.borrow_offers` asks the narrower question: **who is blocked by
+the rotation and by nothing else.** A candidate survives only when every
+warning their placement would cause came from the cycle — `cross_rotation`,
+or an availability row the server derived from the closure. Somebody with a
+constraint of their own is not offered: a borrow trades the rotation, and the
+rotation is the only thing it is allowed to trade.
+
+**Every one of them is a sentence, not a change.** The scheduler is still
+forbidden to assign across a cycle; it leaves the slot short and names the
+offer in `notes`. The change agent returns no operations for one. The board
+draws them in the warning colour, under their own heading, apart from the
+colleagues who are simply free. `requires_approval` is on every row.
+Bringing somebody in on a weekend that is not theirs costs them a plan made a
+month ago — that is a cost only the person carrying the unit can agree to
+pay, and offering it is exactly as far as the agent may go
+([D8](#d8--two-reasons-both-required),
+[D12](#d12--dragging-a-shift-is-a-proposal-not-an-edit),
+[D15](#d15--the-agent-speaks-first-but-still-never-writes)).
+
+*Why the offer is withheld while the closing group can answer:* a
+cross-rotation name listed beside three free colleagues teaches the manager
+that the cycle is a formality to be worked around for convenience. It appears
+only when the group that is in has nobody left, which is the case it exists
+for.
+
 ## Open
 
 - **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment

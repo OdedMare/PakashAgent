@@ -434,6 +434,95 @@ def test_find_replacements_offers_qualified_free_colleagues(repo, tools):
     assert DANA not in names
 
 
+# A unit that closes, so the rotation has something to say about who may
+# take a slot. 2026-08-29 is a Saturday and belongs to סבב א, which makes
+# the weekend of 2026-08-15 א's as well — two cycles earlier.
+UNIT_PROFILE = dict(
+    PROFILE,
+    workplace={
+        "name": "פלוגה", "rotation_mode": "round",
+        "first_closure_date": "2026-08-29", "first_closure_group": "א",
+    },
+    employees=[
+        {"name": DANA, "role": "לוחמת", "eligible_shifts": [MORNING],
+         "exit_pattern": "round", "rotation_group": "ב"},
+        {"name": YOSSI, "role": "לוחם", "eligible_shifts": [MORNING, EVENING],
+         "exit_pattern": "round", "rotation_group": "ב"},
+        {"name": RON, "role": "לוחם", "eligible_shifts": [MORNING, EVENING],
+         "exit_pattern": "round", "rotation_group": "א"},
+    ],
+)
+
+CLOSURE_FRIDAY = "2026-08-14"
+
+
+def _closure_schedule(repo, assignments=None):
+    """The same two-shift period, on a weekend סבב א is holding."""
+    slots = []
+    for date in ("2026-08-13", CLOSURE_FRIDAY):
+        for shift in (MORNING, EVENING):
+            slots.append({
+                "id": "slot-%s-%s" % (shift, date),
+                "shift_name": shift, "slot_date": date,
+                "start_time": "07:00" if shift == MORNING else "15:00",
+                "end_time": "15:00" if shift == MORNING else "23:00",
+                "headcount": 1, "is_on_call": False,
+            })
+    rows = []
+    for index, item in enumerate(assignments or []):
+        rows.append({
+            "id": "asg-%d" % index,
+            "slot_id": "slot-%s-%s" % (item["shift"], item["date"]),
+            "employee": item["employee"], "shift": item["shift"],
+            "date": item["date"], "reason": "בדיקה", "source": "agent",
+        })
+    repo.profiles[TEAM] = UNIT_PROFILE
+    repo.schedules["sched-1"] = {
+        "id": "sched-1", "team_id": TEAM,
+        "starts_on": "2026-08-13", "ends_on": CLOSURE_FRIDAY,
+        "status": "draft", "slots": slots, "assignments": rows,
+    }
+    return repo.schedules["sched-1"]
+
+
+def test_a_borrow_is_offered_only_when_the_closing_group_is_empty(repo, tools):
+    """רון is the only one whose weekend this is, and he is the one leaving.
+
+    The answer is not "nobody". יוסי is on the other cycle, free and
+    qualified, and asking him is a thing the manager can do — so he comes
+    back separately, marked as needing their approval (D25).
+    """
+    _closure_schedule(repo, assignments=[
+        {"employee": RON, "shift": EVENING, "date": CLOSURE_FRIDAY},
+    ])
+    answer = tools.run(TEAM, TOOL_FIND_REPLACEMENTS, {
+        "employee": RON, "shift_name": EVENING, "slot_date": CLOSURE_FRIDAY,
+    })
+
+    assert answer["candidates"] == []
+    assert [row["employee"] for row in answer["borrow"]] == [YOSSI]
+    assert answer["borrow"][0]["requires_approval"] is True
+    assert answer["borrow_note"]
+
+
+def test_a_borrow_is_withheld_while_the_closing_group_can_answer(repo, tools):
+    """A cross-rotation name beside a free colleague teaches the wrong thing.
+
+    On an ordinary date every qualified colleague is simply available, and
+    nothing needs anybody's permission.
+    """
+    _schedule(repo, assignments=[
+        {"employee": YOSSI, "shift": EVENING, "date": "2026-08-17"},
+    ])
+    answer = tools.run(TEAM, TOOL_FIND_REPLACEMENTS, {
+        "employee": YOSSI, "shift_name": EVENING, "slot_date": "2026-08-17",
+    })
+
+    assert answer["candidates"]
+    assert answer["borrow"] == []
+    assert answer["borrow_note"] == ""
+
+
 def test_every_candidate_carries_its_reason(repo, tools):
     _schedule(repo, assignments=[
         {"employee": YOSSI, "shift": EVENING, "date": "2026-08-17"},

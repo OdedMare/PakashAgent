@@ -339,6 +339,14 @@ anchor dates and first groups. Legacy profiles fall back to
 `first_closure_*`; with no anchor for a pattern every function returns nothing
 rather than guess a phase that puts the wrong group in.
 
+**A unit that closes is full-time service** (`full_time_unit`), and that is
+read from the rotation rather than asked: a `rotation_mode`, an enabled exit
+pattern, or one person carrying an `exit_pattern` or a `rotation_group`.
+`audit.py` keys the three civilian ceilings off it (see below), and
+`interview.py` stops requiring them for such a workplace and requires the
+cycle's anchors instead
+([D25](../../../docs/DECISIONS.md#d25--full-time-service-suspends-the-civilian-ceilings-and-a-borrowed-soldier-is-an-offer)).
+
 Read by four callers, which is the point of it being one module:
 `scheduler.py` turns it into hard availability rows and refuses assignments
 that contradict them, `audit.py` warns about a schedule that already drifted
@@ -402,6 +410,17 @@ keeps only the clean ones. That is a constraint on *assertion*, not a veto:
 `validate_placement` still returns `blocking: False`, and the manager may
 still place somebody it warns about (D3).
 
+**A closure the group that is in cannot fill has a second answer.**
+`placement.borrow_offers` names who could be *brought in* from another
+rotation — kept to the people the cycle alone is blocking, so a real
+constraint is never traded along with it. `find_replacements` returns them as
+`borrow`, and only when `candidates` is empty: a cross-rotation name beside
+three free colleagues teaches the manager the cycle is a formality. Every row
+carries `requires_approval`, nothing here writes, and the scheduler is still
+forbidden to assign across a cycle on its own — the agent offers the
+sentence, the manager sends it
+([D25](../../../docs/DECISIONS.md#d25--full-time-service-suspends-the-civilian-ceilings-and-a-borrowed-soldier-is-an-offer)).
+
 `intent.py` is the floor. With no model configured — the deployment default
 here — it reads the sentence by matching against the workspace's own roster
 and shift vocabulary, runs the same tools, and renders Hebrew templates.
@@ -453,6 +472,18 @@ boss chose this shape knowingly, including its tradeoff with D1.
 
 On-call shifts may weight differently — read the weighting from the interview's
 shift vocabulary rather than assuming.
+
+**In a unit that closes, three of those checks do not run.** `over_hours`,
+`consecutive` and the rest minimum are facts about a job someone goes home
+from; a soldier on a סגירה is in for four days with no civilian rest gap, and
+reporting that every week would report the rotation as a violation of itself
+(D25). `_policy` reads `rotation.full_time_unit` and suspends all three. What
+it does *not* suspend is the overlap: the rest minimum falls to zero rather
+than being switched off, so two shifts that genuinely collide are still
+reported — as an overlap, because no amount of rest would fix one. A
+`max_weekly_hours` of zero anywhere means "no ceiling", never "a ceiling of
+nothing". None of this touches a civilian roster: with no rotation in the
+profile every check means exactly what it meant before.
 
 `fairness()` and `load_history()` answer two different questions from the same
 arithmetic. `fairness()` compares hours inside the period on screen;
