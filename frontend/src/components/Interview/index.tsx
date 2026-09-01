@@ -126,7 +126,7 @@ export function Interview({
             <CalendarDays size={17} />
           </span>
           <span>
-            {workspace ? workspace.name : "פקש"}
+            {workspace ? workspace.name : "משמרות זהב"}
             <span className="brand-sub"> · ראיון היכרות</span>
           </span>
         </div>
@@ -447,12 +447,12 @@ function Welcome({
           <span className="brand-mark" aria-hidden="true">
             <MessagesSquare size={17} />
           </span>
-          <span>פקש · מסייע AI להקמת הסידור</span>
+          <span>משמרות זהב · מסייע AI להקמת הסידור</span>
         </div>
 
         <h1 id="welcome-title">מתחילים ממה שכבר יודעים</h1>
         <p>
-          אם יש לכם סידור קיים, פקש יקרא אותו ויכין טיוטה. אם לא, נבנה אותה
+          אם יש לכם סידור קיים, המערכת תקרא אותו ותכין טיוטה. אם לא, נבנה אותה
           יחד—שאלה אחת בכל פעם. בכל שלב אפשר לראות ולתקן מה נשמר.
         </p>
 

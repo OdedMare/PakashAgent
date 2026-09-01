@@ -19,11 +19,11 @@ export function Turn({ message, live = false, onSelect }: Props) {
   return (
     <article className={`turn ${message.role}`}>
       <div className="avatar" aria-hidden="true">
-        {assistant ? "פ" : "א"}
+        {assistant ? "מ" : "א"}
       </div>
       <div className="turn-body">
         <div className="turn-name">
-          {assistant ? "פקש · מסייע AI" : "אתם"}
+          {assistant ? "משמרות זהב · מסייע AI" : "אתם"}
         </div>
         <p className="turn-text">{message.content}</p>
 
