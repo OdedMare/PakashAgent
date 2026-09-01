@@ -292,12 +292,19 @@ export function ShiftEditor({
                       <small>{candidate.available ? `פנוי/ה · ${formatHours(candidate.hours)} בתקופה` : candidate.reasons.join(" ")}</small>
                     </span>
                     {candidate.closing ? <span className="board-candidate-badge is-closing"><Repeat2 size={12} /> {candidate.rotation || "בסגירה"}</span> : null}
+                    {/* Not in, but askable. The picker says "not available"
+                        about two different things, and only one of them is a
+                        person the manager can still choose to bring in (D25). */}
+                    {candidate.borrow ? <span className="board-candidate-badge is-borrow"><Repeat2 size={12} /> {candidate.rotation ? `${candidate.rotation} · באישורך` : "באישורך"}</span> : null}
                     {candidate.is_shift_manager ? <span className="board-candidate-badge"><ShieldCheck size={12} /> מפקד/ת</span> : null}
                     {candidate.can_train ? <span className="board-candidate-badge"><GraduationCap size={12} /> חופף/ת</span> : null}
                   </button>
                 ))}
               </div>
               <small className="board-availability-note">אפשר לבחור גם חייל/ת עם התראה; הסיבה נשארת גלויה וההחלטה בידיך.</small>
+              {check.candidates.some((candidate) => candidate.borrow) ? (
+                <small className="board-availability-note is-borrow">מי שמסומן/ת ״באישורך״ אינו/ה בסגירה של סוף השבוע הזה — הכנסתו/ה היא בקשה ממנו/ה, לא שיבוץ פנוי.</small>
+              ) : null}
             </div>
           ) : checking ? <p className="board-availability-loading" role="status">בודק מי פנוי למשמרת…</p> : null}
 

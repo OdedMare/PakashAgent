@@ -702,6 +702,11 @@ def _policy(profile: Optional[dict]) -> dict:
         "min_rest_hours": _number(
             policy.get("min_rest_hours"), _DEFAULT_MIN_REST_HOURS
         ),
+        # A unit that closes is full-time service, and the three thresholds
+        # above are civilian facts that do not describe it. Read from the
+        # rotation the interview already collected rather than asked again
+        # (`rotation.full_time_unit`), so the two answers cannot disagree.
+        "full_time": rotation.full_time_unit(profile or {}),
     }
 
 
@@ -816,6 +821,12 @@ def _unavailable(rows: List[dict], availability: List[dict]) -> List[dict]:
                     "is_hard": hard,
                     "start_time": _text(item.get("start_time")),
                     "end_time": _text(item.get("end_time")),
+                    # Where the row came from: an explicit constraint the
+                    # manager recorded, or one this server derived from the
+                    # closure cycle. `placement.borrow_offers` needs the two
+                    # apart -- a rotation it may offer to cross with the
+                    # manager's approval, a doctor's appointment it may not.
+                    "source": _text(item.get("source")),
                 },
             ))
             break
@@ -1041,6 +1052,13 @@ def _over_hours(
     planning period: a person's rest does not reset because a new schedule
     started midweek.
     """
+    if policy["full_time"]:
+        # Full-time service has no weekly ceiling to cross: a closure is
+        # measured in weekends held, not in hours logged, and reporting a
+        # soldier "over 45 hours" would report the arrangement itself as a
+        # problem every single week (D25).
+        return []
+
     limits = {}
     for employee in employees or []:
         if not isinstance(employee, dict):
@@ -1063,7 +1081,10 @@ def _over_hours(
     warnings = []
     for (employee, year, week), hours in totals.items():
         limit = limits.get(employee, policy["max_weekly_hours"])
-        if hours > limit:
+        # Zero is "no ceiling", not "a ceiling of nothing". A manager who
+        # clears the field means the hours are not the measure here; reading
+        # it literally would put every person on the list every week.
+        if limit > 0 and hours > limit:
             warnings.append(_warning(
                 OVER_HOURS, SEVERITY_WARNING,
                 "ל%s יש %.1f שעות בשבוע %d/%d, מעל התקרה של %.1f."
@@ -1081,6 +1102,13 @@ def _consecutive_days(rows: List[dict], policy: dict) -> List[dict]:
     Counts distinct days: two shifts on one day are one day worked here, and
     the thing that makes them a problem is rest, reported separately.
     """
+    if policy["full_time"]:
+        # A closure *is* consecutive days: Thursday to the Sunday handover,
+        # by design, every time the group's weekend comes round. Counting
+        # them against a civilian run-length ceiling reports the rotation as
+        # a violation of itself (D25).
+        return []
+
     days: Dict[str, set] = {}
     for row in rows:
         if row["day"] is not None:
@@ -1127,8 +1155,17 @@ def _short_rest(
     Also what catches two shifts that genuinely overlap, which come out as a
     negative gap and are reported as the same class of problem: the person
     cannot be in both.
+
+    **In a full-time unit the rest minimum is dropped to nothing, and the
+    overlap check survives it.** Somebody closing goes from a shift to the
+    next one with whatever gap the roster leaves, and eight hours between
+    them is a civilian expectation this workplace never made (D25). What
+    does not change is that nobody can stand two shifts at once: a negative
+    gap is not a short rest, it is an impossible assignment, so the minimum
+    falls to zero rather than the check being switched off.
     """
-    minimum = policy["min_rest_hours"]
+    full_time = policy["full_time"]
+    minimum = 0.0 if full_time else policy["min_rest_hours"]
     by_employee: Dict[str, List[dict]] = {}
     for row in rows:
         if row["day"] is None or row["start"] is None or row["end"] is None:
@@ -1140,17 +1177,33 @@ def _short_rest(
         ordered = sorted(worked, key=lambda item: _starts_at(item))
         for earlier, later in zip(ordered, ordered[1:]):
             gap = (_starts_at(later) - _ends_at(earlier)).total_seconds() / 3600.0
-            if gap < minimum:
-                warnings.append(_warning(
-                    SHORT_REST, SEVERITY_WARNING,
+            if gap >= minimum:
+                continue
+            if gap < 0:
+                # Two shifts that run into each other. Said as what it is
+                # rather than as "too little rest", because there is no
+                # amount of rest that would fix it -- one of the two has to
+                # go, and a manager reading "0.0 שעות מנוחה" would look for
+                # a longer gap instead of for the double assignment.
+                message = (
+                    "ל%s יש שתי משמרות חופפות: %s ב-%s ו-%s ב-%s."
+                    % (employee, earlier["shift"], earlier["date"],
+                       later["shift"], later["date"])
+                )
+            else:
+                message = (
                     "ל%s יש %.1f שעות מנוחה בין %s ב-%s לבין %s ב-%s, "
                     "פחות מ-%.1f."
                     % (employee, gap, earlier["shift"], earlier["date"],
-                       later["shift"], later["date"], minimum),
-                    employee=employee, date=later["date"],
-                    shift=later["shift"],
-                    details={"rest_hours": round(gap, 2), "minimum": minimum},
-                ))
+                       later["shift"], later["date"], minimum)
+                )
+            warnings.append(_warning(
+                SHORT_REST, SEVERITY_WARNING, message,
+                employee=employee, date=later["date"],
+                shift=later["shift"],
+                details={"rest_hours": round(gap, 2), "minimum": minimum,
+                         "overlapping": gap < 0},
+            ))
     return warnings
 
 

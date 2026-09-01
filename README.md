@@ -66,6 +66,24 @@ by a deterministic reader of the manager's Hebrew instead of by the model.
 It covers six question shapes and says plainly when it did not understand
 one, rather than guessing.
 
+**A unit that closes is full-time service.** Where the profile carries a
+rotation, the schedule stops being measured in weekly hours: no weekly
+ceiling, no maximum run of consecutive days, no minimum rest between shifts —
+a סגירה is four days in a row by design, and warning about that every week
+would report the rotation as a violation of itself. Two shifts that genuinely
+overlap are still impossible and still reported. The interview asks such a
+unit for its closure anchors instead of for three numbers nothing would read.
+A civilian roster keeps every ceiling it had
+([D25](docs/DECISIONS.md#d25--full-time-service-suspends-the-civilian-ceilings-and-a-borrowed-soldier-is-an-offer)).
+
+**A soldier from another rotation can be offered, never placed.** When the
+group that is closing cannot fill a shift, the answer is no longer "nobody":
+the agent names who is free on the other cycle and says plainly that bringing
+them in needs the manager's approval and the soldier's knowledge. It never
+assigns one itself — the scheduler leaves the slot short and writes the offer
+in its notes, and the board draws those names apart from the colleagues who
+are simply free (D25).
+
 **The agent remembers what it is told to.** Standing operational preferences
 — *"עדיף לשאול את יוסי לפני רון לסופ״ש"* — are stored per team, visible,
 editable, and never authorise a write. One the agent proposes stays inert

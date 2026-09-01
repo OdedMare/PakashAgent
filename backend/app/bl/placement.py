@@ -35,7 +35,12 @@ import datetime
 from typing import Any, Dict, List, Optional
 
 from app.bl import rotation
-from app.bl.audit import audit
+from app.bl.audit import (
+    CROSS_ROTATION,
+    UNAVAILABLE,
+    audit,
+    constraint_conflicts,
+)
 from app.bl.scheduler import effective_availability
 
 # How many alternatives are worth offering. Past a handful the list stops
@@ -47,6 +52,11 @@ _MAX_ALTERNATIVES = 5
 # could take instead. One week: past that it is not "nearby" and the manager
 # is choosing a different week rather than adjusting this one.
 _NEARBY_DAYS = 7
+
+# Availability rows the server derived from the cycle itself, as opposed to
+# constraints a person actually has. A borrow may cross the first kind with
+# the manager's approval; the second kind is not the rotation's to trade.
+_ROTATION_SOURCES = frozenset({"closure", "rotation"})
 
 # What "the rotation says nothing about this slot" looks like on the wire.
 # A shape rather than a null so the client renders one branch: no groups
@@ -97,7 +107,8 @@ def check(
     if not employee:
         return {
             "ok": True, "blocking": False, "reasons": [], "warnings": [],
-            "eligible": True, "alternatives": {"employees": [], "slots": []},
+            "eligible": True,
+            "alternatives": {"employees": [], "slots": [], "borrow": []},
             "candidates": candidates, "closure": closure,
         }
     verdict = _verdict(
@@ -108,7 +119,9 @@ def check(
         schedule, profile, employee, shift_name, slot_date,
         availability=availability,
         moving_assignment_id=moving_assignment_id,
-    ) if verdict["reasons"] else {"employees": [], "slots": []},
+    ) if verdict["reasons"] else {
+        "employees": [], "slots": [], "borrow": []
+    },
         candidates=candidates, closure=closure)
 
 
@@ -194,9 +207,20 @@ def employee_options(
                 day is not None
                 and rotation.holds(profile, person, day, shift_name)
             ),
+            # Blocked by the cycle and by nothing else: available in every
+            # respect except that this weekend is not theirs. The picker
+            # marks them as somebody the manager may bring in rather than
+            # as somebody who simply cannot work (`borrow_offers`).
+            "borrow": bool(
+                not verdict["ok"] and _only_rotation(verdict["warnings"])
+            ),
         })
+    # Available first, then whose weekend it is, then the ones the manager
+    # could still bring in from another cycle -- and only then the people
+    # who genuinely cannot work it. A borrow is a real option and belongs
+    # above a constraint, not buried with it.
     options.sort(key=lambda item: (
-        not item["available"], not item["closing"],
+        not item["available"], not item["closing"], not item["borrow"],
         item["hours"], item["employee"],
     ))
     return options
@@ -297,8 +321,14 @@ def suggest_alternatives(
     the date the manager actually wanted, because the nearest alternative is
     the one most likely to still serve whatever they were trying to do.
 
-    Both lists are filtered by re-running `check()` and keeping only the
-    clean options. An "alternative" that warns is not an alternative.
+    `borrow` — who could cover it from *another* rotation, when the group
+    that is in cannot. Kept apart from `employees` because it is not the same
+    offer: those are free, these have to be asked, and the manager is the one
+    who does the asking (`borrow_offers`). A client that merged the two lists
+    would present a favour as an availability.
+
+    The first two lists are filtered by re-running `check()` and keeping only
+    the clean options. An "alternative" that warns is not an alternative.
     """
     employee = _text(employee)
     shift_name = _text(shift_name)
@@ -314,6 +344,10 @@ def suggest_alternatives(
         ),
         "slots": _nearby_slots(
             schedule, profile, employee, shift_name, slot_date,
+            availability, moving_assignment_id,
+        ),
+        "borrow": borrow_offers(
+            schedule, profile, shift_name, slot_date,
             availability, moving_assignment_id,
         ),
     }
@@ -406,6 +440,173 @@ def _nearby_slots(
         item["distance"], item["slot_date"], item["shift_name"]
     ))
     return options[:_MAX_ALTERNATIVES]
+
+
+def borrow_offers(
+    schedule: dict,
+    profile: dict,
+    shift_name: str,
+    slot_date: str,
+    availability: Optional[List[dict]] = None,
+    moving_assignment_id: str = "",
+) -> List[dict]:
+    """Soldiers from another rotation who could cover this slot, if asked.
+
+    The way out of a slot the group that is in cannot fill. Every other list
+    in this module stops at the closure boundary on purpose: `_free_employees`
+    drops anybody the placement would warn about, and a person from a group
+    that is not closing warns twice over — once for the cycle, once for the
+    availability row the cycle derived. That filter is right for an ordinary
+    alternative and wrong for an empty shift, where the honest answer is not
+    "nobody" but "nobody whose weekend this is".
+
+    So this asks the narrower question: **who is blocked by the rotation and
+    by nothing else.** A candidate is kept only when every warning their
+    placement would introduce is one the cycle produced — `cross_rotation`,
+    or an `unavailable` row this server derived from the closure. Somebody
+    with a doctor's appointment, an eligibility they do not have, or a rest
+    problem of their own is not offered: a borrow trades the rotation, and
+    the rotation is the only thing it is allowed to trade.
+
+    **These are offers, not placements** ([D25](../../../docs/DECISIONS.md#d25--full-time-service-suspends-the-civilian-ceilings-and-a-borrowed-soldier-is-an-offer)).
+    Nothing here writes, the scheduler is still forbidden to assign across a
+    cycle on its own, and `requires_approval` says on every row that the
+    manager is the one who decides. Bringing somebody in on a weekend that
+    is not theirs costs them a plan they made a month ago — that is a cost
+    only the person carrying the unit can agree to pay, and offering it is
+    exactly as far as the agent may go
+    ([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required),
+    [D12](../../../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
+
+    Empty on an ordinary date, in a workplace with no anchored cycle, and
+    whenever the closing group can cover the slot itself — in all three the
+    rotation is not what stands in the way, so there is nothing to ask for.
+    """
+    shift_name = _text(shift_name)
+    slot_date = _iso(slot_date)
+    day = _parse(slot_date)
+    if day is None:
+        return []
+
+    closure = closure_of(profile, slot_date, shift_name)
+    if not closure["groups"]:
+        # Nobody is closing this slot, so nobody is being kept off it by a
+        # cycle. Whoever is free is an ordinary candidate.
+        return []
+
+    availability = _effective_availability(
+        schedule, profile, availability, slot_date
+    )
+    taken = {
+        _text(row.get("employee"))
+        for row in _rows(schedule, drop=moving_assignment_id)
+        if _text(row.get("shift")) == shift_name
+        and _iso(row.get("date")) == slot_date
+    }
+    load = _hours_by_employee(schedule, profile)
+
+    offers = []
+    for person in _employees(profile):
+        name = _text(person.get("name"))
+        if not name or name in taken:
+            continue
+        if rotation.holds(profile, person, day, shift_name):
+            # Their own weekend. They are an ordinary candidate and are
+            # offered as one; calling them a borrow would invent a favour.
+            continue
+        if not _is_eligible(profile, name, shift_name):
+            continue
+        if _constrained(availability, name, shift_name, slot_date):
+            # Asked before the verdict, because `audit._unavailable` reports
+            # only the *first* row an assignment conflicts with -- and the
+            # rows the cycle derived come first. A real constraint sitting
+            # behind one of them would otherwise reach `_only_rotation`
+            # looking like the rotation, and be offered.
+            continue
+        verdict = _verdict(
+            schedule, profile, name, shift_name, slot_date,
+            _shifts(profile), _employees(profile), _slots(schedule),
+            availability, moving_assignment_id,
+        )
+        if not _only_rotation(verdict["warnings"]) or verdict["ok"]:
+            # `ok` means the rotation was not standing in their way either,
+            # so they are already in the ordinary list and do not need
+            # anybody's permission.
+            continue
+        group = rotation.label(
+            _cycle_of(profile, person), _text(person.get("rotation_group"))
+        )
+        offers.append({
+            "employee": name,
+            "hours": load.get(name, 0.0),
+            "rotation": group,
+            "closing": closure["label"],
+            # Stated on every row rather than inferred from the list's name:
+            # a client that renders these next to the clean alternatives must
+            # not present them as the same kind of thing.
+            "requires_approval": True,
+            "why": (
+                "%s פנוי/ה ומוגדר/ת למשמרת, אך %sאינו/ה בסגירה%s. "
+                "אפשר להציע לו/ה להיכנס — רק באישורך."
+                % (
+                    name,
+                    "%s " % group if group else "",
+                    " של %s" % closure["label"] if closure["label"] else "",
+                )
+            ),
+        })
+
+    # Lightest week first, the same fairness ordering the clean alternatives
+    # use: if somebody is going to be asked for a weekend that is not theirs,
+    # ask the one who has carried least.
+    offers.sort(key=lambda item: (item["hours"], item["employee"]))
+    return offers[:_MAX_ALTERNATIVES]
+
+
+def _constrained(
+    availability: List[dict], employee: str, shift_name: str, slot_date: str
+) -> bool:
+    """Whether a constraint that is *not* the cycle's blocks this placement.
+
+    The manager's own recorded rows, and the recurring ones behind them. A
+    borrow may cross a closure; it may not cross somebody's reserve duty or
+    their day off, and those are not the rotation's to hand over.
+    """
+    assignment = {
+        "employee": employee, "shift": shift_name, "date": slot_date,
+    }
+    for item in availability or []:
+        if _text(item.get("source")) in _ROTATION_SOURCES:
+            continue
+        if constraint_conflicts(assignment, item):
+            return True
+    return False
+
+
+def _only_rotation(warnings: List[dict]) -> bool:
+    """Whether the cycle is the *whole* reason a placement would warn.
+
+    A borrow crosses one thing. `cross_rotation` is the cycle saying so
+    directly; an `unavailable` row carrying a rotation `source` is the same
+    fact reaching the audit through the availability the scheduler derived
+    from it. Anything else — a real constraint, a rest problem, a double
+    booking — is a cost the manager was not offered and must not be handed
+    one approval for.
+    """
+    if not warnings:
+        return False
+    for warning in warnings:
+        code = _text(warning.get("code"))
+        if code == CROSS_ROTATION:
+            continue
+        details = warning.get("details")
+        details = details if isinstance(details, dict) else {}
+        if code == UNAVAILABLE and _text(
+            details.get("source")
+        ) in _ROTATION_SOURCES:
+            continue
+        return False
+    return True
 
 
 def _clean(
@@ -613,4 +814,7 @@ def _text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-__all__ = ["check", "employee_options", "suggest_alternatives"]
+__all__ = [
+    "borrow_offers", "check", "employee_options",
+    "suggest_alternatives",
+]

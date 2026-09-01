@@ -235,6 +235,34 @@ export function PlacementVerdict({
         </div>
       ) : null}
 
+      {check.alternatives.borrow?.length && onPickEmployee ? (
+        <div className="board-alternatives is-borrow">
+          {/* Its own heading, deliberately worded as a request rather than
+              as availability. These people are on their exit: choosing one
+              is asking them to come in on a weekend that is not theirs,
+              and the dialog must not let that read as "free" (D25). */}
+          <span className="board-alternatives-label">
+            אין אף אחד מהסגירה — אפשר להציע למי שאינו בסגירה, באישורך
+          </span>
+          <div className="board-alternatives-row">
+            {check.alternatives.borrow.map((option) => (
+              <button
+                key={option.employee}
+                type="button"
+                className="board-alternative is-borrow"
+                onClick={() => onPickEmployee(option.employee)}
+                title={option.why}
+              >
+                {option.employee}
+                <span className="board-alternative-hours">
+                  {option.rotation}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {check.alternatives.slots.length && onPickSlot ? (
         <div className="board-alternatives">
           <span className="board-alternatives-label">

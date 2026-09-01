@@ -1012,6 +1012,25 @@
   color: inherit;
 }
 
+/* A borrow is not an availability. It is drawn in the warning colour so the
+   manager reads "this one has a cost" before they read the name -- these
+   people are on their exit, and choosing one is asking them to give up a
+   weekend they planned on (D25). */
+.board-alternatives.is-borrow .board-alternatives-label {
+  color: var(--warning);
+}
+
+.board-alternative.is-borrow {
+  border-style: dashed;
+  border-color: var(--warning);
+}
+
+.board-alternative.is-borrow:hover {
+  background: var(--warning-soft);
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
 /* -- the editor ----------------------------------------------------------- */
 
 /* Wider than the base modal: it holds three selects, a verdict with
@@ -1381,6 +1400,21 @@
 .board-candidate-badge.is-closing {
   color: var(--text-soft);
   background: var(--surface-3);
+}
+
+/* The borrow badge does the opposite job of the closure badge beside it: it
+   says this person is *not* in, and that choosing them is a request rather
+   than a placement. The warning colour is the whole point -- it must not
+   read as another neutral fact about the roster (D25). */
+.board-candidate-badge.is-borrow {
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.board-availability-note.is-borrow {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--warning);
 }
 
 /* Whose closure the slot being edited falls in. A statement of fact above

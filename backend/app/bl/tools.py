@@ -490,6 +490,15 @@ class ScheduleTools:
         Ranking is `placement.py`'s — lightest week first, which is
         `audit.fairness()`'s arithmetic applied to a choice. Transparent by
         construction: `why` says the hours the ordering used.
+
+        **`borrow` is the second answer, and only when the first is empty.**
+        On a closure the candidates come from the group that is in; when that
+        group has nobody left, the slot is not unfillable — somebody from
+        another rotation could be asked. Those names come back separately,
+        each marked `requires_approval`, because bringing them in costs them
+        a weekend they had planned on and only the manager may spend it
+        ([D25](../../../docs/DECISIONS.md#d25--full-time-service-suspends-the-civilian-ceilings-and-a-borrowed-soldier-is-an-offer)).
+        The agent offers the sentence; it does not send it.
         """
         if not _text(slot_date):
             raise AgentError("צריך לציין תאריך")
@@ -516,6 +525,11 @@ class ScheduleTools:
             moving_assignment_id=moving,
         )
         candidates = alternatives.get("employees") or []
+        # Offered only when the closing group cannot answer the question
+        # itself. Handing the manager a cross-rotation name next to three
+        # colleagues who are simply free would teach them to break the cycle
+        # for convenience -- the borrow exists for the empty shift.
+        borrow = (alternatives.get("borrow") or []) if not candidates else []
 
         return {
             "found": True,
@@ -524,6 +538,14 @@ class ScheduleTools:
             "date": _iso(slot_date),
             "replacing": leaving,
             "candidates": candidates[:_MAX_CANDIDATES],
+            # Who could be brought in from another rotation, if the manager
+            # asks them. Never a placement: every row says so, and applying
+            # one goes through the ordinary confirm-with-a-reason path.
+            "borrow": borrow[:_MAX_CANDIDATES],
+            "borrow_note": (
+                "אפשר להציע למי שאינו בסגירה להיכנס — רק באישורך "
+                "ובידיעת מי שנכנס/ת."
+            ) if borrow else "",
             # Where this person could go instead, when the question turns out
             # to be "move them" rather than "replace them".
             "other_slots": alternatives.get("slots") or [],

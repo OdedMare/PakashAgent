@@ -389,6 +389,25 @@ export interface AlternativeEmployee {
   why: string;
 }
 
+/** Somebody from *another* rotation who could cover the slot, if asked.
+ *
+ *  Kept apart from `AlternativeEmployee` because it is not the same offer.
+ *  Those people are free; these are in the middle of their exit, and
+ *  bringing one in costs them a weekend they planned on a month ago. The
+ *  manager is the only one who may spend that, which is why every row says
+ *  `requires_approval` and why nothing here is ever applied on its own
+ *  (D25). */
+export interface BorrowOffer {
+  employee: string;
+  hours: number;
+  /** The cycle they are actually on — "סבב ב" while "סבב א" is closing. */
+  rotation: string;
+  /** The group whose weekend this is, so the ask names both sides. */
+  closing: string;
+  requires_approval: boolean;
+  why: string;
+}
+
 /** Somewhere else this same person could go, near the date that was wanted. */
 export interface AlternativeSlot {
   shift_name: string;
@@ -401,6 +420,9 @@ export interface AlternativeSlot {
 export interface Alternatives {
   employees: AlternativeEmployee[];
   slots: AlternativeSlot[];
+  /** Only ever populated on a closure the group that is in cannot fill.
+   *  Empty everywhere else, including on an ordinary weekday. */
+  borrow: BorrowOffer[];
 }
 
 /** What `bl/placement.py` makes of a placement the manager has not made yet.
@@ -441,6 +463,10 @@ export interface PlacementCandidate {
    *  picker puts them first: "who is free" and "whose weekend is it" are
    *  different questions, and only one of them is on the grid. */
   closing?: boolean;
+  /** Blocked by the cycle and by nothing else: available in every respect
+   *  except that this weekend is not theirs. The picker offers them as
+   *  somebody the manager may bring in, not as somebody who cannot work. */
+  borrow?: boolean;
 }
 
 /** One date the rotation speaks for.

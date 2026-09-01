@@ -374,7 +374,12 @@ export function ManualSetup({
           <button type="button" className="ghost-button" onClick={() => setRules((current) => [...current, { text: "", priority: "hard" }])}><Plus size={16} /> הוספת כלל קבוע</button>
         </SetupSection>
 
-        <SetupSection icon={<Scale />} title="גבולות עומס ומנוחה" hint="בדיקות אלה מציפות חריגות ומסייעות לשיבוץ; הן אינן חוסמות החלטת מפקד.">
+        {/* Kept on the screen and said plainly to be inert here: this setup
+            builds a unit that closes, and a unit that closes is full-time
+            service. The server audits none of the three for it (D25), so a
+            form that showed them as live settings would be promising a check
+            nobody runs. */}
+        <SetupSection icon={<Scale />} title="גבולות עומס ומנוחה" hint="ביחידה עם מבנה יציאות השירות הוא מלא: אין תקרת שעות שבועית, אין מכסת ימים רצופים ואין מנוחת מינימום, והמספרים כאן אינם נבדקים. הם נשמרים למקרה שהיחידה תעבוד גם בלי סבב.">
           <div className="manual-grid three">
             <Field label="מקסימום שעות בשבוע"><input type="number" min={1} value={maxWeeklyHours} onChange={(e) => setMaxWeeklyHours(Number(e.target.value) || 1)} /></Field>
             <Field label="מקסימום ימים רצופים"><input type="number" min={1} value={maxConsecutiveDays} onChange={(e) => setMaxConsecutiveDays(Number(e.target.value) || 1)} /></Field>

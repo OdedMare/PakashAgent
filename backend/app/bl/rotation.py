@@ -156,6 +156,43 @@ def cycle(profile: dict, pattern: str = "round") -> Optional[dict]:
     }
 
 
+def full_time_unit(profile: dict) -> bool:
+    """Whether this workplace runs a closure rotation, and is therefore
+    full-time service rather than a job measured in weekly hours.
+
+    A unit that closes does not employ people by the hour. Somebody on a
+    סגירה is *in* — Thursday through the Sunday handover, sleeping there,
+    with no gap between one shift and the next that a civilian rest ceiling
+    would recognise. Their week has no ceiling to cross because the week is
+    not what they are giving; the rotation is. So the civilian thresholds
+    (`max_weekly_hours`, `max_consecutive_days`, and the rest minimum) stop
+    being facts about this workplace, and `audit.py` stops reporting them
+    ([D25](../../../docs/DECISIONS.md#d25--full-time-service-suspends-the-civilian-ceilings-and-a-borrowed-soldier-is-an-offer)).
+
+    Derived, not declared. The profile already carries every fact that makes
+    a workplace one: a `rotation_mode`, the optional exit patterns the unit
+    enabled, or a roster where somebody carries an `exit_pattern` or a
+    `rotation_group`. Asking the manager a second time — "and is this the
+    army?" — would be asking them to restate what the interview already
+    collected, and would let the two answers disagree.
+
+    False for an ordinary civilian roster, which is why nothing here widens
+    to "the profile mentions the army": no rotation, no closures, and the
+    ceilings mean exactly what they meant before.
+    """
+    workplace = (profile or {}).get("workplace") or {}
+    if isinstance(workplace, dict):
+        if _text(workplace.get("rotation_mode")):
+            return True
+        patterns = workplace.get("enabled_exit_patterns")
+        if isinstance(patterns, list) and any(_text(item) for item in patterns):
+            return True
+    return any(
+        _text(person.get("exit_pattern")) or _text(person.get("rotation_group"))
+        for person in _people(profile)
+    )
+
+
 def configuration_errors(profile: dict) -> List[str]:
     """Missing facts that make a declared round/triplet unenforceable.
 

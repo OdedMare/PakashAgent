@@ -22,6 +22,7 @@ import json
 import re
 from typing import Any, Dict, List, Optional
 
+from app.bl import rotation
 from app.bl.prompts import load
 from app.common.errors import AgentError
 
@@ -862,6 +863,10 @@ def _merged_draft(offered, previous) -> dict:
 # the scheduler cannot run without: a profile missing one is not a finished
 # interview whatever the model claimed, and the gap resurfaces as an open
 # point rather than the manager discovering it after the session closed.
+#
+# The numeric three are *civilian* requirements. A unit that closes is
+# full-time service and is asked for its rotation anchors instead -- see
+# `missing_topics`.
 _REQUIRED_TOPICS = (
     ("workplace", "name", "חסר שם למקום העבודה."),
     ("workplace", "planning_horizon", "חסרה תקופת התכנון של הסידור."),
@@ -888,10 +893,23 @@ def missing_topics(draft: dict) -> List[str]:
     for section, field, message in _REQUIRED_TOPICS:
         if not _bounded(_as_dict(draft.get(section)).get(field)):
             missing.append(message)
-    for section, field, message in _REQUIRED_NUMERIC_TOPICS:
-        value = _as_dict(draft.get(section)).get(field)
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            missing.append(message)
+    if rotation.full_time_unit(draft):
+        # A unit that closes owes different facts. The three civilian
+        # ceilings are not audited here at all (`audit._policy`), so
+        # demanding them would hold an interview open for numbers nothing
+        # will ever read -- and would teach the model to ask a soldier's
+        # manager for a weekly hour cap they do not have. What this
+        # workplace cannot run without is its cycle: an anchor per pattern,
+        # and a group for everyone on a lettered one. Without those the
+        # scheduler does not know whose weekend Saturday is, which is the
+        # first scheduling fact here rather than a detail
+        # ([D25](../../docs/DECISIONS.md#d25--full-time-service-suspends-the-civilian-ceilings-and-a-borrowed-soldier-is-an-offer)).
+        missing.extend(rotation.configuration_errors(draft))
+    else:
+        for section, field, message in _REQUIRED_NUMERIC_TOPICS:
+            value = _as_dict(draft.get(section)).get(field)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                missing.append(message)
     if not draft.get("shifts"):
         missing.append("לא הוגדר אף סוג משמרת.")
     if not draft.get("employees"):
