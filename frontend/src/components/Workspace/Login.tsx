@@ -78,7 +78,7 @@ export function Login({
             <CalendarDays size={18} />
           </span>
           <span>
-            <strong>פקש</strong>
+            <strong>משמרות זהב</strong>
             <small>ניהול סידורי עבודה</small>
           </span>
         </div>
