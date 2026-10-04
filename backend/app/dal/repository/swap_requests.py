@@ -38,22 +38,12 @@ class SwapRepository(RepositoryBase):
         attempt to nag, and neither should displace an offer the other side
         may already be looking at.
         """
-        requester = (requester or "").strip()
-        counterparty = (counterparty or "").strip()
-        if not requester or not counterparty:
-            raise AgentError("חסר שם עובד")
-        if requester == counterparty:
-            raise AgentError("אי אפשר להחליף משמרת עם עצמך")
-        if not requester_date or not counterparty_date:
-            raise AgentError("חסר תאריך")
-        existing = self._all("""
-            SELECT id FROM swap_requests
-            WHERE team_id=%s AND requester=%s AND counterparty=%s
-              AND requester_date=%s AND requester_shift=%s
-              AND status IN (%s,%s)
-        """, (team_id, requester, counterparty, requester_date,
-              requester_shift or "", STATUS_AWAITING, STATUS_PENDING))
-        if existing:
+        requester, counterparty = _parties(
+            requester, counterparty, requester_date, counterparty_date
+        )
+        if self._open_swap_exists(
+            team_id, requester, counterparty, requester_date, requester_shift
+        ):
             raise ConflictError("כבר קיימת בקשת החלפה פתוחה על המשמרת הזו")
         row_id = new_id()
         self._execute("""
@@ -66,6 +56,18 @@ class SwapRepository(RepositoryBase):
               requester_shift or "", counterparty, counterparty_date,
               counterparty_shift or "", reason or "", STATUS_AWAITING))
         return self.get_swap(row_id, team_id)
+
+    def _open_swap_exists(
+        self, team_id: str, requester: str, counterparty: str,
+        requester_date: str, requester_shift: str,
+    ) -> bool:
+        return bool(self._all("""
+            SELECT id FROM swap_requests
+            WHERE team_id=%s AND requester=%s AND counterparty=%s
+              AND requester_date=%s AND requester_shift=%s
+              AND status IN (%s,%s)
+        """, (team_id, requester, counterparty, requester_date,
+              requester_shift or "", STATUS_AWAITING, STATUS_PENDING)))
 
     def get_swap(self, swap_id: str, team_id: str) -> dict:
         return self._one("""
@@ -184,3 +186,16 @@ class SwapRepository(RepositoryBase):
             WHERE team_id=%s AND status=%s
         """, (team_id, STATUS_PENDING))
         return int(rows[0]["n"]) if rows else 0
+
+
+def _parties(requester, counterparty, requester_date, counterparty_date) -> tuple:
+    """Both names trimmed, after checking a swap between them is possible."""
+    requester = (requester or "").strip()
+    counterparty = (counterparty or "").strip()
+    if not requester or not counterparty:
+        raise AgentError("חסר שם עובד")
+    if requester == counterparty:
+        raise AgentError("אי אפשר להחליף משמרת עם עצמך")
+    if not requester_date or not counterparty_date:
+        raise AgentError("חסר תאריך")
+    return requester, counterparty
