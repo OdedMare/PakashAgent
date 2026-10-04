@@ -6,7 +6,7 @@ the result.
 ## Routers
 
 Built so far: `workspace.py`, `interview.py`, `schedules.py`, `health.py`.
-`imports.py` arrives with `bl/importer.py`; `changes.py` and `employees.py` were
+`imports.py` arrives with `bl/importer/`; `changes.py` and `employees.py` were
 folded into `schedules.py` rather than split, since they share the schedule and
 the team scoping.
 
@@ -14,11 +14,11 @@ the team scoping.
 |---|---|
 | `workspace.py` | Create/enter a workspace, the member share link, logout |
 | `interview.py` | The intro interview, one turn at a time |
-| `schedules.py` | The management area: read/generate a period, open one blank and fill it by hand (D18), propose and apply changes, constraints, history, plus asking (`/ask`, `/tool`), simulating (`/simulate`) and preferences (D19–D21) |
+| `schedules/` | The management area: read/generate a period, open one blank and fill it by hand (D18), propose and apply changes, constraints, history, plus asking (`/ask`, `/tool`), simulating (`/simulate`) and preferences (D19–D21) |
 | `imports.py` | Upload a file, return the inferred interpretation, commit on confirm |
 | `employees.py` | Roster management |
 | `health.py` | Liveness |
-| `employee.py` | The employee's own area: claim an identity, read your own hours, submit a constraint request — plus the boss-guarded router that rules on them |
+| `employee/` | The employee's own area: claim an identity, read your own hours, submit a constraint request — plus the boss-guarded router that rules on them |
 
 ## The interview contract
 
@@ -52,7 +52,7 @@ Two flows are deliberately **two calls**, not one:
 
 ## Audit warnings in responses
 
-Any response carrying a schedule also carries `warnings` from `bl/audit.py`. They
+Any response carrying a schedule also carries `warnings` from `bl/audit/`. They
 are **advisory** — a response with warnings is still a success, still `200`, and
 the schedule is still valid to display. Do not turn a warning into a `4xx`
 ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).

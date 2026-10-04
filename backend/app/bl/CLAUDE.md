@@ -11,22 +11,22 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 
 | File | Owns |
 |---|---|
-| `interview.py` | The intro interview — workplace profile, employees, rules, shift vocabulary |
-| `interview_service.py` | Persistence around it: sessions, turns, resume, completion |
+| `interview/` | The intro interview — workplace profile, employees, rules, shift vocabulary |
+| `interview_service/` | Persistence around it: sessions, turns, resume, completion |
 | `workspace_service.py` | Workspace rules: entering a team, roles, the share link |
-| `scheduler.py` | Checkpointed range generation, one date or one week per call; every assignment carries a reason |
-| `changes.py` | Conversational edits and the change log |
+| `scheduler/` | Checkpointed range generation, one date or one week per call; every assignment carries a reason |
+| `changes/` | Conversational edits and the change log |
 | `briefing.py` | **The agent speaking first.** Observes; proposes nothing that lands |
-| `schedule_service.py` | Persistence and orchestration around all three: propose, confirm, apply |
-| `audit.py` | **Pure-Python advisory checks. No LLM.** Also the fairness arithmetic the scheduler and the employee area read |
+| `schedule_service/` | Persistence and orchestration around all three: propose, confirm, apply |
+| `audit/` | **Pure-Python advisory checks. No LLM.** Also the fairness arithmetic the scheduler and the employee area read |
 | `export.py` | **A period out as `.xlsx`.** Pure functions, no model, no repository |
-| `importer.py` | Excel/doc ingest with layout inference |
-| `tools.py` | **The named questions the agent may ask. Pure Python, no LLM, no write** — including `profile_gaps`, what the interview never taught |
-| `planner.py` | The tool loop, with a deterministic fallback when no model is reachable |
-| `intent.py` | **Reading a Hebrew sentence with no model.** Seven shapes; never guesses |
-| `simulate.py` | **What a change would do.** No model, no repository, persists nothing |
-| `rotation.py` | **Whose closure a date is.** Pure arithmetic off separate round/triplet anchors; no model |
-| `placement.py` | **What a placement would cost, and what else the manager could do.** No model |
+| `importer/` | Excel/doc ingest with layout inference |
+| `tools/` | **The named questions the agent may ask. Pure Python, no LLM, no write** — including `profile_gaps`, what the interview never taught |
+| `planner/` | The tool loop, with a deterministic fallback when no model is reachable |
+| `intent/` | **Reading a Hebrew sentence with no model.** Seven shapes; never guesses |
+| `simulate/` | **What a change would do.** No model, no repository, persists nothing |
+| `rotation/` | **Whose closure a date is.** Pure arithmetic off separate round/triplet anchors; no model |
+| `placement/` | **What a placement would cost, and what else the manager could do.** No model |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
 
 ## The division that defines this layer

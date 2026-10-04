@@ -38,17 +38,17 @@ uvicorn app.main:app --reload
   role, and what a new workspace inherits.
 - `api/dependencies.py` — the route guards (`visitor`, `boss`).
 - `common/sessions.py` — signed session cookies (HMAC-SHA256, no library).
-- `bl/interview.py` — the intro interview, one `plan-chat` turn at a time
+- `bl/interview/` — the intro interview, one `plan-chat` turn at a time
   (ported from AiSummryIO). Collects the workplace profile, employees, rules
   (tagged hard/soft), and the **shift vocabulary**. Every turn returns the
   draft profile so far; `ready` is gated in code, never trusted to the prompt.
   The manager may also **end it early** (`interview_service.end`), which
   writes the partial draft with a `completeness` record of what it still owes
   ([D22](../docs/DECISIONS.md#d22--the-interview-can-be-ended-early-and-the-profile-says-what-it-owes-️-amends-d18)).
-- `bl/scheduler.py` — generates a schedule; every assignment carries a reason.
+- `bl/scheduler/` — generates a schedule; every assignment carries a reason.
   Builds the slot grid in code (which dates fall in a period is arithmetic) and
   asks the model only to assign people into it.
-- `bl/changes.py` — conversational edits; asks for the boss's reason, proposes a
+- `bl/changes/` — conversational edits; asks for the boss's reason, proposes a
   replacement with justification, applies on confirmation. Proposes only — it is
   handed no repository, so it cannot write.
 - `bl/briefing.py` — **the agent speaking first.** Reads the current state and
@@ -57,13 +57,13 @@ uvicorn app.main:app --reload
 - `bl/copilot.py` + `app/worker.py` — the durable observation loop. PostgreSQL
   owns jobs, inbox items, per-action permissions and append-only audit events;
   the separate worker survives browser and API restarts.
-- `bl/schedule_service.py` — persistence and ordering around those three plus
+- `bl/schedule_service/` — persistence and ordering around those three plus
   the audit: propose, confirm, apply, publish, constraints, history.
-- `bl/audit.py` — **pure Python, no LLM.** Recomputes countable facts and returns
+- `bl/audit/` — **pure Python, no LLM.** Recomputes countable facts and returns
   warnings. Never blocks. Also owns `personal_summary()` and `fairness()`, which
   the employee area renders — they live here so one person's hours are literally
   the same arithmetic as the manager's warnings, not a second implementation.
-- `bl/employee_service.py` — identity claims, the personal view, constraint
+- `bl/employee_service/` — identity claims, the personal view, constraint
   requests, and the unread-change mark. Approval is the only thing that writes
   a constraint (D14).
 - `bl/schedule_service.create_blank/assign/unassign` — the manual path (D18).
@@ -71,7 +71,7 @@ uvicorn app.main:app --reload
 - `bl/export.py` — a period out as `.xlsx`. Pure functions, no model, no
   repository. Laid out shift-major like `FILE_FORMATS.md` Sample A so an
   exported week can be edited and imported back.
-- `bl/importer.py` — Excel/Word ingest with layout inference. **No model
+- `bl/importer/` — Excel/Word ingest with layout inference. **No model
   call**: which axis is time and whether shift is nested under date is grid
   arithmetic, and code that counts cannot hallucinate a person into a shift.
   Three layouts, scored against each other: `shift_major` (Sample A),
@@ -81,24 +81,24 @@ uvicorn app.main:app --reload
   (`07:00-15:00`) fold into the declared shift running those hours rather than
   becoming a second shift with the same meaning. Returns an `Interpretation`;
   handed no repository, so it cannot write.
-- `bl/learn.py` — what a stack of past files says about the workplace.
+- `bl/learn/` — what a stack of past files says about the workplace.
   `observe()` counts patterns across every uploaded file (no model);
   `RuleLearner` turns those counts into candidate rules in the manager's own
   words (D2) with the evidence attached. Proposes only — nothing is approved
   by having been proposed.
-- `bl/tools.py` — **the named questions the agent may ask, answered in pure
+- `bl/tools/` — **the named questions the agent may ask, answered in pure
   Python.** Seven read-only operations (`read_period`, `employee_state`,
   `coverage_gaps`, `validate_placement`, `find_replacements`,
   `publish_readiness`, `profile_gaps`). No LLM call anywhere in the file, and
   no write: it holds a repository and uses it for reads only (D19).
-- `bl/planner.py` — the loop that runs them. The model picks tools, the
+- `bl/planner/` — the loop that runs them. The model picks tools, the
   tools answer with arithmetic, the results go back. Falls back to
-  `bl/intent.py` when no model is reachable, so the same questions are
+  `bl/intent/` when no model is reachable, so the same questions are
   answered with nothing configured.
-- `bl/intent.py` — **reading a Hebrew sentence with no model.** Keyword
+- `bl/intent/` — **reading a Hebrew sentence with no model.** Keyword
   matching against the workspace's own roster and shift vocabulary, six
   question shapes, and `unknown` for anything else. It never guesses.
-- `bl/simulate.py` — what a change *would* do, computed in memory. Handed no
+- `bl/simulate/` — what a change *would* do, computed in memory. Handed no
   repository, so persisting nothing is a property of the wiring (D20).
 - `bl/prompts/` — prompt text as markdown, loaded by `prompts.load(name)`.
   Shared fragments compose via `<!-- include: shared/name.md -->`.
@@ -108,9 +108,16 @@ uvicorn app.main:app --reload
 Business logic under `bl/`, data access under `dal/`. A file owns one class or
 one concern; split rather than append.
 
+**Size rules.** No file over 300 lines and no function over 50 (docstring
+included). A concern that outgrows one file becomes a package: its
+`__init__.py` re-exports the public names, so callers keep importing from
+the same path, and a facade class (`ScheduleService`, `EmployeeService`,
+`ScheduleTools`) composes small collaborators that each own one job. Each
+package's `__init__` docstring carries a table of which module owns what.
+
 ## Locked rules
 
-- **The audit never blocks.** `bl/audit.py` returns warnings and nothing else. It
+- **The audit never blocks.** `bl/audit/` returns warnings and nothing else. It
   does not reject a schedule, rewrite an assignment, or veto the agent. Making it
   authoritative reverses [D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)
   — the whole product shape depends on the agent keeping the judgment.
@@ -118,7 +125,7 @@ one concern; split rather than append.
   cannot be hallucinated. Pure functions over a roster; trivially unit-testable.
 - **Hard rules are not gates.** They are strong instructions to the model plus a
   loud warning when broken. This is a deliberate, accepted tradeoff — see D1/D3.
-- **How full a slot is has exactly one answer, and `bl/audit.py` owns it.**
+- **How full a slot is has exactly one answer, and `bl/audit/` owns it.**
   `required_headcount()` says how many people it asks for — reading the stored
   grid first, since that is what the week was generated or imported into — and
   `counts_toward_staffing()` says whether the person standing on it fills one
@@ -166,7 +173,7 @@ one concern; split rather than append.
   one gesture is still N people taken off N shifts, and the change log is
   the only history there is (D4).
 - **The rotation is enforced where a shift is assigned, and only ever
-  advisory afterwards.** `bl/rotation.py` is the single definition of whose
+  advisory afterwards.** `bl/rotation/` is the single definition of whose
   closure a date is; `scheduler.py` refuses to store a row contradicting it,
   `placement.py` says so before the click, and `audit.py` warns about a
   schedule that already drifted. Refusing a *generated* row is not the audit
@@ -184,7 +191,7 @@ one concern; split rather than append.
   so rows predating the column keep their meaning, and `move_assignment`
   leaves it alone: dragging a hand-placed shift does not make it the agent's.
 - **The export layout is Sample A, not a design choice.** `bl/export.py`
-  writes the shape `bl/importer.py` is being built to read, so a week can
+  writes the shape `bl/importer/` is being built to read, so a week can
   leave and come back ([D17](../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
   Changing the layout to something prettier produces a file this product
   cannot read.
@@ -204,7 +211,7 @@ one concern; split rather than append.
   builds the slot grid from the file's own rows, not from `build_slots` —
   regenerating it from today's vocabulary would quietly reshape history to
   match a profile that may have changed since ([D9](../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)).
-- **A learned pattern is not a rule.** `bl/learn.py` returns *candidates*
+- **A learned pattern is not a rule.** `bl/learn/` returns *candidates*
   carrying their evidence, and the leap from "has not happened" to "must not
   happen" is the manager's to make: a file showing nobody on Saturday may mean
   Saturday is closed, or that the sheet only covered weekdays. Anything but an
@@ -217,7 +224,7 @@ one concern; split rather than append.
   *request* via `guards.employee()` and nothing else. They cannot assign,
   move, publish, or approve — including their own request.
 - **A pending constraint request is inert.** It lives in `constraint_requests`,
-  not `availability`, so `bl/audit.py` cannot see it and submitting one cannot
+  not `availability`, so `bl/audit/` cannot see it and submitting one cannot
   move the arithmetic. The manager's approval is what promotes it into an
   `availability` row with `source='employee_reported'` (D13/D14). Keeping the
   two tables separate is what makes that a property of the schema rather than
@@ -248,7 +255,7 @@ one concern; split rather than append.
   thin profile and returns a thin schedule — refusing would be the audit
   becoming a gate through a side door (D3/D22).
 - **The tool layer never writes** ([D19](../docs/DECISIONS.md#d19--the-agent-answers-with-tools-asking-and-changing-stay-separate)).
-  `bl/tools.py` is handed a repository and reads from it; the write path
+  `bl/tools/` is handed a repository and reads from it; the write path
   stays `schedule_service.apply()` behind the manager's confirmation. A tool
   that could write would be a second way to change a schedule, and the
   product deliberately has one.
@@ -265,9 +272,9 @@ one concern; split rather than append.
   `tools.resolve_employee` is the single resolver both paths use; it returns
   *several* matches rather than the first, since picking the first is the
   guess the whole gate exists to refuse.
-- **Reading may interpret; writing may not.** `bl/planner.py` answers a
+- **Reading may interpret; writing may not.** `bl/planner/` answers a
   loosely-worded question against a reasonable reading — nothing moves, and a
-  re-ask is cheap. `bl/changes.py` may not, because a change applied to the
+  re-ask is cheap. `bl/changes/` may not, because a change applied to the
   wrong record has to be found before it can be undone.
 - **A clarification continues the request; it does not replace it.**
   `pending_request` travels to the client with the question and back with the
@@ -289,19 +296,19 @@ one concern; split rather than append.
   the same guard `bl/briefing.py` has (D15). Asking and changing are
   separate acts, separate endpoints, and separate cards on the screen.
 - **The agent may not claim a placement is valid unless a tool said so.**
-  `find_replacements` re-validates every candidate through `bl/placement.py`
+  `find_replacements` re-validates every candidate through `bl/placement/`
   and keeps only the clean ones. This is *not* the audit becoming a gate:
   `validate_placement` still returns `blocking: False` and
   `publish_readiness.ready` is descriptive — nothing branches on it before a
   publish (D3).
-- **A simulation persists nothing, structurally.** `bl/simulate.py` is
+- **A simulation persists nothing, structurally.** `bl/simulate/` is
   handed no repository at all ([D20](../docs/DECISIONS.md#d20--a-simulation-is-not-a-proposal)),
   like `changes.py` and `importer.py`. Approving one is an ordinary
   `apply()` with the manager's reason — there is no dedicated endpoint for
   it, because a second write path is how a confirmation step gets routed
   around.
-- **The product answers without a model.** `bl/planner.py` falls back to
-  `bl/intent.py` over the same tools and reports `used_model: false`. The
+- **The product answers without a model.** `bl/planner/` falls back to
+  `bl/intent/` over the same tools and reports `used_model: false`. The
   fallback covers six question shapes and says plainly when it did not
   understand — it never guesses, because an agent acting on a misread
   sentence with no model to blame is worse than one that asks.
