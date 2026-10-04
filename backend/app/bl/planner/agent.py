@@ -2,9 +2,10 @@
 
 from typing import List, Optional
 
+from app.bl.clarification import resume
 from app.bl.planner.fallback import DeterministicAnswerer
 from app.bl.planner.model_loop import ModelToolLoop
-from app.bl.planner.shaping import bounded, resume
+from app.bl.planner.shaping import bounded
 from app.common.errors import AgentError
 
 

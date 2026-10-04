@@ -31,25 +31,6 @@ def pretty(hours: Any) -> str:
         return "0"
 
 
-def resume(pending: str, reply: str) -> str:
-    """The original request and the manager's clarification, read as one.
-
-    Joined rather than replaced. "ערב" is not a request — it is the missing
-    half of one, and dropping the half that carried the verb is how a
-    clarification turns into a new, emptier question. Plain text rather than
-    a parsed intent: the sentence is what both readers already read.
-    """
-    pending, reply = bounded(pending), bounded(reply)
-    if not pending:
-        return reply
-    if not reply:
-        return pending
-    # An answer that already restates the request is not appended to itself.
-    if pending in reply:
-        return reply
-    return "%s (%s)" % (pending, reply)
-
-
 def is_question(value: str) -> bool:
     return text(value).endswith(("?", "؟"))
 
