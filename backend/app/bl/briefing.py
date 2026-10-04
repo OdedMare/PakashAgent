@@ -28,7 +28,7 @@ the state and stores what was said.
 """
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from app.bl.prompts import load
 from app.common.errors import AgentError

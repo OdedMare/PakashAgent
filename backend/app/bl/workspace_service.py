@@ -5,7 +5,7 @@ owns the rules between them -- what a boss is allowed to do that a member is
 not, and what a freshly created workspace inherits.
 """
 
-from typing import List, Optional
+from typing import List
 
 from app.common.errors import AgentError, ConflictError
 from app.common.sessions import ROLE_BOSS, ROLE_MEMBER

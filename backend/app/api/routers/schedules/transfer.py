@@ -13,6 +13,11 @@ _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 class TransferRoutes(RouteGroup):
     def register(self, router: APIRouter) -> None:
+        self._register_export(router)
+        self._register_import(router)
+
+    def _register_export(self, router: APIRouter) -> None:
+        """A period leaving as a file (D17)."""
         service, boss = self.service, self.boss
 
         @router.get("/export/{schedule_id}")
@@ -29,6 +34,10 @@ class TransferRoutes(RouteGroup):
                 media_type=_XLSX,
                 headers={"Content-Disposition": 'attachment; filename="%s"' % name},
             )
+
+    def _register_import(self, router: APIRouter) -> None:
+        """Old files coming in: preview, then confirm (D7)."""
+        service, boss = self.service, self.boss
 
         @router.post("/import/preview", response_model=ImportPreview)
         async def import_preview(

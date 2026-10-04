@@ -18,6 +18,11 @@ class ChangeRoutes(RouteGroup):
     """Propose and apply are two calls, and so are drag and confirm (D8/D12)."""
 
     def register(self, router: APIRouter) -> None:
+        self._register_suggesting(router)
+        self._register_confirming(router)
+
+    def _register_suggesting(self, router: APIRouter) -> None:
+        """What the agent would say or do. Persists nothing."""
         service, boss = self.service, self.boss
 
         @router.post("/brief", response_model=Briefing)
@@ -50,6 +55,10 @@ class ChangeRoutes(RouteGroup):
                 pending_request=request.pending_request,
             )
 
+    def _register_confirming(self, router: APIRouter) -> None:
+        """What the manager confirmed, with their reason attached."""
+        service, boss = self.service, self.boss
+
         @router.post("/apply")
         def apply(request: ApplyRequest, session: dict = Depends(boss)) -> dict:
             """Apply a proposal the manager confirmed, and log both reasons."""
@@ -74,7 +83,6 @@ class ChangeRoutes(RouteGroup):
                 agent_reason=request.agent_reason,
                 schedule_id=request.schedule_id,
             )
-
 
 class AskingRoutes(RouteGroup):
     """Asking and simulating write nothing, and carry no operations (D19/D20)."""

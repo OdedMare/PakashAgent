@@ -14,6 +14,11 @@ def _required(request: GenerateRequest) -> list:
 
 class GenerationRoutes(RouteGroup):
     def register(self, router: APIRouter) -> None:
+        self._register_steps(router)
+        self._register_control(router)
+
+    def _register_steps(self, router: APIRouter) -> None:
+        """Building a period: whole, as a range job, and one step of it."""
         service, boss = self.service, self.boss
 
         @router.post("/generate", response_model=Schedule)
@@ -44,6 +49,10 @@ class GenerationRoutes(RouteGroup):
         def generate_next(schedule_id: str, session: dict = Depends(boss)) -> dict:
             """Generate and checkpoint one span; retry the failed one first."""
             return service.generate_next(session["team_id"], schedule_id)
+
+    def _register_control(self, router: APIRouter) -> None:
+        """Running, stopping, and narrowing a job; opening a blank period."""
+        service, boss = self.service, self.boss
 
         @router.post("/generate/{schedule_id}/run", response_model=Schedule)
         def run_generation(schedule_id: str, session: dict = Depends(boss)) -> dict:

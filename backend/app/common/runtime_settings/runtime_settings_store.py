@@ -144,41 +144,40 @@ class RuntimeSettingsStore:
             if value is None:
                 continue
             try:
-                if key == "database_url":
-                    # A pasted jdbc:...?currentSchema=x sets the schema too,
-                    # unless the patch names one explicitly.
-                    in_url = extract_url_schema(value)
-                    if in_url and not patch.get("database_schema"):
-                        settings.database_schema = (
-                            normalize_database_schema(in_url)
-                        )
-                    value = normalize_database_url(value)
-                elif key == "database_schema":
-                    value = normalize_database_schema(value)
-                elif key in _LLM_BASE_URL_FIELDS:
-                    value = normalize_llm_base_url(value)
-                elif key == "llm_repetition_penalty":
-                    # Float, and 0 is meaningful ("do not send it"), so it
-                    # cannot join the max(1, int(...)) group below.
-                    value = _clamp_penalty(value)
-                elif key in ("llm_timeout_seconds", "llm_queue_seconds"):
-                    # 0 is meaningful here — "no timeout, wait as long as the
-                    # server needs" — so this cannot join the max(1, ...)
-                    # group below, which would quietly turn a request for no
-                    # limit into a one-second one: the harshest possible
-                    # setting, arrived at by asking for the mildest.
-                    # Negatives are folded to 0 rather than rejected; both
-                    # mean "no ceiling" and there is nothing else they could.
-                    value = max(0, int(value))
-                elif key in _POSITIVE_INTS:
-                    value = max(1, int(value))
-                elif key == "schedule_generation_mode":
-                    value = _generation_mode(value)
+                value = _normalized(key, value, patch, settings)
             except (TypeError, ValueError):
                 if strict:
                     raise
                 continue
             setattr(settings, key, value)
+
+
+def _normalized(key: str, value, patch: dict, settings):
+    """One field's value as it will be stored. Raises on an unusable value."""
+    if key == "database_url":
+        # A pasted jdbc:...?currentSchema=x sets the schema too, unless the
+        # patch names one explicitly.
+        in_url = extract_url_schema(value)
+        if in_url and not patch.get("database_schema"):
+            settings.database_schema = normalize_database_schema(in_url)
+        return normalize_database_url(value)
+    if key == "database_schema":
+        return normalize_database_schema(value)
+    if key in _LLM_BASE_URL_FIELDS:
+        return normalize_llm_base_url(value)
+    if key == "llm_repetition_penalty":
+        # Float, and 0 is meaningful ("do not send it").
+        return _clamp_penalty(value)
+    if key in ("llm_timeout_seconds", "llm_queue_seconds"):
+        # 0 means "no timeout, wait as long as the server needs", so these
+        # cannot join the max(1, ...) group below -- that would turn a request
+        # for no limit into a one-second one. Negatives fold to 0.
+        return max(0, int(value))
+    if key in _POSITIVE_INTS:
+        return max(1, int(value))
+    if key == "schedule_generation_mode":
+        return _generation_mode(value)
+    return value
 
 
 def _safe_database_url(value: str) -> str:

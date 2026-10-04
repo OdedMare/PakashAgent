@@ -20,62 +20,68 @@ class CopilotService:
         self._interviews = interviews
 
     def scan(self, team_id: str, job_id: Optional[str] = None) -> List[dict]:
-        """Read one workspace and leave durable, deduplicated inbox items."""
-        created = []
+        """Read one workspace and leave durable, deduplicated inbox items.
+
+        Three observers -- what the interview still owes, whether the profile
+        has gone stale, and what the current schedule warns about. Each item
+        is keyed by a fingerprint, so a rescan never duplicates one.
+        """
+        found = (
+            self._profile_gaps(team_id, job_id)
+            + self._stale_profile(team_id, job_id)
+            + self._schedule_warnings(team_id, job_id)
+        )
+        return [item for item in found if item]
+
+    def _profile_gaps(self, team_id: str, job_id: Optional[str]) -> List[Optional[dict]]:
         profile = self._repository.team_profile(team_id) or {}
         updated_at = self._repository.latest_profile_updated_at(team_id)
-        profile_stamp = updated_at.isoformat() if updated_at else "none"
+        stamp = updated_at.isoformat() if updated_at else "none"
         completeness = profile.get("completeness") or {}
         gaps = list(completeness.get("missing_topics") or [])
         gaps += list(completeness.get("open_points") or [])
-        for gap in gaps:
-            text = str(gap).strip()
-            if not text:
-                continue
-            item = self._create(
-                team_id, "follow-up:%s:%s" % (profile_stamp, _key(text)),
-                ACTION_FOLLOW_UP,
-                "נדרש להשלים מידע בראיון",
-                text,
-                {"question": text, "suggestion": text},
-                job_id,
+        texts = [str(gap).strip() for gap in gaps if str(gap).strip()]
+        return [
+            self._create(
+                team_id, "follow-up:%s:%s" % (stamp, _key(text)), ACTION_FOLLOW_UP,
+                "נדרש להשלים מידע בראיון", text,
+                {"question": text, "suggestion": text}, job_id,
             )
-            if item:
-                created.append(item)
+            for text in texts
+        ]
 
-        if updated_at and _older_than(updated_at, _PROFILE_REVIEW_DAYS):
-            stamp = updated_at.date().isoformat()
-            question = (
-                "עבר זמן מאז ראיון ההיכרות. האם העובדים, המשמרות והכללים "
-                "עדיין מעודכנים?"
-            )
-            item = self._create(
-                team_id, "profile-review:%s" % stamp, ACTION_PROFILE_REVIEW,
-                "כדאי לרענן את פרטי מקום העבודה", question,
-                {"question": question, "suggestion": question}, job_id,
-            )
-            if item:
-                created.append(item)
+    def _stale_profile(self, team_id: str, job_id: Optional[str]) -> List[Optional[dict]]:
+        updated_at = self._repository.latest_profile_updated_at(team_id)
+        if not updated_at or not _older_than(updated_at, _PROFILE_REVIEW_DAYS):
+            return []
+        question = (
+            "עבר זמן מאז ראיון ההיכרות. האם העובדים, המשמרות והכללים "
+            "עדיין מעודכנים?"
+        )
+        return [self._create(
+            team_id, "profile-review:%s" % updated_at.date().isoformat(),
+            ACTION_PROFILE_REVIEW, "כדאי לרענן את פרטי מקום העבודה", question,
+            {"question": question, "suggestion": question}, job_id,
+        )]
 
-        schedule = self._schedules.current(team_id)
-        for warning in (schedule or {}).get("warnings") or []:
+    def _schedule_warnings(self, team_id: str, job_id: Optional[str]) -> List[Optional[dict]]:
+        schedule = self._schedules.current(team_id) or {}
+        items = []
+        for warning in schedule.get("warnings") or []:
             fingerprint = "schedule:%s:%s:%s:%s:%s" % (
                 schedule.get("id", ""), warning.get("code", "warning"),
                 warning.get("employee", ""), warning.get("date", ""),
                 warning.get("shift", ""),
             )
             message = warning.get("message") or "נמצאה בעיה בסידור"
-            suggestion = "בדוק את הבעיה בסידור והצע תיקון: %s" % message
-            item = self._create(
+            items.append(self._create(
                 team_id, fingerprint, ACTION_SCHEDULE_REPAIR,
                 "נמצאה בעיה בסידור", message,
-                {"suggestion": suggestion, "warning": warning,
-                 "schedule_id": schedule.get("id")},
+                {"suggestion": "בדוק את הבעיה בסידור והצע תיקון: %s" % message,
+                 "warning": warning, "schedule_id": schedule.get("id")},
                 job_id,
-            )
-            if item:
-                created.append(item)
-        return created
+            ))
+        return items
 
     def _create(
         self, team_id: str, fingerprint: str, action_type: str,

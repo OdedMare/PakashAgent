@@ -32,16 +32,8 @@ import datetime
 import io
 from typing import Any, Dict, List, Optional
 
+from app.bl.hebrew_calendar import hebrew_weekday
 from app.common.errors import AgentError
-
-# Matching `scheduler._HEBREW_WEEKDAYS`: Monday-first, because that is what
-# `date.weekday()` returns. Duplicated rather than imported to keep this
-# module free of the scheduler -- it is a table of Hebrew names, and the two
-# would have to change together anyway if the language ever did.
-_HEBREW_WEEKDAYS = (
-    "יום שני", "יום שלישי", "יום רביעי", "יום חמישי",
-    "יום שישי", "שבת", "יום ראשון",
-)
 
 # A slot nobody is on. Said out loud rather than left blank: an empty cell in
 # a group chat reads as "nothing that day", and an unstaffed shift is the one
@@ -63,66 +55,65 @@ def as_workbook(schedule: dict, title: str = "") -> bytes:
     """
     try:
         from openpyxl import Workbook
-        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-        from openpyxl.utils import get_column_letter
     except ImportError:  # pragma: no cover - openpyxl is a hard dependency
         raise AgentError("ייצוא לאקסל אינו זמין בשרת הזה")
-
     days = _by_day(schedule)
     if not days:
         raise AgentError("אין מה לייצא: הסידור ריק")
-
-    dates = sorted(days)
-    shifts = _ordered_shifts_across(days)
-
     book = Workbook()
-    sheet = book.active
-    sheet.title = "סידור"
-    sheet.sheet_view.rightToLeft = True
+    writer = _SheetWriter(book.active, sorted(days))
+    writer.title((title or "").strip() or "סידור עבודה", _period(schedule))
+    writer.header()
+    for offset, shift_name in enumerate(_ordered_shifts_across(days)):
+        writer.shift_row(offset, shift_name, days)
+    stream = io.BytesIO()
+    book.save(stream)
+    return stream.getvalue()
 
-    header_fill = PatternFill("solid", fgColor="EEECE3")
-    thin = Side(style="thin", color="D9D5CA")
-    border = Border(left=thin, right=thin, top=thin, bottom=thin)
-    centered = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    heading = (title or "").strip() or "סידור עבודה"
-    sheet.cell(row=1, column=1, value=heading).font = Font(bold=True, size=13)
-    period = _period(schedule)
-    if period:
-        sheet.cell(row=2, column=1, value=period)
+class _SheetWriter:
+    """Writes one period onto one worksheet, in the Sample A layout."""
 
-    # Two header rows, matching Sample A: the date, then its weekday beneath.
-    top = 4
-    label = sheet.cell(row=top, column=1, value="משמרות")
-    label.font = Font(bold=True)
-    label.fill = header_fill
-    label.border = border
-    label.alignment = centered
-    sheet.cell(row=top + 1, column=1).fill = header_fill
-    sheet.cell(row=top + 1, column=1).border = border
+    # Two header rows sit here, matching Sample A: the date, then its weekday.
+    _TOP = 4
 
-    for index, date in enumerate(dates):
-        column = index + 2
-        head = sheet.cell(row=top, column=column, value=_human_date(date))
-        day = sheet.cell(row=top + 1, column=column, value=_weekday(date))
-        for cell in (head, day):
-            cell.font = Font(bold=True)
-            cell.fill = header_fill
-            cell.border = border
-            cell.alignment = centered
-        sheet.column_dimensions[get_column_letter(column)].width = 16
+    def __init__(self, sheet, dates: List[str]):
+        from openpyxl.styles import Alignment, Border, PatternFill, Side
 
-    sheet.column_dimensions["A"].width = 18
+        self._sheet = sheet
+        self._dates = dates
+        sheet.title = "סידור"
+        sheet.sheet_view.rightToLeft = True
+        thin = Side(style="thin", color="D9D5CA")
+        self._fill = PatternFill("solid", fgColor="EEECE3")
+        self._border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        self._centered = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    for offset, shift_name in enumerate(shifts):
-        row = top + 2 + offset
-        name = sheet.cell(row=row, column=1, value=shift_name)
-        name.font = Font(bold=True)
-        name.fill = header_fill
-        name.border = border
-        name.alignment = centered
+    def title(self, heading: str, period: str) -> None:
+        from openpyxl.styles import Font
+
+        self._sheet.cell(row=1, column=1, value=heading).font = Font(bold=True, size=13)
+        if period:
+            self._sheet.cell(row=2, column=1, value=period)
+
+    def header(self) -> None:
+        from openpyxl.utils import get_column_letter
+
+        self._head(self._sheet.cell(row=self._TOP, column=1, value="משמרות"))
+        corner = self._sheet.cell(row=self._TOP + 1, column=1)
+        corner.fill, corner.border = self._fill, self._border
+        for index, date in enumerate(self._dates):
+            column = index + 2
+            self._head(self._sheet.cell(row=self._TOP, column=column, value=_human_date(date)))
+            self._head(self._sheet.cell(row=self._TOP + 1, column=column, value=_weekday(date)))
+            self._sheet.column_dimensions[get_column_letter(column)].width = 16
+        self._sheet.column_dimensions["A"].width = 18
+
+    def shift_row(self, offset: int, shift_name: str, days: Dict[str, Dict[str, List[str]]]) -> None:
+        row = self._TOP + 2 + offset
+        self._head(self._sheet.cell(row=row, column=1, value=shift_name))
         lines = 1
-        for index, date in enumerate(dates):
+        for index, date in enumerate(self._dates):
             people = days[date].get(shift_name)
             # `None` means this shift does not run that day, which is not the
             # same as running with nobody on it. An empty cell says the
@@ -133,20 +124,18 @@ def as_workbook(schedule: dict, title: str = "") -> bytes:
             else:
                 value = "\n".join(people) if people else UNFILLED
                 lines = max(lines, len(people) or 1)
-            cell = sheet.cell(row=row, column=index + 2, value=value)
-            cell.border = border
-            cell.alignment = centered
-        # Sized to the fullest cell in the row rather than fixed. A shift run
-        # by four or ten people writes four or ten names into one cell, and a
-        # fixed height silently crops all but the first two -- the exported
-        # week would then show fewer people than the schedule holds, which is
-        # worse than an ugly file. Read back it is unaffected either way:
-        # `importer._split_names` splits the cell on its newlines.
-        sheet.row_dimensions[row].height = max(34, 15 * lines + 8)
+            cell = self._sheet.cell(row=row, column=index + 2, value=value)
+            cell.border, cell.alignment = self._border, self._centered
+        # Sized to the fullest cell in the row rather than fixed: a fixed
+        # height silently crops all but the first two names, and the exported
+        # week would show fewer people than the schedule holds.
+        self._sheet.row_dimensions[row].height = max(34, 15 * lines + 8)
 
-    stream = io.BytesIO()
-    book.save(stream)
-    return stream.getvalue()
+    def _head(self, cell) -> None:
+        from openpyxl.styles import Font
+
+        cell.font = Font(bold=True)
+        cell.fill, cell.border, cell.alignment = self._fill, self._border, self._centered
 
 
 def filename(schedule: dict, extension: str) -> str:
@@ -227,7 +216,7 @@ def _period(schedule: dict) -> str:
 
 def _weekday(iso: str) -> str:
     day = _parse(iso)
-    return _HEBREW_WEEKDAYS[day.weekday()] if day else ""
+    return hebrew_weekday(day)
 
 
 def _human_date(iso: str) -> str:
