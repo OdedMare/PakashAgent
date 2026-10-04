@@ -10,19 +10,21 @@ from app.api.contracts import (
     CreateTeamRequest,
     LoginRequest,
     PasswordChangeRequest,
-    TeamSummary,
     TeamView,
     Workspace,
 )
 from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 
 
-def build_router(service, guards, secret: str, days: int) -> APIRouter:
-    router = APIRouter(prefix="/api/workspace", tags=["workspace"])
-    boss = guards.boss()
-    visitor = guards.visitor()
+class WorkspaceRoutes:
+    def __init__(self, service, guards, secret: str, days: int):
+        self._service = service
+        self._boss = guards.boss()
+        self._visitor = guards.visitor()
+        self._secret = secret
+        self._days = days
 
-    def _set_cookie(response: Response, team_id: str, role: str) -> None:
+    def set_cookie(self, response: Response, team_id: str, role: str) -> None:
         """Sign the session into an HttpOnly cookie.
 
         `httponly` keeps it away from JavaScript, so an XSS bug cannot read
@@ -38,66 +40,82 @@ def build_router(service, guards, secret: str, days: int) -> APIRouter:
         """
         response.set_cookie(
             COOKIE_NAME,
-            issue(secret, team_id, role, days),
-            max_age=days * 86400,
+            issue(self._secret, team_id, role, self._days),
+            max_age=self._days * 86400,
             httponly=True,
             samesite="lax",
             path="/",
         )
 
-    @router.get("/teams", response_model=list)
-    def teams() -> list:
-        """Names for the login picker. Served unauthenticated by design --
-        it is how a boss finds their workspace -- so it carries no secrets."""
-        return service.list_teams()
+    def register(self, router: APIRouter) -> None:
+        self._register_entry(router)
+        self._register_session(router)
 
-    @router.post("", response_model=Workspace)
-    def create(request: CreateTeamRequest, response: Response) -> dict:
-        """Open a workspace and log its creator in as the boss."""
-        team = service.create(request.name, request.password)
-        _set_cookie(response, team["id"], ROLE_BOSS)
-        return team
+    def _register_entry(self, router: APIRouter) -> None:
+        """Ways into a workspace: pick it, create it, log in, follow a link."""
+        service, set_cookie = self._service, self.set_cookie
 
-    @router.post("/login", response_model=Workspace)
-    def login(request: LoginRequest, response: Response) -> dict:
-        team = service.login(request.team_id, request.password)
-        _set_cookie(response, team["id"], ROLE_BOSS)
-        return team
+        @router.get("/teams", response_model=list)
+        def teams() -> list:
+            """Names for the login picker. Served unauthenticated by design --
+            it is how a boss finds their workspace -- so it carries no secrets."""
+            return service.list_teams()
 
-    @router.post("/member/{token}", response_model=Workspace)
-    def open_member_link(token: str, response: Response) -> dict:
-        """Exchange a share link for a member session.
+        @router.post("", response_model=Workspace)
+        def create(request: CreateTeamRequest, response: Response) -> dict:
+            """Open a workspace and log its creator in as the boss."""
+            team = service.create(request.name, request.password)
+            set_cookie(response, team["id"], ROLE_BOSS)
+            return team
 
-        The token moves into an HttpOnly cookie here so the rest of the
-        member's visit does not carry it in the URL, where it would end up in
-        history and in any screenshot of the address bar.
-        """
-        team = service.open_member_link(token)
-        _set_cookie(response, team["id"], ROLE_MEMBER)
-        return team
+        @router.post("/login", response_model=Workspace)
+        def login(request: LoginRequest, response: Response) -> dict:
+            team = service.login(request.team_id, request.password)
+            set_cookie(response, team["id"], ROLE_BOSS)
+            return team
 
-    @router.get("/me", response_model=TeamView)
-    def me(session: dict = Depends(visitor)) -> dict:
-        """The current workspace, shaped by the visitor's role."""
-        return service.describe(session["team_id"], session["role"])
+        @router.post("/member/{token}", response_model=Workspace)
+        def open_member_link(token: str, response: Response) -> dict:
+            """Exchange a share link for a member session.
 
-    @router.post("/logout")
-    def logout(response: Response) -> dict:
-        response.delete_cookie(COOKIE_NAME, path="/")
-        return {"status": "ok"}
+            The token moves into an HttpOnly cookie here so the rest of the
+            member's visit does not carry it in the URL, where it would end up
+            in history and in any screenshot of the address bar.
+            """
+            team = service.open_member_link(token)
+            set_cookie(response, team["id"], ROLE_MEMBER)
+            return team
 
-    @router.post("/member-link/rotate", response_model=Workspace)
-    def rotate(session: dict = Depends(boss)) -> dict:
-        """Revoke the outstanding share link. Boss only."""
-        return service.rotate_member_link(session["team_id"])
+    def _register_session(self, router: APIRouter) -> None:
+        """What a signed-in visitor can do with the session they hold."""
+        service, boss, visitor = self._service, self._boss, self._visitor
 
-    @router.post("/password")
-    def change_password(
-        request: PasswordChangeRequest, session: dict = Depends(boss)
-    ) -> dict:
-        service.change_password(
-            session["team_id"], request.current, request.replacement
-        )
-        return {"status": "ok"}
+        @router.get("/me", response_model=TeamView)
+        def me(session: dict = Depends(visitor)) -> dict:
+            """The current workspace, shaped by the visitor's role."""
+            return service.describe(session["team_id"], session["role"])
 
+        @router.post("/logout")
+        def logout(response: Response) -> dict:
+            response.delete_cookie(COOKIE_NAME, path="/")
+            return {"status": "ok"}
+
+        @router.post("/member-link/rotate", response_model=Workspace)
+        def rotate(session: dict = Depends(boss)) -> dict:
+            """Revoke the outstanding share link. Boss only."""
+            return service.rotate_member_link(session["team_id"])
+
+        @router.post("/password")
+        def change_password(
+            request: PasswordChangeRequest, session: dict = Depends(boss)
+        ) -> dict:
+            service.change_password(
+                session["team_id"], request.current, request.replacement
+            )
+            return {"status": "ok"}
+
+
+def build_router(service, guards, secret: str, days: int) -> APIRouter:
+    router = APIRouter(prefix="/api/workspace", tags=["workspace"])
+    WorkspaceRoutes(service, guards, secret, days).register(router)
     return router
