@@ -325,7 +325,7 @@ def test_fallback_resolves_tomorrow_before_calling_a_tool(
     repo, tools, monkeypatch,
 ):
     monkeypatch.setattr(
-        "app.bl.planner.israel_today", lambda: datetime.date(2026, 8, 20)
+        "app.bl.planner.fallback.israel_today", lambda: datetime.date(2026, 8, 20)
     )
 
     answer = PlanningAgent(_NoModel(), tools).answer(
