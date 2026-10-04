@@ -1,8 +1,6 @@
 """The employee's own area (D14)."""
 
-
 from pydantic import BaseModel, Field
-
 
 
 # -- the employee's own area (D14) -----------------------------------------
