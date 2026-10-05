@@ -55,6 +55,8 @@ class ManagerChatService:
         self._history = AssignmentHistory(repository)
 
     def start_turn(self, team_id, manager_id, chat_id, request):
+        if not request["content"].strip():
+            raise AgentError("ההודעה אינה יכולה להיות ריקה")
         return self._repo.start_chat_turn(
             team_id, manager_id, chat_id, request["content"].strip(),
             request["request_id"], {
@@ -238,6 +240,9 @@ class ManagerChatService:
                 if not plan["reason"]:
                     raise AgentError("מה הסיבה לשינוי בסידור?")
                 rows = self._changed_rows(schedule, plan["operations"])
+                names = {person["name"] for person in profile.get("employees") or []}
+                if any(row["employee"] not in names for row in rows):
+                    raise AgentError("התוכנית מכילה עובד שאינו נמצא בצוות")
                 plan["warnings"] = self._audit_plan(profile, schedule, rows, state["availability"], plan["constraints"])
             elif kind == "clear":
                 if not plan["reason"]:
