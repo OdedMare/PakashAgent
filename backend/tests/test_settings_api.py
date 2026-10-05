@@ -17,6 +17,8 @@ from app.common.runtime_settings.runtime_settings_store import (
 from app.common.sessions.sessions import COOKIE_NAME, ROLE_BOSS, issue
 
 SECRET = "test-secret"
+PASSWORD = "settings-pass"
+UNLOCKED = {settings_router.PASSWORD_HEADER: PASSWORD}
 
 
 class FakeLLM:
@@ -62,7 +64,7 @@ def llm():
 def client(store, llm):
     app = FastAPI()
     app.include_router(
-        settings_router.build_router(store, llm, Guards(SECRET))
+        settings_router.build_router(store, llm, Guards(SECRET), PASSWORD)
     )
 
     @app.exception_handler(AppError)
@@ -72,7 +74,7 @@ def client(store, llm):
             status_code=exc.status_code, content={"detail": str(exc)}
         )
 
-    authenticated = TestClient(app, raise_server_exceptions=False)
+    authenticated = TestClient(app, raise_server_exceptions=False, headers=UNLOCKED)
     # The settings routes are boss-only now. These tests are about masking and
     # partial saves, so they arrive already logged in; the guard itself is
     # tested in test_workspace_api.py.
@@ -190,7 +192,7 @@ def test_probe_failure_reaches_the_panel_as_hebrew(store):
     app = FastAPI()
     app.include_router(settings_router.build_router(
         store, FakeLLM(error=AgentError("לא ניתן לטעון מודלים: refused")),
-        Guards(SECRET),
+        Guards(SECRET), PASSWORD,
     ))
 
     @app.exception_handler(AppError)
@@ -200,7 +202,7 @@ def test_probe_failure_reaches_the_panel_as_hebrew(store):
             status_code=exc.status_code, content={"detail": str(exc)}
         )
 
-    probing = TestClient(app, raise_server_exceptions=False)
+    probing = TestClient(app, raise_server_exceptions=False, headers=UNLOCKED)
     probing.cookies.set(COOKIE_NAME, issue(SECRET, "team-1", ROLE_BOSS, 1))
     response = probing.get("/api/models")
 
@@ -291,9 +293,9 @@ def test_an_old_settings_file_gains_the_roles_unset(tmp_path, monkeypatch):
     )
     app = FastAPI()
     app.include_router(
-        settings_router.build_router(old, FakeLLM(), Guards(SECRET))
+        settings_router.build_router(old, FakeLLM(), Guards(SECRET), PASSWORD)
     )
-    upgraded = TestClient(app, raise_server_exceptions=False)
+    upgraded = TestClient(app, raise_server_exceptions=False, headers=UNLOCKED)
     upgraded.cookies.set(COOKIE_NAME, issue(SECRET, "team-1", ROLE_BOSS, 1))
 
     body = upgraded.get("/api/settings").json()

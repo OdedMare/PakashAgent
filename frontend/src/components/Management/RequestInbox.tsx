@@ -18,7 +18,7 @@ import type { ConstraintRequestRow } from "@/types";
  *  the request starts counting in `bl/audit.py`.
  *
  *  Approving is one click; rejecting requires a reason, and the button stays
- *  disabled until there is one. That mirrors `ConfirmMove`: the requirement is
+ *  disabled until there is one. That mirrors `ConfirmDrop`: the requirement is
  *  visible in the UI rather than arriving as a server error afterwards, and
  *  the reason is captured at the only moment it is cheap — while the manager
  *  still has it in mind ([D8](../../../../docs/DECISIONS.md)).

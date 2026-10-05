@@ -353,7 +353,7 @@ def _as(client, role, team=TEAM, name=None):
     )
 
 
-def _claim(client, name=DANA, passcode="1234", team=TEAM):
+def _claim(client, name=DANA, passcode="123456", team=TEAM):
     _as(client, ROLE_MEMBER, team)
     response = client.post(
         "/api/employee/claim", json={"employee": name, "passcode": passcode}
@@ -385,7 +385,7 @@ def test_a_name_not_on_the_roster_cannot_be_claimed(client):
     _as(client, ROLE_MEMBER)
 
     response = client.post(
-        "/api/employee/claim", json={"employee": "מנהל", "passcode": "1234"}
+        "/api/employee/claim", json={"employee": "מנהל", "passcode": "123456"}
     )
 
     # 502, the codebase's `AgentError`. Same status the schedule service
@@ -401,7 +401,7 @@ def test_a_claimed_name_cannot_be_claimed_again(client):
     _as(client, ROLE_MEMBER)
 
     response = client.post(
-        "/api/employee/claim", json={"employee": DANA, "passcode": "9999"}
+        "/api/employee/claim", json={"employee": DANA, "passcode": "999999"}
     )
 
     assert response.status_code == 409
@@ -409,7 +409,7 @@ def test_a_claimed_name_cannot_be_claimed_again(client):
 
 def test_an_anonymous_visitor_cannot_claim_anything(client):
     assert client.post(
-        "/api/employee/claim", json={"employee": DANA, "passcode": "1234"}
+        "/api/employee/claim", json={"employee": DANA, "passcode": "123456"}
     ).status_code == 401
 
 
@@ -442,11 +442,11 @@ def test_the_roster_marks_which_names_are_taken(client):
 # --- logging in -------------------------------------------------------------
 
 def test_the_right_passcode_signs_an_employee_in(client):
-    _claim(client, passcode="1234")
+    _claim(client, passcode="123456")
     _as(client, ROLE_MEMBER)
 
     response = client.post(
-        "/api/employee/login", json={"employee": DANA, "passcode": "1234"}
+        "/api/employee/login", json={"employee": DANA, "passcode": "123456"}
     )
 
     assert response.status_code == 200
@@ -454,25 +454,25 @@ def test_the_right_passcode_signs_an_employee_in(client):
 
 
 def test_a_wrong_passcode_is_refused(client):
-    _claim(client, passcode="1234")
+    _claim(client, passcode="123456")
     _as(client, ROLE_MEMBER)
 
     assert client.post(
-        "/api/employee/login", json={"employee": DANA, "passcode": "9999"}
+        "/api/employee/login", json={"employee": DANA, "passcode": "999999"}
     ).status_code == 401
 
 
 def test_an_unclaimed_name_and_a_wrong_passcode_are_indistinguishable(client):
     """Otherwise the endpoint reports which names are claimed to anyone
     holding the link."""
-    _claim(client, name=DANA, passcode="1234")
+    _claim(client, name=DANA, passcode="123456")
     _as(client, ROLE_MEMBER)
 
     wrong_code = client.post(
-        "/api/employee/login", json={"employee": DANA, "passcode": "9999"}
+        "/api/employee/login", json={"employee": DANA, "passcode": "999999"}
     )
     unclaimed = client.post(
-        "/api/employee/login", json={"employee": YOSSI, "passcode": "9999"}
+        "/api/employee/login", json={"employee": YOSSI, "passcode": "999999"}
     )
 
     assert wrong_code.status_code == unclaimed.status_code == 401
@@ -591,11 +591,11 @@ def test_a_boss_cannot_reach_the_employee_area_without_claiming(client):
 
 def test_a_claim_in_one_team_does_not_authenticate_in_another(context):
     client, repository, _ = context
-    _claim(client, name=DANA, passcode="1234", team=TEAM)
+    _claim(client, name=DANA, passcode="123456", team=TEAM)
     _as(client, ROLE_MEMBER, team=OTHER_TEAM)
 
     assert client.post(
-        "/api/employee/login", json={"employee": DANA, "passcode": "1234"}
+        "/api/employee/login", json={"employee": DANA, "passcode": "123456"}
     ).status_code == 401
 
 
@@ -819,8 +819,8 @@ def test_acknowledging_settles_only_the_caller(client, context):
     """The employee comes off the signed cookie, so one person reading their
     own changes can never clear a colleague's badge."""
     _, repository, _ = context
-    _claim(client, name=DANA, passcode="1234")
-    _claim(client, name=YOSSI, passcode="5678")
+    _claim(client, name=DANA, passcode="123456")
+    _claim(client, name=YOSSI, passcode="567856")
     _change(repository, employee=DANA)
     _change(repository, employee=YOSSI)
 

@@ -91,7 +91,7 @@ import screen. All surfaces exist.
 | Interview | The intro conversation, one question per turn — `src/components/Interview/` |
 | Management | The manager's control room — `src/components/Management/` |
 | Schedule | The living grid for a period, RTL — `Management/Calendar.tsx` |
-| Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `ConfirmMove.tsx` |
+| Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `Board/ConfirmDrop.tsx` |
 | Briefing | What the agent noticed unprompted — `Management/Briefing.tsx` |
 | Copilot inbox | Durable observations, proposals, failures, permissions and audit — `Management/CopilotInbox.tsx` |
 | Agent answer | What the agent found when *asked* — `Management/AgentAnswer.tsx` |
@@ -145,7 +145,7 @@ impression.
   rendering an empty grid with a disabled button.
 
 - **Drag proposes; the dialog writes.** `Calendar` reports a drop upward and
-  changes nothing itself. `ConfirmMove` collects the manager's reason and its
+  changes nothing itself. `ConfirmDrop` collects the manager's reason and its
   confirm button stays disabled until there is one, so the requirement is
   visible rather than enforced by a server error afterwards.
 - **The manual writes are deliberately quiet.** `assign` and `unassign` pass
@@ -250,7 +250,7 @@ impression.
   are on the deterministic path would read "לא הבנתי" as the product being
   broken rather than the model being unconfigured.
 - **Approving a simulation is the ordinary apply call.** `SimulationPanel`
-  keeps its button disabled until there is a reason, mirroring `ConfirmMove`
+  keeps its button disabled until there is a reason, mirroring `ConfirmDrop`
   — and it sends the same `applyChange` a typed sentence does. There is no
   shortcut, because a second write path is how the confirmation step gets
   routed around (D8/D12).
@@ -264,7 +264,7 @@ impression.
   do Thursdays" distinct from "the manager decided Dana is off Thursdays"
   (D13/D14).
 - **Approving is one click; rejecting requires a reason.** `RequestInbox`
-  keeps the reject button disabled until there is one, mirroring `ConfirmMove`
+  keeps the reject button disabled until there is one, mirroring `ConfirmDrop`
   — the requirement is visible rather than arriving as a server error.
 
 ## Workspaces

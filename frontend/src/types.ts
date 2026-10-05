@@ -830,13 +830,6 @@ export interface RosterName {
   claimed: boolean;
 }
 
-/** A claim, as the manager's panel sees it. */
-export interface EmployeeIdentity {
-  employee: string;
-  created_at: string | null;
-  last_seen_at: string | null;
-}
-
 /** One assignment as the importer read it, before anything is confirmed.
  *
  *  `shift` may be empty: a sheet of dates and people carries no shift

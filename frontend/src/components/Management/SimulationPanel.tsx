@@ -38,7 +38,7 @@ import { formatDate } from "./Calendar";
  *  [D12](../../../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
  *  It stays disabled until there is a reason, so the requirement is visible
  *  rather than arriving as a server error afterwards — mirroring
- *  `ConfirmMove` and `RequestInbox`.
+ *  `ConfirmDrop` and `RequestInbox`.
  *
  *  **Warnings do not disable approval** (D3). A manager may knowingly accept
  *  a week the audit complains about; what this screen guarantees is that

@@ -6,8 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { formatDate, hebrewWeekday } from "@/components/Management/Calendar";
 import type { Assignment, PlacementCheck } from "@/types";
 
-/** The dialog a drop opens — the same contract `ConfirmMove` has, plus what
- *  the move would cost.
+/** The dialog a drop opens: the manager's reason, plus what the move would
+ *  cost.
  *
  *  **The drag still wrote nothing** ([D12](../../../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)),
  *  and the manager's reason is still required before anything lands
