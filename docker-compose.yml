@@ -26,9 +26,10 @@ services:
       # per process — fine for a single-container dev run, but sessions then
       # die on every restart. Set it in .env for anything long-lived.
       PAKASH_SESSION_SECRET: ${PAKASH_SESSION_SECRET:-}
-      # Unlocks the settings panel, on top of the boss login. Unset, the
-      # panel stays locked. Keep the value in .env, never in this file.
-      PAKASH_SETTINGS_PASSWORD: ${PAKASH_SETTINGS_PASSWORD:-}
+      # Unlocks the settings panel, on top of the boss login. Falls back to
+      # the committed default (same as settings.py) -- an empty value here
+      # would override it and lock the panel. Override it in .env.
+      PAKASH_SETTINGS_PASSWORD: ${PAKASH_SETTINGS_PASSWORD:-010802}
       # The model runs on the host, not in the compose network.
       PAKASH_LLM_BASE_URL: ${PAKASH_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       PAKASH_LLM_MODEL: ${PAKASH_LLM_MODEL:-gemma3:27b}

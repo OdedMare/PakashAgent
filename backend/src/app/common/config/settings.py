@@ -205,12 +205,13 @@ class Settings(BaseSettings):
     session_days: int = 30
     """How long a boss stays logged in before the cookie expires."""
 
-    settings_password: str = ""
+    settings_password: str = "010802"
     """Password the settings panel asks for, on top of the boss session.
 
     The settings are process-wide -- model endpoints, API keys, the database
     URL -- while a boss session only proves ownership of one workspace. So
-    editing them needs this as well. Empty means the panel stays locked:
-    a deployment that forgot to set it must not fall open."""
+    editing them needs this as well. The default is committed so the panel
+    opens out of the box; override it with `PAKASH_SETTINGS_PASSWORD` in any
+    real deployment. Set to empty, the panel stays locked."""
 
     runtime_settings_file: str = "runtime-settings.json"
