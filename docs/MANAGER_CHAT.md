@@ -7,6 +7,12 @@ conversations. Enter sends; Shift+Enter adds a line. The existing model provider
 credentials, role routing and FastAPI / business logic / PostgreSQL architecture
 remain in use.
 
+The chat is the manager's only agent surface. Each day header on the board has
+a "סוכן ליום" button that opens the chat focused on that date. A chip above the
+log names the day and can be cleared; paging to another week drops it. While a
+day is focused every message carries `focus_date`, and the agent treats requests
+that name no date as being about that day.
+
 ## What the agent can do
 
 - Answer schedule and workload questions with the existing read-only tools,
@@ -14,7 +20,10 @@ remain in use.
 - Propose replacements, moves and swaps, including complete sickness plans
   with absence constraints, and show individual replacement selectors.
 - Record availability for future dates before a schedule exists.
-- Build, fill or rebuild a week as actual assignments shown before approval.
+- Build, fill or rebuild a week as actual assignments shown before approval,
+  or a single day (or a few days) inside an existing draft period. A partial
+  rebuild shows the model the rest of the period, audits the whole period, and
+  on approval touches only the requested dates.
   The manager can revise individual generated assignments. Filling retains all
   saved assignments; rebuilding retains placements made by the manager.
 - Add or edit employees, shift definitions, the workplace and initial setup rules.

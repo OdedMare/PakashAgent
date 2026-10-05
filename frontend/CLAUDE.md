@@ -91,11 +91,9 @@ import screen. All surfaces exist.
 | Interview | The intro conversation, one question per turn — `src/components/Interview/` |
 | Management | The manager's control room — `src/components/Management/` |
 | Schedule | The living grid for a period, RTL — `Management/Calendar.tsx` |
+| Manager chat | **The** agent: every instruction, question and plan, optionally focused on one day — `Management/AgentChat.tsx` |
 | Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `Board/ConfirmDrop.tsx` |
-| Briefing | What the agent noticed unprompted — `Management/Briefing.tsx` |
 | Copilot inbox | Durable observations, proposals, failures, permissions and audit — `Management/CopilotInbox.tsx` |
-| Agent answer | What the agent found when *asked* — `Management/AgentAnswer.tsx` |
-| Simulation | A change being considered, never one that landed — `Management/SimulationPanel.tsx` |
 | Preferences | What the agent remembers, all of it visible — `Management/Preferences.tsx` |
 | Import confirm | Inferred interpretation, confirmed before anything is stored — `Management/ImportSchedule.tsx` |
 | Employee view | **Read-only** schedule — `MemberArea` renders the same `Calendar` with `readOnly` |
@@ -213,28 +211,15 @@ impression.
   rather than patching locally: the schedule, its warnings, the constraints and
   the log all move together, and a locally patched grid beside a stale audit is
   worse than a brief spinner.
-- **Five card states, and they never look alike.** The side column
-  distinguishes an *insight* (`Briefing`, the agent volunteered it), an
-  *answer* (`AgentAnswer`, the agent read the schedule and reported), a
-  *simulation* (`SimulationPanel`, dashed and in its own colour — nothing
-  has been written), a *proposal awaiting approval* (`AgentChat`, with a
-  confirm button and a required reason), and an *error*. A simulation that
-  looked like a proposal would be one.
+- **One agent surface.** The manager chat is the only place the agent takes
+  instructions. The board's per-day "סוכן ליום" button opens the chat focused
+  on that date (sent as `focus_date`) rather than a separate dialog; a plan
+  for that day rebuilds only that day. There are no automatic briefings,
+  answer cards or simulation panels beside it.
 - **Questions and actions share one composer.** Message requests prepare answers
   or plans and never perform domain writes. Only the separate Apply endpoint
   commits the stored plan, with snapshot checks and an atomic transaction.
   The legacy `/ask` and `/changes/propose` routes remain available to other callers.
-- **An answer says which checks it rests on.** `AgentAnswer` lists the tools
-  that ran, and states when it was produced without a model. Both are
-  product requirements rather than debugging output: an answer whose checks
-  are invisible has to be taken on faith, and a manager who cannot tell they
-  are on the deterministic path would read "לא הבנתי" as the product being
-  broken rather than the model being unconfigured.
-- **Approving a simulation is the ordinary apply call.** `SimulationPanel`
-  keeps its button disabled until there is a reason, mirroring `ConfirmDrop`
-  — and it sends the same `applyChange` a typed sentence does. There is no
-  shortcut, because a second write path is how the confirmation step gets
-  routed around (D8/D12).
 - **Every stored preference is on screen.** `Preferences` lists suggested,
   active and archived rows and lets the manager reword, approve, archive or
   delete any of them — a preference they cannot see is a rule they never
