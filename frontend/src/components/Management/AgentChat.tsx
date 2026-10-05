@@ -87,13 +87,14 @@ export function AgentChat({ workspaceId, scheduleId, visibleWeek, focusDate = ""
       </div> : null}
       {messages.map((message) => <article key={message.id} className={`conversation-message is-${message.role}${message.status === "error" ? " is-error" : ""}`}>
         <div className="conversation-speaker">{message.role === "assistant" ? <><Sparkles size={13} /> סוכן הסידור</> : "את/ה"}</div>
-        {message.status === "working" ? <div className="conversation-thinking" role="status"><LoaderCircle size={16} /> בודק את הסידור, האילוצים והכללים…</div> : <div className="conversation-text">{message.content}</div>}
+        {message.status === "working" ? <Thinking steps={message.payload.steps ?? []} /> :
+          message.role === "assistant" ? <Markdown text={message.content} /> : <div className="conversation-text">{message.content}</div>}
         {message.payload.plan ? <PlanCard message={message} employees={employees} disabled={disabled || boardBusy}
           onApply={(exceptions) => void agent.apply(message.id, exceptions)} onDismiss={() => void agent.dismiss(message.id)} onAdjust={(value) => void send(value)} /> : null}
         {message.payload.question?.options.length ? <div className="conversation-options">{message.payload.question.options.map((option, index) =>
           <button type="button" key={option.label} disabled={disabled || message.id !== last?.id || message.status === "applied"}
             onClick={() => void send(option.answer)}>{index === 0 ? <Sparkles size={12} /> : null}{option.label}</button>)}</div> : null}
-        {message.payload.steps?.length ? <details className="conversation-checks"><summary><ChevronDown size={12} /> מה נבדק ({message.payload.steps.length})</summary>
+        {message.status !== "working" && message.payload.steps?.length ? <details className="conversation-checks"><summary><ChevronDown size={12} /> מה נבדק ({message.payload.steps.length})</summary>
           <ul>{message.payload.steps.map((step, index) => <li key={index}>{TOOL_LABELS[step.tool] ?? "בדיקת הסידור"}{step.ok ? "" : " — הבדיקה לא הושלמה"}</li>)}</ul></details> : null}
         {message.status === "error" && message.id === last?.id ? <button type="button" className="ghost-button" disabled={disabled} onClick={() => {
           const previous = [...messages].reverse().find((row) => row.role === "user"); if (previous) void send(previous.content);
@@ -113,6 +114,39 @@ export function AgentChat({ workspaceId, scheduleId, visibleWeek, focusDate = ""
       </div>
     </form>
   </section>;
+}
+
+/** What the agent is checking right now. The server saves each round's checks
+ *  on the working message, and the existing poll brings them here. */
+function Thinking({ steps }: { steps: { tool: string; ok: boolean }[] }) {
+  const current = steps.length ? TOOL_LABELS[steps[steps.length - 1].tool] ?? "בדיקת הסידור" : "";
+  return <div className="conversation-thinking" role="status"><LoaderCircle size={16} />
+    <span>{current ? `${current}…` : "בודק את הסידור, האילוצים והכללים…"}
+      {steps.length > 1 ? <small> · {steps.length} בדיקות עד עכשיו</small> : null}</span></div>;
+}
+
+/** The small Markdown subset the agent is told it may use: `-` and `1.` lists
+ *  and **bold**. Rendered as elements, never as HTML, so a reply cannot inject
+ *  markup; anything else stays plain text. */
+function Markdown({ text }: { text: string }) {
+  const blocks: { list?: "ul" | "ol"; lines: string[] }[] = [];
+  for (const line of text.split("\n")) {
+    const kind = /^\s*[-*•]\s+/.test(line) ? "ul" : /^\s*\d+[.)]\s+/.test(line) ? "ol" : undefined;
+    const body = kind ? line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, "") : line;
+    const previous = blocks[blocks.length - 1];
+    if (previous && previous.list === kind && (kind || body.trim())) previous.lines.push(body);
+    else if (kind || body.trim()) blocks.push({ list: kind, lines: [body] });
+  }
+  return <div className="conversation-text is-rich">{blocks.map((block, index) => {
+    if (!block.list) return <p key={index}>{block.lines.map((line, row) => <span key={row}>{row ? <br /> : null}{inline(line)}</span>)}</p>;
+    const List = block.list;
+    return <List key={index}>{block.lines.map((line, row) => <li key={row}>{inline(line)}</li>)}</List>;
+  })}</div>;
+}
+
+function inline(line: string) {
+  return line.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
+    part.startsWith("**") && part.endsWith("**") && part.length > 4 ? <strong key={index}>{part.slice(2, -2)}</strong> : part);
 }
 
 function PlanCard({ message, employees, disabled, onApply, onDismiss, onAdjust }: {
@@ -189,4 +223,4 @@ const PLAN_LABELS: Record<ChatPlan["kind"], string> = { changes: "תוכנית �
 const STATUS_LABELS: Record<string, string> = { applied: "בוצע", superseded: "הוחלף בהצעה חדשה", dismissed: "בוטל" };
 const VALUE_LABELS: Record<string, string> = { round: "סבב", triplet: "תלתון", hamshushim: "חמשושים", shushim: "שושים", standard: "סדיר", reserve: "מילואים", overlap: "חפיפה", hard: "כלל חובה", soft: "העדפה" };
 const FIELD_LABELS: Record<string, string> = { employees: "אנשי צוות", shifts: "סוגי משמרות", rules: "כללי שיבוץ", workplace: "פרטי היחידה", name: "שם", role: "תפקיד", eligible_shifts: "משמרות מתאימות", rotation_group: "קבוצת יציאות", exit_pattern: "מבנה יציאות", service_type: "סוג שירות", start_time: "התחלה", end_time: "סיום", headcount: "מספר עובדים", notes: "הערות", text: "כלל", priority: "עדיפות", staffing: "תקינה", required_roles: "תפקידים נדרשים", is_shift_manager: "אחראי משמרת", can_train: "יכול להדריך", counts_toward_staffing: "נספר בתקינה", is_on_call: "כוננות", days: "ימים", hour_weight: "משקל שעות", recurring_constraints: "אילוצים קבועים", audit_policy: "מדיניות בקרה", max_weekly_hours: "מקסימום שעות בשבוע", min_rest_hours: "מינימום שעות מנוחה", max_consecutive_days: "מקסימום ימים רצופים", rest_policy: "מדיניות מנוחה", fairness_policy: "איזון עומסים", weekend_policy: "מדיניות סופי שבוע", conflict_policy: "טיפול בהתנגשויות", training_policy: "מדיניות הכשרה", rotation_mode: "מבנה היחידה", first_closure_date: "עוגן הסבב", first_closure_group: "קבוצת העוגן", summary: "סיכום", dependencies: "תלויות", availability_process: "תהליך זמינות", constraint_deadline: "מועד הגשת אילוצים" };
-const TOOL_LABELS: Record<string, string> = { team_overview: "פרטי הצוות והכללים", read_period: "הסידור והסגירות", employee_state: "משמרות, שעות ואילוצים", coverage_gaps: "משמרות חסרות", validate_placement: "תקינות השיבוץ", find_replacements: "חלופות מתאימות", publish_readiness: "מוכנות לפרסום", profile_gaps: "פרטים חסרים", list_periods: "סידורים קודמים ועתידיים", workload_report: "השוואת עומסים", change_history: "היסטוריית שינויים" };
+const TOOL_LABELS: Record<string, string> = { team_overview: "פרטי הצוות והכללים", read_period: "הסידור והסגירות", employee_state: "משמרות, שעות ואילוצים", coverage_gaps: "משמרות חסרות", validate_placement: "תקינות השיבוץ", find_replacements: "חלופות מתאימות", publish_readiness: "מוכנות לפרסום", profile_gaps: "פרטים חסרים", list_periods: "סידורים קודמים ועתידיים", workload_report: "השוואת עומסים", change_history: "היסטוריית שינויים", plan_check: "תיקון התוכנית לפי בדיקת השרת" };

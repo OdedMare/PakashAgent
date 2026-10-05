@@ -44,6 +44,11 @@
 .conversation-speaker { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 650; color: var(--text-muted); margin-bottom: 8px; }
 .conversation-message.is-assistant .conversation-speaker { color: var(--primary); }
 .conversation-text { white-space: pre-wrap; font-size: 14px; line-height: 1.9; }
+.conversation-text.is-rich { white-space: normal; }
+.conversation-text.is-rich p { margin: 0 0 8px; }
+.conversation-text.is-rich p:last-child, .conversation-text.is-rich ul:last-child, .conversation-text.is-rich ol:last-child { margin-bottom: 0; }
+.conversation-text.is-rich ul, .conversation-text.is-rich ol { margin: 0 0 8px; padding-inline-start: 20px; }
+.conversation-thinking small { color: var(--text-muted); font-size: 12px; }
 .conversation-message.is-error .conversation-text, .conversation-error { color: var(--danger); }
 .conversation-thinking, .conversation-loading { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); padding: 10px 0; }
 .conversation-thinking svg, .conversation-loading svg, .conversation-send svg.lucide-loader-circle { animation: chat-spin 1.4s linear infinite; }
