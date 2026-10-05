@@ -59,6 +59,22 @@ class AuthError(AppError):
     status_code = 401
 
 
+class ForbiddenError(AppError):
+    """Signed in, but this action needs a credential the session lacks.
+
+    403 rather than 401: the session is fine, and a client that treats 401
+    as "go back to the login screen" must not log the boss out over it.
+    """
+
+    status_code = 403
+
+
+class TooManyAttemptsError(AppError):
+    """Too many wrong passwords against one account in a short window."""
+
+    status_code = 429
+
+
 class UnavailableError(AppError):
     """The process is alive but cannot accept work.
 
