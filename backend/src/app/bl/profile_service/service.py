@@ -36,15 +36,8 @@ class ProfileService:
         current = self._repository.team_profile(team_id)
         creating = current is None
         current = current or {}
-        updated = copy.deepcopy(current)
-        _apply_workplace(updated, current, workplace)
-        _apply_roster(updated, current, employees, shifts)
-        if rules is not None:
-            updated["rules"] = workplace_rules.rules(rules)
-        if dependencies is not None:
-            updated["dependencies"] = text_list(dependencies)
-        _apply_sections(updated, sections)
-        roster.validate_rotation_groups(updated)
+        updated = _prepare_profile(current, employees, shifts, workplace, rules,
+                                   dependencies, sections)
         if not creating:
             return self._repository.update_team_profile(team_id, updated)
         roster.validate_first_profile(updated)
@@ -52,6 +45,17 @@ class ProfileService:
             "complete": True, "missing_topics": [], "open_points": [],
         }
         return self._repository.create_team_profile(team_id, updated)
+
+    def preview(self, team_id: str, **patch) -> dict:
+        """Validate a conversational edit with the same rules, without writing."""
+        current = self._repository.team_profile(team_id)
+        if current is None:
+            raise NotFoundError("פרופיל הצוות לא נמצא")
+        return _prepare_profile(
+            current, patch.get("employees"), patch.get("shifts"),
+            patch.get("workplace"), patch.get("rules"), patch.get("dependencies"),
+            patch,
+        )
 
     def apply_operations(self, team_id: str, operations: List[dict]) -> dict:
         """Apply confirmed agent operations through the same validation path."""
@@ -67,6 +71,19 @@ class ProfileService:
             shifts=edit.shifts if edit.shifts_changed else None,
         )
 
+
+
+def _prepare_profile(current, employees, shifts, workplace, rules, dependencies, sections):
+    updated = copy.deepcopy(current)
+    _apply_workplace(updated, current, workplace)
+    _apply_roster(updated, current, employees, shifts)
+    if rules is not None:
+        updated["rules"] = workplace_rules.rules(rules)
+    if dependencies is not None:
+        updated["dependencies"] = text_list(dependencies)
+    _apply_sections(updated, sections)
+    roster.validate_rotation_groups(updated)
+    return updated
 
 
 def _apply_workplace(updated: dict, current: dict, offered: Optional[dict]) -> None:
