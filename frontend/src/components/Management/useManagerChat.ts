@@ -6,6 +6,13 @@ import { applyManagerPlan, createManagerChat, deleteManagerChat, dismissManagerP
   listManagerChats, readManagerChat, sendManagerMessage, stopManagerReply } from "@/services/api";
 import type { ChatPlan, ManagerChatSummary, ManagerConversation } from "@/types";
 
+// `crypto.randomUUID` exists only in secure contexts (HTTPS/localhost), so a
+// plain-HTTP LAN address needs the fallback.
+function requestId() {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export function useManagerChat(workspaceId: string, scheduleId: string, visibleWeek: string, focusDate: string, onApplied: (plan?: ChatPlan) => Promise<void>) {
   const [chat, setChat] = useState<ManagerConversation | null>(null);
   const [chats, setChats] = useState<ManagerChatSummary[]>([]);
@@ -78,7 +85,7 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
     // An id survives a lost response, so re-fetching recovers the accepted turn.
     return run(async () => {
       try {
-        return await sendManagerMessage(chatId, { content: content.trim(), request_id: crypto.randomUUID(),
+        return await sendManagerMessage(chatId, { content: content.trim(), request_id: requestId(),
           schedule_id: scheduleId || undefined, visible_week: visibleWeek, focus_date: focusDate || undefined });
       } catch (reason) {
         const recovered = await readManagerChat(chatId).catch(() => null);
