@@ -553,7 +553,6 @@ export function Management({
               active={section === "agent"}
               icon={<Sparkles size={15} />}
               label="סוכן"
-              count={copilotPending}
               onClick={() => setSection("agent")}
             />
             <ManagerTab
@@ -572,6 +571,7 @@ export function Management({
               active={section === "overview"}
               icon={<BarChart3 size={15} />}
               label="סקירה"
+              count={copilotPending}
               onClick={() => setSection("overview")}
             />
           </div>
@@ -608,12 +608,13 @@ export function Management({
           />
           </> : null}
 
-          <div hidden={section !== "agent"}>
+          <div hidden={section !== "overview"}>
           <CopilotInbox
             onOpenInterview={onOpenInterview}
             onPendingChange={setCopilotPending}
             onAct={(text) => {
               setSuggested((previous) => ({ text, n: previous.n + 1 }));
+              setSection("agent");
             }}
           />
           </div>
