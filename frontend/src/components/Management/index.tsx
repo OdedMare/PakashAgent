@@ -89,12 +89,6 @@ export function Management({
   // The day the board opened the agent on, if any. Counted like `suggested`
   // so opening the same day twice still focuses the composer.
   const [focusDay, setFocusDay] = useState<{ date: string; n: number }>({ date: "", n: 0 });
-  const openAgent = useCallback((date?: string) => {
-    if (date !== undefined) setFocusDay((previous) => ({ date, n: previous.n + 1 }));
-    setView("board");
-    setSection("agent");
-    setDrawerOpen(true);
-  }, []);
   const refresh = state.refresh;
   const onChatApplied = useCallback(async (plan?: ChatPlan) => {
     await refresh();
@@ -111,6 +105,24 @@ export function Management({
     return () => cancelAnimationFrame(frame);
   }, []);
   const [section, setSection] = useState<ManagerSection>("agent");
+  const openAgent = useCallback((date?: string) => {
+    if (date !== undefined) setFocusDay((previous) => ({ date, n: previous.n + 1 }));
+    setView("board");
+    setSection("agent");
+    setDrawerOpen(true);
+  }, []);
+  // A focus day belongs to the week it was opened from. Paging to another
+  // week drops it, so the agent is never told about a day off screen.
+  const visibleWeek = state.focusedWeek;
+  useEffect(() => {
+    if (!visibleWeek) return;
+    const start = new Date(`${visibleWeek}T00:00:00`).getTime();
+    setFocusDay((previous) => {
+      if (!previous.date) return previous;
+      const offset = (new Date(`${previous.date}T00:00:00`).getTime() - start) / 86_400_000;
+      return offset >= 0 && offset < 7 ? previous : { date: "", n: previous.n };
+    });
+  }, [visibleWeek]);
   const [copilotPending, setCopilotPending] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
