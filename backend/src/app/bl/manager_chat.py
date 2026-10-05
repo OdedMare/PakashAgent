@@ -4,7 +4,6 @@ No model call has write access. A stored plan is validated and applied only
 under a separate, private, atomic approval. Background replies are read-only.
 """
 
-import copy
 import datetime
 import hashlib
 import json
@@ -15,7 +14,7 @@ from app.bl.changes.agent import _closures_for_model, _schedule_for_model
 from app.bl.changes.proposal import build_proposal
 from app.bl.changes.values import json_default
 from app.bl.chat_schema import CHAT_SCHEMA, PROFILE_SECTIONS
-from app.bl.planner.shaping import question, tool_calls
+from app.bl.planner.shaping import question
 from app.bl.profile_service import ProfileService
 from app.bl.prompts import load
 from app.bl.schedule_service.context import ScheduleContext
@@ -26,7 +25,7 @@ from app.bl.scheduler.availability import effective_availability
 from app.bl.simulate.hypothetical import Hypothetical, schedule_rows
 from app.bl.tools import ScheduleTools, TOOL_DESCRIPTIONS
 from app.bl.tools.schedule_tools import _invalid_date_argument
-from app.bl.tools.values import audit_assignments, iso
+from app.bl.tools.values import iso
 from app.common.errors.errors import AgentError, AppError, ConflictError
 from app.common.time_context.time_context import agent_time_context
 
@@ -194,6 +193,11 @@ class ManagerChatService:
         if kind == "answer" or turn.get("needs_input") or turn.get("needs_reason"):
             return None
         schedule_id = turn.get("schedule_id") or focused_id
+        if kind == "generate" and not turn.get("schedule_id"):
+            # A new week's dates must not fall back to the week on screen.
+            schedule_id = next((period["id"] for period in self._repo.list_schedules(team_id)
+                                if iso(period["starts_on"]) == turn.get("starts_on")
+                                and iso(period["ends_on"]) == turn.get("ends_on")), "")
         state = self._state(team_id, schedule_id)
         schedule, profile = state["schedule"] or {}, state["profile"]
         plan = {

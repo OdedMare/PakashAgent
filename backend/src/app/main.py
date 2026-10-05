@@ -18,6 +18,8 @@ from app.bl.interview_service import InterviewService
 from app.bl.profile_service import ProfileService
 from app.bl.schedule_service import ScheduleService
 from app.bl.workspace_service.service import WorkspaceService
+from app.bl.manager_chat import ManagerChatService
+from app.api.routers import manager_chat
 from app.common.config.settings import Settings
 from app.common.errors.errors import AppError, error_payload
 from app.common.logging_setup.logging_setup import configure_logging
@@ -63,6 +65,7 @@ workspace_service = WorkspaceService(repository)
 # next build with no restart — the same property the model settings have.
 schedule_service = ScheduleService(repository, llm, settings=store)
 profile_service = ProfileService(repository)
+manager_chat_service = ManagerChatService(repository, llm, schedule_service)
 copilot_service = CopilotService(
     repository, schedule_service, interview_service
 )
@@ -113,6 +116,7 @@ app.include_router(
 app.include_router(interview.build_router(interview_service, guards))
 app.include_router(schedules.build_router(schedule_service, guards))
 app.include_router(profile.build_router(profile_service, guards))
+app.include_router(manager_chat.build_router(manager_chat_service, repository, guards))
 app.include_router(settings.build_router(store, llm, guards))
 app.include_router(copilot.build_router(copilot_service, repository, guards))
 app.include_router(

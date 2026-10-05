@@ -118,6 +118,14 @@ class ChatRepository(RepositoryBase):
             WHERE id=%s AND chat_id=%s AND status='working'
         """, (content, status, Jsonb(payload), message_id, chat_id))
 
+    def stop_chat_turn(self, team_id, manager_id, chat_id):
+        self.get_chat(team_id, manager_id, chat_id)
+        self._execute("""
+            UPDATE manager_chat_messages SET status='cancelled',
+                content='הבקשה נעצרה. לא בוצע שינוי בסידור'
+            WHERE chat_id=%s AND status='working'
+        """, (chat_id,))
+
     @contextmanager
     def chat_approval(self, team_id, manager_id, chat_id, message_id):
         """Approval, all domain writes, and the receipt commit together."""

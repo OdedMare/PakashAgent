@@ -205,4 +205,12 @@ class Settings(BaseSettings):
     session_days: int = 30
     """How long a boss stays logged in before the cookie expires."""
 
+    settings_password: str = ""
+    """Password the settings panel asks for, on top of the boss session.
+
+    The settings are process-wide -- model endpoints, API keys, the database
+    URL -- while a boss session only proves ownership of one workspace. So
+    editing them needs this as well. Empty means the panel stays locked:
+    a deployment that forgot to set it must not fall open."""
+
     runtime_settings_file: str = "runtime-settings.json"
