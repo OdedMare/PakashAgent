@@ -76,7 +76,8 @@ export function Management({
   autoGenerate?: boolean;
   onAutoGenerateStarted?: () => void;
 }) {
-  const state = useManagement();
+  // The saved conversation replaces the old, unrendered automatic briefings.
+  const state = useManagement(false);
   const generate = state.generate;
   const { theme, toggle } = useTheme();
   // The board stays put. Management tools open beside it, so the manager

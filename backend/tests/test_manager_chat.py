@@ -230,6 +230,38 @@ def test_unknown_slot_does_not_silently_apply_only_half_the_plan():
     assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "דנה"
 
 
+def test_adjusting_generated_preview_preserves_other_choices_and_remains_read_only():
+    proposal = turn("generate")
+    proposal.update(starts_on="2026-10-11", ends_on="2026-10-17",
+                    required_assignments=[
+                        dict(employee="יוסי", shift=MORNING, date="2026-10-11"),
+                        dict(employee="דנה", shift=MORNING, date="2026-10-12"),
+                    ])
+    repo, llm, service, chat_id, schedule_id = setup([proposal, {
+        "assignments": [], "notes": [], "summary": "הבחירות נשמרו",
+    }])
+    message = converse(service, repo, chat_id, schedule_id, "במקום דנה ביום ראשון תציע את יוסי")
+    assert message["status"] == "pending"
+    assignments = message["payload"]["plan"]["generated"]["assignments"]
+    assert [(row["employee"], row["date"]) for row in assignments] == [
+        ("יוסי", "2026-10-11"), ("דנה", "2026-10-12"),
+    ]
+    assert len(json.loads(llm.calls[-1]["user"])["required_assignments"]) == 2
+    assert len(repo.schedules) == 1
+
+
+def test_future_absence_can_be_approved_before_a_schedule_exists():
+    proposal = turn("changes")
+    proposal["constraints"] = [dict(employee="דנה", date="2026-10-20", shift="",
+                                    available=False, reason="מחלה")]
+    repo, _, service, chat_id, _ = setup([proposal])
+    message = converse(service, repo, chat_id, "", "דנה לא תהיה זמינה ב-20 באוקטובר")
+    assert message["status"] == "pending" and not repo.availability_rows
+    service.apply(TEAM, "manager-a", chat_id, message["id"])
+    assert repo.availability_rows[0]["constraint_date"] == "2026-10-20"
+    assert repo.availability_rows[0]["available"] is False
+
+
 def test_two_managers_cannot_read_or_apply_each_others_private_conversation():
     repo, _, service, _, _ = setup([])
     app = FastAPI()

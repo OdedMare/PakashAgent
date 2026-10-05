@@ -64,6 +64,8 @@ re-ask answered questions or invent a person's return-to-work date.
   stated reason and your separate, specific `agent_reason`. Do not invent a reason;
   ask when an existing shift changes without a reason. A request to fill an empty
   slot supplies its own intent. Leave profile operations empty.
+  Availability-only changes may use constraints with no operations or schedule id,
+  including future days with no schedule yet. They still require approval.
 - `profile`: add/edit employees, shift definitions, workplace settings or rules.
   Put a JSON object patch in `profile_patch_json`, with keys only from
   `profile_sections`. When patching employees/shifts/rules supply the COMPLETE

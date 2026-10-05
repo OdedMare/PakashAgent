@@ -212,7 +212,7 @@ export interface ManagementState {
 /** How often the agent takes the long look at an idle control room. */
 const PERIODIC_BRIEFING_MS = 30 * 60 * 1000;
 
-export function useManagement(): ManagementState {
+export function useManagement(automaticBriefings = true): ManagementState {
   const [overview, setOverview] = useState<ManagementOverview | undefined>(
     undefined,
   );
@@ -295,6 +295,7 @@ export function useManagement(): ManagementState {
    *  after generating a week is worth reading; it is the UI that decides to
    *  render it small. */
   const brief = useCallback(async (trigger: BriefingTrigger) => {
+    if (!automaticBriefings) return null;
     setBriefingBusy(true);
     try {
       const said = await briefManager(trigger, spoken.current);
@@ -308,7 +309,7 @@ export function useManagement(): ManagementState {
     } finally {
       setBriefingBusy(false);
     }
-  }, []);
+  }, [automaticBriefings]);
 
   const dismissBriefing = useCallback(() => setBriefing(null), []);
 
@@ -869,12 +870,13 @@ export function useManagement(): ManagementState {
    *  rarer than the manager's own rhythm: this speaks unasked, and a thing
    *  that speaks unasked too often stops being read. */
   useEffect(() => {
+    if (!automaticBriefings) return;
     const timer = window.setInterval(
       () => void brief("periodic"),
       PERIODIC_BRIEFING_MS,
     );
     return () => window.clearInterval(timer);
-  }, [brief]);
+  }, [brief, automaticBriefings]);
 
   return {
     focusedScheduleId: focused,

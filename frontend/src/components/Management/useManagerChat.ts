@@ -92,6 +92,7 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
     if (!chatId || working) return;
     await run(async () => {
       const next = await applyManagerPlan(chatId, messageId, exceptions);
+      if (mounted.current) setChat(next);
       await onApplied(next.messages.find((message) => message.id === messageId)?.payload.plan);
       return next;
     });

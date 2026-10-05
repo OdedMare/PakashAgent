@@ -223,7 +223,7 @@ class ManagerChatService:
         elif kind == "generate":
             self._prepare_generation(team_id, turn, plan, state)
         else:
-            if not schedule:
+            if not schedule and (kind != "changes" or turn.get("operations")):
                 raise AgentError("אין סידור בשבוע הזה. אפשר לבקש לבנות אותו קודם")
             if kind not in ("publish", "unpublish") and schedule.get("status") == "published":
                 raise AgentError("הסידור מפורסם. בקשו להחזיר אותו לטיוטה לפני שינוי")
@@ -239,11 +239,12 @@ class ManagerChatService:
                     return None
                 if not plan["reason"]:
                     raise AgentError("מה הסיבה לשינוי בסידור?")
-                rows = self._changed_rows(schedule, plan["operations"])
+                rows = self._changed_rows(schedule, plan["operations"]) if schedule else []
                 names = {person["name"] for person in profile.get("employees") or []}
                 if any(row["employee"] not in names for row in rows):
                     raise AgentError("התוכנית מכילה עובד שאינו נמצא בצוות")
-                plan["warnings"] = self._audit_plan(profile, schedule, rows, state["availability"], plan["constraints"])
+                if schedule:
+                    plan["warnings"] = self._audit_plan(profile, schedule, rows, state["availability"], plan["constraints"])
             elif kind == "clear":
                 if not plan["reason"]:
                     raise AgentError("מה הסיבה לפינוי השיבוצים?")
