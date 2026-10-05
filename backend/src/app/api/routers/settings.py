@@ -5,7 +5,7 @@ the HTTP boundary onto it. Secrets never leave here in the clear — `public()`
 masks them, and a patch that echoes the mask back is ignored rather than
 overwriting the stored value with literal asterisks.
 
-Boss-only, and password-locked. These settings are process-wide rather than per-team — they hold
+Boss-only. These settings are process-wide rather than per-team — they hold
 the database credentials and the model API key — so with workspaces in play
 they are strictly more sensitive than before, not less: a member arriving on
 a share link must not read them, and one workspace's boss editing them moves
@@ -47,7 +47,7 @@ def _settings_guard(guards, password: str, throttle: LoginThrottle):
             raise ForbiddenError("סיסמת ההגדרות שגויה")
 
     def dependency(
-        session: dict = Depends(unlocked),
+        session: dict = Depends(boss),
         given: Optional[str] = Header(default=None, alias=PASSWORD_HEADER),
     ) -> dict:
         throttle.attempt(
