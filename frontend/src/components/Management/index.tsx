@@ -35,7 +35,6 @@ import { LearnedFromChanges } from "./LearnedFromChanges";
 import { ImportSchedule } from "./ImportSchedule";
 import { Preferences } from "./Preferences";
 import { RequestInbox } from "./RequestInbox";
-import { SimulationPanel } from "./SimulationPanel";
 import { SwapInbox } from "./SwapInbox";
 import { Stats } from "./Stats";
 import { TeamPanel } from "./TeamPanel";
@@ -87,6 +86,15 @@ export function Management({
   const [chatWidth, setChatWidth] = useState(440);
   const [chatPreview, setChatPreview] = useState<Proposal | null>(null);
   const [chatWeek, setChatWeek] = useState<{ date: string; n: number }>();
+  // The day the board opened the agent on, if any. Counted like `suggested`
+  // so opening the same day twice still focuses the composer.
+  const [focusDay, setFocusDay] = useState<{ date: string; n: number }>({ date: "", n: 0 });
+  const openAgent = useCallback((date?: string) => {
+    if (date !== undefined) setFocusDay((previous) => ({ date, n: previous.n + 1 }));
+    setView("board");
+    setSection("agent");
+    setDrawerOpen(true);
+  }, []);
   const refresh = state.refresh;
   const onChatApplied = useCallback(async (plan?: ChatPlan) => {
     await refresh();
@@ -212,14 +220,11 @@ export function Management({
           <button
             type="button"
             className={`management-nav-item${drawerOpen ? " is-active" : ""}`}
-            onClick={() => {
-              setView("board");
-              setDrawerOpen(true);
-            }}
+            onClick={() => openAgent()}
             aria-expanded={drawerOpen}
           >
             <MessagesSquare size={15} />
-            ניהול
+            סוכן הסידור
           </button>
         </nav>
 
@@ -479,7 +484,7 @@ export function Management({
             generating={state.generating}
             dark={theme === "dark"}
             onGenerate={state.generate}
-            onGenerateDay={state.generateDay}
+            onOpenDay={(date) => openAgent(date)}
             onOpenBlank={state.openBlank}
             onAssign={state.assign}
             onUnassign={state.unassign}
@@ -490,19 +495,16 @@ export function Management({
             onExport={state.exportSchedule}
             onPeriodChange={state.focusPeriod}
             navigateToWeek={chatWeek}
-            onOpenAgent={() => {
-              setSection("agent");
-              setDrawerOpen(true);
-            }}
+            onOpenAgent={() => openAgent()}
             // What the agent is currently saying, so the board can show
             // *where* on the week it applies. The same state the cards in the
             // control room render — one source, so the two screens can never
             // point at different cells. Read-only: the board produces no
             // operations and there is no path from a highlight to a write.
             agent={{
-              simulation: state.simulation,
-              proposal: chatPreview ?? state.proposal,
-              answer: state.answer,
+              simulation: null,
+              proposal: chatPreview,
+              answer: null,
             }}
           />
         )}
@@ -584,23 +586,15 @@ export function Management({
               busy={state.busy}
             />
           ) : null}
-          {/* A change being considered rather than requested. Rendered in
-              its own colour above the proposal so the two can never be
-              confused — nothing here has been written, and approving runs
-              the ordinary apply path with the manager's reason (D8). */}
-          <SimulationPanel
-            simulation={state.simulation}
-            busy={state.busy}
-            writeLocked={schedule?.status === "published"}
-            onApprove={state.approveSimulation}
-            onDiscard={state.dismissSimulation}
-          />
           </> : null}
           <AgentChat
             hidden={section !== "agent"}
             workspaceId={workspace.id}
             scheduleId={state.focusedScheduleId}
             visibleWeek={state.focusedWeek}
+            focusDate={focusDay.date}
+            focusKey={focusDay.n}
+            onClearFocus={() => setFocusDay((previous) => ({ date: "", n: previous.n }))}
             employees={overview?.employees.map((person) => String(person.name ?? "")).filter(Boolean) ?? []}
             boardBusy={state.busy}
             draft={suggested.text}
