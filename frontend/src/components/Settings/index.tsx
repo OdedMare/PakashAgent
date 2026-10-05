@@ -4,11 +4,12 @@ import {
   AlertTriangle,
   CheckCircle2,
   LoaderCircle,
+  LockKeyhole,
   Save,
   Settings2,
   X,
 } from "lucide-react";
-import { useEffect } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 import { SettingsContent, SettingsNavigation } from "./SettingsSections";
 import type { SettingsController } from "./useSettings";
@@ -17,9 +18,10 @@ import { useSettings } from "./useSettings";
 /**
  * The settings modal: model connection and database, saved live.
  *
- * Ported from AiSummryIO's SettingsPanel. There is no authorization gate here
- * — PakashAgent is single-tenant and local, so the backend exposes these
- * routes unguarded and there is nothing for the panel to check.
+ * Ported from AiSummryIO's SettingsPanel. Opens locked: these settings are
+ * shared by every workspace on the server, so the boss login is not enough
+ * and the panel asks for the settings password first. The backend checks it
+ * on every call; this screen only collects it.
  */
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const settings = useSettings();
@@ -69,24 +71,57 @@ function ModalHeader({ onClose }: { onClose: () => void }) {
 }
 
 function PanelContent({ settings }: { settings: SettingsController }) {
-  if (settings.loading) {
-    return (
-      <p className="loading-line">
-        <LoaderCircle className="spin" size={16} /> טוען…
-      </p>
-    );
-  }
-  // A load failure leaves no values to edit, so the form is not worth showing.
-  // A *save* failure is different — the values are still there, and the
-  // message belongs in the footer beside the button that produced it.
-  if (!settings.loaded) {
-    return (
-      <p className="form-error" role="alert">
-        <AlertTriangle size={18} /> {settings.error}
-      </p>
-    );
-  }
+  // Until a password has been accepted there are no values to edit, so a
+  // load failure belongs on the unlock form. A *save* failure is different —
+  // the values are still there, and the message belongs in the footer beside
+  // the button that produced it.
+  if (!settings.loaded) return <UnlockForm settings={settings} />;
   return <SettingsWorkspace settings={settings} />;
+}
+
+function UnlockForm({ settings }: { settings: SettingsController }) {
+  const [password, setPassword] = useState("");
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (password) void settings.unlock(password);
+  };
+  return (
+    <form className="settings-unlock" onSubmit={submit} autoComplete="off">
+      <label className="field-label" htmlFor="settings-password">
+        <LockKeyhole size={15} aria-hidden="true" /> סיסמת הגדרות המערכת
+      </label>
+      <input
+        id="settings-password"
+        className="settings-input"
+        type="password"
+        dir="ltr"
+        autoFocus
+        // Not the workspace password: keep password managers from offering it.
+        autoComplete="new-password"
+        data-1p-ignore="true"
+        data-lpignore="true"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+        disabled={settings.loading}
+      />
+      {settings.error ? (
+        <p className="form-error" role="alert">
+          <AlertTriangle size={16} /> {settings.error}
+        </p>
+      ) : null}
+      <button
+        className="primary-button"
+        type="submit"
+        disabled={!password || settings.loading}
+      >
+        {settings.loading ? (
+          <><LoaderCircle className="spin" size={16} /> בודק…</>
+        ) : (
+          "פתיחה"
+        )}
+      </button>
+    </form>
+  );
 }
 
 function SettingsWorkspace({ settings }: { settings: SettingsController }) {

@@ -420,6 +420,33 @@ select.settings-input {
   min-width: 148px;
 }
 
+/* The locked panel: one password field before anything is loaded. */
+.settings-unlock {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 360px;
+  padding: 28px 22px;
+}
+
+.settings-unlock .field-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-unlock .settings-input {
+  margin-bottom: 0;
+}
+
+.settings-unlock .primary-button {
+  align-self: flex-start;
+  min-width: 120px;
+}
+
 .loading-line,
 .form-error,
 .form-success {
