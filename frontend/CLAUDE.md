@@ -157,38 +157,20 @@ impression.
   is pure arithmetic and costs nothing, so the warnings under the calendar
   stay live throughout. Opening a blank period is *not* quiet: it happens once
   and is worth a remark.
-- **The agent chat is two-step.** A proposal renders the agent's reasoning in
-  full, plus the warnings the change *would* cause, and nothing is applied until
-  the manager confirms. A proposal that comes back `needs_reason` carries no
-  operations — the agent is asking why, and the answer goes back through the
-  same call.
-- **A proposal that is asking does not look like one that is proposing.**
-  `needs_input` means the agent could not tell which person, shift or date the
-  request meant and asked instead of picking one. The card renders dashed with
-  no confirm button, because there is nothing to confirm — a question styled
-  like a proposal invites the manager to look for a button that deliberately
-  is not there.
-- **The manager answers the question, not the whole request again.**
-  `pending_request` comes back with the question and `useManagement` sends it
-  with their next sentence, so "ערב" resumes "תשבץ את דניאל". Held in a ref
-  rather than state — it is sent, never rendered — and in *two* refs, one per
-  conversation: a clarification about a question must never resume a held
-  change, which is the one way this could target the wrong record. Dismissing
-  either card clears its pending request, since the manager declining to
-  answer means their next sentence is a new request.
-- **The agent speaks first, and still writes nothing.** `Briefing` renders
-  what the agent noticed on its own — on open, after every write, before
-  publishing, and every half hour in an idle room
-  ([D15](../docs/DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)).
-  Clicking a suggestion **types the sentence into the composer**; the manager
-  still sends it and still confirms with a reason. A briefing carries no
-  operations at all, so there is nothing here that could apply itself. A quiet
-  briefing renders as one calm line rather than vanishing — "I looked and it is
-  fine" is worth reading, and hiding it would leave the manager unsure the
-  agent looked.
-- **A briefing never breaks the screen.** It has its own `busy` flag and never
-  sets `error`: a failure means the agent has nothing to say, not that the
-  manager's action failed. `brief()` never throws.
+- **One saved conversation, followed by a separate approval.** `AgentChat`
+  and `useManagerChat` use `/api/agent/chats` for questions, changes, profile edits
+  and actual generated previews. Follow-up questions and chosen replacements
+  use saved transcript context. A question has no Apply button; a pending plan
+  shows concrete changes, reasoning and all warnings. Displayed exceptions
+  require an explicit checkbox before approval. Superseded plans cannot apply.
+- **History is private to the signed manager browser identity.** The existing
+  team-password login remains. New chat, history, deletion, polling and Stop are
+  built into the conversation. Histories do not sync across devices without
+  individual manager accounts. See [Manager chat](../docs/MANAGER_CHAT.md).
+- **The conversation has its own available height.** The desktop panel is
+  resizable, its transcript scrolls independently, and its composer stays visible.
+  The autonomous copilot console lives under Overview, and the old invisible
+  automatic briefings are disabled for the conversation surface.
 - **Export downloads; it does not navigate.** `downloadSchedule` fetches the
   binary with the session cookie and triggers the browser's own download from
   an object URL, so a failure surfaces as a Hebrew error rather than a blank
@@ -238,11 +220,10 @@ impression.
   has been written), a *proposal awaiting approval* (`AgentChat`, with a
   confirm button and a required reason), and an *error*. A simulation that
   looked like a proposal would be one.
-- **Asking and requesting a change are two buttons.** The magnifier calls
-  `/ask` — read-only, and the card it produces has no confirm button because
-  the response carries no operations (D19). Send asks the agent to propose.
-  Collapsing them would make every question produce a confirm button for
-  something the manager did not ask for.
+- **Questions and actions share one composer.** Message requests prepare answers
+  or plans and never perform domain writes. Only the separate Apply endpoint
+  commits the stored plan, with snapshot checks and an atomic transaction.
+  The legacy `/ask` and `/changes/propose` routes remain available to other callers.
 - **An answer says which checks it rests on.** `AgentAnswer` lists the tools
   that ran, and states when it was produced without a model. Both are
   product requirements rather than debugging output: an answer whose checks

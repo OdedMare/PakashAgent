@@ -111,6 +111,11 @@ accepted tradeoff.
    boss didn't say, proposes a replacement with its reasoning, and applies it on
    confirmation.
 
+The shift board now has one persistent manager chat for questions, replacement
+plans, weekly scheduling, employee management and rule updates. Recommendations
+show concrete changes and rule conflicts before the manager clicks Apply.
+See [Manager chat](docs/MANAGER_CHAT.md) for supported actions and approval behavior.
+
 ## Architecture at a glance
 
 ```
