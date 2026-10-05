@@ -10,7 +10,8 @@ import {
 } from "lucide-react";
 
 import { useTheme } from "@/components/Interview/useTheme";
-import { Calendar, formatDate } from "@/components/Management/Calendar";
+import { Calendar } from "@/components/Management/Calendar";
+import { displayDate } from "@/components/DateInput";
 import { useManagement } from "@/components/Management/useManagement";
 import type { TeamView } from "@/types";
 
@@ -106,8 +107,8 @@ export function MemberArea({
             <div className="management-toolbar">
               <div className="period">
                 <span className="period-range">
-                  {formatDate(schedule.starts_on)} –{" "}
-                  {formatDate(schedule.ends_on)}
+                  {displayDate(schedule.starts_on)} –{" "}
+                  {displayDate(schedule.ends_on)}
                 </span>
               </div>
             </div>

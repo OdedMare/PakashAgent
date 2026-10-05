@@ -11,8 +11,8 @@ import {
 import { useState } from "react";
 
 import type { ShiftStats, WarningCount } from "@/types";
+import { displayDate } from "@/components/DateInput";
 
-import { formatDate } from "./Calendar";
 
 /** The period in numbers: coverage, load per day, and load per person.
  *
@@ -179,7 +179,7 @@ function DayChart({ days }: { days: ShiftStats["by_day"] }) {
             className="day-bar"
             key={day.date}
             role="listitem"
-            title={`${day.weekday} ${formatDate(day.date)} · ${
+            title={`${day.weekday} ${displayDate(day.date)} · ${
               day.count
             } שיבוצים · ${formatHours(day.hours)}`}
           >

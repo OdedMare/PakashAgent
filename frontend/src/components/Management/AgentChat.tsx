@@ -14,7 +14,7 @@ import { useState } from "react";
 import type { AgentAnswer, Operation, Proposal, Simulation } from "@/types";
 
 import { AgentAnswer as AgentAnswerBubble } from "./AgentAnswer";
-import { formatDate } from "./Calendar";
+import { displayDate } from "@/components/DateInput";
 
 /** Talking to the agent about the schedule — the way changes actually happen.
  *
@@ -208,7 +208,7 @@ export function AgentChat({
                   <span>
                     {operation.employee}
                     {operation.shift ? ` · ${operation.shift}` : ""}
-                    {operation.date ? ` · ${formatDate(operation.date)}` : ""}
+                    {operation.date ? ` · ${displayDate(operation.date)}` : ""}
                     {operation.with_employee
                       ? ` ⇄ ${operation.with_employee}`
                       : ""}

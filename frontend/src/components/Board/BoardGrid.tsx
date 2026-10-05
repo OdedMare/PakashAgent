@@ -28,7 +28,7 @@ import type {
   ScheduleWarning,
   Slot,
 } from "@/types";
-import { displayDate } from "@/components/DateInput";
+import { displayDate, shortDate } from "@/components/DateInput";
 
 import type { AgentTouch } from "./agentTouch";
 import { touchKey } from "./agentTouch";
@@ -884,8 +884,4 @@ function touchLabel(origin: AgentTouch["origin"]): string {
   if (origin === "proposal") return "הצעה";
   if (origin === "simulation") return "סימולציה";
   return "נבדק";
-}
-
-function shortDate(iso: string): string {
-  return displayDate(iso).slice(0, 5);
 }

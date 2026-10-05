@@ -9,6 +9,7 @@ import {
   rejectRequest,
 } from "@/services/api";
 import type { ConstraintRequestRow } from "@/types";
+import { shortDate } from "@/components/DateInput";
 
 /** Constraint requests waiting on the manager.
  *
@@ -88,7 +89,7 @@ export function RequestInbox({ onDecided }: { onDecided: () => void }) {
             <div className="request-head">
               <strong>{row.employee}</strong>
               <span className="request-date">
-                {formatDate(row.constraint_date)}
+                {shortDate(row.constraint_date)}
                 {row.shift_name ? ` · ${row.shift_name}` : " · כל היום"}
               </span>
             </div>
@@ -135,10 +136,4 @@ export function RequestInbox({ onDecided }: { onDecided: () => void }) {
       </ul>
     </section>
   );
-}
-
-function formatDate(iso: string): string {
-  const date = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return iso;
-  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`;
 }

@@ -14,8 +14,8 @@ import {
 import { useState } from "react";
 
 import type { Simulation } from "@/types";
+import { displayDate } from "@/components/DateInput";
 
-import { formatDate } from "./Calendar";
 
 /** A change the manager is only *considering*, and what it would do.
  *
@@ -89,7 +89,7 @@ export function SimulationPanel({
               <span>
                 {row.employee ? `${row.employee} · ` : ""}
                 {row.shift ? `${row.shift} · ` : ""}
-                {row.date ? `${formatDate(row.date)} — ` : ""}
+                {row.date ? `${displayDate(row.date)} — ` : ""}
                 {row.why}
               </span>
             </li>

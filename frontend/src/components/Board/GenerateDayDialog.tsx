@@ -3,7 +3,8 @@
 import { CalendarClock, Sparkles, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { formatDate, hebrewWeekday } from "@/components/Management/Calendar";
+import { hebrewWeekday } from "@/components/Management/Calendar";
+import { displayDate } from "@/components/DateInput";
 
 export function GenerateDayDialog({
   date,
@@ -46,7 +47,7 @@ export function GenerateDayDialog({
 
         <div className="generate-day-date">
           <span>{hebrewWeekday(date)}</span>
-          <strong>{formatDate(date)}</strong>
+          <strong>{displayDate(date)}</strong>
         </div>
 
         <label className="generate-instructions">

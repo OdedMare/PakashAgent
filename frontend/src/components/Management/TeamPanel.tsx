@@ -4,10 +4,9 @@ import { CalendarOff, Clock3, GripVertical, Pencil, Plus, Repeat2, Trash2, UserR
 import { useMemo, useState } from "react";
 
 import { EMPLOYEE_DRAG_TYPE } from "@/components/Board/dragData";
-import { DateInput } from "@/components/DateInput";
+import { DateInput, displayDate } from "@/components/DateInput";
 import type { Constraint, ShiftStats } from "@/types";
 
-import { formatDate } from "./Calendar";
 import { buildPalette, colorStyle } from "./palette";
 
 /** The roster and the constraints recorded against it.
@@ -318,7 +317,7 @@ export function TeamPanel({
               <div className="constraint-main">
                 <span className="constraint-who">{row.employee}</span>
                 <span className="constraint-when">
-                  {formatDate(row.constraint_date)}
+                  {displayDate(row.constraint_date)}
                   {row.shift_name ? ` · ${row.shift_name}` : " · כל היום"}
                   {formatWindow(row) ? ` · ${formatWindow(row)}` : ""}
                 </span>

@@ -3,7 +3,8 @@
 import { ArrowLeftRight, CheckCircle2, TriangleAlert, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { formatDate, hebrewWeekday } from "@/components/Management/Calendar";
+import { hebrewWeekday } from "@/components/Management/Calendar";
+import { displayDate } from "@/components/DateInput";
 import type { Assignment, PlacementCheck } from "@/types";
 
 /** The dialog a drop opens: the manager's reason, plus what the move would
@@ -99,11 +100,11 @@ export function ConfirmDrop({
           <strong>{assignment.employee}</strong> יעבור מ־
           <strong>
             {assignment.shift} · {hebrewWeekday(assignment.date)}{" "}
-            {formatDate(assignment.date)}
+            {displayDate(assignment.date)}
           </strong>{" "}
           אל{" "}
           <strong>
-            {shiftName} · {hebrewWeekday(slotDate)} {formatDate(slotDate)}
+            {shiftName} · {hebrewWeekday(slotDate)} {displayDate(slotDate)}
           </strong>
           .
         </p>
@@ -256,7 +257,7 @@ export function PlacementVerdict({
               >
                 {option.shift_name}
                 <span className="board-alternative-hours">
-                  {hebrewWeekday(option.slot_date)} {formatDate(option.slot_date)}
+                  {hebrewWeekday(option.slot_date)} {displayDate(option.slot_date)}
                 </span>
               </button>
             ))}

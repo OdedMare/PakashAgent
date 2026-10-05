@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { approveSwap, pendingSwaps, rejectSwap } from "@/services/api";
 import type { SwapRow } from "@/types";
+import { shortDate } from "@/components/DateInput";
 
 /** Swaps two employees agreed to, waiting on the manager.
  *
@@ -140,12 +141,6 @@ export function SwapInbox({
 }
 
 function describeShift(iso: string, shift: string): string {
-  const label = formatDate(iso);
+  const label = shortDate(iso);
   return shift ? `${label} · ${shift}` : label;
-}
-
-function formatDate(iso: string): string {
-  const date = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return iso;
-  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`;
 }

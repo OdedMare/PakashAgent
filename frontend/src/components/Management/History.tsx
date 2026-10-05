@@ -3,8 +3,8 @@
 import { History as HistoryIcon } from "lucide-react";
 
 import type { ChangeEntry } from "@/types";
+import { displayDate } from "@/components/DateInput";
 
-import { formatDate } from "./Calendar";
 
 /** The append-only change log — the only history the system has.
  *
@@ -35,7 +35,7 @@ export function History({ entries }: { entries: ChangeEntry[] }) {
               ) : null}
               {entry.slot_date ? (
                 <span className="history-when">
-                  {formatDate(entry.slot_date)}
+                  {displayDate(entry.slot_date)}
                   {entry.shift_name ? ` · ${entry.shift_name}` : ""}
                 </span>
               ) : null}

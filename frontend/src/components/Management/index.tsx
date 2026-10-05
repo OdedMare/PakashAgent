@@ -29,7 +29,6 @@ import type { ManagementOverview, TeamView } from "@/types";
 import { AgentChat } from "./AgentChat";
 import { ProfileGapsNotice } from "./ProfileGapsNotice";
 import { Briefing } from "./Briefing";
-import { formatDate } from "./Calendar";
 import { CopilotInbox } from "./CopilotInbox";
 import { History } from "./History";
 import { LearnedFromChanges } from "./LearnedFromChanges";
@@ -42,6 +41,7 @@ import { Stats } from "./Stats";
 import { TeamPanel } from "./TeamPanel";
 import { Warnings } from "./Warnings";
 import { useManagement } from "./useManagement";
+import { displayDate } from "@/components/DateInput";
 
 /** The manager's board-first workspace, opened once the interview is done.
  *
@@ -674,7 +674,7 @@ function ManagerAnalytics({
           <h1 id="manager-analytics-title">תמונת מצב של הצוות</h1>
           <p>
             {schedule
-              ? `${formatDate(schedule.starts_on)}–${formatDate(schedule.ends_on)} · ${schedule.status === "published" ? "סידור מפורסם" : "טיוטה בעבודה"}`
+              ? `${displayDate(schedule.starts_on)}–${displayDate(schedule.ends_on)} · ${schedule.status === "published" ? "סידור מפורסם" : "טיוטה בעבודה"}`
               : "כשתיפתח תקופת שיבוץ, הנתונים שלה יופיעו כאן."}
           </p>
         </div>

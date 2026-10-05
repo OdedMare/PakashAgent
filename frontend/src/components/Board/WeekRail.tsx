@@ -1,6 +1,7 @@
 "use client";
 
-import { formatDate, hebrewWeekday } from "@/components/Management/Calendar";
+import { hebrewWeekday } from "@/components/Management/Calendar";
+import { displayDate } from "@/components/DateInput";
 import type { Schedule } from "@/types";
 
 import { weekDates } from "./useBoard";
@@ -84,11 +85,11 @@ export function WeekRail({
             key={day.date}
             className={`week-rail-day is-${busy ? "loading" : day.tone}${day.date === today ? " is-today" : ""}`}
             role="listitem"
-            aria-label={`${hebrewWeekday(day.date)} ${formatDate(day.date)}: ${busy ? "נטען" : dayLabel(day)}`}
+            aria-label={`${hebrewWeekday(day.date)} ${displayDate(day.date)}: ${busy ? "נטען" : dayLabel(day)}`}
           >
             <div className="week-rail-day-head">
               <strong>{hebrewWeekday(day.date)}</strong>
-              <span>{formatDate(day.date)}</span>
+              <span>{displayDate(day.date)}</span>
             </div>
             <div className="week-rail-track" aria-hidden="true">
               <span style={{ width: busy ? "0%" : `${day.percent}%` }} />

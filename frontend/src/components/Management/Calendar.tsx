@@ -105,8 +105,8 @@ export function Calendar({
     <div className="calendar-scroll">
       <table className="calendar" dir="rtl">
         <caption className="visually-hidden">
-          סידור העבודה מ-{formatDate(schedule.starts_on)} עד{" "}
-          {formatDate(schedule.ends_on)}
+          סידור העבודה מ-{displayDate(schedule.starts_on)} עד{" "}
+          {displayDate(schedule.ends_on)}
         </caption>
         <thead>
           <tr>
@@ -120,7 +120,7 @@ export function Calendar({
                 className={isWeekend(date) ? "is-weekend" : undefined}
               >
                 <span className="calendar-weekday">{hebrewWeekday(date)}</span>
-                <span className="calendar-date">{formatDate(date)}</span>
+                <span className="calendar-date">{displayDate(date)}</span>
               </th>
             ))}
           </tr>
@@ -254,7 +254,7 @@ export function Calendar({
                             type="button"
                             className="calendar-add"
                             onClick={() => setPicking(key)}
-                            aria-label={`שיבוץ ל${shift} ב-${formatDate(date)}`}
+                            aria-label={`שיבוץ ל${shift} ב-${displayDate(date)}`}
                             title="שיבוץ ידני"
                           >
                             <Plus size={13} />
@@ -553,8 +553,4 @@ export function isWeekend(iso: string): boolean {
   const date = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(date.getTime())) return false;
   return date.getDay() === 5 || date.getDay() === 6;
-}
-
-export function formatDate(iso: string): string {
-  return displayDate(iso);
 }

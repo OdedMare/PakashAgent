@@ -3,8 +3,9 @@
 import { CalendarPlus, CalendarRange, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { DateInput } from "@/components/DateInput";
-import { formatDate, hebrewWeekday } from "@/components/Management/Calendar";
+import { DateInput, displayDate } from "@/components/DateInput";
+import { hebrewWeekday } from "@/components/Management/Calendar";
+import { displayDate } from "@/components/DateInput";
 import type { RequiredAssignment } from "@/types";
 
 type Row = RequiredAssignment & { id: number };
@@ -158,8 +159,8 @@ export function GenerateDialog({
             <div className="generate-range-summary" aria-live="polite">
               <strong>{dates.length === 1 ? "יום אחד" : `${dates.length} ימים`}</strong>
               <span>
-                {hebrewWeekday(startsOn)} {formatDate(startsOn)}
-                {dates.length > 1 ? ` — ${hebrewWeekday(endsOn)} ${formatDate(endsOn)}` : ""}
+                {hebrewWeekday(startsOn)} {displayDate(startsOn)}
+                {dates.length > 1 ? ` — ${hebrewWeekday(endsOn)} ${displayDate(endsOn)}` : ""}
               </span>
             </div>
           </section>
@@ -198,7 +199,7 @@ export function GenerateDialog({
                     >
                       {dates.map((date) => (
                         <option key={date} value={date}>
-                          {hebrewWeekday(date)} · {formatDate(date)}
+                          {hebrewWeekday(date)} · {displayDate(date)}
                         </option>
                       ))}
                     </select>
@@ -244,7 +245,7 @@ export function GenerateDialog({
           </button>
 
           <p className="modal-hint">
-            טווח הבנייה: {hebrewWeekday(startsOn)} {formatDate(startsOn)} עד {hebrewWeekday(endsOn)} {formatDate(endsOn)}. כללי מקום העבודה והאילוצים הקיימים חלים על כל יום.
+            טווח הבנייה: {hebrewWeekday(startsOn)} {displayDate(startsOn)} עד {hebrewWeekday(endsOn)} {displayDate(endsOn)}. כללי מקום העבודה והאילוצים הקיימים חלים על כל יום.
           </p>
           <div className="modal-actions">
             <button type="button" className="ghost-button" onClick={onCancel}>ביטול</button>
@@ -282,28 +283,9 @@ function shiftsForDate(shifts: ShiftOption[], date: string): ShiftOption[] {
 
 function dateRange(first: string, last: string): string[] {
   const dates: string[] = [];
-  const cursor = new Date(`${first}T00:00:00`);
-  const end = new Date(`${last}T00:00:00`);
-  while (cursor <= end) {
-    dates.push([
-      cursor.getFullYear(),
-      String(cursor.getMonth() + 1).padStart(2, "0"),
-      String(cursor.getDate()).padStart(2, "0"),
-    ].join("-"));
-    cursor.setDate(cursor.getDate() + 1);
-  }
+  if (!first || !last) return dates;
+  for (let cursor = first; cursor <= last; cursor = addDays(cursor, 1)) dates.push(cursor);
   return dates;
-}
-
-function addDays(iso: string, days: number): string {
-  const date = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return iso;
-  date.setDate(date.getDate() + days);
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ].join("-");
 }
 
 function newRow(

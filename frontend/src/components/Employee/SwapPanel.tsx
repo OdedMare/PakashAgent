@@ -4,6 +4,7 @@ import { ArrowLeftRight, Check, X } from "lucide-react";
 import { useState } from "react";
 
 import type { EmployeeView, SwapRow } from "@/types";
+import { shortDate } from "@/components/DateInput";
 
 /** Swaps: offering one, answering one, and watching what happened to it.
  *
@@ -284,12 +285,6 @@ function statusLabel(row: SwapRow): string {
 }
 
 function describeShift(iso: string, shift: string): string {
-  const label = formatDate(iso);
+  const label = shortDate(iso);
   return shift ? `${label} · ${shift}` : label;
-}
-
-function formatDate(iso: string): string {
-  const date = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return iso;
-  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`;
 }

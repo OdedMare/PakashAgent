@@ -3,7 +3,8 @@
 import { AlertTriangle, CalendarPlus, CheckCircle2, Copy, GraduationCap, MessageSquareText, PencilLine, Repeat2, ShieldCheck, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { formatDate, hebrewWeekday } from "@/components/Management/Calendar";
+import { hebrewWeekday } from "@/components/Management/Calendar";
+import { displayDate } from "@/components/DateInput";
 import type { Assignment, PlacementCheck, Schedule, Slot } from "@/types";
 
 import { PlacementVerdict } from "./ConfirmDrop";
@@ -246,7 +247,7 @@ export function ShiftEditor({
               >
                 {dates.map((date) => (
                   <option key={date} value={date}>
-                    {hebrewWeekday(date)} · {formatDate(date)}
+                    {hebrewWeekday(date)} · {displayDate(date)}
                   </option>
                 ))}
               </select>
@@ -409,7 +410,7 @@ export function ShiftEditor({
                 )
                 .map((date) => (
                   <option key={date} value={date}>
-                    {hebrewWeekday(date)} · {formatDate(date)}
+                    {hebrewWeekday(date)} · {displayDate(date)}
                   </option>
                 ))}
             </select>

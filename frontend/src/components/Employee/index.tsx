@@ -25,6 +25,7 @@ import { HoursPanel } from "./HoursPanel";
 import { IdentityGate } from "./IdentityGate";
 import { SwapPanel } from "./SwapPanel";
 import { useEmployee } from "./useEmployee";
+import { shortDate } from "@/components/DateInput";
 
 /** The employee's personal area.
  *
@@ -296,7 +297,7 @@ function MyShifts({ view }: { view: EmployeeView }) {
             <li key={`${shift.date}-${shift.shift}`}>
               <div className="shift-when">
                 <strong>{shift.weekday}</strong>
-                <span>{formatDate(shift.date)}</span>
+                <span>{shortDate(shift.date)}</span>
               </div>
               <div className="shift-what">
                 <span className="shift-name">{shift.shift}</span>
@@ -339,7 +340,7 @@ function MyChanges({ view }: { view: EmployeeView }) {
               {entry.is_new ? (
                 <span className="change-dot" aria-label="חדש" />
               ) : null}
-              {entry.slot_date ? formatDate(entry.slot_date) : ""}
+              {entry.slot_date ? shortDate(entry.slot_date) : ""}
               {entry.shift_name ? ` · ${entry.shift_name}` : ""}
             </span>
             {entry.reason ? (
@@ -430,12 +431,6 @@ function readShiftNames(shifts: EmployeeView["shifts"]): string[] {
         : ((shift as { name?: unknown })?.name ?? ""),
     )
     .filter((name): name is string => typeof name === "string" && name !== "");
-}
-
-function formatDate(iso: string): string {
-  const date = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return iso;
-  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 export { useEmployee };
