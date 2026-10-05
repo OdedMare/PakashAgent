@@ -138,7 +138,7 @@ Running the two halves directly instead:
 ```bash
 cd backend
 python -m pytest -q
-uvicorn app.main:app --reload          # :8000
+uvicorn app.main:app --app-dir src --reload   # :8000
 ```
 
 ```bash
