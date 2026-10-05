@@ -432,5 +432,3 @@ function readShiftNames(shifts: EmployeeView["shifts"]): string[] {
     )
     .filter((name): name is string => typeof name === "string" && name !== "");
 }
-
-export { useEmployee };

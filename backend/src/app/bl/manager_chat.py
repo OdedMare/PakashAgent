@@ -347,9 +347,9 @@ class ManagerChatService:
             elif kind == "generate":
                 schedule_id = self._commit_generation(team_id, plan, agent_reason)
             elif kind == "publish":
-                self._schedules.publish(team_id, schedule_id)
+                self._schedules.publish(schedule_id, team_id)
             elif kind == "unpublish":
-                self._schedules.unpublish(team_id, schedule_id)
+                self._schedules.unpublish(schedule_id, team_id)
             elif kind in ("changes", "clear"):
                 applier = OperationApplier(self._repo)
                 for operation in plan["operations"]:

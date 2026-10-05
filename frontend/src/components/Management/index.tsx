@@ -87,9 +87,12 @@ export function Management({
   const [chatPreview, setChatPreview] = useState<Proposal | null>(null);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
   useEffect(() => {
-    if (window.matchMedia("(min-width: 1101px)").matches) setDrawerOpen(true);
-    const stored = Number(localStorage.getItem("pakash-chat-width"));
-    if (stored >= 340 && stored <= 760) setChatWidth(stored);
+    const frame = requestAnimationFrame(() => {
+      if (window.matchMedia("(min-width: 1101px)").matches) setDrawerOpen(true);
+      const stored = Number(localStorage.getItem("pakash-chat-width"));
+      if (stored >= 340 && stored <= 760) setChatWidth(stored);
+    });
+    return () => cancelAnimationFrame(frame);
   }, []);
   const [section, setSection] = useState<ManagerSection>("agent");
   const [copilotPending, setCopilotPending] = useState(0);
@@ -587,7 +590,7 @@ export function Management({
             workspaceId={workspace.id}
             scheduleId={state.focusedScheduleId}
             visibleWeek={state.focusedWeek}
-            employees={overview?.employees.map((person) => person.name) ?? []}
+            employees={overview?.employees.map((person) => String(person.name ?? "")).filter(Boolean) ?? []}
             boardBusy={state.busy}
             draft={suggested.text}
             draftKey={suggested.n}

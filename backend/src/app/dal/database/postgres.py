@@ -16,7 +16,7 @@ old host forever, which is a far more confusing failure than a slow query.
 """
 
 import threading
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
 
 import psycopg
@@ -124,7 +124,6 @@ def _configure_for(schema: str):
     return configure
 
 
-@contextmanager
 def connect(store: RuntimeSettingsStore):
     """A pooled connection, as a context manager.
 
@@ -136,10 +135,8 @@ def connect(store: RuntimeSettingsStore):
     """
     active = _transaction.get()
     if active is not None and active[0] is store:
-        yield active[1]
-    else:
-        with _pool_for(store.get()).connection() as connection:
-            yield connection
+        return nullcontext(active[1])
+    return _pool_for(store.get()).connection()
 
 
 @contextmanager

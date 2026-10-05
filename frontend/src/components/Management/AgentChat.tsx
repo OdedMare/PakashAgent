@@ -3,7 +3,7 @@
 import { Check, CheckCircle2, ChevronDown, History, LoaderCircle, MessageSquare, Plus, Send, Sparkles, Square, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ChatPlan, ManagerChatMessage, Proposal } from "@/types";
-import { formatDate } from "./Calendar";
+import { displayDate as formatDate } from "@/components/DateInput";
 import { useManagerChat } from "./useManagerChat";
 
 export function AgentChat({ workspaceId, scheduleId, visibleWeek, employees, draft, draftKey, boardBusy, onApplied, onPreview }: {
@@ -119,9 +119,9 @@ function PlanCard({ message, employees, disabled, onApply, onDismiss, onAdjust }
     {plan.generated ? <p>{formatDate(plan.starts_on!)} – {formatDate(plan.ends_on!)} · {assignments.length} שיבוצים</p> : null}
     {assignments.length ? <details className="conversation-plan-rows" open={assignments.length <= 14}><summary>השיבוצים בתוכנית ({assignments.length})</summary>
       <ul>{assignments.map((operation, index) => <li key={index}>
-        <span className="conversation-operation-action">{"action" in operation ? ACTION_LABELS[operation.action] : "שיבוץ"}</span>
+        <span className="conversation-operation-action">{"action" in operation ? ACTION_LABELS[String(operation.action)] : "שיבוץ"}</span>
         <div><strong>{operation.employee}</strong><span>{operation.shift} · {formatDate(operation.date)}</span>
-          {"with_employee" in operation && operation.with_employee ? <span>עם {operation.with_employee}</span> : null}
+          {"with_employee" in operation && typeof operation.with_employee === "string" && operation.with_employee ? <span>עם {operation.with_employee}</span> : null}
           {pending && (!("action" in operation) || operation.action === "assign") ? <label className="conversation-replacement"><span>בחירת עובד אחר</span>
             <select disabled={disabled} value={operation.employee} onChange={(event) => onAdjust(
               `בתוכנית האחרונה, במשמרת ${operation.shift} בתאריך ${operation.date}, הצע את ${event.target.value} במקום ${operation.employee}. שמור את כל שאר השינויים והאילוצים בתוכנית והצג תוכנית מלאה מעודכנת לאישור.`,

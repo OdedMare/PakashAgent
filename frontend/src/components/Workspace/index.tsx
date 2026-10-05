@@ -156,5 +156,3 @@ function MemberSurface({
     />
   );
 }
-
-export { useWorkspace };

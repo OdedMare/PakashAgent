@@ -5,58 +5,17 @@
 
 /* --- modal shell ------------------------------------------------------- */
 
-.modal-backdrop {
-  position: fixed;
-  z-index: 100;
-  inset: 0;
-  display: grid;
-  padding: 18px;
-  place-items: center;
-  background: rgba(31, 30, 29, 0.72);
-  backdrop-filter: blur(10px);
-}
-
-.modal {
-  width: min(680px, 100%);
-  max-height: calc(100vh - 48px);
-  overflow: auto;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-}
-
-.modal-header {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  min-height: 74px;
-  padding: 14px 22px;
-  background: color-mix(in srgb, var(--surface) 90%, transparent);
-  border-bottom: 1px solid var(--border);
-  backdrop-filter: blur(16px);
-}
+/* `.modal-backdrop`, `.modal`, `.modal-header` and its `h2` are defined once,
+   in management.css; these are the header parts only the settings modal and
+   its siblings add. */
 
 .modal-header > div {
   min-width: 0;
   flex: 1;
 }
 
-.modal-header h2,
 .modal-header p {
-  margin: 0;
-}
-
-.modal-header h2 {
-  font-size: 17px;
-  letter-spacing: -0.01em;
-}
-
-.modal-header p {
-  margin-top: 3px;
+  margin: 3px 0 0;
   color: var(--text-muted);
   font-size: 11px;
 }
@@ -90,25 +49,19 @@
   box-shadow: var(--brand-glow);
 }
 
-/* management.css restyles `.modal-backdrop` for its confirmation dialogs
-   (lower z-index, lighter tint); the settings workspace keeps its own.
-   Flex, not grid: in an `auto` grid track the modal's `min(1000px, 100%)`
-   resolves against its own content and the width jumps from tab to tab. */
+/* Darker and above everything else: settings can be opened over another
+   dialog. The base backdrop stays flex — in an `auto` grid track the modal's
+   `min(1000px, 100%)` would resolve against its own content. */
 .modal-backdrop.settings-backdrop {
   z-index: 100;
-  display: flex;
   padding: 18px;
-  align-items: center;
-  justify-content: center;
   background: rgba(31, 30, 29, 0.72);
 }
 
 /* --- workspace layout -------------------------------------------------- */
 
-/* Two classes, not one: management.css loads later and defines a small
-   confirmation `.modal` (30rem wide, padded) and `.modal-header` (bottom
-   margin). At equal specificity those would win and squeeze this workspace
-   into a ~480px box with a ~150px form column. */
+/* Two classes, not one: the base `.modal` in management.css (loaded later)
+   is a 30rem padded confirmation box and would otherwise win. */
 .modal.settings-workspace-modal {
   display: flex;
   width: min(1000px, 100%);
@@ -389,30 +342,6 @@ select.settings-input {
   margin-inline-end: auto;
   gap: 6px;
   font-size: 12px;
-}
-
-.primary-button {
-  display: inline-flex;
-  min-height: 42px;
-  align-items: center;
-  justify-content: center;
-  padding: 0 16px;
-  gap: 7px;
-  color: #fff;
-  background: var(--brand-gradient);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  font-weight: 700;
-  box-shadow: var(--brand-glow);
-}
-
-.primary-button:hover:not(:disabled) {
-  background: var(--primary-hover);
-}
-
-.primary-button:disabled {
-  opacity: 0.6;
-  cursor: default;
 }
 
 .settings-save {

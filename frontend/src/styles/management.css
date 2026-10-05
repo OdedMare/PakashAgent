@@ -155,9 +155,12 @@
 }
 
 .primary-button {
+  justify-content: center;
+  min-height: 42px;
   background: var(--primary);
   color: #fff;
   border: 1px solid transparent;
+  box-shadow: var(--brand-glow);
 }
 
 .primary-button:hover:not(:disabled) {
@@ -1221,6 +1224,7 @@
   position: fixed;
   inset: 0;
   background: rgba(31, 30, 29, 0.45);
+  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1234,15 +1238,25 @@
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
   width: min(30rem, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
   padding: 1.1rem;
 }
 
 .modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  min-height: 74px;
   margin-bottom: 0.75rem;
+  padding: 14px 22px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(16px);
 }
 
 .modal-header h2 {
@@ -1251,6 +1265,7 @@
   gap: 0.4rem;
   margin: 0;
   font-size: 1rem;
+  letter-spacing: -0.01em;
 }
 
 .modal-summary {
