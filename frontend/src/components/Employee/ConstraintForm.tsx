@@ -3,7 +3,7 @@
 import { CalendarPlus, Check, Clock3, X } from "lucide-react";
 import { useState } from "react";
 
-import { DateInput } from "@/components/DateInput";
+import { DateInput, shortDate } from "@/components/DateInput";
 import type { ConstraintRequestRow } from "@/types";
 
 /** Ask not to be scheduled — and see what happened to previous asks.

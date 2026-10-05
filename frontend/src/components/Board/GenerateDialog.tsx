@@ -5,8 +5,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DateInput, displayDate } from "@/components/DateInput";
 import { hebrewWeekday } from "@/components/Management/Calendar";
-import { displayDate } from "@/components/DateInput";
 import type { RequiredAssignment } from "@/types";
+
+import { addDays } from "./useBoard";
 
 type Row = RequiredAssignment & { id: number };
 
@@ -283,7 +284,8 @@ function shiftsForDate(shifts: ShiftOption[], date: string): ShiftOption[] {
 
 function dateRange(first: string, last: string): string[] {
   const dates: string[] = [];
-  if (!first || !last) return dates;
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  if (!iso.test(first) || !iso.test(last)) return dates;
   for (let cursor = first; cursor <= last; cursor = addDays(cursor, 1)) dates.push(cursor);
   return dates;
 }

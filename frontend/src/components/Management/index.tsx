@@ -19,16 +19,16 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 
 import { Board } from "@/components/Board";
 import { useTheme } from "@/components/Interview/useTheme";
 import { SettingsPanel } from "@/components/Settings";
 import { ShareLink } from "@/components/Workspace/ShareLink";
-import type { ManagementOverview, TeamView } from "@/types";
+import type { ManagementOverview, Proposal, TeamView } from "@/types";
 
 import { AgentChat } from "./AgentChat";
 import { ProfileGapsNotice } from "./ProfileGapsNotice";
-import { Briefing } from "./Briefing";
 import { CopilotInbox } from "./CopilotInbox";
 import { History } from "./History";
 import { LearnedFromChanges } from "./LearnedFromChanges";
@@ -83,6 +83,14 @@ export function Management({
   // never has to remember which cell they were discussing with the agent.
   const [view, setView] = useState<ManagerView>("board");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [chatWidth, setChatWidth] = useState(440);
+  const [chatPreview, setChatPreview] = useState<Proposal | null>(null);
+  const resizeStart = useRef<{ x: number; width: number } | null>(null);
+  useEffect(() => {
+    if (window.matchMedia("(min-width: 1101px)").matches) setDrawerOpen(true);
+    const stored = Number(localStorage.getItem("pakash-chat-width"));
+    if (stored >= 340 && stored <= 760) setChatWidth(stored);
+  }, []);
   const [section, setSection] = useState<ManagerSection>("agent");
   const [copilotPending, setCopilotPending] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -419,6 +427,7 @@ export function Management({
       <main
         id="main-content"
         className={`management-workspace${drawerOpen ? " has-drawer" : ""}${view !== "board" ? " is-page" : ""}`}
+        style={{ "--chat-width": `${chatWidth}px` } as CSSProperties}
       >
         {view === "analytics" ? (
           <ManagerAnalytics overview={overview} />
@@ -480,7 +489,7 @@ export function Management({
             // operations and there is no path from a highlight to a write.
             agent={{
               simulation: state.simulation,
-              proposal: state.proposal,
+              proposal: chatPreview ?? state.proposal,
               answer: state.answer,
             }}
           />
@@ -497,6 +506,27 @@ export function Management({
           aria-label="אזור ניהול"
           hidden={!drawerOpen}
         >
+          <div className="manager-chat-resizer" role="separator" tabIndex={0}
+            aria-label="שינוי רוחב חלונית השיחה" aria-orientation="vertical"
+            aria-valuemin={340} aria-valuemax={760} aria-valuenow={chatWidth}
+            onPointerDown={(event) => {
+              resizeStart.current = { x: event.clientX, width: chatWidth };
+              event.currentTarget.setPointerCapture(event.pointerId);
+            }}
+            onPointerMove={(event) => {
+              if (!resizeStart.current) return;
+              const delta = (event.clientX - resizeStart.current.x) * (document.documentElement.dir === "rtl" ? 1 : -1);
+              setChatWidth(Math.max(340, Math.min(760, resizeStart.current.width + delta)));
+            }}
+            onPointerUp={() => { resizeStart.current = null; localStorage.setItem("pakash-chat-width", String(chatWidth)); }}
+            onLostPointerCapture={() => { resizeStart.current = null; }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+                event.preventDefault();
+                const width = Math.max(340, Math.min(760, chatWidth + (event.key === "ArrowRight" ? 20 : -20)));
+                setChatWidth(width); localStorage.setItem("pakash-chat-width", String(width));
+              }
+            }} />
           <div className="manager-drawer-head">
             <div>
               <strong>ניהול הסידור</strong>
@@ -534,7 +564,7 @@ export function Management({
             />
           </div>
 
-          <div className="manager-drawer-content">
+          <div className={`manager-drawer-content${section === "agent" ? " is-conversation" : ""}`}>
           {section === "agent" ? <>
           {schedule?.status === "published" ? (
             <PublishedNotice
@@ -542,14 +572,6 @@ export function Management({
               busy={state.busy}
             />
           ) : null}
-          <Briefing
-            briefing={state.briefing}
-            busy={state.briefing_busy}
-            onAsk={(text) =>
-              setSuggested((previous) => ({ text, n: previous.n + 1 }))
-            }
-            onDismiss={state.dismissBriefing}
-          />
           {/* A change being considered rather than requested. Rendered in
               its own colour above the proposal so the two can never be
               confused — nothing here has been written, and approving runs
@@ -562,20 +584,15 @@ export function Management({
             onDiscard={state.dismissSimulation}
           />
           <AgentChat
-            proposal={state.proposal}
-            answer={state.answer}
-            answerBusy={state.answer_busy}
-            busy={state.busy}
-            hasSchedule={Boolean(schedule)}
-            writeLocked={schedule?.status === "published"}
+            workspaceId={workspace.id}
+            scheduleId={state.focusedScheduleId}
+            visibleWeek={state.focusedWeek}
+            employees={overview?.employees.map((person) => person.name) ?? []}
+            boardBusy={state.busy}
             draft={suggested.text}
             draftKey={suggested.n}
-            onPropose={state.propose}
-            onAsk={state.ask}
-            onSimulate={state.simulate}
-            onConfirm={state.confirm}
-            onDismiss={state.dismissProposal}
-            onDismissAnswer={state.dismissAnswer}
+            onApplied={state.refresh}
+            onPreview={setChatPreview}
           />
           </> : null}
 

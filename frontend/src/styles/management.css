@@ -116,29 +116,6 @@
   }
 }
 
-.management-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 22rem;
-  gap: 1.25rem;
-  align-items: start;
-  padding: 1.25rem;
-  flex: 1;
-}
-
-@media (max-width: 1100px) {
-  .management-body {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.management-main,
-.management-side {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  min-width: 0;
-}
-
 /* -- toolbar ------------------------------------------------------------- */
 
 .management-toolbar {
@@ -162,26 +139,6 @@
 .period-range {
   font-weight: 600;
   font-size: 1.02rem;
-}
-
-.period-status {
-  font-size: 0.76rem;
-  padding: 0.16rem 0.55rem;
-  border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  color: var(--text-muted);
-}
-
-.period-status.is-published {
-  color: var(--success);
-  background: var(--success-soft);
-  border-color: transparent;
-}
-
-.toolbar-actions {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
 }
 
 .primary-button,
@@ -1327,18 +1284,6 @@
 }
 
 /* -- empty states and the member view ----------------------------------- */
-
-.management-empty {
-  background: var(--surface);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius);
-  padding: 2.5rem 1.5rem;
-}
-
-.management-empty-busy {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
 
 .member-main {
   padding: 1.25rem;

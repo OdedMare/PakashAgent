@@ -165,7 +165,7 @@ export function Board({
    *  everything outside this component that aimed at "the schedule" aimed at
    *  the wrong week the moment the manager paged away. The board is the only
    *  thing that knows which week is on screen, so it is what says so. */
-  onPeriodChange?: (scheduleId: string) => void;
+  onPeriodChange?: (scheduleId: string, weekStart?: string) => void;
   /** Open the conversation with the agent — the control room beside this. */
   onOpenAgent?: () => void;
   /** What the agent is currently saying, so the week can show *where* it
@@ -227,8 +227,8 @@ export function Board({
   // memo above, because it is a notification and not part of computing what
   // to render.
   useEffect(() => {
-    onPeriodChange?.(schedule?.id ?? "");
-  }, [schedule?.id, onPeriodChange]);
+    onPeriodChange?.(schedule?.id ?? "", board.weekStart);
+  }, [schedule?.id, board.weekStart, onPeriodChange]);
 
   // Where on the week what the agent is saying actually applies. Derived
   // from the panels' own state rather than from anything new on the wire:

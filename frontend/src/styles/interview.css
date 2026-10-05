@@ -781,17 +781,6 @@
   font-size: 0.74rem;
 }
 
-.welcome-action {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-}
-
-.welcome-action > small {
-  color: var(--text-muted);
-  font-size: 0.74rem;
-}
-
 .start-button {
   display: inline-flex;
   align-items: center;
@@ -1108,11 +1097,6 @@
 
   .welcome-map small {
     grid-column: 2;
-  }
-
-  .welcome-action {
-    align-items: stretch;
-    flex-direction: column;
   }
 
   .start-button {

@@ -64,6 +64,8 @@ export interface ProfileGaps {
 }
 
 export interface ManagementState {
+  focusedScheduleId: string;
+  focusedWeek: string;
   overview: ManagementOverview | undefined;
   /** A short write is in flight. Gates the board's own controls.
    *
@@ -187,7 +189,7 @@ export interface ManagementState {
    *  overview and so answered about the wrong week whenever the manager had
    *  paged away. The board reports what it is rendering, and this is what
    *  the rest of the area then aims at. */
-  focusPeriod: (scheduleId: string) => void;
+  focusPeriod: (scheduleId: string, weekStart?: string) => void;
   addConstraint: (input: {
     employee: string;
     constraint_date: string;
@@ -238,7 +240,11 @@ export function useManagement(): ManagementState {
   // not exist in the period covering today. Empty until the board has
   // rendered; the overview is the fallback.
   const [focused, setFocused] = useState("");
-  const focusPeriod = useCallback((id: string) => setFocused(id), []);
+  const [focusedWeek, setFocusedWeek] = useState("");
+  const focusPeriod = useCallback((id: string, weekStart?: string) => {
+    setFocused(id);
+    if (weekStart) setFocusedWeek(weekStart);
+  }, []);
 
   /** Stamp the period on a hand-write that did not name one.
    *
@@ -871,6 +877,8 @@ export function useManagement(): ManagementState {
   }, [brief]);
 
   return {
+    focusedScheduleId: focused,
+    focusedWeek,
     overview,
     busy,
     error,

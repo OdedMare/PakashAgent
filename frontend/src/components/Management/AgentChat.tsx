@@ -1,396 +1,177 @@
 "use client";
 
-import {
-  Check,
-  FlaskConical,
-  HelpCircle,
-  Search,
-  Send,
-  Sparkles,
-  X,
-} from "lucide-react";
-import { useState } from "react";
+import { Check, CheckCircle2, ChevronDown, History, LoaderCircle, MessageSquare, Plus, Send, Sparkles, Square, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type { ChatPlan, ManagerChatMessage, Proposal } from "@/types";
+import { formatDate } from "./Calendar";
+import { useManagerChat } from "./useManagerChat";
 
-import type { AgentAnswer, Operation, Proposal, Simulation } from "@/types";
-
-import { AgentAnswer as AgentAnswerBubble } from "./AgentAnswer";
-import { displayDate } from "@/components/DateInput";
-
-/** Talking to the agent about the schedule — the way changes actually happen.
- *
- *  The loop is deliberately two steps
- *  ([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)):
- *
- *  1. The manager says what they want. The agent answers with a *proposal* —
- *     nothing has been written.
- *  2. The manager reads the agent's reasoning and confirms, or does not.
- *
- *  That gap is the product, not friction. Under
- *  [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)
- *  the agent's judgment is final, so seeing *why* it picked this person is
- *  the manager's one cheap chance to catch a bad call — which is why the
- *  reasoning is rendered in full rather than tucked behind a disclosure. */
-export function AgentChat({
-  proposal,
-  answer,
-  answerBusy = false,
-  busy,
-  hasSchedule = true,
-  writeLocked = false,
-  draft,
-  draftKey,
-  onPropose,
-  onAsk,
-  onSimulate,
-  onConfirm,
-  onDismiss,
-  onDismissAnswer,
-}: {
-  proposal: Proposal | null;
-  answer: AgentAnswer | null;
-  answerBusy?: boolean;
-  busy: boolean;
-  /** Without a period there is nothing to change, but the agent can still
-   *  answer questions about the workplace and help decide what to build. */
-  hasSchedule?: boolean;
-  /** Published periods are read-only until the manager returns them to draft. */
-  writeLocked?: boolean;
-  /** A sentence the briefing offered, seeded into the composer.
-   *
-   *  Seeded, never sent: the manager still presses send, which is what keeps
-   *  a suggestion a suggestion. An agent observation that dispatched itself
-   *  would be the agent acting on its own conclusion — exactly what D15 is
-   *  drawn to prevent. */
-  draft?: string;
-  /** Bumped each time a suggestion is clicked, so choosing the same one
-   *  again re-seeds the box after the manager has edited it. Without it the
-   *  effect below would not re-run on an identical `draft`. */
-  draftKey?: number;
-  onPropose: (request: string, reason?: string) => void;
-  /** Ask about the schedule without asking for a change.
-   *
-   *  A separate verb because it is a separate act. "מי יכול להחליף את יוסי
-   *  בשבת" is a question; answering it with a proposal would commit the
-   *  manager to something they did not ask for, and the two-step contract
-   *  exists precisely so a change is deliberate. */
-  onAsk?: (request: string) => void;
-  /** Turn the pending proposal into a simulation instead of applying it.
-   *
-   *  The manager reads the agent's reasoning and wants to see the
-   *  consequences before committing. Nothing is written either way. */
-  onSimulate?: (operations: Operation[]) => void;
-  onConfirm: (reason: string) => void;
-  onDismiss: () => void;
-  onDismissAnswer: () => void;
+export function AgentChat({ workspaceId, scheduleId, visibleWeek, employees, draft, draftKey, boardBusy, onApplied, onPreview }: {
+  workspaceId: string; scheduleId: string; visibleWeek: string; employees: string[];
+  draft?: string; draftKey?: number; boardBusy: boolean;
+  onApplied: () => Promise<void>; onPreview: (proposal: Proposal | null) => void;
 }) {
-  const [request, setRequest] = useState("");
-  const [reason, setReason] = useState("");
-
-  // Adjusting state during render rather than in an effect: this is React's
-  // own pattern for a value that resets when a prop changes, and it avoids
-  // the cascading re-render an effect would cost.
-  //
-  // Keyed on `draftKey` rather than on the text, so clicking the same
-  // suggestion again puts it back after the manager has edited the box —
-  // while an ordinary re-render carrying the same draft never overwrites
-  // what they are in the middle of typing.
+  const agent = useManagerChat(workspaceId, scheduleId, visibleWeek, onApplied);
+  const [text, setText] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const input = useRef<HTMLTextAreaElement>(null);
+  const log = useRef<HTMLDivElement>(null);
   const [seeded, setSeeded] = useState(draftKey);
-  if (draftKey !== seeded) {
-    setSeeded(draftKey);
-    if (draft) setRequest(draft);
-  }
-
-  const needsReason = proposal?.needs_reason ?? false;
-  // The agent could not tell what the request referred to and asked. The
-  // question is already in `reply`; what this changes is the composer, which
-  // says "answer" rather than "request a change" — the manager is finishing
-  // a sentence, not starting one.
-  const needsInput = proposal?.needs_input ?? false;
-  // The manager's reason: whatever they already stated, otherwise what they
-  // are typing now in answer to the agent asking.
-  const confirmReason = (proposal?.stated_reason || reason).trim();
-  const hasScheduleOperations = Boolean(proposal?.operations.length);
-  const hasProfileOperations = Boolean(proposal?.profile_operations.length);
-
-  return (
-    <section className="agent-chat" aria-label="שיחה עם הסוכן">
-      <header className="agent-chat-header">
-        <span className="brand-mark" aria-hidden="true">
-          <Sparkles size={15} />
-        </span>
-        <div>
-          <h3>שיחה עם הסוכן</h3>
-          <p>
-            {hasSchedule
-              ? "אפשר להתייעץ על הצוות והסידור, או לבקש שינוי לאישור."
-              : "אפשר להתייעץ על הצוות, להוסיף עובדים ולהגדיר משמרות."}
-          </p>
-        </div>
-      </header>
-
-      {onAsk ? (
-        <div className="agent-quick-questions" aria-label="שאלות מהירות">
-          <span>אפשר לשאול</span>
-          {(hasSchedule ? SCHEDULE_QUESTIONS : PROFILE_QUESTIONS).map((question) => (
-            <button
-              type="button"
-              key={question}
-              disabled={busy}
-              onClick={() => onAsk(question)}
-            >
-              {question}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      {proposal ? (
-        <div className={needsInput ? "proposal proposal-asking" : "proposal"}>
-          <p className="proposal-reply">
-            {needsInput ? (
-              <span className="proposal-question-mark" aria-hidden="true">
-                <HelpCircle size={14} />
-              </span>
-            ) : null}
-            {proposal.reply}
-          </p>
-
-          {/* The agent asked why. No operations came back, and none will
-              until it is answered — a missing reason is met with a question,
-              never a rejection. */}
-          {needsReason ? (
-            <form
-              className="proposal-reason"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (!reason.trim() || writeLocked) return;
-                onPropose(request || proposal.reply, reason.trim());
-              }}
-            >
-              <label>
-                <HelpCircle size={14} />
-                <span>מה הסיבה לשינוי?</span>
-                <input
-                  type="text"
-                  value={reason}
-                  maxLength={200}
-                  onChange={(event) => setReason(event.target.value)}
-                  placeholder="מחלה, חופשה, בקשת העובד…"
-                  autoFocus
-                />
-              </label>
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={busy || writeLocked || !reason.trim()}
-              >
-                שליחה
-              </button>
-            </form>
-          ) : null}
-
-          {/* The agent's reasoning, shown before the manager confirms. This
-              is the point of the confirmation step, not a detail. */}
-          {proposal.agent_reason ? (
-            <div className="proposal-reasoning">
-              <span className="proposal-label">הנימוק של הסוכן</span>
-              <p>{proposal.agent_reason}</p>
-            </div>
-          ) : null}
-
-          {proposal.operations.length ? (
-            <ul className="proposal-operations">
-              {proposal.operations.map((operation, index) => (
-                <li key={index}>
-                  <span className={`op-badge op-${operation.action}`}>
-                    {ACTION_LABELS[operation.action] ?? operation.action}
-                  </span>
-                  <span>
-                    {operation.employee}
-                    {operation.shift ? ` · ${operation.shift}` : ""}
-                    {operation.date ? ` · ${displayDate(operation.date)}` : ""}
-                    {operation.with_employee
-                      ? ` ⇄ ${operation.with_employee}`
-                      : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-
-          {proposal.profile_operations.length ? (
-            <ul className="proposal-operations">
-              {proposal.profile_operations.map((operation, index) => (
-                <li key={`profile-${index}`}>
-                  <span className="op-badge op-profile">
-                    {PROFILE_ACTION_LABELS[operation.action] ?? operation.action}
-                  </span>
-                  <span>{profileOperationSummary(operation)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-
-          {/* Warnings the change *would* produce, so a proposal that breaks
-              something is visible before it is accepted rather than after.
-              Still advisory: they do not disable the confirm button. */}
-          {proposal.warnings.length ? (
-            <ul className="proposal-warnings">
-              {proposal.warnings.map((warning, index) => (
-                <li key={index}>{warning.message}</li>
-              ))}
-            </ul>
-          ) : null}
-
-          <div className="proposal-actions">
-            <button type="button" className="ghost-button" onClick={onDismiss}>
-              <X size={14} />
-              ביטול
-            </button>
-            {/* See the consequences before committing to them. Writes
-                nothing, exactly as the proposal itself has written nothing —
-                this is a way to look harder, not a third path to a change. */}
-            {proposal.operations.length && onSimulate ? (
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => onSimulate(proposal.operations as Operation[])}
-                disabled={busy}
-                title="לראות מה השינוי היה עושה, בלי לבצע"
-              >
-                <FlaskConical size={14} />
-                סימולציה
-              </button>
-            ) : null}
-            {hasScheduleOperations || hasProfileOperations ? (
-              <button
-                type="button"
-                className="primary-button"
-                onClick={() => onConfirm(confirmReason)}
-                disabled={
-                  busy ||
-                  (hasScheduleOperations && (writeLocked || !confirmReason))
-                }
-              >
-                <Check size={14} />
-                {busy ? "מחיל…" : "אישור השינוי"}
-              </button>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {answerBusy || answer ? (
-        <div className="agent-answer-float">
-          <AgentAnswerBubble
-            answer={answer}
-            busy={answerBusy}
-            onDismiss={onDismissAnswer}
-            onAnswer={onAsk}
-            onContinue={() =>
-              document.getElementById("agent-composer-input")?.focus()
-            }
-          />
-        </div>
-      ) : null}
-
-      <form
-        className="agent-composer"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const text = request.trim();
-          if (!text || busy) return;
-          if (answer?.needs_input && !proposal && onAsk) onAsk(text);
-          else onPropose(text);
-          setRequest("");
-          setReason("");
-        }}
-      >
-        <input
-          id="agent-composer-input"
-          type="text"
-          value={request}
-          maxLength={500}
-          onChange={(event) => setRequest(event.target.value)}
-          placeholder={
-            needsInput
-              ? "התשובה לשאלה של הסוכן — אין צורך לחזור על הבקשה"
-              : hasSchedule
-                ? "למשל: דנה חולה ביום חמישי"
-                : "למשל: תוסיף את מאיה לצוות בתפקיד אחראית משמרת"
-          }
-          disabled={busy}
-          autoFocus={needsInput}
-        />
-        {/* Asking and requesting are two buttons because they are two
-            different acts. The magnifier reads the schedule and answers;
-            send asks the agent to propose a change. Collapsing them would
-            make every question produce a confirm button for something the
-            manager did not ask for. */}
-        {onAsk ? (
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() => {
-              const text = request.trim();
-              if (!text || busy) return;
-              onAsk(text);
-            }}
-            disabled={busy || !request.trim()}
-            aria-label="שאלה על הצוות או הסידור"
-            title="שאלה — קריאה בלבד, בלי לשנות כלום"
-          >
-            <Search size={15} />
-          </button>
-        ) : null}
-        <button
-          type="submit"
-          className="primary-button"
-          disabled={busy || !request.trim()}
-          aria-label="שליחה"
-          title="בקשת שינוי — הסוכן יציע ואתם תאשרו"
-        >
-          <Send size={15} />
-        </button>
-      </form>
-    </section>
-  );
+  if (seeded !== draftKey) { setSeeded(draftKey); if (draft) setText(draft); }
+  const messages = agent.chat?.messages ?? [];
+  const last = messages[messages.length - 1];
+  const preview = last?.status === "pending" ? last.payload.plan : undefined;
+  useEffect(() => {
+    onPreview(preview?.kind === "changes" ? {
+      schedule_id: preview.schedule_id, reply: last?.content ?? "", needs_reason: false, needs_input: false,
+      pending_request: "", agent_reason: preview.agent_reason, stated_reason: preview.reason,
+      operations: preview.operations, constraints: preview.constraints, profile_operations: [],
+      warnings: preview.warnings as Proposal["warnings"],
+    } : null);
+  }, [preview, last?.content, onPreview]);
+  const messageCount = messages.length;
+  const lastStatus = last?.status;
+  useEffect(() => { if (log.current) log.current.scrollTop = log.current.scrollHeight; }, [messageCount, lastStatus, agent.chat?.id]);
+  const send = async (value: string) => {
+    if (await agent.send(value)) { setText(""); input.current?.focus(); }
+  };
+  const disabled = agent.busy || agent.working || agent.loading;
+  return <section className="conversation" aria-label="שיחה עם סוכן הסידור">
+    <header className="conversation-toolbar">
+      <div className="conversation-title"><Sparkles size={17} aria-hidden="true" /><strong>סוכן הסידור</strong></div>
+      <div className="conversation-tools">
+        <button type="button" className="icon-button" aria-label="היסטוריית שיחות" aria-expanded={historyOpen}
+          onClick={() => setHistoryOpen(!historyOpen)}><History size={17} /></button>
+        <button type="button" className="icon-button" aria-label="שיחה חדשה" disabled={agent.busy || agent.loading}
+          onClick={() => { void agent.newChat(); setText(""); setHistoryOpen(false); }}><Plus size={19} /></button>
+      </div>
+    </header>
+    <div className="conversation-context"><span className="conversation-context-dot" aria-hidden="true" />
+      {visibleWeek ? `השבוע שמתחיל ב-${formatDate(visibleWeek)}` : "הצוות וכללי השיבוץ שלך"}
+      <span>המלצות מתבצעות רק באישור שלך</span>
+    </div>
+    {historyOpen ? <div className="conversation-history">
+      <label htmlFor="manager-conversation-picker">השיחות שלי</label>
+      <select id="manager-conversation-picker" value={agent.chat?.id ?? ""} disabled={agent.busy}
+        onChange={(event) => { void agent.select(event.target.value); setText(""); setDeleteOpen(false); }}>
+        {!agent.chats.some((row) => row.id === agent.chat?.id) && agent.chat ? <option value={agent.chat.id}>{agent.chat.title}</option> : null}
+        {agent.chats.map((row) => <option value={row.id} key={row.id}>{row.title}</option>)}
+      </select>
+      {deleteOpen ? <div className="conversation-delete-confirm">
+        <span>למחוק את השיחה? השינויים בסידור יישארו.</span>
+        <button type="button" disabled={agent.busy} onClick={() => { void agent.remove(); setDeleteOpen(false); }}>מחיקת השיחה</button>
+        <button type="button" onClick={() => setDeleteOpen(false)}>ביטול</button>
+      </div> : <button type="button" className="ghost-button" disabled={!agent.chat || agent.busy || agent.working}
+        onClick={() => setDeleteOpen(true)}><Trash2 size={14} /> מחיקת השיחה</button>}
+    </div> : null}
+    <div className="conversation-log" ref={log} role="log" aria-label="הודעות בשיחה" aria-relevant="additions text">
+      {agent.loading ? <p className="conversation-loading"><LoaderCircle size={17} /> טוען שיחות…</p> : null}
+      {!agent.loading && !messages.length ? <div className="conversation-empty">
+        <div className="conversation-empty-mark"><MessageSquare size={25} /></div>
+        <h3>מה צריך לפתור בסידור?</h3><p>אפשר לבנות שבוע, למצוא מחליפים, להשוות עומסים או לעדכן את הצוות והכללים.</p>
+        <div className="conversation-starters">{["תשבץ את השבוע הקרוב", "מי עובד הכי הרבה השבוע?", "מי יכול למלא את המשמרות הפנויות?", "תוסיף עובד חדש"].map((value) =>
+          <button type="button" key={value} disabled={disabled} onClick={() => void send(value)}>{value}</button>)}</div>
+      </div> : null}
+      {messages.map((message) => <article key={message.id} className={`conversation-message is-${message.role}${message.status === "error" ? " is-error" : ""}`}>
+        <div className="conversation-speaker">{message.role === "assistant" ? <><Sparkles size={13} /> סוכן הסידור</> : "את/ה"}</div>
+        {message.status === "working" ? <div className="conversation-thinking" role="status"><LoaderCircle size={16} /> בודק את הסידור, האילוצים והכללים…</div> : <div className="conversation-text">{message.content}</div>}
+        {message.payload.plan ? <PlanCard message={message} employees={employees} disabled={disabled || boardBusy}
+          onApply={(exceptions) => void agent.apply(message.id, exceptions)} onDismiss={() => void agent.dismiss(message.id)} onAdjust={(value) => void send(value)} /> : null}
+        {message.payload.question?.options.length ? <div className="conversation-options">{message.payload.question.options.map((option, index) =>
+          <button type="button" key={option.label} disabled={disabled || message.id !== last?.id || message.status === "applied"}
+            onClick={() => void send(option.answer)}>{index === 0 ? <Sparkles size={12} /> : null}{option.label}</button>)}</div> : null}
+        {message.payload.steps?.length ? <details className="conversation-checks"><summary><ChevronDown size={12} /> מה נבדק ({message.payload.steps.length})</summary>
+          <ul>{message.payload.steps.map((step, index) => <li key={index}>{TOOL_LABELS[step.tool] ?? "בדיקת הסידור"}{step.ok ? "" : " — הבדיקה לא הושלמה"}</li>)}</ul></details> : null}
+        {message.status === "error" && message.id === last?.id ? <button type="button" className="ghost-button" disabled={disabled} onClick={() => {
+          const previous = [...messages].reverse().find((row) => row.role === "user"); if (previous) void send(previous.content);
+        }}>ניסיון נוסף</button> : null}
+      </article>)}
+    </div>
+    {agent.error ? <p className="conversation-error" role="alert">{agent.error}</p> : null}
+    <form className="conversation-composer" onSubmit={(event) => { event.preventDefault(); if (!disabled) void send(text); }}>
+      <label className="sr-only" htmlFor="agent-composer-input">הודעה לסוכן הסידור</label>
+      <textarea id="agent-composer-input" ref={input} value={text} rows={2} maxLength={4000} placeholder="בקשו שינוי, שאלו שאלה או המשיכו את השיחה…"
+        onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!disabled && text.trim()) void send(text); }
+        }} />
+      <div className="conversation-composer-footer"><small>Enter לשליחה · Shift+Enter לשורה חדשה</small>
+        {agent.working ? <button type="button" className="conversation-send" aria-label="עצירת הבקשה" disabled={agent.busy} onClick={() => void agent.stop()}><Square size={16} /></button> :
+          <button type="submit" className="conversation-send" aria-label="שליחת הודעה" disabled={disabled || !text.trim()}>{agent.busy ? <LoaderCircle size={17} /> : <Send size={17} />}</button>}
+      </div>
+    </form>
+  </section>;
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  assign: "שיבוץ",
-  remove: "הסרה",
-  swap: "החלפה",
-};
-
-const PROFILE_ACTION_LABELS: Record<string, string> = {
-  add_employee: "הוספת עובד/ת",
-  update_employee: "עריכת עובד/ת",
-  add_shift: "הוספת משמרת",
-  update_shift: "עריכת משמרת",
-};
-
-function profileOperationSummary(operation: Proposal["profile_operations"][number]): string {
-  const name = String(operation.item.name ?? operation.target);
-  if (operation.action.includes("employee")) {
-    const role = String(operation.item.role ?? "").trim();
-    return role ? `${name} · ${role}` : name;
-  }
-  const start = String(operation.item.start_time ?? "").trim();
-  const end = String(operation.item.end_time ?? "").trim();
-  const time = start || end ? ` · ${start || "—"}–${end || "—"}` : "";
-  const headcount = Number(operation.item.headcount ?? 1);
-  return `${name}${time} · תקן ${headcount}`;
+function PlanCard({ message, employees, disabled, onApply, onDismiss, onAdjust }: {
+  message: ManagerChatMessage; employees: string[]; disabled: boolean; onApply: (exceptions: boolean) => void;
+  onDismiss: () => void; onAdjust: (text: string) => void;
+}) {
+  const plan = message.payload.plan!;
+  const [accepted, setAccepted] = useState(false);
+  const pending = message.status === "pending";
+  const conflicts = [...new Set([...plan.warnings.map((warning) => warning.message), ...plan.exceptions])];
+  const assignments = plan.generated?.assignments ?? plan.operations;
+  return <div className={`conversation-plan${message.status === "applied" ? " is-applied" : ""}`}>
+    <header><span>{message.status === "applied" ? <CheckCircle2 size={15} /> : <Sparkles size={15} />}
+      {message.status === "applied" ? "הוחל בסידור" : PLAN_LABELS[plan.kind]}</span><small>{pending ? "ממתין לאישור שלך" : STATUS_LABELS[message.status] ?? ""}</small></header>
+    {plan.agent_reason ? <p className="conversation-plan-reason">{plan.agent_reason}</p> : null}
+    {plan.generated ? <p>{formatDate(plan.starts_on!)} – {formatDate(plan.ends_on!)} · {assignments.length} שיבוצים</p> : null}
+    {assignments.length ? <details className="conversation-plan-rows" open={assignments.length <= 14}><summary>השיבוצים בתוכנית ({assignments.length})</summary>
+      <ul>{assignments.map((operation, index) => <li key={index}>
+        <span className="conversation-operation-action">{"action" in operation ? ACTION_LABELS[operation.action] : "שיבוץ"}</span>
+        <div><strong>{operation.employee}</strong><span>{operation.shift} · {formatDate(operation.date)}</span>
+          {"with_employee" in operation && operation.with_employee ? <span>עם {operation.with_employee}</span> : null}
+          {pending && (!("action" in operation) || operation.action === "assign") ? <label className="conversation-replacement"><span>בחירת עובד אחר</span>
+            <select disabled={disabled} value={operation.employee} onChange={(event) => onAdjust(
+              `בתוכנית האחרונה, במשמרת ${operation.shift} בתאריך ${operation.date}, הצע את ${event.target.value} במקום ${operation.employee}. שמור את כל שאר השינויים והאילוצים בתוכנית והצג תוכנית מלאה מעודכנת לאישור.`,
+            )}>{employees.map((name) => <option key={name} value={name}>{name}</option>)}</select>
+          </label> : null}
+        </div>
+      </li>)}</ul>
+    </details> : null}
+    {plan.constraints.length ? <div className="conversation-plan-constraints"><strong>עדכון זמינות</strong>
+      {plan.constraints.map((row, index) => <p key={index}>{row.employee} · {formatDate(row.date)}{row.shift ? ` · ${row.shift}` : " · כל היום"} · {row.available ? "זמין/ה" : "לא זמין/ה"}</p>)}</div> : null}
+    {plan.kind === "profile" ? <ProfileChanges plan={plan} /> : null}
+    {conflicts.length ? <div className="conversation-plan-conflicts"><strong>חריגות שדורשות אישור</strong><ul>{conflicts.map((conflict) => <li key={conflict}>{conflict}</li>)}</ul>
+      {pending ? <label><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} disabled={disabled} />אני מאשר/ת את החריגות לשינוי הזה. הכללים השמורים לא ישתנו.</label> : null}
+    </div> : null}
+    {pending ? <div className="conversation-plan-actions"><button type="button" className="primary-button" disabled={disabled || (conflicts.length > 0 && !accepted)}
+      onClick={() => onApply(accepted)}><Check size={15} />{plan.kind === "profile" ? "אישור העדכון" : "החלת התוכנית"}</button>
+      <button type="button" className="ghost-button" disabled={disabled} onClick={onDismiss}>ביטול</button></div> : null}
+    {message.status === "applied" ? <p className="conversation-plan-receipt">{message.payload.receipt?.message ?? "השינוי בוצע"}</p> : null}
+  </div>;
 }
 
-const SCHEDULE_QUESTIONS = [
-  "מי סוגר בסופ״ש הקרוב?",
-  "מה חסר לפני פרסום?",
-  "איפה יש חוסרים בסידור?",
-] as const;
+function ProfileChanges({ plan }: { plan: ChatPlan }) {
+  return <div className="conversation-profile-diff">{Object.keys(plan.profile_after ?? {}).map((key) => {
+    const before = plan.profile_before?.[key], after = plan.profile_after?.[key];
+    if (Array.isArray(after)) {
+      const old = Array.isArray(before) ? before : [];
+      const changed = after.filter((row) => !old.some((item) => JSON.stringify(item) === JSON.stringify(row)));
+      const removed = old.filter((row) => !after.some((item) => JSON.stringify(item) === JSON.stringify(row)));
+      return <div key={key}><strong>{FIELD_LABELS[key] ?? "עדכון מדיניות"}</strong>
+        {removed.length ? <p><span className="conversation-diff-label">לפני</span>{describe(removed)}</p> : null}
+        {changed.length ? <p><span className="conversation-diff-label">אחרי</span>{describe(changed)}</p> : null}</div>;
+    }
+    return <div key={key}><strong>{FIELD_LABELS[key] ?? "עדכון מדיניות"}</strong>
+      <p><span className="conversation-diff-label">לפני</span>{describe(before) || "לא הוגדר"}</p>
+      <p><span className="conversation-diff-label">אחרי</span>{describe(after)}</p></div>;
+  })}</div>;
+}
 
-const PROFILE_QUESTIONS = [
-  "מה עדיין חסר בפרופיל?",
-  "מה כדאי להגדיר לפני הסידור הראשון?",
-  "איזה טווח כדאי לבנות קודם?",
-] as const;
+function describe(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "boolean") return value ? "כן" : "לא";
+  if (Array.isArray(value)) return value.map(describe).filter(Boolean).join(" · ");
+  if (typeof value === "object") return Object.entries(value).map(([key, item]) => {
+    const rendered = describe(item); return rendered ? `${FIELD_LABELS[key] ? FIELD_LABELS[key] + ": " : ""}${rendered}` : "";
+  }).filter(Boolean).join(" · ");
+  return VALUE_LABELS[String(value)] ?? String(value);
+}
+const ACTION_LABELS: Record<string, string> = { assign: "שיבוץ", remove: "הסרה", swap: "החלפה" };
+const PLAN_LABELS: Record<ChatPlan["kind"], string> = { changes: "תוכנית שינויים", profile: "עדכון פרטי הצוות", generate: "סידור מוצע", publish: "פרסום הסידור", unpublish: "החזרה לטיוטה", clear: "פינוי השיבוצים" };
+const STATUS_LABELS: Record<string, string> = { applied: "בוצע", superseded: "הוחלף בהצעה חדשה", dismissed: "בוטל" };
+const VALUE_LABELS: Record<string, string> = { round: "סבב", triplet: "תלתון", hamshushim: "חמשושים", shushim: "שושים", standard: "סדיר", reserve: "מילואים", overlap: "חפיפה", hard: "כלל חובה", soft: "העדפה" };
+const FIELD_LABELS: Record<string, string> = { employees: "אנשי צוות", shifts: "סוגי משמרות", rules: "כללי שיבוץ", workplace: "פרטי היחידה", name: "שם", role: "תפקיד", eligible_shifts: "משמרות מתאימות", rotation_group: "קבוצת יציאות", exit_pattern: "מבנה יציאות", service_type: "סוג שירות", start_time: "התחלה", end_time: "סיום", headcount: "מספר עובדים", notes: "הערות", text: "כלל", priority: "עדיפות", staffing: "תקינה", required_roles: "תפקידים נדרשים", is_shift_manager: "אחראי משמרת", can_train: "יכול להדריך", counts_toward_staffing: "נספר בתקינה", is_on_call: "כוננות", days: "ימים", hour_weight: "משקל שעות", recurring_constraints: "אילוצים קבועים", audit_policy: "מדיניות בקרה", max_weekly_hours: "מקסימום שעות בשבוע", min_rest_hours: "מינימום שעות מנוחה", max_consecutive_days: "מקסימום ימים רצופים", rest_policy: "מדיניות מנוחה", fairness_policy: "איזון עומסים", weekend_policy: "מדיניות סופי שבוע", conflict_policy: "טיפול בהתנגשויות", training_policy: "מדיניות הכשרה", rotation_mode: "מבנה היחידה", first_closure_date: "עוגן הסבב", first_closure_group: "קבוצת העוגן", summary: "סיכום", dependencies: "תלויות", availability_process: "תהליך זמינות", constraint_deadline: "מועד הגשת אילוצים" };
+const TOOL_LABELS: Record<string, string> = { team_overview: "פרטי הצוות והכללים", read_period: "הסידור והסגירות", employee_state: "משמרות, שעות ואילוצים", coverage_gaps: "משמרות חסרות", validate_placement: "תקינות השיבוץ", find_replacements: "חלופות מתאימות", publish_readiness: "מוכנות לפרסום", profile_gaps: "פרטים חסרים", list_periods: "סידורים קודמים ועתידיים", workload_report: "השוואת עומסים", change_history: "היסטוריית שינויים" };

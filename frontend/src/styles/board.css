@@ -1517,16 +1517,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.board-empty-filtered {
-  margin: 0;
-  padding: 1.6rem;
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  border-radius: var(--radius);
-  border: 1px dashed var(--border);
-}
-
 /* -- the navigation between the board and the control room ---------------- */
 
 .management-nav {
@@ -1566,14 +1556,6 @@
 .management-nav-item:focus-visible {
   outline: none;
   box-shadow: var(--focus);
-}
-
-/* `hidden` must win over the grid `display` the control room sets, or the
-   board and the room would render on top of each other. The attribute is
-   used rather than unmounting so an in-flight proposal survives the manager
-   glancing at the board and coming back. */
-.management-body[hidden] {
-  display: none;
 }
 
 /* The board is the stable workspace. Management tools live in a contextual
@@ -1879,7 +1861,6 @@
 .board-published-lock > span {
   flex: 1;
 }
-
 
 /* ── Moving a shift without a mouse ───────────────────────────────────────
    The keyboard and touch half of the drag. Drag-and-drop answers only to a

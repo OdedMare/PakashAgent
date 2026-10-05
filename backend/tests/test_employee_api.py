@@ -462,6 +462,29 @@ def test_a_wrong_passcode_is_refused(client):
     ).status_code == 401
 
 
+def test_repeated_wrong_passcodes_lock_the_name_out(client):
+    """Locked even for the right passcode afterwards -- otherwise the
+    lockout only delays the guess that would have succeeded anyway."""
+    _claim(client, passcode="123456")
+    _as(client, ROLE_MEMBER)
+    for _ in range(5):
+        client.post(
+            "/api/employee/login", json={"employee": DANA, "passcode": "999999"}
+        )
+
+    assert client.post(
+        "/api/employee/login", json={"employee": DANA, "passcode": "123456"}
+    ).status_code == 429
+
+
+def test_a_passcode_shorter_than_six_cannot_be_claimed(client):
+    _as(client, ROLE_MEMBER)
+
+    assert client.post(
+        "/api/employee/claim", json={"employee": DANA, "passcode": "1234"}
+    ).status_code == 422
+
+
 def test_an_unclaimed_name_and_a_wrong_passcode_are_indistinguishable(client):
     """Otherwise the endpoint reports which names are claimed to anyone
     holding the link."""
