@@ -23,6 +23,9 @@
 .conversation-context { display: flex; flex-wrap: wrap; gap: 5px 7px; align-items: center; padding: 0 18px 12px; font-size: 12px; color: var(--text-soft); border-bottom: 1px solid var(--border); }
 .conversation-context > span:last-child { flex-basis: 100%; color: var(--text-muted); }
 .conversation-context-dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; }
+.conversation-focus-day { display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px 3px 9px; border-radius: 999px; background: var(--primary-soft); color: var(--primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+.conversation-focus-day button { display: inline-grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+.conversation-focus-day button:hover, .conversation-focus-day button:focus-visible { background: color-mix(in srgb, var(--primary) 18%, transparent); }
 .conversation-history { background: var(--surface-2); padding: 12px 18px; border-bottom: 1px solid var(--border); display: grid; gap: 8px; }
 .conversation-history label { font-size: 13px; font-weight: 600; }
 .conversation-history select, .conversation-replacement select { width: 100%; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 7px; min-height: 44px; padding: 8px; }

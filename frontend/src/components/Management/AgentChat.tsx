@@ -1,17 +1,22 @@
 "use client";
 
-import { Check, CheckCircle2, ChevronDown, History, LoaderCircle, MessageSquare, Plus, Send, Sparkles, Square, Trash2 } from "lucide-react";
+import { CalendarDays, Check, CheckCircle2, ChevronDown, History, LoaderCircle, MessageSquare, Plus, Send, Sparkles, Square, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ChatPlan, ManagerChatMessage, Proposal } from "@/types";
 import { displayDate as formatDate } from "@/components/DateInput";
+import { hebrewWeekday } from "./Calendar";
 import { useManagerChat } from "./useManagerChat";
 
-export function AgentChat({ workspaceId, scheduleId, visibleWeek, employees, draft, draftKey, boardBusy, hidden = false, onApplied, onPreview }: {
-  workspaceId: string; scheduleId: string; visibleWeek: string; employees: string[];
-  draft?: string; draftKey?: number; boardBusy: boolean; hidden?: boolean;
+/** The manager's one agent: every instruction to the scheduling agent goes
+ *  through this conversation. The board can open it focused on one day
+ *  (`focusDate`); messages then carry that day, and the agent treats requests
+ *  that name no date as being about it. */
+export function AgentChat({ workspaceId, scheduleId, visibleWeek, focusDate = "", focusKey, employees, draft, draftKey, boardBusy, hidden = false, onClearFocus, onApplied, onPreview }: {
+  workspaceId: string; scheduleId: string; visibleWeek: string; focusDate?: string; focusKey?: number; employees: string[];
+  draft?: string; draftKey?: number; boardBusy: boolean; hidden?: boolean; onClearFocus?: () => void;
   onApplied: (plan?: ChatPlan) => Promise<void>; onPreview: (proposal: Proposal | null) => void;
 }) {
-  const agent = useManagerChat(workspaceId, scheduleId, visibleWeek, onApplied);
+  const agent = useManagerChat(workspaceId, scheduleId, visibleWeek, focusDate, onApplied);
   const [text, setText] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -19,6 +24,9 @@ export function AgentChat({ workspaceId, scheduleId, visibleWeek, employees, dra
   const log = useRef<HTMLDivElement>(null);
   const [seeded, setSeeded] = useState(draftKey);
   if (seeded !== draftKey) { setSeeded(draftKey); if (draft) setText(draft); }
+  // Opening the chat on a day puts the cursor in the composer, ready for the
+  // day's instructions.
+  useEffect(() => { if (focusKey && !hidden) input.current?.focus(); }, [focusKey, hidden]);
   const messages = agent.chat?.messages ?? [];
   const last = messages[messages.length - 1];
   const preview = last?.status === "pending" ? last.payload.plan : undefined;
@@ -48,7 +56,10 @@ export function AgentChat({ workspaceId, scheduleId, visibleWeek, employees, dra
       </div>
     </header>
     <div className="conversation-context"><span className="conversation-context-dot" aria-hidden="true" />
-      {visibleWeek ? `השבוע שמתחיל ב-${formatDate(visibleWeek)}` : "הצוות וכללי השיבוץ שלך"}
+      {focusDate ? <span className="conversation-focus-day"><CalendarDays size={13} aria-hidden="true" />
+        {`יום ${hebrewWeekday(focusDate)} · ${formatDate(focusDate)}`}
+        {onClearFocus ? <button type="button" aria-label="הסרת המיקוד ביום" title="חזרה לכל השבוע" onClick={onClearFocus}><X size={12} /></button> : null}
+      </span> : visibleWeek ? `השבוע שמתחיל ב-${formatDate(visibleWeek)}` : "הצוות וכללי השיבוץ שלך"}
       <span>המלצות מתבצעות רק באישור שלך</span>
     </div>
     {historyOpen ? <div className="conversation-history">
@@ -69,8 +80,9 @@ export function AgentChat({ workspaceId, scheduleId, visibleWeek, employees, dra
       {agent.loading ? <p className="conversation-loading"><LoaderCircle size={17} /> טוען שיחות…</p> : null}
       {!agent.loading && !messages.length ? <div className="conversation-empty">
         <div className="conversation-empty-mark"><MessageSquare size={25} /></div>
-        <h3>מה צריך לפתור בסידור?</h3><p>אפשר לבנות שבוע, למצוא מחליפים, להשוות עומסים או לעדכן את הצוות והכללים.</p>
-        <div className="conversation-starters">{["תשבץ את השבוע הקרוב", "מי עובד הכי הרבה השבוע?", "מי יכול למלא את המשמרות הפנויות?", "תוסיף עובד חדש"].map((value) =>
+        <h3>{focusDate ? `מה חשוב ביום ${hebrewWeekday(focusDate)}?` : "מה צריך לפתור בסידור?"}</h3>
+        <p>{focusDate ? "כתבו הוראות ליום הזה. הסוכן יציע שיבוץ רק ליום הזה, ושאר הימים לא ישתנו." : "אפשר לבנות שבוע, למצוא מחליפים, להשוות עומסים או לעדכן את הצוות והכללים."}</p>
+        <div className="conversation-starters">{(focusDate ? DAY_STARTERS : WEEK_STARTERS).map((value) =>
           <button type="button" key={value} disabled={disabled} onClick={() => void send(value)}>{value}</button>)}</div>
       </div> : null}
       {messages.map((message) => <article key={message.id} className={`conversation-message is-${message.role}${message.status === "error" ? " is-error" : ""}`}>
@@ -91,7 +103,7 @@ export function AgentChat({ workspaceId, scheduleId, visibleWeek, employees, dra
     {agent.error ? <p className="conversation-error" role="alert">{agent.error}</p> : null}
     <form className="conversation-composer" onSubmit={(event) => { event.preventDefault(); if (!disabled) void send(text); }}>
       <label className="sr-only" htmlFor="agent-composer-input">הודעה לסוכן הסידור</label>
-      <textarea id="agent-composer-input" ref={input} value={text} rows={2} maxLength={4000} placeholder="בקשו שינוי, שאלו שאלה או המשיכו את השיחה…"
+      <textarea id="agent-composer-input" ref={input} value={text} rows={2} maxLength={4000} placeholder={focusDate ? `הוראות לסוכן על יום ${hebrewWeekday(focusDate)} ${formatDate(focusDate)}…` : "בקשו שינוי, שאלו שאלה או המשיכו את השיחה…"}
         onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!disabled && text.trim()) void send(text); }
         }} />
@@ -170,6 +182,8 @@ function describe(value: unknown): string {
   }).filter(Boolean).join(" · ");
   return VALUE_LABELS[String(value)] ?? String(value);
 }
+const WEEK_STARTERS = ["תשבץ את השבוע הקרוב", "מי עובד הכי הרבה השבוע?", "מי יכול למלא את המשמרות הפנויות?", "תוסיף עובד חדש"];
+const DAY_STARTERS = ["תשבץ את היום הזה", "תמלא רק את המשמרות הפנויות ביום הזה", "מי חסר ביום הזה?", "מי זמין להחליף ביום הזה?"];
 const ACTION_LABELS: Record<string, string> = { assign: "שיבוץ", remove: "הסרה", swap: "החלפה" };
 const PLAN_LABELS: Record<ChatPlan["kind"], string> = { changes: "תוכנית שינויים", profile: "עדכון פרטי הצוות", generate: "סידור מוצע", publish: "פרסום הסידור", unpublish: "החזרה לטיוטה", clear: "פינוי השיבוצים" };
 const STATUS_LABELS: Record<string, string> = { applied: "בוצע", superseded: "הוחלף בהצעה חדשה", dismissed: "בוטל" };
