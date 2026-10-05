@@ -3,6 +3,7 @@
 from app.bl.placement import check as check_placement
 from app.bl.placement import closure_of, suggest_alternatives
 from app.bl.tools.period_tools import Tool
+from app.bl.tools.reads import hours_for
 from app.bl.tools.values import assignment_id, iso, text, window
 from app.common.errors.errors import AgentError
 
@@ -60,6 +61,7 @@ class FindReplacements(Tool):
     def __call__(
         self, team_id: str, shift_name: str, slot_date: str,
         employee: str = "", schedule_id: str = "",
+        include_exceptions: bool = False,
     ) -> dict:
         if not text(slot_date):
             raise AgentError("צריך לציין תאריך")
@@ -77,13 +79,35 @@ class FindReplacements(Tool):
             availability=self._reads.availability(team_id, window(schedule)),
             moving_assignment_id=assignment_id(schedule, leaving, shift, date),
         )
+        candidates = alternatives.get("employees") or []
+        if include_exceptions and not candidates:
+            # Exceptions remain proposals; the manager sees every conflict.
+            for person in profile.get("employees") or []:
+                name = text(person.get("name"))
+                if not name or name == leaving:
+                    continue
+                verdict = check_placement(
+                    schedule, profile, employee=name, shift_name=shift,
+                    slot_date=date,
+                    availability=self._reads.availability(team_id, window(schedule)),
+                    moving_assignment_id=assignment_id(schedule, leaving, shift, date),
+                )
+                warnings = verdict.get("introduced") or verdict.get("warnings") or []
+                candidates.append({
+                    "employee": name,
+                    "hours": hours_for(name, schedule, profile),
+                    "warnings": warnings,
+                    "requires_exception": bool(warnings),
+                    "why": "נדרשת בחינת החריגות המפורטות לפני אישור",
+                })
+            candidates.sort(key=lambda row: (len(row.get("warnings") or []), row["hours"]))
         return {
             "found": True,
             "schedule_id": text(schedule.get("id")),
             "shift": shift,
             "date": date,
             "replacing": leaving,
-            "candidates": (alternatives.get("employees") or [])[:_MAX_CANDIDATES],
+            "candidates": candidates[:_MAX_CANDIDATES],
             # Where this person could go instead, when the question turns out
             # to be "move them" rather than "replace them".
             "other_slots": alternatives.get("slots") or [],

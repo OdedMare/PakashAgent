@@ -57,6 +57,7 @@ def issue(
     role: str,
     days: int,
     employee: Optional[str] = None,
+    manager_id: Optional[str] = None,
 ) -> str:
     """`<payload>.<signature>`, both URL-safe base64.
 
@@ -73,6 +74,8 @@ def issue(
     }
     if employee:
         payload["employee"] = employee
+    if manager_id:
+        payload["manager_id"] = manager_id
     body = _b64(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
     return "%s.%s" % (body, _sign(secret, body))
 

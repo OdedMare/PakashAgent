@@ -16,6 +16,8 @@ old host forever, which is a far more confusing failure than a slow query.
 """
 
 import threading
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 import psycopg
 from psycopg import sql
@@ -40,6 +42,20 @@ _POOL_TIMEOUT_SECONDS = 30
 _pool = None
 _pool_key = None
 _pool_lock = threading.Lock()
+_transaction = ContextVar("pakash_transaction", default=None)
+
+
+class _TransactionConnection:
+    """Repository commits wait for the outer, all-or-nothing transaction."""
+
+    def __init__(self, connection):
+        self._connection = connection
+
+    def execute(self, *args, **kwargs):
+        return self._connection.execute(*args, **kwargs)
+
+    def commit(self):
+        pass
 
 
 def _pool_for(settings) -> ConnectionPool:
@@ -108,6 +124,7 @@ def _configure_for(schema: str):
     return configure
 
 
+@contextmanager
 def connect(store: RuntimeSettingsStore):
     """A pooled connection, as a context manager.
 
@@ -117,7 +134,25 @@ def connect(store: RuntimeSettingsStore):
     block returns the connection to the pool instead of closing it, so a
     caller that commits must still commit.
     """
-    return _pool_for(store.get()).connection()
+    active = _transaction.get()
+    if active is not None and active[0] is store:
+        yield active[1]
+    else:
+        with _pool_for(store.get()).connection() as connection:
+            yield connection
+
+
+@contextmanager
+def atomic(store):
+    """Compose existing repository writes without intermediate commits."""
+    with _pool_for(store.get()).connection() as connection:
+        with connection.transaction():
+            connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+            token = _transaction.set((store, _TransactionConnection(connection)))
+            try:
+                yield _transaction.get()[1]
+            finally:
+                _transaction.reset(token)
 
 
 def close_pool() -> None:

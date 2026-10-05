@@ -6,12 +6,14 @@ at the route, where a middleware rule matched on a path prefix is not, and a
 new route added under the wrong prefix would silently inherit the wrong one.
 """
 
-from fastapi import Cookie, Depends
+import secrets
+
+from fastapi import Cookie, Depends, Response
 from typing import Optional
 
 from app.common.errors.errors import AuthError
 from app.common.sessions.sessions import (
-    COOKIE_NAME, ROLE_BOSS, ROLE_EMPLOYEE, read,
+    COOKIE_NAME, ROLE_BOSS, ROLE_EMPLOYEE, issue, read,
 )
 
 
@@ -68,6 +70,31 @@ class Guards:
             if not session.get("employee"):
                 raise AuthError("נדרשת התחברות אישית")
             return session
+        return dependency
+
+    def manager(self):
+        """Private chats under the existing shared-password manager login.
+
+        A separate signed, HttpOnly identity survives logout in this browser.
+        It is never accepted from a request body or shared with other browsers.
+        """
+        def dependency(
+            response: Response,
+            session: dict = Depends(self.boss()),
+            pakash_manager: Optional[str] = Cookie(default=None),
+        ) -> dict:
+            owner = read(self._secret, pakash_manager)
+            if not owner or owner.get("team_id") != session["team_id"] \
+                    or not owner.get("manager_id"):
+                owner = dict(session, manager_id=secrets.token_urlsafe(24))
+                response.set_cookie(
+                    "pakash_manager",
+                    issue(self._secret, session["team_id"], ROLE_BOSS, 365,
+                          manager_id=owner["manager_id"]),
+                    httponly=True, samesite="lax", max_age=365 * 86400,
+                    path="/",
+                )
+            return dict(session, manager_id=owner["manager_id"])
         return dependency
 
 

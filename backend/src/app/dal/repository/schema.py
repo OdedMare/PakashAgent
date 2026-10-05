@@ -23,7 +23,8 @@ from app.dal.repository.ddl.agent import AGENT_DDL
 from app.dal.repository.ddl.employees import EMPLOYEE_DDL
 from app.dal.repository.ddl.scheduling import SCHEDULING_DDL
 from app.dal.repository.ddl.workspace import WORKSPACE_DDL
+from app.dal.repository.chat import CHAT_DDL
 
 # Applied in this order: every later block references `teams`, and the
 # employee tables reference the scheduling ones.
-SCHEMA = WORKSPACE_DDL + SCHEDULING_DDL + EMPLOYEE_DDL + AGENT_DDL
+SCHEMA = WORKSPACE_DDL + SCHEDULING_DDL + EMPLOYEE_DDL + AGENT_DDL + CHAT_DDL

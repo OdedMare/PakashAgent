@@ -73,6 +73,9 @@ class ReadPeriod(Tool):
         return {
             "found": True,
             "schedule": period_view(schedule),
+            "assignments": audit_assignments(schedule),
+            "slots": [dict(slot, slot_date=iso(slot.get("slot_date")))
+                      for slot in schedule.get("slots") or []],
             # Pure rotation arithmetic, so the agent answers "who closes"
             # without deriving a cycle from names or dates.
             "closures": _closure_schedule(profile, schedule),

@@ -35,7 +35,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+    <div className="modal-backdrop settings-backdrop" role="presentation" onClick={onClose}>
       <section
         className="modal settings-workspace-modal"
         role="dialog"
