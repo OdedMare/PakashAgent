@@ -4,9 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { applyManagerPlan, createManagerChat, deleteManagerChat, dismissManagerPlan,
   listManagerChats, readManagerChat, sendManagerMessage, stopManagerReply } from "@/services/api";
-import type { ManagerChatSummary, ManagerConversation } from "@/types";
+import type { ChatPlan, ManagerChatSummary, ManagerConversation } from "@/types";
 
-export function useManagerChat(workspaceId: string, scheduleId: string, visibleWeek: string, onApplied: () => Promise<void>) {
+export function useManagerChat(workspaceId: string, scheduleId: string, visibleWeek: string, onApplied: (plan?: ChatPlan) => Promise<void>) {
   const [chat, setChat] = useState<ManagerConversation | null>(null);
   const [chats, setChats] = useState<ManagerChatSummary[]>([]);
   const [busy, setBusy] = useState(false);
@@ -58,7 +58,11 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
     setBusy(true); setError(null);
     try {
       const next = await action();
-      if (mounted.current) { setChat(next); setChats(await listManagerChats()); }
+      if (mounted.current) {
+        setChat(next);
+        const rows = await listManagerChats().catch(() => null);
+        if (rows && mounted.current) setChats(rows);
+      }
       return true;
     } catch (reason) {
       if (mounted.current) setError(reason instanceof Error ? reason.message : "לא ניתן להשלים את הפעולה");
@@ -88,7 +92,7 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
     if (!chatId || working) return;
     await run(async () => {
       const next = await applyManagerPlan(chatId, messageId, exceptions);
-      await onApplied();
+      await onApplied(next.messages.find((message) => message.id === messageId)?.payload.plan);
       return next;
     });
   }, [chatId, working, run, onApplied]);

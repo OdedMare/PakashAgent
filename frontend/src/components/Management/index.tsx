@@ -18,14 +18,14 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { Board } from "@/components/Board";
 import { useTheme } from "@/components/Interview/useTheme";
 import { SettingsPanel } from "@/components/Settings";
 import { ShareLink } from "@/components/Workspace/ShareLink";
-import type { ManagementOverview, Proposal, TeamView } from "@/types";
+import type { ChatPlan, ManagementOverview, Proposal, TeamView } from "@/types";
 
 import { AgentChat } from "./AgentChat";
 import { ProfileGapsNotice } from "./ProfileGapsNotice";
@@ -85,6 +85,13 @@ export function Management({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [chatWidth, setChatWidth] = useState(440);
   const [chatPreview, setChatPreview] = useState<Proposal | null>(null);
+  const [chatWeek, setChatWeek] = useState<{ date: string; n: number }>();
+  const refresh = state.refresh;
+  const onChatApplied = useCallback(async (plan?: ChatPlan) => {
+    await refresh();
+    const date = plan?.starts_on || plan?.operations[0]?.date || plan?.constraints[0]?.date;
+    if (date) setChatWeek((previous) => ({ date, n: (previous?.n ?? 0) + 1 }));
+  }, [refresh]);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -481,6 +488,7 @@ export function Management({
             onPublish={state.publish}
             onExport={state.exportSchedule}
             onPeriodChange={state.focusPeriod}
+            navigateToWeek={chatWeek}
             onOpenAgent={() => {
               setSection("agent");
               setDrawerOpen(true);
@@ -594,7 +602,7 @@ export function Management({
             boardBusy={state.busy}
             draft={suggested.text}
             draftKey={suggested.n}
-            onApplied={state.refresh}
+            onApplied={onChatApplied}
             onPreview={setChatPreview}
           />
           </> : null}

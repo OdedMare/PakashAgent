@@ -1140,6 +1140,8 @@ export interface ChatPlan {
   exceptions: string[];
   starts_on?: string;
   ends_on?: string;
+  replace_existing?: boolean;
+  preserved_assignments?: { employee: string; shift: string; date: string }[];
   generated?: {
     assignments: { employee: string; shift: string; date: string; reason: string }[];
     summary: string;

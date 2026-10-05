@@ -18,6 +18,11 @@ props.update({
     "ends_on": {"type": "string"},
     "instructions": {"type": "string"},
     "replace_existing": {"type": "boolean"},
+    "required_assignments": {"type": "array", "maxItems": 2000, "items": {
+        "type": "object", "additionalProperties": False,
+        "properties": {key: {"type": "string"} for key in ("employee", "shift", "date")},
+        "required": ["employee", "shift", "date"],
+    }},
     "exceptions": {"type": "array", "items": {"type": "string"}, "maxItems": 20},
     "question": copy.deepcopy(_QUESTION_SCHEMA),
     "tool_calls": {"type": "array", "maxItems": 4, "items": copy.deepcopy(_TOOL_CALL_SCHEMA)},

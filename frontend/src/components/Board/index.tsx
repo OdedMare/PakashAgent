@@ -96,6 +96,7 @@ export function Board({
   onExport,
   onOpenAgent,
   onPeriodChange,
+  navigateToWeek,
   agent,
   dark,
 }: {
@@ -166,6 +167,7 @@ export function Board({
    *  the wrong week the moment the manager paged away. The board is the only
    *  thing that knows which week is on screen, so it is what says so. */
   onPeriodChange?: (scheduleId: string, weekStart?: string) => void;
+  navigateToWeek?: { date: string; n: number };
   /** Open the conversation with the agent — the control room beside this. */
   onOpenAgent?: () => void;
   /** What the agent is currently saying, so the week can show *where* it
@@ -181,6 +183,10 @@ export function Board({
 }) {
   const current = overview?.schedule ?? null;
   const board = useBoard(current?.id);
+  const goToWeekOf = board.goToWeekOf;
+  useEffect(() => {
+    if (navigateToWeek?.date) goToWeekOf(navigateToWeek.date);
+  }, [navigateToWeek, goToWeekOf]);
 
   // Which schedule this week actually shows. The overview hands over the
   // *current* period, so a manager sitting on this week costs no extra

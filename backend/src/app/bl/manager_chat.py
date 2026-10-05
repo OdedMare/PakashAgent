@@ -278,6 +278,8 @@ class ManagerChatService:
         required = [dict(employee=row["employee"], shift=row["shift"], date=iso(row["date"]))
                     for row in schedule.get("assignments") or []
                     if not turn.get("replace_existing") or row.get("source") == "manager"]
+        plan["preserved_assignments"] = list(required)
+        required += turn.get("required_assignments") or []
         generated = self._scheduler.generate(
             state["profile"], first, last, availability=state["availability"],
             history=self._history.before(team_id, first),
@@ -290,7 +292,8 @@ class ManagerChatService:
             slots = {(row["shift_name"], iso(row["slot_date"])) for row in schedule["slots"]}
             if any((row["shift"], row["date"]) not in slots for row in generated["assignments"]):
                 raise AgentError("סוגי המשמרות השתנו מאז יצירת הסידור. יש לבנות תקופה חדשה")
-        plan.update(starts_on=first, ends_on=last, generated=generated)
+        plan.update(starts_on=first, ends_on=last, generated=generated,
+                    replace_existing=bool(turn.get("replace_existing")))
         plan["warnings"] = self._audit_plan(state["profile"], pseudo,
                                            generated["assignments"], state["availability"], [])
 

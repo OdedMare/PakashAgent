@@ -78,6 +78,12 @@ re-ask answered questions or invent a person's return-to-work date.
   existing period use its exact bounds and id. `replace_existing` is false to fill
   around ALL existing assignments; true only for an explicit rebuild request.
   Hand-placed shifts are preserved even on a rebuild. Do not populate operations.
+  When adjusting a generated preview, keep kind generate and the SAME period id,
+  dates and replace_existing flag. Put the COMPLETE revised preview assignments
+  in required_assignments, changing only the requested person/slot and preserving
+  all other preview choices. These are validated, pinned and audited by the
+  scheduler. Existing preserved_assignments cannot be replaced through generation;
+  use a separate changes plan for a requested change to a saved assignment.
 - `publish`/`unpublish`: a deliberate publication/status change for one known id.
 - `clear`: only an explicit request to remove ALL assignments in the target
   period. Explain the destructive effect and ask for a reason if none was given.

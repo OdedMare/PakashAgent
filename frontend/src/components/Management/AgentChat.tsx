@@ -9,7 +9,7 @@ import { useManagerChat } from "./useManagerChat";
 export function AgentChat({ workspaceId, scheduleId, visibleWeek, employees, draft, draftKey, boardBusy, onApplied, onPreview }: {
   workspaceId: string; scheduleId: string; visibleWeek: string; employees: string[];
   draft?: string; draftKey?: number; boardBusy: boolean;
-  onApplied: () => Promise<void>; onPreview: (proposal: Proposal | null) => void;
+  onApplied: (plan?: ChatPlan) => Promise<void>; onPreview: (proposal: Proposal | null) => void;
 }) {
   const agent = useManagerChat(workspaceId, scheduleId, visibleWeek, onApplied);
   const [text, setText] = useState("");
@@ -122,9 +122,10 @@ function PlanCard({ message, employees, disabled, onApply, onDismiss, onAdjust }
         <span className="conversation-operation-action">{"action" in operation ? ACTION_LABELS[String(operation.action)] : "שיבוץ"}</span>
         <div><strong>{operation.employee}</strong><span>{operation.shift} · {formatDate(operation.date)}</span>
           {"with_employee" in operation && typeof operation.with_employee === "string" && operation.with_employee ? <span>עם {operation.with_employee}</span> : null}
-          {pending && (!("action" in operation) || operation.action === "assign") ? <label className="conversation-replacement"><span>בחירת עובד אחר</span>
+          {pending && (!("action" in operation) || operation.action === "assign") && !plan.preserved_assignments?.some((row) =>
+            row.employee === operation.employee && row.shift === operation.shift && row.date === operation.date) ? <label className="conversation-replacement"><span>בחירת עובד אחר</span>
             <select disabled={disabled} value={operation.employee} onChange={(event) => onAdjust(
-              `בתוכנית האחרונה, במשמרת ${operation.shift} בתאריך ${operation.date}, הצע את ${event.target.value} במקום ${operation.employee}. שמור את כל שאר השינויים והאילוצים בתוכנית והצג תוכנית מלאה מעודכנת לאישור.`,
+              `בתוכנית האחרונה, במשמרת ${operation.shift} בתאריך ${operation.date}, הצע את ${event.target.value} במקום ${operation.employee}. שמור את כל שאר השינויים והאילוצים בתוכנית והצג תוכנית מלאה מעודכנת לאישור.${plan.generated ? " זהו תיקון לתצוגה המקדימה של השבוע שנוצר; בנה תצוגה מעודכנת לאותם תאריכים עם כל שאר הבחירות בתוכנית." : ""}`,
             )}>{employees.map((name) => <option key={name} value={name}>{name}</option>)}</select>
           </label> : null}
         </div>
