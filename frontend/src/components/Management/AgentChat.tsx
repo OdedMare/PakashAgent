@@ -6,9 +6,9 @@ import type { ChatPlan, ManagerChatMessage, Proposal } from "@/types";
 import { displayDate as formatDate } from "@/components/DateInput";
 import { useManagerChat } from "./useManagerChat";
 
-export function AgentChat({ workspaceId, scheduleId, visibleWeek, employees, draft, draftKey, boardBusy, onApplied, onPreview }: {
+export function AgentChat({ workspaceId, scheduleId, visibleWeek, employees, draft, draftKey, boardBusy, hidden = false, onApplied, onPreview }: {
   workspaceId: string; scheduleId: string; visibleWeek: string; employees: string[];
-  draft?: string; draftKey?: number; boardBusy: boolean;
+  draft?: string; draftKey?: number; boardBusy: boolean; hidden?: boolean;
   onApplied: (plan?: ChatPlan) => Promise<void>; onPreview: (proposal: Proposal | null) => void;
 }) {
   const agent = useManagerChat(workspaceId, scheduleId, visibleWeek, onApplied);
@@ -32,12 +32,12 @@ export function AgentChat({ workspaceId, scheduleId, visibleWeek, employees, dra
   }, [preview, last?.content, onPreview]);
   const messageCount = messages.length;
   const lastStatus = last?.status;
-  useEffect(() => { if (log.current) log.current.scrollTop = log.current.scrollHeight; }, [messageCount, lastStatus, agent.chat?.id]);
+  useEffect(() => { if (log.current && !hidden) log.current.scrollTop = log.current.scrollHeight; }, [messageCount, lastStatus, agent.chat?.id, hidden]);
   const send = async (value: string) => {
     if (await agent.send(value)) { setText(""); input.current?.focus(); }
   };
   const disabled = agent.busy || agent.working || agent.loading;
-  return <section className="conversation" aria-label="שיחה עם סוכן הסידור">
+  return <section className="conversation" hidden={hidden} aria-label="שיחה עם סוכן הסידור">
     <header className="conversation-toolbar">
       <div className="conversation-title"><Sparkles size={17} aria-hidden="true" /><strong>סוכן הסידור</strong></div>
       <div className="conversation-tools">

@@ -595,7 +595,9 @@ export function Management({
             onApprove={state.approveSimulation}
             onDiscard={state.dismissSimulation}
           />
+          </> : null}
           <AgentChat
+            hidden={section !== "agent"}
             workspaceId={workspace.id}
             scheduleId={state.focusedScheduleId}
             visibleWeek={state.focusedWeek}
@@ -606,7 +608,6 @@ export function Management({
             onApplied={onChatApplied}
             onPreview={setChatPreview}
           />
-          </> : null}
 
           <div hidden={section !== "overview"}>
           <CopilotInbox
