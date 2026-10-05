@@ -1136,3 +1136,48 @@ export interface CopilotAuditEvent {
   verification?: Record<string, unknown> | null;
   created_at?: string;
 }
+export interface ChatPlan {
+  kind: "changes" | "profile" | "generate" | "publish" | "unpublish" | "clear";
+  schedule_id: string;
+  agent_reason: string;
+  reason: string;
+  operations: Operation[];
+  constraints: { employee: string; date: string; shift?: string; reason?: string; available: boolean }[];
+  warnings: { message: string; code?: string; employee?: string; date?: string }[];
+  exceptions: string[];
+  starts_on?: string;
+  ends_on?: string;
+  generated?: {
+    assignments: { employee: string; shift: string; date: string; reason: string }[];
+    summary: string;
+    notes: string[];
+  };
+  profile_before?: Record<string, unknown>;
+  profile_after?: Record<string, unknown>;
+}
+
+export interface ManagerChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  status: "working" | "pending" | "complete" | "applied" | "dismissed" | "superseded" | "error" | "cancelled";
+  created_at: string;
+  payload: {
+    plan?: ChatPlan;
+    question?: { question: string; recommendation: string; why: string; options: { label: string; answer: string }[] } | null;
+    steps?: { tool: string; ok: boolean }[];
+    receipt?: { schedule_id: string; message: string };
+  };
+}
+
+export interface ManagerConversation {
+  id: string;
+  title: string;
+  messages: ManagerChatMessage[];
+}
+
+export interface ManagerChatSummary {
+  id: string;
+  title: string;
+  updated_at: string;
+}

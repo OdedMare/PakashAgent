@@ -39,9 +39,9 @@ export function IdentityGate({
 
   const chosen = roster.find((row) => row.employee === selected) ?? null;
   const claiming = chosen !== null && !chosen.claimed;
-  // 4 characters, matching the backend. Checked here only to keep the button
+  // 6 characters, matching the backend. Checked here only to keep the button
   // honest -- the server enforces it, and this is not the security boundary.
-  const ready = chosen !== null && passcode.length >= (claiming ? 4 : 1);
+  const ready = chosen !== null && passcode.length >= (claiming ? 6 : 1);
 
   const submit = () => {
     if (!chosen || !ready) return;
@@ -109,7 +109,7 @@ export function IdentityGate({
                 }}
               >
                 <label htmlFor="passcode">
-                  {claiming ? "בחרו קוד אישי (4 תווים לפחות)" : "הקוד האישי"}
+                  {claiming ? "בחרו קוד אישי (6 תווים לפחות)" : "הקוד האישי"}
                 </label>
                 <input
                   id="passcode"

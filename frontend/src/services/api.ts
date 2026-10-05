@@ -32,7 +32,24 @@ import type {
   TeamSummary,
   TeamView,
   Workspace,
+  ManagerChatSummary,
+  ManagerConversation,
 } from "@/types";
+
+export const listManagerChats = () => request<ManagerChatSummary[]>("/api/agent/chats");
+export const createManagerChat = () => request<ManagerConversation>("/api/agent/chats", { method: "POST" });
+export const readManagerChat = (id: string) => request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}`);
+export const deleteManagerChat = (id: string) => request(`/api/agent/chats/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const sendManagerMessage = (id: string, input: { content: string; request_id: string; schedule_id?: string; visible_week?: string }) =>
+  request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/messages`, { method: "POST", body: JSON.stringify(input) });
+export const applyManagerPlan = (id: string, messageId: string, acceptExceptions: boolean) =>
+  request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/apply`, {
+    method: "POST", body: JSON.stringify({ accept_exceptions: acceptExceptions }),
+  });
+export const dismissManagerPlan = (id: string, messageId: string) =>
+  request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/dismiss`, { method: "POST" });
+export const stopManagerReply = (id: string) =>
+  request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/stop`, { method: "POST" });
 
 /**
  * Every backend call is traced to the browser console.
@@ -173,19 +190,31 @@ export function endInterview(sessionId: string): Promise<InterviewTurn> {
   });
 }
 
-/** Current settings, with every secret already masked by the backend. */
-export function getSettings(): Promise<RuntimeSettings> {
-  return request<RuntimeSettings>("/api/settings");
+/** The settings password travels as a header on every settings call. It is
+ *  held in the panel's memory only -- never stored -- so closing the panel
+ *  locks it again. */
+function settingsHeaders(password: string): Record<string, string> {
+  return { "X-Settings-Password": password };
+}
+
+/** Current settings, with every secret already masked by the backend. A
+ *  wrong password answers 403, which is how the panel checks it. */
+export function getSettings(password: string): Promise<RuntimeSettings> {
+  return request<RuntimeSettings>("/api/settings", {
+    headers: settingsHeaders(password),
+  });
 }
 
 /** Save a partial patch. A masked secret sent back means "unchanged", so a
  *  field the boss did not retype keeps its stored value. */
 export function updateSettings(
   patch: Record<string, unknown>,
+  password: string,
 ): Promise<RuntimeSettings> {
   return request<RuntimeSettings>("/api/settings", {
     method: "PUT",
     body: JSON.stringify(patch),
+    headers: settingsHeaders(password),
   });
 }
 
@@ -201,11 +230,13 @@ export function probeModels(
     llm_base_url?: string;
     openai_api_key?: string;
     role?: string;
-  } = {},
+  },
+  password: string,
 ): Promise<{ models: string[] }> {
   return request<{ models: string[] }>("/api/models", {
     method: "POST",
     body: JSON.stringify(overrides),
+    headers: settingsHeaders(password),
   });
 }
 
