@@ -37,6 +37,29 @@ also checked by the existing deterministic audit. Suggestions prefer compliant
 candidates. Exceptions are shown and require a separate checkbox, and do not
 change the saved policies.
 
+## How a reply is built
+
+A reply is a short loop of model rounds. A round either asks for up to four
+read-only checks or offers the final answer or plan. Extra checks are refused
+and the model is told so. Each round's checks are saved on the working message,
+so the panel shows what is being checked while the reply is still running. A
+check that fails, such as an incomplete date range, comes back to the model as
+a fact. It does not end the turn. The seventh round may not ask for checks. It
+answers from what was found instead of failing.
+
+A plan the server refuses, such as an unknown slot, a period that is already
+published, or a range outside the period, is handed back to the model as a
+`plan_check` result. The model gets two chances to correct it before the turn
+fails. A missing reason is different (D8). Only the manager can give it, so
+the reply asks the manager and is never handed back to the model.
+
+Every round resends the conversation, so only the recent part goes in full.
+The newest plan is sent whole, which lets "instead use Dana" revise it. So are
+the last two turns' check results. Older plans become summaries (kind, dates,
+reasons, counts), and older checks list only the tool names. The snapshot hash
+and the generated slot grid never reach the model. Replies may use `-`/`1.`
+lists and **bold**. The panel renders these as elements, never as HTML.
+
 ## Approval and persistence
 
 Sending a message never changes scheduling or profile data. It starts a
