@@ -36,6 +36,18 @@ _EXTRA_TOOLS = {
     "workload_report": "השוואת שעות, מספר משמרות וכוננויות בכל טווח תאריכים",
     "change_history": "מה השתנה בסידורים ומדוע",
 }
+_ROUNDS = 7      # model calls per turn; the last one may not request tools
+_REPAIRS = 2     # times a rejected plan is handed back to the model to fix
+_MAX_CALLS = 4   # tool calls the model may request per round
+_FULL_RESULTS = 2  # earlier turns whose tool results the model re-reads in full
+
+
+class _Rejected(AgentError):
+    """A plan the code refused, which the model can revise in the same turn."""
+
+
+class _NeedsManager(AgentError):
+    """Only the manager can supply what is missing (D8): ask, do not repair."""
 
 
 def _json(value):
@@ -48,6 +60,22 @@ def _iso_or_blank(value):
         return datetime.date.fromisoformat(value or "").isoformat()
     except ValueError:
         return ""
+
+
+def _plan_for_model(plan, whole):
+    """A stored plan as the model reads it back: whole, or as a summary."""
+    # The snapshot hash and the generated slot grid mean nothing to the model.
+    shown = {key: value for key, value in plan.items() if key != "snapshot"}
+    if shown.get("generated"):
+        shown["generated"] = {key: value for key, value in shown["generated"].items() if key != "slots"}
+    if whole:
+        return shown
+    summary = {key: shown[key] for key in ("kind", "schedule_id", "starts_on", "ends_on", "reason",
+                                           "agent_reason", "replace_existing") if key in shown}
+    return dict(summary, summarized=True,
+                operations=len(shown.get("operations") or []),
+                constraints=len(shown.get("constraints") or []),
+                generated_assignments=len((shown.get("generated") or {}).get("assignments") or []))
 
 
 def _fingerprint(value):
@@ -95,44 +123,59 @@ class ManagerChatService:
                 "closures": _closures_for_model(profile, schedule or {}),
                 "availability": self._repo.availability(team_id),
                 "preferences": self._context.active_preferences(team_id),
-                "history": self._repo.change_log(team_id, limit=30),
+                "history": self._repo.change_log(team_id, limit=12),
                 "conversation": self._conversation(chat, message_id),
                 "tools": dict(TOOL_DESCRIPTIONS, **_EXTRA_TOOLS),
             }
             results, steps = [], []
-            turn = None
-            for _ in range(6):
+            plan, asked, repairs = None, "", 0
+            for round_ in range(_ROUNDS):
+                final = round_ == _ROUNDS - 1
                 turn = self._llm.complete_json(
-                    load("manager_chat"), _json(dict(payload, results=results)),
+                    load("manager_chat"), _json(dict(payload, results=results, final_round=final)),
                     schema=CHAT_SCHEMA, flow="planner",
                 )
                 if not isinstance(turn, dict):
                     raise AgentError("הסוכן החזיר תשובה לא תקינה. אפשר לנסות שוב")
                 calls = turn.get("tool_calls") or []
-                if not calls:
-                    break
-                for call in calls[:4]:
-                    name, arguments = call.get("tool"), call.get("arguments") or {}
-                    if name in TOOL_DESCRIPTIONS and not arguments.get("schedule_id") \
-                            and not arguments.get("day") and not arguments.get("slot_date"):
-                        if schedule_id:
-                            arguments = dict(arguments, schedule_id=schedule_id)
-                        elif name in ("read_period", "employee_state", "coverage_gaps", "publish_readiness"):
-                            if not context.get("visible_week"):
-                                results.append({"tool": name, "ok": False, "error": "יש לבחור שבוע או לציין תאריך"})
-                                steps.append({"tool": name, "ok": False})
-                                continue
-                            arguments = dict(arguments, day=context["visible_week"])
-                    result = self._run_tool(team_id, name, arguments, schedule_id)
-                    results.append(result)
-                    steps.append({"tool": name, "ok": result.get("ok", True)})
-            else:
-                raise AgentError("הבדיקה ארוכה מדי. אפשר למקד את הבקשה לעובד או לשבוע אחד")
+                if calls and not final:
+                    for call in calls[_MAX_CALLS:]:
+                        results.append({"tool": call.get("tool"), "ok": False,
+                                        "error": "נדחה: עד %d בדיקות בכל סבב" % _MAX_CALLS})
+                    for call in calls[:_MAX_CALLS]:
+                        name, arguments = call.get("tool"), call.get("arguments") or {}
+                        arguments = self._focus_arguments(name, arguments, schedule_id, context)
+                        if arguments is None:
+                            results.append({"tool": name, "ok": False, "error": "יש לבחור שבוע או לציין תאריך"})
+                            steps.append({"tool": name, "ok": False})
+                            continue
+                        try:
+                            result = self._run_tool(team_id, name, arguments, schedule_id)
+                        except AppError as exc:
+                            # A refused read is a fact for the model, not the end of the turn.
+                            result = {"tool": name, "ok": False, "error": str(exc)}
+                        results.append(result)
+                        steps.append({"tool": name, "ok": result.get("ok", True)})
+                    # The browser polls the working message; it shows each check as it lands.
+                    self._repo.chat_turn_progress(chat_id, message_id, dict(context, steps=steps))
+                    continue
+                try:
+                    plan = self._prepare_plan(team_id, turn, schedule_id)
+                except _NeedsManager as exc:
+                    asked = str(exc)
+                except _Rejected as exc:
+                    if final or repairs >= _REPAIRS:
+                        raise
+                    # The code refused the plan; the model sees why and revises it.
+                    repairs += 1
+                    results.append({"tool": "plan_check", "ok": False, "error": str(exc)})
+                    steps.append({"tool": "plan_check", "ok": False})
+                    continue
+                break
             output = {"steps": steps, "results": results, "question": question(turn.get("question"))}
-            plan = self._prepare_plan(team_id, turn, schedule_id)
             if plan:
                 output["plan"] = plan
-            reply = (turn.get("reply") or "").strip()
+            reply = asked or (turn.get("reply") or "").strip()
             if not reply and output["question"]:
                 reply = output["question"]["question"]
             self._repo.finish_chat_turn(
@@ -145,18 +188,50 @@ class ManagerChatService:
                 "לא הצלחתי להשלים את הבקשה. לא בוצע שינוי בסידור; אפשר לנסות שוב"
             self._repo.finish_chat_turn(chat_id, message_id, content, "error", {})
 
+    @staticmethod
+    def _focus_arguments(name, arguments, schedule_id, context):
+        """Aim a dateless read at the week on screen; None when nothing is."""
+        if name not in TOOL_DESCRIPTIONS or arguments.get("schedule_id") \
+                or arguments.get("day") or arguments.get("slot_date"):
+            return arguments
+        if schedule_id:
+            return dict(arguments, schedule_id=schedule_id)
+        if name in ("read_period", "employee_state", "coverage_gaps", "publish_readiness"):
+            if not context.get("visible_week"):
+                return None
+            return dict(arguments, day=context["visible_week"])
+        return arguments
+
     def _conversation(self, chat, working_id):
-        rows = []
-        for row in chat["messages"][-32:]:
-            if row["id"] == working_id:
-                continue
+        """Earlier turns, with only the recent ones carried in full.
+
+        Every round of every turn re-sends this, so stale bulk is paid for
+        many times over and crowds out the facts that matter. The newest plan
+        stays whole, because "instead use Dana" revises it; the last checked
+        facts stay whole, because "the second person" points into them.
+        Anything older is a summary of what was proposed and what became of it.
+        """
+        rows = [row for row in chat["messages"][-32:] if row["id"] != working_id]
+        planned = [index for index, row in enumerate(rows) if (row.get("payload") or {}).get("plan")]
+        checked = [index for index, row in enumerate(rows) if (row.get("payload") or {}).get("results")]
+        latest_plan = planned[-1] if planned else -1
+        recent_results = set(checked[-_FULL_RESULTS:])
+        result = []
+        for index, row in enumerate(rows):
             item = {"role": row["role"], "content": row["content"], "status": row["status"]}
             payload = row.get("payload") or {}
-            # Keep checked candidates and the latest plans so references resolve.
-            item["context"] = {key: payload[key] for key in ("question", "results", "plan")
-                               if key in payload}
-            rows.append(item)
-        return rows
+            context = {}
+            if payload.get("question"):
+                context["question"] = payload["question"]
+            if index in recent_results:
+                context["results"] = payload["results"]
+            elif payload.get("steps"):
+                context["checked"] = sorted({step["tool"] for step in payload["steps"]})
+            if payload.get("plan"):
+                context["plan"] = _plan_for_model(payload["plan"], whole=index == latest_plan)
+            item["context"] = context
+            result.append(item)
+        return result
 
     def _run_tool(self, team_id, name, arguments, focused_id):
         invalid = _invalid_date_argument(arguments)
@@ -239,10 +314,13 @@ class ManagerChatService:
             try:
                 patch = json.loads(turn.get("profile_patch_json") or "{}")
             except ValueError as exc:
-                raise AgentError("עריכת הפרופיל אינה תקינה. אפשר לנסח שוב") from exc
+                raise _Rejected("עריכת הפרופיל אינה תקינה. אפשר לנסח שוב") from exc
             if not isinstance(patch, dict) or not patch or set(patch) - set(PROFILE_SECTIONS):
-                raise AgentError("לא זוהה שינוי תקין בפרטי הצוות")
-            updated = self._profiles.preview(team_id, **patch)
+                raise _Rejected("לא זוהה שינוי תקין בפרטי הצוות")
+            try:
+                updated = self._profiles.preview(team_id, **patch)
+            except AppError as exc:
+                raise _Rejected(str(exc)) from exc
             plan["profile_patch"] = patch
             plan["profile_before"] = {key: profile.get(key) for key in patch}
             plan["profile_after"] = {key: updated.get(key) for key in patch}
@@ -250,30 +328,30 @@ class ManagerChatService:
             self._prepare_generation(team_id, turn, plan, state)
         else:
             if not schedule and (kind != "changes" or turn.get("operations")):
-                raise AgentError("אין סידור בשבוע הזה. אפשר לבקש לבנות אותו קודם")
+                raise _Rejected("אין סידור בשבוע הזה. אפשר לבקש לבנות אותו קודם")
             if kind not in ("publish", "unpublish") and schedule.get("status") == "published":
-                raise AgentError("הסידור מפורסם. בקשו להחזיר אותו לטיוטה לפני שינוי")
+                raise _Rejected("הסידור מפורסם. בקשו להחזיר אותו לטיוטה לפני שינוי")
             if kind == "changes":
                 proposal = build_proposal(turn, profile, schedule, plan["reason"])
                 if proposal["needs_input"] or proposal["needs_reason"]:
-                    raise AgentError(proposal["reply"] or "נדרשים פרטים נוספים לפני שינוי")
+                    raise _NeedsManager(proposal["reply"] or "נדרשים פרטים נוספים לפני שינוי")
                 if len(proposal["operations"]) != len(turn.get("operations") or []):
-                    raise AgentError("חלק מהשינויים לא תואמים לסידור. יש לבקש תוכנית מעודכנת")
+                    raise _Rejected("חלק מהשינויים לא תואמים לסידור. יש לבקש תוכנית מעודכנת")
                 plan["operations"] = proposal["operations"]
                 plan["constraints"] = self._constraints(turn.get("constraints") or [], profile)
                 if not plan["operations"] and not plan["constraints"]:
                     return None
                 if not plan["reason"]:
-                    raise AgentError("מה הסיבה לשינוי בסידור?")
+                    raise _NeedsManager("מה הסיבה לשינוי בסידור?")
                 rows = self._changed_rows(schedule, plan["operations"]) if schedule else []
                 names = {person["name"] for person in profile.get("employees") or []}
                 if any(row["employee"] not in names for row in rows):
-                    raise AgentError("התוכנית מכילה עובד שאינו נמצא בצוות")
+                    raise _Rejected("התוכנית מכילה עובד שאינו נמצא בצוות")
                 if schedule:
                     plan["warnings"] = self._audit_plan(profile, schedule, rows, state["availability"], plan["constraints"])
             elif kind == "clear":
                 if not plan["reason"]:
-                    raise AgentError("מה הסיבה לפינוי השיבוצים?")
+                    raise _NeedsManager("מה הסיבה לפינוי השיבוצים?")
                 plan["operations"] = [dict(action="remove", employee=row["employee"],
                                            date=iso(row["date"]), shift=row["shift"],
                                            reason=plan["agent_reason"])
@@ -281,7 +359,7 @@ class ManagerChatService:
             elif kind == "publish":
                 plan["warnings"] = self._context.audit_rows(team_id, schedule.get("assignments") or [], schedule)
             elif kind != "unpublish":
-                raise AgentError("הפעולה אינה נתמכת")
+                raise _Rejected("הפעולה אינה נתמכת")
         return plan
 
     def _prepare_generation(self, team_id, turn, plan, state):
@@ -289,19 +367,19 @@ class ManagerChatService:
         try:
             start, end = datetime.date.fromisoformat(first), datetime.date.fromisoformat(last)
         except ValueError as exc:
-            raise AgentError("נדרשים תאריכי התחלה וסיום לבניית הסידור") from exc
+            raise _Rejected("נדרשים תאריכי התחלה וסיום לבניית הסידור") from exc
         if end < start or (end - start).days > 62:
-            raise AgentError("אפשר לבנות בשיחה תקופה של עד 63 ימים")
+            raise _Rejected("אפשר לבנות בשיחה תקופה של עד 63 ימים")
         schedule = state["schedule"] or {}
         if not schedule:
             matches = [period for period in state["periods"]
                        if iso(period["starts_on"]) <= last and iso(period["ends_on"]) >= first]
             if matches:
-                raise AgentError("קיים סידור בטווח הזה. יש לבקש למלא או לבנות מחדש את הסידור הקיים")
+                raise _Rejected("קיים סידור בטווח הזה. יש לבקש למלא או לבנות מחדש את הסידור הקיים")
         elif not (iso(schedule["starts_on"]) <= first and last <= iso(schedule["ends_on"])):
-            raise AgentError("הטווח חורג מהסידור שנבחר. יש לבחור את התקופה המתאימה")
+            raise _Rejected("הטווח חורג מהסידור שנבחר. יש לבחור את התקופה המתאימה")
         if schedule.get("status") == "published":
-            raise AgentError("יש להחזיר את הסידור לטיוטה לפני בנייה מחדש")
+            raise _Rejected("יש להחזיר את הסידור לטיוטה לפני בנייה מחדש")
         # A range inside an existing period (one day, a few days) rebuilds only
         # those dates; every other saved assignment stays as it is.
         partial = bool(schedule) and (iso(schedule["starts_on"]) != first or iso(schedule["ends_on"]) != last)
@@ -349,20 +427,20 @@ class ManagerChatService:
         result = []
         for row in offered[:126]:
             if row.get("employee") not in names or row.get("shift", "") not in shifts | {""}:
-                raise AgentError("האילוץ חייב להתייחס לעובד ולמשמרת מוכרים")
+                raise _Rejected("האילוץ חייב להתייחס לעובד ולמשמרת מוכרים")
             try:
                 date = datetime.date.fromisoformat(row.get("date") or "").isoformat()
             except ValueError as exc:
-                raise AgentError("תאריך האילוץ אינו תקין") from exc
+                raise _Rejected("תאריך האילוץ אינו תקין") from exc
             result.append(dict(row, date=date, available=bool(row.get("available", False))))
         return result
 
     def _changed_rows(self, schedule, operations):
         if len(operations) > 40:
-            raise AgentError("התוכנית גדולה מדי. יש לפצל את השינוי לתקופות קצרות יותר")
+            raise _Rejected("התוכנית גדולה מדי. יש לפצל את השינוי לתקופות קצרות יותר")
         imagined = Hypothetical(schedule_rows(schedule), schedule).apply_all(operations)
         if imagined.skipped:
-            raise ConflictError(imagined.skipped[0]["why"])
+            raise _Rejected(imagined.skipped[0]["why"])
         return imagined.rows
 
     def _audit_plan(self, profile, schedule, rows, availability, constraints):

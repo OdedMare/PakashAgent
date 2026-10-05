@@ -118,6 +118,13 @@ class ChatRepository(RepositoryBase):
             WHERE id=%s AND chat_id=%s AND status='working'
         """, (content, status, Jsonb(payload), message_id, chat_id))
 
+    def chat_turn_progress(self, chat_id, message_id, payload):
+        """The checks a running turn has made so far; a stopped turn stays stopped."""
+        self._execute("""
+            UPDATE manager_chat_messages SET payload=%s
+            WHERE id=%s AND chat_id=%s AND status='working'
+        """, (Jsonb(payload), message_id, chat_id))
+
     def stop_chat_turn(self, team_id, manager_id, chat_id):
         self.get_chat(team_id, manager_id, chat_id)
         self._execute("""

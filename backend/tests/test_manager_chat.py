@@ -23,6 +23,7 @@ class ChatRepo(_FakeScheduleRepo):
         super().__init__()
         self.profiles = {TEAM: copy.deepcopy(PROFILE)}
         self.chats = {}
+        self.progress = []
 
     def create_chat(self, team_id, manager_id):
         chat_id = self._id("chat")
@@ -60,6 +61,12 @@ class ChatRepo(_FakeScheduleRepo):
         for row in self.chats[chat_id]["messages"]:
             if row["id"] == message_id and row["status"] == "working":
                 row.update(content=content, status=status, payload=payload)
+
+    def chat_turn_progress(self, chat_id, message_id, payload):
+        self.progress.append(copy.deepcopy(payload))
+        for row in self.chats[chat_id]["messages"]:
+            if row["id"] == message_id and row["status"] == "working":
+                row["payload"] = payload
 
     @contextmanager
     def chat_approval(self, team_id, manager_id, chat_id, message_id):
@@ -270,13 +277,88 @@ def test_malformed_focus_date_is_dropped_rather_than_shown_to_the_model():
     assert json.loads(llm.calls[0]["user"])["focused_date"] == ""
 
 
-def test_unknown_slot_does_not_silently_apply_only_half_the_plan():
+def unknown_slot():
     proposal = sickness()
     proposal["operations"][1]["shift"] = "משמרת שלא קיימת"
-    repo, _, service, chat_id, schedule_id = setup([proposal])
+    return proposal
+
+
+def test_unknown_slot_does_not_silently_apply_only_half_the_plan():
+    # Refused, handed back twice, and still wrong: the turn fails with no plan.
+    repo, llm, service, chat_id, schedule_id = setup([unknown_slot(), unknown_slot(), unknown_slot()])
     message = converse(service, repo, chat_id, schedule_id)
     assert message["status"] == "error" and "plan" not in message["payload"]
+    assert len(llm.calls) == 3
     assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "דנה"
+
+
+def test_refused_plan_is_handed_back_and_the_corrected_plan_is_offered():
+    repo, llm, service, chat_id, schedule_id = setup([unknown_slot(), sickness()])
+    message = converse(service, repo, chat_id, schedule_id)
+    assert message["status"] == "pending", message["content"]
+    check = json.loads(llm.calls[1]["user"])["results"][-1]
+    assert check["tool"] == "plan_check" and check["ok"] is False and check["error"]
+    assert [step["tool"] for step in message["payload"]["steps"]] == ["plan_check"]
+    assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "דנה"
+
+
+def test_missing_reason_is_asked_of_the_manager_not_repaired_by_the_model():
+    proposal = sickness()
+    proposal["stated_reason"] = ""
+    repo, llm, service, chat_id, schedule_id = setup([proposal])
+    message = converse(service, repo, chat_id, schedule_id, "תחליף את דנה ביוסי")
+    assert len(llm.calls) == 1
+    assert message["status"] == "complete" and "plan" not in message["payload"]
+    assert "סיבה" in message["content"] or "מדוע" in message["content"] or "למה" in message["content"]
+
+
+def test_last_round_answers_from_what_was_checked_instead_of_failing():
+    calls = turn()
+    calls["tool_calls"] = [dict(tool="list_periods", arguments={})]
+    final = turn()
+    final.update(reply="לפי מה שנבדק", tool_calls=[dict(tool="list_periods", arguments={})])
+    repo, llm, service, chat_id, schedule_id = setup([calls] * 6 + [final])
+    message = converse(service, repo, chat_id, schedule_id, "מה יש?")
+    assert message["status"] == "complete" and message["content"] == "לפי מה שנבדק"
+    assert json.loads(llm.calls[-1]["user"])["final_round"] is True
+    assert len(message["payload"]["steps"]) == 6
+
+
+def test_extra_tool_calls_are_refused_out_loud_and_progress_is_saved_each_round():
+    calls = turn()
+    calls["tool_calls"] = [dict(tool="list_periods", arguments={})] * 5
+    repo, llm, service, chat_id, schedule_id = setup([calls, turn()])
+    converse(service, repo, chat_id, schedule_id, "מה יש?")
+    results = json.loads(llm.calls[-1]["user"])["results"]
+    assert len(results) == 5 and results[0]["ok"] is False and "נדחה" in results[0]["error"]
+    assert len(repo.progress[0]["steps"]) == 4
+    assert repo.progress[0]["schedule_id"] == schedule_id
+
+
+def test_failed_tool_is_reported_to_the_model_rather_than_ending_the_turn():
+    calls = turn()
+    calls["tool_calls"] = [dict(tool="workload_report", arguments={"starts_on": "2026-10-10"})]
+    repo, llm, service, chat_id, schedule_id = setup([calls, turn()])
+    message = converse(service, repo, chat_id, schedule_id, "כמה עבדו?")
+    assert message["status"] == "complete"
+    assert json.loads(llm.calls[-1]["user"])["results"][0]["ok"] is False
+
+
+def test_only_the_newest_plan_and_recent_checks_are_resent_in_full():
+    tools = turn()
+    tools["tool_calls"] = [dict(tool="list_periods", arguments={})]
+    repo, llm, service, chat_id, schedule_id = setup(
+        [tools, turn(), tools, turn(), tools, turn(), sickness(), sickness(), turn()])
+    for index in range(6):
+        converse(service, repo, chat_id, schedule_id, "שאלה %d" % index, "r%d" % index)
+    conversation = json.loads(llm.calls[-1]["user"])["conversation"]
+    plans = [row["context"]["plan"] for row in conversation if "plan" in row["context"]]
+    assert plans[0]["summarized"] is True and plans[0]["operations"] == 2
+    assert "operations" in plans[1] and isinstance(plans[1]["operations"], list)
+    assert all("snapshot" not in plan for plan in plans)
+    full = [row for row in conversation if "results" in row["context"]]
+    trimmed = [row for row in conversation if "checked" in row["context"]]
+    assert len(full) == 2 and trimmed[0]["context"]["checked"] == ["list_periods"]
 
 
 def test_adjusting_generated_preview_preserves_other_choices_and_remains_read_only():
