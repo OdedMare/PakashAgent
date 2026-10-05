@@ -6,7 +6,7 @@ import { applyManagerPlan, createManagerChat, deleteManagerChat, dismissManagerP
   listManagerChats, readManagerChat, sendManagerMessage, stopManagerReply } from "@/services/api";
 import type { ChatPlan, ManagerChatSummary, ManagerConversation } from "@/types";
 
-export function useManagerChat(workspaceId: string, scheduleId: string, visibleWeek: string, onApplied: (plan?: ChatPlan) => Promise<void>) {
+export function useManagerChat(workspaceId: string, scheduleId: string, visibleWeek: string, focusDate: string, onApplied: (plan?: ChatPlan) => Promise<void>) {
   const [chat, setChat] = useState<ManagerConversation | null>(null);
   const [chats, setChats] = useState<ManagerChatSummary[]>([]);
   const [busy, setBusy] = useState(false);
@@ -79,14 +79,14 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
     return run(async () => {
       try {
         return await sendManagerMessage(chatId, { content: content.trim(), request_id: crypto.randomUUID(),
-          schedule_id: scheduleId || undefined, visible_week: visibleWeek });
+          schedule_id: scheduleId || undefined, visible_week: visibleWeek, focus_date: focusDate || undefined });
       } catch (reason) {
         const recovered = await readManagerChat(chatId).catch(() => null);
         if (recovered?.messages.some((message) => message.status === "working")) return recovered;
         throw reason;
       }
     });
-  }, [chatId, working, scheduleId, visibleWeek, run]);
+  }, [chatId, working, scheduleId, visibleWeek, focusDate, run]);
 
   const apply = useCallback(async (messageId: string, exceptions: boolean) => {
     if (!chatId || working) return;
