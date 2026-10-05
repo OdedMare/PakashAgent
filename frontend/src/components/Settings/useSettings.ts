@@ -8,7 +8,7 @@ export type SettingsSection = "agent" | "schedule" | "database";
 
 /** What the backend returns in place of a stored secret, and what it accepts
  *  back to mean "unchanged". Must match `MASKED_SECRET` in
- *  `backend/app/common/runtime_settings/normalizers.py`. */
+ *  `backend/src/app/common/runtime_settings/normalizers.py`. */
 const MASKED = "********";
 
 /**

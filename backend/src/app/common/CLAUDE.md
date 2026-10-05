@@ -1,4 +1,4 @@
-# Common (`app/common/`)
+# Common (`src/app/common/`)
 
 Cross-cutting infrastructure. **Ported from AiSummryIO.**
 
@@ -8,11 +8,11 @@ Cross-cutting infrastructure. **Ported from AiSummryIO.**
   values **without a restart**, because `dal/llm/` reads the store on every call.
   Secrets are masked on the way out; a masked value coming back means "unchanged",
   so the stored secret is kept.
-- `sessions.py` — signed workspace session cookies: `issue()` and `read()`,
+- `sessions/sessions.py` — signed workspace session cookies: `issue()` and `read()`,
   HMAC-SHA256 over a compact payload. Not a JWT and not trying to be — no
   algorithm field, no library, a format this file fully controls.
-- `logging_setup.py` — `structlog` configuration.
-- `errors.py` — `AgentError`, the Hebrew-facing error type everything raises.
+- `logging_setup/logging_setup.py` — `structlog` configuration.
+- `errors/errors.py` — `AgentError`, the Hebrew-facing error type everything raises.
 
 ## Settings that matter here
 

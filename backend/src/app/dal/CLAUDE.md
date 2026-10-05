@@ -1,4 +1,4 @@
-# Data access (`app/dal/`)
+# Data access (`src/app/dal/`)
 
 Fetches and sends. Makes no decisions — those live in `bl/`.
 

@@ -1,4 +1,4 @@
-# Business logic (`app/bl/`)
+# Business logic (`src/app/bl/`)
 
 Where decisions are made. `bl/` decides *what* to schedule and *how* to interpret
 a file; `dal/` only fetches and sends. Nothing here imports `psycopg` or `openai`
@@ -13,13 +13,14 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 |---|---|
 | `interview/` | The intro interview — workplace profile, employees, rules, shift vocabulary |
 | `interview_service/` | Persistence around it: sessions, turns, resume, completion |
-| `workspace_service.py` | Workspace rules: entering a team, roles, the share link |
+| `workspace_service/` | Workspace rules: entering a team, roles, the share link |
 | `scheduler/` | Checkpointed range generation, one date or one week per call; every assignment carries a reason |
 | `changes/` | Conversational edits and the change log |
-| `briefing.py` | **The agent speaking first.** Observes; proposes nothing that lands |
+| `briefing/` | **The agent speaking first.** Observes; proposes nothing that lands |
+| `copilot/` | The durable observation loop the worker drives |
 | `schedule_service/` | Persistence and orchestration around all three: propose, confirm, apply |
 | `audit/` | **Pure-Python advisory checks. No LLM.** Also the fairness arithmetic the scheduler and the employee area read |
-| `export.py` | **A period out as `.xlsx`.** Pure functions, no model, no repository |
+| `export/` | **A period out as `.xlsx`.** Pure functions, no model, no repository |
 | `importer/` | Excel/doc ingest with layout inference |
 | `tools/` | **The named questions the agent may ask. Pure Python, no LLM, no write** — including `profile_gaps`, what the interview never taught |
 | `planner/` | The tool loop, with a deterministic fallback when no model is reachable |
@@ -28,6 +29,7 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | `rotation/` | **Whose closure a date is.** Pure arithmetic off separate round/triplet anchors; no model |
 | `placement/` | **What a placement would cost, and what else the manager could do.** No model |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
+| `shared/` | Small helpers several packages read: `clarification.py`, `hebrew_calendar.py` |
 
 ## The division that defines this layer
 

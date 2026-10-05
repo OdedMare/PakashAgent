@@ -1,4 +1,4 @@
-# LLM client (`app/dal/llm/`)
+# LLM client (`src/app/dal/llm/`)
 
 **Ported from AiSummryIO essentially unchanged.** An OpenAI-compatible JSON-mode
 client. Default target is a local model through Ollama, but the same code works

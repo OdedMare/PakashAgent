@@ -1,4 +1,4 @@
-# HTTP layer (`app/api/`)
+# HTTP layer (`src/app/api/`)
 
 Pydantic contracts and routers. No business logic — routers call `bl/` and shape
 the result.

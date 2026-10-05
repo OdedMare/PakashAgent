@@ -12,7 +12,7 @@ members open a read-only view through a share link, with no account at all
 ([D10](docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)).
 
 **Hebrew, right-to-left.** Not just the UI — shift names, weekdays, availability
-markers, and errors are all Hebrew. See [`backend/app/bl/CLAUDE.md`](backend/app/bl/CLAUDE.md).
+markers, and errors are all Hebrew. See [`backend/src/app/bl/CLAUDE.md`](backend/src/app/bl/CLAUDE.md).
 
 ## Status
 
@@ -86,7 +86,7 @@ and imported back. A message for the group chat is asked of the agent instead
 Built: the ported `dal/llm` client, settings and runtime settings, the interview
 and its prompt, the workspace layer (teams, boss login, member share links, route
 guards), `bl/audit.py` and its table-driven tests, `bl/scheduler.py`,
-`bl/changes.py`, `bl/briefing.py`, `bl/export.py`, `bl/placement.py`, the agent's
+`bl/changes.py`, `bl/briefing/briefing.py`, `bl/export/export.py`, `bl/placement.py`, the agent's
 tool layer (`bl/tools.py`, `bl/planner.py`, `bl/intent.py`, `bl/simulate.py`),
 the schedule tables, the management HTTP layer, and the RTL UI for all of it.
 
@@ -114,12 +114,12 @@ accepted tradeoff.
 ## Architecture at a glance
 
 ```
-backend/          FastAPI + Postgres, layered api / bl / dal
-  app/api/        HTTP contracts and routers
-  app/bl/         Decisions: interview, scheduling, changes, audit, import
-  app/dal/        Data access: Postgres, LLM client
-  app/common/     Config, runtime settings, logging, errors
-frontend/         Next.js, RTL, chat-first with a schedule grid
+backend/              FastAPI + Postgres, layered api / bl / dal
+  src/app/api/        HTTP contracts and routers
+  src/app/bl/         Decisions: interview, scheduling, changes, audit, import
+  src/app/dal/        Data access: Postgres, LLM client
+  src/app/common/     Config, runtime settings, logging, errors
+frontend/             Next.js, RTL, chat-first with a schedule grid
 ```
 
 Ported from [OdedMare/AiSummryIO](https://github.com/OdedMare/AiSummryIO): the

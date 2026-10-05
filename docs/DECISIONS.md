@@ -290,7 +290,7 @@ for each one a *suggestion*: the sentence the manager could send to act on it.
 **A suggestion is text, not an action.** Clicking one types it into the
 composer. The manager still sends it, the agent still proposes, and the
 manager still confirms with their reason. There is no field in a briefing
-that `apply` can read, and `bl/briefing.py` returns exactly three keys —
+that `apply` can read, and `bl/briefing/briefing.py` returns exactly three keys —
 `headline`, `items`, `quiet` — so there is nothing an operation could hide in.
 
 *Why this shape and not autonomy:* "be proactive" reads like a request for an
@@ -380,7 +380,7 @@ be edited in Excel, and come back. Inventing a prettier layout would produce
 a file this product cannot read, which is a strange thing for the product to
 emit.
 
-`bl/export.py` is pure functions over a stored schedule: no model call, no
+`bl/export/export.py` is pure functions over a stored schedule: no model call, no
 repository, nothing decided. It re-presents what the manager already
 confirmed, which is what makes it safe for this to be the one output nobody
 reviews before it is sent.

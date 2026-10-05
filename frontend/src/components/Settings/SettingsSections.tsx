@@ -131,7 +131,7 @@ function AgentSettings({ settings }: { settings: SettingsController }) {
 /** How wide one scheduling model call is.
  *
  *  The values are the backend's own (`GENERATION_MODES` in
- *  `backend/app/common/config/settings.py`); a third choice added there needs
+ *  `backend/src/app/common/config/settings.py`); a third choice added there needs
  *  a line here, and nothing else — the backend rejects anything it does not
  *  recognise rather than quietly running at a width nobody chose. */
 const GENERATION_MODES = [
@@ -167,7 +167,7 @@ function ScheduleSettings({ settings }: { settings: SettingsController }) {
 }
 
 /** The roles a task can be routed to. Mirrors `_FLOW_ROLES` in
- *  `backend/app/dal/llm/model_roles.py` — the backend does the routing, this
+ *  `backend/src/app/dal/llm/model_roles.py` — the backend does the routing, this
  *  only says which model, endpoint and key each role uses.
  *
  *  No model name appears here, or anywhere else in the panel: which models

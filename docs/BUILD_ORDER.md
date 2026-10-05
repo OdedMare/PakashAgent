@@ -18,13 +18,13 @@ time, never retrofitted onto a populated table.
 
 Also done, likewise out of order, four features the boss asked for directly:
 
-- the **proactive agent** — `bl/briefing.py` and `Management/Briefing.tsx`,
+- the **proactive agent** — `bl/briefing/briefing.py` and `Management/Briefing.tsx`,
   where the agent opens the conversation instead of waiting to be asked
   ([D15](DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes));
 - **change notifications for employees** — the personal area leads with what
   moved since they last looked, marked by `employee_identities.acknowledged_at`
   ([D16](DECISIONS.md#d16--an-employee-is-told-what-changed-and-acknowledging-is-what-marks-it-read));
-- **export** — `bl/export.py`, a period out as `.xlsx`
+- **export** — `bl/export/export.py`, a period out as `.xlsx`
   ([D17](DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes));
 - **the manual path** — a period opened empty and filled in by hand, with
   `assignments.source` recording where each row came from
@@ -87,7 +87,7 @@ plus `common/config`, `common/runtime_settings`, `bl/prompts/_loader.py`,
 Rename the env prefix to `PAKASH_`.
 
 **2. Schema and repositories.**
-Tables per [`../backend/app/dal/CLAUDE.md`](../backend/app/dal/CLAUDE.md).
+Tables per [`../backend/src/app/dal/CLAUDE.md`](../backend/src/app/dal/CLAUDE.md).
 `change_log` append-only; `assignments` carries the agent's reason.
 
 **3. `bl/audit.py` + its tests.** ← *do this before the agent work*

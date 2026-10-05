@@ -1,7 +1,7 @@
 """Shared connection and query primitives for repository modules.
 
 Ported from AiSummryIO. SQL lives in this package and nowhere else — `bl/`
-never imports psycopg (backend/app/dal/CLAUDE.md).
+never imports psycopg (backend/src/app/dal/CLAUDE.md).
 """
 
 import uuid

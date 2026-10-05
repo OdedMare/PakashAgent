@@ -39,7 +39,7 @@ RUN pip install --no-cache-dir --upgrade "pip<25" \
     && useradd --system --uid 999 --gid app --home /srv/backend app
 
 COPY backend/pyproject.toml ./
-COPY backend/app ./app
+COPY backend/src ./src
 COPY backend/tests ./tests
 
 RUN pip install --no-cache-dir -e ".[dev]" \
