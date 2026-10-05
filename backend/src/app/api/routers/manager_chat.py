@@ -11,6 +11,7 @@ class ChatTurn(BaseModel):
     request_id: str = Field(min_length=1, max_length=80)
     schedule_id: Optional[str] = None
     visible_week: str = Field(default="", max_length=10)
+    focus_date: str = Field(default="", max_length=10)
 
 
 class ChatApproval(BaseModel):

@@ -233,6 +233,43 @@ def test_generate_upcoming_week_previews_real_assignments_without_touching_curre
     assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "דנה"
 
 
+def test_day_opened_from_board_rebuilds_only_that_day_and_keeps_the_rest():
+    proposal = turn("generate", required_assignments=[])
+    proposal.update(starts_on="2026-10-06", ends_on="2026-10-06", replace_existing=True,
+                    instructions="לתת עדיפות ליוסי")
+    span = {"assignments": [dict(employee="יוסי", shift=MORNING, date="2026-10-06", reason="לפי ההנחיה")],
+            "notes": [], "summary": "יום שלישי שובץ"}
+    repo, llm, service, chat_id, schedule_id = setup([proposal, span])
+    repo.assignment_rows[schedule_id] = []
+    repo.replace_slots(schedule_id, TEAM, [
+        {"shift_name": MORNING, "slot_date": "2026-10-05", "headcount": 1},
+        {"shift_name": MORNING, "slot_date": "2026-10-06", "headcount": 1},
+    ])
+    slots = {row["slot_date"]: row["id"] for row in repo.get_schedule(schedule_id, TEAM)["slots"]}
+    repo.add_assignment(schedule_id, TEAM, slots["2026-10-05"], "דנה", "שיבוץ קיים")
+    message_id = service.start_turn(TEAM, "manager-a", chat_id, dict(
+        content="תשבץ את היום", request_id="day-1", schedule_id=schedule_id,
+        visible_week="2026-10-04", focus_date="2026-10-06"))
+    service.reply(TEAM, "manager-a", chat_id, message_id)
+    message = repo.get_chat(TEAM, "manager-a", chat_id)["messages"][-1]
+    assert json.loads(llm.calls[0]["user"])["focused_date"] == "2026-10-06"
+    assert message["status"] == "pending", message["content"]
+    plan = message["payload"]["plan"]
+    assert (plan["starts_on"], plan["ends_on"]) == ("2026-10-06", "2026-10-06")
+    service.apply(TEAM, "manager-a", chat_id, message["id"], True)
+    rows = sorted((row["employee"], str(row["date"])[:10]) for row in repo.assignments(schedule_id, TEAM))
+    assert rows == [("דנה", "2026-10-05"), ("יוסי", "2026-10-06")]
+    assert len(repo.schedules) == 1
+
+
+def test_malformed_focus_date_is_dropped_rather_than_shown_to_the_model():
+    repo, llm, service, chat_id, schedule_id = setup([turn()])
+    message_id = service.start_turn(TEAM, "manager-a", chat_id, dict(
+        content="מה חסר?", request_id="day-2", schedule_id=schedule_id, focus_date="not-a-day"))
+    service.reply(TEAM, "manager-a", chat_id, message_id)
+    assert json.loads(llm.calls[0]["user"])["focused_date"] == ""
+
+
 def test_unknown_slot_does_not_silently_apply_only_half_the_plan():
     proposal = sickness()
     proposal["operations"][1]["shift"] = "משמרת שלא קיימת"

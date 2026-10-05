@@ -19,6 +19,7 @@ from app.bl.profile_service import ProfileService
 from app.bl.prompts import load
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.generation.history import AssignmentHistory
+from app.bl.schedule_service.generation.pins import model_assignment
 from app.bl.schedule_service.operations import OperationApplier
 from app.bl.scheduler import Scheduler
 from app.bl.scheduler.availability import effective_availability
@@ -39,6 +40,14 @@ _EXTRA_TOOLS = {
 
 def _json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, default=json_default)
+
+
+def _iso_or_blank(value):
+    """A focus day the browser sent, or nothing; never a malformed date."""
+    try:
+        return datetime.date.fromisoformat(value or "").isoformat()
+    except ValueError:
+        return ""
 
 
 def _fingerprint(value):
@@ -62,6 +71,7 @@ class ManagerChatService:
             request["request_id"], {
                 "schedule_id": request.get("schedule_id") or "",
                 "visible_week": request.get("visible_week") or "",
+                "focus_date": _iso_or_blank(request.get("focus_date")),
             },
         )
 
@@ -80,6 +90,7 @@ class ManagerChatService:
                 "profile_sections": PROFILE_SECTIONS,
                 "focused_schedule_id": schedule_id,
                 "visible_week": context.get("visible_week") or "",
+                "focused_date": context.get("focus_date") or "",
                 "schedule": _schedule_for_model(schedule or {}),
                 "closures": _closures_for_model(profile, schedule or {}),
                 "availability": self._repo.availability(team_id),
@@ -203,10 +214,16 @@ class ManagerChatService:
             return None
         schedule_id = turn.get("schedule_id") or focused_id
         if kind == "generate" and not turn.get("schedule_id"):
-            # A new week's dates must not fall back to the week on screen.
-            schedule_id = next((period["id"] for period in self._repo.list_schedules(team_id)
-                                if iso(period["starts_on"]) == turn.get("starts_on")
-                                and iso(period["ends_on"]) == turn.get("ends_on")), "")
+            # A new week's dates must not fall back to the week on screen. An
+            # exact period wins; otherwise a period that contains the dates is
+            # the one a single day (or a few days) is rebuilt inside.
+            first, last = turn.get("starts_on") or "", turn.get("ends_on") or ""
+            periods = self._repo.list_schedules(team_id)
+            schedule_id = next((period["id"] for period in periods
+                                if iso(period["starts_on"]) == first
+                                and iso(period["ends_on"]) == last), "") or \
+                next((period["id"] for period in periods if first and last
+                      and iso(period["starts_on"]) <= first and last <= iso(period["ends_on"])), "")
         state = self._state(team_id, schedule_id)
         schedule, profile = state["schedule"] or {}, state["profile"]
         plan = {
@@ -281,22 +298,39 @@ class ManagerChatService:
                        if iso(period["starts_on"]) <= last and iso(period["ends_on"]) >= first]
             if matches:
                 raise AgentError("קיים סידור בטווח הזה. יש לבקש למלא או לבנות מחדש את הסידור הקיים")
-        elif iso(schedule["starts_on"]) != first or iso(schedule["ends_on"]) != last:
-            raise AgentError("הטווח שונה מהסידור שנבחר. יש לבחור את התקופה המתאימה")
+        elif not (iso(schedule["starts_on"]) <= first and last <= iso(schedule["ends_on"])):
+            raise AgentError("הטווח חורג מהסידור שנבחר. יש לבחור את התקופה המתאימה")
         if schedule.get("status") == "published":
             raise AgentError("יש להחזיר את הסידור לטיוטה לפני בנייה מחדש")
+        # A range inside an existing period (one day, a few days) rebuilds only
+        # those dates; every other saved assignment stays as it is.
+        partial = bool(schedule) and (iso(schedule["starts_on"]) != first or iso(schedule["ends_on"]) != last)
+        saved = schedule.get("assignments") or []
+        inside = [row for row in saved if first <= iso(row["date"]) <= last]
+        outside = [row for row in saved if not first <= iso(row["date"]) <= last]
         required = [dict(employee=row["employee"], shift=row["shift"], date=iso(row["date"]))
-                    for row in schedule.get("assignments") or []
+                    for row in inside
                     if not turn.get("replace_existing") or row.get("source") == "manager"]
         plan["preserved_assignments"] = list(required)
-        required += turn.get("required_assignments") or []
-        generated = self._scheduler.generate(
-            state["profile"], first, last, availability=state["availability"],
-            history=self._history.before(team_id, first),
-            preferences=state["preferences"], instructions=turn.get("instructions") or "",
-            required_assignments=required,
-        )
-        pseudo = dict(schedule, starts_on=first, ends_on=last,
+        required += [row for row in turn.get("required_assignments") or []
+                     if first <= (row.get("date") or "") <= last]
+        if partial:
+            generated = self._scheduler.generate_span(
+                state["profile"], first, last, availability=state["availability"],
+                history=self._history.before(team_id, iso(schedule["starts_on"])),
+                preferences=state["preferences"], instructions=turn.get("instructions") or "",
+                required_assignments=required,
+                already_scheduled=[model_assignment(row) for row in outside],
+            )
+        else:
+            generated = self._scheduler.generate(
+                state["profile"], first, last, availability=state["availability"],
+                history=self._history.before(team_id, first),
+                preferences=state["preferences"], instructions=turn.get("instructions") or "",
+                required_assignments=required,
+            )
+        pseudo = dict(schedule, starts_on=iso(schedule["starts_on"]) if partial else first,
+                      ends_on=iso(schedule["ends_on"]) if partial else last,
                       slots=schedule.get("slots") or generated["slots"])
         if schedule:
             slots = {(row["shift_name"], iso(row["slot_date"])) for row in schedule["slots"]}
@@ -304,8 +338,10 @@ class ManagerChatService:
                 raise AgentError("סוגי המשמרות השתנו מאז יצירת הסידור. יש לבנות תקופה חדשה")
         plan.update(starts_on=first, ends_on=last, generated=generated,
                     replace_existing=bool(turn.get("replace_existing")))
+        context_rows = [dict(employee=row["employee"], shift=row["shift"], date=iso(row["date"]))
+                        for row in outside] if partial else []
         plan["warnings"] = self._audit_plan(state["profile"], pseudo,
-                                           generated["assignments"], state["availability"], [])
+                                           context_rows + generated["assignments"], state["availability"], [])
 
     def _constraints(self, offered, profile):
         names = {row["name"] for row in profile.get("employees") or []}
@@ -400,7 +436,9 @@ class ManagerChatService:
         schedule = self._repo.get_schedule(schedule_id, team_id)
         slots = {(row["shift_name"], iso(row["slot_date"])): row["id"] for row in schedule["slots"]}
         desired = {(row["employee"], row["shift"], iso(row["date"])): row for row in generated["assignments"]}
-        existing = {(row["employee"], row["shift"], iso(row["date"])): row for row in schedule["assignments"]}
+        first, last = plan["starts_on"], plan["ends_on"]
+        existing = {(row["employee"], row["shift"], iso(row["date"])): row for row in schedule["assignments"]
+                    if first <= iso(row["date"]) <= last}
         for key, row in existing.items():
             if key not in desired:
                 self._repo.remove_assignment(row["id"], team_id)
