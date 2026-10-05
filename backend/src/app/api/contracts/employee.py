@@ -20,7 +20,10 @@ class ClaimRequest(BaseModel):
     """
 
     employee: str = Field(min_length=1, max_length=120)
-    passcode: str = Field(min_length=4, max_length=200)
+    # Six, not four: ten thousand four-digit codes fall to a patient guesser
+    # even through the login throttle. Existing shorter passcodes still log
+    # in -- `EmployeeLoginRequest` keeps no minimum.
+    passcode: str = Field(min_length=6, max_length=200)
 
 
 class EmployeeLoginRequest(BaseModel):

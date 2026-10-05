@@ -11,17 +11,25 @@ until a manager approves it. Routes that decide depend on `guards.boss()`.
 Route order matters: literal paths are declared before `/{request_id}`.
 """
 
+from typing import Optional
+
 from fastapi import APIRouter
 
 from app.api.routers.employee.identity import IdentityRoutes
 from app.api.routers.employee.manager import RequestDecisionRoutes, SwapDecisionRoutes
 from app.api.routers.employee.personal import EmployeeSwapRoutes, PersonalRoutes
+from app.common.throttle.throttle import LoginThrottle
 
 
-def build_router(service, guards, secret: str, days: int) -> APIRouter:
+def build_router(
+    service, guards, secret: str, days: int,
+    throttle: Optional[LoginThrottle] = None,
+) -> APIRouter:
     router = APIRouter(prefix="/api/employee", tags=["employee"])
     employee = guards.employee()
-    IdentityRoutes(service, guards.visitor(), secret, days).register(router)
+    IdentityRoutes(
+        service, guards.visitor(), secret, days, throttle or LoginThrottle()
+    ).register(router)
     PersonalRoutes(service, employee).register(router)
     EmployeeSwapRoutes(service, employee).register(router)
     return router

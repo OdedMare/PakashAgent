@@ -7,11 +7,12 @@ from app.common.sessions.sessions import COOKIE_NAME, ROLE_EMPLOYEE, issue
 
 
 class IdentityRoutes:
-    def __init__(self, service, visitor, secret: str, days: int):
+    def __init__(self, service, visitor, secret: str, days: int, throttle):
         self._service = service
         self._visitor = visitor
         self._secret = secret
         self._days = days
+        self._throttle = throttle
 
     def sign_in(self, response: Response, team_id: str, name: str) -> None:
         """Upgrade the current session to a personal one.
@@ -32,6 +33,7 @@ class IdentityRoutes:
 
     def register(self, router: APIRouter) -> None:
         service, visitor, sign_in = self._service, self._visitor, self.sign_in
+        throttle = self._throttle
 
         @router.get("/roster")
         def roster(session: dict = Depends(visitor)) -> dict:
@@ -61,7 +63,13 @@ class IdentityRoutes:
             request: EmployeeLoginRequest, response: Response,
             session: dict = Depends(visitor),
         ) -> dict:
-            result = service.login(session["team_id"], request.employee, request.passcode)
+            """Throttled per claimed name: a passcode is short enough that
+            unlimited guesses would find it."""
+            team_id = session["team_id"]
+            key = "employee:%s:%s" % (team_id, request.employee.strip().lower())
+            result = throttle.attempt(key, lambda: service.login(
+                team_id, request.employee, request.passcode
+            ))
             sign_in(response, session["team_id"], result["employee"])
             return result
 

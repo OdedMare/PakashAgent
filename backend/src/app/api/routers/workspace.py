@@ -4,6 +4,8 @@ Routers delegate; the decisions live in `bl/`. What this layer owns is the
 cookie -- issuing it on a successful login and clearing it on logout.
 """
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Response
 
 from app.api.contracts import (
@@ -14,11 +16,13 @@ from app.api.contracts import (
     Workspace,
 )
 from app.common.sessions.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
+from app.common.throttle.throttle import LoginThrottle
 
 
 class WorkspaceRoutes:
-    def __init__(self, service, guards, secret: str, days: int):
+    def __init__(self, service, guards, secret: str, days: int, throttle):
         self._service = service
+        self._throttle = throttle
         self._boss = guards.boss()
         self._visitor = guards.visitor()
         self._secret = secret
@@ -54,6 +58,7 @@ class WorkspaceRoutes:
     def _register_entry(self, router: APIRouter) -> None:
         """Ways into a workspace: pick it, create it, log in, follow a link."""
         service, set_cookie = self._service, self.set_cookie
+        throttle = self._throttle
 
         @router.get("/teams", response_model=list)
         def teams() -> list:
@@ -70,7 +75,12 @@ class WorkspaceRoutes:
 
         @router.post("/login", response_model=Workspace)
         def login(request: LoginRequest, response: Response) -> dict:
-            team = service.login(request.team_id, request.password)
+            """Throttled per workspace, so its password cannot be guessed
+            at the speed of the network."""
+            team = throttle.attempt(
+                "boss:%s" % request.team_id,
+                lambda: service.login(request.team_id, request.password),
+            )
             set_cookie(response, team["id"], ROLE_BOSS)
             return team
 
@@ -89,6 +99,7 @@ class WorkspaceRoutes:
     def _register_session(self, router: APIRouter) -> None:
         """What a signed-in visitor can do with the session they hold."""
         service, boss, visitor = self._service, self._boss, self._visitor
+        throttle = self._throttle
 
         @router.get("/me", response_model=TeamView)
         def me(session: dict = Depends(visitor)) -> dict:
@@ -109,13 +120,22 @@ class WorkspaceRoutes:
         def change_password(
             request: PasswordChangeRequest, session: dict = Depends(boss)
         ) -> dict:
-            service.change_password(
-                session["team_id"], request.current, request.replacement
+            # The same key as the login: both verify the boss password.
+            throttle.attempt(
+                "boss:%s" % session["team_id"],
+                lambda: service.change_password(
+                    session["team_id"], request.current, request.replacement
+                ),
             )
             return {"status": "ok"}
 
 
-def build_router(service, guards, secret: str, days: int) -> APIRouter:
+def build_router(
+    service, guards, secret: str, days: int,
+    throttle: Optional[LoginThrottle] = None,
+) -> APIRouter:
     router = APIRouter(prefix="/api/workspace", tags=["workspace"])
-    WorkspaceRoutes(service, guards, secret, days).register(router)
+    WorkspaceRoutes(
+        service, guards, secret, days, throttle or LoginThrottle()
+    ).register(router)
     return router

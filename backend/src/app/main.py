@@ -24,6 +24,7 @@ from app.common.config.settings import Settings
 from app.common.errors.errors import AppError, error_payload
 from app.common.logging_setup.logging_setup import configure_logging
 from app.common.sessions.sessions import generate_secret
+from app.common.throttle.throttle import LoginThrottle
 from app.common.runtime_settings.runtime_settings_store import (
     RuntimeSettingsStore,
 )
@@ -100,6 +101,13 @@ if not env.session_secret:
         "Sessions will not survive a restart and will break across workers."
     )
 guards = Guards(session_secret)
+# One throttle for every password check in the process. Keys are namespaced
+# (`boss:`, `employee:`, `settings:`), so sharing it couples nothing.
+login_throttle = LoginThrottle()
+if not env.settings_password:
+    _log.warning(
+        "PAKASH_SETTINGS_PASSWORD is not set; the settings panel is locked."
+    )
 
 app = FastAPI(
     title="PakashAgent",
@@ -110,18 +118,24 @@ app = FastAPI(
 app.include_router(health.build_router(repository))
 app.include_router(
     workspace.build_router(
-        workspace_service, guards, session_secret, env.session_days
+        workspace_service, guards, session_secret, env.session_days,
+        login_throttle,
     )
 )
 app.include_router(interview.build_router(interview_service, guards))
 app.include_router(schedules.build_router(schedule_service, guards))
 app.include_router(profile.build_router(profile_service, guards))
 app.include_router(manager_chat.build_router(manager_chat_service, repository, guards))
-app.include_router(settings.build_router(store, llm, guards))
+app.include_router(
+    settings.build_router(
+        store, llm, guards, env.settings_password, login_throttle
+    )
+)
 app.include_router(copilot.build_router(copilot_service, repository, guards))
 app.include_router(
     employee.build_router(
-        employee_service, guards, session_secret, env.session_days
+        employee_service, guards, session_secret, env.session_days,
+        login_throttle,
     )
 )
 # The manager's side of constraint requests. A separate router so that every
