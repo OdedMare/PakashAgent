@@ -104,7 +104,14 @@ class ManagerChatService:
                     name, arguments = call.get("tool"), call.get("arguments") or {}
                     if name in TOOL_DESCRIPTIONS and not arguments.get("schedule_id") \
                             and not arguments.get("day") and not arguments.get("slot_date"):
-                        arguments = dict(arguments, schedule_id=schedule_id)
+                        if schedule_id:
+                            arguments = dict(arguments, schedule_id=schedule_id)
+                        elif name in ("read_period", "employee_state", "coverage_gaps", "publish_readiness"):
+                            if not context.get("visible_week"):
+                                results.append({"tool": name, "ok": False, "error": "יש לבחור שבוע או לציין תאריך"})
+                                steps.append({"tool": name, "ok": False})
+                                continue
+                            arguments = dict(arguments, day=context["visible_week"])
                     result = self._run_tool(team_id, name, arguments, schedule_id)
                     results.append(result)
                     steps.append({"tool": name, "ok": result.get("ok", True)})
@@ -209,6 +216,8 @@ class ManagerChatService:
             "snapshot": _fingerprint(state), "operations": [], "constraints": [],
             "warnings": [], "exceptions": (turn.get("exceptions") or [])[:20],
         }
+        if schedule and kind != "profile":
+            plan.update(starts_on=iso(schedule["starts_on"]), ends_on=iso(schedule["ends_on"]))
         if kind == "profile":
             try:
                 patch = json.loads(turn.get("profile_patch_json") or "{}")

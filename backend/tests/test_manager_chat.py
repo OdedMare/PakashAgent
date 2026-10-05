@@ -206,6 +206,18 @@ def test_workload_is_computed_by_tool_and_tool_results_feed_final_answer():
     assert json.loads(llm.calls[-1]["user"])["results"][0]["basis"] == "scheduled"
 
 
+def test_tool_on_empty_visible_week_cannot_report_todays_schedule():
+    calls = turn()
+    calls["tool_calls"] = [dict(tool="read_period", arguments={})]
+    repo, llm, service, chat_id, _ = setup([calls, turn()])
+    message_id = service.start_turn(TEAM, "manager-a", chat_id, {
+        "content": "מי עובד כאן?", "request_id": "blank-week", "schedule_id": "",
+        "visible_week": "2026-10-18",
+    })
+    service.reply(TEAM, "manager-a", chat_id, message_id)
+    assert json.loads(llm.calls[-1]["user"])["results"][0]["found"] is False
+
+
 def test_generate_upcoming_week_previews_real_assignments_without_touching_current_week():
     proposal = turn("generate")
     proposal.update(starts_on="2026-10-11", ends_on="2026-10-17")

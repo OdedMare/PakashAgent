@@ -114,5 +114,6 @@ class FindReplacements(Tool):
             # On a closure the replacement comes from the group already in,
             # and an answer that did not say so would read as a free choice.
             "closure": closure_of(profile, date, shift),
-            "ranked_by": _RANKED_BY,
+            "ranked_by": ("לפי מספר החריגות ואז לפי השעות המצטברות; כל חריגה דורשת אישור מפורש"
+                          if any(row.get("requires_exception") for row in candidates) else _RANKED_BY),
         }
