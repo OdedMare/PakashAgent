@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 
-from app.common.errors import AgentError, AuthError, ConflictError
+from app.common.errors.errors import AgentError, AuthError, ConflictError
 from app.dal.repository.base import RepositoryBase, new_id
 from app.dal.repository.request_status import (
     MIN_PASSCODE,

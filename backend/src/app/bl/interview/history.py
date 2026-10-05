@@ -3,7 +3,7 @@
 from typing import Dict, List
 
 from app.bl.interview.text import MAX_MESSAGE_CHARS
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 # The interview is bounded at roughly the topic count, so history is not
 # windowed for a context budget — this is a guard against a pathological

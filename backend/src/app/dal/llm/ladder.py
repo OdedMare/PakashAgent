@@ -12,7 +12,7 @@ from typing import List
 
 from openai import APITimeoutError, BadRequestError
 
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 from app.dal.llm.completion_retry import create_with_retry
 from app.dal.llm.message_merger import merge_system_into_user
 from app.dal.llm.model_slots import ModelBusy

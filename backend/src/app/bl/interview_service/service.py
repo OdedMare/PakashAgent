@@ -7,7 +7,7 @@ from app.bl.interview import IntroInterview, empty_draft
 from app.bl.interview_service import responses
 from app.bl.interview_service.history import TurnHistory
 from app.bl.interview_service.seeding import completeness, seeded_state
-from app.common.errors import AgentError, ConflictError
+from app.common.errors.errors import AgentError, ConflictError
 
 _log = logging.getLogger("pakash.interview")
 _GENERIC_FAILURE = "יצירת השאלה נכשלה. אפשר לנסות שוב."

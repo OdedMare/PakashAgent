@@ -17,7 +17,7 @@ import logging
 import pytest
 from fastapi.testclient import TestClient
 
-from app.common.errors import AgentError, NotFoundError
+from app.common.errors.errors import AgentError, NotFoundError
 
 import app.main as main
 

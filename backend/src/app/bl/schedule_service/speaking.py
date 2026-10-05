@@ -3,8 +3,8 @@
 from typing import Callable, List, Optional
 
 from app.bl.audit import fairness
-from app.bl.briefing import TRIGGER_OPENED
-from app.bl.export import as_workbook, filename
+from app.bl.briefing.briefing import TRIGGER_OPENED
+from app.bl.export.export import as_workbook, filename
 from app.bl.schedule_service import rows
 from app.bl.schedule_service.constants import RECENT_CHANGES
 from app.bl.schedule_service.context import ScheduleContext

@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 from app.bl.learn.values import bounded
 from app.bl.prompts import load
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 _MAX_RULE_CHARS = 400
 _CONFIDENCES = ("high", "medium", "low")

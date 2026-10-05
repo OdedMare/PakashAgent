@@ -1,7 +1,7 @@
 import pytest
 
 from app.bl.profile_service import ProfileService
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 
 class _Repo:

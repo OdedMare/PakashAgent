@@ -21,7 +21,7 @@ from typing import List, Optional
 
 from psycopg.types.json import Jsonb
 
-from app.common.errors import AuthError, NotFoundError
+from app.common.errors.errors import AuthError, NotFoundError
 from app.dal.database.postgres import connect
 from app.dal.repository.base import RepositoryBase, new_id
 

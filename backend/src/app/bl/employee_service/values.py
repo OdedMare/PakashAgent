@@ -2,7 +2,7 @@
 
 from typing import Any, List, Optional
 
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 # Logged against the change log when a manager rules on a request, so an
 # approval is traceable in the same place every other change is (D4).

@@ -6,15 +6,15 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api.dependencies import Guards
+from app.api.dependencies.dependencies import Guards
 from app.api.routers import settings as settings_router
 from app.common.config.settings import Settings
-from app.common.errors import AgentError, AppError
+from app.common.errors.errors import AgentError, AppError
 from app.common.runtime_settings.normalizers import MASKED_SECRET
 from app.common.runtime_settings.runtime_settings_store import (
     RuntimeSettingsStore,
 )
-from app.common.sessions import COOKIE_NAME, ROLE_BOSS, issue
+from app.common.sessions.sessions import COOKIE_NAME, ROLE_BOSS, issue
 
 SECRET = "test-secret"
 

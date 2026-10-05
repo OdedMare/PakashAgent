@@ -3,7 +3,7 @@
 from typing import List
 
 from app.bl.employee_service.values import roster_names
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 
 class IdentityService:

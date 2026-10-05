@@ -3,7 +3,7 @@
 from typing import Any, List
 
 from app.bl.profile_service.validation import named_rows, text, valid_time
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 _SHIFT_TYPES = ("regular", "overlap", "on_call")
 

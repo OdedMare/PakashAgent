@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from psycopg.types.json import Jsonb
 
-from app.common.errors import AgentError, ConflictError
+from app.common.errors.errors import AgentError, ConflictError
 from app.dal.database.postgres import connect
 from app.dal.repository.base import RepositoryBase, new_id
 

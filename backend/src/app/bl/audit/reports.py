@@ -10,7 +10,7 @@ from typing import Dict, List, Optional
 
 from app.bl.audit.roster import index_shifts, iso_week, rows_of
 from app.bl.audit.values import person_name, text
-from app.bl.hebrew_calendar import hebrew_weekday
+from app.bl.shared.hebrew_calendar import hebrew_weekday
 
 # Friday and Saturday: the Israeli weekend, matching how the interview
 # collects a shift's `days` and how the real files are written.

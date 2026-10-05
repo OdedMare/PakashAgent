@@ -10,11 +10,11 @@ import signal
 import threading
 import time
 
-from app.bl.copilot import CopilotService
+from app.bl.copilot.copilot import CopilotService
 from app.bl.interview_service import InterviewService
 from app.bl.schedule_service import ScheduleService
 from app.common.config.settings import Settings
-from app.common.logging_setup import configure_logging
+from app.common.logging_setup.logging_setup import configure_logging
 from app.common.runtime_settings.runtime_settings_store import RuntimeSettingsStore
 from app.dal.llm.openai_client import OpenAIJsonClient
 from app.dal.repository import Repository

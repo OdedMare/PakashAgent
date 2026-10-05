@@ -26,11 +26,11 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from app.api.dependencies import Guards
+from app.api.dependencies.dependencies import Guards
 from app.api.routers import employee as employee_router
 from app.bl.employee_service import EmployeeService
-from app.common.errors import AppError
-from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
+from app.common.errors.errors import AppError
+from app.common.sessions.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 from tests.test_employee_api import (
     DANA, MORNING, OTHER_TEAM, SECRET, TEAM, YOSSI,
     _FakeIdentities, _FakeSchedules,

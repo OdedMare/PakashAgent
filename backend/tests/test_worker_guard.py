@@ -16,6 +16,9 @@ def _boot(env_extra):
 
     env = dict(os.environ)
     env.pop("PAKASH_SESSION_SECRET", None)
+    # `app` lives under src/; the child interpreter does not inherit pytest's path.
+    src = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src")
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, [src, env.get("PYTHONPATH")]))
     env.update(env_extra)
     return subprocess.run(
         [sys.executable, "-c", "import app.main"],

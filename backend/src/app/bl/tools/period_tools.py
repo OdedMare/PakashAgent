@@ -11,7 +11,7 @@ from app.bl.tools.values import (
     audit_assignments, eligible, employees, iso, period_view, shifts, text,
     window,
 )
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 
 class Tool:

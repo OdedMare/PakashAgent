@@ -8,7 +8,7 @@ but still only a candidate until the manager says so.
 
 from typing import Any, Dict, List
 
-from app.bl.hebrew_calendar import hebrew_weekday
+from app.bl.shared.hebrew_calendar import hebrew_weekday
 from app.bl.learn.values import bounded, bounded_rows, date_of, iso_or_blank, text
 
 # Two is deliberately low: the second time a manager makes the same

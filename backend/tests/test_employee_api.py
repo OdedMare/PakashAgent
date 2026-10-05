@@ -22,13 +22,13 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from app.api.dependencies import Guards
+from app.api.dependencies.dependencies import Guards
 from app.api.routers import employee as employee_router
 from app.bl.employee_service import EmployeeService
-from app.common.errors import (
+from app.common.errors.errors import (
     AgentError, AppError, AuthError, ConflictError, NotFoundError,
 )
-from app.common.sessions import (
+from app.common.sessions.sessions import (
     COOKIE_NAME, ROLE_BOSS, ROLE_EMPLOYEE, ROLE_MEMBER, issue,
 )
 from app.dal.repository.teams import hash_password, verify_password

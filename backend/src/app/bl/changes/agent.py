@@ -8,9 +8,9 @@ from app.bl import rotation
 from app.bl.changes.proposal import build_proposal
 from app.bl.changes.schema import CHANGE_RESPONSE_SCHEMA
 from app.bl.changes.values import bounded, date_of, dict_rows, json_default
-from app.bl.clarification import resume
+from app.bl.shared.clarification import resume
 from app.bl.prompts import load
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 
 class ChangeAgent:

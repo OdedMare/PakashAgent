@@ -7,7 +7,7 @@ from app.bl.placement import check as check_placement
 from app.bl.schedule_service import rows
 from app.bl.schedule_service.constants import RECENT_CHANGES
 from app.bl.schedule_service.context import ScheduleContext
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 
 class ScheduleReader:

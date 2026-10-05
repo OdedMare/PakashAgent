@@ -10,7 +10,7 @@ from typing import List
 from app.bl.employee_service.values import (
     ACTION_SWAP_REJECTED, find_assignment, iso_date, require_reason, text,
 )
-from app.common.errors import AgentError, AuthError
+from app.common.errors.errors import AgentError, AuthError
 from app.dal.repository.identities import (
     STATUS_APPROVED, STATUS_AWAITING, STATUS_PENDING, STATUS_REJECTED,
 )

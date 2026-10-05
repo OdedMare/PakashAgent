@@ -11,7 +11,7 @@ remember and in what order -- which is why they, and not those, own the
 repository. Every method takes the team from the caller's signed session.
 """
 
-from app.bl.briefing import BriefingAgent
+from app.bl.briefing.briefing import BriefingAgent
 from app.bl.changes import ChangeAgent
 from app.bl.learn import RuleLearner
 from app.bl.planner import PlanningAgent

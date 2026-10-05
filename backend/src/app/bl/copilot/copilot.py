@@ -3,7 +3,7 @@
 import datetime
 from typing import List, Optional
 
-from app.common.errors import ConflictError
+from app.common.errors.errors import ConflictError
 from app.dal.repository.copilot import (
     ACTION_FOLLOW_UP,
     ACTION_PROFILE_REVIEW,

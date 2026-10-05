@@ -7,7 +7,7 @@ never imports psycopg (backend/app/dal/CLAUDE.md).
 import uuid
 from typing import List
 
-from app.common.errors import NotFoundError
+from app.common.errors.errors import NotFoundError
 from app.dal.database.postgres import connect
 
 

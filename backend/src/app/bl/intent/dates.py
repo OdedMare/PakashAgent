@@ -5,7 +5,7 @@ import re
 from typing import Any, Optional
 
 from app.bl.intent.vocabulary import WEEKDAYS
-from app.common.time_context import israel_today
+from app.common.time_context.time_context import israel_today
 
 _RELATIVE = (("מחרתיים", 2), ("מחר", 1), ("אתמול", -1), ("היום", 0))
 

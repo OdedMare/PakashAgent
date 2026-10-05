@@ -18,7 +18,7 @@ RUN printf '%s\n' \
       > /etc/apt/apt.conf.d/99no-check-valid-until
 
 COPY pyproject.toml ./
-COPY app ./app
+COPY src ./src
 
 # gcc is not optional on 3.8: `pydantic-settings` pulls `backports.zoneinfo`,
 # which ships no aarch64 wheel for this interpreter and compiles from source.

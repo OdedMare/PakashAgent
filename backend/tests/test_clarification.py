@@ -24,7 +24,7 @@ import pytest
 from app.bl.changes import ChangeAgent, OP_ASSIGN, OP_REMOVE, OP_SWAP
 from app.bl.planner import PlanningAgent
 from app.bl.tools import ScheduleTools, resolve_employee
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 MORNING = "בוקר"
 EVENING = "צהריים"

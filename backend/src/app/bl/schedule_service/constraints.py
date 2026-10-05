@@ -5,7 +5,7 @@ from typing import Any, List, Optional
 
 from app.bl.schedule_service.constants import ACTION_CONSTRAINT
 from app.bl.schedule_service.rows import text
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 from app.dal.repository.schedules import SOURCE_MANAGER
 
 

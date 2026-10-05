@@ -11,7 +11,7 @@ from app.bl.schedule_service.operations import (
     preview,
 )
 from app.bl.schedule_service.rows import find_assignment
-from app.common.errors import AgentError, NotFoundError
+from app.common.errors.errors import AgentError, NotFoundError
 
 
 class ChangeService:

@@ -7,8 +7,8 @@ not, and what a freshly created workspace inherits.
 
 from typing import List
 
-from app.common.errors import AgentError, ConflictError
-from app.common.sessions import ROLE_BOSS, ROLE_MEMBER
+from app.common.errors.errors import AgentError, ConflictError
+from app.common.sessions.sessions import ROLE_BOSS, ROLE_MEMBER
 
 # Short enough to type on a phone, long enough not to fall to a guess in the
 # time it takes anyone to notice. The boss picks it once and shares it with

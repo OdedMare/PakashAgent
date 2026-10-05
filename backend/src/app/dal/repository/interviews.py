@@ -14,7 +14,7 @@ from typing import List, Optional
 
 from psycopg.types.json import Jsonb
 
-from app.common.errors import ConflictError
+from app.common.errors.errors import ConflictError
 from app.dal.database.postgres import connect
 from app.dal.repository.base import RepositoryBase, new_id
 

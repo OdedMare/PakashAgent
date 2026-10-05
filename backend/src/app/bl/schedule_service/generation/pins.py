@@ -10,7 +10,7 @@ from typing import Iterable, List
 
 from app.bl.schedule_service.constants import PINNED_REASON
 from app.bl.schedule_service.rows import employees, iso, text
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 from app.dal.repository.schedules import ASSIGNED_BY_AGENT, ASSIGNED_BY_MANAGER
 
 

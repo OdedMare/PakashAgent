@@ -18,7 +18,7 @@ from app.bl.scheduler.payload import (
 from app.bl.scheduler.slots import build_slots, chunks
 from app.bl.scheduler.span import MAX_HISTORY_ROWS, SpanGenerator
 from app.bl.scheduler.values import bounded, bounded_rows, lines
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 
 class Scheduler:

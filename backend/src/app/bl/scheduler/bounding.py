@@ -13,7 +13,7 @@ from typing import Any, List, Optional
 from app.bl.audit import constraint_conflicts
 from app.bl.scheduler.rotation_rows import ROTATION_SOURCES
 from app.bl.scheduler.values import bounded, parse_date
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 PINNED_REASON = "שיבוץ חובה שנבחר על ידי המנהל בעת בניית הסידור"
 

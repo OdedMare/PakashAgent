@@ -7,7 +7,7 @@ from app.bl.learn import observe
 from app.bl.schedule_service.constants import ACTION_IMPORTED, IMPORTED_REASON
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.rows import iso, slot_index, text
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 from app.dal.repository.schedules import ASSIGNED_BY_IMPORT, SOURCE_MANAGER
 
 

@@ -4,7 +4,7 @@ import datetime
 
 import pytest
 
-from app.common.time_context import agent_time_context, israel_datetime, israel_today
+from app.common.time_context.time_context import agent_time_context, israel_datetime, israel_today
 
 
 UTC = datetime.timezone.utc

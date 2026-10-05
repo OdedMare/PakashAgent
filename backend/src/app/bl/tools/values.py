@@ -2,7 +2,7 @@
 
 from typing import Any, List, Optional
 
-from app.common.time_context import israel_today
+from app.common.time_context.time_context import israel_today
 
 
 def text(value: Any) -> str:

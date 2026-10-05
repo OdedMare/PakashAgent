@@ -21,7 +21,7 @@ import json
 import pytest
 
 from app.bl.schedule_service import ScheduleService
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 from app.dal.repository.schedules import (
     PREFERENCE_SUGGESTED,
     SOURCE_AGENT,

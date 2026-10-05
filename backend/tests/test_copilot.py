@@ -2,7 +2,7 @@
 
 import datetime
 
-from app.bl.copilot import CopilotService
+from app.bl.copilot.copilot import CopilotService
 
 
 class _Repo:

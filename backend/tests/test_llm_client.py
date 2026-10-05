@@ -9,7 +9,7 @@ import httpx
 import pytest
 from openai import BadRequestError
 
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 from app.dal.llm.json_response_parser import extract_json
 from app.dal.llm.message_merger import merge_system_into_user
 from app.dal.llm.model_id_extractor import extract_model_ids

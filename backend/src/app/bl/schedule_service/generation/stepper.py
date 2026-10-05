@@ -13,7 +13,7 @@ from app.bl.schedule_service.generation.pins import (
 )
 from app.bl.schedule_service.profile_gate import ProfileGate
 from app.bl.schedule_service.rows import iso
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 
 class GenerationStepper:

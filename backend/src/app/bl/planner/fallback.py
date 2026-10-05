@@ -11,7 +11,7 @@ from typing import Callable, Dict, Optional
 from app.bl import intent as intent_reader
 from app.bl.planner import shaping
 from app.bl.planner.fallback_answers import FallbackAnswers
-from app.common.time_context import israel_today
+from app.common.time_context.time_context import israel_today
 
 # Lists what the reader *can* do rather than apologising: a manager told only
 # "I did not understand" has no way to find the sentence that would have worked.

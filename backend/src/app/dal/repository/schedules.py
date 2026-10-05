@@ -19,7 +19,7 @@ Two invariants are enforced here rather than left to callers:
 import datetime
 from typing import Optional
 
-from app.common.time_context import israel_today
+from app.common.time_context.time_context import israel_today
 from app.dal.repository.assignments import AssignmentRepository
 from app.dal.repository.periods import PeriodRepository
 from app.dal.repository.records import (

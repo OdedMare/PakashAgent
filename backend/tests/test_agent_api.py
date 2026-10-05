@@ -21,11 +21,11 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from app.api.dependencies import Guards
+from app.api.dependencies.dependencies import Guards
 from app.api.routers import schedules
 from app.bl.schedule_service import ScheduleService
-from app.common.errors import AppError, NotFoundError
-from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
+from app.common.errors.errors import AppError, NotFoundError
+from app.common.sessions.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 from app.dal.repository.schedules import (
     PREFERENCE_ACTIVE,
     PREFERENCE_SUGGESTED,
@@ -101,7 +101,7 @@ class _NoModel:
     """No model configured. Every new route must still answer."""
 
     def complete_json(self, *args, **kwargs):
-        from app.common.errors import AgentError
+        from app.common.errors.errors import AgentError
         raise AgentError("לא הוגדר מפתח API או שרת תואם OpenAI")
 
 

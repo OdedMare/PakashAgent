@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, Response
 
 from app.api.contracts import ClaimRequest, EmployeeLoginRequest
-from app.common.sessions import COOKIE_NAME, ROLE_EMPLOYEE, issue
+from app.common.sessions.sessions import COOKIE_NAME, ROLE_EMPLOYEE, issue
 
 
 class IdentityRoutes:

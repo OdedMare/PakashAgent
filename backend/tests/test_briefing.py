@@ -11,13 +11,13 @@ import json
 
 import pytest
 
-from app.bl.briefing import (
+from app.bl.briefing.briefing import (
     BriefingAgent,
     TRIGGER_OPENED,
     TRIGGER_PERIODIC,
     TRIGGER_PUBLISHING,
 )
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 MORNING = "בוקר"
 EVENING = "צהריים"

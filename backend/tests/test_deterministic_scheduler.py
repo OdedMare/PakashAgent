@@ -6,7 +6,7 @@ The model assigns (D3); this engine runs only when it cannot be reached.
 import pytest
 
 from app.bl.deterministic_scheduler import generate_day
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 
 SHIFT = "בוקר"

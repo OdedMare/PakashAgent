@@ -3,7 +3,7 @@
 from typing import Any, List
 
 from app.bl.profile_service.validation import named_rows, text, text_list
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 _SERVICE_TYPES = ("standard", "overlap", "reserve")
 _EXIT_PATTERNS = ("round", "triplet", "hamshushim", "shushim")

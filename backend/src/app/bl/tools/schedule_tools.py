@@ -15,7 +15,7 @@ from app.bl.tools.placement_tools import FindReplacements, ValidatePlacement
 from app.bl.tools.profile_tools import ProfileGaps
 from app.bl.tools.reads import ToolReads
 from app.bl.tools.values import text
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 _DATE_ARGUMENTS = ("day", "slot_date", "starts_on", "ends_on")
 

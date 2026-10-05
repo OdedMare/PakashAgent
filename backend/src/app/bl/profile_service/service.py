@@ -7,7 +7,7 @@ from app.bl.profile_service import roster
 from app.bl.profile_service import shifts as shift_rules
 from app.bl.profile_service import workplace as workplace_rules
 from app.bl.profile_service.validation import keep_existing_names, text, text_list
-from app.common.errors import AgentError, NotFoundError
+from app.common.errors.errors import AgentError, NotFoundError
 
 _TEXT_SECTIONS = (
     "availability_process", "constraint_deadline", "casual_worker_policy",

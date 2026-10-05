@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 from app.dal.repository.schedules import (
     PREFERENCE_ACTIVE,
     PREFERENCE_GENERAL,

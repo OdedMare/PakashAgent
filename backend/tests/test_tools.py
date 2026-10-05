@@ -30,7 +30,7 @@ from app.bl.tools import (
     TOOL_VALIDATE_PLACEMENT,
     ScheduleTools,
 )
-from app.common.errors import NotFoundError
+from app.common.errors.errors import NotFoundError
 
 TEAM = "team-a"
 OTHER_TEAM = "team-b"

@@ -7,21 +7,21 @@ import secrets
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from app.api.dependencies import Guards
+from app.api.dependencies.dependencies import Guards
 from app.api.routers import (
     copilot, employee, health, interview, profile, schedules, settings,
     workspace,
 )
-from app.bl.copilot import CopilotService
+from app.bl.copilot.copilot import CopilotService
 from app.bl.employee_service import EmployeeService
 from app.bl.interview_service import InterviewService
 from app.bl.profile_service import ProfileService
 from app.bl.schedule_service import ScheduleService
-from app.bl.workspace_service import WorkspaceService
+from app.bl.workspace_service.service import WorkspaceService
 from app.common.config.settings import Settings
-from app.common.errors import AppError, error_payload
-from app.common.logging_setup import configure_logging
-from app.common.sessions import generate_secret
+from app.common.errors.errors import AppError, error_payload
+from app.common.logging_setup.logging_setup import configure_logging
+from app.common.sessions.sessions import generate_secret
 from app.common.runtime_settings.runtime_settings_store import (
     RuntimeSettingsStore,
 )

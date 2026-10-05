@@ -25,7 +25,7 @@ from app.bl.tools import (
     TOOL_FIND_REPLACEMENTS,
     ScheduleTools,
 )
-from app.common.errors import AgentError, NotFoundError
+from app.common.errors.errors import AgentError, NotFoundError
 
 TEAM = "team-a"
 

@@ -7,12 +7,12 @@ generating a calendar. It assigns people into this grid.
 
 from typing import Dict, List
 
-from app.bl.hebrew_calendar import hebrew_weekday, runs_on
+from app.bl.shared.hebrew_calendar import hebrew_weekday, runs_on
 from app.bl.scheduler.values import (
     bounded, dates_between, named, parse_date, role_list,
 )
 from app.common.config.settings import MODE_DAY, MODE_WEEK
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 # Checkpointed daily generation makes long planning horizons safe to resume.
 # One leap year is a useful product ceiling; beyond that belongs in a separate

@@ -15,7 +15,7 @@ import pytest
 from app.bl.interview import (
     CORE_TOPIC_IDS, INTERVIEW_TOPICS, IntroInterview, empty_draft,
 )
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 
 class _FakeLlm:

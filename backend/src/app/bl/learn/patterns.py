@@ -8,7 +8,7 @@ mean Saturday is closed, or that the sheet only covered weekdays.
 
 from typing import Any, Dict, List, Optional
 
-from app.bl.hebrew_calendar import HEBREW_WEEKDAYS, hebrew_weekday
+from app.bl.shared.hebrew_calendar import HEBREW_WEEKDAYS, hebrew_weekday
 from app.bl.learn.values import bounded_rows, date_of, text
 
 # A person must appear this many times before their record is read as a

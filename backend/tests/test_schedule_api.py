@@ -20,11 +20,11 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from app.api.dependencies import Guards
+from app.api.dependencies.dependencies import Guards
 from app.api.routers import schedules
 from app.bl.schedule_service import ScheduleService
-from app.common.errors import AgentError, AppError, NotFoundError, error_payload
-from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
+from app.common.errors.errors import AgentError, AppError, NotFoundError, error_payload
+from app.common.sessions.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 
 TEAM = "team-a"
 OTHER_TEAM = "team-b"

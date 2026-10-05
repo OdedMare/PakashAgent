@@ -14,7 +14,7 @@ from app.bl.deterministic_scheduler.rows import (
     assignment, eligible, employees, roles, same_slot, text, unique,
 )
 from app.bl.scheduler import effective_availability
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 _BLOCKING_CODES = frozenset({
     CONSECUTIVE, CROSS_ROTATION, DOUBLE_BOOKED, OVER_HOURS, SHORT_REST, UNAVAILABLE,

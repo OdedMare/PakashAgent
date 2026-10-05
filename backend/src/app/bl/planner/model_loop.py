@@ -7,7 +7,7 @@ from app.bl.planner import shaping
 from app.bl.planner.schema import PLANNER_RESPONSE_SCHEMA
 from app.bl.prompts import load
 from app.bl.tools import TOOL_DESCRIPTIONS, TOOL_NAMES
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 # How many model turns one question may cost. Three is enough for the deepest
 # real chain -- find the period, find the person's shift in it, find who could

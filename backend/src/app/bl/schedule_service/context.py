@@ -12,7 +12,7 @@ from app.bl import rotation
 from app.bl.audit import audit
 from app.bl.scheduler import effective_availability
 from app.bl.schedule_service import rows
-from app.common.errors import NotFoundError
+from app.common.errors.errors import NotFoundError
 from app.dal.repository.schedules import PREFERENCE_ACTIVE
 
 

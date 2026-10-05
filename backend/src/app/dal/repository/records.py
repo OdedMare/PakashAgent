@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 
-from app.common.errors import AgentError, NotFoundError
+from app.common.errors.errors import AgentError, NotFoundError
 from app.dal.repository.base import RepositoryBase, new_id
 from app.dal.repository.schedule_vocabulary import (
     PREFERENCE_ACTIVE, PREFERENCE_GENERAL, PREFERENCE_KINDS,

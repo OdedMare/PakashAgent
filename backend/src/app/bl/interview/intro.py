@@ -10,7 +10,7 @@ from app.bl.interview.text import as_dict, bounded, lines
 from app.bl.interview.topics import CORE_TOPIC_IDS, INTERVIEW_TOPICS
 from app.bl.interview.turn import shape_turn
 from app.bl.prompts import load
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 # How much of the conversation the model reads back. The draft and the state
 # lists carry the settled *facts*, but neither records which questions were

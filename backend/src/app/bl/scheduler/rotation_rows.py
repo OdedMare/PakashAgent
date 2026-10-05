@@ -10,7 +10,7 @@ from typing import Dict, List, Optional
 
 from app.bl import rotation as rotation_cycle
 from app.bl.audit import constraint_conflicts
-from app.bl.hebrew_calendar import weekday_key
+from app.bl.shared.hebrew_calendar import weekday_key
 from app.bl.scheduler.slots import build_slots
 from app.bl.scheduler.values import bounded
 

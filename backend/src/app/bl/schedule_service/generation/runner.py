@@ -16,7 +16,7 @@ from app.bl.schedule_service.context import ScheduleContext, progress_of
 from app.bl.schedule_service.generation.job import GenerationJob
 from app.bl.schedule_service.generation.stepper import GenerationStepper
 from app.bl.schedule_service.rows import iso, now_stamp
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 _log = logging.getLogger("pakash.schedule")
 

@@ -11,14 +11,14 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.api.dependencies import Guards
+from app.api.dependencies.dependencies import Guards
 from app.api.routers import health, interview
 from app.bl.interview import (
     FINISH_ANSWER, INTERVIEW_TOPICS, empty_draft,
 )
 from app.bl.interview_service import InterviewService
-from app.common.errors import AgentError, AppError, ConflictError, NotFoundError
-from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
+from app.common.errors.errors import AgentError, AppError, ConflictError, NotFoundError
+from app.common.sessions.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 
 # The team every test authenticates into. Its value is arbitrary; what matters
 # is that the routes now take it from the cookie rather than the request.

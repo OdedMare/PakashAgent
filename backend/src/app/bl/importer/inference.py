@@ -8,7 +8,7 @@ from app.bl.importer.headers import MAX_HEADER_SCAN
 from app.bl.importer.interpretation import Interpretation
 from app.bl.importer.layouts import READERS
 from app.bl.importer.vocabulary import ShiftVocabulary
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 # How close a runner-up layout's score must be to call the sheet ambiguous.
 _AMBIGUITY_RATIO = 0.85

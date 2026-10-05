@@ -3,7 +3,7 @@
 import datetime
 from typing import Any, List
 
-from app.bl.hebrew_calendar import hebrew_weekday, weekday_key
+from app.bl.shared.hebrew_calendar import hebrew_weekday, weekday_key
 from app.bl.scheduler.rotation_rows import (
     closure_availability, overridden, rotation_availability,
 )

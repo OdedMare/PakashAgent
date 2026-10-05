@@ -11,7 +11,7 @@ import json
 import pytest
 
 from app.bl.learn import RuleLearner, observe, observe_corrections
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 MORNING = "בוקר"
 EVENING = "צהריים"

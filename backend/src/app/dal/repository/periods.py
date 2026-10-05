@@ -4,8 +4,8 @@ from typing import List, Optional
 
 from psycopg.types.json import Jsonb
 
-from app.common.errors import AgentError
-from app.common.time_context import israel_today
+from app.common.errors.errors import AgentError
+from app.common.time_context.time_context import israel_today
 from app.dal.database.postgres import connect
 from app.dal.repository.base import RepositoryBase, new_id
 

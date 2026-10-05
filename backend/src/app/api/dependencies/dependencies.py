@@ -9,8 +9,8 @@ new route added under the wrong prefix would silently inherit the wrong one.
 from fastapi import Cookie, Depends
 from typing import Optional
 
-from app.common.errors import AuthError
-from app.common.sessions import (
+from app.common.errors.errors import AuthError
+from app.common.sessions.sessions import (
     COOKIE_NAME, ROLE_BOSS, ROLE_EMPLOYEE, read,
 )
 

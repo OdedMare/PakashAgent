@@ -11,7 +11,7 @@ from app.bl.schedule_service.patterns import (
     worded_by_subject,
 )
 from app.bl.schedule_service.rows import text
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 from app.dal.repository.schedules import (
     PREFERENCE_EMPLOYEE,
     PREFERENCE_GENERAL,

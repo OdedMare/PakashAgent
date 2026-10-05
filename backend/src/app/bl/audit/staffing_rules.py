@@ -13,7 +13,7 @@ from typing import Dict, Iterator, List, Optional
 
 from app.bl.audit.roster import index_people
 from app.bl.audit.values import slot_date, text
-from app.bl.hebrew_calendar import hebrew_weekday, runs_on
+from app.bl.shared.hebrew_calendar import hebrew_weekday, runs_on
 
 
 def counts_toward_staffing(person: Optional[dict], profile: Optional[dict]) -> bool:

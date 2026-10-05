@@ -31,7 +31,7 @@ import json
 from typing import Any, List, Optional
 
 from app.bl.prompts import load
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 _MAX_TEXT_CHARS = 4000
 # Four is a screenful the manager actually reads. A briefing that lists

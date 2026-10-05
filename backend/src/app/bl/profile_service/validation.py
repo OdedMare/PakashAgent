@@ -2,7 +2,7 @@
 
 from typing import Any, List
 
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 _MAX_TEXT = 200
 

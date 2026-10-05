@@ -13,7 +13,7 @@ from app.api.contracts import (
     TeamView,
     Workspace,
 )
-from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
+from app.common.sessions.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 
 
 class WorkspaceRoutes:

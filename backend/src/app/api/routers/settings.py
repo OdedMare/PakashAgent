@@ -17,7 +17,7 @@ store is what has to become per-team.
 from fastapi import APIRouter, Depends
 
 from app.api.contracts import ModelsProbeRequest
-from app.common.errors import AppError
+from app.common.errors.errors import AppError
 
 
 def build_router(store, llm, guards) -> APIRouter:

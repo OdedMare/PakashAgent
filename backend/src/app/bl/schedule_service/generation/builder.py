@@ -10,7 +10,7 @@ from app.bl.schedule_service.generation.job import GenerationJob
 from app.bl.schedule_service.generation.pins import required_rows
 from app.bl.schedule_service.profile_gate import ProfileGate
 from app.bl.schedule_service.rows import iso, slot_index
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 from app.dal.repository.schedules import ASSIGNED_BY_MANAGER, week_bounds
 
 

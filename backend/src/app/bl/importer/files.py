@@ -6,7 +6,7 @@ from typing import List, Tuple
 from xml.etree import ElementTree
 
 from app.bl.importer.cells import text
-from app.common.errors import AgentError
+from app.common.errors.errors import AgentError
 
 # A sheet bigger than this is not a shift schedule. Bounded because every
 # cell is visited several times during inference.

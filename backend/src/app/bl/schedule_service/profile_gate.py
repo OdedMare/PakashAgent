@@ -1,7 +1,7 @@
 """Whether a profile can carry a grid, and what to say when it cannot."""
 
 from app.bl.schedule_service.rows import has_shifts
-from app.common.errors import AgentError, ProfileIncompleteError
+from app.common.errors.errors import AgentError, ProfileIncompleteError
 
 
 class ProfileGate:
