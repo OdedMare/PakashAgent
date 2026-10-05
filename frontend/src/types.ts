@@ -646,7 +646,7 @@ export interface Proposal {
  * ordinary propose-then-confirm path still runs.
  */
 
-export type BriefingKind =
+type BriefingKind =
   | "risk"
   | "fairness"
   | "gap"
