@@ -376,7 +376,6 @@ select.settings-input {
   min-width: 120px;
 }
 
-.loading-line,
 .form-error,
 .form-success {
   display: flex;
@@ -384,11 +383,6 @@ select.settings-input {
   gap: 7px;
   margin: 0;
   font-size: 12px;
-}
-
-.loading-line {
-  padding: 28px 22px;
-  color: var(--text-muted);
 }
 
 .form-error {
