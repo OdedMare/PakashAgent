@@ -8,7 +8,6 @@
 .manager-drawer[hidden], .manager-drawer-backdrop[hidden] { display: none; }
 .manager-drawer-content.is-conversation { padding: 0; gap: 0; overflow: hidden; }
 .manager-drawer-content.is-conversation > [hidden] { display: none; }
-.manager-drawer-content.is-conversation > .simulation-panel { flex: 0 0 auto; max-height: 30%; overflow: auto; }
 .manager-chat-resizer {
   position: absolute; inset-inline-start: -4px; top: 0; bottom: 0;
   width: 9px; cursor: col-resize; touch-action: none; z-index: 4;

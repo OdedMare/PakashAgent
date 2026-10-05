@@ -75,8 +75,8 @@ export function Management({
   autoGenerate?: boolean;
   onAutoGenerateStarted?: () => void;
 }) {
-  // The saved conversation replaces the old, unrendered automatic briefings.
-  const state = useManagement(false);
+  // The manager chat is the only agent surface; there are no automatic briefings.
+  const state = useManagement();
   const generate = state.generate;
   const { theme, toggle } = useTheme();
   // The board stays put. Management tools open beside it, so the manager
@@ -113,16 +113,7 @@ export function Management({
   }, []);
   // A focus day belongs to the week it was opened from. Paging to another
   // week drops it, so the agent is never told about a day off screen.
-  const visibleWeek = state.focusedWeek;
-  useEffect(() => {
-    if (!visibleWeek) return;
-    const start = new Date(`${visibleWeek}T00:00:00`).getTime();
-    setFocusDay((previous) => {
-      if (!previous.date) return previous;
-      const offset = (new Date(`${previous.date}T00:00:00`).getTime() - start) / 86_400_000;
-      return offset >= 0 && offset < 7 ? previous : { date: "", n: previous.n };
-    });
-  }, [visibleWeek]);
+  const focusDate = focusDay.date && inWeek(focusDay.date, state.focusedWeek) ? focusDay.date : "";
   const [copilotPending, setCopilotPending] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -604,7 +595,7 @@ export function Management({
             workspaceId={workspace.id}
             scheduleId={state.focusedScheduleId}
             visibleWeek={state.focusedWeek}
-            focusDate={focusDay.date}
+            focusDate={focusDate}
             focusKey={focusDay.n}
             onClearFocus={() => setFocusDay((previous) => ({ date: "", n: previous.n }))}
             employees={overview?.employees.map((person) => String(person.name ?? "")).filter(Boolean) ?? []}
@@ -694,6 +685,14 @@ export function Management({
 }
 
 type ManagerView = "board" | "team" | "analytics";
+
+/** Whether `date` falls in the seven days starting `weekStart`. An unknown
+ *  week keeps the day: nothing on screen contradicts it yet. */
+function inWeek(date: string, weekStart: string): boolean {
+  if (!weekStart) return true;
+  const offset = (new Date(`${date}T00:00:00`).getTime() - new Date(`${weekStart}T00:00:00`).getTime()) / 86_400_000;
+  return offset >= 0 && offset < 7;
+}
 type ManagerSection = "agent" | "requests" | "team" | "overview";
 
 function ManagerAnalytics({
