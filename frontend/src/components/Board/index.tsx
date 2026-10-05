@@ -42,7 +42,6 @@ import { ConfirmRemoval } from "./ConfirmRemoval";
 import { CoverageBar } from "./CoverageBar";
 import { FilterBar } from "./FilterBar";
 import { GenerateDialog } from "./GenerateDialog";
-import { GenerateDayDialog } from "./GenerateDayDialog";
 import { fillsASeat, rotationLabel } from "./person";
 import { orderByHours } from "./shiftOrder";
 import { EditorTarget, ShiftEditor } from "./ShiftEditor";
@@ -85,7 +84,7 @@ export function Board({
   busy,
   generating,
   onGenerate,
-  onGenerateDay,
+  onOpenDay,
   onOpenBlank,
   onAssign,
   onUnassign,
@@ -116,11 +115,10 @@ export function Board({
     instructions?: string;
     required_assignments?: RequiredAssignment[];
   }) => void;
-  onGenerateDay: (input: {
-    schedule_id: string;
-    date: string;
-    instructions?: string;
-  }) => void;
+  /** Open the agent conversation focused on one day, to give it
+   *  instructions for that date. The chat is the only place the agent takes
+   *  instructions; the board just points it at a day. */
+  onOpenDay?: (date: string) => void;
   onOpenBlank: (input: { starts_on?: string; ends_on?: string }) => void;
   /** Every hand-write names the period it happened on.
    *
@@ -322,7 +320,6 @@ export function Board({
   const [check, setCheck] = useState<PlacementCheck | null>(null);
   const [checking, setChecking] = useState(false);
   const [generationOpen, setGenerationOpen] = useState(false);
-  const [generationDay, setGenerationDay] = useState<string | null>(null);
 
   // Every check is answered against the request that is still the newest.
   // Without this, a manager clicking through a dropdown gets whichever
@@ -399,7 +396,7 @@ export function Board({
     onNext: board.nextWeek,
     onToday: board.goToToday,
     enabled:
-      !pendingMove && !editor && !generationOpen && !generationDay && !removal,
+      !pendingMove && !editor && !generationOpen && !removal,
   });
 
   // Whether this week can still be written to at all. Publishing locks the
@@ -646,8 +643,7 @@ export function Board({
                   slot_date: input.slot_date,
                 });
               }}
-              onGenerateDay={
-                writable ? (date) => setGenerationDay(date) : undefined}
+              onOpenDay={onOpenDay}
               onClearDay={
                 writable
                   ? (date) =>
@@ -787,21 +783,6 @@ export function Board({
         />
       ) : null}
 
-      {generationDay && schedule ? (
-        <GenerateDayDialog
-          date={generationDay}
-          busy={busy || generating}
-          onCancel={() => setGenerationDay(null)}
-          onConfirm={(instructions) => {
-            onGenerateDay({
-              schedule_id: schedule.id,
-              date: generationDay,
-              instructions,
-            });
-            setGenerationDay(null);
-          }}
-        />
-      ) : null}
     </div>
   );
 }

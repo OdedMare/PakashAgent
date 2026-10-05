@@ -82,7 +82,7 @@ export function BoardGrid({
   onDropEmployee,
   onOpenCard,
   onAddShift,
-  onGenerateDay,
+  onOpenDay,
   onClearDay,
 }: {
   schedule: Schedule | null;
@@ -115,7 +115,7 @@ export function BoardGrid({
   }) => void;
   onOpenCard?: (assignment: Assignment) => void;
   onAddShift?: (input: { shift_name: string; slot_date: string }) => void;
-  onGenerateDay?: (date: string) => void;
+  onOpenDay?: (date: string) => void;
   /** Clear one day's shifts. Withheld on a published board, where every
    *  write is refused, and while a build is running on this period. */
   onClearDay?: (date: string) => void;
@@ -323,7 +323,7 @@ export function BoardGrid({
             coverage={index.dayCoverage(date)}
             closure={closures.get(date)}
             columnRef={date === today ? todayColumn : undefined}
-            onGenerate={onGenerateDay ? () => onGenerateDay(date) : undefined}
+            onOpenAgent={onOpenDay ? () => onOpenDay(date) : undefined}
             onClear={onClearDay ? () => onClearDay(date) : undefined}
           />
         ))}
@@ -383,7 +383,7 @@ function DayHead({
   coverage,
   closure,
   columnRef,
-  onGenerate,
+  onOpenAgent,
   onClear,
 }: {
   date: string;
@@ -396,7 +396,7 @@ function DayHead({
   closure?: Closure;
   /** Set on today's head only, so the scroller can bring it into view. */
   columnRef?: React.Ref<HTMLDivElement>;
-  onGenerate?: () => void;
+  onOpenAgent?: () => void;
   onClear?: () => void;
 }) {
   const { assigned, required } = coverage;
@@ -451,16 +451,16 @@ function DayHead({
         </span>
       ) : null}
       <div className="board-dayhead-actions">
-        {onGenerate ? (
+        {onOpenAgent ? (
           <button
             type="button"
             className="board-dayhead-generate"
-            onClick={onGenerate}
-            aria-label={`שיבוץ ${hebrewWeekday(date)} ${displayDate(date)}`}
-            title="לתת לסוכן הנחיות ולשבץ רק את היום הזה"
+            onClick={onOpenAgent}
+            aria-label={`הנחיות לסוכן על ${hebrewWeekday(date)} ${displayDate(date)}`}
+            title="לפתוח את סוכן הסידור על היום הזה ולתת לו הוראות"
           >
             <Sparkles size={12} />
-            שבץ יום
+            סוכן ליום
           </button>
         ) : null}
         {onClear ? (
