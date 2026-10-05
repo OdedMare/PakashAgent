@@ -295,16 +295,6 @@ export function rotateMemberLink(): Promise<Workspace> {
   });
 }
 
-export function changePassword(
-  current: string,
-  replacement: string,
-): Promise<{ status: string }> {
-  return request<{ status: string }>("/api/workspace/password", {
-    method: "POST",
-    body: JSON.stringify({ current, replacement }),
-  });
-}
-
 /** Everything the management area opens with. Served to members too — the
  *  backend shapes it by role, giving them published periods only. */
 export function scheduleOverview(): Promise<ManagementOverview> {
@@ -471,7 +461,7 @@ export async function resumeScheduleGeneration(
 }
 
 /** How far a build has got. The cheap read the poll above is built on. */
-export function scheduleProgress(
+function scheduleProgress(
   scheduleId: string,
 ): Promise<ScheduleProgress> {
   return request<ScheduleProgress>(`/api/schedule/${scheduleId}/progress`);
@@ -675,7 +665,7 @@ export function unpublishSchedule(scheduleId: string): Promise<Schedule> {
   });
 }
 
-export function getSchedule(scheduleId: string): Promise<Schedule> {
+function getSchedule(scheduleId: string): Promise<Schedule> {
   return request<Schedule>(`/api/schedule/${scheduleId}`);
 }
 
@@ -782,22 +772,6 @@ export function moveAssignment(body: {
   });
 }
 
-export function listConstraints(params: {
-  starts_on?: string;
-  ends_on?: string;
-  employee?: string;
-} = {}): Promise<Constraint[]> {
-  const query = new URLSearchParams(
-    Object.entries(params).filter(([, value]) => Boolean(value)) as [
-      string,
-      string,
-    ][],
-  ).toString();
-  return request<Constraint[]>(
-    `/api/schedule/constraints/list${query ? `?${query}` : ""}`,
-  );
-}
-
 /** Record a constraint. Boss-only: employees never write (D5). `source`
  *  distinguishes the manager entering it from the manager writing down what
  *  an employee reported. */
@@ -822,13 +796,6 @@ export function deleteConstraint(rowId: string): Promise<{ status: string }> {
   return request<{ status: string }>(`/api/schedule/constraints/${rowId}`, {
     method: "DELETE",
   });
-}
-
-/** The append-only change log — the only history there is (D4). */
-export function listChanges(scheduleId?: string): Promise<ChangeEntry[]> {
-  return request<ChangeEntry[]>(
-    `/api/schedule/history/list${scheduleId ? `?schedule_id=${scheduleId}` : ""}`,
-  );
 }
 
 /* -- the employee's own area (D14) ----------------------------------------
@@ -945,16 +912,6 @@ export function proposeSwap(body: {
   });
 }
 
-/** Swaps naming the caller, on either side. */
-export function mySwaps(): Promise<SwapRow[]> {
-  return request<SwapRow[]>("/api/employee/swaps");
-}
-
-/** Offers waiting on the caller's answer — their badge. */
-export function incomingSwaps(): Promise<SwapRow[]> {
-  return request<SwapRow[]>("/api/employee/swaps/incoming");
-}
-
 /** Accept or decline an offer.
  *
  *  Accepting still moves nothing: it puts the swap in the manager's inbox,
@@ -984,10 +941,6 @@ export function withdrawSwap(swapId: string): Promise<SwapRow> {
  *  rules on arrangements, and an offer nobody has accepted is not yet one. */
 export function pendingSwaps(): Promise<SwapRow[]> {
   return request<SwapRow[]>("/api/schedule/swaps/pending");
-}
-
-export function allSwaps(): Promise<SwapRow[]> {
-  return request<SwapRow[]>("/api/schedule/swaps");
 }
 
 /** Approve, and perform the swap.
@@ -1023,10 +976,6 @@ export function pendingRequests(): Promise<ConstraintRequestRow[]> {
   return request<ConstraintRequestRow[]>("/api/schedule/requests/pending");
 }
 
-export function allRequests(): Promise<ConstraintRequestRow[]> {
-  return request<ConstraintRequestRow[]>("/api/schedule/requests");
-}
-
 /** Approve, which writes the constraint it becomes — with
  *  `source='employee_reported'`, keeping the provenance D13 defined. */
 export function approveRequest(
@@ -1048,21 +997,6 @@ export function rejectRequest(
     method: "POST",
     body: JSON.stringify({ reason }),
   });
-}
-
-export function listIdentities(): Promise<EmployeeIdentity[]> {
-  return request<EmployeeIdentity[]>("/api/schedule/requests/identities");
-}
-
-/** Free a claimed name. The manager's tool for a departure or a lost
- *  passcode — rotating the share link does not do this. */
-export function releaseIdentity(
-  employee: string,
-): Promise<{ status: string }> {
-  return request<{ status: string }>(
-    "/api/schedule/requests/identities/release",
-    { method: "POST", body: JSON.stringify({ employee }) },
-  );
 }
 
 /** Read uploaded schedule files and return what they appear to say.
@@ -1143,21 +1077,6 @@ export function askAgent(body: {
   return request<AgentAnswer>("/api/schedule/ask", {
     method: "POST",
     body: JSON.stringify(body),
-  });
-}
-
-/** Run one named read-only tool directly. **Writes nothing.**
- *
- *  The same tools the agent uses, reachable without a conversation — which
- *  is what stops a board button and the agent from ever giving different
- *  answers to the same question. */
-export function runAgentTool(body: {
-  tool: string;
-  arguments?: Record<string, unknown>;
-}): Promise<Record<string, unknown>> {
-  return request<Record<string, unknown>>("/api/schedule/tool", {
-    method: "POST",
-    body: JSON.stringify({ arguments: {}, ...body }),
   });
 }
 
