@@ -33,7 +33,7 @@ export interface BoardFilters {
   unassignedOnly: boolean;
 }
 
-export const EMPTY_FILTERS: BoardFilters = {
+const EMPTY_FILTERS: BoardFilters = {
   employee: "",
   role: "",
   shift: "",
@@ -41,7 +41,7 @@ export const EMPTY_FILTERS: BoardFilters = {
   unassignedOnly: false,
 };
 
-export interface BoardState {
+interface BoardState {
   /** The Sunday of the week on screen, ISO. */
   weekStart: string;
   /** Its Saturday. Sunday-based because the workweek here is Israeli —
@@ -309,7 +309,7 @@ function readRememberedWeek(): string | null {
  *  Built from the local date parts rather than `toISOString()`, which
  *  converts to UTC first: at 01:00 in Israel that returns *yesterday*, which
  *  would open the board on the previous week for two hours every night. */
-export function localToday(): string {
+function localToday(): string {
   return isoOf(new Date());
 }
 
@@ -319,7 +319,7 @@ export function localToday(): string {
  *  Sunday-based because the real source files run ראשון through שבת. The two
  *  must agree: a board built on a Monday week would ask the server for a
  *  period whose bounds never line up with what it renders. */
-export function sundayOf(iso: string): string {
+function sundayOf(iso: string): string {
   const date = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(date.getTime())) return iso;
   date.setDate(date.getDate() - date.getDay());

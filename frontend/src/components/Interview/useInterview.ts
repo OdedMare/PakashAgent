@@ -21,7 +21,7 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-export interface InterviewState {
+interface InterviewState {
   turn: InterviewTurn | null;
   busy: boolean;
   error: string | null;

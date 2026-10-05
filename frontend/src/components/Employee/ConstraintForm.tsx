@@ -69,7 +69,7 @@ export function ConstraintForm({
         הבקשה נשלחת למנהל לאישור. עד שהמנהל יאשר אותה היא לא משנה את הסידור.
       </p>
 
-      <form className="constraint-form" onSubmit={submit}>
+      <form className="employee-constraint-form" onSubmit={submit}>
         <label htmlFor="constraint-date">תאריך</label>
         <DateInput
           id="constraint-date"

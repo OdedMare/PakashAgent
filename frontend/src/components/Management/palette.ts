@@ -31,7 +31,7 @@
  *  lookup stays, and only where the index comes from changes.
  */
 
-export interface EmployeeColor {
+interface EmployeeColor {
   /** Cell fill behind the name. */
   bg: string;
   /** The name itself. Clears 4.5:1 on `bg` in its theme. */
@@ -147,7 +147,7 @@ export function buildPalette(roster: string[]): (name: string) => number {
 }
 
 /** The colour for one person, given their hue index. */
-export function colorFor(index: number, dark: boolean): EmployeeColor {
+function colorFor(index: number, dark: boolean): EmployeeColor {
   const pair = HUES[((index % HUES.length) + HUES.length) % HUES.length];
   return dark ? pair[1] : pair[0];
 }

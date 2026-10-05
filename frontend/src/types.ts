@@ -383,14 +383,14 @@ export interface SchedulePeriod {
  *  arrives sorted by it: the lightest week is offered first. `why` is the
  *  Hebrew sentence the backend wrote — assembling it here from fragments is
  *  the one place a Latin-script assumption creeps back into an RTL product. */
-export interface AlternativeEmployee {
+interface AlternativeEmployee {
   employee: string;
   hours: number;
   why: string;
 }
 
 /** Somewhere else this same person could go, near the date that was wanted. */
-export interface AlternativeSlot {
+interface AlternativeSlot {
   shift_name: string;
   slot_date: string;
   distance: number;

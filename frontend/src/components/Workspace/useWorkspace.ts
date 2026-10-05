@@ -20,7 +20,7 @@ import type { TeamView } from "@/types";
  *  `null` means "no session"; `undefined` means "not asked yet". The
  *  distinction matters: rendering the login screen during the first check
  *  would flash it at a boss who is already signed in. */
-export interface WorkspaceState {
+interface WorkspaceState {
   workspace: TeamView | null | undefined;
   busy: boolean;
   error: string | null;

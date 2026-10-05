@@ -44,10 +44,17 @@ should — that is what the repository does, and it stays correct either way.
 ## Tables
 
 Built so far: `teams`, `interview_sessions`, `interview_turns`, `schedules`,
-`shift_slots`, `assignments`, `availability`, and `change_log` (all in
-`schema.py`). `workplace_profile`, `employees`, `rules` and `conversations` are
-not separate tables: the interview's confirmed profile holds all four as JSON on
-`interview_sessions.profile`, which is what `team_profile()` reads.
+`shift_slots`, `assignments`, `availability`, `change_log`, `manager_chats` and
+`manager_chat_messages` (composed in `schema.py`). The workplace, employee roster
+and rules remain JSON on the interview's confirmed profile, which is what
+`team_profile()` reads. Manager conversations are separate durable rows: the
+parent carries `team_id` and signed browser `manager_id`; messages belong to that
+parent. Reads and approvals verify the parent owner before accessing messages.
+
+Chat approval uses `database/postgres.py:atomic()` to compose existing repository
+writes in one serializable transaction. Their inner `commit()` calls are deferred
+until the approval's outer transaction succeeds, so a failed later assignment or
+constraint write also rolls back earlier writes and the approval receipt.
 
 **Every workplace-owned table carries `team_id`** ([D10](../../../docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)).
 Add it when the table is created, not later: retrofitting a tenant key onto a

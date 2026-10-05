@@ -63,7 +63,7 @@ export interface ProfileGaps {
   blocks: string[];
 }
 
-export interface ManagementState {
+interface ManagementState {
   focusedScheduleId: string;
   focusedWeek: string;
   overview: ManagementOverview | undefined;

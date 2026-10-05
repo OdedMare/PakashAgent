@@ -213,7 +213,7 @@ export function orderByHours(
  *  A start time is a wall clock, not an instant: a shift starting at 23:00
  *  sorts to the bottom of the board because that is where the eye expects
  *  the night to be, even though it ends on the following date. */
-export function minutesOf(value: string | undefined): number | null {
+function minutesOf(value: string | undefined): number | null {
   const match = /^(\d{1,2}):(\d{2})/.exec((value ?? "").trim());
   if (!match) return null;
   const hours = Number(match[1]);
@@ -234,7 +234,7 @@ export function minutesOf(value: string | undefined): number | null {
  *  because a stored order is the manager's and need not run by the clock at
  *  all: on a board they have already shuffled, the two rules disagree, and
  *  only this one puts the newcomer next to the shift it actually follows. */
-export function mergeOrder(
+function mergeOrder(
   byHours: string[],
   stored: string[],
   startTimes: Record<string, string>,
