@@ -1168,7 +1168,7 @@ export interface ManagerChatMessage {
       candidates?: { employee: string; hours?: number; why?: string; requires_exception?: boolean }[] }[];
     question?: { question: string; recommendation: string; why: string; options: { label: string; answer: string }[] } | null;
     steps?: { tool: string; ok: boolean }[];
-    receipt?: { schedule_id: string; message: string };
+    receipt?: { schedule_id: string; starts_on?: string; message: string };
   };
 }
 

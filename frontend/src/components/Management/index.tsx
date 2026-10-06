@@ -187,6 +187,15 @@ export function Management({
         <nav className="management-nav" aria-label="ניווט ראשי">
           <button
             type="button"
+            className={`management-nav-item${drawerOpen ? " is-active" : ""}`}
+            onClick={() => openAgent()}
+            aria-expanded={drawerOpen}
+          >
+            <MessagesSquare size={15} />
+            סוכן הסידור
+          </button>
+          <button
+            type="button"
             className={`management-nav-item${view === "board" && !drawerOpen ? " is-active" : ""}`}
             onClick={() => {
               setView("board");
@@ -224,15 +233,7 @@ export function Management({
             <BarChart3 size={15} />
             נתונים
           </button>
-          <button
-            type="button"
-            className={`management-nav-item${drawerOpen ? " is-active" : ""}`}
-            onClick={() => openAgent()}
-            aria-expanded={drawerOpen}
-          >
-            <MessagesSquare size={15} />
-            סוכן הסידור
-          </button>
+
         </nav>
 
         <section className="workspace-conversations" aria-label="השיחות שלך">
@@ -555,7 +556,7 @@ export function Management({
             }}
             onPointerMove={(event) => {
               if (!resizeStart.current) return;
-              const delta = (event.clientX - resizeStart.current.x) * (document.documentElement.dir === "rtl" ? 1 : -1);
+              const delta = (event.clientX - resizeStart.current.x) * (document.documentElement.dir === "rtl" ? -1 : 1);
               setChatWidth(Math.max(340, Math.min(760, resizeStart.current.width + delta)));
             }}
             onPointerUp={() => { resizeStart.current = null; localStorage.setItem("pakash-chat-width", String(chatWidth)); }}
@@ -625,6 +626,7 @@ export function Management({
             draft={suggested.text}
             draftKey={suggested.n}
             onPreview={setChatPreview}
+            onOpenReceipt={(date) => setChatWeek((previous) => ({ date, n: (previous?.n ?? 0) + 1 }))}
           />
 
           <div hidden={section !== "overview"}>

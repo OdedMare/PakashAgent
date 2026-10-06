@@ -15,7 +15,7 @@ from app.common.config.settings import Settings
 from app.dal.database import postgres
 from app.dal.repository import Repository
 from tests.test_schedule_api import _ScriptedLlm, PROFILE, MORNING
-from tests.test_manager_chat import sickness
+from tests.test_manager_chat import sickness, turn
 
 pytestmark = pytest.mark.skipif(not os.getenv("CHAT_TEST_DSN"), reason="requires a scratch PostgreSQL database")
 
@@ -81,3 +81,50 @@ def test_real_later_failure_rolls_back_earlier_repository_commits(real_repo, mon
     assert [row["employee"] for row in real_repo.assignments(period, team)] == ["דנה"]
     assert not real_repo.change_log(team) and not real_repo.availability(team)
     assert real_repo.get_chat(team, "manager-a", chat)["messages"][-1]["status"] == "pending"
+
+
+def test_real_conversation_confirmation_saves_instruction_and_receipt_once(real_repo):
+    team, period, chat, message, service = seed(real_repo)
+    request = dict(content="כן, תעשה", request_id="text-approval", approval_message_id=message)
+    service.start_turn(team, "manager-a", chat, request)
+    saved = real_repo.get_chat(team, "manager-a", chat)["messages"]
+    assert saved[-1]["payload"]["receipt"] and saved[-2]["content"] == "כן, תעשה"
+    assert real_repo.assignments(period, team)[0]["employee"] == "יוסי"
+    service.start_turn(team, "manager-a", chat, request)
+    assert len(real_repo.get_chat(team, "manager-a", chat)["messages"]) == len(saved)
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_real_shift_migration_is_atomic_and_preserves_unaffected_ids(real_repo, monkeypatch, fail):
+    team, period, chat, _, service = seed(real_repo)
+    before = copy.deepcopy(real_repo.team_profile(team))
+    original = real_repo.assignments(period, team)[0]
+    shifts = [dict(name=name, start_time=start, end_time=end,
+                   staffing=[dict(days=[], headcount=1, required_roles=[])])
+              for name, start, end in [("יום", "12:00", "00:00"), ("לילה", "00:00", "12:00")]]
+    employees = [dict(row, eligible_shifts=["יום", "לילה"]) for row in before["employees"]]
+    proposal = turn("restructure")
+    import json
+    proposal.update(profile_patch_json=json.dumps(dict(shifts=shifts, employees=employees)),
+                    starts_on="2026-10-06", ends_on="2026-10-06")
+    service._llm._answers += [proposal, dict(assignments=[
+        dict(employee="דנה", shift="יום", date="2026-10-06", reason="זמינה ומוסמכת"),
+        dict(employee="יוסי", shift="לילה", date="2026-10-06", reason="זמין ומוסמך"),
+    ], notes=[], summary="סידור חדש")]
+    message = service.start_turn(team, "manager-a", chat, dict(content="שנה את המשמרות ביום שלישי",
+                                 request_id="migrate", schedule_id=period))
+    service.reply(team, "manager-a", chat, message)
+    assert real_repo.get_chat(team, "manager-a", chat)["messages"][-1]["status"] == "pending"
+    if fail:
+        def fail_assignment(*args, **kwargs):
+            raise RuntimeError("migration write failed")
+        monkeypatch.setattr(real_repo, "add_assignment", fail_assignment)
+        with pytest.raises(RuntimeError):
+            service.apply(team, "manager-a", chat, message)
+        assert real_repo.team_profile(team) == before
+        assert real_repo.assignments(period, team) == [original]
+    else:
+        service.apply(team, "manager-a", chat, message)
+        saved = real_repo.assignments(period, team)
+        assert next(row for row in saved if str(row["date"]) == "2026-10-05")["id"] == original["id"]
+        assert {row["shift"] for row in saved if str(row["date"]) == "2026-10-06"} == {"יום", "לילה"}

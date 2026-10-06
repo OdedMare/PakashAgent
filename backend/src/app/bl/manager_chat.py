@@ -681,7 +681,12 @@ class ManagerChatService:
                 team_id, "chat_approved", schedule_id=schedule_id or None,
                 reason=reason, agent_reason=agent_reason,
             )
-            payload["receipt"] = {"schedule_id": schedule_id, "message": "התוכנית הוחלה בהצלחה"}
+            receipt = "התוכנית הוחלה בהצלחה"
+            if kind == "retire":
+                receipt = "%s הוצא/ה מהסגל הפעיל. פונו %d משמרות עתידיות; ההיסטוריה נשמרה." % (plan["employee"], len(plan["operations"]))
+            elif plan.get("coverage") and not plan["coverage"]["complete"]:
+                receipt += ". נותרו %d משמרות שדורשות טיפול." % sum(not row["complete"] for row in plan["coverage"]["slots"])
+            payload["receipt"] = {"schedule_id": schedule_id, "starts_on": plan.get("starts_on") or "", "message": receipt}
             self._repo.mark_chat_applied(chat_id, message_id, payload)
             if confirmation:
                 self._repo.record_chat_confirmation(chat_id, confirmation["content"],

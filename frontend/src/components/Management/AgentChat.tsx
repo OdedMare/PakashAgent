@@ -13,10 +13,10 @@ import { ChatCandidates } from "./ChatCandidates";
  *  through this conversation. The board can open it focused on one day
  *  (`focusDate`); messages then carry that day, and the agent treats requests
  *  that name no date as being about it. */
-export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employees, draft, draftKey, boardBusy, hidden = false, onClearFocus, onPreview }: {
+export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employees, draft, draftKey, boardBusy, hidden = false, onClearFocus, onPreview, onOpenReceipt }: {
   agent: ReturnType<typeof useManagerChat>; visibleWeek: string; focusDate?: string; focusKey?: number; employees: string[];
   draft?: string; draftKey?: number; boardBusy: boolean; hidden?: boolean; onClearFocus?: () => void;
-  onPreview: (proposal: Proposal | null) => void;
+  onPreview: (proposal: Proposal | null) => void; onOpenReceipt: (date: string) => void;
 }) {
   const [text, setText] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -122,6 +122,7 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
         {message.status === "error" && message.id === last?.id ? <button type="button" className="ghost-button" disabled={disabled} onClick={() => {
           const previous = [...messages].reverse().find((row) => row.role === "user"); if (previous) void send(previous.content);
         }}>ניסיון נוסף</button> : null}
+        {message.payload.receipt?.starts_on ? <button type="button" className="conversation-receipt-link" onClick={() => onOpenReceipt(message.payload.receipt!.starts_on!)}><CalendarDays size={14} />פתיחת הסידור שעודכן</button> : null}
         {message.role === "assistant" && message.status !== "working" && message.content ? <div className="conversation-message-actions">
           <button type="button" className="icon-button" aria-label="העתקת התשובה" title="העתקת התשובה" onClick={async () => {
             try { await navigator.clipboard.writeText(message.content); setCopied(message.id); setCopyError(""); }
