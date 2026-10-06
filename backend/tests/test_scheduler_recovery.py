@@ -153,3 +153,17 @@ def test_missing_commander_gets_one_focused_repair():
     result = Scheduler(model).generate_day(profile, "2026-10-06")
     assert [row["employee"] for row in result["assignments"]] == ["יוסי"]
     assert not result["warnings"]
+
+
+def test_non_adjacent_repair_dates_include_the_fixed_day_between_them():
+    original = [assignment("2026-10-05"), assignment("2026-10-07", "יוסי"),
+                assignment("2026-10-09")]
+    model = Model([_reply(original), cover])
+    result = Scheduler(model).generate_span(_week_profile(), "2026-10-05", "2026-10-09")
+    repair = model.calls[1]
+    assert {slot["date"] for slot in repair["period"]["slots"]} == {"2026-10-06", "2026-10-08"}
+    assert {row["date"] for row in repair["already_scheduled"]} == {
+        "2026-10-05", "2026-10-07", "2026-10-09",
+    }
+    assert [row for row in result["assignments"] if row["date"] == "2026-10-07"] == [original[1]]
+    assert not result["warnings"]

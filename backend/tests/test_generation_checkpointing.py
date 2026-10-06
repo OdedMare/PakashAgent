@@ -56,3 +56,4 @@ def test_failed_repair_checkpoints_draft_and_remaining_warnings():
     assert finished["generation"]["status"] == "complete"
     assert any(item["code"] == "unfilled" for item in finished["warnings"])
     assert finished["generation"]["days"][0]["metrics"]["repair_error"]
+    assert any("הטיוטה" in note for note in finished["notes"])

@@ -14,7 +14,7 @@ def repair_request(span, first, history, instructions, preferences):
         dates = span.dates
     slots = [slot for slot in span.slots if slot["slot_date"] in dates]
     request = SpanRequest(span.profile, min(dates), max(dates), slots,
-                          span.audit_availability, first.roster,
+                          span.raw_availability, first.roster,
                           [row for row in span.required if row["date"] in dates])
     payload = request.payload(history, instructions, preferences)
     payload["repair"] = {

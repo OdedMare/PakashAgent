@@ -172,6 +172,40 @@ re-answers the whole span. Also settable as
 `PAKASH_SCHEDULE_GENERATION_MODE`. The board says which mode a running build
 is using.
 
+Weekly requests are also divided by input size (profile, candidates, constraints
+and schema), while keeping every date whole. Context overflow or invalid model
+output splits an unfinished multi-day request into smaller requests. Board jobs
+checkpoint each smaller request, so a later failure resumes from unfinished
+dates. Connection and authentication failures retain the ordinary bounded retry.
+
+Repairs re-answer only problematic dates and retain the other dates and manager
+pins. Both adjacent days and the fixed period's load totals are shown to the
+model. A repair is adopted only when a full-period audit introduces no new or
+worse findings and rejects no more rows than the first answer. If the repair
+call fails, the audited first draft survives with its warnings and an explicit
+note. Completion still means a draft was built; warnings remain advisory.
+
+Each generation checkpoint records logical model calls, failed calls, character
+counts, duration, reported tokens, coverage, warning counts and per-person load.
+Failed attempts and split requests are included in the totals. Token counts are
+zero when the provider does not report them; character counts are not tokens.
+To compare saved outputs against the same profile, constraints and dates:
+
+```bash
+cd backend
+PYTHONPATH=src .venv/bin/python -m app.bl.scheduler.compare \
+  ../docs/scheduler-comparison.example.json --output /tmp/scheduler-comparison.json
+```
+
+The example uses scripted model replies, with Tuesday missing on the first
+attempt. The old repair re-answered seven dates; the new repair re-answered one.
+It sends 22% fewer payload characters and produces identical coverage, warnings
+and load distribution. This measures request work, not live model latency.
+The saved report is in `docs/scheduler-comparison.report.json`. For a real
+comparison, use the same snapshot fields with recorded baseline and candidate
+results. Natural-language preferences still need manager review; these numeric
+measurements cover the facts the audit can check.
+
 **Set `PAKASH_SESSION_SECRET` in any real deployment.** Left unset it is
 generated per process, so sessions do not survive a restart and break across
 workers.

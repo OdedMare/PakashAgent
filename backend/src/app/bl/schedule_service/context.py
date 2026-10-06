@@ -75,6 +75,8 @@ class ScheduleContext:
         ([D3](../../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
         """
         schedule = dict(schedule)
+        generation = schedule.get("generation") or {}
+        schedule.setdefault("notes", list(generation.get("notes") or []))
         schedule["warnings"] = self.audit_rows(
             team_id, schedule.get("assignments") or [], schedule
         )

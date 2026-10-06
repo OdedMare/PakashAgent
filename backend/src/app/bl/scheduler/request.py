@@ -45,6 +45,7 @@ class SpanRequest:
         self.starts_on, self.ends_on = starts_on, ends_on
         self.slots = slots
         self.dates = {slot["slot_date"] for slot in slots}
+        self.raw_availability = availability
         self.availability = effective_availability(
             self.profile, availability, starts_on, ends_on
         )
