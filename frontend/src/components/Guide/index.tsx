@@ -52,10 +52,12 @@ const SEEN_KEY = (surface: Surface) => `pakash-guide-seen:${surface}`;
 export function GuideProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [surface, setSurface] = useState<Surface | null>(null);
+  // The newest registration, callbacks included, read when something is
+  // clicked. `checklist` below is only its visible shape, replaced when that
+  // shape changes, so a surface re-rendering does not re-render the panel.
   const registration = useRef<Registration>({});
-  // The checklist's visible shape. Callbacks live in the ref; this string is
-  // what makes the panel re-render when an item is ticked.
-  const [signature, setSignature] = useState("");
+  const shape = useRef("");
+  const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [panelOpen, setPanelOpen] = useState(false);
   const [touring, setTouring] = useState(false);
   const [welcome, setWelcome] = useState(false);
@@ -67,14 +69,18 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
       leave: (previous) => {
         setSurface((current) => (current === previous ? null : current));
         registration.current = {};
-        setSignature("");
+        shape.current = "";
+        setChecklist([]);
       },
       update: (_surface, next) => {
         registration.current = next;
-        const sig = (next.checklist ?? [])
-          .map((item) => `${item.id}:${item.done ? 1 : 0}:${item.detail ?? ""}`)
+        const items = next.checklist ?? [];
+        const sig = items
+          .map((item) => `${item.id}:${item.done ? 1 : 0}:${item.label}:${item.detail ?? ""}`)
           .join("|");
-        setSignature((previous) => (previous === sig ? previous : sig));
+        if (sig === shape.current) return;
+        shape.current = sig;
+        setChecklist(items);
       },
     }),
     [],
@@ -86,11 +92,13 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
   // settles so the targets exist. An offer, not a takeover: a manager who
   // came to fix tonight's shift should not have to dismiss a walkthrough.
   useEffect(() => {
-    setWelcome(false);
     if (!surface || !steps?.length) return;
     if (readSeen(surface)) return;
     const timer = window.setTimeout(() => setWelcome(true), 1200);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      setWelcome(false);
+    };
   }, [surface, steps]);
 
   const startTour = useCallback(() => {
@@ -112,6 +120,11 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
     registration.current.actions?.[action]?.();
   }, []);
 
+  const act = useCallback((id: string) => {
+    setPanelOpen(false);
+    registration.current.checklist?.find((item) => item.id === id)?.onAction?.();
+  }, []);
+
   // `?` opens help from anywhere that is not a text field.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -125,11 +138,6 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const checklist = useMemo(
-    () => registration.current.checklist ?? [],
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the signature is what tracks the ref
-    [signature],
-  );
   const remaining = checklist.filter((item) => !item.done).length;
   const onTutorialPage = pathname?.startsWith("/tutorial");
 
@@ -158,6 +166,7 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
               surface={surface}
               anchor={fab.current}
               checklist={checklist}
+              onAction={act}
               canTour={Boolean(steps?.length)}
               onTour={startTour}
               onClose={() => setPanelOpen(false)}
