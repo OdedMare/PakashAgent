@@ -932,3 +932,41 @@ def test_a_member_without_an_identity_cannot_acknowledge(client):
     _as(client, ROLE_MEMBER)
 
     assert client.post("/api/employee/acknowledge").status_code == 401
+
+
+# --- the assistant (D27) ----------------------------------------------------
+
+def test_the_assistant_needs_a_signed_in_employee(client):
+    """A share-link visitor has no "my shifts" to ask about."""
+    _as(client, ROLE_MEMBER)
+
+    response = client.post("/api/employee/assistant", json={"question": "עם מי להחליף?"})
+
+    assert response.status_code in (401, 403)
+
+
+def test_the_assistant_answers_for_the_cookie_not_the_body(context):
+    """No name field exists in the body; an extra one is ignored, and the
+    answer is about the signed-in employee. With no published schedule the
+    reply says so and suggests nothing -- and moves nothing."""
+    client, repository, schedules = context
+    _claim(client)
+
+    response = client.post(
+        "/api/employee/assistant",
+        json={"question": "עם מי להחליף?", "employee": YOSSI,
+              "history": [{"role": "employee", "text": "היי"}]},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["suggestions"] == []
+    assert body["answer"]
+    assert repository.swaps == {} and schedules.applied == []
+
+
+def test_the_personal_view_no_longer_carries_the_teams_hours(client):
+    """Hours per colleague are the manager's stats, not a teammate's."""
+    _claim(client)
+
+    assert "fairness" not in client.get("/api/employee/me").json()

@@ -164,7 +164,7 @@ function Thinking({ steps }: { steps: { tool: string; ok: boolean }[] }) {
 /** The small Markdown subset the agent is told it may use: `-` and `1.` lists
  *  and **bold**. Rendered as elements, never as HTML, so a reply cannot inject
  *  markup; anything else stays plain text. */
-function Markdown({ text }: { text: string }) {
+export function Markdown({ text }: { text: string }) {
   const blocks: { list?: "ul" | "ol"; lines: string[] }[] = [];
   for (const line of text.split("\n")) {
     const kind = /^\s*[-*•]\s+/.test(line) ? "ul" : /^\s*\d+[.)]\s+/.test(line) ? "ol" : undefined;

@@ -6,7 +6,9 @@ cookie, never from the body or the path (D14).
 
 from fastapi import APIRouter, Depends
 
-from app.api.contracts import ConstraintSubmission, SwapAnswer, SwapProposal
+from app.api.contracts import (
+    AssistantQuestion, ConstraintSubmission, SwapAnswer, SwapProposal,
+)
 
 
 class PersonalRoutes:
@@ -24,6 +26,20 @@ class PersonalRoutes:
             One call because the personal area renders them together.
             """
             return service.me(session["team_id"], session["employee"])
+
+        @router.post("/assistant")
+        def assistant(request: AssistantQuestion, session: dict = Depends(employee)) -> dict:
+            """Ask about swaps or one's own week (D27). Writes nothing.
+
+            `suggestions` are swaps already checked clean; offering one is
+            the ordinary `POST /swaps`, sent by the employee's own click.
+            """
+            return service.ask(
+                session["team_id"],
+                session["employee"],
+                request.question,
+                history=[turn.model_dump() for turn in request.history],
+            )
 
         @router.post("/acknowledge")
         def acknowledge(session: dict = Depends(employee)) -> dict:

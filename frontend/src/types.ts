@@ -741,13 +741,6 @@ export interface PersonalSummary {
   constraints: Constraint[];
 }
 
-/** Hours against the team average — the number that answers "why is it
- *  always me". A report, never a rule (D3). */
-export interface Fairness {
-  average_hours: number;
-  people: { employee: string; hours: number; delta: number }[];
-}
-
 /** A constraint an employee asked for. **Pending changes nothing** — it is
  *  invisible to the audit until a manager approves it (D14). */
 export interface ConstraintRequestRow {
@@ -816,7 +809,6 @@ export interface EmployeeView {
   employee: string;
   schedule: Schedule | null;
   summary: PersonalSummary;
-  fairness: Fairness;
   teammates: Teammates[];
   requests: ConstraintRequestRow[];
   /** Swaps naming this person on either side. */
@@ -833,6 +825,32 @@ export interface EmployeeView {
    *  not have to compare a grid against memory to find out. */
   unseen: number;
   shifts: Record<string, unknown>[];
+}
+
+/** One shift on either side of a suggested swap. */
+export interface AssistantShift {
+  assignment_id: string;
+  date: string;
+  weekday: string;
+  shift: string;
+}
+
+/** A swap the assistant suggests (D27). **Checked clean in code** — the
+ *  model only picks from these by id. Offering it is the ordinary swap
+ *  request: the colleague answers, then the manager decides. */
+export interface AssistantSuggestion {
+  id: string;
+  mine: AssistantShift;
+  colleague: string;
+  theirs: AssistantShift;
+  /** The employee's own problems this swap would clear, in plain Hebrew. */
+  fixes: string[];
+}
+
+export interface AssistantReply {
+  answer: string;
+  suggestions: AssistantSuggestion[];
+  used_model: boolean;
 }
 
 /** A change-log entry as the employee sees it — the manager's row plus

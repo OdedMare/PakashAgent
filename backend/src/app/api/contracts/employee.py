@@ -1,5 +1,7 @@
 """The employee's own area (D14)."""
 
+from typing import List, Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -99,6 +101,25 @@ class SwapAnswer(BaseModel):
     """
 
     agreed: bool
+
+
+class AssistantTurn(BaseModel):
+    """One earlier line of the employee's chat, as the browser kept it.
+
+    The conversation is not stored server-side: it is a few questions about
+    one's own shifts, and the browser holding it keeps the feature free of a
+    transcript table nobody asked for (D27).
+    """
+
+    role: Literal["employee", "assistant"]
+    text: str = Field(default="", max_length=2000)
+
+
+class AssistantQuestion(BaseModel):
+    """A question for the employee's assistant (D27). Moves nothing."""
+
+    question: str = Field(min_length=1, max_length=1000)
+    history: List[AssistantTurn] = Field(default_factory=list, max_length=12)
 
 
 class ReleaseRequest(BaseModel):

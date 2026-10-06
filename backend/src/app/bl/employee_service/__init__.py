@@ -8,10 +8,14 @@ The business half of D14:
   `bl/audit`, so the employee's arithmetic is the manager's arithmetic.
 - **Requests** (`requests.py`, `swaps.py`) — submitting and withdrawing, and
   on the manager's side approving.
+- **The assistant** (`assistant.py`, `swap_options.py`) — a read-only chat
+  about swaps and the employee's own week (D27). Which swaps are clean is
+  decided in code; the model only phrases it.
 
 **Approval is the only thing that writes a constraint** (D3).
 """
 
+from app.bl.employee_service.assistant import EmployeeAssistant
 from app.bl.employee_service.identity import IdentityService
 from app.bl.employee_service.personal import PersonalView
 from app.bl.employee_service.requests import ConstraintRequests
@@ -21,11 +25,12 @@ from app.bl.employee_service.swaps import SwapRequests
 class EmployeeService:
     """The facade the employee routers talk to. Owns no behaviour itself."""
 
-    def __init__(self, repository, schedules):
+    def __init__(self, repository, schedules, llm=None):
         self._identity = IdentityService(repository)
         self._requests = ConstraintRequests(repository, schedules)
         self._swaps = SwapRequests(repository, schedules)
         self._personal = PersonalView(repository, schedules, self._swaps)
+        self._assistant = EmployeeAssistant(repository, schedules, llm)
 
     # -- identity --------------------------------------------------------------
 
@@ -51,6 +56,11 @@ class EmployeeService:
 
     def acknowledge(self, *args, **kwargs):
         return self._personal.acknowledge(*args, **kwargs)
+
+    # -- the assistant (D27) ---------------------------------------------------
+
+    def ask(self, *args, **kwargs):
+        return self._assistant.ask(*args, **kwargs)
 
     # -- constraint requests ---------------------------------------------------
 

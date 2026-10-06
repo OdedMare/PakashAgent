@@ -2,9 +2,9 @@
 
 from typing import Any, Dict, List
 
-from app.bl.audit import fairness, personal_summary
+from app.bl.audit import personal_summary
 from app.bl.employee_service.values import (
-    employees, iso_date, shifts, text, window,
+    iso_date, shifts, text, window,
 )
 
 # How many of the newest change-log rows are searched, and how many naming
@@ -38,8 +38,6 @@ class PersonalView:
             "employee": employee,
             "schedule": schedule,
             "summary": self._summary(team_id, employee, schedule, profile),
-            # The comparison that answers "why is it always me".
-            "fairness": fairness(assignments, shifts(profile), employees(profile)),
             # Who else is on each of their shifts, read off the same grid.
             "teammates": teammates(assignments, employee),
             "requests": self._repository.list_requests(team_id, employee=employee),

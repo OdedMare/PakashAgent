@@ -73,7 +73,7 @@ copilot_service = CopilotService(
 # Takes the schedule service, not just the repository: the personal view needs
 # an audited schedule, and recomputing the audit for the employee would be a
 # second implementation of the arithmetic the manager sees (D14).
-employee_service = EmployeeService(repository, schedule_service)
+employee_service = EmployeeService(repository, schedule_service, llm)
 
 # An unset secret is generated per process. Fine for a single-worker dev run,
 # wrong for a multi-worker deployment — each worker would sign with its own

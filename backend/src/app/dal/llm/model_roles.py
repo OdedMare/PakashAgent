@@ -58,6 +58,7 @@ _FLOW_ROLES = {
     "interview": DEFAULT,
     "changes": DEFAULT,
     "planner": DEFAULT,
+    "employee_assistant": DEFAULT,
     "learn": DEFAULT,
     "briefing": FAST,
 }
