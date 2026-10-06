@@ -638,7 +638,10 @@ def test_adjusting_generated_preview_preserves_other_choices_and_remains_read_on
     assert [(row["employee"], row["date"]) for row in assignments] == [
         ("יוסי", "2026-10-11"), ("דנה", "2026-10-12"),
     ]
-    assert len(json.loads(llm.calls[-1]["user"])["required_assignments"]) == 2
+    # The initial preview sees both pins; the repair only receives unfilled days.
+    assert len(json.loads(llm.calls[-2]["user"])["required_assignments"]) == 2
+    repaired_dates = {slot["date"] for slot in json.loads(llm.calls[-1]["user"])["period"]["slots"]}
+    assert not repaired_dates & {"2026-10-11", "2026-10-12"}
     assert len(repo.schedules) == 1
 
 
