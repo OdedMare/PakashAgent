@@ -9,32 +9,31 @@ import hashlib
 import json
 import logging
 
-from app.bl.audit import audit, shift_stats
+from app.bl.audit import shift_stats
 from app.bl.changes.agent import _closures_for_model, _schedule_for_model
 from app.bl.changes.proposal import build_proposal
 from app.bl.changes.values import json_default
 from app.bl.chat_schema import CHAT_SCHEMA, PROFILE_SECTIONS
 from app.bl.chat_contract import (
     NeedsManager as _NeedsManager, RejectedPlan as _Rejected,
-    approval_text, coverage_preview, exception_warnings, whole_day_request,
+    approval_text, add_coverage, audit_plan, exception_warnings, whole_day_request, normalize_day_turn,
 )
-from app.bl.chat_lifecycle import copied_day, future_schedules, prepare_retirement, prepare_structure
+from app.bl.chat_lifecycle import future_schedules, prepare_retirement, prepare_structure
+from app.bl.chat_generation import prepare_generation
 from app.bl.planner.shaping import question
-from app.bl.placement.values import is_eligible, warning_key
+from app.bl.placement.values import warning_key
 from app.bl.profile_service import ProfileService
 from app.bl.prompts import load
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.generation.history import AssignmentHistory
-from app.bl.schedule_service.generation.pins import model_assignment
 from app.bl.schedule_service.operations import OperationApplier
 from app.bl.scheduler import Scheduler
-from app.bl.scheduler.availability import effective_availability
 from app.bl.simulate.hypothetical import Hypothetical, schedule_rows
 from app.bl.tools import ScheduleTools, TOOL_DESCRIPTIONS
 from app.bl.tools.schedule_tools import _invalid_date_argument
 from app.bl.tools.values import iso
 from app.common.errors.errors import AgentError, AppError, ConflictError
-from app.common.time_context.time_context import agent_time_context
+from app.common.time_context.time_context import agent_time_context, israel_today
 
 _log = logging.getLogger("pakash.chat")
 _EXTRA_TOOLS = {
@@ -47,10 +46,37 @@ _ROUNDS = 7      # model calls per turn; the last one may not request tools
 _REPAIRS = 2     # times a rejected plan is handed back to the model to fix
 _MAX_CALLS = 4   # tool calls the model may request per round
 _FULL_RESULTS = 2  # earlier turns whose tool results the model re-reads in full
+# Past constraints the model still reads, for "why was Dana off yesterday".
+# Older ones arrive through the tools, which take their own date ranges.
+_AVAILABILITY_LOOKBACK_DAYS = 7
+_ROW_NOISE = ("id", "team_id", "created_at")
 
 
 def _json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, default=json_default)
+
+
+def _model_input(payload, results, final):
+    """One round's input: the turn's fixed context first, this round's last.
+
+    Every round re-sends the whole context, and an inference server reuses
+    the prompt prefix it already computed only while the text is identical.
+    Sorted keys alone would put `final_round` and `results` mid-object, ahead
+    of `profile`, `schedule` and `tools`, so each round recomputed those.
+    """
+    tail = _json({"final_round": final, "results": results})
+    return _json(payload)[:-1] + ", " + tail[1:]
+
+
+def _availability_since(schedule):
+    """The earliest constraint date the model is shown for this turn."""
+    recent = (israel_today() - datetime.timedelta(days=_AVAILABILITY_LOOKBACK_DAYS)).isoformat()
+    starts = iso((schedule or {}).get("starts_on"))
+    return min(recent, starts) if starts else recent
+
+
+def _availability_for_model(rows):
+    return [{key: value for key, value in row.items() if key not in _ROW_NOISE} for row in rows]
 
 
 def _iso_or_blank(value):
@@ -65,7 +91,7 @@ def _plan_for_model(plan, whole):
     """A stored plan as the model reads it back: whole, or as a summary."""
     # The snapshot hash and the generated slot grid mean nothing to the model.
     shown = {key: value for key, value in plan.items()
-             if key not in ("snapshot", "updated_profile", "replacement_slots")}
+             if key not in ("snapshot", "updated_profile", "replacement_slots", "creation_slots")}
     if shown.get("generated"):
         shown["generated"] = {key: value for key, value in shown["generated"].items() if key != "slots"}
     if whole:
@@ -116,6 +142,7 @@ class ManagerChatService:
         )
 
     def reply(self, team_id, manager_id, chat_id, message_id):
+        steps = []
         try:
             chat = self._repo.get_chat(team_id, manager_id, chat_id)
             message = next(row for row in chat["messages"] if row["id"] == message_id)
@@ -125,22 +152,25 @@ class ManagerChatService:
             schedule_id = context.get("schedule_id") or ""
             schedule = self._repo.get_schedule(schedule_id, team_id) if schedule_id else None
             profile = self._context.profile(team_id)
+            # One clock for every round, so the rounds' prompts share a prefix.
+            clock = agent_time_context()
             payload = {
-                "clock": agent_time_context(), "profile": profile,
+                "clock": clock, "profile": profile,
                 "profile_sections": PROFILE_SECTIONS,
                 "focused_schedule_id": schedule_id,
                 "visible_week": context.get("visible_week") or "",
                 "focused_date": context.get("focus_date") or "",
                 "schedule": _schedule_for_model(schedule or {}),
                 "closures": _closures_for_model(profile, schedule or {}),
-                "availability": self._repo.availability(team_id),
+                "availability": _availability_for_model(self._repo.availability(
+                    team_id, starts_on=_availability_since(schedule))),
                 "preferences": self._context.active_preferences(team_id),
                 "history": self._repo.change_log(team_id, limit=12),
                 "conversation": self._conversation(chat, message_id),
                 "tools": dict(TOOL_DESCRIPTIONS, **_EXTRA_TOOLS),
             }
             results, steps = [], []
-            plan, asked, repairs = None, "", 0
+            plan, asked, repairs, task = None, "", 0, None
             reviewed = False
             request = next((row["content"] for row in reversed(payload["conversation"])
                             if row["role"] == "user"), "")
@@ -148,8 +178,8 @@ class ManagerChatService:
             for round_ in range(_ROUNDS):
                 final = round_ == _ROUNDS - 1
                 turn = self._llm.complete_json(
-                    load("manager_chat"), _json(dict(payload, results=results, final_round=final)),
-                    schema=CHAT_SCHEMA, flow="planner",
+                    load("manager_chat"), _model_input(payload, results, final),
+                    schema=CHAT_SCHEMA, flow="planner", time_context=clock,
                 )
                 if not isinstance(turn, dict):
                     raise AgentError("הסוכן החזיר תשובה לא תקינה. אפשר לנסות שוב")
@@ -176,9 +206,13 @@ class ManagerChatService:
                     self._repo.chat_turn_progress(chat_id, message_id, dict(context, steps=steps))
                     continue
                 try:
+                    turn = normalize_day_turn(turn, request, context, profile)
                     if not (turn.get("reply") or "").strip() and not question(turn.get("question")):
                         raise _Rejected("חסרה תשובה למנהל. יש להסביר את התוכנית או לענות לבקשה הנוכחית באופן קונקרטי")
                     choices = [row["content"] for row in payload["conversation"][-8:] if row["role"] == "user"]
+                    if turn.get("kind") in ("generate", "restructure"):
+                        self._repo.chat_turn_progress(chat_id, message_id, dict(context, steps=steps,
+                            activity="מכין שיבוץ ובודק את כל המשמרות בטווח שנבחר…"))
                     plan = self._prepare_plan(team_id, turn, schedule_id, request, choices)
                     if plan and plan["kind"] in ("changes", "generate") \
                             and any(row.get("severity") == "warning" and row["code"] not in
@@ -198,6 +232,7 @@ class ManagerChatService:
                     plan = None
                     asked = str(exc)
                     results.extend(exc.results)
+                    task = exc.task
                 except _Rejected as exc:
                     if final or repairs >= _REPAIRS:
                         raise
@@ -205,10 +240,13 @@ class ManagerChatService:
                     repairs += 1
                     results.append({"tool": "plan_check", "ok": False, "error": str(exc)})
                     steps.append({"tool": "plan_check", "ok": False})
+                    self._repo.chat_turn_progress(chat_id, message_id, dict(context, steps=steps))
                     continue
                 break
             output = {"steps": steps, "results": results,
                       "question": None if asked else question(turn.get("question"))}
+            if task:
+                output["task"] = task
             if plan:
                 output["plan"] = plan
             reply = asked or (turn.get("reply") or "").strip()
@@ -228,7 +266,7 @@ class ManagerChatService:
             _log.exception("chat reply failed chat=%s message=%s", chat_id, message_id)
             content = str(exc) if isinstance(exc, AppError) else \
                 "לא הצלחתי להשלים את הבקשה. לא בוצע שינוי בסידור; אפשר לנסות שוב"
-            self._repo.finish_chat_turn(chat_id, message_id, content, "error", {})
+            self._repo.finish_chat_turn(chat_id, message_id, content, "error", {"steps": steps})
 
     @staticmethod
     def _focus_arguments(name, arguments, schedule_id, context):
@@ -255,7 +293,7 @@ class ManagerChatService:
         """
         all_rows = [row for row in chat["messages"] if row["id"] != working_id]
         retained = set(range(max(0, len(all_rows) - 32), len(all_rows)))
-        for key in ("plan", "question", "results"):
+        for key in ("plan", "question", "results", "task"):
             anchor = next((index for index in range(len(all_rows) - 1, -1, -1)
                            if (all_rows[index].get("payload") or {}).get(key)), None)
             if anchor is not None:
@@ -274,6 +312,8 @@ class ManagerChatService:
             item = {"role": row["role"], "content": row["content"], "status": row["status"]}
             payload = row.get("payload") or {}
             context = {}
+            if payload.get("task"):
+                context["task"] = payload["task"]
             if payload.get("question"):
                 context["question"] = payload["question"]
             if index in recent_results:
@@ -339,7 +379,10 @@ class ManagerChatService:
         periods = self._repo.list_schedules(team_id)
         if schedule_id:
             periods = [self._repo.get_schedule(schedule_id, team_id)]
-            first, last = iso(periods[0]["starts_on"]), iso(periods[0]["ends_on"])
+            if not first:
+                first, last = iso(periods[0]["starts_on"]), iso(periods[0]["ends_on"])
+            elif not (iso(periods[0]["starts_on"]) <= first <= last <= iso(periods[0]["ends_on"])):
+                raise AgentError("טווח הדוח חורג מהסידור שנבחר. בחרו את התקופה המתאימה")
         elif not first:
             return {"found": False, "reason": "בחרו שבוע או ציינו טווח תאריכים"}
         assignments, seen, included = [], set(), []
@@ -411,7 +454,7 @@ class ManagerChatService:
         if kind == "restructure":
             prepare_structure(self._profiles, self._scheduler, team_id, turn, plan, state,
                               self._history.before(team_id, iso(schedule["starts_on"])), self._audit_plan)
-            self._add_coverage(plan, plan["updated_profile"])
+            add_coverage(plan, plan["updated_profile"])
             return plan
         if kind == "profile":
             try:
@@ -444,7 +487,7 @@ class ManagerChatService:
             plan["profile_before"] = {key: profile.get(key) for key in patch}
             plan["profile_after"] = {key: updated.get(key) for key in patch}
         elif kind == "generate":
-            self._prepare_generation(team_id, turn, plan, state)
+            prepare_generation(self._repo, self._scheduler, self._history, team_id, turn, plan, state)
         else:
             if not schedule and (kind != "changes" or turn.get("operations")):
                 raise _Rejected("אין סידור בשבוע הזה. אפשר לבקש לבנות אותו קודם")
@@ -473,7 +516,8 @@ class ManagerChatService:
                         prompt = "בדקתי מועמדים להחלפה. בחרו מי יחליף בכל משמרת כדי שאכין תוכנית מלאה לאישור." \
                             if any(result.get("candidates") for result in candidates) else \
                             "לא נמצאו מחליפים שעומדים בכל הכללים. אפשר לשנות את היקף המשמרת או להוסיף תגבור. איך תרצו לפתור את החוסר?"
-                        raise _NeedsManager(prompt, candidates)
+                        raise _NeedsManager(prompt, candidates, dict(request=request,
+                            constraints=self._constraints(turn.get("constraints") or [], profile)))
                 proposal = build_proposal(turn, profile, schedule, plan["reason"])
                 if proposal["needs_input"] or proposal["needs_reason"]:
                     raise _NeedsManager(proposal["reply"] or "נדרשים פרטים נוספים לפני שינוי")
@@ -504,78 +548,6 @@ class ManagerChatService:
                 raise _Rejected("הפעולה אינה נתמכת")
         return plan
 
-    def _prepare_generation(self, team_id, turn, plan, state):
-        first, last = turn.get("starts_on") or "", turn.get("ends_on") or ""
-        try:
-            start, end = datetime.date.fromisoformat(first), datetime.date.fromisoformat(last)
-        except ValueError as exc:
-            raise _Rejected("נדרשים תאריכי התחלה וסיום לבניית הסידור") from exc
-        if end < start or (end - start).days > 62:
-            raise _Rejected("אפשר לבנות בשיחה תקופה של עד 63 ימים")
-        schedule = state["schedule"] or {}
-        if not schedule:
-            matches = [period for period in state["periods"]
-                       if iso(period["starts_on"]) <= last and iso(period["ends_on"]) >= first]
-            if matches:
-                raise _Rejected("קיים סידור בטווח הזה. יש לבקש למלא או לבנות מחדש את הסידור הקיים")
-        elif not (iso(schedule["starts_on"]) <= first and last <= iso(schedule["ends_on"])):
-            raise _Rejected("הטווח חורג מהסידור שנבחר. יש לבחור את התקופה המתאימה")
-        if schedule.get("status") == "published":
-            raise _Rejected("יש להחזיר את הסידור לטיוטה לפני בנייה מחדש")
-        # A range inside an existing period (one day, a few days) rebuilds only
-        # those dates; every other saved assignment stays as it is.
-        partial = bool(schedule) and (iso(schedule["starts_on"]) != first or iso(schedule["ends_on"]) != last)
-        saved = schedule.get("assignments") or []
-        inside = [row for row in saved if first <= iso(row["date"]) <= last]
-        outside = [row for row in saved if not first <= iso(row["date"]) <= last]
-        required = [dict(employee=row["employee"], shift=row["shift"], date=iso(row["date"]))
-                    for row in inside
-                    if not turn.get("replace_existing") or row.get("source") == "manager"]
-        plan["preserved_assignments"] = list(required)
-        required += [row for row in turn.get("required_assignments") or []
-                     if first <= (row.get("date") or "") <= last]
-        if turn.get("copy_from_date"):
-            if first != last:
-                raise _Rejected("העתקת יום דורשת תאריך יעד יחיד")
-            generated = copied_day(self._repo, team_id, turn["copy_from_date"], first,
-                                   state["profile"], plan["preserved_assignments"], turn.get("required_assignments"))
-            plan["copy_from_date"] = turn["copy_from_date"]
-        elif partial or first == last:
-            generated = self._scheduler.generate_span(
-                state["profile"], first, last, availability=state["availability"],
-                history=self._history.before(team_id, iso(schedule["starts_on"])),
-                preferences=state["preferences"], instructions=turn.get("instructions") or "",
-                required_assignments=required,
-                already_scheduled=[model_assignment(row) for row in outside],
-            )
-        else:
-            generated = self._scheduler.generate_verified(
-                state["profile"], first, last, availability=state["availability"],
-                history=self._history.before(team_id, first),
-                preferences=state["preferences"], instructions=turn.get("instructions") or "",
-                required_assignments=required,
-            )
-        pseudo = dict(schedule, starts_on=iso(schedule["starts_on"]) if partial else first,
-                      ends_on=iso(schedule["ends_on"]) if partial else last,
-                      slots=schedule.get("slots") or generated["slots"])
-        if schedule:
-            slots = {(row["shift_name"], iso(row["slot_date"])) for row in schedule["slots"]}
-            if any((row["shift"], row["date"]) not in slots for row in generated["assignments"]):
-                raise AgentError("סוגי המשמרות השתנו מאז יצירת הסידור. יש לבנות תקופה חדשה")
-        plan.update(starts_on=first, ends_on=last, generated=generated,
-                    replace_existing=bool(turn.get("replace_existing")))
-        context_rows = [dict(employee=row["employee"], shift=row["shift"], date=iso(row["date"]))
-                        for row in outside] if partial else []
-        plan["warnings"] = self._audit_plan(state["profile"], pseudo,
-                                           context_rows + generated["assignments"], state["availability"], [])
-        self._add_coverage(plan, state["profile"])
-
-    @staticmethod
-    def _add_coverage(plan, profile):
-        generated = plan["generated"]
-        plan["coverage"] = coverage_preview(profile, generated["slots"],
-                                             generated["assignments"], plan["warnings"])
-
     def _constraints(self, offered, profile):
         names = {row["name"] for row in profile.get("employees") or []}
         shifts = {row["name"] for row in profile.get("shifts") or []}
@@ -601,25 +573,7 @@ class ManagerChatService:
             raise _Rejected("התוכנית משבצת את אותו עובד פעמיים באותה משמרת. יש להסיר את השיבוץ הכפול")
         return imagined.rows
 
-    def _audit_plan(self, profile, schedule, rows, availability, constraints):
-        facts = {(row["employee"], iso(row["constraint_date"]), row.get("shift_name") or ""):
-                 dict(row, date=iso(row["constraint_date"]), shift=row.get("shift_name") or "")
-                 for row in availability}
-        facts.update({(row["employee"], row["date"], row.get("shift") or ""): row
-                      for row in constraints})
-        warnings = audit(
-            rows, profile.get("shifts") or [], profile.get("employees") or [],
-            effective_availability(profile, list(facts.values()), iso(schedule["starts_on"]),
-                                   iso(schedule["ends_on"])),
-            profile, schedule.get("slots") or [],
-        )
-        for row in rows:
-            if not is_eligible(profile, row["employee"], row["shift"], iso(row["date"])):
-                warnings.append(dict(code="ineligible", severity="warning", employee=row["employee"],
-                                     date=iso(row["date"]), shift=row["shift"], details={},
-                                     message="%s לא מוגדר/ת למשמרת %s בפרופיל הצוות" %
-                                     (row["employee"], row["shift"])))
-        return warnings
+    _audit_plan = staticmethod(audit_plan)
 
     def apply(self, team_id, manager_id, chat_id, message_id, accept_exceptions=False, confirmation=None):
         with self._repo.chat_approval(team_id, manager_id, chat_id, message_id) as message:
@@ -703,9 +657,10 @@ class ManagerChatService:
         generated = plan["generated"]
         schedule_id = plan["schedule_id"]
         if not schedule_id:
-            schedule = self._repo.create_schedule(team_id, plan["starts_on"], plan["ends_on"])
+            schedule = self._repo.create_schedule(team_id, plan.get("period_starts_on") or plan["starts_on"],
+                                                  plan.get("period_ends_on") or plan["ends_on"])
             schedule_id = schedule["id"]
-            self._repo.replace_slots(schedule_id, team_id, generated["slots"])
+            self._repo.replace_slots(schedule_id, team_id, plan.get("creation_slots") or generated["slots"])
         schedule = self._repo.get_schedule(schedule_id, team_id)
         slots = {(row["shift_name"], iso(row["slot_date"])): row["id"] for row in schedule["slots"]}
         desired = {(row["employee"], row["shift"], iso(row["date"])): row for row in generated["assignments"]}

@@ -55,9 +55,13 @@ def is_context_overflow(error) -> bool:
 
 def complete(
     client, model, messages, max_tokens, schema, penalty, reservation,
-    total_budget_seconds=None,
+    total_budget_seconds=None, first_rung=0,
 ):
-    """One completion down the ladder. Returns `(content, usage)`.
+    """One completion down the ladder. Returns `(content, usage, rung)`.
+
+    `first_rung` skips rungs the same endpoint already refused for the same
+    model and schema; each refusal is a full round-trip, paid on every call
+    otherwise. `rung` is the index that answered, for the caller to remember.
 
     `total_budget_seconds` of `None` is "no ceiling", which is what
     `create_with_retry` already means by a `None` deadline.
@@ -69,7 +73,9 @@ def complete(
     last_bad_request = None
     try:
         with reservation:
-            for kwargs in attempts(messages, max_tokens, schema, penalty):
+            rungs = attempts(messages, max_tokens, schema, penalty)
+            first_rung = min(max(first_rung, 0), len(rungs) - 1)
+            for rung, kwargs in enumerate(rungs[first_rung:], first_rung):
                 try:
                     response = create_with_retry(client, model, kwargs, deadline=deadline)
                 except BadRequestError as exc:
@@ -81,7 +87,8 @@ def complete(
                     raise AgentError(_TIMED_OUT)
                 except Exception as exc:
                     raise AgentError("שגיאת מודל: " + str(exc))
-                return response_data(response)
+                content, usage = response_data(response)
+                return content, usage, rung
     except ModelBusy:
         raise AgentError("המודל תפוס כרגע בעבודה אחרת. נסו שוב בעוד רגע.")
     raise AgentError("שגיאת מודל: " + str(last_bad_request))

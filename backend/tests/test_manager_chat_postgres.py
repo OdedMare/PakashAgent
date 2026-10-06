@@ -128,3 +128,11 @@ def test_real_shift_migration_is_atomic_and_preserves_unaffected_ids(real_repo, 
         saved = real_repo.assignments(period, team)
         assert next(row for row in saved if str(row["date"]) == "2026-10-05")["id"] == original["id"]
         assert {row["shift"] for row in saved if str(row["date"]) == "2026-10-06"} == {"יום", "לילה"}
+
+
+def test_a_tail_read_starts_at_the_named_message(real_repo):
+    team, _, chat, message_id, _ = seed(real_repo)
+    tail = real_repo.get_chat(team, "manager-a", chat, from_message=message_id)["messages"]
+    assert [row["id"] for row in tail] == [message_id]
+    whole = real_repo.get_chat(team, "manager-a", chat, from_message="missing")["messages"]
+    assert len(whole) == 2

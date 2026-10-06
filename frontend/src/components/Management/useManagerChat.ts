@@ -13,6 +13,15 @@ function requestId() {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// A poll reads only the running message onward: nothing before it can change
+// while it runs, and re-reading every earlier plan grows with the thread.
+function withTail(previous: ManagerConversation | null, tail: ManagerConversation, fromId: string) {
+  if (previous?.id !== tail.id) return previous;
+  const start = previous.messages.findIndex((message) => message.id === fromId);
+  if (start < 0 || tail.messages[0]?.id !== fromId) return tail;
+  return { ...tail, messages: [...previous.messages.slice(0, start), ...tail.messages] };
+}
+
 export function useManagerChat(workspaceId: string, scheduleId: string, visibleWeek: string, focusDate: string, onApplied: (plan?: ChatPlan) => Promise<void>) {
   const [chat, setChat] = useState<ManagerConversation | null>(null);
   const [chats, setChats] = useState<ManagerChatSummary[]>([]);
@@ -21,7 +30,8 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
   const mounted = useRef(true);
-  const working = Boolean(chat?.messages.some((message) => message.status === "working"));
+  const workingId = chat?.messages.find((message) => message.status === "working")?.id;
+  const working = Boolean(workingId);
 
   useEffect(() => {
     mounted.current = true;
@@ -37,14 +47,14 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
 
   const chatId = chat?.id;
   useEffect(() => {
-    if (!chatId || !working) return;
+    if (!chatId || !workingId) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
-        const next = await readManagerChat(chatId);
+        const next = await readManagerChat(chatId, workingId);
         if (cancelled) return;
-        setChat(next);
+        setChat((previous) => withTail(previous, next, workingId));
         setError(null);
         if (!next.messages.some((message) => message.status === "working")) {
           setChats(await listManagerChats());
@@ -57,7 +67,7 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
     };
     timer = setTimeout(() => void poll(), 1200);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [chatId, working]);
+  }, [chatId, workingId]);
 
   const run = useCallback(async (action: () => Promise<ManagerConversation>) => {
     if (inFlight.current) return false;

@@ -165,3 +165,26 @@ def test_copy_translates_dates_without_asking_the_scheduler_to_choose_people():
     assert message["payload"]["plan"]["generated"]["assignments"][0]["employee"] == "דנה"
     assert message["payload"]["plan"]["generated"]["assignments"][0]["date"] == "2026-10-12"
     assert len(llm.calls) == 1
+
+
+def test_workload_report_keeps_a_requested_subrange_inside_a_week():
+    repo, _, service, _, schedule_id = setup([])
+    report = service._workload(TEAM, dict(schedule_id=schedule_id,
+                              starts_on="2026-10-09", ends_on="2026-10-10"), schedule_id)
+    assert report["starts_on"] == "2026-10-09" and report["ends_on"] == "2026-10-10"
+    assert report["stats"]["total_hours"] == 0  # Monday is outside the requested weekend.
+
+
+def test_new_single_day_opens_a_visible_week_without_generating_other_days():
+    proposal = turn("generate")
+    proposal.update(starts_on="2026-10-12", ends_on="2026-10-12")
+    repo, _, service, chat_id, schedule_id = setup([proposal, dict(assignments=[
+        dict(employee="דנה", shift=MORNING, date="2026-10-12", reason="זמינה ומוסמכת")
+    ], notes=[], summary="יום שני")])
+    message = converse(service, repo, chat_id, schedule_id, "תשבץ את יום שני הבא")
+    assert message["status"] == "pending", message["content"]
+    service.apply(TEAM, "manager-a", chat_id, message["id"])
+    created = next(row for row in repo.schedules.values() if row["id"] != schedule_id)
+    assert (created["starts_on"], created["ends_on"]) == ("2026-10-11", "2026-10-17")
+    rows = repo.assignments(created["id"], TEAM)
+    assert len(rows) == 1 and rows[0]["date"] == "2026-10-12"

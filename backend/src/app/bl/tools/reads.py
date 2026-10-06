@@ -2,7 +2,8 @@
 
 from typing import List, Optional
 
-from app.bl.audit import audit, fairness
+from app.bl.audit import audit
+from app.bl.placement.values import hours_by_employee
 from app.bl.tools.values import (
     audit_assignments, employees, iso, shifts, text, window,
 )
@@ -89,8 +90,4 @@ class ToolReads:
 
 def hours_for(employee: str, schedule: dict, profile: dict) -> float:
     """One person's assigned hours in this period, weighted as the audit does."""
-    totals = fairness(audit_assignments(schedule), shifts(profile), employees(profile))
-    for row in totals.get("people") or []:
-        if text(row.get("employee")) == employee:
-            return float(row.get("hours") or 0.0)
-    return 0.0
+    return hours_by_employee(schedule, profile).get(employee, 0.0)

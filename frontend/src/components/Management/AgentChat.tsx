@@ -13,10 +13,10 @@ import { ChatCandidates } from "./ChatCandidates";
  *  through this conversation. The board can open it focused on one day
  *  (`focusDate`); messages then carry that day, and the agent treats requests
  *  that name no date as being about it. */
-export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employees, draft, draftKey, boardBusy, hidden = false, onClearFocus, onPreview, onOpenReceipt }: {
+export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employees, draft, draftKey, boardBusy, hidden = false, onClearFocus, onPreview, onOpenReceipt, onImport }: {
   agent: ReturnType<typeof useManagerChat>; visibleWeek: string; focusDate?: string; focusKey?: number; employees: string[];
   draft?: string; draftKey?: number; boardBusy: boolean; hidden?: boolean; onClearFocus?: () => void;
-  onPreview: (proposal: Proposal | null) => void; onOpenReceipt: (date: string) => void;
+  onPreview: (proposal: Proposal | null) => void; onOpenReceipt: (date: string) => void; onImport: () => void;
 }) {
   const [text, setText] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -143,7 +143,8 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
         onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!disabled && text.trim()) void send(text); }
         }} />
-      <div className="conversation-composer-footer"><small>Enter לשליחה · Shift+Enter לשורה חדשה</small>
+      <div className="conversation-composer-footer"><button type="button" className="icon-button" aria-label="ייבוא סידור מקובץ" title="ייבוא סידור מקובץ" onClick={onImport} disabled={boardBusy}><Plus size={19} /></button>
+        <small>Enter לשליחה · Shift+Enter לשורה חדשה</small>
         {agent.working ? <button type="button" className="conversation-send" aria-label="עצירת הבקשה" disabled={agent.busy} onClick={() => void agent.stop()}><Square size={16} /></button> :
           <button type="submit" className="conversation-send" aria-label="שליחת הודעה" disabled={disabled || !text.trim()}>{agent.busy ? <LoaderCircle size={17} /> : <ArrowUp size={19} />}</button>}
       </div>

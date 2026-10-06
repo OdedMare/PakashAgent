@@ -10,7 +10,9 @@ vLLM, Groq...); the default target is a local model through Ollama.
 
 Robustness policy:
 - no API key required when a custom base_url is set (local servers)
-- the degradation ladder (`ladder.py`): schema → JSON mode → plain → merged
+- the degradation ladder (`ladder.py`): schema → JSON mode → plain → merged,
+  starting from the rung that last answered for the same endpoint, model and
+  schema
 - strips markdown fences from the reply
 - retries once with the parse error appended before giving up
 - bounds each HTTP completion and the whole logical call (`budgets.py`)
@@ -61,8 +63,13 @@ _log = logging.getLogger("pakash.llm")
 class _Call:
     """One logical call's resolved connection: settings, role, model, client."""
 
-    def __init__(self, settings, role: str, model: str, client):
+    def __init__(self, settings, role: str, model: str, client, base_url: str = ""):
         self.settings, self.role, self.model, self.client = settings, role, model, client
+        self.base_url = base_url
+
+
+def _schema_key(schema) -> str:
+    return "" if schema is None else json.dumps(schema, sort_keys=True)
 
 
 class OpenAIJsonClient:
@@ -71,10 +78,16 @@ class OpenAIJsonClient:
     def __init__(self, settings_store):
         self._store = settings_store
         self._cached_clients = {}
+        # (endpoint, model, schema) -> the ladder rung that last answered.
+        # A server that refuses `json_schema` refuses it on every call; without
+        # this each call pays that 400 round-trip again before stepping down.
+        # Per process and never moved back up: a restart, or a different
+        # endpoint or model in the settings, starts again from the top.
+        self._first_rungs = {}
 
     def complete_json(
         self, system: str, user: str, schema=None, flow: str = "",
-        role: str = "", model: str = "",
+        role: str = "", model: str = "", time_context: str = "",
     ) -> dict:
         """Return the model's reply parsed as a JSON object.
 
@@ -85,11 +98,16 @@ class OpenAIJsonClient:
         caller names itself once. `role` and `model` override that for a
         one-off; the endpoint and key always follow the role. Everything is
         resolved here, per call, so a saved selection applies immediately.
+
+        `time_context` lets a caller making several calls for one request pin
+        the clock they all see (`agent_time_context()` otherwise), so their
+        prompts stay identical up to where the request's own state differs.
         """
         started = time.monotonic()
         call = self._connect(flow, role or role_for_flow(flow), model)
         messages = [
-            {"role": "system", "content": system.rstrip() + "\n\n" + agent_time_context()},
+            {"role": "system",
+             "content": system.rstrip() + "\n\n" + (time_context or agent_time_context())},
             {"role": "user", "content": user},
         ]
         return self._until_json(call, messages, schema, flow, started)
@@ -102,7 +120,7 @@ class OpenAIJsonClient:
             if not api_key and not base_url:
                 raise AgentError("לא הוגדר מפתח API או שרת תואם OpenAI")
             client = self._client_for(api_key, base_url, read_timeout_for(settings, flow))
-            return _Call(settings, role, resolve_model(settings, role, model), client)
+            return _Call(settings, role, resolve_model(settings, role, model), client, base_url)
         except AgentError:
             raise
         except Exception as exc:
@@ -116,15 +134,18 @@ class OpenAIJsonClient:
         usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
         max_tokens = _DIET_MAX_COMPLETION_TOKENS if settings.llm_diet_mode else None
         last_error = "unknown"
+        rung_key = (call.base_url, call.model, _schema_key(schema))
         for attempt in range(_MAX_JSON_ATTEMPTS):
-            content, current = ladder.complete(
+            content, current, rung = ladder.complete(
                 call.client, call.model, messages, max_tokens, schema,
                 settings.llm_repetition_penalty,
                 slots_for(settings).reserve(
                     priority_for_flow(flow), queue_seconds(settings, flow)
                 ),
                 _budget_seconds(settings, flow),
+                self._first_rungs.get(rung_key, 0),
             )
+            self._first_rungs[rung_key] = rung
             # Tokens spent on a rejected reply were still spent.
             for key in usage:
                 usage[key] += current.get(key, 0)

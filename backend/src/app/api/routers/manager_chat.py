@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from pydantic import BaseModel, Field
 
 
@@ -32,8 +32,10 @@ def build_router(service, repository, guards):
         return repository.create_chat(session["team_id"], session["manager_id"])
 
     @router.get("/{chat_id}")
-    def get_chat(chat_id: str, session: dict = Depends(manager)):
-        return repository.get_chat(session["team_id"], session["manager_id"], chat_id)
+    def get_chat(chat_id: str, from_message: str = Query(default="", max_length=80),
+                 session: dict = Depends(manager)):
+        return repository.get_chat(session["team_id"], session["manager_id"], chat_id,
+                                   from_message=from_message)
 
     @router.delete("/{chat_id}")
     def delete_chat(chat_id: str, session: dict = Depends(manager)):

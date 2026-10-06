@@ -30,8 +30,11 @@ that name no date as being about that day.
   Profile patches use the existing profile validation and show before/after values.
 - Propose publishing, returning to draft or clearing a period.
 
-The full initial profile, current availability, recurring constraints, rotations,
-standing preferences and recent changes accompany the conversation. Arbitrary
+The full initial profile, current availability (from a week ago, or the focused
+period's start if earlier), recurring constraints, rotations, standing
+preferences and recent changes accompany the conversation. Every round of one
+reply re-sends that context with the same clock and the round's tool results
+last, so the model server can reuse the part it already computed. Arbitrary
 written policies are interpreted by the model; supported countable rules are
 also checked by the existing deterministic audit. Suggestions prefer compliant
 candidates. Exceptions are shown and require a separate checkbox, and do not
@@ -67,7 +70,10 @@ lists and **bold**. The panel renders these as elements, never as HTML.
 
 Sending a message never changes scheduling or profile data. It starts a
 background reply and the browser polls the saved conversation, so long model
-requests do not hold a browser request open. Stop discards any late response;
+requests do not hold a browser request open. While a reply runs the poll asks
+only for the working message onward (`?from_message=`): nothing before it can
+change until it finishes, and the whole thread with every earlier plan grew
+with the conversation. Stop discards any late response;
 it does not interrupt an HTTP completion already running at the provider.
 
 The Apply button approves the server-stored plan. The server checks its owner

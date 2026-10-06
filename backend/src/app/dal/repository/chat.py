@@ -55,15 +55,25 @@ class ChatRepository(RepositoryBase):
         """, (chat_id, team_id, manager_id))
         return self.get_chat(team_id, manager_id, chat_id)
 
-    def get_chat(self, team_id, manager_id, chat_id):
+    def get_chat(self, team_id, manager_id, chat_id, from_message=""):
+        """The conversation; `from_message` keeps only that message and later.
+
+        A poll during a running reply asks for the tail alone: nothing before
+        the working message can change until it finishes, and re-sending every
+        earlier plan every two seconds grows with the conversation. An id that
+        is not in this chat returns every message.
+        """
         chat = self._one("""
             SELECT id,title,created_at,updated_at FROM manager_chats
             WHERE id=%s AND team_id=%s AND manager_id=%s
         """, (chat_id, team_id, manager_id))
         chat["messages"] = self._all("""
             SELECT id,role,content,status,payload,created_at,request_id FROM manager_chat_messages
-            WHERE chat_id=%s ORDER BY sequence
-        """, (chat_id,))
+            WHERE chat_id=%s AND sequence >= COALESCE((
+                SELECT sequence FROM manager_chat_messages WHERE id=%s AND chat_id=%s
+            ), 0)
+            ORDER BY sequence
+        """, (chat_id, from_message, chat_id))
         return chat
 
     def delete_chat(self, team_id, manager_id, chat_id):

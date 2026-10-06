@@ -36,7 +36,9 @@ import type {
 
 export const listManagerChats = () => request<ManagerChatSummary[]>("/api/agent/chats");
 export const createManagerChat = () => request<ManagerConversation>("/api/agent/chats", { method: "POST" });
-export const readManagerChat = (id: string) => request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}`);
+// `fromMessage` asks for that message and everything after it, not the whole thread.
+export const readManagerChat = (id: string, fromMessage?: string) => request<ManagerConversation>(
+  `/api/agent/chats/${encodeURIComponent(id)}${fromMessage ? `?from_message=${encodeURIComponent(fromMessage)}` : ""}`);
 export const deleteManagerChat = (id: string) => request(`/api/agent/chats/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const sendManagerMessage = (id: string, input: { content: string; request_id: string; schedule_id?: string; visible_week?: string; focus_date?: string; approval_message_id?: string }) =>
   request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/messages`, { method: "POST", body: JSON.stringify(input) });

@@ -41,6 +41,23 @@ on `BadRequestError`:
 Only a `BadRequestError` advances the ladder; any other exception becomes an
 `AgentError` immediately.
 
+**The ladder starts where it last succeeded.** `OpenAIJsonClient` remembers,
+per (endpoint, model, schema), the rung that answered, and the next call
+starts there. A server that refuses `json_schema` refuses it every time, and
+without the memory each call paid that 400 round-trip again before stepping
+down. Keyed by the schema too, so one flow's schema being refused does not
+cost another flow its structured output. It only ever moves down, and lives
+per process: a restart, or a different endpoint or model in the settings,
+starts from the top again.
+
+**The clock is part of the prompt prefix.** `agent_time_context()` is
+appended to every system prompt at minute precision, and a caller making
+several calls for one request (the manager chat's rounds) passes
+`time_context=` to pin one clock for all of them. Inference servers (Ollama,
+llama.cpp, vLLM with prefix caching) reuse the computation for the part of a
+prompt that is identical to the previous one; a clock ticking every second
+made that part end right after the system prompt.
+
 **A context-overflow 400 does not advance it.** A prompt longer than the
 server's context window is also a `BadRequestError`, and no rung can shorten
 it — every remaining one sends the same oversized messages, fails identically,

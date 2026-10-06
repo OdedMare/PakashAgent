@@ -20,6 +20,15 @@ def test_agent_context_contains_the_full_israel_clock_in_summer():
     assert "Local time: 15:36" in context
 
 
+def test_agent_context_does_not_change_within_a_minute():
+    # Seconds would make every prompt differ early, defeating prefix reuse.
+    first = agent_time_context(datetime.datetime(2026, 8, 25, 12, 36, 1, tzinfo=UTC))
+    later = agent_time_context(datetime.datetime(2026, 8, 25, 12, 36, 59, tzinfo=UTC))
+
+    assert first == later
+    assert "Local datetime: 2026-08-25T15:36:00+03:00" in first
+
+
 def test_iana_timezone_applies_winter_standard_time():
     local = israel_datetime(datetime.datetime(2026, 1, 15, 12, 0, tzinfo=UTC))
 

@@ -149,6 +149,46 @@ def test_ladder_steps_down_through_every_rung_on_bad_request():
     assert "sys" in last[0]["content"]
 
 
+def test_the_next_call_starts_from_the_rung_that_answered():
+    # A server that refused json_schema once refuses it every time; paying
+    # that 400 again on each call is a wasted round-trip.
+    llm, fake = _client([_bad_request(), _Response('{"ok": 1}'), _Response('{"ok": 2}')])
+    llm.complete_json("sys", "usr", schema={"type": "object"})
+    llm.complete_json("sys", "usr", schema={"type": "object"})
+
+    formats = [call["response_format"]["type"] for call in fake.completions.calls]
+    assert formats == ["json_schema", "json_object", "json_object"]
+
+
+def test_a_remembered_rung_belongs_to_one_schema():
+    llm, fake = _client([_bad_request(), _Response('{"ok": 1}'), _Response('{"ok": 2}')])
+    llm.complete_json("sys", "usr", schema={"type": "object"})
+    llm.complete_json("sys", "usr", schema={"type": "object", "required": ["ok"]})
+
+    assert fake.completions.calls[2]["response_format"]["type"] == "json_schema"
+
+
+def test_a_remembered_rung_still_steps_down_when_it_is_refused():
+    llm, fake = _client([
+        _bad_request(), _Response('{"ok": 1}'),
+        _bad_request(), _Response('{"ok": 2}'), _Response('{"ok": 3}'),
+    ])
+    for _ in range(3):
+        llm.complete_json("sys", "usr", schema={"type": "object"})
+
+    formats = [(call.get("response_format") or {}).get("type") for call in fake.completions.calls]
+    assert formats == ["json_schema", "json_object", "json_object", None, None]
+
+
+def test_a_caller_can_pin_the_clock_for_a_series_of_calls():
+    llm, fake = _client([_Response('{"ok": 1}'), _Response('{"ok": 2}')])
+    llm.complete_json("sys", "usr", time_context="PINNED CLOCK")
+    llm.complete_json("sys", "usr", time_context="PINNED CLOCK")
+
+    systems = [call["messages"][0]["content"] for call in fake.completions.calls]
+    assert systems == ["sys\n\nPINNED CLOCK"] * 2
+
+
 def test_a_non_bad_request_error_does_not_advance_the_ladder():
     # Only a 400 means "the server rejected this shape". Anything else is a
     # real failure and must surface immediately rather than being retried

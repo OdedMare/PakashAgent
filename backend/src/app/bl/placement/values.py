@@ -3,7 +3,7 @@
 import datetime
 from typing import Any, Dict, List, Optional
 
-from app.bl.audit.roster import shift_hours
+from app.bl.audit.stats import shift_stats
 
 
 def text(value: Any) -> str:
@@ -93,20 +93,9 @@ def hours_by_employee(schedule: dict, profile: dict) -> Dict[str, float]:
     `audit.roster.shift_hours` is the one hours calculation in the product,
     so a candidate's "8 hours" here is the same number the warning uses.
     """
-    lengths = {
-        text(shift.get("name")): shift_hours(shift)
-        for shift in shifts(profile) if text(shift.get("name"))
-    }
-    load: Dict[str, float] = {
-        text(person.get("name")): 0.0
-        for person in employees(profile) if text(person.get("name"))
-    }
-    for row in rows(schedule):
-        if row["employee"]:
-            load[row["employee"]] = load.get(row["employee"], 0.0) + lengths.get(
-                row["shift"], 0.0
-            )
-    return load
+    stats = shift_stats(schedule.get("assignments") or [], shifts(profile), employees(profile),
+                        slots=schedule.get("slots") or [], profile=profile)
+    return {row["employee"]: row["hours"] for row in stats["by_employee"]}
 
 
 def warning_key(warning: dict) -> tuple:

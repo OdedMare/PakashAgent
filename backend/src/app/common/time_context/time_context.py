@@ -32,8 +32,14 @@ def israel_today(
 def agent_time_context(
     now: Optional[datetime.datetime] = None,
 ) -> str:
-    """Machine-readable clock plus the rules every model invocation follows."""
-    local = israel_datetime(now).replace(microsecond=0)
+    """Machine-readable clock plus the rules every model invocation follows.
+
+    Minute precision on purpose: this text sits early in every prompt, and a
+    clock that ticks every second makes consecutive calls differ there, so an
+    inference server cannot reuse the prompt prefix it just computed. No
+    scheduling decision turns on seconds.
+    """
+    local = israel_datetime(now).replace(second=0, microsecond=0)
     return """Current date and time:
 - Timezone: {timezone}
 - Local datetime: {datetime}

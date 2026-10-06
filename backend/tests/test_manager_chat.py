@@ -31,11 +31,15 @@ class ChatRepo(_FakeScheduleRepo):
                                    title="שיחה חדשה", messages=[])
         return self.get_chat(team_id, manager_id, chat_id)
 
-    def get_chat(self, team_id, manager_id, chat_id):
+    def get_chat(self, team_id, manager_id, chat_id, from_message=""):
         chat = self.chats.get(chat_id)
         if not chat or (chat["team_id"], chat["manager_id"]) != (team_id, manager_id):
             raise NotFoundError("השיחה לא נמצאה")
-        return copy.deepcopy(chat)
+        chat = copy.deepcopy(chat)
+        ids = [row["id"] for row in chat["messages"]]
+        if from_message in ids:
+            chat["messages"] = chat["messages"][ids.index(from_message):]
+        return chat
 
     def list_chats(self, team_id, manager_id):
         return [dict(id=row["id"], title=row["title"]) for row in self.chats.values()
@@ -564,6 +568,31 @@ def test_extra_tool_calls_are_refused_out_loud_and_progress_is_saved_each_round(
     assert repo.progress[0]["schedule_id"] == schedule_id
 
 
+def test_rounds_share_one_prompt_prefix_up_to_what_the_round_adds():
+    # An inference server reuses a computed prefix only while the text is
+    # identical, so everything fixed for the turn comes before the results.
+    calls = turn()
+    calls["tool_calls"] = [dict(tool="list_periods", arguments={})]
+    repo, llm, service, chat_id, schedule_id = setup([calls, turn()])
+    converse(service, repo, chat_id, schedule_id, "מה יש?")
+    first, second = llm.calls[0], llm.calls[1]
+    fixed = first["user"].index('"final_round"')
+    assert fixed > len(first["user"]) // 2
+    assert second["user"][:fixed] == first["user"][:fixed]
+    assert json.loads(second["user"])["results"]
+    assert first["time_context"] and second["time_context"] == first["time_context"]
+
+
+def test_the_model_reads_recent_and_future_availability_without_storage_fields():
+    repo, llm, service, chat_id, schedule_id = setup([turn()])
+    repo.set_availability(TEAM, "יוסי", "2020-01-06", reason="ישן")
+    repo.set_availability(TEAM, "יוסי", "2099-01-06", reason="עתידי")
+    converse(service, repo, chat_id, schedule_id, "מה יש?")
+    rows = json.loads(llm.calls[0]["user"])["availability"]
+    assert [row["reason"] for row in rows] == ["עתידי"]
+    assert not {"id", "team_id"} & set(rows[0])
+
+
 def test_failed_tool_is_reported_to_the_model_rather_than_ending_the_turn():
     calls = turn()
     calls["tool_calls"] = [dict(tool="workload_report", arguments={"starts_on": "2026-10-10"})]
@@ -640,6 +669,22 @@ def test_two_managers_cannot_read_or_apply_each_others_private_conversation():
     member = TestClient(app)
     member.cookies.set(COOKIE_NAME, issue(SECRET, TEAM, ROLE_MEMBER, 30))
     assert member.get("/api/agent/chats").status_code == 401
+
+
+def test_a_poll_can_read_only_the_tail_of_the_conversation():
+    repo, _, service, _, schedule_id = setup([turn()])
+    app = FastAPI()
+    app.include_router(build_router(service, repo, Guards(SECRET)))
+    client = TestClient(app)
+    client.cookies.set(COOKIE_NAME, issue(SECRET, TEAM, ROLE_BOSS, 30))
+    chat = client.post("/api/agent/chats").json()
+    client.post("/api/agent/chats/%s/messages" % chat["id"], json={
+        "content": "מה יש?", "request_id": "r1", "schedule_id": schedule_id})
+    url = "/api/agent/chats/%s?from_message=%s"
+    reply = client.get("/api/agent/chats/" + chat["id"]).json()["messages"][-1]
+    tail = client.get(url % (chat["id"], reply["id"])).json()["messages"]
+    assert [row["id"] for row in tail] == [reply["id"]]
+    assert len(client.get(url % (chat["id"], "missing")).json()["messages"]) == 2
 
 
 def test_retry_request_id_does_not_duplicate_messages():

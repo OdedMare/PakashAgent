@@ -628,6 +628,7 @@ export function Management({
             draftKey={suggested.n}
             onPreview={setChatPreview}
             onOpenReceipt={(date) => setChatWeek((previous) => ({ date, n: (previous?.n ?? 0) + 1 }))}
+            onImport={() => setImportOpen(true)}
           />
 
           <div hidden={section !== "overview"}>
