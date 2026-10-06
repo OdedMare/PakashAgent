@@ -61,7 +61,7 @@ class ChatRepository(RepositoryBase):
             WHERE id=%s AND team_id=%s AND manager_id=%s
         """, (chat_id, team_id, manager_id))
         chat["messages"] = self._all("""
-            SELECT id,role,content,status,payload,created_at FROM manager_chat_messages
+            SELECT id,role,content,status,payload,created_at,request_id FROM manager_chat_messages
             WHERE chat_id=%s ORDER BY sequence
         """, (chat_id,))
         return chat
