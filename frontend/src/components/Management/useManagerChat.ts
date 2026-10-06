@@ -84,16 +84,25 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
     if (!chatId || working || !content.trim()) return false;
     // An id survives a lost response, so re-fetching recovers the accepted turn.
     return run(async () => {
+      const id = requestId();
+      const latest = chat?.messages[chat.messages.length - 1];
+      const confirms = /^(כן|כן תעשה|כן תעשי|כן תבצע|תבצע|תעשי|מאשר|מאשרת|מאשר את התוכנית|מאשרת את התוכנית|החל שינויים)$/.test(content.trim().replace(/[\s,.!?؟]+/g, " ").trim());
+      const approval = confirms && latest?.status === "pending" && !latest.payload.question ? latest.id : undefined;
+      let next: ManagerConversation;
       try {
-        return await sendManagerMessage(chatId, { content: content.trim(), request_id: requestId(),
-          schedule_id: scheduleId || undefined, visible_week: visibleWeek, focus_date: focusDate || undefined });
+        next = await sendManagerMessage(chatId, { content: content.trim(), request_id: id,
+          schedule_id: scheduleId || undefined, visible_week: visibleWeek, focus_date: focusDate || undefined,
+          approval_message_id: approval });
       } catch (reason) {
         const recovered = await readManagerChat(chatId).catch(() => null);
-        if (recovered?.messages.some((message) => message.status === "working")) return recovered;
-        throw reason;
+        if (recovered?.messages.some((message) => message.status === "working" || message.request_id === id)) next = recovered;
+        else throw reason;
       }
+      if (approval && next.messages.find((message) => message.id === approval)?.status === "applied")
+        await onApplied(latest?.payload.plan);
+      return next;
     });
-  }, [chatId, working, scheduleId, visibleWeek, focusDate, run]);
+  }, [chat, chatId, working, scheduleId, visibleWeek, focusDate, run, onApplied]);
 
   const apply = useCallback(async (messageId: string, exceptions: boolean) => {
     if (!chatId || working) return;

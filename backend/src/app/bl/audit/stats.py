@@ -26,8 +26,8 @@ def shift_stats(
     profile: Optional[dict] = None,
 ) -> dict:
     """Everyone on the roster appears in `by_employee`, zeros included."""
-    shift_index = index_shifts(shifts)
-    rows = rows_of(assignments, shift_index)
+    shift_index = index_shifts(((profile or {}).get("archived_shifts") or []) + (shifts or []))
+    rows = rows_of(assignments, shift_index, slots)
     return {
         "total_hours": round(sum(row["hours"] for row in rows), 2),
         "total_shifts": len(rows),

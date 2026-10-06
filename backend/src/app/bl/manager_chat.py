@@ -16,7 +16,7 @@ from app.bl.changes.values import json_default
 from app.bl.chat_schema import CHAT_SCHEMA, PROFILE_SECTIONS
 from app.bl.chat_contract import (
     NeedsManager as _NeedsManager, RejectedPlan as _Rejected,
-    approval_text, coverage_preview, exception_warnings,
+    approval_text, coverage_preview, exception_warnings, whole_day_request,
 )
 from app.bl.chat_lifecycle import copied_day, future_schedules, prepare_retirement, prepare_structure
 from app.bl.planner.shaping import question
@@ -64,7 +64,8 @@ def _iso_or_blank(value):
 def _plan_for_model(plan, whole):
     """A stored plan as the model reads it back: whole, or as a summary."""
     # The snapshot hash and the generated slot grid mean nothing to the model.
-    shown = {key: value for key, value in plan.items() if key != "snapshot"}
+    shown = {key: value for key, value in plan.items()
+             if key not in ("snapshot", "updated_profile", "replacement_slots")}
     if shown.get("generated"):
         shown["generated"] = {key: value for key, value in shown["generated"].items() if key != "slots"}
     if whole:
@@ -248,7 +249,18 @@ class ManagerChatService:
         facts stay whole, because "the second person" points into them.
         Anything older is a summary of what was proposed and what became of it.
         """
-        rows = [row for row in chat["messages"][-32:] if row["id"] != working_id]
+        all_rows = [row for row in chat["messages"] if row["id"] != working_id]
+        retained = set(range(max(0, len(all_rows) - 32), len(all_rows)))
+        for key in ("plan", "question", "results"):
+            anchor = next((index for index in range(len(all_rows) - 1, -1, -1)
+                           if (all_rows[index].get("payload") or {}).get(key)), None)
+            if anchor is not None:
+                retained.add(anchor)
+                if anchor:
+                    retained.add(anchor - 1)
+                if anchor + 1 < len(all_rows):
+                    retained.add(anchor + 1)
+        rows = [all_rows[index] for index in sorted(retained)]
         planned = [index for index, row in enumerate(rows) if (row.get("payload") or {}).get("plan")]
         checked = [index for index, row in enumerate(rows) if (row.get("payload") or {}).get("results")]
         latest_plan = planned[-1] if planned else -1
@@ -311,7 +323,7 @@ class ManagerChatService:
                         introduced=[row for row in after if warning_key(row) not in before],
                         resolved=[row for key, row in before.items() if key not in after_keys])
         if name == "find_replacements":
-            arguments = dict(arguments, include_exceptions=True)
+            arguments = dict(arguments, include_exceptions=False)
         return self._tools.run(team_id, name, arguments)
 
     def _workload(self, team_id, arguments, focused_id):
@@ -377,6 +389,8 @@ class ManagerChatService:
                       and iso(period["starts_on"]) <= first and last <= iso(period["ends_on"])), "")
         state = self._state(team_id, schedule_id)
         schedule, profile = state["schedule"] or {}, state["profile"]
+        if kind == "changes" and whole_day_request(request, profile):
+            raise _Rejected("בקשת שיבוץ ליום שלם דורשת kind=generate ובדיקת כל המשמרות ביום; אין להחזיר רק שיבוץ בוקר")
         plan = {
             "kind": kind, "schedule_id": schedule_id,
             "agent_reason": (turn.get("agent_reason") or turn.get("reply") or "").strip(),
@@ -509,7 +523,7 @@ class ManagerChatService:
                 already_scheduled=[model_assignment(row) for row in outside],
             )
         else:
-            generated = self._scheduler.generate(
+            generated = self._scheduler.generate_verified(
                 state["profile"], first, last, availability=state["availability"],
                 history=self._history.before(team_id, first),
                 preferences=state["preferences"], instructions=turn.get("instructions") or "",
@@ -574,7 +588,7 @@ class ManagerChatService:
             profile, schedule.get("slots") or [],
         )
         for row in rows:
-            if not is_eligible(profile, row["employee"], row["shift"]):
+            if not is_eligible(profile, row["employee"], row["shift"], iso(row["date"])):
                 warnings.append(dict(code="ineligible", severity="warning", employee=row["employee"],
                                      date=iso(row["date"]), shift=row["shift"], details={},
                                      message="%s לא מוגדר/ת למשמרת %s בפרופיל הצוות" %
@@ -610,17 +624,14 @@ class ManagerChatService:
                 self._repo.update_team_profile(team_id, plan["updated_profile"])
             elif kind == "restructure":
                 schedule = self._repo.get_schedule(schedule_id, team_id)
-                outside = [dict(row) for row in schedule["assignments"]
-                           if not plan["starts_on"] <= iso(row["date"]) <= plan["ends_on"]]
-                # Replacing slots cascades assignments in Postgres. Clear explicitly
-                # first so the same contract holds for every repository implementation.
                 for row in schedule["assignments"]:
-                    self._repo.remove_assignment(row["id"], team_id)
-                self._repo.replace_slots(schedule_id, team_id, plan["replacement_slots"])
+                    if plan["starts_on"] <= iso(row["date"]) <= plan["ends_on"]:
+                        self._repo.remove_assignment(row["id"], team_id)
+                self._repo.replace_span_slots(schedule_id, team_id, plan["starts_on"], plan["ends_on"], plan["generated"]["slots"])
                 self._repo.update_team_profile(team_id, plan["updated_profile"])
                 refreshed = self._repo.get_schedule(schedule_id, team_id)
                 slots = {(row["shift_name"], iso(row["slot_date"])): row["id"] for row in refreshed["slots"]}
-                for row in outside + plan["generated"]["assignments"]:
+                for row in plan["generated"]["assignments"]:
                     self._repo.add_assignment(schedule_id, team_id, slots[(row["shift"], iso(row["date"]))],
                                               row["employee"], row.get("reason") or agent_reason,
                                               source=row.get("source") or "agent")

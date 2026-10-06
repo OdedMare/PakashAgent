@@ -85,6 +85,18 @@ class ChatRepo(_FakeScheduleRepo):
         row = next(row for row in self.chats[chat_id]["messages"] if row["id"] == message_id)
         row.update(status="applied", payload=payload)
 
+    def record_chat_confirmation(self, chat_id, content, request_id, receipt):
+        self.chats[chat_id]["messages"] += [
+            dict(id=self._id("user"), role="user", content=content, status="complete", payload={}, request_id=request_id),
+            dict(id=self._id("receipt"), role="assistant", content=receipt["message"], status="complete", payload={"receipt": receipt}),
+        ]
+
+    def replace_span_slots(self, schedule_id, team_id, first, last, slots):
+        self.get_schedule(schedule_id, team_id)
+        self.slots[schedule_id] = [row for row in self.slots[schedule_id]
+                                  if not first <= row["slot_date"] <= last] + [
+            dict(row, id=self._id("slot"), team_id=team_id) for row in slots]
+
 
 def turn(kind="answer", **kwargs):
     return dict(kind=kind, reply="הנה התוכנית", needs_reason=False, needs_input=False,
@@ -231,7 +243,7 @@ def test_generate_upcoming_week_previews_real_assignments_without_touching_curre
     proposal.update(starts_on="2026-10-11", ends_on="2026-10-17")
     generation = {"assignments": [dict(employee="דנה", shift=MORNING, date="2026-10-11", reason="מתאימה")],
                   "notes": [], "summary": "סידור מוצע"}
-    repo, _, service, chat_id, schedule_id = setup([proposal, generation])
+    repo, _, service, chat_id, schedule_id = setup([proposal, generation, generation])
     message = converse(service, repo, chat_id, schedule_id, "תשבץ את השבוע הבא")
     assert message["status"] == "pending"
     assert len(repo.schedules) == 1
@@ -583,6 +595,8 @@ def test_adjusting_generated_preview_preserves_other_choices_and_remains_read_on
                     ])
     repo, llm, service, chat_id, schedule_id = setup([proposal, {
         "assignments": [], "notes": [], "summary": "הבחירות נשמרו",
+    }, {
+        "assignments": [], "notes": [], "summary": "הבחירות נשמרו, נותרו חוסרים",
     }])
     message = converse(service, repo, chat_id, schedule_id, "במקום דנה ביום ראשון תציע את יוסי")
     assert message["status"] == "pending"

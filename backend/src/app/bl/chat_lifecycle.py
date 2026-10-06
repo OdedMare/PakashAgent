@@ -86,7 +86,7 @@ def prepare_structure(profiles, scheduler, team_id, turn, plan, state, history, 
     outside = [row for row in schedule_rows(schedule) if not first <= row["date"] <= last]
     existing = [row for row in schedule_rows(schedule) if first <= row["date"] <= last]
     instructions = (turn.get("instructions") or "") + "\nנסה לשמר את העובדים הקיימים היכן שהם מתאימים; בדוק מחדש שעות ומנוחה. השיבוץ הקודם: " + json.dumps(existing, ensure_ascii=False)
-    generated = scheduler.generate_span(updated, first, last, availability=state["availability"],
+    generated = scheduler.generate_verified(updated, first, last, availability=state["availability"],
         history=history, preferences=state["preferences"], instructions=instructions,
         required_assignments=turn.get("required_assignments") or [], already_scheduled=outside)
     new_slots = [dict(row) for row in schedule["slots"] if not first <= iso(row["slot_date"]) <= last]

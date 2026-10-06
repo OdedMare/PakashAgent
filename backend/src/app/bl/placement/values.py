@@ -77,6 +77,9 @@ def is_eligible(profile: dict, employee: str, shift_name: str, date: str = "") -
             continue
         if date and person.get("inactive_from") and date >= person["inactive_from"]:
             return False
+        active_shifts = {row.get("name") for row in shifts(profile)}
+        if shift_name not in active_shifts and shift_name in (person.get("archived_eligible_shifts") or []):
+            return True
         eligible = person.get("eligible_shifts")
         if not isinstance(eligible, list) or not eligible:
             return True

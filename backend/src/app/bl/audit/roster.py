@@ -71,7 +71,10 @@ def row(item: Any, shift_index: Dict[str, dict]) -> Optional[dict]:
     if not employee or not date:
         return None
     shift_name = text(item.get("shift"))
-    shift = shift_index.get(shift_name) or {}
+    shift = dict(shift_index.get(shift_name) or {})
+    for key in ("start_time", "end_time", "hour_weight", "is_on_call"):
+        if item.get(key) is not None and item.get(key) != "":
+            shift[key] = item[key]
     return {
         "employee": employee,
         "shift": shift_name,
@@ -84,8 +87,13 @@ def row(item: Any, shift_index: Dict[str, dict]) -> Optional[dict]:
     }
 
 
-def rows_of(assignments: Optional[List[dict]], shift_index: Dict[str, dict]) -> List[dict]:
-    rows = [row(item, shift_index) for item in assignments or []]
+def rows_of(assignments: Optional[List[dict]], shift_index: Dict[str, dict], slots=None) -> List[dict]:
+    grid = {(text(slot.get("shift_name")), str(slot.get("slot_date"))): slot for slot in slots or []}
+    enriched = [dict(item, **{key: value for key, value in
+                grid.get((item.get("shift"), str(item.get("date"))), {}).items()
+                if key in ("start_time", "end_time", "is_on_call", "hour_weight")})
+                if isinstance(item, dict) else item for item in assignments or []]
+    rows = [row(item, shift_index) for item in enriched]
     return [item for item in rows if item is not None]
 
 

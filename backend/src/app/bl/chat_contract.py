@@ -31,6 +31,11 @@ def exception_warnings(plan):
             if row.get("severity", "warning") == "warning" and row.get("code") not in GAP_CODES]
 
 
+def whole_day_request(content, profile):
+    return bool(re.search(r"(?:תשבץ|תשבצי|שבץ|שבצי).*?(?:היום|מחר|יום\s|ראשון|שני|שלישי|רביעי|חמישי|שישי|שבת)", content)) \
+        and not any(row.get("name") and row["name"] in content for row in profile.get("shifts") or [])
+
+
 def coverage_preview(profile, slots, assignments, warnings):
     """Every requested slot, even when the model returned no placements for it."""
     counts = seat_counts(assignments, profile.get("employees") or [], profile)

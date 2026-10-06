@@ -1130,7 +1130,7 @@ export interface CopilotAuditEvent {
   created_at?: string;
 }
 export interface ChatPlan {
-  kind: "changes" | "profile" | "generate" | "publish" | "unpublish" | "clear";
+  kind: "changes" | "profile" | "generate" | "publish" | "unpublish" | "clear" | "retire" | "restructure";
   schedule_id: string;
   agent_reason: string;
   reason: string;
@@ -1138,6 +1138,10 @@ export interface ChatPlan {
   constraints: { employee: string; date: string; shift?: string; reason?: string; available: boolean }[];
   warnings: { message: string; code?: string; employee?: string; date?: string }[];
   exceptions: string[];
+  employee?: string;
+  effective_date?: string;
+  copy_from_date?: string;
+  coverage?: { complete: boolean; slots: { date: string; shift: string; required: number | null; assigned: number; complete: boolean; problems: string[]; start_time: string; end_time: string }[] };
   starts_on?: string;
   ends_on?: string;
   replace_existing?: boolean;
@@ -1157,6 +1161,7 @@ export interface ManagerChatMessage {
   content: string;
   status: "working" | "pending" | "complete" | "applied" | "dismissed" | "superseded" | "error" | "cancelled";
   created_at: string;
+  request_id?: string;
   payload: {
     plan?: ChatPlan;
     question?: { question: string; recommendation: string; why: string; options: { label: string; answer: string }[] } | null;

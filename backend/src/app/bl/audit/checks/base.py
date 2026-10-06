@@ -22,9 +22,9 @@ class AuditInput:
         self.availability = availability or []
         self.profile = profile or {}
         self.slots = slots
-        self.shift_index: Dict[str, dict] = index_shifts(shifts)
+        self.shift_index: Dict[str, dict] = index_shifts((self.profile.get("archived_shifts") or []) + (shifts or []))
         self.policy = policy(profile)
-        self.rows = rows_of(assignments, self.shift_index)
+        self.rows = rows_of(assignments, self.shift_index, slots)
 
 
 class AuditCheck:

@@ -147,6 +147,24 @@ class PeriodRepository(RepositoryBase):
             ORDER BY slot_date, start_time, shift_name
         """, (schedule_id, team_id))
 
+    def replace_span_slots(self, schedule_id, team_id, starts_on, ends_on, slots):
+        """Migrate only the approved dates; other slot and assignment ids survive."""
+        self._require_schedule(schedule_id, team_id)
+        with connect(self._store) as connection:
+            connection.execute("""
+                DELETE FROM shift_slots WHERE schedule_id=%s AND team_id=%s
+                AND slot_date BETWEEN %s AND %s
+            """, (schedule_id, team_id, starts_on, ends_on))
+            for slot in slots:
+                connection.execute("""
+                    INSERT INTO shift_slots(id,team_id,schedule_id,shift_name,slot_date,
+                        start_time,end_time,headcount,required_roles,requires_shift_manager,is_on_call)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """, _slot_values(team_id, schedule_id, slot))
+            _touch(connection, schedule_id)
+            connection.commit()
+        return self.slots(schedule_id, team_id)
+
     def find_slot(
         self, schedule_id: str, team_id: str, shift_name: str, slot_date: str
     ) -> Optional[dict]:

@@ -62,8 +62,18 @@ class ProfileService:
         current = self._repository.team_profile(team_id)
         if current is None:
             raise NotFoundError("פרופיל הצוות לא נמצא")
+        existing = {row["name"]: row for row in current.get("employees") or []}
+        if employees is not None:
+            if not isinstance(employees, list) or any(not isinstance(row, dict) for row in employees):
+                raise AgentError("פרטי העובדים חייבים להיות רשימת רשומות")
+            employees = [dict(existing.get(row.get("name"), {}), **row) for row in employees]
         updated = _prepare_profile(current, employees, None, None, None, None, {})
         updated["shifts"] = shift_rules.shifts(shift_rows)
+        names = {row["name"] for row in updated["shifts"]}
+        for person in updated["employees"]:
+            before = existing.get(person["name"], {})
+            person["archived_eligible_shifts"] = sorted(set(before.get("archived_eligible_shifts") or []) |
+                                                       (set(before.get("eligible_shifts") or []) - names))
         updated["archived_shifts"] = current.get("archived_shifts", []) + [
             dict(row) for row in current.get("shifts") or []
             if row not in (current.get("archived_shifts") or [])]

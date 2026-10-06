@@ -60,6 +60,28 @@ class Scheduler:
         """Generate and verify exactly one date."""
         return self.generate_span(profile, day, day, **kwargs)
 
+    def generate_verified(self, profile, starts_on, ends_on, availability=None,
+                          history=None, instructions="", required_assignments=None,
+                          preferences=None, already_scheduled=None):
+        """The verified span path for chat periods, bounded to one week per call."""
+        from app.bl.scheduler.slots import plan_spans, MODE_WEEK
+        slots = build_slots(profile, starts_on, ends_on)
+        if not slots:
+            raise AgentError("לא הוגדרו משמרות לתאריכים שנבחרו")
+        committed = list(already_scheduled or [])
+        result = dict(slots=slots, assignments=[], warnings=[], notes=[], summary="", metrics=[])
+        for span in plan_spans(profile, starts_on, ends_on, MODE_WEEK):
+            pins = [row for row in required_assignments or [] if row["date"] in span["dates"]]
+            generated = self.generate_span(profile, span["date"], span["through"],
+                availability=availability, history=history, instructions=instructions,
+                required_assignments=pins, preferences=preferences, already_scheduled=committed)
+            result["assignments"].extend(generated["assignments"])
+            committed.extend(generated["assignments"])
+            result["warnings"].extend(generated.get("warnings") or [])
+            result["notes"].extend(generated.get("notes") or [])
+            result["metrics"].append(generated.get("metrics") or {})
+        return result
+
     def generate_span(
         self,
         profile: dict,

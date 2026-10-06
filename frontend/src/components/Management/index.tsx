@@ -16,6 +16,8 @@ import {
   Sun,
   Users,
   X,
+  Plus,
+  Search,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
@@ -27,6 +29,7 @@ import { ShareLink } from "@/components/Workspace/ShareLink";
 import type { ChatPlan, ManagementOverview, Proposal, TeamView } from "@/types";
 
 import { AgentChat } from "./AgentChat";
+import { useManagerChat } from "./useManagerChat";
 import { ProfileGapsNotice } from "./ProfileGapsNotice";
 import { CopilotInbox } from "./CopilotInbox";
 import { History } from "./History";
@@ -82,7 +85,8 @@ export function Management({
   // never has to remember which cell they were discussing with the agent.
   const [view, setView] = useState<ManagerView>("board");
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [chatWidth, setChatWidth] = useState(440);
+  const [chatWidth, setChatWidth] = useState(600);
+  const [chatSearch, setChatSearch] = useState("");
   const [chatPreview, setChatPreview] = useState<Proposal | null>(null);
   const [chatWeek, setChatWeek] = useState<{ date: string; n: number }>();
   // The day the board opened the agent on, if any. Counted like `suggested`
@@ -113,6 +117,7 @@ export function Management({
   // A focus day belongs to the week it was opened from. Paging to another
   // week drops it, so the agent is never told about a day off screen.
   const focusDate = focusDay.date && inWeek(focusDay.date, state.focusedWeek) ? focusDay.date : "";
+  const agent = useManagerChat(workspace.id, state.focusedScheduleId, state.focusedWeek, focusDate, onChatApplied);
   const [copilotPending, setCopilotPending] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -229,6 +234,23 @@ export function Management({
             סוכן הסידור
           </button>
         </nav>
+
+        <section className="workspace-conversations" aria-label="השיחות שלך">
+          <button type="button" className="sidebar-new-chat" disabled={agent.busy || agent.working || agent.loading}
+            onClick={() => { void agent.newChat(); openAgent(); }}><Plus size={18} />שיחה חדשה</button>
+          <label className="sidebar-search"><Search size={15} aria-hidden="true" />
+            <input type="search" aria-label="חיפוש שיחות" placeholder="חיפוש שיחות" value={chatSearch}
+              onChange={(event) => setChatSearch(event.target.value)} /></label>
+          <span className="sidebar-section-label">השיחות שלך</span>
+          <div className="sidebar-chat-list">
+            {agent.chats.filter((chat) => chat.title.includes(chatSearch)).map((chat) =>
+              <button type="button" key={chat.id} title={chat.title} disabled={agent.busy || agent.working}
+                className={agent.chat?.id === chat.id ? "is-active" : ""}
+                aria-current={agent.chat?.id === chat.id ? "true" : undefined}
+                onClick={() => { void agent.select(chat.id); openAgent(); }}><MessagesSquare size={15} />{chat.title}</button>)}
+            {chatSearch && !agent.chats.some((chat) => chat.title.includes(chatSearch)) ? <p>לא נמצאו שיחות</p> : null}
+          </div>
+        </section>
 
         <div className="header-actions">
           {onOpenManualSetup ? (
@@ -593,8 +615,7 @@ export function Management({
           </> : null}
           <AgentChat
             hidden={section !== "agent"}
-            workspaceId={workspace.id}
-            scheduleId={state.focusedScheduleId}
+            agent={agent}
             visibleWeek={state.focusedWeek}
             focusDate={focusDate}
             focusKey={focusDay.n}
@@ -603,7 +624,6 @@ export function Management({
             boardBusy={state.busy}
             draft={suggested.text}
             draftKey={suggested.n}
-            onApplied={onChatApplied}
             onPreview={setChatPreview}
           />
 
