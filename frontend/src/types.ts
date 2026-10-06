@@ -1136,7 +1136,7 @@ export interface ChatPlan {
   reason: string;
   operations: Operation[];
   constraints: { employee: string; date: string; shift?: string; reason?: string; available: boolean }[];
-  warnings: { message: string; code?: string; employee?: string; date?: string }[];
+  warnings: { message: string; code?: string; employee?: string; date?: string; severity?: string }[];
   exceptions: string[];
   employee?: string;
   effective_date?: string;
@@ -1164,6 +1164,8 @@ export interface ManagerChatMessage {
   request_id?: string;
   payload: {
     plan?: ChatPlan;
+    results?: { tool: string; ok?: boolean; date?: string; shift?: string; replacing?: string;
+      candidates?: { employee: string; hours?: number; why?: string; requires_exception?: boolean }[] }[];
     question?: { question: string; recommendation: string; why: string; options: { label: string; answer: string }[] } | null;
     steps?: { tool: string; ok: boolean }[];
     receipt?: { schedule_id: string; message: string };

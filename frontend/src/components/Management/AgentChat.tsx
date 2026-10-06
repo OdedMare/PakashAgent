@@ -7,6 +7,7 @@ import { displayDate as formatDate } from "@/components/DateInput";
 import { hebrewWeekday } from "./Calendar";
 import type { useManagerChat } from "./useManagerChat";
 import { ChatPlanCard } from "./ChatPlanCard";
+import { ChatCandidates } from "./ChatCandidates";
 
 /** The manager's one agent: every instruction to the scheduling agent goes
  *  through this conversation. The board can open it focused on one day
@@ -22,6 +23,14 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
   const [deleteOpen, setDeleteOpen] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const log = useRef<HTMLDivElement>(null);
+  const pinned = useRef(true);
+  const [awayFromBottom, setAwayFromBottom] = useState(false);
+  const [copied, setCopied] = useState("");
+  const [copyError, setCopyError] = useState("");
+  const [conversationId, setConversationId] = useState(agent.chat?.id);
+  if (conversationId !== agent.chat?.id) {
+    setConversationId(agent.chat?.id); setText("");
+  }
   const [seeded, setSeeded] = useState(draftKey);
   if (seeded !== draftKey) { setSeeded(draftKey); if (draft) setText(draft); }
   // Opening the chat on a day puts the cursor in the composer, ready for the
@@ -40,18 +49,29 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
   }, [preview, last?.content, onPreview]);
   const messageCount = messages.length;
   const lastStatus = last?.status;
-  useEffect(() => { if (log.current && !hidden) log.current.scrollTop = log.current.scrollHeight; }, [messageCount, lastStatus, agent.chat?.id, hidden]);
+  useEffect(() => {
+    if (log.current && !hidden && pinned.current) log.current.scrollTop = log.current.scrollHeight;
+  }, [messageCount, lastStatus, agent.chat?.id, hidden]);
+  useEffect(() => { pinned.current = true; }, [agent.chat?.id]);
+  useEffect(() => {
+    if (input.current) {
+      input.current.style.height = "auto";
+      input.current.style.height = `${Math.min(200, Math.max(64, input.current.scrollHeight))}px`;
+    }
+  }, [text]);
+  useEffect(() => { if (copied) { const timer = setTimeout(() => setCopied(""), 2000); return () => clearTimeout(timer); } }, [copied]);
   const send = async (value: string) => {
+    pinned.current = true;
     if (await agent.send(value)) { setText(""); input.current?.focus(); }
   };
   const disabled = agent.busy || agent.working || agent.loading;
   return <section className="conversation" hidden={hidden} aria-label="שיחה עם סוכן הסידור">
     <header className="conversation-toolbar">
-      <div className="conversation-title"><Sparkles size={17} aria-hidden="true" /><strong>סוכן הסידור</strong></div>
+      <div className="conversation-title"><Sparkles size={17} aria-hidden="true" /><strong>{agent.chat?.title === "שיחה חדשה" ? "סוכן הסידור" : agent.chat?.title ?? "סוכן הסידור"}</strong></div>
       <div className="conversation-tools">
         <button type="button" className="icon-button" aria-label="היסטוריית שיחות" aria-expanded={historyOpen}
           onClick={() => setHistoryOpen(!historyOpen)}><History size={17} /></button>
-        <button type="button" className="icon-button" aria-label="שיחה חדשה" disabled={agent.busy || agent.loading}
+        <button type="button" className="icon-button" aria-label="שיחה חדשה" disabled={agent.busy || agent.working || agent.loading}
           onClick={() => { void agent.newChat(); setText(""); setHistoryOpen(false); }}><Plus size={19} /></button>
       </div>
     </header>
@@ -60,7 +80,7 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
         {`יום ${hebrewWeekday(focusDate)} · ${formatDate(focusDate)}`}
         {onClearFocus ? <button type="button" aria-label="הסרת המיקוד ביום" title="חזרה לכל השבוע" onClick={onClearFocus}><X size={12} /></button> : null}
       </span> : visibleWeek ? `השבוע שמתחיל ב-${formatDate(visibleWeek)}` : "הצוות וכללי השיבוץ שלך"}
-      <span>המלצות מתבצעות רק באישור שלך</span>
+      <span>אפשר לאשר בכפתור או לכתוב ״כן, תעשה״</span>
     </div>
     {historyOpen ? <div className="conversation-history">
       <label htmlFor="manager-conversation-picker">השיחות שלי</label>
@@ -76,21 +96,24 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
       </div> : <button type="button" className="ghost-button" disabled={!agent.chat || agent.busy || agent.working}
         onClick={() => setDeleteOpen(true)}><Trash2 size={14} /> מחיקת השיחה</button>}
     </div> : null}
-    <div className="conversation-log" ref={log} role="log" aria-label="הודעות בשיחה" aria-relevant="additions text">
+    <div className="conversation-log" ref={log} role="log" aria-label="הודעות בשיחה" aria-relevant="additions text"
+      onScroll={() => { const element = log.current; if (element) { pinned.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; setAwayFromBottom(!pinned.current); } }}>
       {agent.loading ? <p className="conversation-loading"><LoaderCircle size={17} /> טוען שיחות…</p> : null}
       {!agent.loading && !messages.length ? <div className="conversation-empty">
         <div className="conversation-empty-mark"><MessageSquare size={25} /></div>
-        <h3>{focusDate ? `מה חשוב ביום ${hebrewWeekday(focusDate)}?` : "מה צריך לפתור בסידור?"}</h3>
-        <p>{focusDate ? "אפשר לבקש שיבוץ, לעדכן אילוץ או להתייעץ על היום הזה. בקשה בלי תאריך מתייחסת ליום שנבחר." : "כאן מנהלים את השיבוץ, העובדים והאילוצים, וגם מתייעצים איך לפתור בעיה. כתבו מה תרצו לעשות; אין צורך בסיבה נוספת."}</p>
+        <h3>{focusDate ? `מה נעשה ביום ${hebrewWeekday(focusDate)}?` : "איך ננהל את הסידור היום?"}</h3>
+        <p>{focusDate ? "שיבוץ, החלפה או אילוץ — נדבר על היום שנבחר בלוח." : "שיבוצים, אנשים ואילוצים. מתחילים בבקשה שלך."}</p>
         <div className="conversation-starters">{(focusDate ? DAY_STARTERS : WEEK_STARTERS).map((value) =>
           <button type="button" key={value} disabled={disabled} onClick={() => void send(value)}>{value}</button>)}</div>
       </div> : null}
-      {messages.map((message) => <article key={message.id} className={`conversation-message is-${message.role}${message.status === "error" ? " is-error" : ""}`}>
+      {messages.map((message) => <article id={`chat-message-${message.id}`} key={message.id} className={`conversation-message is-${message.role}${message.status === "error" ? " is-error" : ""}`}>
         <div className="conversation-speaker">{message.role === "assistant" ? <><Sparkles size={13} /> סוכן הסידור</> : "את/ה"}</div>
         {message.status === "working" ? <Thinking steps={message.payload.steps ?? []} /> :
           message.role === "assistant" ? <Markdown text={message.content} /> : <div className="conversation-text">{message.content}</div>}
         {message.payload.plan ? <ChatPlanCard message={message} employees={employees} disabled={disabled || boardBusy}
           onApply={(exceptions) => void agent.apply(message.id, exceptions)} onDismiss={() => void agent.dismiss(message.id)} onAdjust={(value) => void send(value)} /> : null}
+        {message.role === "assistant" && message.status === "complete" && message.payload.results ?
+          <ChatCandidates results={message.payload.results} disabled={disabled || message.id !== last?.id} onChoose={(value) => void send(value)} /> : null}
         {message.payload.question?.options.length ? <div className="conversation-options">{message.payload.question.options.map((option, index) =>
           <button type="button" key={option.label} disabled={disabled || message.id !== last?.id || message.status === "applied"}
             onClick={() => void send(option.answer)}>{index === 0 ? <Sparkles size={12} /> : null}{option.label}</button>)}</div> : null}
@@ -99,8 +122,19 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
         {message.status === "error" && message.id === last?.id ? <button type="button" className="ghost-button" disabled={disabled} onClick={() => {
           const previous = [...messages].reverse().find((row) => row.role === "user"); if (previous) void send(previous.content);
         }}>ניסיון נוסף</button> : null}
+        {message.role === "assistant" && message.status !== "working" && message.content ? <div className="conversation-message-actions">
+          <button type="button" className="icon-button" aria-label="העתקת התשובה" title="העתקת התשובה" onClick={async () => {
+            try { await navigator.clipboard.writeText(message.content); setCopied(message.id); setCopyError(""); }
+            catch { setCopyError("ההעתקה לא זמינה בדפדפן הזה. אפשר לבחור ולהעתיק את הטקסט."); }
+          }}>{copied === message.id ? <Check size={15} /> : <Copy size={15} />}</button>
+        </div> : null}
       </article>)}
     </div>
+    {awayFromBottom ? <button type="button" className="conversation-jump" aria-label="מעבר להודעה האחרונה"
+      onClick={() => { pinned.current = true; log.current?.scrollTo({ top: log.current.scrollHeight, behavior: "smooth" }); }}><ArrowDown size={17} /></button> : null}
+    {preview ? <div className="conversation-pending-bar"><span><Sparkles size={14} />תוכנית ממתינה לאישור</span>
+      <button type="button" onClick={() => document.getElementById(`chat-message-${last.id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" })}>הצגת התוכנית</button></div> : null}
+    {copyError ? <p className="conversation-error" role="status">{copyError}</p> : null}
     {agent.error ? <p className="conversation-error" role="alert">{agent.error}</p> : null}
     <form className="conversation-composer" onSubmit={(event) => { event.preventDefault(); if (!disabled) void send(text); }}>
       <label className="sr-only" htmlFor="agent-composer-input">הודעה לסוכן הסידור</label>
@@ -110,7 +144,7 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
         }} />
       <div className="conversation-composer-footer"><small>Enter לשליחה · Shift+Enter לשורה חדשה</small>
         {agent.working ? <button type="button" className="conversation-send" aria-label="עצירת הבקשה" disabled={agent.busy} onClick={() => void agent.stop()}><Square size={16} /></button> :
-          <button type="submit" className="conversation-send" aria-label="שליחת הודעה" disabled={disabled || !text.trim()}>{agent.busy ? <LoaderCircle size={17} /> : <Send size={17} />}</button>}
+          <button type="submit" className="conversation-send" aria-label="שליחת הודעה" disabled={disabled || !text.trim()}>{agent.busy ? <LoaderCircle size={17} /> : <ArrowUp size={19} />}</button>}
       </div>
     </form>
   </section>;

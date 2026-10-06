@@ -101,7 +101,7 @@ export function Management({
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      if (window.matchMedia("(min-width: 1101px)").matches) setDrawerOpen(true);
+      if (window.matchMedia("(min-width: 900px)").matches) setDrawerOpen(true);
       const stored = Number(localStorage.getItem("pakash-chat-width"));
       if (stored >= 340 && stored <= 760) setChatWidth(stored);
     });
@@ -247,7 +247,7 @@ export function Management({
               <button type="button" key={chat.id} title={chat.title} disabled={agent.busy || agent.working}
                 className={agent.chat?.id === chat.id ? "is-active" : ""}
                 aria-current={agent.chat?.id === chat.id ? "true" : undefined}
-                onClick={() => { void agent.select(chat.id); openAgent(); }}><MessagesSquare size={15} />{chat.title}</button>)}
+                onClick={() => { void agent.select(chat.id); openAgent(); }}><MessagesSquare size={15} /><span>{chat.title}</span></button>)}
             {chatSearch && !agent.chats.some((chat) => chat.title.includes(chatSearch)) ? <p>לא נמצאו שיחות</p> : null}
           </div>
         </section>

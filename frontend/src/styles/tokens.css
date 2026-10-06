@@ -1,21 +1,11 @@
-/* Pakash borrows its structure from Frappe HR's "Espresso" system: a white
-   canvas, neutral gray controls that are filled rather than outlined, thin
-   hairline borders, pill badges and segmented tabs. Where Espresso stays
-   gray, Pakash spends colour: one blue action colour, a gradient brand mark,
-   and a set of named hues that tell the app's areas apart.
-
-   Warning, danger and success stay reserved for schedule meaning — no area
-   hue reuses them, so amber on the board still always means "look at this".
-
-   `--sidebar` / `--sidebar-2` are the chrome (top bar, drawer head, week
-   rail). They used to be navy; they are now the same light surfaces as the
-   rest of the page, the way Frappe's navbar is. */
+/* Shared neutral surfaces and typography for the desktop conversation workspace.
+   Employee colors identify people; warning/success colors retain scheduling meaning. */
 :root {
-  --bg: #f7f7f8;
+  --bg: #ffffff;
   --surface: #ffffff;
-  --surface-2: #f8f8f8;
-  --surface-3: #f1f1f2;
-  --sidebar: #ffffff;
+  --surface-2: #f9f9f9;
+  --surface-3: #f0f0f0;
+  --sidebar: #f9f9f9;
   --sidebar-2: #f1f1f2;
   --text: #171717;
   --text-soft: #383838;
@@ -23,9 +13,9 @@
   --text-on-dark: #ffffff;
   --border: #ebebeb;
   --border-strong: #d6d6d6;
-  --primary: #2e5bd7;
-  --primary-hover: #2448b8;
-  --primary-soft: #ecf1ff;
+  --primary: #171717;
+  --primary-hover: #363636;
+  --primary-soft: #f0f0f0;
   --accent: #0f766e;
   --success: #18794e;
   --success-soft: #e7f6ed;
@@ -47,26 +37,27 @@
   --shadow-soft: 0 1px 2px rgba(23, 23, 23, 0.06);
   --radius: 12px;
   --radius-sm: 8px;
-  --focus: 0 0 0 3px rgba(46, 91, 215, 0.25);
-  --brand-gradient: linear-gradient(135deg, #2e5bd7 0%, #6a45e0 55%, #b8357f 100%);
+  --focus: 0 0 0 3px rgba(115, 115, 115, 0.3);
+  --brand-gradient: linear-gradient(#171717, #171717);
+  --on-primary: #ffffff;
   --brand-glow: none;
 }
 
 :root[data-theme="dark"] {
-  --bg: #121212;
-  --surface: #1b1b1b;
-  --surface-2: #212121;
-  --surface-3: #2a2a2a;
+  --bg: #212121;
+  --surface: #212121;
+  --surface-2: #282828;
+  --surface-3: #303030;
   --text: #f5f5f5;
   --text-soft: #d4d4d4;
   --text-muted: #9a9a9a;
-  --sidebar: #1b1b1b;
+  --sidebar: #171717;
   --sidebar-2: #2a2a2a;
   --border: #2c2c2c;
   --border-strong: #3d3d3d;
-  --primary: #7b9cff;
-  --primary-hover: #9ab2ff;
-  --primary-soft: #1d2a52;
+  --primary: #ececec;
+  --primary-hover: #ffffff;
+  --primary-soft: #303030;
   --accent: #5ed0c4;
   --success: #6bc995;
   --success-soft: #16332a;
@@ -84,7 +75,8 @@
   --hue-pink-soft: #3d1a2c;
   --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
   --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --brand-gradient: linear-gradient(135deg, #4a72e8 0%, #7552e6 55%, #b8417f 100%);
+  --brand-gradient: linear-gradient(#ececec, #ececec);
+  --on-primary: #171717;
   --brand-glow: none;
 }
 
