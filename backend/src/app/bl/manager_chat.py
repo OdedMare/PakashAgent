@@ -452,6 +452,12 @@ class ManagerChatService:
                     and schedule.get("status") == "published":
                 raise _Rejected("הסידור מפורסם. בקשו להחזיר אותו לטיוטה לפני שינוי")
             if kind == "changes":
+                people = {row["name"]: row for row in profile.get("employees") or []}
+                for row in turn.get("operations") or []:
+                    person = people.get(row.get("employee"), {})
+                    if row.get("action") == "assign" and person.get("inactive_from") \
+                            and (row.get("date") or "") >= person["inactive_from"]:
+                        raise _Rejected("העובד סיים את העבודה לפני המשמרת. יש לבחור מחליף פעיל")
                 if any(not row.get("available", False) for row in turn.get("constraints") or []):
                     selections = "\n".join(list(choices) + [request])
                     assignments = [row for row in turn.get("operations") or [] if row.get("action") == "assign"]

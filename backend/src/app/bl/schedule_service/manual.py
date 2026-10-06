@@ -50,6 +50,10 @@ class ManualEditor:
         )
         if slot is None:
             raise NotFoundError("המשמרת לא נמצאה בסידור")
+        person = next((row for row in self._context.profile(team_id).get("employees") or []
+                       if row.get("name") == employee), {})
+        if person.get("inactive_from") and slot_date >= person["inactive_from"]:
+            raise AgentError("העובד סיים את העבודה לפני המשמרת שנבחרה. יש לבחור עובד פעיל")
         stated = (reason or "").strip()
         row = self._repository.add_assignment(
             schedule["id"], team_id, slot["id"], employee,

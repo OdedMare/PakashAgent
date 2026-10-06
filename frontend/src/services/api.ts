@@ -60,7 +60,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const method = options?.method ?? "GET";
   const label = `${method} ${path}`;
   const started = performance.now();
-  console.debug(`[api] → ${label}`, options?.body);
+  console.debug(`[api] → ${label}`);
 
   let response: Response;
   try {
@@ -82,10 +82,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const elapsed = performance.now() - started;
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    console.error(`[api] ✗ ${label} → ${response.status}`, data);
+    if (!(response.status === 401 && path === "/api/workspace/me")) console.error(`[api] ✗ ${label} → ${response.status}`);
     throw apiError(data, response.status);
   }
-  console.debug(`[api] ✓ ${label} (${elapsed.toFixed(0)}ms)`, data);
+  console.debug(`[api] ✓ ${label} (${elapsed.toFixed(0)}ms)`);
   return data as T;
 }
 

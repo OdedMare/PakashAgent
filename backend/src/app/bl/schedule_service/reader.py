@@ -8,6 +8,7 @@ from app.bl.schedule_service import rows
 from app.bl.schedule_service.constants import RECENT_CHANGES
 from app.bl.schedule_service.context import ScheduleContext
 from app.common.errors.errors import AgentError
+from app.common.time_context.time_context import israel_today
 
 
 class ScheduleReader:
@@ -97,6 +98,7 @@ class ScheduleReader:
         profile = self._context.profile(team_id)
         schedule = self.current(team_id, role)
         return {
+            "today": israel_today().isoformat(),
             "profile": profile,
             "employees": rows.employees(profile),
             "shifts": rows.shifts(profile),

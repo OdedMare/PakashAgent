@@ -93,6 +93,7 @@
   .manager-drawer-head { display: none; }
   .manager-tabs { flex: 0 0 auto; padding: 10px 14px; background: var(--surface); border-bottom: 1px solid var(--border); }
   .manager-tab { min-height: 36px; font-size: 12px; }
+  .manager-tab svg { color: inherit; }
   .manager-tab.is-active { background: var(--surface-3); color: var(--text); box-shadow: none; }
   .manager-drawer-content { height: auto; min-height: 0; flex: 1; padding-bottom: 16px; }
   .manager-drawer-content.is-conversation { padding: 0; }
@@ -105,6 +106,21 @@
   .management .board-head { gap: 10px; }
   .management .board-tile { border-radius: 12px; }
   .management .board-title { font-size: 17px; }
+  .management-workspace.has-drawer .week-rail { display: none; }
+  .management-workspace.has-drawer .board-grid { min-width: 0; grid-template-columns: 80px repeat(var(--board-days, 7), minmax(52px, 1fr)); }
+  .management-workspace.has-drawer .board-cell { padding: 6px; min-height: 90px; }
+  .management-workspace.has-drawer .board-card { padding: 7px; border-radius: 8px; }
+  .management-workspace.has-drawer .board-card-name { font-size: 12px; }
+  .management-workspace.has-drawer .board-card-role, .management-workspace.has-drawer .board-card-identity { display: none; }
+  .management-workspace.has-drawer .board-card-hours { font-size: 10px; }
+  .management-workspace.has-drawer .board-rowhead { padding-inline: 8px; }
+  .management-workspace.has-drawer .board-rowhead-hours { font-size: 10px; }
+  .management-workspace.has-drawer .board-dayhead { padding: 8px 2px; }
+  .management-workspace.has-drawer .board-dayhead-actions { flex-direction: column; gap: 3px; }
+  .management-workspace.has-drawer .board-dayhead-generate, .management-workspace.has-drawer .board-dayhead-clear { padding: 5px; font-size: 10px; }
+  .management-workspace.has-drawer .board-tile { padding: 10px; min-height: 84px; }
+  .management-workspace.has-drawer .board-tile-value { font-size: 22px; }
+  .management-workspace.has-drawer .board-tile-foot { display: none; }
   body:has(.management) .tutorial-fab { bottom: 18px; right: auto; left: 18px; width: 38px; height: 38px; }
 }
 @media (min-width: 900px) and (max-width: 1199px) {

@@ -104,6 +104,9 @@ def required_assignments(
         )
         if key[0] not in people:
             raise AgentError("העובד שנבחר לשיבוץ החובה אינו קיים בצוות")
+        person = next(row for row in profile.get("employees") or [] if bounded(row.get("name")) == key[0])
+        if person.get("inactive_from") and key[2] >= person["inactive_from"]:
+            raise AgentError("העובד שנבחר סיים את העבודה לפני המשמרת המבוקשת")
         if key[1:] not in known_slots:
             raise AgentError("המשמרת שנבחרה לשיבוץ החובה אינה קיימת בשבוע הזה")
         if key in seen:

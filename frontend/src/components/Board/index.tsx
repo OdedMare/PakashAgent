@@ -705,6 +705,7 @@ export function Board({
           target={editor}
           schedule={schedule}
           employees={roster}
+          inactiveFrom={Object.fromEntries((overview?.employees ?? []).filter((row) => row.inactive_from).map((row) => [String(row.name), String(row.inactive_from)]))}
           roles={roles}
           busy={busy}
           check={check}

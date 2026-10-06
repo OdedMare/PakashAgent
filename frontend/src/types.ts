@@ -579,6 +579,7 @@ export interface ShiftStats {
 
 /** Everything the management area opens with, in one call. */
 export interface ManagementOverview {
+  today?: string;
   profile: WorkplaceProfile | null;
   employees: Record<string, unknown>[];
   shifts: Record<string, unknown>[];

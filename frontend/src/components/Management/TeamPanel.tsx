@@ -29,6 +29,7 @@ export function TeamPanel({
   draggable = false,
   readOnly = false,
   rotationMode = "round",
+  today = "",
   onAdd,
   onRemove,
   onSaveProfile,
@@ -42,6 +43,7 @@ export function TeamPanel({
   draggable?: boolean;
   readOnly?: boolean;
   rotationMode?: "round" | "triplet";
+  today?: string;
   onAdd?: (input: {
     employee: string;
     constraint_date: string;
@@ -65,6 +67,7 @@ export function TeamPanel({
   const [editingShift, setEditingShift] = useState<string | null>(null);
   const [addingShift, setAddingShift] = useState(false);
   const names = employees
+    .filter((row) => !row.inactive_from || !today || text(row.inactive_from) > today)
     .map((row) => text(row.name))
     .filter((name) => name !== "");
   const shiftNames = shifts
@@ -79,6 +82,7 @@ export function TeamPanel({
     () => new Map((stats?.by_employee ?? []).map((row) => [row.employee, row])),
     [stats?.by_employee],
   );
+  const archived = employees.filter((row) => row.inactive_from && today && text(row.inactive_from) <= today);
 
   return (
     <aside className="team-panel" aria-label="כוח האדם, התקינה והאילוצים">
@@ -169,6 +173,10 @@ export function TeamPanel({
             <li className="panel-empty">אין עובדים בפרופיל עדיין.</li>
           ) : null}
         </ul>
+        {archived.length ? <details className="roster-archive"><summary>עובדים שסיימו את העבודה ({archived.length})</summary>
+          <ul>{archived.map((person) => <li key={text(person.name)}><strong>{text(person.name)}</strong>
+            <span>סיום עבודה · {displayDate(text(person.inactive_from))}</span></li>)}</ul>
+        </details> : null}
         {onSaveProfile ? (
           addingEmployee || editingEmployee ? (
             <EmployeeForm

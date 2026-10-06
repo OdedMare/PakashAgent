@@ -44,6 +44,7 @@ export function ShiftEditor({
   target,
   schedule,
   employees,
+  inactiveFrom = {},
   roles,
   busy,
   check,
@@ -58,6 +59,7 @@ export function ShiftEditor({
   target: EditorTarget;
   schedule: Schedule;
   employees: string[];
+  inactiveFrom?: Record<string, string>;
   roles: Record<string, string>;
   busy: boolean;
   check: PlacementCheck | null;
@@ -152,7 +154,8 @@ export function ShiftEditor({
       editing.date !== slotDate ||
       editing.employee !== employee);
 
-  const canSave = Boolean(employee && shiftName && slotDate && slot && !busy);
+  const active = !inactiveFrom[employee] || slotDate < inactiveFrom[employee];
+  const canSave = Boolean(employee && shiftName && slotDate && slot && !busy && active);
 
   const save = () => {
     if (!canSave) return;

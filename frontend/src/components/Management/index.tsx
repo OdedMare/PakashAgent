@@ -85,7 +85,7 @@ export function Management({
   // never has to remember which cell they were discussing with the agent.
   const [view, setView] = useState<ManagerView>("board");
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [chatWidth, setChatWidth] = useState(600);
+  const [chatWidth, setChatWidth] = useState(680);
   const [chatSearch, setChatSearch] = useState("");
   const [chatPreview, setChatPreview] = useState<Proposal | null>(null);
   const [chatWeek, setChatWeek] = useState<{ date: string; n: number }>();
@@ -488,6 +488,7 @@ export function Management({
             </header>
             {overview ? (
               <TeamPanel
+                today={overview.today}
                 employees={overview.employees}
                 shifts={overview.shifts}
                 constraints={overview.availability}
@@ -657,6 +658,7 @@ export function Management({
           {section === "team" ? <>
           <Preferences busy={state.busy} />
           <TeamPanel
+            today={overview?.today}
             employees={overview?.employees ?? []}
             shifts={overview?.shifts ?? []}
             constraints={overview?.availability ?? []}
