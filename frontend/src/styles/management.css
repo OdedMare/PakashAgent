@@ -148,7 +148,8 @@
   gap: 0.4rem;
   font: inherit;
   font-size: 0.88rem;
-  padding: 0.5rem 0.95rem;
+  font-weight: 500;
+  padding: 0.45rem 0.9rem;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
@@ -156,25 +157,40 @@
 
 .primary-button {
   justify-content: center;
-  min-height: 42px;
+  min-height: 38px;
   background: var(--primary);
   color: #fff;
   border: 1px solid transparent;
-  box-shadow: var(--brand-glow);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--primary) 35%, transparent);
 }
 
 .primary-button:hover:not(:disabled) {
   background: var(--primary-hover);
 }
 
+/* Frappe's secondary button: filled gray, no outline. The icon inside picks
+   up the primary hue so a toolbar of them is not a wall of gray. */
 .ghost-button {
-  background: transparent;
+  background: var(--surface-3);
   color: var(--text-soft);
-  border: 1px solid var(--border-strong);
+  border: 1px solid transparent;
+}
+
+.ghost-button > svg:first-child {
+  color: var(--primary);
 }
 
 .ghost-button:hover:not(:disabled) {
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--text) 9%, var(--surface));
+}
+
+.ghost-button.is-danger,
+.ghost-button.is-danger > svg:first-child {
+  color: var(--danger);
+}
+
+.ghost-button.is-danger:hover:not(:disabled) {
+  background: var(--danger-soft);
 }
 
 .ghost-button.full {
@@ -1211,14 +1227,21 @@
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  padding: 0.6rem 0.7rem;
-  background: var(--surface-2);
+  padding: 0.85rem 0.95rem;
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
 }
 
 .stats-tile .stat-icon {
-  color: var(--primary);
+  display: inline-grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  color: var(--tint, var(--primary));
+  background: var(--tint-soft, var(--primary-soft));
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.35rem;
 }
 
 .stats-tile .stat-label {
@@ -2188,9 +2211,10 @@
   gap: 1rem;
   padding: 1rem;
   color: var(--text-on-dark);
-  background: var(--sidebar);
-  border: 1px solid color-mix(in srgb, #ffffff 8%, transparent);
+  background: var(--brand-gradient);
+  border: 0;
   border-radius: var(--radius);
+  box-shadow: 0 8px 24px color-mix(in srgb, #6a45e0 22%, transparent);
 }
 
 .copilot-console-title {
@@ -2207,7 +2231,7 @@
   width: 2.35rem;
   height: 2.35rem;
   color: #ffffff;
-  background: var(--primary);
+  background: rgba(255, 255, 255, 0.18);
   border-radius: var(--radius-sm);
 }
 
@@ -2225,7 +2249,7 @@
 
 .copilot-console-head p {
   margin-top: 0.25rem;
-  color: #aebbd0;
+  color: rgba(255, 255, 255, 0.86);
   font-size: 0.76rem;
   line-height: 1.45;
 }
@@ -2234,7 +2258,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  color: #aebbd0;
+  color: rgba(255, 255, 255, 0.86);
   font-size: 0.68rem;
   font-weight: 600;
 }

@@ -17,7 +17,7 @@
   gap: clamp(2rem, 6vh, 5rem);
   padding: clamp(2rem, 5vw, 5rem);
   color: var(--text-on-dark);
-  background: var(--sidebar);
+  background: var(--brand-gradient);
   overflow: hidden;
   position: relative;
 }
@@ -28,7 +28,7 @@
   inset: auto -8rem -11rem auto;
   width: 26rem;
   height: 26rem;
-  border: 4rem solid color-mix(in srgb, var(--primary) 20%, transparent);
+  border: 4rem solid rgba(255, 255, 255, 0.1);
   border-radius: 50%;
   pointer-events: none;
 }
@@ -53,7 +53,7 @@
 
 .gate-story-brand small {
   margin-top: 0.2rem;
-  color: #aebbd0;
+  color: rgba(255, 255, 255, 0.8);
   font-size: 0.72rem;
 }
 
@@ -66,7 +66,7 @@
 .gate-eyebrow {
   display: block;
   margin-bottom: 0.9rem;
-  color: #9db4ff;
+  color: rgba(255, 255, 255, 0.9);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -85,7 +85,7 @@
 .gate-story-copy p {
   max-width: 37rem;
   margin: 1.25rem 0 0;
-  color: #c5cfdd;
+  color: rgba(255, 255, 255, 0.88);
   font-size: clamp(1rem, 1.4vw, 1.18rem);
   line-height: 1.75;
 }
@@ -95,9 +95,9 @@
   padding: 1rem;
   color: var(--text);
   background: var(--surface);
-  border: 1px solid color-mix(in srgb, #ffffff 20%, transparent);
+  border: 0;
   border-radius: var(--radius);
-  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.24);
+  box-shadow: 0 22px 60px rgba(40, 20, 90, 0.3);
   position: relative;
   z-index: 1;
 }
@@ -189,7 +189,7 @@
 .gate-trust {
   flex-wrap: wrap;
   gap: 0.65rem 1.4rem;
-  color: #aebbd0;
+  color: rgba(255, 255, 255, 0.85);
   font-size: 0.74rem;
   position: relative;
   z-index: 1;

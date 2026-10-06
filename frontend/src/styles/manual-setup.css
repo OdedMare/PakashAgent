@@ -10,16 +10,15 @@
   justify-content: space-between;
   gap: 1.5rem;
   padding: 1.35rem clamp(1rem, 4vw, 3rem);
-  color: var(--text-on-dark);
+  color: var(--text);
   background: var(--sidebar);
-  border-bottom: 1px solid color-mix(in srgb, #fff 12%, transparent);
+  border-bottom: 1px solid var(--border);
 }
 
 .manual-setup-header h1 { margin: 0.18rem 0; font-size: clamp(1.35rem, 3vw, 2rem); }
-.manual-setup-header p { margin: 0; color: #aebbd0; font-size: 0.86rem; }
-.manual-kicker { color: #9db4ff; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; }
+.manual-setup-header p { margin: 0; color: var(--text-muted); font-size: 0.86rem; }
+.manual-kicker { color: var(--hue-violet); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; }
 .manual-header-actions { display: flex; gap: 0.55rem; flex: none; }
-.manual-setup-header .ghost-button { color: #d7dfeb; border-color: #475467; }
 
 .manual-sections {
   display: grid;

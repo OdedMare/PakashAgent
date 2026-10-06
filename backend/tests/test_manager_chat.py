@@ -302,14 +302,131 @@ def test_refused_plan_is_handed_back_and_the_corrected_plan_is_offered():
     assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "דנה"
 
 
-def test_missing_reason_is_asked_of_the_manager_not_repaired_by_the_model():
+def test_clear_instruction_is_previewed_and_logged_without_a_separate_reason():
     proposal = sickness()
     proposal["stated_reason"] = ""
+    proposal["constraints"] = []
     repo, llm, service, chat_id, schedule_id = setup([proposal])
-    message = converse(service, repo, chat_id, schedule_id, "תחליף את דנה ביוסי")
+    request = "תחליף את דנה ביוסי"
+    message = converse(service, repo, chat_id, schedule_id, request)
     assert len(llm.calls) == 1
+    assert message["status"] == "pending" and message["payload"]["plan"]["reason"] == request
+    service.apply(TEAM, "manager-a", chat_id, message["id"])
+    assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "יוסי"
+    assert repo.changes[-1]["reason"] == request
+
+
+def test_model_reason_question_is_repaired_without_asking_manager_again():
+    asked = turn()
+    asked.update(needs_reason=True, reply="מה הסיבה לשינוי?", stated_reason="")
+    fixed = sickness()
+    fixed.update(stated_reason="", constraints=[])
+    repo, llm, service, chat_id, schedule_id = setup([asked, fixed])
+    message = converse(service, repo, chat_id, schedule_id, "תחליף את דנה ביוסי")
+    assert message["status"] == "pending"
+    assert json.loads(llm.calls[1]["user"])["results"][-1]["tool"] == "plan_check"
+
+
+def test_clear_and_constraint_only_requests_do_not_need_justification():
+    proposal = turn("clear")
+    proposal["stated_reason"] = ""
+    repo, _, service, chat_id, schedule_id = setup([proposal])
+    message = converse(service, repo, chat_id, schedule_id, "תפנה את כל השיבוצים בשבוע הזה")
+    assert message["status"] == "pending"
+    service.apply(TEAM, "manager-a", chat_id, message["id"])
+    assert not repo.assignments(schedule_id, TEAM)
+
+    constraint = turn("changes")
+    constraint.update(stated_reason="", constraints=[dict(
+        employee="דנה", date="2026-10-20", shift="", available=False, reason="")])
+    repo, _, service, chat_id, schedule_id = setup([constraint])
+    repo.schedules[schedule_id]["status"] = "published"
+    request = "דנה לא זמינה ב-20 באוקטובר"
+    message = converse(service, repo, chat_id, schedule_id, request)
+    assert message["status"] == "pending"
+    service.apply(TEAM, "manager-a", chat_id, message["id"])
+    assert repo.availability_rows[0]["reason"] == request
+    assert repo.schedules[schedule_id]["status"] == "published"
+
+
+def test_consultation_can_simulate_combined_replacement_without_a_plan_or_writes():
+    tools = turn()
+    tools["tool_calls"] = [dict(tool="simulate_changes", arguments={
+        "operations": sickness()["operations"],
+    })]
+    answer = turn()
+    answer["reply"] = "ההחלפה שומרת על הכיסוי; יוסי יקבל 8 שעות ודנה תתפנה."
+    repo, llm, service, chat_id, schedule_id = setup([tools, answer])
+    message = converse(service, repo, chat_id, schedule_id, "מה יקרה אם נחליף את דנה ביוסי?")
+    result = json.loads(llm.calls[1]["user"])["results"][-1]
+    assert result["simulated"] and result["coverage"]["delta"] == 0
+    assert result["affected"] == ["דנה", "יוסי"]
+    assert not result["introduced"]
     assert message["status"] == "complete" and "plan" not in message["payload"]
-    assert "סיבה" in message["content"] or "מדוע" in message["content"] or "למה" in message["content"]
+    assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "דנה"
+    assert not repo.changes and not repo.availability_rows
+
+
+def test_simulation_of_missing_visible_week_cannot_fall_back_to_current_week():
+    tools = turn()
+    tools["tool_calls"] = [dict(tool="simulate_changes", arguments={
+        "operations": sickness()["operations"],
+    })]
+    repo, llm, service, chat_id, _ = setup([tools, turn()])
+    message_id = service.start_turn(TEAM, "manager-a", chat_id, dict(
+        content="מה יקרה אם נחליף?", request_id="empty-simulation", schedule_id="",
+        visible_week="2026-10-18"))
+    service.reply(TEAM, "manager-a", chat_id, message_id)
+    result = json.loads(llm.calls[1]["user"])["results"][-1]
+    assert result["ok"] is False and "simulated" not in result
+
+
+def test_combined_conflicts_reach_agent_and_corrected_plan_keeps_absence():
+    proposal = sickness()
+    repo, llm, service, chat_id, schedule_id = setup([proposal])
+    repo.set_availability(TEAM, "יוסי", "2026-10-05", reason="חופשה")
+    repo.profiles[TEAM]["employees"].append(dict(name="מאיה", eligible_shifts=[MORNING]))
+    fixed = sickness()
+    fixed["operations"][1]["employee"] = "מאיה"
+    llm._answers.append(fixed)
+    message = converse(service, repo, chat_id, schedule_id)
+    review = json.loads(llm.calls[1]["user"])["results"][-1]
+    assert review["tool"] == "plan_review"
+    assert any(row["code"] == "unavailable" for row in review["plan"]["warnings"])
+    plan = message["payload"]["plan"]
+    assert plan["operations"][1]["employee"] == "מאיה" and not plan["warnings"]
+    assert plan["constraints"] == fixed["constraints"]
+
+
+def test_known_qualification_conflict_is_visible_and_requires_exception_approval():
+    proposal = sickness()
+    proposal["exceptions"] = ["יוסי אינו מוסמך לבוקר לפי הפרופיל"]
+    repo, _, service, chat_id, schedule_id = setup([proposal])
+    repo.profiles[TEAM]["employees"][1]["eligible_shifts"] = ["צהריים"]
+    message = converse(service, repo, chat_id, schedule_id)
+    assert any(row["code"] == "ineligible" for row in message["payload"]["plan"]["warnings"])
+    with pytest.raises(ConflictError):
+        service.apply(TEAM, "manager-a", chat_id, message["id"])
+
+
+def test_unrelated_existing_gaps_do_not_hold_a_valid_replacement():
+    repo, llm, service, chat_id, schedule_id = setup([sickness()])
+    repo.slots[schedule_id].append(dict(id="empty-slot", shift_name=MORNING,
+                                      slot_date="2026-10-06", headcount=1))
+    message = converse(service, repo, chat_id, schedule_id)
+    assert message["status"] == "pending" and len(llm.calls) == 1
+    assert not message["payload"]["plan"]["warnings"]
+
+
+def test_duplicate_assignment_is_repaired_before_it_can_reach_storage():
+    duplicate = sickness()
+    duplicate["operations"].append(copy.deepcopy(duplicate["operations"][-1]))
+    repo, llm, service, chat_id, schedule_id = setup([duplicate, sickness()])
+    message = converse(service, repo, chat_id, schedule_id)
+    assert message["status"] == "pending"
+    assert "פעמיים" in json.loads(llm.calls[1]["user"])["results"][-1]["error"]
+    service.apply(TEAM, "manager-a", chat_id, message["id"])
+    assert len(repo.assignments(schedule_id, TEAM)) == 1
 
 
 def test_last_round_answers_from_what_was_checked_instead_of_failing():

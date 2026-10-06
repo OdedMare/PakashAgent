@@ -167,7 +167,10 @@ class ManagerChatService:
                 try:
                     plan = self._prepare_plan(team_id, turn, schedule_id, request)
                     if plan and plan["kind"] in ("changes", "generate") \
-                            and plan["warnings"] and not plan["exceptions"] and not reviewed and not final:
+                            and any(row.get("severity") == "warning" and row["code"] not in
+                                    ("unfilled", "missing_role", "missing_commander")
+                                    for row in plan["warnings"]) \
+                            and not plan["exceptions"] and not reviewed and not final:
                         # Give the agent the combined result once, before the
                         # manager sees it. Warnings remain advisory: a named
                         # choice may stand with its exact conflicts explained.
@@ -207,7 +210,7 @@ class ManagerChatService:
     @staticmethod
     def _focus_arguments(name, arguments, schedule_id, context):
         """Aim a dateless read at the week on screen; None when nothing is."""
-        if name not in dict(TOOL_DESCRIPTIONS, **_EXTRA_TOOLS) or arguments.get("schedule_id") \
+        if (name not in TOOL_DESCRIPTIONS and name != "simulate_changes") or arguments.get("schedule_id") \
                 or arguments.get("day") or arguments.get("slot_date"):
             return arguments
         if schedule_id:
@@ -267,9 +270,15 @@ class ManagerChatService:
             if (period and not period.get("found")) or not schedule_id:
                 return {"tool": name, "ok": False, "error": "יש לבחור סידור קיים או לציין את השבוע"}
             operations = arguments.get("operations") or []
+            schedule = self._repo.get_schedule(schedule_id, team_id)
+            proposal = build_proposal(dict(operations=operations), self._context.profile(team_id),
+                                      schedule, "בדיקת תרחיש")
+            if proposal["needs_input"] or len(proposal["operations"]) != len(operations):
+                raise _Rejected(proposal["reply"] or "יש לציין עובדים, משמרות ותאריכים מוכרים לכל השינויים")
+            operations = proposal["operations"]
             # The shared simulator bounds operations. Reject overflow rather
             # than describing a silently truncated scenario as complete.
-            self._changed_rows(self._repo.get_schedule(schedule_id, team_id), operations)
+            self._changed_rows(schedule, operations)
             return dict(self._schedules.simulate(team_id, operations, schedule_id), tool=name, ok=True)
         if name == "find_replacements":
             arguments = dict(arguments, include_exceptions=True)

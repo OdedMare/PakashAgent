@@ -257,7 +257,13 @@
 }
 
 .employee-stat .stat-icon {
-  color: var(--primary);
+  display: inline-grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  color: var(--tint, var(--primary));
+  background: var(--tint-soft, var(--primary-soft));
+  border-radius: var(--radius-sm);
 }
 
 .employee-stat .stat-label {

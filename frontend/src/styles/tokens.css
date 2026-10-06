@@ -88,6 +88,15 @@
   --brand-glow: none;
 }
 
+/* Tiles in a row take the area hues in turn, so a row of figures reads as
+   distinct things rather than one repeated card. Components colour their
+   icon chip from `--tint`; a tile in an attention state overrides it with
+   the warning colour, which keeps its meaning. */
+:is(.board-tile, .stats-tile, .employee-stat):nth-child(4n + 1) { --tint: var(--hue-blue); --tint-soft: var(--hue-blue-soft); }
+:is(.board-tile, .stats-tile, .employee-stat):nth-child(4n + 2) { --tint: var(--hue-violet); --tint-soft: var(--hue-violet-soft); }
+:is(.board-tile, .stats-tile, .employee-stat):nth-child(4n + 3) { --tint: var(--hue-pink); --tint-soft: var(--hue-pink-soft); }
+:is(.board-tile, .stats-tile, .employee-stat):nth-child(4n + 4) { --tint: var(--hue-teal); --tint-soft: var(--hue-teal-soft); }
+
 * {
   box-sizing: border-box;
 }
