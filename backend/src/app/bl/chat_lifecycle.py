@@ -39,8 +39,6 @@ def prepare_retirement(repository, profiles, team_id, turn, plan, state):
                    if row["employee"] == name and iso(row["date"]) >= first]
         if not removed:
             continue
-        if period["status"] == "published":
-            raise RejectedPlan("יש משמרות עתידיות בסידור מפורסם. יש להחזיר אותו לטיוטה לפני סיום העבודה")
         affected.append(dict(schedule_id=period["id"], operations=[
             dict(action="remove", employee=name, shift=row["shift"], date=iso(row["date"]),
                  reason=plan["reason"]) for row in removed]))
@@ -55,8 +53,6 @@ def prepare_structure(profiles, scheduler, team_id, turn, plan, state, history, 
     schedule = state["schedule"]
     if not schedule:
         raise RejectedPlan("בחרו טיוטת סידור לשינוי מבנה המשמרות")
-    if schedule["status"] != "draft":
-        raise RejectedPlan("יש להחזיר את הסידור לטיוטה לפני שינוי מבנה המשמרות")
     try:
         patch = json.loads(turn.get("profile_patch_json") or "{}")
     except ValueError:

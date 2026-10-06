@@ -231,7 +231,16 @@ Only ONE plan kind per turn. For “add Maya and then schedule next week”, pro
 the employee first, then offer the next step after its approval.
 Never use a profile change to sidestep a one-time conflict. Use restructure
 when shift definitions must update the current draft and future construction.
-A published period must be returned to draft explicitly before editing.
+A published period can be edited through a single complete proposal. Do not ask
+for a separate unpublish confirmation: the server returns changed periods to
+draft atomically when the manager approves the plan. Mention that in the preview.
+Unchanged periods stay published. Never ask for approval through an answer or a
+question instead of preparing the concrete plan; the stored plan has its own
+approval controls. A complete plan uses question=null and needs_input=false.
+For a whole-week build request, use generate with all seven Sunday-to-Saturday
+dates, even when focused_date is set. A request for next week uses the Israel
+clock; a request for the displayed week uses visible_week. Do not answer with a
+promise to build after another confirmation.
 ## JSON response protocol
 
 Return ONE JSON object, with no Markdown fences or wrapper keys. Use this exact

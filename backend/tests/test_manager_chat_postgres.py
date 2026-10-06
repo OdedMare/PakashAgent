@@ -39,7 +39,7 @@ def real_repo():
             connection.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
 
 
-def seed(repo):
+def seed(repo, published=False):
     team = repo.create_team("בדיקת שיחה", "test-password-only")
     repo.create_team_profile(team["id"], copy.deepcopy(PROFILE))
     period = repo.create_schedule(team["id"], "2026-10-04", "2026-10-10")
@@ -48,6 +48,8 @@ def seed(repo):
         "start_time": "07:00", "end_time": "15:00",
     }])
     repo.add_assignment(period["id"], team["id"], slots[0]["id"], "דנה", "שיבוץ קיים")
+    if published:
+        repo.set_schedule_status(period["id"], team["id"], "published")
     chat = repo.create_chat(team["id"], "manager-a")
     llm = _ScriptedLlm([sickness()])
     service = ManagerChatService(repo, llm, ScheduleService(repo, llm))
@@ -60,19 +62,22 @@ def seed(repo):
     return team["id"], period["id"], chat["id"], message_id, service
 
 
-def test_real_batch_commits_assignments_absence_receipt_and_idempotency(real_repo):
-    team, period, chat, message, service = seed(real_repo)
+@pytest.mark.parametrize("published", [False, True])
+def test_real_batch_commits_assignments_absence_receipt_and_idempotency(real_repo, published):
+    team, period, chat, message, service = seed(real_repo, published)
     service.apply(team, "manager-a", chat, message, True)
     assert [row["employee"] for row in real_repo.assignments(period, team)] == ["יוסי"]
     assert real_repo.availability(team)[0]["employee"] == "דנה"
     assert real_repo.get_chat(team, "manager-a", chat)["messages"][-1]["status"] == "applied"
+    assert real_repo.get_schedule(period, team)["status"] == "draft"
     count = len(real_repo.change_log(team))
     service.apply(team, "manager-a", chat, message, True)
     assert len(real_repo.change_log(team)) == count
 
 
-def test_real_later_failure_rolls_back_earlier_repository_commits(real_repo, monkeypatch):
-    team, period, chat, message, service = seed(real_repo)
+@pytest.mark.parametrize("published", [False, True])
+def test_real_later_failure_rolls_back_earlier_repository_commits(real_repo, monkeypatch, published):
+    team, period, chat, message, service = seed(real_repo, published)
     def fail(*args, **kwargs):
         raise RuntimeError("simulated late constraint write failure")
     monkeypatch.setattr(real_repo, "set_availability", fail)
@@ -81,6 +86,7 @@ def test_real_later_failure_rolls_back_earlier_repository_commits(real_repo, mon
     assert [row["employee"] for row in real_repo.assignments(period, team)] == ["דנה"]
     assert not real_repo.change_log(team) and not real_repo.availability(team)
     assert real_repo.get_chat(team, "manager-a", chat)["messages"][-1]["status"] == "pending"
+    assert real_repo.get_schedule(period, team)["status"] == ("published" if published else "draft")
 
 
 def test_real_conversation_confirmation_saves_instruction_and_receipt_once(real_repo):

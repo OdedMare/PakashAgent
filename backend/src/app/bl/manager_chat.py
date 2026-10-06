@@ -17,6 +17,7 @@ from app.bl.chat_schema import CHAT_SCHEMA, PROFILE_SECTIONS
 from app.bl.chat_contract import (
     NeedsManager as _NeedsManager, RejectedPlan as _Rejected,
     approval_text, add_coverage, audit_plan, exception_warnings, whole_day_request, normalize_day_turn,
+    normalize_week_turn, draft_schedule_ids, confirmation_question,
 )
 from app.bl.chat_lifecycle import future_schedules, prepare_retirement, prepare_structure
 from app.bl.chat_generation import prepare_generation
@@ -120,18 +121,24 @@ class ManagerChatService:
     def start_turn(self, team_id, manager_id, chat_id, request):
         if not request["content"].strip():
             raise AgentError("ההודעה אינה יכולה להיות ריקה")
-        if request.get("approval_message_id"):
-            if not approval_text(request["content"]):
+        confirms = approval_text(request["content"])
+        if request.get("approval_message_id") or confirms:
+            if not confirms:
                 raise AgentError("הודעת אישור חייבת לאשר במפורש את התוכנית המוצגת")
             chat = self._repo.get_chat(team_id, manager_id, chat_id)
             if any(row.get("request_id") == request["request_id"] for row in chat["messages"]):
                 return None
             latest = chat["messages"][-1] if chat["messages"] else {}
-            if latest.get("id") != request["approval_message_id"] or latest.get("status") != "pending" \
-                    or latest.get("payload", {}).get("question"):
+            target = request.get("approval_message_id") or request.get("displayed_plan_id") or latest.get("id")
+            if latest.get("id") == target and latest.get("status") == "pending" \
+                    and latest.get("payload", {}).get("plan") \
+                    and (not latest["payload"].get("question") or confirmation_question(latest["payload"])):
+                self.apply(team_id, manager_id, chat_id, latest["id"], confirmation=request)
+                return None
+            if request.get("approval_message_id") or request.get("displayed_plan_id"):
                 raise ConflictError("אין תוכנית מוצגת שממתינה לאישור. בקשו תוכנית מעודכנת")
-            self.apply(team_id, manager_id, chat_id, latest["id"], confirmation=request)
-            return None
+            if latest.get("status") == "applied" or latest.get("payload", {}).get("receipt"):
+                return None
         return self._repo.start_chat_turn(
             team_id, manager_id, chat_id, request["content"].strip(),
             request["request_id"], {
@@ -207,6 +214,7 @@ class ManagerChatService:
                     continue
                 try:
                     turn = normalize_day_turn(turn, request, context, profile)
+                    turn = normalize_week_turn(turn, request, context, profile)
                     if not (turn.get("reply") or "").strip() and not question(turn.get("question")):
                         raise _Rejected("חסרה תשובה למנהל. יש להסביר את התוכנית או לענות לבקשה הנוכחית באופן קונקרטי")
                     choices = [row["content"] for row in payload["conversation"][-8:] if row["role"] == "user"]
@@ -244,7 +252,7 @@ class ManagerChatService:
                     continue
                 break
             output = {"steps": steps, "results": results,
-                      "question": None if asked else question(turn.get("question"))}
+                      "question": None if asked or plan else question(turn.get("question"))}
             if task:
                 output["task"] = task
             if plan:
@@ -411,6 +419,8 @@ class ManagerChatService:
 
     def _prepare_plan(self, team_id, turn, focused_id, request, choices=()):
         kind = turn.get("kind") or "answer"
+        if kind == "answer" and confirmation_question(turn):
+            raise _Rejected("אין לבקש אישור בלי תוכנית שמורה. לבקשת שינוי יש להכין תוכנית מלאה; להתייעצות יש לענות בלי לבקש אישור ביצוע")
         if turn.get("needs_reason"):
             raise _Rejected("אין צורך לבקש סיבה. הוראת המנהל היא הסיבה; יש להכין את התוכנית או לשאול רק על יעד חסר")
         if turn.get("needs_input"):
@@ -423,7 +433,7 @@ class ManagerChatService:
         if kind == "answer":
             return None
         schedule_id = turn.get("schedule_id") or focused_id
-        if kind == "generate" and not turn.get("schedule_id"):
+        if kind == "generate":
             # A new week's dates must not fall back to the week on screen. An
             # exact period wins; otherwise a period that contains the dates is
             # the one a single day (or a few days) is rebuilt inside.
@@ -449,12 +459,15 @@ class ManagerChatService:
             plan.update(starts_on=iso(schedule["starts_on"]), ends_on=iso(schedule["ends_on"]))
         if kind == "retire":
             periods = prepare_retirement(self._repo, self._profiles, team_id, turn, plan, state)
-            plan["snapshot"] = _fingerprint(dict(state, future_schedules=periods))
+            state = dict(state, future_schedules=periods)
+            plan["snapshot"] = _fingerprint(state)
+            plan["draft_schedule_ids"] = draft_schedule_ids(plan, state)
             return plan
         if kind == "restructure":
             prepare_structure(self._profiles, self._scheduler, team_id, turn, plan, state,
                               self._history.before(team_id, iso(schedule["starts_on"])), self._audit_plan)
             add_coverage(plan, plan["updated_profile"])
+            plan["draft_schedule_ids"] = draft_schedule_ids(plan, state)
             return plan
         if kind == "profile":
             try:
@@ -491,9 +504,6 @@ class ManagerChatService:
         else:
             if not schedule and (kind != "changes" or turn.get("operations")):
                 raise _Rejected("אין סידור בשבוע הזה. אפשר לבקש לבנות אותו קודם")
-            if (kind == "clear" or kind == "changes" and turn.get("operations")) \
-                    and schedule.get("status") == "published":
-                raise _Rejected("הסידור מפורסם. בקשו להחזיר אותו לטיוטה לפני שינוי")
             if kind == "changes":
                 people = {row["name"]: row for row in profile.get("employees") or []}
                 for row in turn.get("operations") or []:
@@ -546,6 +556,7 @@ class ManagerChatService:
                 plan["warnings"] = self._context.audit_rows(team_id, schedule.get("assignments") or [], schedule)
             elif kind != "unpublish":
                 raise _Rejected("הפעולה אינה נתמכת")
+        plan["draft_schedule_ids"] = draft_schedule_ids(plan, state)
         return plan
 
     def _constraints(self, offered, profile):
@@ -595,6 +606,8 @@ class ManagerChatService:
             if conflicts:
                 agent_reason += "\nחריגות שאושרו במפורש: " + "; ".join(conflicts)
             kind, schedule_id = plan.get("kind"), plan.get("schedule_id") or ""
+            for period_id in plan.get("draft_schedule_ids") or []:
+                self._repo.set_schedule_status(period_id, team_id, "draft")
             if kind == "retire":
                 for period in plan["affected_schedules"]:
                     for operation in period["operations"]:
@@ -642,6 +655,8 @@ class ManagerChatService:
                 reason=reason, agent_reason=agent_reason,
             )
             receipt = "התוכנית הוחלה בהצלחה"
+            if plan.get("draft_schedule_ids"):
+                receipt = "הסידור הוחזר לטיוטה והתוכנית הוחלה בהצלחה"
             if kind == "retire":
                 receipt = "%s הוצא/ה מהסגל הפעיל. פונו %d משמרות עתידיות; ההיסטוריה נשמרה." % (plan["employee"], len(plan["operations"]))
             elif plan.get("coverage") and not plan["coverage"]["complete"]:

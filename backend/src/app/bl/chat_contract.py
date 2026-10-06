@@ -33,12 +33,21 @@ def approval_text(content):
     return normalized in {
         "כן", "כן תעשה", "כן תעשי", "כן תבצע", "תבצע", "תעשי", "מאשר",
         "מאשרת", "מאשר את התוכנית", "מאשרת את התוכנית", "החל שינויים",
+        "אישור", "אני מאשר", "אני מאשרת", "כן מאשר", "כן מאשרת",
+        "אני מאשר את התוכנית", "אני מאשרת את התוכנית", "מאושר",
+        "תאשר", "תאשרי", "תאשר את התוכנית", "תאשרי את התוכנית",
     }
 
 
 def exception_warnings(plan):
     return [row for row in plan.get("warnings") or []
             if row.get("severity", "warning") == "warning" and row.get("code") not in GAP_CODES]
+
+
+def confirmation_question(turn):
+    asked = turn.get("question") or {}
+    content = asked.get("question", "") if isinstance(asked, dict) else str(asked)
+    return bool(re.search(r"\b(?:מאשר|מאשרת|תאשר|תאשרי|לאשר|אישור)\b", content))
 
 
 def whole_day_request(content, profile):
@@ -56,7 +65,8 @@ def normalize_day_turn(turn, request, context, profile):
     employees. Mixed edits, consultations and genuine questions stay with the model.
     """
     if not whole_day_request(request, profile) or turn.get("kind") not in ("answer", "changes", "generate") \
-            or turn.get("needs_input") or turn.get("question") or turn.get("constraints") \
+            or ((turn.get("needs_input") or turn.get("question")) and not confirmation_question(turn)) \
+            or turn.get("constraints") \
             or turn.get("profile_patch_json"):
         return turn
     if len(re.findall(r"\d{4}-\d{2}-\d{2}", request)) > 1:
@@ -72,15 +82,75 @@ def normalize_day_turn(turn, request, context, profile):
     focused = context.get("focus_date") or ""
     target = explicit or (focused if focused and ("היום" in request or "יום הזה" in request) else "") \
         or date_in(request, today.isoformat(), period)
+    if not explicit and not focused and not re.search(r"היום|מחר|אתמול", request) \
+            and turn.get("copy_from_date") and turn.get("starts_on") == turn.get("ends_on"):
+        source, proposed = parse(turn["copy_from_date"]), parse(turn.get("starts_on"))
+        if source and proposed and proposed == source + datetime.timedelta(days=7):
+            target = proposed.isoformat()
     if not target:
         raise NeedsManager("לאיזה תאריך לשבץ את כל המשמרות?")
     copy = (datetime.date.fromisoformat(target) - datetime.timedelta(days=7)).isoformat() \
         if "שבוע שעבר" in request else turn.get("copy_from_date") or ""
     return dict(turn, kind="generate", starts_on=target, ends_on=target,
+                needs_input=False, question=None,
                 operations=[], constraints=[], profile_operations=[],
                 instructions=(turn.get("instructions") or "") + "\n" + request,
                 replace_existing=bool(copy or "מחדש" in request or turn.get("replace_existing")),
                 copy_from_date=copy, reply=turn.get("reply") or "הכנתי תוכנית ליום שנבחר לאישור")
+
+
+def normalize_week_turn(turn, request, context, profile):
+    """Bind a clear whole-week instruction to seven dates before scheduling."""
+    from app.dal.repository.schedules import week_bounds
+
+    command = re.match(r"^(?:בבקשה\s+)?(?:אני רוצה ש)?(?:תבנה|תבני|בנה|בני|תכין|תכיני|הכן|הכיני|תייצר|תייצרי|צור|צרי|תיצור|תצרי|תשבץ|תשבצי|שבץ|שבצי|תמלא|תמלאי)\b", request.strip())
+    if not command or not re.search(r"\b[לבה]?שבוע\b", request) or "שבוע שעבר" in request \
+            or whole_day_request(request, profile) \
+            or re.search(r"\b(?:ראשון|שני|שלישי|רביעי|חמישי|שישי|שבת)\b", request) \
+            or turn.get("kind") not in ("answer", "changes", "generate") \
+            or ((turn.get("needs_input") or turn.get("question")) and not confirmation_question(turn)) \
+            or turn.get("constraints") \
+            or turn.get("profile_patch_json") \
+            or any(row.get("name") and row["name"] in request
+                   for row in (profile.get("shifts") or []) + (profile.get("employees") or [])):
+        return turn
+    if len(re.findall(r"\d{4}-\d{2}-\d{2}", request)) > 1:
+        return turn
+    today = israel_today()
+    explicit = explicit_date(request, today)
+    if explicit:
+        anchor = parse(explicit)
+    elif "הבא" in request or "הקרוב" in request:
+        anchor = parse(week_bounds(today)[0]) + datetime.timedelta(days=7)
+    else:
+        anchor = parse(context.get("visible_week")) or today
+    first, last = week_bounds(anchor)
+    return dict(turn, kind="generate", starts_on=first, ends_on=last, schedule_id="",
+                needs_input=False, question=None,
+                operations=[], constraints=[], profile_operations=[], copy_from_date="",
+                instructions=(turn.get("instructions") or "") + "\n" + request,
+                replace_existing=bool("מחדש" in request or turn.get("replace_existing")),
+                reply="הכנתי תוכנית לשבוע %s – %s לאישור" % (first, last))
+
+
+def draft_schedule_ids(plan, state):
+    """Only periods whose saved assignments/grid will change need a draft."""
+    if plan["kind"] == "retire":
+        affected = {row["schedule_id"] for row in plan["affected_schedules"]}
+        return [row["id"] for row in state["future_schedules"]
+                if row["id"] in affected and row["status"] == "published"]
+    schedule = state.get("schedule") or {}
+    if schedule.get("status") != "published":
+        return []
+    changed = bool(plan.get("operations"))
+    if plan["kind"] in ("generate", "restructure"):
+        keys = lambda rows: {(row["employee"], row["shift"], iso(row["date"])) for row in rows}
+        saved = [row for row in schedule.get("assignments") or []
+                 if plan["starts_on"] <= iso(row["date"]) <= plan["ends_on"]]
+        changed = keys(saved) != keys(plan["generated"]["assignments"])
+        if plan["kind"] == "restructure":
+            changed = changed or plan["updated_profile"] != state["profile"]
+    return [schedule["id"]] if changed else []
 
 
 def coverage_preview(profile, slots, assignments, warnings):

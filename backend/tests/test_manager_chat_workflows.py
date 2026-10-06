@@ -1,16 +1,142 @@
 """Whole-day coverage, conversational approval and compound manager actions."""
 
 import copy
+import datetime
 import json
 
 import pytest
 
 from app.bl.audit import shift_stats
+from app.bl.chat_contract import normalize_week_turn
 from app.bl.scheduler import effective_availability
 from app.common.errors.errors import ConflictError
 from tests.test_manager_chat import TEAM, MORNING, converse, setup, sickness, turn
 
 EVENING = "ערב"
+
+
+@pytest.mark.parametrize("content", ["אני מאשר", "אישור!", "כן, מאשר", "תאשר", "מאשרת"])
+def test_plain_confirmation_applies_once_without_another_model_turn(content):
+    repo, llm, service, chat_id, schedule_id = setup([sickness()])
+    converse(service, repo, chat_id, schedule_id)
+    message = converse(service, repo, chat_id, schedule_id, content, "approval")
+    assert message["payload"]["receipt"]
+    assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "יוסי"
+    count = len(repo.changes)
+    converse(service, repo, chat_id, schedule_id, content, "approval")
+    converse(service, repo, chat_id, schedule_id, content, "repeat-approval")
+    assert len(repo.changes) == count and len(llm.calls) == 1
+
+
+def test_complete_plan_does_not_also_ask_for_confirmation():
+    proposal = sickness()
+    proposal["question"] = dict(question="מאשר לבצע?", recommendation="", why="", options=[])
+    repo, _, service, chat_id, schedule_id = setup([proposal])
+    message = converse(service, repo, chat_id, schedule_id)
+    assert message["status"] == "pending" and message["payload"]["question"] is None
+    # Previously saved proposals may still carry a redundant approval question.
+    repo.chats[chat_id]["messages"][-1]["payload"]["question"] = proposal["question"]
+    converse(service, repo, chat_id, schedule_id, "אני מאשר", "approval")
+    assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "יוסי"
+
+
+def test_an_approval_question_without_a_plan_is_repaired_in_the_same_turn():
+    answer = turn()
+    answer.update(needs_input=True, question=dict(question="מאשר להחליף את דנה ביוסי?",
+                                                recommendation="", why="", options=[]))
+    repo, llm, service, chat_id, schedule_id = setup([answer, sickness()])
+    message = converse(service, repo, chat_id, schedule_id)
+    assert message["status"] == "pending", message["content"]
+    assert message["payload"]["plan"]["operations"] and len(llm.calls) == 2
+    assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "דנה"
+
+
+def test_text_confirmation_cannot_apply_a_newer_plan_than_the_one_on_screen():
+    repo, llm, service, chat_id, schedule_id = setup([sickness(), sickness()])
+    shown = converse(service, repo, chat_id, schedule_id)
+    latest = converse(service, repo, chat_id, schedule_id, request_id="revise")
+    with pytest.raises(ConflictError):
+        service.start_turn(TEAM, "manager-a", chat_id, dict(content="אני מאשר", request_id="stale",
+                                                          displayed_plan_id=shown["id"]))
+    assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "דנה"
+    service.start_turn(TEAM, "manager-a", chat_id, dict(content="אני מאשר", request_id="current",
+                                                      displayed_plan_id=latest["id"]))
+    assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "יוסי"
+    assert len(llm.calls) == 2
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_published_changes_and_return_to_draft_commit_together(monkeypatch, fail):
+    repo, _, service, chat_id, schedule_id = setup([sickness()])
+    repo.schedules[schedule_id]["status"] = "published"
+    before = copy.deepcopy(repo.assignments(schedule_id, TEAM))
+    message = converse(service, repo, chat_id, schedule_id)
+    assert message["status"] == "pending", message["content"]
+    assert message["payload"]["plan"]["draft_schedule_ids"] == [schedule_id]
+    assert repo.schedules[schedule_id]["status"] == "published"
+    if fail:
+        def reject(*args, **kwargs):
+            raise RuntimeError("constraint write failed")
+        monkeypatch.setattr(repo, "set_availability", reject)
+        with pytest.raises(RuntimeError):
+            service.apply(TEAM, "manager-a", chat_id, message["id"])
+        assert repo.schedules[schedule_id]["status"] == "published"
+        assert repo.assignments(schedule_id, TEAM) == before
+        assert not repo.changes
+    else:
+        service.apply(TEAM, "manager-a", chat_id, message["id"])
+        assert repo.schedules[schedule_id]["status"] == "draft"
+        assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "יוסי"
+
+
+@pytest.mark.parametrize("replace", [False, True])
+def test_generation_returns_published_period_to_draft_only_when_assignments_change(replace):
+    proposal = turn("generate")
+    proposal.update(starts_on="2026-10-05", ends_on="2026-10-05", replace_existing=replace)
+    response = dict(assignments=[dict(employee="יוסי" if replace else "דנה", shift=MORNING,
+                                     date="2026-10-05", reason="זמין ומוסמך")], notes=[], summary="יום שני")
+    repo, _, service, chat_id, schedule_id = setup([proposal, response])
+    repo.schedules[schedule_id]["status"] = "published"
+    message = converse(service, repo, chat_id, schedule_id, "בנה את הסידור ל-2026-10-05")
+    assert message["status"] == "pending", message["content"]
+    assert bool(message["payload"]["plan"]["draft_schedule_ids"]) == replace
+    service.apply(TEAM, "manager-a", chat_id, message["id"])
+    assert repo.schedules[schedule_id]["status"] == ("draft" if replace else "published")
+
+
+@pytest.mark.parametrize("asks_approval", [False, True])
+def test_build_week_from_an_answer_previews_all_seven_days_and_applies_to_that_week(asks_approval):
+    dates = [(datetime.date(2026, 10, 11) + datetime.timedelta(days=i)).isoformat() for i in range(7)]
+    response = dict(assignments=[dict(employee="דנה" if i % 2 else "יוסי", shift=MORNING,
+                                     date=date, reason="זמין ומוסמך") for i, date in enumerate(dates)],
+                    notes=[], summary="שבוע מלא")
+    proposal = turn()
+    if asks_approval:
+        proposal.update(needs_input=True, question=dict(question="מאשר לבנות את השבוע?", options=[],
+                                                       recommendation="", why=""))
+    repo, llm, service, chat_id, schedule_id = setup([proposal, response])
+    message_id = service.start_turn(TEAM, "manager-a", chat_id, dict(
+        content="תבנה לי סידור לשבוע הזה", request_id="week", schedule_id=schedule_id,
+        visible_week=dates[0], focus_date=dates[2]))
+    service.reply(TEAM, "manager-a", chat_id, message_id)
+    message = repo.get_chat(TEAM, "manager-a", chat_id)["messages"][-1]
+    assert message["status"] == "pending", message["content"]
+    plan = message["payload"]["plan"]
+    assert (plan["starts_on"], plan["ends_on"]) == (dates[0], dates[-1])
+    assert {slot["date"] for slot in plan["coverage"]["slots"]} == set(dates)
+    assert plan["coverage"]["complete"] and len(repo.schedules) == 1
+    converse(service, repo, chat_id, schedule_id, "מאשר", "approve-week")
+    created = next(row for row in repo.schedules.values() if row["id"] != schedule_id)
+    assert {row["date"] for row in repo.assignments(created["id"], TEAM)} == set(dates)
+    assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "דנה"
+    assert len(llm.calls) == 2
+
+
+@pytest.mark.parametrize("content", ["תשבץ את שני בשבוע הבא", "תשבץ את דנה השבוע", "תבנה סידור לשבועיים"])
+def test_week_normalization_keeps_specific_day_employee_and_longer_ranges(content):
+    proposal = turn()
+    assert normalize_week_turn(proposal, content, {"visible_week": "2026-10-04"},
+                               {"employees": [dict(name="דנה")], "shifts": []}) == proposal
 
 
 def two_shifts(repo):

@@ -110,7 +110,7 @@ interface WeekRead {
   week: WeekState;
 }
 
-export function useBoard(scheduleId?: string): BoardState {
+export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
   const today = useMemo(() => localToday(), []);
   const [weekStart, setWeekStart] = useState<string>(() => {
     const remembered = readRememberedWeek();
@@ -220,7 +220,7 @@ export function useBoard(scheduleId?: string): BoardState {
     // `scheduleId` is a dependency because a write to the current period
     // changes what `/at` answers for the week containing it — without it, a
     // freshly generated week would render against the pre-write copy.
-  }, [fetchWeek, weekStart, scheduleId]);
+  }, [fetchWeek, weekStart, scheduleId, refreshKey]);
 
   const setFilters = useCallback((next: Partial<BoardFilters>) => {
     setFiltersState((current) => ({ ...current, ...next }));

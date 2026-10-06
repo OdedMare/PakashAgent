@@ -40,7 +40,7 @@ export const createManagerChat = () => request<ManagerConversation>("/api/agent/
 export const readManagerChat = (id: string, fromMessage?: string) => request<ManagerConversation>(
   `/api/agent/chats/${encodeURIComponent(id)}${fromMessage ? `?from_message=${encodeURIComponent(fromMessage)}` : ""}`);
 export const deleteManagerChat = (id: string) => request(`/api/agent/chats/${encodeURIComponent(id)}`, { method: "DELETE" });
-export const sendManagerMessage = (id: string, input: { content: string; request_id: string; schedule_id?: string; visible_week?: string; focus_date?: string; approval_message_id?: string }) =>
+export const sendManagerMessage = (id: string, input: { content: string; request_id: string; schedule_id?: string; visible_week?: string; focus_date?: string; approval_message_id?: string; displayed_plan_id?: string }) =>
   request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/messages`, { method: "POST", body: JSON.stringify(input) });
 export const applyManagerPlan = (id: string, messageId: string, acceptExceptions: boolean) =>
   request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/apply`, {

@@ -96,20 +96,19 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
     return run(async () => {
       const id = requestId();
       const latest = chat?.messages[chat.messages.length - 1];
-      const confirms = /^(כן|כן תעשה|כן תעשי|כן תבצע|תבצע|תעשי|מאשר|מאשרת|מאשר את התוכנית|מאשרת את התוכנית|החל שינויים)$/.test(content.trim().replace(/[\s,.!?؟]+/g, " ").trim());
-      const approval = confirms && latest?.status === "pending" && !latest.payload.question ? latest.id : undefined;
       let next: ManagerConversation;
       try {
         next = await sendManagerMessage(chatId, { content: content.trim(), request_id: id,
           schedule_id: scheduleId || undefined, visible_week: visibleWeek, focus_date: focusDate || undefined,
-          approval_message_id: approval });
+          displayed_plan_id: latest?.status === "pending" ? latest.id : undefined });
       } catch (reason) {
         const recovered = await readManagerChat(chatId).catch(() => null);
         if (recovered?.messages.some((message) => message.status === "working" || message.request_id === id)) next = recovered;
         else throw reason;
       }
-      if (approval && next.messages.find((message) => message.id === approval)?.status === "applied")
-        await onApplied(latest?.payload.plan);
+      if (mounted.current) setChat(next);
+      if (latest?.status === "pending" && next.messages.find((message) => message.id === latest.id)?.status === "applied")
+        await onApplied(latest.payload.plan);
       return next;
     });
   }, [chat, chatId, working, scheduleId, visibleWeek, focusDate, run, onApplied]);
@@ -117,7 +116,14 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
   const apply = useCallback(async (messageId: string, exceptions: boolean) => {
     if (!chatId || working) return;
     await run(async () => {
-      const next = await applyManagerPlan(chatId, messageId, exceptions);
+      let next: ManagerConversation;
+      try {
+        next = await applyManagerPlan(chatId, messageId, exceptions);
+      } catch (reason) {
+        const recovered = await readManagerChat(chatId).catch(() => null);
+        if (recovered?.messages.find((message) => message.id === messageId)?.status === "applied") next = recovered;
+        else throw reason;
+      }
       if (mounted.current) setChat(next);
       await onApplied(next.messages.find((message) => message.id === messageId)?.payload.plan);
       return next;

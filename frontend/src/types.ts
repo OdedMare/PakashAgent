@@ -1147,6 +1147,7 @@ export interface ChatPlan {
   ends_on?: string;
   replace_existing?: boolean;
   preserved_assignments?: { employee: string; shift: string; date: string }[];
+  draft_schedule_ids?: string[];
   generated?: {
     assignments: { employee: string; shift: string; date: string; reason: string }[];
     summary: string;

@@ -248,6 +248,7 @@ def test_generate_upcoming_week_previews_real_assignments_without_touching_curre
     generation = {"assignments": [dict(employee="דנה", shift=MORNING, date="2026-10-11", reason="מתאימה")],
                   "notes": [], "summary": "סידור מוצע"}
     repo, _, service, chat_id, schedule_id = setup([proposal, generation, generation])
+    proposal["schedule_id"] = schedule_id  # A stale model id cannot redirect the requested week.
     message = converse(service, repo, chat_id, schedule_id, "תשבץ את השבוע הבא")
     assert message["status"] == "pending"
     assert len(repo.schedules) == 1

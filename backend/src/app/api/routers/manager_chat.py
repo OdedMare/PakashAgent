@@ -13,6 +13,7 @@ class ChatTurn(BaseModel):
     visible_week: str = Field(default="", max_length=10)
     focus_date: str = Field(default="", max_length=10)
     approval_message_id: Optional[str] = Field(default=None, max_length=80)
+    displayed_plan_id: Optional[str] = Field(default=None, max_length=80)
 
 
 class ChatApproval(BaseModel):

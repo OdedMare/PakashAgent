@@ -18,6 +18,7 @@ export function ChatPlanCard({ message, employees, disabled, onApply, onDismiss,
     <header><span>{message.status === "applied" ? <CheckCircle2 size={15} /> : <Sparkles size={15} />}
       {message.status === "applied" ? "הוחל בסידור" : PLAN_LABELS[plan.kind]}</span><small>{pending ? "ממתין לאישור שלך" : STATUS_LABELS[message.status] ?? ""}</small></header>
     {plan.agent_reason ? <p className="conversation-plan-reason">{plan.agent_reason}</p> : null}
+    {pending && plan.draft_schedule_ids?.length ? <p>באישור התוכנית, הסידור יוחזר לטיוטה והשינויים יוחלו יחד.</p> : null}
     {plan.generated ? <p>{formatDate(plan.starts_on!)} – {formatDate(plan.ends_on!)} · {assignments.length} שיבוצים</p> : null}
     {plan.kind === "retire" ? <p>סיום העבודה של <strong>{plan.employee}</strong> החל מ־{formatDate(plan.effective_date!)}. המשמרות המפורטות יפונו; ההיסטוריה תישמר.</p> : null}
     {plan.coverage ? <section className="conversation-coverage" aria-label="כיסוי המשמרות בתוכנית">

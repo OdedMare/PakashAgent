@@ -30,8 +30,6 @@ def prepare_generation(repository, scheduler, history, team_id, turn, plan, stat
                     creation_slots=build_slots(state["profile"], period_first, period_last))
     elif not (iso(schedule["starts_on"]) <= first and last <= iso(schedule["ends_on"])):
         raise _Rejected("הטווח חורג מהסידור שנבחר. יש לבחור את התקופה המתאימה")
-    if schedule.get("status") == "published":
-        raise _Rejected("יש להחזיר את הסידור לטיוטה לפני בנייה מחדש")
     # A range inside an existing period (one day, a few days) rebuilds only
     # those dates; every other saved assignment stays as it is.
     partial = bool(schedule) and (iso(schedule["starts_on"]) != first or iso(schedule["ends_on"]) != last)

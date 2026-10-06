@@ -184,7 +184,7 @@ export function Board({
   dark: boolean;
 }) {
   const current = overview?.schedule ?? null;
-  const board = useBoard(current?.id);
+  const board = useBoard(current?.id, navigateToWeek?.n);
   const goToWeekOf = board.goToWeekOf;
   useEffect(() => {
     if (navigateToWeek?.date) goToWeekOf(navigateToWeek.date);

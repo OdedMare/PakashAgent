@@ -96,9 +96,9 @@ export function Management({
   const [focusDay, setFocusDay] = useState<{ date: string; n: number }>({ date: "", n: 0 });
   const refresh = state.refresh;
   const onChatApplied = useCallback(async (plan?: ChatPlan) => {
-    await refresh();
-    const date = plan?.starts_on || plan?.operations[0]?.date || plan?.constraints[0]?.date;
+    const date = plan?.operations[0]?.date || plan?.starts_on || plan?.constraints[0]?.date;
     if (date) setChatWeek((previous) => ({ date, n: (previous?.n ?? 0) + 1 }));
+    await refresh();
   }, [refresh]);
   const resizeStart = useRef<{ x: number; width: number } | null>(null);
   useEffect(() => {
