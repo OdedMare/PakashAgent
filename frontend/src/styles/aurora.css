@@ -1,0 +1,445 @@
+/* Aurora — the finish over every surface, loaded last.
+
+   Three ideas, all from tokens.css:
+   - a canvas that is lit rather than blank (`--aurora` behind everything),
+   - chrome that is frosted glass, so the canvas reads through the edges,
+   - colour that means something: system blue for the next action, the
+     brand gradient for the agent and the brand, the area hues by position.
+   Warning, danger and success are untouched here — they still belong to the
+   schedule, not to the decoration. */
+
+/* -- the canvas ----------------------------------------------------------- */
+
+html,
+body {
+  background: var(--aurora), var(--bg);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--primary) 24%, transparent);
+}
+
+* {
+  scrollbar-color: color-mix(in srgb, var(--text) 18%, transparent) transparent;
+}
+
+/* Page roots stop painting their own white so the canvas shows through. */
+.interview,
+.management,
+.workspace-gate,
+.workspace-gate.identity-gate,
+.manual-setup,
+.management-workspace > .board {
+  background: transparent;
+}
+
+/* -- brand ---------------------------------------------------------------- */
+
+.brand-mark,
+.gate-story .brand-mark {
+  color: #fff;
+  background: var(--brand-gradient);
+  border-radius: 9px;
+  box-shadow: var(--brand-glow), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.brand {
+  letter-spacing: -0.02em;
+}
+
+/* -- chrome --------------------------------------------------------------- */
+
+.interview-header {
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.management-nav-item svg,
+.manager-tab svg {
+  color: var(--tint, currentColor);
+}
+
+.management-nav-item.is-active,
+.manager-tab.is-active {
+  color: var(--tint, var(--primary));
+  background: var(--tint-soft, var(--primary-soft));
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tint, var(--primary)) 16%, transparent);
+}
+
+.management-nav-item:hover:not(.is-active),
+.manager-tab:hover:not(.is-active) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--tint, var(--primary)) 8%, transparent);
+}
+
+@media (min-width: 900px) {
+  .management > .interview-header {
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border-inline-end: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  }
+
+  .management-nav-item.is-active,
+  .management-nav-item:hover {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tint, var(--primary)) 16%, transparent);
+  }
+
+  .management-nav-item:hover:not(.is-active) {
+    box-shadow: none;
+  }
+
+  .sidebar-new-chat {
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  .sidebar-new-chat:hover {
+    background: var(--primary-soft);
+  }
+
+  .sidebar-search {
+    background: color-mix(in srgb, var(--text) 5%, transparent);
+  }
+
+  .sidebar-chat-list button:hover {
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+  }
+
+  .sidebar-chat-list button.is-active {
+    color: var(--primary);
+    background: var(--primary-soft);
+    font-weight: 600;
+  }
+
+  .management-workspace > .manager-drawer {
+    background: var(--glass-strong);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border-inline-end-color: color-mix(in srgb, var(--border) 80%, transparent);
+  }
+
+  .manager-tabs {
+    background: transparent;
+  }
+}
+
+/* -- buttons -------------------------------------------------------------- */
+
+.primary-button,
+.ghost-button,
+.start-button {
+  border-radius: 999px;
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 180ms ease;
+}
+
+.primary-button {
+  color: #fff;
+  background: var(--primary-fill);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--primary) 30%, transparent), 0 6px 16px -6px color-mix(in srgb, var(--primary) 70%, transparent);
+}
+
+.primary-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary-fill) 90%, #000000);
+}
+
+.primary-button:hover:not(:disabled),
+.start-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.primary-button:active:not(:disabled),
+.ghost-button:active:not(:disabled),
+.start-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.ghost-button {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.ghost-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.start-button {
+  color: #fff;
+  background: var(--brand-gradient);
+  background-size: 140% 100%;
+  box-shadow: var(--brand-glow);
+}
+
+.start-button:hover:not(:disabled) {
+  background-position: 100% 0;
+  filter: saturate(1.15);
+}
+
+.icon-button {
+  border-radius: 10px;
+}
+
+/* -- the login gate ------------------------------------------------------- */
+
+.gate-card {
+  background: transparent;
+}
+
+.workspace-gate:has(.gate-story) .gate-card,
+.identity-gate .gate-card {
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+}
+
+.gate-card h2 {
+  letter-spacing: -0.03em;
+}
+
+.gate-form-head > span,
+.gate-eyebrow {
+  color: transparent;
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.gate-field input,
+.gate-field select {
+  background: color-mix(in srgb, var(--text) 5%, var(--surface));
+  border-radius: 12px;
+  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.gate-field input:focus,
+.gate-field select:focus {
+  background: var(--surface);
+  border-color: var(--primary);
+  box-shadow: var(--focus);
+  outline: none;
+}
+
+.gate-door {
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  border-color: var(--border);
+  border-radius: 14px;
+}
+
+.gate-door.is-selected {
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+/* -- the board ------------------------------------------------------------ */
+
+.board-coverage,
+.board-grid-scroll {
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--border) 80%, transparent);
+  box-shadow: var(--shadow-soft);
+}
+
+.board-tile-icon {
+  color: #fff;
+  background: linear-gradient(135deg, var(--tint, var(--primary)), color-mix(in srgb, var(--tint, var(--primary)) 55%, #ffffff));
+  border-radius: 9px;
+  box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--tint, var(--primary)) 70%, transparent);
+}
+
+:root[data-theme="dark"] .board-tile-icon {
+  color: var(--bg);
+}
+
+.board-tile-value {
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+}
+
+.board-corner,
+.board-dayhead {
+  background: var(--surface-2);
+}
+
+.board-dayhead.is-today {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 14%, var(--surface)), var(--surface));
+  box-shadow: inset 0 3px 0 0 var(--primary);
+}
+
+.board-card {
+  border-radius: 10px;
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease;
+}
+
+.board-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px -10px rgba(16, 24, 64, 0.35);
+}
+
+.schedule-generation-track span {
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+/* -- the conversation ----------------------------------------------------- */
+
+.conversation-title > svg,
+.conversation-message.is-assistant .conversation-speaker svg,
+.conversation-empty-mark svg {
+  color: var(--accent);
+}
+
+.conversation-message.is-assistant .conversation-speaker {
+  color: var(--accent);
+}
+
+/* The manager's own lines read like a sent message: system blue, white
+   text, the tail on the corner nearest the composer. */
+.conversation-message.is-user {
+  color: #fff;
+  background: var(--primary-fill);
+  border-radius: 22px;
+  border-end-end-radius: 6px;
+  box-shadow: 0 6px 18px -10px color-mix(in srgb, var(--primary) 80%, transparent);
+}
+
+.conversation-message.is-user :is(a, strong, code) {
+  color: inherit;
+}
+
+.conversation-empty-mark {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  margin-inline: auto;
+  place-items: center;
+  border-radius: 18px;
+  background: var(--brand-gradient);
+  box-shadow: var(--brand-glow);
+}
+
+.conversation-empty-mark svg {
+  color: #fff;
+}
+
+.conversation-empty h3 {
+  color: transparent;
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  letter-spacing: -0.035em;
+}
+
+.conversation-starters button {
+  background: var(--glass-strong);
+  border-color: var(--border);
+  border-radius: 16px;
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.conversation-starters button:nth-child(4n + 1) { --tint: var(--hue-blue); }
+.conversation-starters button:nth-child(4n + 2) { --tint: var(--hue-violet); }
+.conversation-starters button:nth-child(4n + 3) { --tint: var(--hue-pink); }
+.conversation-starters button:nth-child(4n + 4) { --tint: var(--hue-teal); }
+
+.conversation-starters button:hover {
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--tint, var(--primary)) 45%, var(--border));
+  box-shadow: 0 10px 26px -14px color-mix(in srgb, var(--tint, var(--primary)) 70%, transparent);
+  transform: translateY(-2px);
+}
+
+/* The composer is where the agent listens; while it has focus its edge
+   takes the brand gradient, the way an assistant shows it is attending. */
+.conversation-composer {
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1.5px solid var(--border);
+  box-shadow: var(--shadow);
+  transition: box-shadow 220ms ease, border-color 220ms ease;
+}
+
+.conversation-composer:focus-within {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    var(--brand-gradient) border-box;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent),
+    0 18px 48px -16px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.conversation-send:not(:disabled) {
+  color: #fff;
+  background: var(--brand-gradient);
+  box-shadow: var(--brand-glow);
+}
+
+.conversation-plan {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  box-shadow: 0 12px 36px -18px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.conversation-plan > header {
+  background: linear-gradient(120deg, color-mix(in srgb, var(--primary) 10%, var(--surface)), color-mix(in srgb, var(--accent) 12%, var(--surface)));
+}
+
+.conversation-focus-day {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+/* -- dialogs -------------------------------------------------------------- */
+
+.modal-backdrop,
+.manager-drawer-backdrop {
+  background: rgba(8, 10, 24, 0.32);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
+}
+
+.modal,
+.settings-dialog,
+.confirm-drop,
+.shift-editor {
+  border: 1px solid var(--glass-border);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+}
+
+/* -- help ----------------------------------------------------------------- */
+
+.tutorial-fab {
+  color: #fff;
+  background: var(--brand-gradient);
+  border: 0;
+  box-shadow: var(--brand-glow);
+}
+
+.tutorial-fab:hover {
+  background: var(--brand-gradient);
+  filter: saturate(1.15) brightness(1.05);
+}
+
+/* -- motion --------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .primary-button,
+  .ghost-button,
+  .start-button,
+  .board-card,
+  .conversation-starters button {
+    transform: none !important;
+  }
+}

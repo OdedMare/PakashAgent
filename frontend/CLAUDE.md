@@ -3,17 +3,22 @@
 Next.js App Router, TypeScript, plain CSS. Deps and conventions ported from
 AiSummryIO.
 
-**The look is Frappe HR's "Espresso" system, with more colour.** White
-canvas, a light top bar, hairline borders, controls that are *filled gray*
-rather than outlined, pill badges and segmented tabs — all from
-`src/styles/tokens.css`. Where Espresso stays gray, Pakash spends colour:
-the blue primary, a blue→violet→magenta `--brand-gradient` (brand mark, the
-login hero, the copilot card), and four area hues (`--hue-blue|violet|teal|pink`
-plus `-soft`) that the nav, the drawer tabs and every row of stat tiles cycle
-through by position. Warning, danger and success are **not** area hues — they
-stay reserved for schedule meaning, so amber on the board always means "look
-at this". `--sidebar`/`--sidebar-2` name the chrome and are light surfaces
-now; there is no navy chrome left outside the tutorial page.
+**The look is "Aurora": Apple-calm neutrals, lit glass, deliberate colour.**
+Tokens live in `src/styles/tokens.css`; the finish that spends them lives in
+`src/styles/aurora.css`, imported last so it sits over every surface. Apple
+grays and the system face (SF Pro / SF Hebrew on Apple devices, Inter and
+Noto Sans Hebrew elsewhere), a canvas lit by a soft `--aurora` wash rather
+than blank white, and frosted `--glass` chrome — the sidebar, the chat drawer,
+the composer, dialogs — so the canvas reads through the edges. Colour has
+jobs: system blue `--primary` is the next action (filled controls use
+`--primary-fill`, which stays deep enough in dark mode for white text to clear
+4.5:1); the blue→indigo→violet→rose `--brand-gradient` marks the brand and the
+agent (brand mark, the composer's focus ring, the send button, the empty-chat
+heading); and four area hues (`--hue-blue|violet|teal|pink` plus `-soft`)
+tint the nav, the drawer tabs, the chat starters and every row of stat tiles
+by position. Warning, danger and success are **not** area hues — they stay
+reserved for schedule meaning, so amber on the board always means "look at
+this". There is no navy chrome outside the tutorial page.
 
 `next.config.ts` proxies `/api/*` to FastAPI, so the browser sees one origin
 and there is no CORS setup.

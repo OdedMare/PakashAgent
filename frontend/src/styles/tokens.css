@@ -1,22 +1,28 @@
-/* Shared neutral surfaces and typography for the desktop conversation workspace.
-   Employee colors identify people; warning/success colors retain scheduling meaning. */
+/* Aurora: an Apple-calm canvas with colour spent where it means something.
+   Neutrals follow Apple's grays; the primary is system blue; the brand
+   gradient (blue → indigo → violet → rose) marks the agent, the brand and
+   the one action a screen is asking for. Employee colours identify people;
+   warning/success/danger keep their scheduling meaning and are never decor. */
 :root {
-  --bg: #ffffff;
+  --bg: #f5f5f7;
   --surface: #ffffff;
-  --surface-2: #f9f9f9;
-  --surface-3: #f0f0f0;
-  --sidebar: #f9f9f9;
-  --sidebar-2: #f1f1f2;
-  --text: #171717;
-  --text-soft: #383838;
-  --text-muted: #6b6b6b;
+  --surface-2: #fafafc;
+  --surface-3: #f0f0f4;
+  --sidebar: #f5f5f7;
+  --sidebar-2: #e9e9ee;
+  --text: #1d1d1f;
+  --text-soft: #424245;
+  --text-muted: #6e6e73;
   --text-on-dark: #ffffff;
-  --border: #ebebeb;
-  --border-strong: #d6d6d6;
-  --primary: #171717;
-  --primary-hover: #363636;
-  --primary-soft: #f0f0f0;
-  --accent: #0f766e;
+  --border: #e5e5ea;
+  --border-strong: #d2d2d7;
+  --primary: #0071e3;
+  --primary-hover: #0077ed;
+  --primary-soft: #e8f1fd;
+  /* The blue a filled control is painted with. Equal to --primary in light;
+     in dark it stays deeper so white text on it still clears 4.5:1. */
+  --primary-fill: #0071e3;
+  --accent: #5e5ce6;
   --success: #18794e;
   --success-soft: #e7f6ed;
   --warning: #9a5708;
@@ -33,32 +39,44 @@
   --hue-teal-soft: #e5f6f3;
   --hue-pink: #c2266f;
   --hue-pink-soft: #fdecf4;
-  --shadow: 0 12px 32px rgba(23, 23, 23, 0.1), 0 2px 6px rgba(23, 23, 23, 0.05);
-  --shadow-soft: 0 1px 2px rgba(23, 23, 23, 0.06);
-  --radius: 12px;
-  --radius-sm: 8px;
-  --focus: 0 0 0 3px rgba(115, 115, 115, 0.3);
-  --brand-gradient: linear-gradient(#171717, #171717);
+  --shadow: 0 1px 1px rgba(16, 24, 64, 0.03), 0 10px 30px -8px rgba(30, 40, 100, 0.16), 0 30px 70px -24px rgba(30, 40, 100, 0.22);
+  --shadow-soft: 0 1px 2px rgba(16, 24, 64, 0.05), 0 4px 14px -6px rgba(16, 24, 64, 0.1);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --focus: 0 0 0 4px rgba(0, 113, 227, 0.28);
+  --brand-gradient: linear-gradient(120deg, #0071e3 0%, #5e5ce6 38%, #9b45d6 68%, #db2e6c 100%);
   --on-primary: #ffffff;
-  --brand-glow: none;
+  --brand-glow: 0 10px 30px -8px rgba(94, 92, 230, 0.55);
+  /* Frosted chrome. A surface is glass only where something sits behind it
+     worth seeing — the sidebar, the composer, dialogs — never under text
+     that has to be read at length. */
+  --glass: rgba(255, 255, 255, 0.62);
+  --glass-strong: rgba(255, 255, 255, 0.84);
+  --glass-border: rgba(255, 255, 255, 0.75);
+  --glass-blur: saturate(180%) blur(24px);
+  --aurora:
+    radial-gradient(60rem 42rem at 100% -12%, rgba(94, 92, 230, 0.22), transparent 62%),
+    radial-gradient(52rem 38rem at -8% 6%, rgba(0, 113, 227, 0.2), transparent 60%),
+    radial-gradient(46rem 34rem at 62% 118%, rgba(219, 46, 108, 0.14), transparent 62%);
 }
 
 :root[data-theme="dark"] {
-  --bg: #212121;
-  --surface: #212121;
-  --surface-2: #282828;
-  --surface-3: #303030;
-  --text: #f5f5f5;
-  --text-soft: #d4d4d4;
-  --text-muted: #9a9a9a;
-  --sidebar: #171717;
-  --sidebar-2: #2a2a2a;
-  --border: #2c2c2c;
-  --border-strong: #3d3d3d;
-  --primary: #ececec;
-  --primary-hover: #ffffff;
-  --primary-soft: #303030;
-  --accent: #5ed0c4;
+  --bg: #050508;
+  --surface: #131317;
+  --surface-2: #19191e;
+  --surface-3: #232329;
+  --text: #f5f5f7;
+  --text-soft: #d1d1d6;
+  --text-muted: #98989f;
+  --sidebar: #0c0c10;
+  --sidebar-2: #1d1d23;
+  --border: #26262d;
+  --border-strong: #3a3a42;
+  --primary: #0a84ff;
+  --primary-hover: #409cff;
+  --primary-soft: #0c2645;
+  --primary-fill: #0071e3;
+  --accent: #7d7aff;
   --success: #6bc995;
   --success-soft: #16332a;
   --warning: #f0b45b;
@@ -73,11 +91,19 @@
   --hue-teal-soft: #143430;
   --hue-pink: #f28ab8;
   --hue-pink-soft: #3d1a2c;
-  --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
-  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --brand-gradient: linear-gradient(#ececec, #ececec);
-  --on-primary: #171717;
-  --brand-glow: none;
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 24px 60px -16px rgba(0, 0, 0, 0.75);
+  --shadow-soft: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 6px 18px -8px rgba(0, 0, 0, 0.6);
+  --focus: 0 0 0 4px rgba(10, 132, 255, 0.4);
+  --brand-gradient: linear-gradient(120deg, #0a84ff 0%, #5e5ce6 38%, #bf5af2 68%, #ff375f 100%);
+  --on-primary: #ffffff;
+  --brand-glow: 0 10px 36px -8px rgba(125, 122, 255, 0.65);
+  --glass: rgba(20, 20, 26, 0.58);
+  --glass-strong: rgba(22, 22, 28, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --aurora:
+    radial-gradient(60rem 42rem at 100% -12%, rgba(94, 92, 230, 0.3), transparent 62%),
+    radial-gradient(52rem 38rem at -8% 6%, rgba(10, 132, 255, 0.22), transparent 60%),
+    radial-gradient(46rem 34rem at 62% 118%, rgba(255, 55, 95, 0.16), transparent 62%);
 }
 
 /* Tiles in a row take the area hues in turn, so a row of figures reads as
@@ -106,10 +132,11 @@ button,
 input,
 textarea,
 select {
-  /* Inter for Latin and digits, as in Frappe; Hebrew falls through to Noto
-     Sans Hebrew. Both are loaded in the root layout and degrade to system
-     faces if the font host is unreachable. */
-  font-family: "Inter", "Noto Sans Hebrew", "Arial Hebrew", -apple-system, "Segoe UI", Arial, sans-serif;
+  /* The system face first: on Apple devices that is SF Pro and SF Hebrew,
+     which is most of what makes the app feel native there. Elsewhere Inter
+     carries Latin and digits and Noto Sans Hebrew the Hebrew — both loaded
+     in the root layout, degrading to system faces if the host is unreachable. */
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Noto Sans Hebrew", "Arial Hebrew", "Segoe UI", Arial, sans-serif;
   font-size: 15px;
   font-feature-settings: "cv11", "ss01";
 }
