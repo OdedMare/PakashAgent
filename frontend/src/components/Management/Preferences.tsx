@@ -44,7 +44,9 @@ import type { Preference, PreferenceKind } from "@/types";
  *  confirmation step is unchanged by anything in this list. */
 export function Preferences({ busy = false }: { busy?: boolean }) {
   const [rows, setRows] = useState<Preference[]>([]);
-  const [loading, setLoading] = useState(false);
+  // True from the start: the first read is already under way at mount, and
+  // starting false showed "no preferences saved yet" until it answered.
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [kind, setKind] = useState<PreferenceKind>("general");
@@ -79,6 +81,9 @@ export function Preferences({ busy = false }: { busy?: boolean }) {
         if (!cancelled) {
           setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
         }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;

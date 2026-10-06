@@ -312,7 +312,8 @@ export function CopilotInbox({
             <h3>יומן ביקורת</h3>
             <p>מי עשה מה, מתי, והאם המערכת הצליחה לאמת את התוצאה.</p>
           </div>
-          {!audit.length ? <p className="copilot-empty">עדיין אין פעילות מתועדת.</p> : null}
+          {!data ? <p className="copilot-empty" aria-live="polite">טוען את פעילות הסוכן…</p> : null}
+          {data && !audit.length ? <p className="copilot-empty">עדיין אין פעילות מתועדת.</p> : null}
           <ol className="copilot-audit">
             {audit.map((event) => (
               <li key={event.id}>

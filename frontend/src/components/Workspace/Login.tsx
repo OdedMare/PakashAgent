@@ -46,7 +46,10 @@ export function Login({
   onCreate: (name: string, password: string) => Promise<void>;
   onDismissError: () => void;
 }) {
-  const [teams, setTeams] = useState<TeamSummary[]>([]);
+  // `undefined` until the list has answered. Starting from `[]` drew the
+  // manager door with an empty picker, then jumped to "create" a moment later
+  // on a server with no teams.
+  const [teams, setTeams] = useState<TeamSummary[] | undefined>(undefined);
   const [mode, setMode] = useState<Mode>("boss");
   const [teamId, setTeamId] = useState("");
   const [name, setName] = useState("");
@@ -147,141 +150,145 @@ export function Login({
         </div>
       </section>
 
-      <form className="gate-card" onSubmit={submit} aria-labelledby="gate-form-title">
-        <div className="gate-form-head">
-          <span>{creating ? "סביבת עבודה חדשה" : "כניסה מאובטחת"}</span>
-          <h2 id="gate-form-title">
-            {creating ? "פתיחת צוות" : mode === "worker" ? "כניסת עובד/ת" : "כניסת מנהל"}
-          </h2>
-        </div>
-        <p className="gate-lede">
-          {creating
-            ? "כל צוות מקבל מרחב עבודה נפרד — ראיון, סידור והגדרות משלו."
-            : "בחרו את הצוות, ואז היכנסו כמנהל או כעובד/ת."}
-        </p>
-
-        {creating ? (
-          <label className="gate-field">
-            <span>שם הצוות</span>
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="לדוגמה: צוות תפעול"
-              maxLength={80}
-              autoComplete="organization"
-              disabled={busy}
-            />
-          </label>
-        ) : (
-          <label className="gate-field">
-            <span>צוות</span>
-            <select
-              value={teamId}
-              onChange={(event) => setTeamId(event.target.value)}
-              disabled={busy || teams.length === 0}
-            >
-              {teams.map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        {creating ? null : (
-          <div className="gate-doors" role="radiogroup" aria-label="סוג כניסה">
-            <button
-              type="button"
-              role="radio"
-              aria-checked={mode === "boss"}
-              className={`gate-door${mode === "boss" ? " is-selected" : ""}`}
-              onClick={() => switchMode("boss")}
-              disabled={busy}
-            >
-              <UserCog size={18} />
-              <span>מנהל</span>
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={mode === "worker"}
-              className={`gate-door${mode === "worker" ? " is-selected" : ""}`}
-              onClick={() => switchMode("worker")}
-              disabled={busy}
-            >
-              <UserCircle size={18} />
-              <span>עובד/ת</span>
-            </button>
+      {teams === undefined ? (
+        <div className="gate-card" aria-busy="true" />
+      ) : (
+        <form className="gate-card" onSubmit={submit} aria-labelledby="gate-form-title">
+          <div className="gate-form-head">
+            <span>{creating ? "סביבת עבודה חדשה" : "כניסה מאובטחת"}</span>
+            <h2 id="gate-form-title">
+              {creating ? "פתיחת צוות" : mode === "worker" ? "כניסת עובד/ת" : "כניסת מנהל"}
+            </h2>
           </div>
-        )}
+          <p className="gate-lede">
+            {creating
+              ? "כל צוות מקבל מרחב עבודה נפרד — ראיון, סידור והגדרות משלו."
+              : "בחרו את הצוות, ואז היכנסו כמנהל או כעובד/ת."}
+          </p>
 
-        {mode === "worker" ? (
-          <label className="gate-field">
-            <span>השם שלך</span>
-            <input
-              value={employee}
-              onChange={(event) => setEmployee(event.target.value)}
-              placeholder="כפי שרשום בצוות"
-              maxLength={120}
-              autoComplete="username"
-              disabled={busy}
-            />
-          </label>
-        ) : null}
-
-        <label className="gate-field">
-          <span>{mode === "worker" ? "קוד אישי" : "סיסמה"}</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete={creating ? "new-password" : "current-password"}
-            disabled={busy}
-          />
           {creating ? (
-            <small className="gate-hint">לפחות 6 תווים.</small>
-          ) : null}
-          {mode === "worker" ? (
-            <small className="gate-hint">
-              עדיין אין לכם קוד אישי? פתחו את קישור הצוות שקיבלתם מהמנהל
-              ובחרו בו את השם שלכם.
-            </small>
-          ) : null}
-        </label>
-
-        {error ? (
-          <div className="gate-error" role="alert">
-            <AlertCircle size={15} />
-            <span>{error}</span>
-          </div>
-        ) : null}
-
-        <button
-          type="submit"
-          className="start-button"
-          disabled={busy || !canSubmit}
-        >
-          {busy ? "רגע…" : creating ? "פתחו מרחב עבודה" : "כניסה"}
-        </button>
-
-        <button
-          type="button"
-          className="gate-switch"
-          onClick={() => switchMode(creating ? "boss" : "create")}
-          disabled={busy}
-        >
-          {creating ? (
-            <>
-              <Users size={14} /> יש לי כבר צוות
-            </>
+            <label className="gate-field">
+              <span>שם הצוות</span>
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="לדוגמה: צוות תפעול"
+                maxLength={80}
+                autoComplete="organization"
+                disabled={busy}
+              />
+            </label>
           ) : (
-            <>
-              <Plus size={14} /> פתיחת צוות חדש
-            </>
+            <label className="gate-field">
+              <span>צוות</span>
+              <select
+                value={teamId}
+                onChange={(event) => setTeamId(event.target.value)}
+                disabled={busy || teams.length === 0}
+              >
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
-        </button>
-      </form>
+
+          {creating ? null : (
+            <div className="gate-doors" role="radiogroup" aria-label="סוג כניסה">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={mode === "boss"}
+                className={`gate-door${mode === "boss" ? " is-selected" : ""}`}
+                onClick={() => switchMode("boss")}
+                disabled={busy}
+              >
+                <UserCog size={18} />
+                <span>מנהל</span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={mode === "worker"}
+                className={`gate-door${mode === "worker" ? " is-selected" : ""}`}
+                onClick={() => switchMode("worker")}
+                disabled={busy}
+              >
+                <UserCircle size={18} />
+                <span>עובד/ת</span>
+              </button>
+            </div>
+          )}
+
+          {mode === "worker" ? (
+            <label className="gate-field">
+              <span>השם שלך</span>
+              <input
+                value={employee}
+                onChange={(event) => setEmployee(event.target.value)}
+                placeholder="כפי שרשום בצוות"
+                maxLength={120}
+                autoComplete="username"
+                disabled={busy}
+              />
+            </label>
+          ) : null}
+
+          <label className="gate-field">
+            <span>{mode === "worker" ? "קוד אישי" : "סיסמה"}</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete={creating ? "new-password" : "current-password"}
+              disabled={busy}
+            />
+            {creating ? (
+              <small className="gate-hint">לפחות 6 תווים.</small>
+            ) : null}
+            {mode === "worker" ? (
+              <small className="gate-hint">
+                עדיין אין לכם קוד אישי? פתחו את קישור הצוות שקיבלתם מהמנהל
+                ובחרו בו את השם שלכם.
+              </small>
+            ) : null}
+          </label>
+
+          {error ? (
+            <div className="gate-error" role="alert">
+              <AlertCircle size={15} />
+              <span>{error}</span>
+            </div>
+          ) : null}
+
+          <button
+            type="submit"
+            className="start-button"
+            disabled={busy || !canSubmit}
+          >
+            {busy ? "רגע…" : creating ? "פתחו מרחב עבודה" : "כניסה"}
+          </button>
+
+          <button
+            type="button"
+            className="gate-switch"
+            onClick={() => switchMode(creating ? "boss" : "create")}
+            disabled={busy}
+          >
+            {creating ? (
+              <>
+                <Users size={14} /> יש לי כבר צוות
+              </>
+            ) : (
+              <>
+                <Plus size={14} /> פתיחת צוות חדש
+              </>
+            )}
+          </button>
+        </form>
+      )}
     </main>
   );
 }

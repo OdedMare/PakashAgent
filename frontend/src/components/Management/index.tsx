@@ -457,9 +457,11 @@ export function Management({
                 <h1 id="manager-team-title">כוח אדם ותקינה</h1>
                 <p>אנשי צוות, מעמד, סבב או תלתון, סוגי משמרות ואילוצים במקום אחד.</p>
               </div>
-              <span className="manager-analytics-status">
-                {overview?.employees.length ?? 0} אנשי צוות
-              </span>
+              {overview ? (
+                <span className="manager-analytics-status">
+                  {overview.employees.length} אנשי צוות
+                </span>
+              ) : null}
             </header>
             {overview ? (
               <TeamPanel

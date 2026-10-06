@@ -27,7 +27,8 @@ export function IdentityGate({
   onLogin,
   onDismissError,
 }: {
-  roster: RosterName[];
+  /** `undefined` while the roster is still being fetched. */
+  roster: RosterName[] | undefined;
   busy: boolean;
   error: string | null;
   onClaim: (employee: string, passcode: string) => void;
@@ -37,7 +38,7 @@ export function IdentityGate({
   const [selected, setSelected] = useState<string | null>(null);
   const [passcode, setPasscode] = useState("");
 
-  const chosen = roster.find((row) => row.employee === selected) ?? null;
+  const chosen = roster?.find((row) => row.employee === selected) ?? null;
   const claiming = chosen !== null && !chosen.claimed;
   // 6 characters, matching the backend. Checked here only to keep the button
   // honest -- the server enforces it, and this is not the security boundary.
@@ -68,7 +69,9 @@ export function IdentityGate({
           </div>
         ) : null}
 
-        {roster.length === 0 ? (
+        {roster === undefined ? (
+          <p className="gate-lede" aria-busy="true">טוען את רשימת הצוות…</p>
+        ) : roster.length === 0 ? (
           <p className="gate-lede">
             רשימת העובדים עדיין לא הוגדרה. פנו למנהל.
           </p>

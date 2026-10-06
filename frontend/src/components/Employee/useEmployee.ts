@@ -29,7 +29,10 @@ import type { EmployeeView, RosterName } from "@/types";
  *  even if it wanted to (D14). */
 export function useEmployee() {
   const [view, setView] = useState<EmployeeView | null | undefined>(undefined);
-  const [roster, setRoster] = useState<RosterName[]>([]);
+  // `undefined` until the roster has answered, for the same reason `view`
+  // has it: an empty list renders "no employees defined yet", which flashed
+  // on every visit before the real names arrived.
+  const [roster, setRoster] = useState<RosterName[] | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
