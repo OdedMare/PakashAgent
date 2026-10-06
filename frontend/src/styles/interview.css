@@ -19,11 +19,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  min-height: 4.5rem;
-  padding: 0.75rem 1.25rem;
-  color: var(--text-on-dark);
-  background: var(--sidebar);
-  border-bottom: 1px solid color-mix(in srgb, #ffffff 10%, transparent);
+  min-height: 3.5rem;
+  padding: 0.5rem 1.25rem;
+  color: var(--text);
+  background: color-mix(in srgb, var(--sidebar) 92%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid var(--border);
 }
 
 .brand {
@@ -43,12 +44,13 @@
   place-items: center;
   color: var(--text-on-dark);
   background: var(--brand-gradient);
-  border: 1px solid color-mix(in srgb, #ffffff 18%, transparent);
+  border: 0;
   border-radius: var(--radius-sm);
+  box-shadow: 0 2px 6px color-mix(in srgb, #6a45e0 30%, transparent);
 }
 
 .interview-header .brand-sub {
-  color: #9eabc0;
+  color: var(--text-muted);
   font-size: 12px;
   font-weight: 500;
 }
@@ -76,11 +78,13 @@
 }
 
 .interview-header .icon-button {
-  color: #aebbd0;
+  width: 40px;
+  height: 40px;
+  color: var(--text-muted);
 }
 
 .interview-header .icon-button:hover {
-  color: #ffffff;
+  color: var(--text);
   background: var(--sidebar-2);
 }
 

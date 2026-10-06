@@ -142,9 +142,9 @@
   grid-template-columns: 8rem minmax(0, 1fr);
   min-height: 5.2rem;
   overflow: hidden;
-  color: var(--text-on-dark);
-  background: var(--sidebar);
-  border: 1px solid color-mix(in srgb, #ffffff 9%, transparent);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
 }
 
@@ -154,16 +154,20 @@
   justify-content: center;
   gap: 0.15rem;
   padding: 0.8rem 1rem;
-  background: var(--sidebar-2);
-  border-inline-end: 1px solid color-mix(in srgb, #ffffff 10%, transparent);
+  background: linear-gradient(160deg, var(--hue-blue-soft), var(--hue-violet-soft));
+  border-inline-end: 1px solid var(--border);
 }
 
 .week-rail-label strong {
   font-size: 0.8rem;
 }
 
+.week-rail-label strong {
+  color: var(--hue-violet);
+}
+
 .week-rail-label span {
-  color: #9eabc0;
+  color: var(--text-muted);
   font-size: 0.65rem;
 }
 
@@ -179,7 +183,7 @@
   justify-content: center;
   gap: 0.38rem;
   padding: 0.65rem 0.7rem;
-  border-inline-end: 1px solid color-mix(in srgb, #ffffff 8%, transparent);
+  border-inline-end: 1px solid var(--border);
   position: relative;
 }
 
@@ -192,7 +196,7 @@
   position: absolute;
   inset: 0 0 auto;
   height: 3px;
-  background: #7b9cff;
+  background: var(--brand-gradient);
 }
 
 .week-rail-day-head {
@@ -209,8 +213,12 @@
   white-space: nowrap;
 }
 
+.week-rail-day.is-today {
+  background: var(--primary-soft);
+}
+
 .week-rail-day-head span {
-  color: #9eabc0;
+  color: var(--text-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.62rem;
   direction: ltr;
@@ -219,8 +227,8 @@
 .week-rail-track {
   height: 0.34rem;
   overflow: hidden;
-  background: color-mix(in srgb, #ffffff 12%, transparent);
-  border-radius: 2px;
+  background: var(--surface-3);
+  border-radius: 999px;
 }
 
 .week-rail-track span {
@@ -241,7 +249,7 @@
 
 .week-rail-day small {
   overflow: hidden;
-  color: #aebbd0;
+  color: var(--text-muted);
   font-size: 0.62rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -249,7 +257,7 @@
 
 .week-rail-day.is-short small,
 .week-rail-day.is-warning small {
-  color: #f2be70;
+  color: var(--warning);
 }
 
 /* Draft and published are the two states of a period, and they must be
@@ -371,9 +379,9 @@
   gap: 0.55rem;
   flex-wrap: wrap;
   padding: 0.55rem 0.7rem;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   border: 1px solid var(--border);
-  background: var(--surface-2);
+  background: var(--surface);
 }
 
 .board-filters-icon {
@@ -397,10 +405,10 @@
 .board-editor-fields select {
   font-family: inherit;
   font-size: 0.8rem;
-  padding: 0.32rem 0.5rem;
+  padding: 0.38rem 0.6rem;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid transparent;
+  background: var(--surface-3);
   color: var(--text);
   cursor: pointer;
 }
@@ -417,8 +425,8 @@
   gap: 0.28rem;
   padding: 0.32rem 0.6rem;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid transparent;
+  background: var(--surface-3);
   color: var(--text-soft);
   font-size: 0.76rem;
   font-family: inherit;
@@ -429,7 +437,7 @@
 
 .board-toggle.is-on {
   background: var(--primary-soft);
-  border-color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
   color: var(--primary);
 }
 
@@ -1497,13 +1505,25 @@
 
 /* -- the navigation between the board and the control room ---------------- */
 
+/* A Frappe segmented control, except that each area keeps its own hue: the
+   icon is always tinted, and the active segment takes the tint as its
+   background so the manager can tell which room they are in at a glance. */
 .management-nav {
   display: flex;
-  gap: 0.25rem;
+  gap: 0.15rem;
   padding: 0.2rem;
-  border-radius: var(--radius-sm);
+  border-radius: calc(var(--radius-sm) + 2px);
   background: var(--sidebar-2);
-  border: 1px solid color-mix(in srgb, #ffffff 10%, transparent);
+  border: 0;
+}
+
+.management-nav-item:nth-child(4n + 1) { --tint: var(--hue-blue); --tint-soft: var(--hue-blue-soft); }
+.management-nav-item:nth-child(4n + 2) { --tint: var(--hue-violet); --tint-soft: var(--hue-violet-soft); }
+.management-nav-item:nth-child(4n + 3) { --tint: var(--hue-teal); --tint-soft: var(--hue-teal-soft); }
+.management-nav-item:nth-child(4n + 4) { --tint: var(--hue-pink); --tint-soft: var(--hue-pink-soft); }
+
+.management-nav-item svg {
+  color: var(--tint, currentColor);
 }
 
 .management-nav-item {
@@ -1514,21 +1534,22 @@
   border-radius: calc(var(--radius-sm) - 3px);
   border: none;
   background: transparent;
-  color: #aebbd0;
+  color: var(--text-muted);
   font-size: 0.8rem;
+  font-weight: 500;
   font-family: inherit;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .management-nav-item:hover {
-  color: #ffffff;
+  color: var(--text);
 }
 
 .management-nav-item.is-active {
-  background: var(--primary);
-  color: #ffffff;
-  box-shadow: none;
+  background: var(--surface);
+  color: var(--tint, var(--text));
+  box-shadow: var(--shadow-soft), inset 0 -2px 0 var(--tint, var(--primary));
 }
 
 .management-nav-item:focus-visible {
@@ -1681,9 +1702,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  color: var(--text-on-dark);
+  color: var(--text);
   background: var(--sidebar);
-  border-bottom: 1px solid color-mix(in srgb, #ffffff 9%, transparent);
+  border-bottom: 1px solid var(--border);
 }
 
 .manager-drawer-head > div {
@@ -1698,15 +1719,15 @@
 
 .manager-drawer-head span {
   font-size: 0.74rem;
-  color: #9eabc0;
+  color: var(--text-muted);
 }
 
 .manager-drawer-head .icon-button {
-  color: #aebbd0;
+  color: var(--text-muted);
 }
 
 .manager-drawer-head .icon-button:hover {
-  color: #ffffff;
+  color: var(--text);
   background: var(--sidebar-2);
 }
 

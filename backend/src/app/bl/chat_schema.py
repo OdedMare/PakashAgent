@@ -28,8 +28,11 @@ props.update({
     "tool_calls": {"type": "array", "maxItems": 4, "items": copy.deepcopy(_TOOL_CALL_SCHEMA)},
 })
 props["tool_calls"]["items"]["properties"]["tool"]["enum"] += [
-    "list_periods", "workload_report", "change_history",
+    "list_periods", "workload_report", "change_history", "simulate_changes",
 ]
+props["tool_calls"]["items"]["properties"]["arguments"]["properties"]["operations"] = \
+    copy.deepcopy(props["operations"])
+props["needs_reason"]["enum"] = [False]
 props["constraints"]["items"]["properties"]["available"] = {"type": "boolean"}
 CHAT_SCHEMA["required"] = list(props)
 

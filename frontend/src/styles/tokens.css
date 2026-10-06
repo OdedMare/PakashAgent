@@ -1,66 +1,90 @@
-/* Pakash is an operations product, so its visual language comes from a
-   dispatch desk: cool paper, dark ink, precise rules and one blue action
-   colour. Warning and success colours are reserved for schedule meaning.
-   There are no decorative gradients or glows. */
+/* Pakash borrows its structure from Frappe HR's "Espresso" system: a white
+   canvas, neutral gray controls that are filled rather than outlined, thin
+   hairline borders, pill badges and segmented tabs. Where Espresso stays
+   gray, Pakash spends colour: one blue action colour, a gradient brand mark,
+   and a set of named hues that tell the app's areas apart.
+
+   Warning, danger and success stay reserved for schedule meaning — no area
+   hue reuses them, so amber on the board still always means "look at this".
+
+   `--sidebar` / `--sidebar-2` are the chrome (top bar, drawer head, week
+   rail). They used to be navy; they are now the same light surfaces as the
+   rest of the page, the way Frappe's navbar is. */
 :root {
-  --bg: #eef2f6;
+  --bg: #f7f7f8;
   --surface: #ffffff;
-  --surface-2: #f7f9fb;
-  --surface-3: #e6ebf1;
-  --sidebar: #101828;
-  --sidebar-2: #1d2939;
-  --text: #101828;
-  --text-soft: #344054;
-  --text-muted: #667085;
-  --text-on-dark: #f8fafc;
-  --border: #d8e0e9;
-  --border-strong: #b9c5d3;
+  --surface-2: #f8f8f8;
+  --surface-3: #f1f1f2;
+  --sidebar: #ffffff;
+  --sidebar-2: #f1f1f2;
+  --text: #171717;
+  --text-soft: #383838;
+  --text-muted: #6b6b6b;
+  --text-on-dark: #ffffff;
+  --border: #ebebeb;
+  --border-strong: #d6d6d6;
   --primary: #2e5bd7;
   --primary-hover: #2448b8;
-  --primary-soft: #eaf0ff;
+  --primary-soft: #ecf1ff;
   --accent: #0f766e;
   --success: #18794e;
-  --success-soft: #e8f5ee;
+  --success-soft: #e7f6ed;
   --warning: #9a5708;
-  --warning-soft: #fff3df;
+  --warning-soft: #fff4e0;
   --danger: #b42318;
-  --danger-soft: #feebe9;
-  --shadow: 0 18px 48px rgba(16, 24, 40, 0.12);
-  --shadow-soft: 0 1px 3px rgba(16, 24, 40, 0.08);
+  --danger-soft: #feecea;
+  /* Area hues — navigation, tile icons and section marks. Each clears 4.5:1
+     on white so the same token can colour text as well as an icon. */
+  --hue-blue: #2e5bd7;
+  --hue-blue-soft: #ecf1ff;
+  --hue-violet: #7a3fe0;
+  --hue-violet-soft: #f3edff;
+  --hue-teal: #0b7a70;
+  --hue-teal-soft: #e5f6f3;
+  --hue-pink: #c2266f;
+  --hue-pink-soft: #fdecf4;
+  --shadow: 0 12px 32px rgba(23, 23, 23, 0.1), 0 2px 6px rgba(23, 23, 23, 0.05);
+  --shadow-soft: 0 1px 2px rgba(23, 23, 23, 0.06);
   --radius: 12px;
   --radius-sm: 8px;
-  --focus: 0 0 0 3px rgba(46, 91, 215, 0.28);
-  /* Kept as compatibility tokens for existing components. Both intentionally
-     resolve to a flat operation colour rather than a decorative effect. */
-  --brand-gradient: #2e5bd7;
+  --focus: 0 0 0 3px rgba(46, 91, 215, 0.25);
+  --brand-gradient: linear-gradient(135deg, #2e5bd7 0%, #6a45e0 55%, #b8357f 100%);
   --brand-glow: none;
 }
 
 :root[data-theme="dark"] {
-  --bg: #0f1724;
-  --surface: #172131;
-  --surface-2: #1d2939;
-  --surface-3: #29374a;
-  --text: #f8fafc;
-  --text-soft: #d6deea;
-  --text-muted: #98a6b9;
-  --sidebar: #0a101c;
-  --sidebar-2: #172131;
-  --border: #2d3b4f;
-  --border-strong: #47566b;
+  --bg: #121212;
+  --surface: #1b1b1b;
+  --surface-2: #212121;
+  --surface-3: #2a2a2a;
+  --text: #f5f5f5;
+  --text-soft: #d4d4d4;
+  --text-muted: #9a9a9a;
+  --sidebar: #1b1b1b;
+  --sidebar-2: #2a2a2a;
+  --border: #2c2c2c;
+  --border-strong: #3d3d3d;
   --primary: #7b9cff;
   --primary-hover: #9ab2ff;
-  --primary-soft: #1e3268;
+  --primary-soft: #1d2a52;
   --accent: #5ed0c4;
   --success: #6bc995;
-  --success-soft: #17392c;
+  --success-soft: #16332a;
   --warning: #f0b45b;
-  --warning-soft: #3b2a12;
+  --warning-soft: #362713;
   --danger: #ff8a80;
-  --danger-soft: #44211f;
-  --shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
-  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.24);
-  --brand-gradient: #5f82ef;
+  --danger-soft: #3f2120;
+  --hue-blue: #8aa6ff;
+  --hue-blue-soft: #1d2a52;
+  --hue-violet: #b79bff;
+  --hue-violet-soft: #2c2150;
+  --hue-teal: #5ed0c4;
+  --hue-teal-soft: #143430;
+  --hue-pink: #f28ab8;
+  --hue-pink-soft: #3d1a2c;
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --brand-gradient: linear-gradient(135deg, #4a72e8 0%, #7552e6 55%, #b8417f 100%);
   --brand-glow: none;
 }
 
@@ -81,8 +105,12 @@ button,
 input,
 textarea,
 select {
-  font-family: "Noto Sans Hebrew", "Arial Hebrew", Arial, sans-serif;
-  font-size: 16px;
+  /* Inter for Latin and digits, as in Frappe; Hebrew falls through to Noto
+     Sans Hebrew. Both are loaded in the root layout and degrade to system
+     faces if the font host is unreachable. */
+  font-family: "Inter", "Noto Sans Hebrew", "Arial Hebrew", -apple-system, "Segoe UI", Arial, sans-serif;
+  font-size: 15px;
+  font-feature-settings: "cv11", "ss01";
 }
 
 body {

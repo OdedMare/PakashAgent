@@ -15,6 +15,7 @@ from app.bl.changes.proposal import build_proposal
 from app.bl.changes.values import json_default
 from app.bl.chat_schema import CHAT_SCHEMA, PROFILE_SECTIONS
 from app.bl.planner.shaping import question
+from app.bl.placement.values import is_eligible, warning_key
 from app.bl.profile_service import ProfileService
 from app.bl.prompts import load
 from app.bl.schedule_service.context import ScheduleContext
@@ -35,6 +36,7 @@ _EXTRA_TOOLS = {
     "list_periods": "כל הסידורים השמורים של הצוות ותאריכיהם",
     "workload_report": "השוואת שעות, מספר משמרות וכוננויות בכל טווח תאריכים",
     "change_history": "מה השתנה בסידורים ומדוע",
+    "simulate_changes": "בדיקת מה יקרה אם מבצעים כמה שינויים יחד, כולל כיסוי ועומסים; ללא שמירה",
 }
 _ROUNDS = 7      # model calls per turn; the last one may not request tools
 _REPAIRS = 2     # times a rejected plan is handed back to the model to fix
@@ -47,7 +49,7 @@ class _Rejected(AgentError):
 
 
 class _NeedsManager(AgentError):
-    """Only the manager can supply what is missing (D8): ask, do not repair."""
+    """An unresolved target: ask the manager rather than guessing."""
 
 
 def _json(value):
@@ -129,6 +131,9 @@ class ManagerChatService:
             }
             results, steps = [], []
             plan, asked, repairs = None, "", 0
+            reviewed = False
+            request = next((row["content"] for row in reversed(payload["conversation"])
+                            if row["role"] == "user"), "")
             for round_ in range(_ROUNDS):
                 final = round_ == _ROUNDS - 1
                 turn = self._llm.complete_json(
@@ -160,7 +165,18 @@ class ManagerChatService:
                     self._repo.chat_turn_progress(chat_id, message_id, dict(context, steps=steps))
                     continue
                 try:
-                    plan = self._prepare_plan(team_id, turn, schedule_id)
+                    plan = self._prepare_plan(team_id, turn, schedule_id, request)
+                    if plan and plan["kind"] in ("changes", "generate") \
+                            and plan["warnings"] and not plan["exceptions"] and not reviewed and not final:
+                        # Give the agent the combined result once, before the
+                        # manager sees it. Warnings remain advisory: a named
+                        # choice may stand with its exact conflicts explained.
+                        reviewed = True
+                        results.append({"tool": "plan_review", "ok": True,
+                                        "plan": _plan_for_model(plan, whole=True)})
+                        steps.append({"tool": "plan_review", "ok": True})
+                        self._repo.chat_turn_progress(chat_id, message_id, dict(context, steps=steps))
+                        continue
                 except _NeedsManager as exc:
                     asked = str(exc)
                 except _Rejected as exc:
@@ -191,12 +207,12 @@ class ManagerChatService:
     @staticmethod
     def _focus_arguments(name, arguments, schedule_id, context):
         """Aim a dateless read at the week on screen; None when nothing is."""
-        if name not in TOOL_DESCRIPTIONS or arguments.get("schedule_id") \
+        if name not in dict(TOOL_DESCRIPTIONS, **_EXTRA_TOOLS) or arguments.get("schedule_id") \
                 or arguments.get("day") or arguments.get("slot_date"):
             return arguments
         if schedule_id:
             return dict(arguments, schedule_id=schedule_id)
-        if name in ("read_period", "employee_state", "coverage_gaps", "publish_readiness"):
+        if name in ("read_period", "employee_state", "coverage_gaps", "publish_readiness", "simulate_changes"):
             if not context.get("visible_week"):
                 return None
             return dict(arguments, day=context["visible_week"])
@@ -243,6 +259,18 @@ class ManagerChatService:
             return {"tool": name, "ok": True, "changes": self._repo.change_log(team_id, limit=60)}
         if name == "workload_report":
             return dict(self._workload(team_id, arguments, focused_id), tool=name, ok=True)
+        if name == "simulate_changes":
+            period = self._tools.run(team_id, "read_period", {
+                key: arguments[key] for key in ("schedule_id", "day") if arguments.get(key)
+            }) if arguments.get("schedule_id") or arguments.get("day") else None
+            schedule_id = ((period or {}).get("schedule") or {}).get("id") or focused_id
+            if (period and not period.get("found")) or not schedule_id:
+                return {"tool": name, "ok": False, "error": "יש לבחור סידור קיים או לציין את השבוע"}
+            operations = arguments.get("operations") or []
+            # The shared simulator bounds operations. Reject overflow rather
+            # than describing a silently truncated scenario as complete.
+            self._changed_rows(self._repo.get_schedule(schedule_id, team_id), operations)
+            return dict(self._schedules.simulate(team_id, operations, schedule_id), tool=name, ok=True)
         if name == "find_replacements":
             arguments = dict(arguments, include_exceptions=True)
         return self._tools.run(team_id, name, arguments)
@@ -283,9 +311,11 @@ class ManagerChatService:
             "periods": self._repo.list_schedules(team_id) if not schedule_id else [],
         }
 
-    def _prepare_plan(self, team_id, turn, focused_id):
+    def _prepare_plan(self, team_id, turn, focused_id, request):
         kind = turn.get("kind") or "answer"
-        if kind == "answer" or turn.get("needs_input") or turn.get("needs_reason"):
+        if turn.get("needs_reason"):
+            raise _Rejected("אין צורך לבקש סיבה. הוראת המנהל היא הסיבה; יש להכין את התוכנית או לשאול רק על יעד חסר")
+        if kind == "answer" or turn.get("needs_input"):
             return None
         schedule_id = turn.get("schedule_id") or focused_id
         if kind == "generate" and not turn.get("schedule_id"):
@@ -304,7 +334,7 @@ class ManagerChatService:
         plan = {
             "kind": kind, "schedule_id": schedule_id,
             "agent_reason": (turn.get("agent_reason") or turn.get("reply") or "").strip(),
-            "reason": (turn.get("stated_reason") or "").strip(),
+            "reason": (turn.get("stated_reason") or request).strip(),
             "snapshot": _fingerprint(state), "operations": [], "constraints": [],
             "warnings": [], "exceptions": (turn.get("exceptions") or [])[:20],
         }
@@ -329,7 +359,8 @@ class ManagerChatService:
         else:
             if not schedule and (kind != "changes" or turn.get("operations")):
                 raise _Rejected("אין סידור בשבוע הזה. אפשר לבקש לבנות אותו קודם")
-            if kind not in ("publish", "unpublish") and schedule.get("status") == "published":
+            if (kind == "clear" or kind == "changes" and turn.get("operations")) \
+                    and schedule.get("status") == "published":
                 raise _Rejected("הסידור מפורסם. בקשו להחזיר אותו לטיוטה לפני שינוי")
             if kind == "changes":
                 proposal = build_proposal(turn, profile, schedule, plan["reason"])
@@ -341,17 +372,17 @@ class ManagerChatService:
                 plan["constraints"] = self._constraints(turn.get("constraints") or [], profile)
                 if not plan["operations"] and not plan["constraints"]:
                     return None
-                if not plan["reason"]:
-                    raise _NeedsManager("מה הסיבה לשינוי בסידור?")
                 rows = self._changed_rows(schedule, plan["operations"]) if schedule else []
                 names = {person["name"] for person in profile.get("employees") or []}
                 if any(row["employee"] not in names for row in rows):
                     raise _Rejected("התוכנית מכילה עובד שאינו נמצא בצוות")
                 if schedule:
-                    plan["warnings"] = self._audit_plan(profile, schedule, rows, state["availability"], plan["constraints"])
+                    existing = {warning_key(row) for row in self._audit_plan(
+                        profile, schedule, schedule_rows(schedule), state["availability"], [])}
+                    plan["warnings"] = [row for row in self._audit_plan(
+                        profile, schedule, rows, state["availability"], plan["constraints"])
+                        if warning_key(row) not in existing]
             elif kind == "clear":
-                if not plan["reason"]:
-                    raise _NeedsManager("מה הסיבה לפינוי השיבוצים?")
                 plan["operations"] = [dict(action="remove", employee=row["employee"],
                                            date=iso(row["date"]), shift=row["shift"],
                                            reason=plan["agent_reason"])
@@ -441,6 +472,9 @@ class ManagerChatService:
         imagined = Hypothetical(schedule_rows(schedule), schedule).apply_all(operations)
         if imagined.skipped:
             raise _Rejected(imagined.skipped[0]["why"])
+        keys = [(row["employee"], row["shift"], row["date"]) for row in imagined.rows]
+        if len(keys) != len(set(keys)):
+            raise _Rejected("התוכנית משבצת את אותו עובד פעמיים באותה משמרת. יש להסיר את השיבוץ הכפול")
         return imagined.rows
 
     def _audit_plan(self, profile, schedule, rows, availability, constraints):
@@ -449,12 +483,19 @@ class ManagerChatService:
                  for row in availability}
         facts.update({(row["employee"], row["date"], row.get("shift") or ""): row
                       for row in constraints})
-        return audit(
+        warnings = audit(
             rows, profile.get("shifts") or [], profile.get("employees") or [],
             effective_availability(profile, list(facts.values()), iso(schedule["starts_on"]),
                                    iso(schedule["ends_on"])),
             profile, schedule.get("slots") or [],
         )
+        for row in rows:
+            if not is_eligible(profile, row["employee"], row["shift"]):
+                warnings.append(dict(code="ineligible", severity="warning", employee=row["employee"],
+                                     date=iso(row["date"]), shift=row["shift"], details={},
+                                     message="%s לא מוגדר/ת למשמרת %s בפרופיל הצוות" %
+                                     (row["employee"], row["shift"])))
+        return warnings
 
     def apply(self, team_id, manager_id, chat_id, message_id, accept_exceptions=False):
         with self._repo.chat_approval(team_id, manager_id, chat_id, message_id) as message:
