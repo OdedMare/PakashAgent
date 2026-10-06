@@ -2,7 +2,6 @@
 
 import {
   ArrowLeftRight,
-  BarChart3,
   BellRing,
   CalendarDays,
   CalendarClock,
@@ -10,6 +9,7 @@ import {
   ClipboardList,
   LayoutGrid,
   LogOut,
+  MessageCircle,
   Moon,
   Sun,
   UserCircle,
@@ -21,18 +21,21 @@ import { useTheme } from "@/components/Interview/useTheme";
 import { Calendar } from "@/components/Management/Calendar";
 import type { EmployeeView } from "@/types";
 
+import { AssistantChat } from "./AssistantChat";
 import { ConstraintForm } from "./ConstraintForm";
-import { HoursPanel } from "./HoursPanel";
 import { IdentityGate } from "./IdentityGate";
 import { SwapPanel } from "./SwapPanel";
+import { useAssistant } from "./useAssistant";
 import { useEmployee } from "./useEmployee";
 import { shortDate } from "@/components/DateInput";
 
 /** The employee's personal area.
  *
  *  What [D14](../../../../docs/DECISIONS.md) added, and the boundary of what
- *  it added: this screen shows one person their own hours, their own shifts
- *  and their own warnings, and lets them **ask** not to be scheduled. It has
+ *  it added: this screen shows one person their own shifts and changes, and
+ *  lets them **ask** not to be scheduled or to swap. Charts of hours against
+ *  the team are the manager's (D27); the employee gets a small assistant for
+ *  swap questions instead, which suggests and never writes. It has
  *  no control that edits a schedule — the calendar below is the same
  *  `readOnly` grid the team view renders, taking no `onDrop`, because the
  *  manager remains the sole decider.
@@ -43,6 +46,7 @@ import { shortDate } from "@/components/DateInput";
 export function Employee({ onLeave }: { onLeave?: () => void }) {
   const { theme, toggle } = useTheme();
   const state = useEmployee();
+  const assistant = useAssistant();
   const { view } = state;
   const [section, setSection] = useState<EmployeeSection>("mine");
   // Only once signed in: the claim gate has none of what the tour points at.
@@ -128,10 +132,11 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
             onClick={() => setSection("mine")}
           />
           <EmployeeTab
-            active={section === "analytics"}
-            icon={<BarChart3 size={16} />}
-            label="הנתונים שלי"
-            onClick={() => setSection("analytics")}
+            active={section === "assistant"}
+            icon={<MessageCircle size={16} />}
+            label="שאלו על החלפות"
+            tour="employee-assistant-tab"
+            onClick={() => setSection("assistant")}
           />
           <EmployeeTab
             active={section === "requests"}
@@ -161,12 +166,12 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
             )
           ) : null}
 
-          {section === "analytics" ? (
-            view.schedule ? (
-              <HoursPanel summary={view.summary} fairness={view.fairness} />
-            ) : (
-              <NoPublishedSchedule />
-            )
+          {section === "assistant" ? (
+            <AssistantChat
+              assistant={assistant}
+              busy={state.busy}
+              onOffer={state.offerSwap}
+            />
           ) : null}
 
           {section === "requests" ? (
@@ -218,7 +223,7 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
   );
 }
 
-type EmployeeSection = "mine" | "analytics" | "requests" | "schedule";
+type EmployeeSection = "mine" | "assistant" | "requests" | "schedule";
 
 function EmployeeTab({
   active,

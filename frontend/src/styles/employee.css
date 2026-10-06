@@ -238,6 +238,171 @@
   line-height: 1.6;
 }
 
+/* -- the assistant (D27) --------------------------------------------------- */
+
+.assistant {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.assistant-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.assistant-head h2 {
+  margin: 0;
+}
+
+.assistant-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 220px;
+  max-height: min(60vh, 560px);
+  overflow-y: auto;
+  padding-block: 4px;
+}
+
+.assistant-empty p {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.assistant-empty .conversation-starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.assistant-message {
+  max-width: 88%;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+
+.assistant-message.is-mine {
+  align-self: flex-start;
+  background: var(--primary-soft);
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.assistant-message.is-assistant {
+  align-self: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.assistant-swap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.assistant-swap p {
+  margin: 0;
+}
+
+.assistant-swap-what {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 0.86rem;
+}
+
+.assistant-swap-fixes {
+  color: var(--success);
+  font-size: 0.8rem;
+}
+
+.assistant-swap-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.assistant-swap-actions span,
+.assistant-swap-sent {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.assistant-swap-sent {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.assistant-thinking {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.assistant-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.84rem;
+}
+
+.assistant-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.assistant-composer textarea {
+  flex: 1;
+  min-height: 52px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.assistant-composer textarea:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: var(--focus);
+}
+
+.assistant-composer .primary-button {
+  min-width: 44px;
+  min-height: 44px;
+  justify-content: center;
+}
+
+@media (max-width: 620px) {
+  .assistant-message {
+    max-width: 100%;
+  }
+}
+
 .shift-list,
 .change-list,
 .request-list ul {
