@@ -733,6 +733,43 @@ answers. The deterministic fallback still answers the question rather than
 asking what the manager meant — an unreachable model is not the manager
 having been unclear, and asking would repeat on every retry.
 
+---
+
+## D25 — The front door has a worker entrance, but it only signs in *(amends D14)*
+
+The front page asks for the team first, then offers two doors: **מנהל**
+(the team password, unchanged from D10) and **עובד/ת** (a claimed name and its
+personal passcode, D14). Before this, a worker could only arrive through the
+share link, even to sign in to a name they had claimed months ago.
+
+**The worker door signs in; it does not claim.** `POST /api/employee/signin`
+takes `team_id` in the body, because there is no session to take it from, and
+reaches only a name that is already claimed. Claiming stays behind the
+share-link session exactly as D14 set it.
+
+*Why sign-in can drop the link and claiming cannot:* for an existing claim the
+passcode is the credential, so the link proves nothing extra. For an
+unclaimed name the link is the *only* proof of having been invited. The team
+picker on the front page is public, so letting it reach `claim` would let
+anyone who can see a team's name take any name its roster has not claimed yet.
+
+*Why the name is typed, not picked:* a picker on a public page would publish
+every team's roster to anyone who opens the site. The share-link
+`IdentityGate` still lists names, because a visitor there has proven they
+were invited.
+
+**Consequences worth knowing:**
+
+- **`/signin` and `/login` share one throttle key**
+  (`employee:<team>:<name>`), so two doors to one passcode do not double
+  the guesses an attacker gets.
+- **A wrong passcode and an unclaimed name answer identically**, as `/login`
+  already did. Here that matters more, because this door needs no link.
+- **Taking `team_id` from the body is a login's exception to the
+  team-from-cookie rule**, the same one `/api/workspace/login` already
+  makes: the route issues the cookie, so there is no cookie yet to read the
+  team from. Every route *after* sign-in still scopes by the signed session.
+
 ## Open
 
 - **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment

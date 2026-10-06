@@ -86,7 +86,7 @@ import screen. All surfaces exist.
 
 | Surface | Purpose |
 |---|---|
-| Workspace gate | Boss login / team creation — `src/components/Workspace/` |
+| Workspace gate | Pick the team, then the manager or worker door; team creation — `src/components/Workspace/` |
 | Member area | The employee's read-only surface — `MemberArea.tsx` |
 | Interview | The intro conversation, one question per turn — `src/components/Interview/` |
 | Management | The manager's control room — `src/components/Management/` |
@@ -252,6 +252,12 @@ replaces the profile everything downstream reads.
 - **Every request sends `credentials: "same-origin"`.** Without it the browser
   withholds the cookie and every guarded route answers 401 while the user is
   plainly logged in.
+- **The front door asks for the team, then manager or worker**
+  (`Login.tsx`, [D25](../docs/DECISIONS.md)). The worker door takes a
+  *typed* name and a passcode and only signs in to a name already claimed;
+  claiming still goes through the share link's `IdentityGate`. Do not put a
+  roster picker here: this page is public, and a picker would publish every
+  team's names.
 - **The member share link is `/team/<token>`.** `MemberEntry` exchanges the
   token for a cookie and then `replaceState`s it out of the URL, so the
   credential stops travelling in the address bar and the back stack.

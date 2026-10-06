@@ -89,6 +89,9 @@ schedule ids. FastAPI resolves in declaration order.
 **The team always comes from the signed session cookie, never from the request
 body or a path parameter.** A route that accepts a team id from the caller is a
 route that lets one workspace name another.
+The only exceptions are the two logins that *issue* that cookie,
+`POST /api/workspace/login` and `POST /api/employee/signin` (D25). Each one
+checks a credential for the team it names before signing anything.
 
 `/api/settings` is boss-only and process-wide — it holds the database
 credentials and the model key. See [D10](../../../docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)
