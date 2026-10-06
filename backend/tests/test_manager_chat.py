@@ -116,7 +116,7 @@ def setup(answers):
     return repo, llm, service, chat["id"], schedule["id"]
 
 
-def converse(service, repo, chat_id, schedule_id, content="דנה חולה מחר", request_id="request-1"):
+def converse(service, repo, chat_id, schedule_id, content="דנה חולה מחר, תציע את יוסי להחלפה", request_id="request-1"):
     message_id = service.start_turn(TEAM, "manager-a", chat_id, dict(content=content,
         request_id=request_id, schedule_id=schedule_id, visible_week="2026-10-04"))
     if message_id:

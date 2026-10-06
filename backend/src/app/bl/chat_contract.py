@@ -17,6 +17,10 @@ class RejectedPlan(AgentError):
 class NeedsManager(AgentError):
     """An essential detail that cannot be inferred."""
 
+    def __init__(self, message, results=None):
+        super().__init__(message)
+        self.results = results or []
+
 
 def approval_text(content):
     normalized = re.sub(r"[\s,.!؟?]+", " ", content.strip()).strip()

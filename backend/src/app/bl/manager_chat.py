@@ -178,7 +178,8 @@ class ManagerChatService:
                 try:
                     if not (turn.get("reply") or "").strip() and not question(turn.get("question")):
                         raise _Rejected("חסרה תשובה למנהל. יש להסביר את התוכנית או לענות לבקשה הנוכחית באופן קונקרטי")
-                    plan = self._prepare_plan(team_id, turn, schedule_id, request)
+                    choices = [row["content"] for row in payload["conversation"][-8:] if row["role"] == "user"]
+                    plan = self._prepare_plan(team_id, turn, schedule_id, request, choices)
                     if plan and plan["kind"] in ("changes", "generate") \
                             and any(row.get("severity") == "warning" and row["code"] not in
                                     ("unfilled", "missing_role", "missing_commander")
@@ -195,6 +196,7 @@ class ManagerChatService:
                         continue
                 except _NeedsManager as exc:
                     asked = str(exc)
+                    results.extend(exc.results)
                 except _Rejected as exc:
                     if final or repairs >= _REPAIRS:
                         raise
@@ -204,7 +206,8 @@ class ManagerChatService:
                     steps.append({"tool": "plan_check", "ok": False})
                     continue
                 break
-            output = {"steps": steps, "results": results, "question": question(turn.get("question"))}
+            output = {"steps": steps, "results": results,
+                      "question": None if asked else question(turn.get("question"))}
             if plan:
                 output["plan"] = plan
             reply = asked or (turn.get("reply") or "").strip()
@@ -362,7 +365,7 @@ class ManagerChatService:
             "periods": self._repo.list_schedules(team_id) if not schedule_id else [],
         }
 
-    def _prepare_plan(self, team_id, turn, focused_id, request):
+    def _prepare_plan(self, team_id, turn, focused_id, request, choices=()):
         kind = turn.get("kind") or "answer"
         if turn.get("needs_reason"):
             raise _Rejected("אין צורך לבקש סיבה. הוראת המנהל היא הסיבה; יש להכין את התוכנית או לשאול רק על יעד חסר")
@@ -448,6 +451,19 @@ class ManagerChatService:
                     and schedule.get("status") == "published":
                 raise _Rejected("הסידור מפורסם. בקשו להחזיר אותו לטיוטה לפני שינוי")
             if kind == "changes":
+                if any(not row.get("available", False) for row in turn.get("constraints") or []):
+                    selections = "\n".join(list(choices) + [request])
+                    assignments = [row for row in turn.get("operations") or [] if row.get("action") == "assign"]
+                    unselected = [row for row in assignments if row.get("employee") and row["employee"] not in selections]
+                    if unselected:
+                        candidates = []
+                        for row in unselected:
+                            leaving = next((item.get("employee", "") for item in turn.get("operations") or []
+                                            if item.get("action") == "remove" and item.get("shift") == row.get("shift")
+                                            and item.get("date") == row.get("date")), "")
+                            candidates.append(self._tools.run(team_id, "find_replacements", dict(
+                                schedule_id=schedule_id, employee=leaving, shift_name=row.get("shift"), slot_date=row.get("date"))))
+                        raise _NeedsManager("בדקתי מועמדים להחלפה. בחרו מי יחליף בכל משמרת כדי שאכין תוכנית מלאה לאישור.", candidates)
                 proposal = build_proposal(turn, profile, schedule, plan["reason"])
                 if proposal["needs_input"] or proposal["needs_reason"]:
                     raise _NeedsManager(proposal["reply"] or "נדרשים פרטים נוספים לפני שינוי")

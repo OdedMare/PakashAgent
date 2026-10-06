@@ -52,7 +52,7 @@ def seed(repo):
     llm = _ScriptedLlm([sickness()])
     service = ManagerChatService(repo, llm, ScheduleService(repo, llm))
     message_id = service.start_turn(team["id"], "manager-a", chat["id"], {
-        "content": "דנה חולה היום", "request_id": "request-1", "schedule_id": period["id"],
+        "content": "דנה חולה היום, תציע את יוסי להחלפה", "request_id": "request-1", "schedule_id": period["id"],
     })
     service.reply(team["id"], "manager-a", chat["id"], message_id)
     saved = repo.get_chat(team["id"], "manager-a", chat["id"])
