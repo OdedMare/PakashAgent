@@ -70,9 +70,11 @@ export function Tour({
     [steps, close],
   );
 
+  // Begin on the next frame, once the screen behind the tour has painted.
   useEffect(() => {
-    void go(0, 1);
+    const frame = requestAnimationFrame(() => void go(0, 1));
     return () => {
+      cancelAnimationFrame(frame);
       token.current += 1;
     };
   }, [go]);
