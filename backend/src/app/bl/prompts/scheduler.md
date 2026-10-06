@@ -41,8 +41,12 @@ the manager taught you in the intro interview.
   and `days`, listing exactly who is held on each date. Do not derive the
   cycle yourself and do not re-count the weeks — this is the answer.
 - `repair` — when present, code audited your first answer and found concrete
-  rejected rows or warnings. Return the complete corrected roster **for every
-  date in `period`**, not a patch, and change nothing outside those dates.
+  rejected rows or warnings. `period.slots` contains only the dates needing
+  repair. Return their complete corrected roster and change nothing outside
+  those dates. Other days stay fixed. `already_scheduled` includes the days
+  immediately before and after this period, so preserve rest at both boundaries.
+  The fairness totals include fixed assignments after the period as well;
+  leave room for their hours when choosing a replacement.
 
 ## What you produce
 

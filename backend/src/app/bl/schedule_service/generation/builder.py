@@ -127,7 +127,8 @@ class PeriodBuilder:
         # *next* one runs.
         mode = self._generation_mode()
         job = GenerationJob.open(
-            plan_spans(profile, starts_on, ends_on, mode),
+            plan_spans(profile, starts_on, ends_on, mode,
+                       self._repository.availability(team_id, starts_on, ends_on)),
             total_days=len({iso(slot.get("slot_date")) for slot in stored}),
             mode=mode,
             instructions=instructions,

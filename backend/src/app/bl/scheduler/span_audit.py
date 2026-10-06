@@ -7,6 +7,7 @@ from app.bl.audit import (
     CONSECUTIVE,
     DOUBLE_BOOKED,
     MISSING_ROLE,
+    MISSING_COMMANDER,
     OVER_HOURS,
     OVERSTAFFED,
     SHORT_REST,
@@ -21,7 +22,7 @@ from app.bl.scheduler.values import bounded
 # focused chance to repair the current span; a second bad answer stays visible
 # as an audit warning instead of entering an unbounded model loop.
 REPAIRABLE_WARNING_CODES = frozenset({
-    CONSECUTIVE, DOUBLE_BOOKED, MISSING_ROLE, OVER_HOURS,
+    CONSECUTIVE, DOUBLE_BOOKED, MISSING_ROLE, MISSING_COMMANDER, OVER_HOURS,
     OVERSTAFFED, SHORT_REST, UNAVAILABLE, UNFILLED,
 })
 

@@ -18,7 +18,7 @@ from app.bl.scheduler.payload import (
 from app.bl.scheduler.slots import build_slots, chunks
 from app.bl.scheduler.span import MAX_HISTORY_ROWS, SpanGenerator
 from app.bl.scheduler.values import bounded, bounded_rows, lines
-from app.common.errors.errors import AgentError
+from app.common.errors.errors import AgentError, ModelOutputError
 
 
 class Scheduler:
@@ -70,16 +70,26 @@ class Scheduler:
             raise AgentError("לא הוגדרו משמרות לתאריכים שנבחרו")
         committed = list(already_scheduled or [])
         result = dict(slots=slots, assignments=[], warnings=[], notes=[], summary="", metrics=[])
-        for span in plan_spans(profile, starts_on, ends_on, MODE_WEEK):
+        for span in plan_spans(profile, starts_on, ends_on, MODE_WEEK, availability):
             pins = [row for row in required_assignments or [] if row["date"] in span["dates"]]
             generated = self.generate_span(profile, span["date"], span["through"],
                 availability=availability, history=history, instructions=instructions,
                 required_assignments=pins, preferences=preferences, already_scheduled=committed)
             result["assignments"].extend(generated["assignments"])
+            committed = [row for row in committed if row.get("date") not in span["dates"]]
             committed.extend(generated["assignments"])
             result["warnings"].extend(generated.get("warnings") or [])
             result["notes"].extend(generated.get("notes") or [])
             result["metrics"].append(generated.get("metrics") or {})
+        from app.bl.scheduler.request import SpanRequest
+        from app.bl.scheduler.quality import combine_metrics, quality
+        request = SpanRequest(profile, starts_on, ends_on, slots, availability,
+                              already_scheduled, required_assignments)
+        result["warnings"] = request.audit(committed)
+        result["quality"] = quality(committed, request.audit_slots, profile, result["warnings"])
+        result["performance"] = {}
+        for measured in result["metrics"]:
+            result["performance"] = combine_metrics(result["performance"], measured)
         return result
 
     def generate_span(
@@ -93,17 +103,19 @@ class Scheduler:
         required_assignments: Optional[List[dict]] = None,
         already_scheduled: Optional[List[dict]] = None,
         preferences: Optional[List[dict]] = None,
+        split_on_failure: bool = True,
     ) -> dict:
         """Generate and verify one contiguous stretch of dates. See `span.py`."""
-        return self._spans.generate(
-            profile, starts_on, ends_on,
-            availability=availability,
-            history=history,
-            instructions=instructions,
-            required_assignments=required_assignments,
-            already_scheduled=already_scheduled,
-            preferences=preferences,
-        )
+        options = dict(availability=availability, history=history, instructions=instructions,
+                       required_assignments=required_assignments,
+                       already_scheduled=already_scheduled, preferences=preferences)
+        try:
+            return self._spans.generate(profile, starts_on, ends_on, **options)
+        except ModelOutputError as exc:
+            if not split_on_failure:
+                raise
+            from app.bl.scheduler.recovery import generate_split
+            return generate_split(self, profile, starts_on, ends_on, options, exc)
 
     def _ask(self, payload: dict, schema: Optional[dict] = None) -> dict:
         answer = self._llm.complete_json(
@@ -113,7 +125,7 @@ class Scheduler:
             flow="scheduler",
         )
         if not isinstance(answer, dict):
-            raise AgentError("המודל החזיר סידור לא תקין")
+            raise ModelOutputError("המודל החזיר סידור לא תקין")
         return answer
 
 

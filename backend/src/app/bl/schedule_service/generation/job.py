@@ -9,6 +9,9 @@ requeue -- is a method here, so the counters (`completed_days`,
 import datetime
 from typing import List, Optional
 
+from app.bl.scheduler.planning import split_dates
+from app.bl.scheduler.quality import combine_metrics
+
 from app.bl.schedule_service.constants import (
     ERROR_LIMIT,
     GENERATION_CANCELLED,
@@ -182,7 +185,7 @@ class GenerationJob:
         target.update({
             "status": GENERATION_COMPLETE,
             "error": "",
-            "metrics": result.get("metrics") or {},
+            "metrics": combine_metrics(target.get("metrics") or {}, result.get("metrics") or {}),
         })
         self._document.setdefault("notes", []).extend(result.get("notes") or [])
         summary = text(result.get("summary"))
@@ -193,12 +196,29 @@ class GenerationJob:
     def fail_span(self, target: dict, error: Exception) -> None:
         target.update({
             "status": GENERATION_FAILED, "error": str(error)[:ERROR_LIMIT],
+            "metrics": combine_metrics(target.get("metrics") or {},
+                                       getattr(error, "generation_metrics", {})),
         })
         self._document.update({
             "status": GENERATION_FAILED,
             "current_date": iso(target.get("date")),
         })
         self.recount()
+
+    def split(self, target: dict) -> bool:
+        """Checkpoint smaller pending requests; never re-ask completed neighbours."""
+        halves = split_dates(span_dates(target))
+        if self.cancel_requested or not halves:
+            return False
+        children = [span_entry(dates[0], dates[-1], dates) for dates in halves]
+        # Keep the failed parent call's cost exactly once, on its first child.
+        children[0]["metrics"] = combine_metrics(target.get("metrics") or {}, {"split_count": 1})
+        index = self.days.index(target)
+        self.days[index:index + 1] = children
+        self._document["status"] = GENERATION_RUNNING
+        self._document["current_date"] = children[0]["date"]
+        self.recount()
+        return True
 
     def advance(self) -> bool:
         """Point at the next unfinished span. True once nothing is left."""

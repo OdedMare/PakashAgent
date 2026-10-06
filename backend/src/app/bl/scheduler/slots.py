@@ -130,7 +130,8 @@ def chunks(
 
 
 def plan_spans(
-    profile: dict, starts_on: str, ends_on: str, mode: str = MODE_DAY
+    profile: dict, starts_on: str, ends_on: str, mode: str = MODE_DAY,
+    availability=None,
 ) -> List[dict]:
     """The date ranges a range job will ask the model for, one call each.
 
@@ -146,7 +147,9 @@ def plan_spans(
             for date in sorted({slot["slot_date"] for slot in slots})
         ]
     spans = []
-    for chunk in chunks(slots, MAX_ASSIGNMENTS_PER_SPAN):
+    # Imported here because planning uses SpanRequest, which builds this grid.
+    from app.bl.scheduler.planning import sized_chunks
+    for chunk in sized_chunks(profile, chunks(slots, MAX_ASSIGNMENTS_PER_SPAN), availability):
         dates = sorted({slot["slot_date"] for slot in chunk})
         spans.append({"date": dates[0], "through": dates[-1], "dates": dates})
     return spans

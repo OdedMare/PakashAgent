@@ -1,5 +1,6 @@
 """A span request and its audited model answer, including fixed neighbours."""
 
+import datetime
 from typing import List
 
 from app.bl.audit import audit, load_history
@@ -13,8 +14,7 @@ from app.bl.scheduler.payload import (
 )
 from app.bl.scheduler.slots import build_slots
 from app.bl.scheduler.span_audit import span_warnings
-from app.bl.scheduler.values import bounded, bounded_rows, lines, parse_date
-import datetime
+from app.bl.scheduler.values import bounded, bounded_rows, parse_date
 
 MAX_HISTORY_ROWS = 400
 
@@ -80,8 +80,8 @@ class SpanRequest:
                 self.profile, self.starts_on, self.ends_on
             ),
             "fairness": self._fairness(history),
-            # Only the day before the span is needed verbatim, for
-            # cross-midnight rest; load totals carry the rest of the range.
+            # Both boundaries protect rest when repairing inside a fixed period;
+            # load totals carry the other dates without repeating their reasons.
             "already_scheduled": merge(
                 self._boundary_rows(),
                 committed_for_model(self.required),
@@ -124,4 +124,3 @@ class SpanRequest:
         return merge(previous_day(self.committed, self.starts_on),
                      committed_for_model([row for row in self.committed
                                           if row.get("date") == tomorrow]))
-

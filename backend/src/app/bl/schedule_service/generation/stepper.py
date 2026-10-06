@@ -13,7 +13,7 @@ from app.bl.schedule_service.generation.pins import (
 )
 from app.bl.schedule_service.profile_gate import ProfileGate
 from app.bl.schedule_service.rows import iso
-from app.common.errors.errors import AgentError
+from app.common.errors.errors import AgentError, ModelOutputError
 
 
 class GenerationStepper:
@@ -123,6 +123,9 @@ class GenerationStepper:
             job.complete_span(target, result)
         except Exception as exc:
             job.fail_span(target, exc)
+            if isinstance(exc, ModelOutputError) and job.split(target):
+                self._repository.set_generation(schedule_id, team_id, job.to_dict())
+                return
             self._repository.set_generation(schedule_id, team_id, job.to_dict())
             raise
 
@@ -141,7 +144,8 @@ class GenerationStepper:
             profile,
             day,
             through,
-            availability=self._repository.availability(team_id, day, through),
+            availability=self._repository.availability(
+                team_id, iso(schedule.get("starts_on")), iso(schedule.get("ends_on"))),
             history=self._history.before(team_id, iso(schedule.get("starts_on"))),
             instructions=job.get("instructions") or "",
             # What the manager pinned when the job was opened, plus anything
@@ -154,6 +158,7 @@ class GenerationStepper:
                 model_assignment(row) for row in schedule.get("assignments") or []
             ],
             preferences=self._context.active_preferences(team_id),
+            split_on_failure=False,  # The job checkpoints each smaller span separately.
         )
 
     def _write_span(
