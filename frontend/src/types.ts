@@ -308,7 +308,28 @@ export interface GenerationDay {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
+    /** Logical model requests, including failed attempts. */
+    model_calls?: number;
+    failed_calls?: number;
+    prompt_chars?: number;
+    schema_chars?: number;
+    reply_chars?: number;
+    split_count?: number;
+    repair_dates?: string[];
+    repair_error?: string;
+    repair_improved?: boolean;
+    quality?: GenerationQuality;
+    quality_before?: GenerationQuality;
   };
+}
+
+export interface GenerationQuality {
+  coverage: { required: number; assigned: number; unfilled_slots: number; percent: number };
+  unfilled_seats: number;
+  warning_counts: { code: string; severity: string; count: number }[];
+  by_employee: { employee: string; hours: number; shifts: number; on_call: number; days: number }[];
+  hours_stddev: number;
+  shifts_stddev: number;
 }
 
 export interface GenerationProgress {

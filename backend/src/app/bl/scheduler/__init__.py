@@ -16,6 +16,9 @@ refuses to do is store an assignment without a reason (D8).
 |---|---|
 | `scheduler.py` | `Scheduler`: the model call, and the legacy chunked path |
 | `span.py` | One span: ask, verify, repair at most once |
+| `request.py`, `repair.py` | Fixed context and focused, fully audited repairs |
+| `planning.py`, `recovery.py` | Input budgets and smaller requests after capacity failures |
+| `quality.py`, `compare.py` | Quality/performance measurements and saved-result comparison |
 | `slots.py` | The slot grid, chunks and spans |
 | `availability.py`, `rotation_rows.py` | Who may work when |
 | `candidates.py` | Legal choices per slot and the id-pinned schema |

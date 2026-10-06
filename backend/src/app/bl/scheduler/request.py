@@ -6,7 +6,7 @@ from typing import List
 from app.bl.audit import audit, load_history
 from app.bl.scheduler.availability import effective_availability
 from app.bl.scheduler.bounding import (
-    committed_for_model, merge, previous_day, replace_span, required_assignments,
+    committed_for_model, merge, replace_span, required_assignments,
 )
 from app.bl.scheduler.candidates import candidates_for, read_span_assignments, span_schema
 from app.bl.scheduler.payload import (
@@ -120,7 +120,7 @@ class SpanRequest:
                      slots=self.audit_slots)
 
     def _boundary_rows(self) -> List[dict]:
-        tomorrow = (parse_date(self.ends_on) + datetime.timedelta(days=1)).isoformat()
-        return merge(previous_day(self.committed, self.starts_on),
-                     committed_for_model([row for row in self.committed
-                                          if row.get("date") == tomorrow]))
+        neighbours = {(parse_date(day) + datetime.timedelta(days=delta)).isoformat()
+                      for day in self.dates for delta in (-1, 1)} - self.dates
+        return committed_for_model([row for row in self.committed
+                                    if row.get("date") in neighbours])

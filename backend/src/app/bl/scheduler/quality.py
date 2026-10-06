@@ -6,7 +6,7 @@ from app.bl.audit import shift_stats
 
 
 COUNTERS = (
-    "duration_ms", "model_calls", "failed_calls", "prompt_chars", "schema_chars",
+    "duration_ms", "model_calls", "failed_calls", "prompt_chars", "schema_chars", "reply_chars",
     "prompt_tokens", "completion_tokens", "total_tokens", "split_count",
 )
 

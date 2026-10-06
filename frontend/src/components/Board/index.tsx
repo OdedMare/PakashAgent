@@ -331,6 +331,11 @@ export function Board({
   // moved past.
   const checkToken = useRef(0);
 
+  // Depend on `board.check`, not `board`: `useBoard` returns a fresh object
+  // every render, and `ShiftEditor` re-checks whenever `onCheck` changes —
+  // so depending on `board` made every answer trigger the next request, and
+  // the verdict flickered between "checking" and the result forever.
+  const boardCheck = board.check;
   const runCheck = useCallback(
     async (input: {
       employee: string;
@@ -340,7 +345,7 @@ export function Board({
     }) => {
       const token = ++checkToken.current;
       setChecking(true);
-      const result = await board.check({
+      const result = await boardCheck({
         ...input,
         schedule_id: schedule?.id,
       });
@@ -348,7 +353,7 @@ export function Board({
       setCheck(result);
       setChecking(false);
     },
-    [board, schedule?.id],
+    [boardCheck, schedule?.id],
   );
 
   /** Open the confirmation for a proposed move, and check it.

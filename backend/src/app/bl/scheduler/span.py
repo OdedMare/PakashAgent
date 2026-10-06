@@ -53,7 +53,7 @@ class SpanGenerator:
             availability, already_scheduled, required_assignments,
         )
         payload = span.payload(history, instructions, preferences)
-        measured = dict(model_calls=0, failed_calls=0, prompt_chars=0, schema_chars=0, usage={})
+        measured = dict(model_calls=0, failed_calls=0, prompt_chars=0, schema_chars=0, reply_chars=0, usage={})
         try:
             first = span.read(self._call(payload, span.schema, measured))
         except AgentError as exc:
@@ -80,10 +80,13 @@ class SpanGenerator:
                 repair_error = bounded(str(exc))
                 _log.warning("schedule repair failed span=%s..%s: %s",
                              request.starts_on, request.ends_on, exc)
+        improved = chosen is not first and (len(chosen.rejected) < len(first.rejected)
+                                            or not no_worse(chosen.warnings, baseline))
         measured.update(repair_dates=repair_dates, repair_error=repair_error,
-                        repair_improved=chosen is not first,
+                        repair_improved=improved,
                         quality_before=quality(first.roster, span.audit_slots, span.profile, baseline))
-        return self._finish(span, chosen, rejected, bool(first.problems), measured, started)
+        warnings = baseline if chosen is first else chosen.warnings
+        return self._finish(span, chosen, rejected, bool(first.problems), measured, started, warnings)
 
     def _call(self, payload, schema, measured):
         measured["model_calls"] += 1
@@ -96,14 +99,14 @@ class SpanGenerator:
             measured["usage"] = add_usage(measured["usage"], getattr(exc, "usage", {}))
             raise
         measured["usage"] = add_usage(measured["usage"], usage_of(answer))
+        measured["reply_chars"] += len(json.dumps(answer, ensure_ascii=False))
         return answer
 
     def _finish(
         self, span: SpanRequest, chosen: SpanAttempt, rejected: List[dict],
-        repaired: bool, measured: dict, started: float,
+        repaired: bool, measured: dict, started: float, warnings: List[dict],
     ) -> dict:
         rows = [row for row in chosen.roster if row.get("date") in span.dates]
-        warnings = span.audit(chosen.roster)
         notes = lines(chosen.answer.get("notes"))
         if measured["repair_error"]:
             notes.append("בקשת התיקון נכשלה. הטיוטה שנבדקה נשמרה עם האזהרות שנותרו.")

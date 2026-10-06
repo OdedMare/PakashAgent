@@ -123,6 +123,8 @@ class GenerationStepper:
             job.complete_span(target, result)
         except Exception as exc:
             job.fail_span(target, exc)
+            if self._cancel_requested(schedule_id, team_id):
+                job.stop()
             if isinstance(exc, ModelOutputError) and job.split(target):
                 self._repository.set_generation(schedule_id, team_id, job.to_dict())
                 return
