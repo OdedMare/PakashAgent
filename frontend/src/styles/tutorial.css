@@ -7,7 +7,7 @@
   gap: 7px;
   min-height: 42px;
   padding: 0 14px;
-  color: var(--text-on-dark);
+  color: var(--on-primary);
   background: var(--primary);
   border: 1px solid color-mix(in srgb, var(--primary) 72%, white);
   border-radius: 999px;

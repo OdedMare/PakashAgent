@@ -1,0 +1,325 @@
+/* The in-app guide: help button badge, help panel, first-visit offer and the
+   spotlight tour. Everything reads from tokens.css so both themes follow.
+   The tour's blue is an area hue on purpose — amber and red keep their
+   schedule meaning even while the board is dimmed behind a tour step. */
+
+.tutorial-fab { border: 0; cursor: pointer; font-family: inherit; }
+.tutorial-fab.is-open { box-shadow: var(--focus), 0 10px 28px rgba(16, 24, 40, 0.2); }
+.guide-fab-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--hue-blue);
+  color: #fff;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Shared controls, local to the guide so they read the same on every surface. */
+.guide-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+}
+.guide-icon-button:hover { background: var(--surface-3); color: var(--text); }
+.guide-primary-button,
+.guide-ghost-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 9px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.guide-primary-button { border: 0; background: var(--primary); color: var(--on-primary); }
+.guide-primary-button:hover { background: var(--primary-hover); }
+.guide-ghost-button { border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); }
+.guide-ghost-button:hover { background: var(--surface-2); }
+.guide-link-button {
+  border: 0;
+  background: none;
+  padding: 4px 2px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.guide-link-button:hover { color: var(--text); }
+.guide-chip-button {
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: var(--hue-blue-soft);
+  color: var(--hue-blue);
+  font-size: 12px;
+  font-weight: 600;
+}
+.guide-chip-button:hover { filter: brightness(0.97); }
+kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ---- Help panel ---- */
+.guide-panel {
+  position: fixed;
+  z-index: 140;
+  bottom: 72px;
+  left: 18px;
+  display: flex;
+  flex-direction: column;
+  width: min(392px, calc(100vw - 32px));
+  max-height: min(660px, calc(100dvh - 100px));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  outline: none;
+  animation: guide-rise 180ms ease-out;
+}
+.guide-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.guide-panel-head strong { display: block; font-size: 15px; }
+.guide-panel-head span { color: var(--text-muted); font-size: 12px; }
+.guide-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: none;
+  padding: 4px 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+.guide-panel-body { overflow-y: auto; padding: 14px 16px 16px; overscroll-behavior: contain; }
+
+.guide-checklist {
+  padding: 14px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.guide-checklist-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.guide-checklist h3 { margin: 0; font-size: 14px; }
+.guide-checklist-head span { color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.guide-progress { height: 6px; margin: 10px 0 12px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.guide-progress span { display: block; height: 100%; border-radius: inherit; background: var(--hue-blue); transition: width 300ms ease; }
+.guide-checklist ol { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.guide-checklist li { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-radius: 8px; }
+.guide-check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 999px;
+  color: #fff;
+}
+.guide-checklist li.is-done .guide-check { border-color: var(--success); background: var(--success); }
+.guide-check-copy { flex: 1; min-width: 0; }
+.guide-check-copy strong { display: block; font-size: 13.5px; font-weight: 600; }
+.guide-check-copy small { display: block; color: var(--text-muted); font-size: 12px; }
+.guide-checklist li.is-done strong { color: var(--text-muted); text-decoration: line-through; text-decoration-color: var(--border-strong); }
+
+.guide-links { display: grid; gap: 6px; }
+.guide-links > :is(button, a) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: start;
+  text-decoration: none;
+  font: inherit;
+}
+.guide-links > :is(button, a):hover { background: var(--surface-2); border-color: var(--border-strong); }
+.guide-links > :is(button, a) > svg:first-child { flex: none; color: var(--hue-blue); }
+.guide-links > :nth-child(2) > svg:first-child { color: var(--hue-violet); }
+.guide-links > :nth-child(3) > svg:first-child { color: var(--hue-teal); }
+.guide-links > :nth-child(4) > svg:first-child { color: var(--hue-pink); }
+.guide-links > :is(button, a) > svg:last-child { flex: none; color: var(--text-muted); }
+.guide-links span { flex: 1; min-width: 0; }
+.guide-links strong { display: block; font-size: 13.5px; font-weight: 600; }
+.guide-links small { display: block; color: var(--text-muted); font-size: 12px; }
+.guide-panel-tip { margin: 14px 2px 0; color: var(--text-muted); font-size: 12px; }
+.guide-panel-tip kbd { min-width: 20px; height: 20px; font-size: 11px; }
+
+.guide-shortcuts section + section { margin-top: 16px; }
+.guide-shortcuts h3 { margin: 0 0 8px; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+.guide-shortcuts dl { display: grid; gap: 4px; margin: 0; }
+.guide-shortcuts dl > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.guide-shortcuts dt { display: inline-flex; align-items: center; gap: 4px; order: 2; direction: ltr; }
+.guide-shortcuts dt > span { display: inline-flex; align-items: center; gap: 4px; }
+.guide-shortcuts dd { margin: 0; font-size: 13.5px; }
+.guide-key-sep { color: var(--text-muted); font-size: 11px; }
+
+.guide-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+.guide-search:focus-within { box-shadow: var(--focus); }
+.guide-search input {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+.guide-glossary dl { display: grid; gap: 2px; margin: 0; }
+.guide-glossary dl > div { padding: 10px 2px; border-bottom: 1px solid var(--border); }
+.guide-glossary dl > div:last-child { border-bottom: 0; }
+.guide-glossary dt { font-size: 14px; font-weight: 700; }
+.guide-glossary dd { margin: 3px 0 0; color: var(--text-soft); font-size: 13px; line-height: 1.6; }
+.guide-empty { color: var(--text-muted); font-size: 13px; text-align: center; padding: 20px 0; }
+
+/* ---- First-visit offer ---- */
+.guide-welcome {
+  position: fixed;
+  z-index: 130;
+  bottom: 72px;
+  left: 18px;
+  display: flex;
+  gap: 12px;
+  width: min(380px, calc(100vw - 32px));
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  animation: guide-rise 260ms ease-out;
+}
+.guide-welcome-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--hue-blue-soft);
+  color: var(--hue-blue);
+}
+.guide-welcome h2 { margin: 2px 0 4px; font-size: 15px; }
+.guide-welcome p { margin: 0 0 12px; color: var(--text-soft); font-size: 13.5px; line-height: 1.55; }
+.guide-welcome-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.guide-welcome small { display: block; margin-top: 10px; color: var(--text-muted); font-size: 11.5px; }
+
+/* Follow the help button when the drawer pushes it to the other side. */
+body:has(.management-workspace.has-drawer) .guide-welcome { left: auto; right: 20px; }
+
+/* ---- Spotlight tour ---- */
+.guide-tour { position: fixed; inset: 0; z-index: 300; }
+.guide-tour-catcher { position: absolute; inset: 0; }
+.guide-tour-spot {
+  position: fixed;
+  border-radius: 10px;
+  box-shadow: 0 0 0 2px var(--hue-blue), 0 0 0 9999px rgba(8, 10, 14, 0.58);
+  pointer-events: none;
+  transition: top 220ms ease, left 220ms ease, width 220ms ease, height 220ms ease;
+}
+.guide-tour-dim { position: fixed; inset: 0; background: rgba(8, 10, 14, 0.58); }
+.guide-tour-card {
+  position: fixed;
+  width: 340px;
+  padding: 16px 18px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  transition: top 220ms ease, left 220ms ease;
+}
+.guide-tour-card.is-centered { top: 50%; left: 50%; transform: translate(-50%, -50%); }
+.guide-tour-card header { display: flex; align-items: center; justify-content: space-between; margin: -4px -6px 2px 0; }
+.guide-tour-count { color: var(--hue-blue); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.guide-tour-card h2 { margin: 0 0 6px; font-size: 16px; }
+.guide-tour-card p { margin: 0; color: var(--text-soft); font-size: 13.5px; line-height: 1.65; }
+.guide-tour-dots { display: flex; gap: 4px; margin: 14px 0 12px; }
+.guide-tour-dots span { width: 6px; height: 6px; border-radius: 999px; background: var(--surface-3); transition: width 200ms ease, background 200ms ease; }
+.guide-tour-dots span.is-done { background: var(--border-strong); }
+.guide-tour-dots span.is-active { width: 18px; background: var(--hue-blue); }
+.guide-tour-card footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.guide-tour-nav { display: inline-flex; gap: 6px; }
+
+@keyframes guide-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 1100px) {
+  /* The drawer becomes a sheet over the board here and the help button is
+     hidden under it, so the offer moves to the top instead. */
+  body:has(.management-workspace.has-drawer) .guide-welcome { top: 72px; bottom: auto; }
+}
+
+@media (max-width: 639px) {
+  .guide-panel {
+    inset: auto 0 0 0 !important;
+    width: 100%;
+    max-height: 82dvh;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .guide-welcome { left: 16px; right: 16px; width: auto; bottom: 72px; }
+  .guide-tour-card,
+  .guide-tour-card.is-centered {
+    top: auto;
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    width: auto;
+    transform: none;
+  }
+}

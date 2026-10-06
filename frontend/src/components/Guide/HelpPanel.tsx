@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, RefObject } from "react";
 
 import { glossaryFor, shortcutsFor } from "./content";
 import type { Surface } from "./content";
@@ -50,7 +50,7 @@ export function HelpPanel({
   onClose,
 }: {
   surface: Surface | null;
-  anchor: HTMLElement | null;
+  anchor: RefObject<HTMLElement | null>;
   checklist: ChecklistItem[];
   onAction: (id: string) => void;
   canTour: boolean;
@@ -65,11 +65,12 @@ export function HelpPanel({
   // drawer has pushed that button.
   useLayoutEffect(() => {
     const place = () => {
-      if (!anchor || window.innerWidth < 640) {
+      const button = anchor.current;
+      if (!button || window.innerWidth < 640) {
         setPosition({});
         return;
       }
-      const box = anchor.getBoundingClientRect();
+      const box = button.getBoundingClientRect();
       if (!box.width) {
         setPosition({});
         return;
@@ -102,7 +103,7 @@ export function HelpPanel({
     };
     const onPointer = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (panel.current?.contains(target) || anchor?.contains(target)) return;
+      if (panel.current?.contains(target) || anchor.current?.contains(target)) return;
       onClose();
     };
     window.addEventListener("keydown", onKey, true);

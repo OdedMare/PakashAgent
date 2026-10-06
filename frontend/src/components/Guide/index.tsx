@@ -164,7 +164,7 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
           {panelOpen ? (
             <HelpPanel
               surface={surface}
-              anchor={fab.current}
+              anchor={fab}
               checklist={checklist}
               onAction={act}
               canTour={Boolean(steps?.length)}
