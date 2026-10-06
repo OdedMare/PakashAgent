@@ -61,11 +61,16 @@ uvicorn app.main:app --app-dir src --reload
   the audit: propose, confirm, apply, publish, constraints, history.
 - `bl/audit/` — **pure Python, no LLM.** Recomputes countable facts and returns
   warnings. Never blocks. Also owns `personal_summary()` and `fairness()`, which
-  the employee area renders — they live here so one person's hours are literally
-  the same arithmetic as the manager's warnings, not a second implementation.
+  the employee area and the manager's stats read — they live here so one
+  person's hours are literally the same arithmetic as the manager's warnings,
+  not a second implementation.
 - `bl/employee_service/` — identity claims, the personal view, constraint
   requests, and the unread-change mark. Approval is the only thing that writes
   a constraint (D14).
+  `assistant.py` answers an employee's swap questions (D27): which swaps are
+  clean is computed in `swap_options.py` by re-auditing each trade, and the
+  model may only pick from that list by id. It writes nothing, and
+  colleagues' constraints never reach the model.
 - `bl/schedule_service.create_blank/assign/unassign` — the manual path (D18).
   The only schedule writes with no model call anywhere on them.
 - `bl/export/export.py` — a period out as `.xlsx`. Pure functions, no model, no

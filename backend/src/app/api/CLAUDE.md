@@ -18,7 +18,7 @@ the team scoping.
 | `imports.py` | Upload a file, return the inferred interpretation, commit on confirm |
 | `employees.py` | Roster management |
 | `health.py` | Liveness |
-| `employee/` | The employee's own area: claim an identity, read your own hours, submit a constraint request — plus the boss-guarded router that rules on them |
+| `employee/` | The employee's own area: claim an identity, read your own shifts, submit a constraint request or swap, ask the assistant (`/assistant`, read-only, D27) — plus the boss-guarded router that rules on them |
 
 ## The interview contract
 

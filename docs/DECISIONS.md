@@ -795,6 +795,44 @@ Final previews retain explicit Apply approval, exception approval, private
 manager history, stale-state checks and atomic writes. A message alone never
 writes to the schedule.
 
+## D27 — Employees ask about swaps; the charts are the manager's *(amends D14)*
+
+The personal area's "הנתונים שלי" tab — hours, shift mix and a comparison
+against every colleague — is gone. Hours per person is the manager's view
+(the stats panel on the board), and `/api/employee/me` no longer carries
+`fairness`, so colleagues' hours do not reach an employee's browser at all.
+In its place is **"שאלו על החלפות"**: a small chat where an employee asks who
+they could swap with, or how their week could work better.
+
+**It suggests; it never writes.** `POST /api/employee/assistant` returns
+`answer` and `suggestions` and nothing an `apply` could read — the D15/D19
+shape. A suggestion carries a button that sends the **ordinary swap offer**
+(`POST /api/employee/swaps`), which still needs the colleague's agreement and
+then the manager's decision (D14). There is no new write path.
+
+**Which swaps exist is decided in code.** `bl/employee_service/swap_options.py`
+tries the employee's upcoming published shifts against colleagues' and keeps
+only trades that introduce **no** audit warning anywhere in the period; ones
+that clear a warning about the employee rank first. The model picks from that
+list by id and phrases the answer; an unknown id is dropped. This is D19's
+"never claim a placement is valid unless a tool said so", applied to the
+employee side.
+
+**What the model sees is what the employee's own screen shows** — their shifts,
+who is on them with them, their hours, the team *average*, their own warnings —
+plus the clean swaps. Colleagues' constraints are read in code to rule swaps
+out and never leave it: an option is either offered or absent, with no reason.
+Drafts, pending requests and the change log are not read at all.
+
+*Why not reuse the manager chat:* that conversation reads drafts, other
+people's stated reasons and pending requests, and prepares plans for approval.
+None of that belongs in front of an employee, and a soldier asking "with whom
+can I swap Tuesday" needs one answer and a button, not a planning surface.
+The conversation lives in the browser only; nothing is stored server-side.
+
+**It answers without a model**, listing the clean swaps (narrowed to a weekday
+named in the question), and reports `used_model: false`.
+
 ## Open
 
 - **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment

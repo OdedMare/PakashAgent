@@ -112,7 +112,8 @@ import screen. All surfaces exist.
 | Preferences | What the agent remembers, all of it visible — `Management/Preferences.tsx` |
 | Import confirm | Inferred interpretation, confirmed before anything is stored — `Management/ImportSchedule.tsx` |
 | Employee view | **Read-only** schedule — `MemberArea` renders the same `Calendar` with `readOnly` |
-| Personal area | One employee's own hours, shifts and constraint requests — `src/components/Employee/` |
+| Personal area | One employee's own shifts, constraint requests and swaps — `src/components/Employee/` |
+| Employee assistant | Swap and "better week" questions; suggests checked swaps, never writes (D27) — `Employee/AssistantChat.tsx` |
 | Request inbox | The manager ruling on submissions — `Management/RequestInbox.tsx` |
 
 ## Importing a schedule the workplace already had
@@ -348,6 +349,10 @@ with warnings is a valid schedule the boss may knowingly accept
   with no `onDrop`. Submitting a constraint creates a **pending request** and
   the copy says so — an employee who believes a submitted constraint is
   already in force is the failure mode this feature would otherwise create.
+- **The employee sees no team charts** (D27). Hours per colleague are the
+  manager's stats; the personal area has the assistant instead. A suggested
+  swap's button sends the ordinary `proposeSwap`, and its card says the
+  colleague and the manager still have to agree.
 - Import and change are two-step: interpretation/proposal, then confirmation.
   Never auto-confirm either.
 - The agent's reasoning is shown before the boss confirms — it is the point, not a
