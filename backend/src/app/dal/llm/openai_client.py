@@ -164,7 +164,7 @@ class OpenAIJsonClient:
             return result
         log_call(flow, call.model, usage, started, _MAX_JSON_ATTEMPTS - 1,
                  failed=True, role=call.role)
-        raise ModelOutputError("המודל החזיר JSON לא תקין פעמיים: " + last_error)
+        raise ModelOutputError("המודל החזיר JSON לא תקין פעמיים: " + last_error, usage=usage)
 
     def list_models(
         self, base_url_override: Optional[str] = None,

@@ -10,6 +10,8 @@ def repair_request(span, first, history, instructions, preferences):
     if "" in dates:
         dates = span.dates
     dates &= span.dates
+    if not dates:
+        dates = span.dates
     slots = [slot for slot in span.slots if slot["slot_date"] in dates]
     request = SpanRequest(span.profile, min(dates), max(dates), slots,
                           span.audit_availability, first.roster,

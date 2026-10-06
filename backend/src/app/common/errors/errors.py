@@ -23,6 +23,10 @@ class AgentError(AppError):
 class ModelOutputError(AgentError):
     """A reply or context that may fit after narrowing the scheduling span."""
 
+    def __init__(self, message: str, usage=None):
+        super().__init__(message)
+        self.usage = usage or {}
+
 
 class ProfileIncompleteError(AgentError):
     """The interview finished, but not with enough to build a grid.

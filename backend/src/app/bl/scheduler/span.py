@@ -8,12 +8,15 @@ granularity of the repair and the price of a failure.
 """
 
 import logging
+import json
 import time
 from typing import Callable, List, Optional
 
 from app.bl.scheduler.request import MAX_HISTORY_ROWS, SpanAttempt, SpanRequest
 from app.bl.scheduler.slots import build_slots
-from app.bl.scheduler.span_audit import add_usage, audit_for_span, metrics, usage_of
+from app.bl.scheduler.span_audit import add_usage, metrics, usage_of
+from app.bl.scheduler.quality import no_worse, quality
+from app.bl.scheduler.repair import repair_request, repaired_attempt
 from app.bl.scheduler.values import bounded, lines
 from app.common.errors.errors import AgentError
 
@@ -50,29 +53,60 @@ class SpanGenerator:
             availability, already_scheduled, required_assignments,
         )
         payload = span.payload(history, instructions, preferences)
-        first = span.read(self._ask(payload, schema=span.schema))
-        chosen, rejected, usage = first, list(first.rejected), usage_of(first.answer)
+        measured = dict(model_calls=0, failed_calls=0, prompt_chars=0, schema_chars=0, usage={})
+        try:
+            first = span.read(self._call(payload, span.schema, measured))
+        except AgentError as exc:
+            exc.generation_metrics = metrics(starts_on, started, "failed", through=ends_on,
+                                            usage=measured.pop("usage"))
+            exc.generation_metrics.update(measured)
+            raise
+        return self._complete(span, first, history, instructions, preferences, measured, started)
+
+    def _complete(self, span, first, history, instructions, preferences, measured, started):
+        chosen, rejected = first, list(first.rejected)
+        baseline = span.audit(first.roster)
+        repair_error, repair_dates = "", []
         if first.problems:
-            second = span.read(self._ask(_repair(payload, first), schema=span.schema))
-            usage = add_usage(usage, usage_of(second.answer))
-            # A repair is another model answer, not proof of improvement:
-            # keep the first when the second has more concrete problems.
-            if second.problems <= first.problems:
-                chosen = second
-            rejected.extend(second.rejected)
-        return self._finish(
-            span, chosen, rejected, bool(first.problems), usage, started
-        )
+            request, payload = repair_request(span, first, history, instructions, preferences)
+            repair_dates = sorted(request.dates)
+            try:
+                answer = self._call(payload, request.schema, measured)
+                second = repaired_attempt(span, request, answer, first)
+                if len(second.rejected) <= len(first.rejected) and no_worse(baseline, second.warnings):
+                    chosen = second
+                rejected.extend(second.rejected)
+            except AgentError as exc:
+                repair_error = bounded(str(exc))
+                _log.warning("schedule repair failed span=%s..%s: %s",
+                             request.starts_on, request.ends_on, exc)
+        measured.update(repair_dates=repair_dates, repair_error=repair_error,
+                        repair_improved=chosen is not first,
+                        quality_before=quality(first.roster, span.audit_slots, span.profile, baseline))
+        return self._finish(span, chosen, rejected, bool(first.problems), measured, started)
+
+    def _call(self, payload, schema, measured):
+        measured["model_calls"] += 1
+        measured["prompt_chars"] += len(json.dumps(payload, ensure_ascii=False))
+        measured["schema_chars"] += len(json.dumps(schema, ensure_ascii=False))
+        try:
+            answer = self._ask(payload, schema=schema)
+        except AgentError as exc:
+            measured["failed_calls"] += 1
+            measured["usage"] = add_usage(measured["usage"], getattr(exc, "usage", {}))
+            raise
+        measured["usage"] = add_usage(measured["usage"], usage_of(answer))
+        return answer
 
     def _finish(
         self, span: SpanRequest, chosen: SpanAttempt, rejected: List[dict],
-        repaired: bool, usage: dict, started: float,
+        repaired: bool, measured: dict, started: float,
     ) -> dict:
         rows = [row for row in chosen.roster if row.get("date") in span.dates]
-        warnings = audit_for_span(
-            chosen.roster, span.slots, span.profile, span.availability, span.dates
-        )
+        warnings = span.audit(chosen.roster)
         notes = lines(chosen.answer.get("notes"))
+        if measured["repair_error"]:
+            notes.append("בקשת התיקון נכשלה. הטיוטה שנבדקה נשמרה עם האזהרות שנותרו.")
         if rejected:
             notes.append(
                 "%d שיבוצים לא תקינים שהחזיר המודל לא נשמרו." % len(rejected)
@@ -81,8 +115,10 @@ class SpanGenerator:
             span.starts_on, started, status="complete", through=span.ends_on,
             returned=len(chosen.answer.get("assignments") or []),
             accepted=len(rows), rejected=len(rejected),
-            warnings=len(warnings), repaired=repaired, usage=usage,
+            warnings=len(warnings), repaired=repaired, usage=measured.pop("usage"),
         )
+        result_metrics.update(measured)
+        result_metrics["quality"] = quality(chosen.roster, span.audit_slots, span.profile, warnings)
         _log_span(span, result_metrics)
         return {
             "slots": span.slots,
@@ -94,21 +130,12 @@ class SpanGenerator:
         }
 
 
-def _repair(payload: dict, attempt: SpanAttempt) -> dict:
-    repair = dict(payload)
-    repair["repair"] = {
-        "rejected_rows": attempt.rejected,
-        "warnings": [item["message"] for item in attempt.warnings],
-        "instruction": _REPAIR_INSTRUCTION,
-    }
-    return repair
-
-
 def _log_span(span: SpanRequest, result: dict) -> None:
     _log.info(
         "schedule span=%s..%s status=%s assignments=%d rejected=%d "
-        "warnings=%d repaired=%s tokens=%d duration_ms=%d",
+        "warnings=%d repaired=%s tokens=%d duration_ms=%d calls=%d coverage=%.1f",
         span.starts_on, span.ends_on, result["status"], result["accepted"],
         result["rejected"], result["warnings"], result["repaired"],
-        result["total_tokens"], result["duration_ms"],
+        result["total_tokens"], result["duration_ms"], result["model_calls"],
+        result["quality"]["coverage"]["percent"],
     )
