@@ -378,6 +378,22 @@ class ManagerChatService:
                 raise _Rejected("עריכת הפרופיל אינה תקינה. אפשר לנסח שוב") from exc
             if not isinstance(patch, dict) or not patch or set(patch) - set(PROFILE_SECTIONS):
                 raise _Rejected("לא זוהה שינוי תקין בפרטי הצוות")
+            for section in ("employees", "shifts"):
+                if section not in patch:
+                    continue
+                if not isinstance(patch[section], list) or any(not isinstance(row, dict) for row in patch[section]):
+                    raise _Rejected("פרטי העובדים והמשמרות חייבים להיות רשימת רשומות")
+                existing = {row["name"]: row for row in profile.get(section) or []}
+                if section == "employees":
+                    for row in patch[section]:
+                        required = {"role", "eligible_shifts", "service_type", "exit_pattern", "rotation_group"}
+                        missing = required - set(row)
+                        if row.get("name") not in existing and missing:
+                            raise _Rejected("לעובד החדש חסרים שדות: %s. יש לשמור את הפרטים שהמנהל נתן ולא לנחש" %
+                                            ", ".join(sorted(missing)))
+                # A missed field must not erase an existing qualification,
+                # rotation, trainer flag or note. Explicit values still win.
+                patch[section] = [dict(existing.get(row.get("name"), {}), **row) for row in patch[section]]
             try:
                 updated = self._profiles.preview(team_id, **patch)
             except AppError as exc:

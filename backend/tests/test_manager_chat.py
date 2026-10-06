@@ -190,7 +190,8 @@ def test_add_employee_preview_preserves_existing_fields_and_applies_profile():
     profile = repo.profiles[TEAM]
     profile["employees"][0].update(rotation_group="א", can_train=True, notes="חשוב")
     proposal["profile_patch_json"] = json.dumps({"employees": profile["employees"] + [
-        {"name": "מאיה", "role": "נציגת שירות", "eligible_shifts": [MORNING], "rotation_group": "ב"},
+        {"name": "מאיה", "role": "נציגת שירות", "eligible_shifts": [MORNING],
+         "rotation_group": "ב", "exit_pattern": "round", "service_type": "standard"},
     ]})
     service._llm._answers.append(proposal)
     message = converse(service, repo, chat_id, schedule_id, "תוסיף את מאיה לצוות")
@@ -438,6 +439,42 @@ def test_recurring_constraint_profile_plan_preserves_roster_and_employee_details
     assert updated[0]["can_train"] and updated[0]["rotation_group"] == "א"
     assert updated[0]["notes"] == "פרט קיים" and len(updated) == 2
     assert not repo.availability_rows
+    from app.bl.scheduler.availability import effective_availability
+    recurring = [row for row in effective_availability(repo.profiles[TEAM], [], "2026-10-04", "2026-10-10")
+                 if row["source"] == "interview"]
+    assert [(row["date"], row["shift"]) for row in recurring] == [("2026-10-06", MORNING)]
+
+
+def test_malformed_recurring_scope_is_repaired_instead_of_blocking_entire_week():
+    repo, llm, service, chat_id, schedule_id = setup([])
+    employees = copy.deepcopy(repo.profiles[TEAM]["employees"])
+    employees[0]["recurring_constraints"] = [dict(day_of_week=2, shift=MORNING, available=False)]
+    malformed = turn("profile")
+    malformed["profile_patch_json"] = json.dumps(dict(employees=employees))
+    employees[0]["recurring_constraints"] = [dict(days=["שלישי"], shifts=[MORNING], available=False)]
+    fixed = turn("profile")
+    fixed["profile_patch_json"] = json.dumps(dict(employees=employees))
+    llm._answers.extend([malformed, fixed])
+    message = converse(service, repo, chat_id, schedule_id, "דנה לא זמינה בכל שלישי בבוקר")
+    assert message["status"] == "pending"
+    assert "days" in json.loads(llm.calls[1]["user"])["results"][-1]["error"]
+    assert message["payload"]["plan"]["profile_after"]["employees"][0]["recurring_constraints"] == \
+        employees[0]["recurring_constraints"]
+
+
+def test_partial_employee_row_cannot_erase_existing_qualifications_or_notes():
+    proposal = turn("profile")
+    proposal["profile_patch_json"] = json.dumps(dict(employees=[
+        dict(name="דנה", recurring_constraints=[dict(days=["שלישי"], shifts=[], available=False)]),
+        dict(name="יוסי"),
+    ]))
+    repo, _, service, chat_id, schedule_id = setup([proposal])
+    repo.profiles[TEAM]["employees"][0].update(can_train=True, notes="חשוב", rotation_group="א")
+    message = converse(service, repo, chat_id, schedule_id, "הוסף אילוץ לשלישי")
+    assert message["status"] == "pending"
+    employee = message["payload"]["plan"]["profile_after"]["employees"][0]
+    assert employee["eligible_shifts"] == [MORNING] and employee["can_train"]
+    assert employee["notes"] == "חשוב" and employee["rotation_group"] == "א"
 
 
 def test_combined_conflicts_reach_agent_and_corrected_plan_keeps_absence():

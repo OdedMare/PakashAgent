@@ -787,6 +787,10 @@ Unknown targets, duplicate assignments and malformed operations are repaired
 or clarified. Newly introduced rule conflicts are returned to the agent for
 one advisory review; it can repair its own choices or describe a deliberate
 exception. Existing unrelated gaps do not hold an otherwise valid change.
+Recurring rules validate their weekday/shift lists and availability flag before
+saving, so unknown fields cannot silently widen a Tuesday constraint to every
+day. New employee rows explicitly carry role, eligibility, service and rotation;
+omitted fields on existing roster/shift rows preserve their saved values.
 Final previews retain explicit Apply approval, exception approval, private
 manager history, stale-state checks and atomic writes. A message alone never
 writes to the schedule.

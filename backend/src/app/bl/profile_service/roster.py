@@ -2,7 +2,8 @@
 
 from typing import Any, List
 
-from app.bl.profile_service.validation import named_rows, text, text_list
+from app.bl.profile_service.validation import named_rows, text, text_list, valid_time
+from app.bl.shared.hebrew_calendar import HEBREW_WEEKDAYS, weekday_key
 from app.common.errors.errors import AgentError
 
 _SERVICE_TYPES = ("standard", "overlap", "reserve")
@@ -24,6 +25,7 @@ def _employee(row: dict, default_exit_pattern: str) -> dict:
     recurring = row.get("recurring_constraints") or []
     if not isinstance(recurring, list):
         raise AgentError("האילוצים הקבועים של איש הצוות אינם תקינים")
+    _validate_recurring(recurring)
     row.update({
         "service_type": service_type,
         "exit_pattern": exit_pattern,
@@ -42,6 +44,28 @@ def _employee(row: dict, default_exit_pattern: str) -> dict:
     if not isinstance(row.get("counts_toward_staffing"), bool):
         row["counts_toward_staffing"] = service_type != "overlap"
     return row
+
+
+def _validate_recurring(rows: list) -> None:
+    weekdays = {weekday_key(day) for day in HEBREW_WEEKDAYS}
+    fields = {"days", "shifts", "available", "is_hard", "start_time", "end_time", "reason", "source"}
+    for rule in rows:
+        if isinstance(rule, str):
+            # Older interview prose is preserved; only structured rules expand.
+            continue
+        if not isinstance(rule, dict) or set(rule) - fields \
+                or not isinstance(rule.get("days"), list) \
+                or not isinstance(rule.get("shifts"), list) \
+                or not isinstance(rule.get("available"), bool):
+            raise AgentError("אילוץ קבוע חייב להכיל days ו-shifts כרשימות ו-available כערך בוליאני; אין להשתמש ב-day_of_week או shift")
+        if any(weekday_key(day) not in weekdays for day in rule["days"]) \
+                or any(not isinstance(shift, str) or not shift.strip() for shift in rule["shifts"]):
+            raise AgentError("ימי האילוץ חייבים להיות שמות ימים בעברית, והמשמרות חייבות להיות רשימת שמות")
+        if "is_hard" in rule and not isinstance(rule["is_hard"], bool):
+            raise AgentError("is_hard באילוץ קבוע חייב להיות ערך בוליאני")
+        if any(rule.get(key) and (not isinstance(rule[key], str) or not valid_time(rule[key]))
+               for key in ("start_time", "end_time")):
+            raise AgentError("שעות האילוץ הקבוע חייבות להיות בפורמט HH:MM")
 
 
 def employee_item(item: dict) -> dict:
