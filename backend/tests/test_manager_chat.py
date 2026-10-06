@@ -342,6 +342,16 @@ def test_empty_final_answer_is_repaired_instead_of_sending_a_generic_question():
     assert not repo.changes
 
 
+def test_answer_with_mutations_is_repaired_instead_of_silently_dropping_request():
+    malformed = sickness()
+    malformed["kind"] = "answer"
+    repo, llm, service, chat_id, schedule_id = setup([malformed, sickness()])
+    message = converse(service, repo, chat_id, schedule_id, "תחליף את דנה ביוסי")
+    assert message["status"] == "pending" and message["payload"]["plan"]["kind"] == "changes"
+    assert json.loads(llm.calls[1]["user"])["results"][-1]["tool"] == "plan_check"
+    assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "דנה"
+
+
 def test_clear_and_constraint_only_requests_do_not_need_justification():
     proposal = turn("clear")
     proposal["stated_reason"] = ""

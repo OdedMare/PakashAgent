@@ -339,7 +339,14 @@ class ManagerChatService:
         kind = turn.get("kind") or "answer"
         if turn.get("needs_reason"):
             raise _Rejected("אין צורך לבקש סיבה. הוראת המנהל היא הסיבה; יש להכין את התוכנית או לשאול רק על יעד חסר")
-        if kind == "answer" or turn.get("needs_input"):
+        if turn.get("needs_input"):
+            return None
+        if (kind != "changes" and (turn.get("operations") or turn.get("constraints"))) \
+                or (kind != "profile" and turn.get("profile_patch_json")) \
+                or (kind != "generate" and turn.get("required_assignments")) \
+                or turn.get("profile_operations"):
+            raise _Rejected("סוג התשובה אינו תואם לפעולות. הוראת שיבוץ דורשת kind=changes; התייעצות דורשת kind=answer בלי פעולות; עריכת צוות דורשת kind=profile ו-profile_patch_json")
+        if kind == "answer":
             return None
         schedule_id = turn.get("schedule_id") or focused_id
         if kind == "generate" and not turn.get("schedule_id"):

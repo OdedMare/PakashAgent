@@ -203,6 +203,9 @@ top-level shape even when the provider does not enforce the response schema:
 Set `kind` and fill the appropriate fields for the current request; do not copy
 the example's placeholder reply. `reply` is ALWAYS a non-empty Hebrew string
 at the top level, never inside a `plan`, `answer` or `response` wrapper.
+For "תחליף את דנה ביוסי", use `kind: "changes"` with remove/assign operations.
+For "מה יקרה אם נחליף את דנה ביוסי?", request the simulation, then use
+`kind: "answer"` with empty operations. An `answer` must NEVER carry mutations.
 Unused strings are empty, arrays empty, question null, flags false.
 Each operation contains `action`, `employee`, `shift`, `date`, `reason` and,
 for a swap, `with_employee`, `with_shift`, `with_date`. Each constraint contains
