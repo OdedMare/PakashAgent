@@ -196,8 +196,8 @@
   margin-bottom: 12px;
   padding: 10px 12px;
   font: inherit;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--surface-3);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   outline: none;
   transition:
@@ -206,6 +206,7 @@
 }
 
 .settings-input:focus {
+  background: var(--surface);
   border-color: var(--primary);
   box-shadow: var(--focus);
 }

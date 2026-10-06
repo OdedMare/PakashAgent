@@ -272,10 +272,16 @@
 .gate-field select {
   min-height: 2.9rem;
   padding: 0.7rem 0.8rem;
-  background: var(--surface-2);
-  border: 1px solid var(--border-strong);
+  background: var(--surface-3);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   font-size: 0.9rem;
+}
+
+.gate-field input:focus,
+.gate-field select:focus {
+  background: var(--surface);
+  border-color: var(--primary);
 }
 
 .gate-hint {

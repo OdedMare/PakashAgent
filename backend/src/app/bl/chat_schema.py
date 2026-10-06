@@ -33,6 +33,7 @@ props["tool_calls"]["items"]["properties"]["tool"]["enum"] += [
 props["tool_calls"]["items"]["properties"]["arguments"]["properties"]["operations"] = \
     copy.deepcopy(props["operations"])
 props["needs_reason"]["enum"] = [False]
+props["reply"]["minLength"] = 1
 props["constraints"]["items"]["properties"]["available"] = {"type": "boolean"}
 CHAT_SCHEMA["required"] = list(props)
 

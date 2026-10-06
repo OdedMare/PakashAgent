@@ -87,7 +87,8 @@
 .conversation-plan-actions button { min-height: 44px; font-size: 13px; }
 .conversation-plan-receipt { color: var(--success); }
 .conversation-composer { border-top: 1px solid var(--border); margin: 0; padding: 12px 16px; flex: 0 0 auto; background: var(--surface); }
-.conversation-composer textarea { width: 100%; border: 1px solid var(--border-strong); background: var(--surface-2); border-radius: 10px; padding: 12px; resize: vertical; min-height: 72px; max-height: 170px; font-size: 14px; line-height: 1.6; }
+.conversation-composer textarea { width: 100%; border: 1px solid transparent; background: var(--surface-3); border-radius: 10px; padding: 12px; resize: vertical; min-height: 72px; max-height: 170px; font-size: 14px; line-height: 1.6; }
+.conversation-composer textarea:focus { outline: none; background: var(--surface); border-color: var(--primary); box-shadow: var(--focus); }
 .conversation-composer-footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px; }
 .conversation-composer-footer small { color: var(--text-muted); font-size: 11px; }
 .conversation-send { width: 44px; height: 44px; border: none; border-radius: 10px; background: var(--primary); color: var(--surface); display: grid; place-items: center; }

@@ -327,6 +327,21 @@ def test_model_reason_question_is_repaired_without_asking_manager_again():
     assert json.loads(llm.calls[1]["user"])["results"][-1]["tool"] == "plan_check"
 
 
+def test_empty_final_answer_is_repaired_instead_of_sending_a_generic_question():
+    empty = turn()
+    empty["reply"] = " "
+    answer = turn()
+    answer["reply"] = "כדאי להתחיל בבדיקת הזמינות ולחלק את העומס בין העובדים הזמינים."
+    repo, llm, service, chat_id, _ = setup([empty, answer])
+    request = "איך כדאי לפתור עומס בצוות?"
+    message = converse(service, repo, chat_id, "", request)
+    assert message["status"] == "complete" and message["content"] == answer["reply"]
+    payload = json.loads(llm.calls[1]["user"])
+    assert payload["current_request"] == request
+    assert payload["results"][-1]["tool"] == "plan_check"
+    assert not repo.changes
+
+
 def test_clear_and_constraint_only_requests_do_not_need_justification():
     proposal = turn("clear")
     proposal["stated_reason"] = ""

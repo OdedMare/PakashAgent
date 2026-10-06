@@ -134,6 +134,7 @@ class ManagerChatService:
             reviewed = False
             request = next((row["content"] for row in reversed(payload["conversation"])
                             if row["role"] == "user"), "")
+            payload["current_request"] = request
             for round_ in range(_ROUNDS):
                 final = round_ == _ROUNDS - 1
                 turn = self._llm.complete_json(
@@ -165,6 +166,8 @@ class ManagerChatService:
                     self._repo.chat_turn_progress(chat_id, message_id, dict(context, steps=steps))
                     continue
                 try:
+                    if not (turn.get("reply") or "").strip() and not question(turn.get("question")):
+                        raise _Rejected("חסרה תשובה למנהל. יש להסביר את התוכנית או לענות לבקשה הנוכחית באופן קונקרטי")
                     plan = self._prepare_plan(team_id, turn, schedule_id, request)
                     if plan and plan["kind"] in ("changes", "generate") \
                             and any(row.get("severity") == "warning" and row["code"] not in
@@ -271,14 +274,18 @@ class ManagerChatService:
                 return {"tool": name, "ok": False, "error": "יש לבחור סידור קיים או לציין את השבוע"}
             operations = arguments.get("operations") or []
             schedule = self._repo.get_schedule(schedule_id, team_id)
-            proposal = build_proposal(dict(operations=operations), self._context.profile(team_id),
+            profile = self._context.profile(team_id)
+            proposal = build_proposal(dict(operations=operations), profile,
                                       schedule, "בדיקת תרחיש")
             if proposal["needs_input"] or len(proposal["operations"]) != len(operations):
                 raise _Rejected(proposal["reply"] or "יש לציין עובדים, משמרות ותאריכים מוכרים לכל השינויים")
             operations = proposal["operations"]
             # The shared simulator bounds operations. Reject overflow rather
             # than describing a silently truncated scenario as complete.
-            self._changed_rows(schedule, operations)
+            rows = self._changed_rows(schedule, operations)
+            names = {person["name"] for person in profile.get("employees") or []}
+            if any(row["employee"] not in names for row in rows):
+                raise _Rejected("יש להשתמש בשמות העובדים המלאים מרשימת הצוות")
             return dict(self._schedules.simulate(team_id, operations, schedule_id), tool=name, ok=True)
         if name == "find_replacements":
             arguments = dict(arguments, include_exceptions=True)
