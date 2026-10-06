@@ -94,6 +94,14 @@ def test_text_approval_preserves_exception_and_stale_state_guards():
         service.apply(TEAM, "manager-a", chat_id, message["id"], True)
 
 
+def test_sickness_requires_manager_candidate_selection_before_a_plan():
+    repo, _, service, chat_id, schedule_id = setup([sickness()])
+    message = converse(service, repo, chat_id, schedule_id, "דנה חולה ביום שני, תמצא מחליף")
+    assert message["status"] == "complete" and "plan" not in message["payload"]
+    assert message["payload"]["results"][-1]["candidates"][0]["employee"] == "יוסי"
+    assert not repo.changes
+
+
 def test_retirement_removes_future_work_across_periods_and_keeps_history():
     proposal = turn("retire", employee="דנה", effective_date="2026-10-05")
     repo, _, service, chat_id, schedule_id = setup([proposal])

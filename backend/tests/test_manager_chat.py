@@ -501,6 +501,10 @@ def test_combined_conflicts_reach_agent_and_corrected_plan_keeps_absence():
     review = json.loads(llm.calls[1]["user"])["results"][-1]
     assert review["tool"] == "plan_review"
     assert any(row["code"] == "unavailable" for row in review["plan"]["warnings"])
+    assert message["status"] == "complete" and "plan" not in message["payload"]
+    assert message["payload"]["results"][-1]["candidates"][0]["employee"] == "מאיה"
+    llm._answers.append(fixed)
+    message = converse(service, repo, chat_id, schedule_id, "מאיה תחליף את דנה ביום שני", "selected-maya")
     plan = message["payload"]["plan"]
     assert plan["operations"][1]["employee"] == "מאיה" and not plan["warnings"]
     assert plan["constraints"] == fixed["constraints"]
@@ -575,7 +579,7 @@ def test_only_the_newest_plan_and_recent_checks_are_resent_in_full():
     repo, llm, service, chat_id, schedule_id = setup(
         [tools, turn(), tools, turn(), tools, turn(), sickness(), sickness(), turn()])
     for index in range(6):
-        converse(service, repo, chat_id, schedule_id, "שאלה %d" % index, "r%d" % index)
+        converse(service, repo, chat_id, schedule_id, "תציע את יוסי, שאלה %d" % index, "r%d" % index)
     conversation = json.loads(llm.calls[-1]["user"])["conversation"]
     plans = [row["context"]["plan"] for row in conversation if "plan" in row["context"]]
     assert plans[0]["summarized"] is True and plans[0]["operations"] == 2

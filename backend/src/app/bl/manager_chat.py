@@ -195,6 +195,7 @@ class ManagerChatService:
                         self._repo.chat_turn_progress(chat_id, message_id, dict(context, steps=steps))
                         continue
                 except _NeedsManager as exc:
+                    plan = None
                     asked = str(exc)
                     results.extend(exc.results)
                 except _Rejected as exc:
@@ -463,7 +464,10 @@ class ManagerChatService:
                                             and item.get("date") == row.get("date")), "")
                             candidates.append(self._tools.run(team_id, "find_replacements", dict(
                                 schedule_id=schedule_id, employee=leaving, shift_name=row.get("shift"), slot_date=row.get("date"))))
-                        raise _NeedsManager("בדקתי מועמדים להחלפה. בחרו מי יחליף בכל משמרת כדי שאכין תוכנית מלאה לאישור.", candidates)
+                        prompt = "בדקתי מועמדים להחלפה. בחרו מי יחליף בכל משמרת כדי שאכין תוכנית מלאה לאישור." \
+                            if any(result.get("candidates") for result in candidates) else \
+                            "לא נמצאו מחליפים שעומדים בכל הכללים. אפשר לשנות את היקף המשמרת או להוסיף תגבור. איך תרצו לפתור את החוסר?"
+                        raise _NeedsManager(prompt, candidates)
                 proposal = build_proposal(turn, profile, schedule, plan["reason"])
                 if proposal["needs_input"] or proposal["needs_reason"]:
                     raise _NeedsManager(proposal["reply"] or "נדרשים פרטים נוספים לפני שינוי")
