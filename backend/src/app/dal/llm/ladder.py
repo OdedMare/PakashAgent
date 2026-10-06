@@ -12,7 +12,7 @@ from typing import List
 
 from openai import APITimeoutError, BadRequestError
 
-from app.common.errors.errors import AgentError
+from app.common.errors.errors import AgentError, ModelOutputError
 from app.dal.llm.completion_retry import create_with_retry
 from app.dal.llm.message_merger import merge_system_into_user
 from app.dal.llm.model_slots import ModelBusy
@@ -80,7 +80,7 @@ def complete(
                     response = create_with_retry(client, model, kwargs, deadline=deadline)
                 except BadRequestError as exc:
                     if is_context_overflow(exc):
-                        raise AgentError(_TOO_LONG)
+                        raise ModelOutputError(_TOO_LONG) from exc
                     last_bad_request = exc
                     continue
                 except APITimeoutError:

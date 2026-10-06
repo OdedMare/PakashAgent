@@ -152,15 +152,22 @@ def read_span_assignments(
             rejected.append({
                 "employee_id": bounded(item.get("employee_id")),
                 "slot_id": bounded(item.get("slot_id")),
+                "date": (slot_by_id.get(bounded(item.get("slot_id"))) or {}).get(
+                    "slot_date", bounded(item.get("date"))),
                 "reason": "unknown or ineligible candidate",
             })
             continue
         translated.append(row)
     accepted = bound_assignments(translated, slots, profile, availability)
-    rejected.extend(
-        {"reason": "missing reason, duplicate, or unknown slot/person"}
-        for _ in range(len(translated) - len(accepted))
-    )
+    kept = {(row["employee"], row["shift"], row["date"]) for row in accepted}
+    seen = set()
+    for row in translated:
+        key = tuple(bounded(row.get(field)) for field in ("employee", "shift", "date"))
+        if key not in kept or key in seen or not bounded(row.get("reason")):
+            rejected.append({"date": bounded(row.get("date")),
+                             "reason": "missing reason, duplicate, or unknown slot/person"})
+        else:
+            seen.add(key)
     return accepted, rejected
 
 

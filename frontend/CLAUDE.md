@@ -180,8 +180,15 @@ impression.
   team-password login remains. New chat, history, deletion, polling and Stop are
   built into the conversation. Histories do not sync across devices without
   individual manager accounts. See [Manager chat](../docs/MANAGER_CHAT.md).
-- **The conversation has its own available height.** The desktop panel is
-  resizable, its transcript scrolls independently, and its composer stays visible.
+- **The conversation has its own available height.** Its transcript scrolls
+  independently and its composer stays visible.
+- **The manager owns the split between the agent and the board.** On desktop
+  a visible grip on the divider drags it (arrows nudge, Home/End go to the
+  limits, double-click or Enter resets). `Management/useChatSplit.ts` keeps it
+  as a *share* of the workspace rather than pixels, so a split chosen on a
+  wide monitor still means the same thing on a laptop, and keeps each side
+  above a pixel floor (agent 340, board 320). Remembered per browser, like
+  the shift-row order; nothing is written to the server.
   The autonomous copilot console lives under Overview, and the old invisible
   automatic briefings are disabled for the conversation surface.
 - **Export downloads; it does not navigate.** `downloadSchedule` fetches the

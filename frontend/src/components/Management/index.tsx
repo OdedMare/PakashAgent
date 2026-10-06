@@ -32,6 +32,7 @@ import type { ChatPlan, ManagementOverview, Proposal, TeamView } from "@/types";
 
 import { AgentChat } from "./AgentChat";
 import { useManagerChat } from "./useManagerChat";
+import { useChatSplit } from "./useChatSplit";
 import { ProfileGapsNotice } from "./ProfileGapsNotice";
 import { CopilotInbox } from "./CopilotInbox";
 import { History } from "./History";
@@ -87,7 +88,7 @@ export function Management({
   // never has to remember which cell they were discussing with the agent.
   const [view, setView] = useState<ManagerView>("board");
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [chatWidth, setChatWidth] = useState(680);
+  const { workspace: workspaceRef, share: chatShare, resizing, handle: resizeHandle } = useChatSplit();
   const [chatSearch, setChatSearch] = useState("");
   const [chatPreview, setChatPreview] = useState<Proposal | null>(null);
   const [chatWeek, setChatWeek] = useState<{ date: string; n: number }>();
@@ -100,12 +101,9 @@ export function Management({
     if (date) setChatWeek((previous) => ({ date, n: (previous?.n ?? 0) + 1 }));
     await refresh();
   }, [refresh]);
-  const resizeStart = useRef<{ x: number; width: number } | null>(null);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       if (window.matchMedia("(min-width: 900px)").matches) setDrawerOpen(true);
-      const stored = Number(localStorage.getItem("pakash-chat-width"));
-      if (stored >= 340 && stored <= 760) setChatWidth(stored);
     });
     return () => cancelAnimationFrame(frame);
   }, []);
@@ -570,8 +568,9 @@ export function Management({
 
       <main
         id="main-content"
-        className={`management-workspace${drawerOpen ? " has-drawer" : ""}${view !== "board" ? " is-page" : ""}`}
-        style={{ "--chat-width": `${chatWidth}px` } as CSSProperties}
+        ref={workspaceRef}
+        className={`management-workspace${drawerOpen ? " has-drawer" : ""}${view !== "board" ? " is-page" : ""}${resizing ? " is-resizing" : ""}`}
+        style={{ "--chat-share": `${(chatShare * 100).toFixed(2)}%` } as CSSProperties}
       >
         {view === "analytics" ? (
           <ManagerAnalytics overview={overview} />
@@ -652,27 +651,18 @@ export function Management({
           aria-label="אזור ניהול"
           hidden={!drawerOpen}
         >
-          <div className="manager-chat-resizer" role="separator" tabIndex={0}
-            aria-label="שינוי רוחב חלונית השיחה" aria-orientation="vertical"
-            aria-valuemin={340} aria-valuemax={760} aria-valuenow={chatWidth}
-            onPointerDown={(event) => {
-              resizeStart.current = { x: event.clientX, width: chatWidth };
-              event.currentTarget.setPointerCapture(event.pointerId);
-            }}
-            onPointerMove={(event) => {
-              if (!resizeStart.current) return;
-              const delta = (event.clientX - resizeStart.current.x) * (document.documentElement.dir === "rtl" ? -1 : 1);
-              setChatWidth(Math.max(340, Math.min(760, resizeStart.current.width + delta)));
-            }}
-            onPointerUp={() => { resizeStart.current = null; localStorage.setItem("pakash-chat-width", String(chatWidth)); }}
-            onLostPointerCapture={() => { resizeStart.current = null; }}
-            onKeyDown={(event) => {
-              if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
-                event.preventDefault();
-                const width = Math.max(340, Math.min(760, chatWidth + (event.key === "ArrowRight" ? 20 : -20)));
-                setChatWidth(width); localStorage.setItem("pakash-chat-width", String(width));
-              }
-            }} />
+          <div
+            className="manager-chat-resizer"
+            role="separator"
+            tabIndex={0}
+            aria-label="גודל הסוכן מול הלוח — גרירה או חיצים, לחיצה כפולה לאיפוס"
+            title="גרירה לשינוי הגודל · לחיצה כפולה לאיפוס"
+            aria-orientation="vertical"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(chatShare * 100)}
+            {...resizeHandle}
+          />
           <div className="manager-drawer-head">
             <div>
               <strong>ניהול הסידור</strong>

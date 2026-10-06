@@ -85,7 +85,9 @@
   .management .header-actions { margin-top: auto; flex-wrap: wrap; gap: 0; padding-top: 10px; border-top: 1px solid var(--border); }
   .management .header-actions .icon-button { width: 38px; height: 40px; }
   .management-workspace { min-height: 0; overflow: hidden; grid-template-columns: minmax(0, 1fr); }
-  .management-workspace.has-drawer { grid-template-columns: minmax(400px, min(var(--chat-width, 600px), 58%)) minmax(280px, 1fr); }
+  /* The split is the manager's (Management/useChatSplit.ts), which also keeps
+     both sides above their floors — so the columns here take it as given. */
+  .management-workspace.has-drawer { grid-template-columns: minmax(0, var(--chat-share, 45%)) minmax(0, 1fr); }
   .management-workspace.has-drawer > .board { grid-column: 2; grid-row: 1; overflow-y: auto; padding: 20px 16px; }
   .management-workspace > .board { overflow-y: auto; }
   .management-workspace > .manager-drawer { position: relative; inset: auto; grid-column: 1; grid-row: 1; height: 100%; display: flex; flex-direction: column; border: 0; border-inline-end: 1px solid var(--border); border-radius: 0; transform: none; box-shadow: none; transition: none; }
@@ -98,7 +100,7 @@
   .manager-drawer-content { height: auto; min-height: 0; flex: 1; padding-bottom: 16px; }
   .manager-drawer-content.is-conversation { padding: 0; }
   .management-workspace.has-drawer .manager-drawer-backdrop { display: none; }
-  .manager-chat-resizer { display: block; inset-inline-start: auto; inset-inline-end: -4px; }
+  .manager-chat-resizer { display: grid; }
   .conversation-toolbar { padding: 12px 20px 6px; }
   .conversation-context { padding-inline: 20px; }
   .conversation-log { padding: 28px 24px; }
@@ -125,7 +127,6 @@
 }
 @media (min-width: 900px) and (max-width: 1199px) {
   .management { --navigation-width: 184px; }
-  .management-workspace.has-drawer { grid-template-columns: minmax(360px, 52%) minmax(260px, 1fr); }
   .conversation-log { padding-inline: 18px; }
   .conversation-starters { grid-template-columns: 1fr; }
 }

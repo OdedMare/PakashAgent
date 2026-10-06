@@ -20,6 +20,10 @@ class AgentError(AppError):
     status_code = 502
 
 
+class ModelOutputError(AgentError):
+    """A reply or context that may fit after narrowing the scheduling span."""
+
+
 class ProfileIncompleteError(AgentError):
     """The interview finished, but not with enough to build a grid.
 

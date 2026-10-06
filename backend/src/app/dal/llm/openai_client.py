@@ -30,7 +30,7 @@ from typing import List, Optional
 import httpx
 from openai import OpenAI
 
-from app.common.errors.errors import AgentError
+from app.common.errors.errors import AgentError, ModelOutputError
 from app.common.time_context.time_context import agent_time_context
 from app.dal.llm import ladder
 from app.dal.llm.budgets import (  # noqa: F401  (re-exported for tests)
@@ -164,7 +164,7 @@ class OpenAIJsonClient:
             return result
         log_call(flow, call.model, usage, started, _MAX_JSON_ATTEMPTS - 1,
                  failed=True, role=call.role)
-        raise AgentError("המודל החזיר JSON לא תקין פעמיים: " + last_error)
+        raise ModelOutputError("המודל החזיר JSON לא תקין פעמיים: " + last_error)
 
     def list_models(
         self, base_url_override: Optional[str] = None,
