@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Sparkles,
   Trash2,
+  Upload,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -168,6 +169,8 @@ export function Board({
   navigateToWeek?: { date: string; n: number };
   /** Open the conversation with the agent — the control room beside this. */
   onOpenAgent?: () => void;
+  /** Open the import screen. Opening it writes nothing (D7). */
+  onImport?: () => void;
   /** What the agent is currently saying, so the week can show *where* it
    *  applies. Read-only: the board renders these and produces none of them,
    *  which is what keeps a highlight a description of the conversation
@@ -430,7 +433,7 @@ export function Board({
           onToday={board.goToToday}
         />
 
-        <div className="board-head-actions">
+        <div className="board-head-actions" data-tour="board-actions">
           {schedule ? (
             <span className={`board-status is-${schedule.status}`}>
               {schedule.status === "published" ? "פורסם" : "טיוטה"}
@@ -668,6 +671,7 @@ export function Board({
           onOpenBlank={() =>
             onOpenBlank({ starts_on: board.weekStart, ends_on: board.weekEnd })
           }
+          onImport={onImport}
         />
       )}
 
@@ -1047,6 +1051,7 @@ function EmptyWeek({
   weekEnd,
   onGenerate,
   onOpenBlank,
+  onImport,
 }: {
   busy: boolean;
   generating: boolean;
@@ -1055,6 +1060,7 @@ function EmptyWeek({
   weekEnd: string;
   onGenerate: () => void;
   onOpenBlank: () => void;
+  onImport?: () => void;
 }) {
   if (!profile) {
     return (
@@ -1088,11 +1094,11 @@ function EmptyWeek({
   }
 
   return (
-    <div className="board-empty">
+    <div className="board-empty" data-tour="empty-week">
       <h2>אין סידור לשבוע הזה</h2>
       <p>
-        אפשר לבקש מהסוכן לבנות את השבוע, או לפתוח שבוע ריק ולשבץ ידנית — בלי
-        הסוכן בכלל.
+        אפשר לבקש מהסוכן לבנות את השבוע, לפתוח שבוע ריק ולשבץ ידנית — בלי
+        הסוכן בכלל — או לייבא סידור שכבר קיים אצלכם בקובץ.
       </p>
       {gaps && !gaps.complete ? (
         <p className="board-empty-partial">
@@ -1101,6 +1107,21 @@ function EmptyWeek({
         </p>
       ) : null}
       <div className="board-empty-actions">
+        {/* The third way in, beside the two the board always offered: a
+            week the workplace already has in a file. The import screen reads
+            and shows its interpretation; only its own confirm stores (D7). */}
+        {onImport ? (
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={onImport}
+            disabled={busy || generating}
+            title="ייבוא סידור קיים מקובץ Excel או מסמך"
+          >
+            <Upload size={14} />
+            ייבוא מקובץ
+          </button>
+        ) : null}
         <button
           type="button"
           className="ghost-button"

@@ -36,7 +36,7 @@ export function WeekNav({
   onToday: () => void;
 }) {
   return (
-    <div className="board-weeknav">
+    <div className="board-weeknav" data-tour="week-nav">
       <button
         type="button"
         className="board-nav-button"

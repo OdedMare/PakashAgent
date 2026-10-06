@@ -44,7 +44,7 @@ export function CoverageBar({
   ).length;
 
   return (
-    <div className="board-coverage" role="group" aria-label="סיכום השבוע">
+    <div className="board-coverage" role="group" aria-label="סיכום השבוע" data-tour="coverage">
       <Tile
         icon={<UserCheck size={15} />}
         label="איוש"

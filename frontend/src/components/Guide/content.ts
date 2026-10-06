@@ -286,6 +286,8 @@ export function glossaryFor(surface: Surface | null): GlossaryEntry[] {
 export interface Shortcut {
   keys: string[];
   label: string;
+  /** The keys are alternatives (either works) rather than a chord. */
+  either?: boolean;
 }
 
 export function shortcutsFor(surface: Surface | null): { title: string; items: Shortcut[] }[] {
@@ -306,7 +308,7 @@ export function shortcutsFor(surface: Surface | null): { title: string; items: S
         items: [
           { keys: ["←"], label: "השבוע הבא" },
           { keys: ["→"], label: "השבוע הקודם" },
-          { keys: ["T", "א"], label: "חזרה לשבוע הנוכחי" },
+          { keys: ["T", "א"], label: "חזרה לשבוע הנוכחי", either: true },
         ],
       },
       {

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { GuideProvider } from "@/components/Guide";
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {
@@ -29,7 +30,9 @@ export default function RootLayout({
         <a className="skip-link" href="#main-content">
           דלגו לתוכן הראשי
         </a>
-        {children}
+        {/* The help button and guided tour sit above every page, so each
+            screen only says which surface it is rather than mounting its own. */}
+        <GuideProvider>{children}</GuideProvider>
       </body>
     </html>
   );

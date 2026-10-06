@@ -11,6 +11,7 @@ import {
   Search,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
@@ -214,14 +215,14 @@ export function HelpPanel({
                 </span>
                 <ChevronLeft size={15} />
               </button>
-              <a href="/tutorial" target="_blank" rel="noopener">
+              <Link href="/tutorial" target="_blank" rel="noopener">
                 <ExternalLink size={17} />
                 <span>
                   <strong>המדריך המלא</strong>
                   <small>מדריך מצולם לכל תפקיד, בלשונית חדשה</small>
                 </span>
                 <ChevronLeft size={15} />
-              </a>
+              </Link>
             </nav>
             <p className="guide-panel-tip">
               טיפ: המקש <kbd>?</kbd> פותח את החלון הזה מכל מסך.
@@ -249,7 +250,7 @@ function Shortcuts({ surface }: { surface: Surface | null }) {
                 <dt>
                   {item.keys.map((key, index) => (
                     <span key={key}>
-                      {index ? <span className="guide-key-sep">{item.keys.length === 2 && key === "א" ? "או" : "+"}</span> : null}
+                      {index ? <span className="guide-key-sep">{item.either ? "או" : "+"}</span> : null}
                       <kbd>{key}</kbd>
                     </span>
                   ))}
@@ -295,7 +296,7 @@ function Glossary({ surface }: { surface: Surface | null }) {
           ))}
         </dl>
       ) : (
-        <p className="guide-empty">לא נמצא מונח בשם הזה. נסו מילה אחרת, או שאלו את הסוכן.</p>
+        <p className="guide-empty">לא נמצא מונח כזה. נסו מילה אחרת.</p>
       )}
     </div>
   );

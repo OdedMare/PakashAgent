@@ -36,7 +36,7 @@ export function FilterBar({
   onClear: () => void;
 }) {
   return (
-    <div className="board-filters" role="group" aria-label="סינון הלוח">
+    <div className="board-filters" role="group" aria-label="סינון הלוח" data-tour="filters">
       <span className="board-filters-icon" aria-hidden="true">
         <Filter size={14} />
       </span>

@@ -264,7 +264,7 @@ export function BoardGrid({
   };
 
   return (
-    <div className="board-grid-scroll" ref={scroller}>
+    <div className="board-grid-scroll" ref={scroller} data-tour="grid">
       {/* What a picked-up card is waiting for, said rather than left to be
           inferred from an outline. It carries no confirm: placing still
           opens the dialog that collects the reason (D12). */}

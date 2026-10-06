@@ -196,15 +196,17 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
 /** Tell the guide which screen is showing and what it can offer.
  *
  *  `checklist` and `actions` may be rebuilt every render; only a change in
- *  what the checklist *shows* reaches the panel. */
-export function useGuideSurface(surface: Surface, registration: Registration = {}) {
+ *  what the checklist *shows* reaches the panel. `null` registers nothing —
+ *  for a screen, like a sign-in gate, that the surface's tour cannot cover. */
+export function useGuideSurface(surface: Surface | null, registration: Registration = {}) {
   const api = useContext(GuideContext);
   useEffect(() => {
+    if (!surface) return;
     api?.enter(surface);
     return () => api?.leave(surface);
   }, [api, surface]);
   useEffect(() => {
-    api?.update(surface, registration);
+    if (surface) api?.update(surface, registration);
   });
 }
 
