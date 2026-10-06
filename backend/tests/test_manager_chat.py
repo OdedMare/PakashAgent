@@ -396,6 +396,40 @@ def test_simulation_of_missing_visible_week_cannot_fall_back_to_current_week():
     assert result["ok"] is False and "simulated" not in result
 
 
+def test_simulation_checks_named_week_and_reports_qualification_conflicts():
+    repo, _, service, _, focused_id = setup([])
+    other = repo.create_schedule(TEAM, "2026-10-11", "2026-10-17")
+    repo.replace_slots(other["id"], TEAM, [dict(shift_name=MORNING, slot_date="2026-10-12", headcount=1)])
+    repo.profiles[TEAM]["employees"][1]["eligible_shifts"] = ["צהריים"]
+    result = service._run_tool(TEAM, "simulate_changes", dict(day="2026-10-12", operations=[
+        dict(action="assign", employee="יוסי", shift=MORNING, date="2026-10-12", reason="בדיקה"),
+    ]), focused_id)
+    assert result["schedule_id"] == other["id"]
+    assert any(row["code"] == "ineligible" for row in result["introduced"])
+    assert not repo.assignments(other["id"], TEAM)
+
+
+def test_recurring_constraint_profile_plan_preserves_roster_and_employee_details():
+    repo, _, service, chat_id, schedule_id = setup([])
+    profile = repo.profiles[TEAM]
+    profile["employees"][0].update(can_train=True, rotation_group="א", notes="פרט קיים")
+    employees = copy.deepcopy(profile["employees"])
+    employees[0]["recurring_constraints"] = [dict(days=["שלישי"], shifts=[], available=False,
+                                                reason="אילוץ קבוע")]
+    proposal = turn("profile")
+    proposal.update(stated_reason="", profile_patch_json=json.dumps(dict(employees=employees)))
+    service._llm._answers.append(proposal)
+    message = converse(service, repo, chat_id, schedule_id, "דנה לא זמינה בכל יום שלישי")
+    assert message["status"] == "pending"
+    assert "recurring_constraints" not in profile["employees"][0]
+    service.apply(TEAM, "manager-a", chat_id, message["id"])
+    updated = repo.profiles[TEAM]["employees"]
+    assert updated[0]["recurring_constraints"] == employees[0]["recurring_constraints"]
+    assert updated[0]["can_train"] and updated[0]["rotation_group"] == "א"
+    assert updated[0]["notes"] == "פרט קיים" and len(updated) == 2
+    assert not repo.availability_rows
+
+
 def test_combined_conflicts_reach_agent_and_corrected_plan_keeps_absence():
     proposal = sickness()
     repo, llm, service, chat_id, schedule_id = setup([proposal])

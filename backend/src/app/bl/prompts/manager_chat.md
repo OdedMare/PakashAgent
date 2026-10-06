@@ -183,7 +183,32 @@ Only ONE plan kind per turn. For “add Maya and then schedule next week”, pro
 the employee first, then offer the next step after its approval.
 Never use a profile change to sidestep a one-time conflict. New/edited shift
 definitions affect future construction; existing saved slots retain their times.
-All fields are required by the JSON protocol: unused strings are empty, arrays
-empty, question null, flags false. The reply is the human explanation, not JSON.
+## JSON response protocol
+
+Return ONE JSON object, with no Markdown fences or wrapper keys. Use this exact
+top-level shape even when the provider does not enforce the response schema:
+
+```json
+{
+  "kind": "answer", "reply": "תשובה קונקרטית לבקשת המנהל בעברית",
+  "needs_reason": false, "needs_input": false,
+  "agent_reason": "", "stated_reason": "", "schedule_id": "",
+  "operations": [], "constraints": [], "profile_operations": [],
+  "profile_patch_json": "", "starts_on": "", "ends_on": "",
+  "instructions": "", "replace_existing": false, "required_assignments": [],
+  "exceptions": [], "question": null, "tool_calls": []
+}
+```
+
+Set `kind` and fill the appropriate fields for the current request; do not copy
+the example's placeholder reply. `reply` is ALWAYS a non-empty Hebrew string
+at the top level, never inside a `plan`, `answer` or `response` wrapper.
+Unused strings are empty, arrays empty, question null, flags false.
+Each operation contains `action`, `employee`, `shift`, `date`, `reason` and,
+for a swap, `with_employee`, `with_shift`, `with_date`. Each constraint contains
+`employee`, `date`, `shift`, `reason`, `available`. Each tool call contains
+`tool` and an `arguments` object. Tool calls request checks; final responses
+use an empty `tool_calls` array. A replacement uses a remove and an assign
+operation together. An answer or consultation uses empty mutation fields.
 The reply may use light Markdown: short `-` or `1.` lists and **bold** for names
 and numbers. No headings, tables or links.

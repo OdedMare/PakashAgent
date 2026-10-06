@@ -286,7 +286,15 @@ class ManagerChatService:
             names = {person["name"] for person in profile.get("employees") or []}
             if any(row["employee"] not in names for row in rows):
                 raise _Rejected("יש להשתמש בשמות העובדים המלאים מרשימת הצוות")
-            return dict(self._schedules.simulate(team_id, operations, schedule_id), tool=name, ok=True)
+            result = self._schedules.simulate(team_id, operations, schedule_id)
+            availability = self._repo.availability(team_id)
+            before = {warning_key(row): row for row in self._audit_plan(
+                profile, schedule, schedule_rows(schedule), availability, [])}
+            after = self._audit_plan(profile, schedule, rows, availability, [])
+            after_keys = {warning_key(row) for row in after}
+            return dict(result, tool=name, ok=True, warnings_after=after,
+                        introduced=[row for row in after if warning_key(row) not in before],
+                        resolved=[row for key, row in before.items() if key not in after_keys])
         if name == "find_replacements":
             arguments = dict(arguments, include_exceptions=True)
         return self._tools.run(team_id, name, arguments)

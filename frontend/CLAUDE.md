@@ -1,9 +1,19 @@
 # Frontend (`frontend/`)
 
 Next.js App Router, TypeScript, plain CSS. Deps and conventions ported from
-AiSummryIO; the design tokens in `src/styles/tokens.css` are its `shell.css`
-palette — warm cream ground, terracotta accent — so the two products read as
-one system.
+AiSummryIO.
+
+**The look is Frappe HR's "Espresso" system, with more colour.** White
+canvas, a light top bar, hairline borders, controls that are *filled gray*
+rather than outlined, pill badges and segmented tabs — all from
+`src/styles/tokens.css`. Where Espresso stays gray, Pakash spends colour:
+the blue primary, a blue→violet→magenta `--brand-gradient` (brand mark, the
+login hero, the copilot card), and four area hues (`--hue-blue|violet|teal|pink`
+plus `-soft`) that the nav, the drawer tabs and every row of stat tiles cycle
+through by position. Warning, danger and success are **not** area hues — they
+stay reserved for schedule meaning, so amber on the board always means "look
+at this". `--sidebar`/`--sidebar-2` name the chrome and are light surfaces
+now; there is no navy chrome left outside the tutorial page.
 
 `next.config.ts` proxies `/api/*` to FastAPI, so the browser sees one origin
 and there is no CORS setup.
