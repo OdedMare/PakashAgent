@@ -95,6 +95,7 @@ export function Board({
   onPublish,
   onExport,
   onOpenAgent,
+  onImport,
   onPeriodChange,
   navigateToWeek,
   agent,

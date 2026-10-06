@@ -23,6 +23,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { Board } from "@/components/Board";
+import { useGuideSurface } from "@/components/Guide";
+import type { ChecklistItem } from "@/components/Guide";
 import { useTheme } from "@/components/Interview/useTheme";
 import { SettingsPanel } from "@/components/Settings";
 import { ShareLink } from "@/components/Workspace/ShareLink";
@@ -163,6 +165,107 @@ export function Management({
       : 0;
   const schedule = overview?.schedule ?? null;
 
+  // Whether this manager has opened the team link from this browser. Nothing
+  // on the server records a link being *handed out*, so the first-steps list
+  // can only know it was looked at — which is the step it is nudging toward.
+  const sharedKey = `pakash-link-opened:${workspace.id}`;
+  const [linkOpened, setLinkOpened] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      try {
+        if (localStorage.getItem(sharedKey)) setLinkOpened(true);
+      } catch {
+        /* Storage blocked: the step simply stays open. */
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [sharedKey]);
+  const openShare = useCallback(() => {
+    setShareOpen(true);
+    setLinkOpened(true);
+    try {
+      localStorage.setItem(sharedKey, "1");
+    } catch {
+      /* A convenience only. */
+    }
+  }, [sharedKey]);
+
+  const showBoard = useCallback(() => {
+    setView("board");
+    // Below 1100px the drawer covers the board rather than sitting beside it.
+    if (!window.matchMedia("(min-width: 1100px)").matches) setDrawerOpen(false);
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  // The first steps, read off the overview. Each one is ticked by the
+  // workplace actually being in that state — never by the list itself — and
+  // each action only navigates to where the step is done.
+  const periods = overview?.periods ?? [];
+  const coverage = overview?.stats?.coverage;
+  const checklist: ChecklistItem[] = overview
+    ? [
+        {
+          id: "teach",
+          label: "ללמד את פקש על היחידה",
+          done: openTopics === 0,
+          detail: openTopics ? `${openTopics} נושאים עוד פתוחים בראיון` : "הראיון הושלם",
+          actionLabel: "להשלמה",
+          onAction: onOpenInterview,
+        },
+        {
+          id: "week",
+          label: "לפתוח סידור לשבוע",
+          done: periods.length > 0 || Boolean(schedule),
+          detail: "עם הסוכן, ידנית, או בייבוא מקובץ",
+          actionLabel: "ללוח",
+          onAction: showBoard,
+        },
+        {
+          id: "fill",
+          label: "לאייש את כל המשמרות",
+          done: Boolean(schedule && coverage && coverage.required > 0 && coverage.unfilled_slots === 0),
+          detail: schedule && coverage
+            ? coverage.unfilled_slots
+              ? `${coverage.unfilled_slots} משמרות עוד פתוחות השבוע`
+              : "כל המשמרות מאוישות"
+            : "אחרי שנפתח שבוע",
+          actionLabel: "ללוח",
+          onAction: showBoard,
+        },
+        {
+          id: "ask",
+          label: "לשאול את הסוכן שאלה ראשונה",
+          done: agent.chats.length > 0,
+          detail: "למשל: ‘מה חסר לפני פרסום?’ — שאלה לא משנה דבר",
+          actionLabel: "לנסות",
+          onAction: () => {
+            setSuggested((previous) => ({ text: "מה חסר לפני פרסום השבוע?", n: previous.n + 1 }));
+            openAgent();
+          },
+        },
+        {
+          id: "share",
+          label: "לשתף את קישור הצוות",
+          done: linkOpened,
+          detail: "הצוות רואה רק מה שפורסם",
+          actionLabel: "לקישור",
+          onAction: workspace.member_token ? openShare : undefined,
+        },
+        {
+          id: "publish",
+          label: "לפרסם את השבוע לצוות",
+          done: periods.some((period) => period.status === "published") || schedule?.status === "published",
+          detail: "אזהרות לא חוסמות פרסום",
+          actionLabel: "ללוח",
+          onAction: showBoard,
+        },
+      ]
+    : [];
+  useGuideSurface("manager", {
+    checklist,
+    actions: { board: showBoard, agent: () => openAgent() },
+  });
+
   useEffect(() => {
     if (!autoGenerate || autoGenerationStarted.current) return;
     autoGenerationStarted.current = true;
@@ -184,7 +287,7 @@ export function Management({
           </span>
         </div>
         {/* The board is the workspace; management opens beside it. */}
-        <nav className="management-nav" aria-label="ניווט ראשי">
+        <nav className="management-nav" aria-label="ניווט ראשי" data-tour="nav">
           <button
             type="button"
             className={`management-nav-item${drawerOpen ? " is-active" : ""}`}
@@ -253,7 +356,7 @@ export function Management({
           </div>
         </section>
 
-        <div className="header-actions">
+        <div className="header-actions" data-tour="header-actions">
           {onOpenManualSetup ? (
             <button
               type="button"
@@ -295,7 +398,7 @@ export function Management({
             <button
               type="button"
               className="icon-button"
-              onClick={() => setShareOpen((open) => !open)}
+              onClick={() => (shareOpen ? setShareOpen(false) : openShare())}
               aria-label="קישור לצוות"
               title="קישור לצוות"
               aria-expanded={shareOpen}
@@ -524,6 +627,7 @@ export function Management({
             onPeriodChange={state.focusPeriod}
             navigateToWeek={chatWeek}
             onOpenAgent={() => openAgent()}
+            onImport={() => setImportOpen(true)}
             // What the agent is currently saying, so the board can show
             // *where* on the week it applies. The same state the cards in the
             // control room render — one source, so the two screens can never
@@ -578,7 +682,7 @@ export function Management({
               <X size={17} />
             </button>
           </div>
-          <div className="manager-tabs" role="group" aria-label="כלי ניהול">
+          <div className="manager-tabs" role="group" aria-label="כלי ניהול" data-tour="drawer-tabs">
             <ManagerTab
               active={section === "agent"}
               icon={<Sparkles size={15} />}

@@ -9,6 +9,7 @@ import {
   Users,
 } from "lucide-react";
 
+import { useGuideSurface } from "@/components/Guide";
 import { useTheme } from "@/components/Interview/useTheme";
 import { Calendar } from "@/components/Management/Calendar";
 import { displayDate } from "@/components/DateInput";
@@ -48,6 +49,7 @@ export function MemberArea({
 }) {
   const { theme, toggle } = useTheme();
   const { overview } = useManagement();
+  useGuideSurface("member");
   const shifts = readShiftNames(workspace.profile);
   const schedule = overview?.schedule ?? null;
   // The roster in profile order, so a member reads the same colours the
@@ -75,6 +77,7 @@ export function MemberArea({
               type="button"
               className="icon-button"
               onClick={onOpenPersonal}
+              data-tour="member-personal"
               aria-label="האזור האישי שלי"
               title="האזור האישי שלי"
             >
@@ -103,7 +106,7 @@ export function MemberArea({
 
       <main id="main-content" className="member-main">
         {schedule ? (
-          <div className="member-schedule">
+          <div className="member-schedule" data-tour="member-schedule">
             <div className="management-toolbar">
               <div className="period">
                 <span className="period-range">

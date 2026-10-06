@@ -137,7 +137,7 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
       <button type="button" onClick={() => document.getElementById(`chat-message-${last.id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" })}>הצגת התוכנית</button></div> : null}
     {copyError ? <p className="conversation-error" role="status">{copyError}</p> : null}
     {agent.error ? <p className="conversation-error" role="alert">{agent.error}</p> : null}
-    <form className="conversation-composer" onSubmit={(event) => { event.preventDefault(); if (!disabled) void send(text); }}>
+    <form className="conversation-composer" data-tour="agent-composer" onSubmit={(event) => { event.preventDefault(); if (!disabled) void send(text); }}>
       <label className="sr-only" htmlFor="agent-composer-input">הודעה לסוכן הסידור</label>
       <textarea id="agent-composer-input" ref={input} value={text} rows={2} maxLength={4000} placeholder={focusDate ? `בקשה או התייעצות על יום ${hebrewWeekday(focusDate)} ${formatDate(focusDate)}…` : "בקשו שיבוץ, הוסיפו עובד או אילוץ, או התייעצו על בעיה…"}
         onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {

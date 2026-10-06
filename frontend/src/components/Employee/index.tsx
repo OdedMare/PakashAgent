@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import { useGuideSurface } from "@/components/Guide";
 import { useTheme } from "@/components/Interview/useTheme";
 import { Calendar } from "@/components/Management/Calendar";
 import type { EmployeeView } from "@/types";
@@ -44,6 +45,8 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
   const state = useEmployee();
   const { view } = state;
   const [section, setSection] = useState<EmployeeSection>("mine");
+  // Only once signed in: the claim gate has none of what the tour points at.
+  useGuideSurface(view ? "employee" : null);
 
   // Not asked yet. Rendering the gate here would flash a claim screen at
   // someone who is already signed in.
@@ -117,7 +120,7 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
             on the other end of it. */}
         <SwapAlert waiting={view.swaps_awaiting_me ?? 0} />
 
-        <nav className="employee-tabs" role="tablist" aria-label="האזור שלי">
+        <nav className="employee-tabs" role="tablist" aria-label="האזור שלי" data-tour="employee-tabs">
           <EmployeeTab
             active={section === "mine"}
             icon={<CalendarDays size={16} />}
@@ -135,6 +138,7 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
             icon={<ClipboardList size={16} />}
             label="בקשות והחלפות"
             badge={pendingCount(view)}
+            tour="employee-requests-tab"
             onClick={() => setSection("requests")}
           />
           <EmployeeTab
@@ -221,17 +225,20 @@ function EmployeeTab({
   icon,
   label,
   badge = 0,
+  tour,
   onClick,
 }: {
   active: boolean;
   icon: React.ReactNode;
   label: string;
   badge?: number;
+  tour?: string;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
+      data-tour={tour}
       role="tab"
       aria-selected={active}
       className={active ? "is-active" : undefined}
@@ -371,7 +378,7 @@ function ChangeAlert({
   if (unseen <= 0) return null;
 
   return (
-    <section className="change-alert" role="status">
+    <section className="change-alert" role="status" data-tour="change-alert">
       <span className="brand-mark" aria-hidden="true">
         <BellRing size={16} />
       </span>
