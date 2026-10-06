@@ -29,6 +29,8 @@ import { InterviewImport } from "./InterviewImport";
 import { ProfileSummary } from "./ProfileSummary";
 import { Turn } from "./Turn";
 import { useInterview } from "./useInterview";
+import { useGuideSurface } from "@/components/Guide";
+
 import { useTheme } from "./useTheme";
 
 /** Roughly the topic count in `bl/interview.py`. Used only as a floor for
@@ -88,6 +90,9 @@ export function Interview({
   const { turn, busy, error, start, answer, correct, end, reset, retry } =
     useInterview();
   const { theme, toggle } = useTheme();
+  // No tour here — the welcome screen already explains the interview — but
+  // the help button still offers the glossary for the words it asks about.
+  useGuideSurface("interview");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [entry, setEntry] = useState<"welcome" | "import">("welcome");
