@@ -14,6 +14,11 @@ from app.bl.changes.agent import _closures_for_model, _schedule_for_model
 from app.bl.changes.proposal import build_proposal
 from app.bl.changes.values import json_default
 from app.bl.chat_schema import CHAT_SCHEMA, PROFILE_SECTIONS
+from app.bl.chat_contract import (
+    NeedsManager as _NeedsManager, RejectedPlan as _Rejected,
+    approval_text, coverage_preview, exception_warnings,
+)
+from app.bl.chat_lifecycle import copied_day, future_schedules, prepare_retirement, prepare_structure
 from app.bl.planner.shaping import question
 from app.bl.placement.values import is_eligible, warning_key
 from app.bl.profile_service import ProfileService
@@ -42,14 +47,6 @@ _ROUNDS = 7      # model calls per turn; the last one may not request tools
 _REPAIRS = 2     # times a rejected plan is handed back to the model to fix
 _MAX_CALLS = 4   # tool calls the model may request per round
 _FULL_RESULTS = 2  # earlier turns whose tool results the model re-reads in full
-
-
-class _Rejected(AgentError):
-    """A plan the code refused, which the model can revise in the same turn."""
-
-
-class _NeedsManager(AgentError):
-    """An unresolved target: ask the manager rather than guessing."""
 
 
 def _json(value):
@@ -96,6 +93,18 @@ class ManagerChatService:
     def start_turn(self, team_id, manager_id, chat_id, request):
         if not request["content"].strip():
             raise AgentError("ההודעה אינה יכולה להיות ריקה")
+        if request.get("approval_message_id"):
+            if not approval_text(request["content"]):
+                raise AgentError("הודעת אישור חייבת לאשר במפורש את התוכנית המוצגת")
+            chat = self._repo.get_chat(team_id, manager_id, chat_id)
+            if any(row.get("request_id") == request["request_id"] for row in chat["messages"]):
+                return None
+            latest = chat["messages"][-1] if chat["messages"] else {}
+            if latest.get("id") != request["approval_message_id"] or latest.get("status") != "pending" \
+                    or latest.get("payload", {}).get("question"):
+                raise ConflictError("אין תוכנית מוצגת שממתינה לאישור. בקשו תוכנית מעודכנת")
+            self.apply(team_id, manager_id, chat_id, latest["id"], confirmation=request)
+            return None
         return self._repo.start_chat_turn(
             team_id, manager_id, chat_id, request["content"].strip(),
             request["request_id"], {
@@ -198,6 +207,12 @@ class ManagerChatService:
             if plan:
                 output["plan"] = plan
             reply = asked or (turn.get("reply") or "").strip()
+            if plan and plan.get("coverage") and not plan["coverage"]["complete"]:
+                gaps = ["%s · %s (%s/%s)" % (row["date"], row["shift"], row["assigned"],
+                        row["required"] if row["required"] is not None else "תקינה לא ידועה")
+                        for row in plan["coverage"]["slots"] if not row["complete"]]
+                reply = "הכנתי תוכנית חלקית לאישור. המשמרות שעדיין דורשות טיפול:\n" + \
+                        "\n".join("- " + value for value in gaps)
             if not reply and output["question"]:
                 reply = output["question"]["question"]
             self._repo.finish_chat_turn(
@@ -342,8 +357,8 @@ class ManagerChatService:
         if turn.get("needs_input"):
             return None
         if (kind != "changes" and (turn.get("operations") or turn.get("constraints"))) \
-                or (kind != "profile" and turn.get("profile_patch_json")) \
-                or (kind != "generate" and turn.get("required_assignments")) \
+                or (kind not in ("profile", "restructure") and turn.get("profile_patch_json")) \
+                or (kind not in ("generate", "restructure") and turn.get("required_assignments")) \
                 or turn.get("profile_operations"):
             raise _Rejected("סוג התשובה אינו תואם לפעולות. הוראת שיבוץ דורשת kind=changes; התייעצות דורשת kind=answer בלי פעולות; עריכת צוות דורשת kind=profile ו-profile_patch_json")
         if kind == "answer":
@@ -371,6 +386,15 @@ class ManagerChatService:
         }
         if schedule and kind != "profile":
             plan.update(starts_on=iso(schedule["starts_on"]), ends_on=iso(schedule["ends_on"]))
+        if kind == "retire":
+            periods = prepare_retirement(self._repo, self._profiles, team_id, turn, plan, state)
+            plan["snapshot"] = _fingerprint(dict(state, future_schedules=periods))
+            return plan
+        if kind == "restructure":
+            prepare_structure(self._profiles, self._scheduler, team_id, turn, plan, state,
+                              self._history.before(team_id, iso(schedule["starts_on"])), self._audit_plan)
+            self._add_coverage(plan, plan["updated_profile"])
+            return plan
         if kind == "profile":
             try:
                 patch = json.loads(turn.get("profile_patch_json") or "{}")
@@ -470,7 +494,13 @@ class ManagerChatService:
         plan["preserved_assignments"] = list(required)
         required += [row for row in turn.get("required_assignments") or []
                      if first <= (row.get("date") or "") <= last]
-        if partial:
+        if turn.get("copy_from_date"):
+            if first != last:
+                raise _Rejected("העתקת יום דורשת תאריך יעד יחיד")
+            generated = copied_day(self._repo, team_id, turn["copy_from_date"], first,
+                                   state["profile"], plan["preserved_assignments"], turn.get("required_assignments"))
+            plan["copy_from_date"] = turn["copy_from_date"]
+        elif partial or first == last:
             generated = self._scheduler.generate_span(
                 state["profile"], first, last, availability=state["availability"],
                 history=self._history.before(team_id, iso(schedule["starts_on"])),
@@ -498,6 +528,13 @@ class ManagerChatService:
                         for row in outside] if partial else []
         plan["warnings"] = self._audit_plan(state["profile"], pseudo,
                                            context_rows + generated["assignments"], state["availability"], [])
+        self._add_coverage(plan, state["profile"])
+
+    @staticmethod
+    def _add_coverage(plan, profile):
+        generated = plan["generated"]
+        plan["coverage"] = coverage_preview(profile, generated["slots"],
+                                             generated["assignments"], plan["warnings"])
 
     def _constraints(self, offered, profile):
         names = {row["name"] for row in profile.get("employees") or []}
@@ -544,16 +581,18 @@ class ManagerChatService:
                                      (row["employee"], row["shift"])))
         return warnings
 
-    def apply(self, team_id, manager_id, chat_id, message_id, accept_exceptions=False):
+    def apply(self, team_id, manager_id, chat_id, message_id, accept_exceptions=False, confirmation=None):
         with self._repo.chat_approval(team_id, manager_id, chat_id, message_id) as message:
             if message["status"] == "applied":
                 return self._repo.get_chat(team_id, manager_id, chat_id)
             payload = message["payload"]
             plan = payload.get("plan") or {}
             state = self._state(team_id, plan.get("schedule_id") or "")
+            if plan.get("kind") == "retire":
+                state["future_schedules"] = future_schedules(self._repo, team_id, plan["effective_date"])
             if _fingerprint(state) != plan.get("snapshot"):
                 raise ConflictError("הסידור או כללי הצוות השתנו מאז ההמלצה. בקשו תוכנית מעודכנת")
-            if (plan.get("warnings") or plan.get("exceptions")) and not accept_exceptions:
+            if (exception_warnings(plan) or plan.get("exceptions")) and not accept_exceptions:
                 raise ConflictError("יש לאשר במפורש את החריגות המוצגות בתוכנית")
             reason = plan.get("reason") or message["content"]
             agent_reason = plan.get("agent_reason") or "שינוי שאושר בשיחה"
@@ -562,7 +601,30 @@ class ManagerChatService:
             if conflicts:
                 agent_reason += "\nחריגות שאושרו במפורש: " + "; ".join(conflicts)
             kind, schedule_id = plan.get("kind"), plan.get("schedule_id") or ""
-            if kind == "profile":
+            if kind == "retire":
+                for period in plan["affected_schedules"]:
+                    for operation in period["operations"]:
+                        schedule = self._repo.get_schedule(period["schedule_id"], team_id)
+                        if not OperationApplier(self._repo).apply(team_id, schedule, operation, reason, agent_reason):
+                            raise ConflictError("לא ניתן לפנות את כל המשמרות. לא בוצע שינוי")
+                self._repo.update_team_profile(team_id, plan["updated_profile"])
+            elif kind == "restructure":
+                schedule = self._repo.get_schedule(schedule_id, team_id)
+                outside = [dict(row) for row in schedule["assignments"]
+                           if not plan["starts_on"] <= iso(row["date"]) <= plan["ends_on"]]
+                # Replacing slots cascades assignments in Postgres. Clear explicitly
+                # first so the same contract holds for every repository implementation.
+                for row in schedule["assignments"]:
+                    self._repo.remove_assignment(row["id"], team_id)
+                self._repo.replace_slots(schedule_id, team_id, plan["replacement_slots"])
+                self._repo.update_team_profile(team_id, plan["updated_profile"])
+                refreshed = self._repo.get_schedule(schedule_id, team_id)
+                slots = {(row["shift_name"], iso(row["slot_date"])): row["id"] for row in refreshed["slots"]}
+                for row in outside + plan["generated"]["assignments"]:
+                    self._repo.add_assignment(schedule_id, team_id, slots[(row["shift"], iso(row["date"]))],
+                                              row["employee"], row.get("reason") or agent_reason,
+                                              source=row.get("source") or "agent")
+            elif kind == "profile":
                 self._profiles.update(team_id, **plan["profile_patch"])
             elif kind == "generate":
                 schedule_id = self._commit_generation(team_id, plan, agent_reason)
@@ -590,6 +652,9 @@ class ManagerChatService:
             )
             payload["receipt"] = {"schedule_id": schedule_id, "message": "התוכנית הוחלה בהצלחה"}
             self._repo.mark_chat_applied(chat_id, message_id, payload)
+            if confirmation:
+                self._repo.record_chat_confirmation(chat_id, confirmation["content"],
+                                                    confirmation["request_id"], payload["receipt"])
         return self._repo.get_chat(team_id, manager_id, chat_id)
 
     def _commit_generation(self, team_id, plan, agent_reason):

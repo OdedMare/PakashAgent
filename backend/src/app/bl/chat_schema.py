@@ -9,13 +9,16 @@ CHAT_SCHEMA = copy.deepcopy(CHANGE_RESPONSE_SCHEMA)
 props = CHAT_SCHEMA["properties"]
 props.update({
     "kind": {"type": "string", "enum": [
-        "answer", "changes", "profile", "generate", "publish", "unpublish", "clear",
+        "answer", "changes", "profile", "generate", "publish", "unpublish", "clear", "retire", "restructure",
     ]},
     "schedule_id": {"type": "string"},
     "stated_reason": {"type": "string"},
     "profile_patch_json": {"type": "string"},
     "starts_on": {"type": "string"},
     "ends_on": {"type": "string"},
+    "copy_from_date": {"type": "string"},
+    "employee": {"type": "string"},
+    "effective_date": {"type": "string"},
     "instructions": {"type": "string"},
     "replace_existing": {"type": "boolean"},
     "required_assignments": {"type": "array", "maxItems": 2000, "items": {

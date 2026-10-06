@@ -50,7 +50,7 @@ class PlacementContext:
         # `audit.py` writes Hebrew already; rewording it would be a second
         # voice describing the same fact.
         reasons = [values.text(row.get("message")) for row in caused]
-        eligible = values.is_eligible(self.profile, employee, shift_name)
+        eligible = values.is_eligible(self.profile, employee, shift_name, slot_date)
         if not eligible:
             # Not an audit warning -- eligibility is a fact about the roster,
             # not the week -- but to the manager it is the same kind of

@@ -1,5 +1,6 @@
 """Validating the roster: service types, exit patterns, rotation groups."""
 
+import datetime
 from typing import Any, List
 
 from app.bl.profile_service.validation import named_rows, text, text_list, valid_time
@@ -16,6 +17,11 @@ def employees(rows: Any, default_exit_pattern: str = "round") -> List[dict]:
 
 
 def _employee(row: dict, default_exit_pattern: str) -> dict:
+    if row.get("inactive_from"):
+        try:
+            row["inactive_from"] = datetime.date.fromisoformat(row["inactive_from"]).isoformat()
+        except (ValueError, TypeError):
+            raise AgentError("תאריך סיום העבודה חייב להיות בפורמט YYYY-MM-DD")
     service_type = text(row.get("service_type")) or "standard"
     if service_type not in _SERVICE_TYPES:
         raise AgentError("סוג כוח האדם אינו תקין")

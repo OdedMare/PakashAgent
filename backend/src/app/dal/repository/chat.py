@@ -162,6 +162,18 @@ class ChatRepository(RepositoryBase):
             WHERE id=%s AND chat_id=%s
         """, (Jsonb(payload), message_id, chat_id))
 
+    def record_chat_confirmation(self, chat_id, content, request_id, receipt):
+        """Called inside chat_approval: the instruction and receipt commit together."""
+        self._execute("""
+            INSERT INTO manager_chat_messages(id,chat_id,role,content,request_id)
+            VALUES (%s,%s,'user',%s,%s)
+        """, (new_id(), chat_id, content, request_id))
+        self._execute("""
+            INSERT INTO manager_chat_messages(id,chat_id,role,content,status,payload)
+            VALUES (%s,%s,'assistant',%s,'complete',%s)
+        """, (new_id(), chat_id, receipt["message"], Jsonb({"receipt": receipt})))
+        self._execute("UPDATE manager_chats SET updated_at=NOW() WHERE id=%s", (chat_id,))
+
     def dismiss_chat_plan(self, team_id, manager_id, chat_id, message_id):
         with self.chat_approval(team_id, manager_id, chat_id, message_id) as row:
             if row["status"] == "pending":

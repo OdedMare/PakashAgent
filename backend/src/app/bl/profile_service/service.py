@@ -57,6 +57,18 @@ class ProfileService:
             patch,
         )
 
+    def preview_structure(self, team_id, shift_rows, employees=None):
+        """Explicit shift migration; ordinary profile edits retain identity guards."""
+        current = self._repository.team_profile(team_id)
+        if current is None:
+            raise NotFoundError("פרופיל הצוות לא נמצא")
+        updated = _prepare_profile(current, employees, None, None, None, None, {})
+        updated["shifts"] = shift_rules.shifts(shift_rows)
+        updated["archived_shifts"] = current.get("archived_shifts", []) + [
+            dict(row) for row in current.get("shifts") or []
+            if row not in (current.get("archived_shifts") or [])]
+        return updated
+
     def apply_operations(self, team_id: str, operations: List[dict]) -> dict:
         """Apply confirmed agent operations through the same validation path."""
         profile = self._repository.team_profile(team_id)

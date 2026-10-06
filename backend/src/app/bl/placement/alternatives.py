@@ -58,7 +58,7 @@ def free_employees(
         name = values.text(person.get("name"))
         if not name or name == employee or name in taken:
             continue
-        if not values.is_eligible(context.profile, name, shift_name):
+        if not values.is_eligible(context.profile, name, shift_name, slot_date):
             continue
         if not context.clean(name, shift_name, slot_date):
             continue

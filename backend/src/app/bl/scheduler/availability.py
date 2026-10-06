@@ -31,8 +31,21 @@ def effective_availability(
         rotation_availability(profile, start, end, keys)
         + closure_availability(profile, start, end, keys)
         + _recurring_rows(profile, start, end, keys)
+        + _inactive_rows(profile, start, end)
         + explicit
     )
+
+
+def _inactive_rows(profile, start, end):
+    result = []
+    for person in profile.get("employees") or []:
+        first = parse_date(person.get("inactive_from") or "")
+        if first is None or first > end:
+            continue
+        for day in dates_between(max(start, first), end):
+            result.append(dict(employee=person["name"], date=day.isoformat(), shift="",
+                               available=False, is_hard=True, reason="סיום עבודה", source="retirement"))
+    return result
 
 
 def _explicit_rows(rows: Any, start, end) -> List[dict]:

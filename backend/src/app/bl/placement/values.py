@@ -65,7 +65,7 @@ def slots(schedule: dict) -> List[dict]:
     ]
 
 
-def is_eligible(profile: dict, employee: str, shift_name: str) -> bool:
+def is_eligible(profile: dict, employee: str, shift_name: str, date: str = "") -> bool:
     """Whether the profile says this person works this shift.
 
     A roster that declares no `eligible_shifts` for somebody is saying
@@ -75,6 +75,8 @@ def is_eligible(profile: dict, employee: str, shift_name: str) -> bool:
     for person in employees(profile):
         if text(person.get("name")) != employee:
             continue
+        if date and person.get("inactive_from") and date >= person["inactive_from"]:
+            return False
         eligible = person.get("eligible_shifts")
         if not isinstance(eligible, list) or not eligible:
             return True
