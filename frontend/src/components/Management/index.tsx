@@ -12,7 +12,6 @@ import {
   Settings2,
   SlidersHorizontal,
   Share2,
-  Upload,
   Sparkles,
   Sun,
   Users,
@@ -648,10 +647,6 @@ export function Management({
           </> : null}
 
           {section === "overview" ? <>
-            <button type="button" className="ghost-button full" onClick={() => setImportOpen(true)} disabled={state.busy}>
-              <Upload size={14} />
-              טעינת סידור קיים
-            </button>
             {schedule?.notes?.length ? <ul className="schedule-notes">{schedule.notes.map((note, index) => <li key={index}>{note}</li>)}</ul> : null}
             {schedule ? <Warnings warnings={schedule.warnings} /> : null}
             {overview?.stats ? <Stats stats={overview.stats} /> : null}
