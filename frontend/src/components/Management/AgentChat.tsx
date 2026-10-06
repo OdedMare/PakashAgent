@@ -81,7 +81,7 @@ export function AgentChat({ workspaceId, scheduleId, visibleWeek, focusDate = ""
       {!agent.loading && !messages.length ? <div className="conversation-empty">
         <div className="conversation-empty-mark"><MessageSquare size={25} /></div>
         <h3>{focusDate ? `מה חשוב ביום ${hebrewWeekday(focusDate)}?` : "מה צריך לפתור בסידור?"}</h3>
-        <p>{focusDate ? "כתבו הוראות ליום הזה. הסוכן יציע שיבוץ רק ליום הזה, ושאר הימים לא ישתנו." : "אפשר לבנות שבוע, למצוא מחליפים, להשוות עומסים או לעדכן את הצוות והכללים."}</p>
+        <p>{focusDate ? "אפשר לבקש שיבוץ, לעדכן אילוץ או להתייעץ על היום הזה. בקשה בלי תאריך מתייחסת ליום שנבחר." : "כאן מנהלים את השיבוץ, העובדים והאילוצים, וגם מתייעצים איך לפתור בעיה. כתבו מה תרצו לעשות; אין צורך בסיבה נוספת."}</p>
         <div className="conversation-starters">{(focusDate ? DAY_STARTERS : WEEK_STARTERS).map((value) =>
           <button type="button" key={value} disabled={disabled} onClick={() => void send(value)}>{value}</button>)}</div>
       </div> : null}
@@ -104,7 +104,7 @@ export function AgentChat({ workspaceId, scheduleId, visibleWeek, focusDate = ""
     {agent.error ? <p className="conversation-error" role="alert">{agent.error}</p> : null}
     <form className="conversation-composer" onSubmit={(event) => { event.preventDefault(); if (!disabled) void send(text); }}>
       <label className="sr-only" htmlFor="agent-composer-input">הודעה לסוכן הסידור</label>
-      <textarea id="agent-composer-input" ref={input} value={text} rows={2} maxLength={4000} placeholder={focusDate ? `הוראות לסוכן על יום ${hebrewWeekday(focusDate)} ${formatDate(focusDate)}…` : "בקשו שינוי, שאלו שאלה או המשיכו את השיחה…"}
+      <textarea id="agent-composer-input" ref={input} value={text} rows={2} maxLength={4000} placeholder={focusDate ? `בקשה או התייעצות על יום ${hebrewWeekday(focusDate)} ${formatDate(focusDate)}…` : "בקשו שיבוץ, הוסיפו עובד או אילוץ, או התייעצו על בעיה…"}
         onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!disabled && text.trim()) void send(text); }
         }} />
@@ -216,11 +216,11 @@ function describe(value: unknown): string {
   }).filter(Boolean).join(" · ");
   return VALUE_LABELS[String(value)] ?? String(value);
 }
-const WEEK_STARTERS = ["תשבץ את השבוע הקרוב", "מי עובד הכי הרבה השבוע?", "מי יכול למלא את המשמרות הפנויות?", "תוסיף עובד חדש"];
-const DAY_STARTERS = ["תשבץ את היום הזה", "תמלא רק את המשמרות הפנויות ביום הזה", "מי חסר ביום הזה?", "מי זמין להחליף ביום הזה?"];
+const WEEK_STARTERS = ["תשבץ את השבוע הקרוב", "איך כדאי לפתור את החוסרים בסידור?", "מי עובד הכי הרבה השבוע?", "תוסיף עובד חדש", "אני רוצה להוסיף אילוץ לעובד"];
+const DAY_STARTERS = ["תשבץ את היום הזה", "תמלא רק את המשמרות הפנויות ביום הזה", "איך כדאי לפתור חוסר בעובדים ביום הזה?", "מי זמין להחליף ביום הזה?"];
 const ACTION_LABELS: Record<string, string> = { assign: "שיבוץ", remove: "הסרה", swap: "החלפה" };
 const PLAN_LABELS: Record<ChatPlan["kind"], string> = { changes: "תוכנית שינויים", profile: "עדכון פרטי הצוות", generate: "סידור מוצע", publish: "פרסום הסידור", unpublish: "החזרה לטיוטה", clear: "פינוי השיבוצים" };
 const STATUS_LABELS: Record<string, string> = { applied: "בוצע", superseded: "הוחלף בהצעה חדשה", dismissed: "בוטל" };
 const VALUE_LABELS: Record<string, string> = { round: "סבב", triplet: "תלתון", hamshushim: "חמשושים", shushim: "שושים", standard: "סדיר", reserve: "מילואים", overlap: "חפיפה", hard: "כלל חובה", soft: "העדפה" };
 const FIELD_LABELS: Record<string, string> = { employees: "אנשי צוות", shifts: "סוגי משמרות", rules: "כללי שיבוץ", workplace: "פרטי היחידה", name: "שם", role: "תפקיד", eligible_shifts: "משמרות מתאימות", rotation_group: "קבוצת יציאות", exit_pattern: "מבנה יציאות", service_type: "סוג שירות", start_time: "התחלה", end_time: "סיום", headcount: "מספר עובדים", notes: "הערות", text: "כלל", priority: "עדיפות", staffing: "תקינה", required_roles: "תפקידים נדרשים", is_shift_manager: "אחראי משמרת", can_train: "יכול להדריך", counts_toward_staffing: "נספר בתקינה", is_on_call: "כוננות", days: "ימים", hour_weight: "משקל שעות", recurring_constraints: "אילוצים קבועים", audit_policy: "מדיניות בקרה", max_weekly_hours: "מקסימום שעות בשבוע", min_rest_hours: "מינימום שעות מנוחה", max_consecutive_days: "מקסימום ימים רצופים", rest_policy: "מדיניות מנוחה", fairness_policy: "איזון עומסים", weekend_policy: "מדיניות סופי שבוע", conflict_policy: "טיפול בהתנגשויות", training_policy: "מדיניות הכשרה", rotation_mode: "מבנה היחידה", first_closure_date: "עוגן הסבב", first_closure_group: "קבוצת העוגן", summary: "סיכום", dependencies: "תלויות", availability_process: "תהליך זמינות", constraint_deadline: "מועד הגשת אילוצים" };
-const TOOL_LABELS: Record<string, string> = { team_overview: "פרטי הצוות והכללים", read_period: "הסידור והסגירות", employee_state: "משמרות, שעות ואילוצים", coverage_gaps: "משמרות חסרות", validate_placement: "תקינות השיבוץ", find_replacements: "חלופות מתאימות", publish_readiness: "מוכנות לפרסום", profile_gaps: "פרטים חסרים", list_periods: "סידורים קודמים ועתידיים", workload_report: "השוואת עומסים", change_history: "היסטוריית שינויים", plan_check: "תיקון התוכנית לפי בדיקת השרת" };
+const TOOL_LABELS: Record<string, string> = { team_overview: "פרטי הצוות והכללים", read_period: "הסידור והסגירות", employee_state: "משמרות, שעות ואילוצים", coverage_gaps: "משמרות חסרות", validate_placement: "תקינות השיבוץ", find_replacements: "חלופות מתאימות", publish_readiness: "מוכנות לפרסום", profile_gaps: "פרטים חסרים", list_periods: "סידורים קודמים ועתידיים", workload_report: "השוואת עומסים", change_history: "היסטוריית שינויים", simulate_changes: "בדיקת ההשפעה של השינויים בלי לשמור", plan_review: "בחינת החריגות ותיקון ההצעה", plan_check: "תיקון התוכנית לפי בדיקת השרת" };

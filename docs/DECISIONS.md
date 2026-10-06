@@ -770,6 +770,27 @@ were invited.
   makes: the route issues the cookie, so there is no cookie yet to read the
   team from. Every route *after* sign-in still scopes by the signed session.
 
+## D26 — One manager conversation follows clear instructions *(amends D8 for manager chat)*
+
+The manager chat is the single conversational entry point for scheduling,
+employees, availability, recurring constraints, workplace rules and advice.
+A clear instruction needs no separate justification. When the manager does not
+provide a reason, the chat records their actual request as the audit reason;
+the agent still explains its choices separately and must not invent a motive.
+Legacy change routes and manual board actions keep their existing contracts.
+
+Advice and “what if” questions produce answers, without a pending mutation.
+The chat can run the existing pure-Python simulator over a complete combination
+of changes and compare coverage, workload and warnings before recommending it.
+
+Unknown targets, duplicate assignments and malformed operations are repaired
+or clarified. Newly introduced rule conflicts are returned to the agent for
+one advisory review; it can repair its own choices or describe a deliberate
+exception. Existing unrelated gaps do not hold an otherwise valid change.
+Final previews retain explicit Apply approval, exception approval, private
+manager history, stale-state checks and atomic writes. A message alone never
+writes to the schedule.
+
 ## Open
 
 - **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment
