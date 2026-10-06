@@ -2,7 +2,11 @@
 
 from fastapi import APIRouter, Depends, Response
 
-from app.api.contracts import ClaimRequest, EmployeeLoginRequest
+from app.api.contracts import (
+    ClaimRequest,
+    EmployeeLoginRequest,
+    EmployeeSignInRequest,
+)
 from app.common.sessions.sessions import COOKIE_NAME, ROLE_EMPLOYEE, issue
 
 
@@ -71,6 +75,25 @@ class IdentityRoutes:
                 team_id, request.employee, request.passcode
             ))
             sign_in(response, session["team_id"], result["employee"])
+            return result
+
+        @router.post("/signin")
+        def signin(request: EmployeeSignInRequest, response: Response) -> dict:
+            """Sign in from the front door, with no share-link session (D25).
+
+            Only reaches a name somebody already claimed -- the passcode is
+            the credential, so the link adds nothing here. Claiming stays
+            behind `visitor`, because without the link anyone who can see
+            the team picker could take an unclaimed name. Shares `/login`'s
+            throttle key, so the two doors do not double the guesses.
+            """
+            key = "employee:%s:%s" % (
+                request.team_id, request.employee.strip().lower()
+            )
+            result = throttle.attempt(key, lambda: service.login(
+                request.team_id, request.employee, request.passcode
+            ))
+            sign_in(response, request.team_id, result["employee"])
             return result
 
         @router.post("/logout")

@@ -86,6 +86,7 @@ from app.api.contracts.employee import (  # noqa: F401
     ClaimRequest,
     ConstraintSubmission,
     EmployeeLoginRequest,
+    EmployeeSignInRequest,
     ReadAssignment,
     ReleaseRequest,
     RequestDecision,

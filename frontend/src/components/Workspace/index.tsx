@@ -34,6 +34,7 @@ export function Workspace({ memberToken }: { memberToken?: string }) {
         busy={state.busy}
         error={state.error}
         onLogin={state.login}
+        onEmployeeLogin={state.employeeLogin}
         onCreate={state.create}
         onDismissError={state.clearError}
       />

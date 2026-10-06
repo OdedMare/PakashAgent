@@ -33,6 +33,17 @@ class EmployeeLoginRequest(BaseModel):
     passcode: str = Field(min_length=1, max_length=200)
 
 
+class EmployeeSignInRequest(EmployeeLoginRequest):
+    """Sign in from the front door, without a share-link session (D25).
+
+    The team comes from the body because there is no session to take it
+    from. That is safe only because this reaches an identity that already
+    exists: the passcode is the credential. Claiming still needs the link.
+    """
+
+    team_id: str = Field(min_length=1)
+
+
 class ConstraintSubmission(BaseModel):
     """An employee asking not to be scheduled (or offering to be).
 

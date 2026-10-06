@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   createTeam,
   currentWorkspace,
+  employeeSignIn,
   loginTeam,
   logout as logoutRequest,
   openMemberLink,
@@ -26,6 +27,12 @@ interface WorkspaceState {
   error: string | null;
   create: (name: string, password: string) => Promise<void>;
   login: (teamId: string, password: string) => Promise<void>;
+  /** The worker's front door: a name already claimed, and its passcode. */
+  employeeLogin: (
+    teamId: string,
+    employee: string,
+    passcode: string,
+  ) => Promise<void>;
   enterWithToken: (token: string) => Promise<void>;
   logout: () => Promise<void>;
   rotateLink: () => Promise<void>;
@@ -83,6 +90,13 @@ export function useWorkspace(): WorkspaceState {
     [run],
   );
 
+  const employeeLogin = useCallback(
+    async (teamId: string, employee: string, passcode: string) => {
+      await run(() => employeeSignIn({ teamId, employee, passcode }));
+    },
+    [run],
+  );
+
   const enterWithToken = useCallback(
     async (token: string) => {
       await run(() => openMemberLink(token));
@@ -127,6 +141,7 @@ export function useWorkspace(): WorkspaceState {
     error,
     create,
     login,
+    employeeLogin,
     enterWithToken,
     logout,
     rotateLink,

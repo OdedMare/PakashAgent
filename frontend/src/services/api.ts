@@ -830,6 +830,24 @@ export function employeeLogin(body: {
   });
 }
 
+/** Sign in to a claimed name from the front door, without the share link
+ *  (D25). The team is named here because there is no session to carry it.
+ *  Only an existing claim is reachable — claiming still needs the link. */
+export function employeeSignIn(body: {
+  teamId: string;
+  employee: string;
+  passcode: string;
+}): Promise<{ employee: string }> {
+  return request<{ employee: string }>("/api/employee/signin", {
+    method: "POST",
+    body: JSON.stringify({
+      team_id: body.teamId,
+      employee: body.employee,
+      passcode: body.passcode,
+    }),
+  });
+}
+
 export function employeeLogout(): Promise<{ status: string }> {
   return request<{ status: string }>("/api/employee/logout", {
     method: "POST",

@@ -312,6 +312,46 @@
   color: var(--primary);
 }
 
+/* Manager or worker, chosen after the team. Two equal doors rather than a
+   link under the form: a worker is not a second-class visitor here. */
+.gate-doors {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.gate-door {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 3.1rem;
+  padding: 0.6rem 0.8rem;
+  color: var(--text-soft);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gate-door:hover:not(:disabled) {
+  border-color: var(--primary);
+}
+
+.gate-door.is-selected {
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-color: var(--primary);
+}
+
+.gate-door:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
 /* --- the share link ---------------------------------------------------- */
 
 .share-link {
