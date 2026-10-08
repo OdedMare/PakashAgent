@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
-  createTeam,
   currentWorkspace,
   employeeSignIn,
   loginTeam,
@@ -25,7 +24,6 @@ interface WorkspaceState {
   workspace: TeamView | null | undefined;
   busy: boolean;
   error: string | null;
-  create: (name: string, password: string) => Promise<void>;
   login: (teamId: string, password: string) => Promise<void>;
   /** The worker's front door: a name already claimed, and its passcode. */
   employeeLogin: (
@@ -74,13 +72,6 @@ export function useWorkspace(): WorkspaceState {
       }
     },
     [refresh],
-  );
-
-  const create = useCallback(
-    async (name: string, password: string) => {
-      await run(() => createTeam(name, password));
-    },
-    [run],
   );
 
   const login = useCallback(
@@ -139,7 +130,6 @@ export function useWorkspace(): WorkspaceState {
     workspace,
     busy,
     error,
-    create,
     login,
     employeeLogin,
     enterWithToken,

@@ -36,16 +36,45 @@ body {
 
 /* -- brand ---------------------------------------------------------------- */
 
+/* The mark is gold everywhere it appears — headers, the gate, the panels
+   that carry it as their badge — so the brand reads as one object. */
 .brand-mark,
 .gate-story .brand-mark {
-  color: #fff;
-  background: var(--brand-gradient);
+  color: var(--on-gold);
+  background: var(--gold-gradient);
   border-radius: 9px;
-  box-shadow: var(--brand-glow), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  box-shadow: var(--gold-glow), inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 .brand {
   letter-spacing: -0.02em;
+}
+
+/* The header stacks the product name over the place you are in. */
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.brand-name {
+  color: var(--gold);
+  background: var(--gold-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.brand-text > .brand-name {
+  font-size: 11px;
+  margin-bottom: 1px;
+}
+
+.gate-story-brand .brand-name {
+  font-size: 1.15rem;
 }
 
 /* -- chrome --------------------------------------------------------------- */

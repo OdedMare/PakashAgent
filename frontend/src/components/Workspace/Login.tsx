@@ -4,20 +4,18 @@ import {
   AlertCircle,
   CalendarDays,
   CheckCircle2,
-  Plus,
+  Crown,
   ShieldCheck,
   UserCircle,
   UserCog,
-  Users,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { listTeams } from "@/services/api";
 import type { TeamSummary } from "@/types";
 
-/** Which door the visitor is standing at. `create` is not a door into an
- *  existing team, so it hides the picker. */
-type Mode = "boss" | "worker" | "create";
+/** Which door the visitor is standing at. */
+type Mode = "boss" | "worker";
 
 /** The front door: pick the team, then come in as its manager or as a worker.
  *
@@ -26,13 +24,15 @@ type Mode = "boss" | "worker" | "create";
  *  personal passcode (D14) — and only that: *claiming* a name still needs the
  *  share link, because this screen is open to anyone and the team list above
  *  it is public (D25). The name is typed rather than picked for the same
- *  reason: a picker here would publish every team's roster. */
+ *  reason: a picker here would publish every team's roster.
+ *
+ *  There is no "open a team" door any more (D28): workspaces are opened by
+ *  צוות משמרות זהב from the operator console, and this page says so. */
 export function Login({
   busy,
   error,
   onLogin,
   onEmployeeLogin,
-  onCreate,
   onDismissError,
 }: {
   busy: boolean;
@@ -43,19 +43,15 @@ export function Login({
     employee: string,
     passcode: string,
   ) => Promise<void>;
-  onCreate: (name: string, password: string) => Promise<void>;
   onDismissError: () => void;
 }) {
-  // `undefined` until the list has answered. Starting from `[]` drew the
-  // manager door with an empty picker, then jumped to "create" a moment later
-  // on a server with no teams.
+  // `undefined` until the list has answered, so the card does not flash an
+  // empty picker before the first answer.
   const [teams, setTeams] = useState<TeamSummary[] | undefined>(undefined);
   const [mode, setMode] = useState<Mode>("boss");
   const [teamId, setTeamId] = useState("");
-  const [name, setName] = useState("");
   const [employee, setEmployee] = useState("");
   const [password, setPassword] = useState("");
-  const creating = mode === "create";
 
   const switchMode = (next: Mode) => {
     setMode(next);
@@ -68,9 +64,6 @@ export function Login({
       .then((rows) => {
         setTeams(rows);
         setTeamId((current) => current || rows[0]?.id || "");
-        // With no workspace on the server there is nothing to log into, so
-        // the form opens on "create" rather than on an empty picker.
-        if (rows.length === 0) setMode("create");
       })
       .catch(() => setTeams([]));
   }, []);
@@ -79,9 +72,7 @@ export function Login({
     event.preventDefault();
     if (busy) return;
     try {
-      if (mode === "create") {
-        await onCreate(name.trim(), password);
-      } else if (mode === "worker") {
+      if (mode === "worker") {
         await onEmployeeLogin(teamId, employee.trim(), password);
       } else {
         await onLogin(teamId, password);
@@ -95,11 +86,9 @@ export function Login({
   };
 
   const canSubmit =
-    mode === "create"
-      ? name.trim().length > 0 && password.length >= 6
-      : mode === "worker"
-        ? teamId.length > 0 && employee.trim().length > 0 && password.length > 0
-        : teamId.length > 0 && password.length > 0;
+    mode === "worker"
+      ? teamId.length > 0 && employee.trim().length > 0 && password.length > 0
+      : teamId.length > 0 && password.length > 0;
 
   return (
     <main id="main-content" className="workspace-gate">
@@ -155,30 +144,18 @@ export function Login({
       ) : (
         <form className="gate-card" onSubmit={submit} aria-labelledby="gate-form-title">
           <div className="gate-form-head">
-            <span>{creating ? "סביבת עבודה חדשה" : "כניסה מאובטחת"}</span>
+            <span>כניסה מאובטחת</span>
             <h2 id="gate-form-title">
-              {creating ? "פתיחת צוות" : mode === "worker" ? "כניסת עובד/ת" : "כניסת מנהל"}
+              {mode === "worker" ? "כניסת עובד/ת" : "כניסת מנהל"}
             </h2>
           </div>
           <p className="gate-lede">
-            {creating
-              ? "כל צוות מקבל מרחב עבודה נפרד — ראיון, סידור והגדרות משלו."
+            {teams.length === 0
+              ? "עדיין לא נפתח צוות פעיל. צוותים חדשים נפתחים על ידי צוות משמרות זהב."
               : "בחרו את הצוות, ואז היכנסו כמנהל או כעובד/ת."}
           </p>
 
-          {creating ? (
-            <label className="gate-field">
-              <span>שם הצוות</span>
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="לדוגמה: צוות תפעול"
-                maxLength={80}
-                autoComplete="organization"
-                disabled={busy}
-              />
-            </label>
-          ) : (
+          {teams.length === 0 ? null : (
             <label className="gate-field">
               <span>צוות</span>
               <select
@@ -195,7 +172,7 @@ export function Login({
             </label>
           )}
 
-          {creating ? null : (
+          {teams.length === 0 ? null : (
             <div className="gate-doors" role="radiogroup" aria-label="סוג כניסה">
               <button
                 type="button"
@@ -242,12 +219,9 @@ export function Login({
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              autoComplete={creating ? "new-password" : "current-password"}
-              disabled={busy}
+              autoComplete="current-password"
+              disabled={busy || teams.length === 0}
             />
-            {creating ? (
-              <small className="gate-hint">לפחות 6 תווים.</small>
-            ) : null}
             {mode === "worker" ? (
               <small className="gate-hint">
                 עדיין אין לכם קוד אישי? פתחו את קישור הצוות שקיבלתם מהמנהל
@@ -268,25 +242,16 @@ export function Login({
             className="start-button"
             disabled={busy || !canSubmit}
           >
-            {busy ? "רגע…" : creating ? "פתחו מרחב עבודה" : "כניסה"}
+            {busy ? "רגע…" : "כניסה"}
           </button>
 
-          <button
-            type="button"
-            className="gate-switch"
-            onClick={() => switchMode(creating ? "boss" : "create")}
-            disabled={busy}
-          >
-            {creating ? (
-              <>
-                <Users size={14} /> יש לי כבר צוות
-              </>
-            ) : (
-              <>
-                <Plus size={14} /> פתיחת צוות חדש
-              </>
-            )}
-          </button>
+          <p className="gate-golden">
+            <Crown size={14} aria-hidden="true" />
+            <span>צריכים צוות חדש? צוות משמרות זהב פותח אותו עבורכם.</span>
+          </p>
+          <a className="gate-switch" href="/admin">
+            <ShieldCheck size={14} /> כניסת צוות משמרות זהב
+          </a>
         </form>
       )}
     </main>

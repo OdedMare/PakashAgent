@@ -55,7 +55,7 @@
 }
 
 .tutorial-brand { gap: 10px; }
-.tutorial-brand-mark { display: grid; width: 34px; height: 34px; place-items: center; color: white; background: var(--guide-cobalt); border-radius: 8px; }
+.tutorial-brand-mark { display: grid; width: 34px; height: 34px; place-items: center; color: #3b2a05; background: linear-gradient(135deg, #f8dc8a 0%, #e4b53f 48%, #b9860c 100%); border-radius: 8px; }
 .tutorial-brand strong, .tutorial-brand small { display: block; }
 .tutorial-brand strong { font: 800 .92rem/1.1 "Noto Sans Hebrew", Arial, sans-serif; }
 .tutorial-brand small { margin-top: 3px; color: #9eabc0; font-size: .66rem; }

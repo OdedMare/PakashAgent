@@ -1,7 +1,8 @@
 /* Aurora: an Apple-calm canvas with colour spent where it means something.
    Neutrals follow Apple's grays; the primary is system blue; the brand
-   gradient (blue → indigo → violet → rose) marks the agent, the brand and
-   the one action a screen is asking for. Employee colours identify people;
+   gradient (blue → indigo → violet → rose) marks the agent and the one
+   action a screen is asking for; gold marks the brand itself — משמרות זהב —
+   its mark, its wordmark and the warm light on the canvas. Employee colours identify people;
    warning/success/danger keep their scheduling meaning and are never decor. */
 :root {
   --bg: #f5f5f7;
@@ -47,6 +48,16 @@
   --brand-gradient: linear-gradient(120deg, #0071e3 0%, #5e5ce6 38%, #9b45d6 68%, #db2e6c 100%);
   --on-primary: #ffffff;
   --brand-glow: 0 10px 30px -8px rgba(94, 92, 230, 0.55);
+  /* Gold is the brand: the mark, the wordmark, the favicon. It is never a
+     status — amber `--warning` keeps that job — so it stays out of the board.
+     `--gold` clears 4.5:1 on white for text; `--on-gold` is the glyph on the
+     gold mark. */
+  --gold: #8f6300;
+  --gold-soft: #fbf3df;
+  --gold-gradient: linear-gradient(135deg, #f8dc8a 0%, #e4b53f 48%, #b9860c 100%);
+  --gold-text: linear-gradient(120deg, #a06f00 0%, #7a5300 100%);
+  --on-gold: #3b2a05;
+  --gold-glow: 0 8px 22px -8px rgba(185, 134, 12, 0.6);
   /* Frosted chrome. A surface is glass only where something sits behind it
      worth seeing — the sidebar, the composer, dialogs — never under text
      that has to be read at length. */
@@ -57,7 +68,8 @@
   --aurora:
     radial-gradient(60rem 42rem at 100% -12%, rgba(94, 92, 230, 0.22), transparent 62%),
     radial-gradient(52rem 38rem at -8% 6%, rgba(0, 113, 227, 0.2), transparent 60%),
-    radial-gradient(46rem 34rem at 62% 118%, rgba(219, 46, 108, 0.14), transparent 62%);
+    radial-gradient(46rem 34rem at 62% 118%, rgba(219, 46, 108, 0.1), transparent 62%),
+    radial-gradient(40rem 30rem at -6% 104%, rgba(228, 181, 63, 0.2), transparent 60%);
 }
 
 :root[data-theme="dark"] {
@@ -97,13 +109,20 @@
   --brand-gradient: linear-gradient(120deg, #0a84ff 0%, #5e5ce6 38%, #bf5af2 68%, #ff375f 100%);
   --on-primary: #ffffff;
   --brand-glow: 0 10px 36px -8px rgba(125, 122, 255, 0.65);
+  --gold: #f2c95c;
+  --gold-soft: #33280f;
+  --gold-gradient: linear-gradient(135deg, #ffe7a3 0%, #f0c14f 48%, #c9921a 100%);
+  --gold-text: linear-gradient(120deg, #ffe39a 0%, #e9b543 100%);
+  --on-gold: #2e2003;
+  --gold-glow: 0 8px 26px -8px rgba(240, 193, 79, 0.45);
   --glass: rgba(20, 20, 26, 0.58);
   --glass-strong: rgba(22, 22, 28, 0.82);
   --glass-border: rgba(255, 255, 255, 0.08);
   --aurora:
     radial-gradient(60rem 42rem at 100% -12%, rgba(94, 92, 230, 0.3), transparent 62%),
     radial-gradient(52rem 38rem at -8% 6%, rgba(10, 132, 255, 0.22), transparent 60%),
-    radial-gradient(46rem 34rem at 62% 118%, rgba(255, 55, 95, 0.16), transparent 62%);
+    radial-gradient(46rem 34rem at 62% 118%, rgba(255, 55, 95, 0.12), transparent 62%),
+    radial-gradient(40rem 30rem at -6% 104%, rgba(240, 193, 79, 0.14), transparent 60%);
 }
 
 /* Tiles in a row take the area hues in turn, so a row of figures reads as
