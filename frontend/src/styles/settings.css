@@ -7,6 +7,7 @@
 .settings-top-tabs button { min-height: 44px; padding: 8px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); color: var(--text); }
 .settings-top-tabs button[aria-current="page"] { border-color: var(--primary); color: var(--primary); }
 .rotation-settings { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.rotation-settings-page:not([hidden]) { display: flex; flex: 1; min-height: 0; }
 .rotation-settings > .settings-content { flex: 1; overflow-y: auto; }
 .rotation-settings-fields { border: 0; padding: 0; min-width: 0; }
 .rotation-cycle { margin-block: 18px; }

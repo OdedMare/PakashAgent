@@ -9,9 +9,10 @@ from fastapi.responses import JSONResponse
 
 from app.api.dependencies.dependencies import Guards
 from app.api.routers import (
-    copilot, employee, health, interview, profile, schedules, settings,
+    admin, copilot, employee, health, interview, profile, schedules, settings,
     workspace,
 )
+from app.bl.admin_service import AdminService
 from app.bl.copilot.copilot import CopilotService
 from app.bl.employee_service import EmployeeService
 from app.bl.interview_service import InterviewService
@@ -100,7 +101,10 @@ if not env.session_secret:
         "PAKASH_SESSION_SECRET is not set; generated one for this process. "
         "Sessions will not survive a restart and will break across workers."
     )
-guards = Guards(session_secret)
+# The guards ask the database whether a team is still active, so a team the
+# operator suspended or deleted stops working under cookies already issued
+# (D28). Cached briefly per team inside `Guards`.
+guards = Guards(session_secret, team_active=repository.team_is_active)
 # One throttle for every password check in the process. Keys are namespaced
 # (`boss:`, `employee:`, `settings:`), so sharing it couples nothing.
 login_throttle = LoginThrottle()
@@ -108,6 +112,17 @@ if not env.settings_password:
     _log.warning(
         "PAKASH_SETTINGS_PASSWORD is not set; the settings panel is locked."
     )
+# The צוות משמרות זהב console (D28). Its password defaults to the settings
+# password: the operator is the one person who already holds that.
+admin_password = env.admin_password or env.settings_password
+if not admin_password:
+    _log.warning(
+        "Neither PAKASH_ADMIN_PASSWORD nor PAKASH_SETTINGS_PASSWORD is set; "
+        "the operator console is locked."
+    )
+admin_service = AdminService(
+    repository, workspace_service, admin_password, store=store,
+)
 
 app = FastAPI(
     title="PakashAgent",
@@ -119,6 +134,12 @@ app.include_router(health.build_router(repository))
 app.include_router(
     workspace.build_router(
         workspace_service, guards, session_secret, env.session_days,
+        login_throttle, allow_signup=env.open_signup,
+    )
+)
+app.include_router(
+    admin.build_router(
+        admin_service, guards, session_secret, env.admin_session_hours,
         login_throttle,
     )
 )

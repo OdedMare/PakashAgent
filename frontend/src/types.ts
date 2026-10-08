@@ -489,9 +489,9 @@ export interface PlacementCandidate {
 
 /** One date the rotation speaks for.
  *
- *  A closure weekend runs Thursday to the Sunday morning handover, which is
- *  why the last date carries `until_handover` and names the `shifts` the
- *  stretch still covers. `groups` empty means no closure at all. */
+ *  Closure windows may start or end partway through a day. `shifts` names
+ *  the covered occurrences; empty means the whole day. `until_handover`
+ *  marks the tail after Saturday. `groups` empty means no closure. */
 export interface Closure {
   date: string;
   groups: { pattern: string; group: string; label: string }[];

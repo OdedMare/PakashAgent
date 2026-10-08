@@ -197,7 +197,7 @@ def test_an_error_that_is_not_a_wrong_password_does_not_count():
 def test_the_boss_login_locks_after_repeated_wrong_passwords():
     app = _app(workspace.build_router(
         WorkspaceService(_FakeRepo()), Guards(SECRET), SECRET, 30,
-        LoginThrottle(limit=3),
+        LoginThrottle(limit=3), allow_signup=True,
     ))
     client = TestClient(app, raise_server_exceptions=False)
     team = client.post(

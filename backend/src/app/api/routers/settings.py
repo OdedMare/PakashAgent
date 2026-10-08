@@ -18,23 +18,29 @@ settings password (`PAKASH_SETTINGS_PASSWORD`) in the `X-Settings-Password`
 header. Anyone can open a workspace and become its boss; only the operator
 knows this. Wrong guesses are throttled per workspace, and an unset password
 keeps the panel locked rather than open.
+
+The operator signed in to the צוות משמרות זהב console (D28) is admitted on
+that session alone: signing in there already took the operator password,
+which defaults to this one, and the console is where the system settings
+are managed from.
 """
 
 import hmac
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Cookie, Depends, Header
 
 from app.api.contracts import ModelsProbeRequest
 from app.common.errors.errors import AppError, ForbiddenError
+from app.common.sessions.sessions import ADMIN_COOKIE_NAME, COOKIE_NAME
 from app.common.throttle.throttle import LoginThrottle
 
 PASSWORD_HEADER = "X-Settings-Password"
 
 
 def _settings_guard(guards, password: str, throttle: LoginThrottle):
-    """The boss of some workspace who also knows the settings password."""
-    boss = guards.boss()
+    """The operator, or the boss of some workspace who also knows the
+    settings password."""
 
     def check(given: Optional[str]) -> None:
         if not password:
@@ -47,9 +53,16 @@ def _settings_guard(guards, password: str, throttle: LoginThrottle):
             raise ForbiddenError("סיסמת ההגדרות שגויה")
 
     def dependency(
-        session: dict = Depends(boss),
         given: Optional[str] = Header(default=None, alias=PASSWORD_HEADER),
+        team_cookie: Optional[str] = Cookie(default=None, alias=COOKIE_NAME),
+        admin_cookie: Optional[str] = Cookie(
+            default=None, alias=ADMIN_COOKIE_NAME
+        ),
     ) -> dict:
+        operator = guards.admin_session(admin_cookie)
+        if operator is not None:
+            return operator
+        session = guards.boss_session(team_cookie)
         throttle.attempt(
             "settings:%s" % session["team_id"], lambda: check(given)
         )

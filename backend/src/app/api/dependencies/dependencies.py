@@ -102,16 +102,28 @@ class Guards:
         def dependency(
             pakash_session: Optional[str] = Cookie(default=None, alias=COOKIE_NAME)
         ) -> dict:
-            session = read(self._secret, pakash_session)
-            if session is None:
-                raise AuthError("נדרשת התחברות")
-            # 401, not 403: the client answers it by returning to the login
-            # screen, which is right for a team that was suspended or deleted
-            # under an open session.
-            if not self.is_active(session["team_id"]):
-                raise AuthError(SUSPENDED_MESSAGE)
-            return session
+            return self.visitor_session(pakash_session)
         return dependency
+
+    def visitor_session(self, cookie: Optional[str]) -> dict:
+        """The team session behind a raw cookie value, or `AuthError`."""
+        session = read(self._secret, cookie)
+        if session is None:
+            raise AuthError("נדרשת התחברות")
+        # 401, not 403: the client answers it by returning to the login
+        # screen, which is right for a team that was suspended or deleted
+        # under an open session.
+        if not self.is_active(session["team_id"]):
+            raise AuthError(SUSPENDED_MESSAGE)
+        return session
+
+    def boss_session(self, cookie: Optional[str]) -> dict:
+        """`visitor_session`, narrowed to the boss -- for a guard that must
+        accept either a boss or the operator and so cannot `Depends(boss)`."""
+        session = self.visitor_session(cookie)
+        if session.get("role") != ROLE_BOSS:
+            raise AuthError("הפעולה מותרת למנהל בלבד")
+        return session
 
     def boss(self):
         """The boss of a workspace, and nobody else.

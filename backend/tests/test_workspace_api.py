@@ -36,8 +36,11 @@ def app_and_repo():
     repository = _FakeRepo()
     guards = Guards(SECRET)
     app = FastAPI()
+    # Self-service signup is off in production (D28); these tests open
+    # teams through it because they are about cookies and isolation, not
+    # about who may open a team. `test_admin_api.py` covers that.
     app.include_router(workspace.build_router(
-        WorkspaceService(repository), guards, SECRET, 30
+        WorkspaceService(repository), guards, SECRET, 30, allow_signup=True,
     ))
     app.include_router(interview.build_router(
         InterviewService(

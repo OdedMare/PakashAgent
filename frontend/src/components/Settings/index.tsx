@@ -58,7 +58,10 @@ export function SettingsPanel({ onClose, profile, onProfileSaved }: {
           <button type="button" aria-current={tab === "rotation" ? "page" : undefined} onClick={() => setTab("rotation")}>סבבים ותלתונים</button>
           <button type="button" aria-current={tab === "system" ? "page" : undefined} onClick={() => setTab("system")}>הגדרות מערכת</button>
         </nav> : null}
-        {tab === "rotation" && profile ? <RotationSettings profile={profile} onSaved={onProfileSaved ?? (() => undefined)} /> : <PanelContent settings={settings} />}
+        {profile ? <div className="rotation-settings-page" hidden={tab !== "rotation"}>
+          <RotationSettings profile={profile} onSaved={onProfileSaved ?? (() => undefined)} />
+        </div> : null}
+        {tab === "system" ? <PanelContent settings={settings} /> : null}
       </section>
     </div>
   );
