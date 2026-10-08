@@ -12,9 +12,14 @@ than blank white, and frosted `--glass` chrome — the sidebar, the chat drawer,
 the composer, dialogs — so the canvas reads through the edges. Colour has
 jobs: system blue `--primary` is the next action (filled controls use
 `--primary-fill`, which stays deep enough in dark mode for white text to clear
-4.5:1); the blue→indigo→violet→rose `--brand-gradient` marks the brand and the
-agent (brand mark, the composer's focus ring, the send button, the empty-chat
-heading); and four area hues (`--hue-blue|violet|teal|pink` plus `-soft`)
+4.5:1); the blue→indigo→violet→rose `--brand-gradient` marks the agent (the
+composer's focus ring, the send button, the empty-chat heading); **gold marks
+the product, משמרות זהב** — `--gold-gradient` paints every `.brand-mark` (with
+a dark `--on-gold` glyph, since white on gold fails contrast), `.brand-name`
+is the wordmark each header stacks over the workspace name, `src/app/icon.svg`
+is the favicon, and a warm gold wash sits in a corner of `--aurora`. Gold is
+identity, never status: it stays off the board, where amber means warning;
+and four area hues (`--hue-blue|violet|teal|pink` plus `-soft`)
 tint the nav, the drawer tabs, the chat starters and every row of stat tiles
 by position. Warning, danger and success are **not** area hues — they stay
 reserved for schedule meaning, so amber on the board always means "look at

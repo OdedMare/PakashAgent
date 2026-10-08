@@ -1,4 +1,7 @@
-# PakashAgent
+# משמרות זהב
+
+*Golden Shifts — codebase name `PakashAgent`; env vars, storage keys and the
+database keep the `pakash` prefix.*
 
 An agent that builds and maintains work shift schedules through conversation.
 
