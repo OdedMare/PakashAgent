@@ -17,6 +17,7 @@ from psycopg.types.json import Jsonb
 from app.common.errors.errors import ConflictError
 from app.dal.database.postgres import connect
 from app.dal.repository.base import RepositoryBase, new_id
+from app.dal.repository.seats import guard_seats
 
 
 class InterviewRepository(RepositoryBase):
@@ -105,6 +106,18 @@ class InterviewRepository(RepositoryBase):
             """, (session_id, team_id)).fetchone()
             if row and row["status"] == "complete":
                 raise ConflictError("הראיון כבר הושלם")
+            # Measured against the profile this interview replaces, so a
+            # re-interview of a team already over a lowered cap still lands.
+            current = connection.execute("""
+                SELECT profile FROM interview_sessions
+                WHERE team_id=%s AND status='complete' AND profile IS NOT NULL
+                ORDER BY updated_at DESC
+                LIMIT 1
+            """, (team_id,)).fetchone()
+            guard_seats(
+                connection, team_id, profile,
+                current["profile"] if current else None,
+            )
             connection.execute("""
                 UPDATE interview_sessions
                 SET status='complete', profile=%s, pending=NULL,
