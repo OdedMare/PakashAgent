@@ -49,14 +49,6 @@ export function formatBytes(bytes: number | undefined): string {
   return `${value.toFixed(value < 10 && unit > 0 ? 1 : 0)} ${units[unit]}`;
 }
 
-/** How full a team is against its cap: `ok`, `near` (90%+) or `over`. */
-export function seatState(used: number, cap: number | null): "ok" | "near" | "over" | "none" {
-  if (cap === null) return "none";
-  if (used > cap) return "over";
-  if (used >= cap * 0.9) return "near";
-  return "ok";
-}
-
 /** A manager password the operator can read aloud: no 0/O or 1/l. */
 export function generatePassword(): string {
   const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";

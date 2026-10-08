@@ -1,8 +1,8 @@
 /* The צוות משמרות זהב console (D28) — `/admin`.
    Same Aurora canvas and tokens as every other surface; gold is spent on the
    operator's identity (the crest, the brand, the one action a screen asks
-   for), never on status. Status keeps its schedule colours: amber for a team
-   near its cap, red for over it or suspended, green for active. */
+   for), never on status. Status keeps its schedule colours: red for a
+   suspended team, green for an active one. */
 
 .adm {
   min-height: 100vh;
@@ -208,10 +208,6 @@
 
 .adm-input-row input {
   flex: 1;
-}
-
-.adm-seat-field .adm-chips {
-  justify-self: start;
 }
 
 .adm-alert {
@@ -648,40 +644,13 @@
 .adm-pill.is-off { color: var(--danger); background: var(--danger-soft); }
 .adm-pill.is-setup { color: var(--text-soft); background: var(--surface-3); }
 
-.adm-seats {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-}
-
-.adm-seats-text {
-  font-size: 0.82rem;
-  color: var(--text-muted);
+.adm-count {
   font-variant-numeric: tabular-nums;
 }
 
-.adm-seats-text b {
-  color: var(--text);
+.adm-count b {
   font-size: 0.95rem;
 }
-
-.adm-seats-bar {
-  height: 5px;
-  overflow: hidden;
-  background: var(--surface-3);
-  border-radius: 999px;
-}
-
-.adm-seats-bar i {
-  display: block;
-  height: 100%;
-  background: var(--primary);
-  border-radius: inherit;
-}
-
-.adm-seats.is-near .adm-seats-bar i { background: var(--warning); }
-.adm-seats.is-over .adm-seats-bar i { background: var(--danger); }
-.adm-seats.is-over .adm-seats-text b { color: var(--danger); }
 
 /* -- drawer and dialog ---------------------------------------------------- */
 
@@ -1080,10 +1049,6 @@ a.gate-switch {
   .adm-row {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px 12px;
-  }
-
-  .adm-row > :nth-child(3) {
-    grid-column: 1 / -1;
   }
 
   .adm-row > [data-label] {

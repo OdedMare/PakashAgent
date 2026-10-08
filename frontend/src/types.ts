@@ -199,10 +199,9 @@ export interface AdminTeam {
   name: string;
   created_at: string;
   active: boolean;
-  /** null = no cap. */
-  max_employees: number | null;
   notes: string;
-  /** Employees who still hold a seat (departed ones excluded). */
+  /** Employees the manager listed who have not left. How many there are is
+   *  the manager's decision; the console only reports it. */
   employees: number;
   roster_total: number;
   has_profile: boolean;

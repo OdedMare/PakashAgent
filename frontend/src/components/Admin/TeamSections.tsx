@@ -67,57 +67,34 @@ function Feedback({ error, done }: { error: string | null; done: string | null }
 
 export function SettingsSection({ team, onChanged }: { team: AdminTeamDetail; onChanged: Changed }) {
   const [name, setName] = useState(team.name);
-  const [seats, setSeats] = useState(team.max_employees?.toString() ?? "");
   const [notes, setNotes] = useState(team.notes);
   const action = useAction();
 
-  const seatValue = seats.trim() === "" ? null : Number.parseInt(seats, 10);
-  const seatsValid = seatValue === null || (Number.isInteger(seatValue) && seatValue >= 1 && seatValue <= 5000);
-  const dirty = name.trim() !== team.name || seatValue !== team.max_employees || notes.trim() !== team.notes;
+  const dirty = name.trim() !== team.name || notes.trim() !== team.notes;
 
   const save = (event: FormEvent) => {
     event.preventDefault();
-    if (!dirty || !seatsValid || !name.trim()) return;
+    if (!dirty || !name.trim()) return;
     void action.run(async () => {
-      await onChanged(await adminUpdateTeam(team.id, {
-        name: name.trim(),
-        max_employees: seatValue,
-        notes: notes.trim(),
-      }));
+      await onChanged(await adminUpdateTeam(team.id, { name: name.trim(), notes: notes.trim() }));
     }, "נשמר");
   };
 
   return (
     <form className="adm-section" onSubmit={save}>
-      <h3>פרטי הצוות ומכסה</h3>
+      <h3>פרטי הצוות</h3>
       <label className="adm-field">
         <span>שם הצוות</span>
         <input value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
       </label>
       <label className="adm-field">
-        <span>מכסת עובדים</span>
-        <input
-          type="number"
-          inputMode="numeric"
-          min={1}
-          max={5000}
-          placeholder="ללא הגבלה"
-          value={seats}
-          aria-invalid={!seatsValid}
-          onChange={(event) => setSeats(event.target.value)}
-        />
-        <small>
-          כרגע {team.employees} עובדים פעילים. השאירו ריק לביטול ההגבלה. הורדה מתחת למספר הנוכחי לא
-          מוחקת אף אחד — רק מונעת הוספה.
-        </small>
-      </label>
-      <label className="adm-field">
         <span>הערה פנימית</span>
         <textarea rows={2} maxLength={500} value={notes} onChange={(event) => setNotes(event.target.value)} />
+        <small>נראית רק לצוות משמרות זהב.</small>
       </label>
       <Feedback error={action.error} done={action.done} />
       <div className="adm-section-actions">
-        <button type="submit" className="adm-gold-button" disabled={!dirty || !seatsValid || action.busy}>
+        <button type="submit" className="adm-gold-button" disabled={!dirty || action.busy}>
           <Save size={15} /> {action.busy ? "שומר…" : "שמירה"}
         </button>
       </div>

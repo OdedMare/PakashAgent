@@ -37,9 +37,8 @@ uvicorn app.main:app --app-dir src --reload
 - `bl/workspace_service/service.py` — workspace rules: who may enter a team, in which
   role, and what a new workspace inherits.
 - `bl/admin_service/` — the צוות משמרות זהב operator console (D28): opening,
-  re-capping, suspending and deleting teams. `dal/repository/admin.py` holds
-  its cross-team queries — the one deliberate exception to team scoping — and
-  `dal/repository/seats.py` the seat cap every roster write is checked against.
+  suspending and deleting teams. `dal/repository/admin.py` holds its
+  cross-team queries — the one deliberate exception to team scoping.
 - `api/dependencies/dependencies.py` — the route guards (`visitor`, `boss`,
   `employee`, `admin`). `visitor` also refuses a suspended or deleted team.
 - `common/sessions/sessions.py` — signed session cookies (HMAC-SHA256, no library).
@@ -256,10 +255,8 @@ package's `__init__` docstring carries a table of which module owns what.
   `POST /api/workspace` is 403 unless `PAKASH_OPEN_SIGNUP` is on; the console
   (`/api/admin`, `guards.admin()`) is the door. Its cookie is separate from the
   team cookie and neither reader accepts the other's role.
-- **A roster may not grow past the team's seat cap.** Checked in the same
-  transaction as the write, on all three writers (interview completion,
-  profile edit, approved chat plan); lowering a cap never blocks an edit that
-  does not add people.
+- **The operator never decides headcount.** Opening a team takes a name and
+  a password; the roster, and how many people are on it, is the manager's.
 - **`PAKASH_SESSION_SECRET` must be set in any real deployment.** Unset, each
   worker signs with its own key and rejects the others' cookies.
 - **The interview has two doors, and only a person opens the second one.**

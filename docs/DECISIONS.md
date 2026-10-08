@@ -857,16 +857,16 @@ for that door to close, and for one place to control the whole system.
   credential. Both empty keeps the console locked.
 - **`POST /api/workspace` answers 403** unless `PAKASH_OPEN_SIGNUP=true`. The
   login page no longer offers to open a team; it says who does.
-- **The operator opens a team on its behalf** — name, the first manager
-  password (shown once, then only its hash exists), an optional **seat cap**
-  and a private note — and can later rename, re-cap, reset the manager
-  password, rotate the share link, release a claimed name, **suspend** and
-  **delete**.
-- **The seat cap is enforced on every roster write** (`dal/repository/seats.py`):
-  the interview completing, the profile editor, an approved chat plan. Only
-  *growth* past the cap is refused, so a team whose cap was lowered can still
-  edit and remove people. A departed employee (`inactive_from` ≤ today) does
-  not hold a seat.
+- **The operator opens a team with a name and a password, nothing more.**
+  The first manager password is shown once on a hand-over card, then only its
+  hash exists. Afterwards the operator can rename the team, keep a private
+  note on it, reset the manager password, rotate the share link, release a
+  claimed name, **suspend** and **delete** — and sees every team's numbers:
+  employees, claimed identities, periods, pending requests, last activity.
+- **How many employees a team has is the manager's decision.** The console
+  reports the count (a departed employee is listed, not counted) and never
+  limits it. A per-team seat cap was built and removed the same day at the
+  boss's direction: the operator opens the door, the manager runs the room.
 - **A suspended team is refused at every door and under every open session.**
   `Guards.visitor()` asks the database whether the team is active (cached ten
   seconds per process, cleared at once by the console), because a signed
@@ -890,11 +890,6 @@ for that door to close, and for one place to control the whole system.
   console's queries are the one deliberate exception — cross-team by design —
   and they live in one mixin, `dal/repository/admin.py`, so the exception is
   a single file to review. None returns a password or passcode hash.
-
-*Why the cap is enforced in `dal/` rather than `bl/`:* three different
-writers put a roster into the database, and a rule each of them must remember
-is a rule one of them forgets. It is a quota checked in the same transaction
-as the write, the same class of thing as a UNIQUE constraint.
 
 *Why deleting may remove `change_log` rows when D4 says never to:* D4 is about
 a living schedule's history while the team exists. Deleting the team is the

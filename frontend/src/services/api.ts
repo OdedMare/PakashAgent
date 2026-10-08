@@ -256,10 +256,11 @@ export const adminMe = () => request<{ role: string; expires: number }>("/api/ad
 export const adminOverview = () => request<AdminOverview>("/api/admin/overview");
 export const adminTeams = () => request<AdminTeam[]>("/api/admin/teams");
 export const adminTeam = (id: string) => request<AdminTeamDetail>(`/api/admin/teams/${encodeURIComponent(id)}`);
-export const adminCreateTeam = (input: { name: string; password: string; max_employees: number | null; notes: string }) =>
+/** A name and the first manager password — the roster is the manager's. */
+export const adminCreateTeam = (input: { name: string; password: string }) =>
   request<AdminTeamDetail>("/api/admin/teams", { method: "POST", body: JSON.stringify(input) });
-/** Only the keys present are applied; `max_employees: null` removes the cap. */
-export const adminUpdateTeam = (id: string, patch: Partial<{ name: string; max_employees: number | null; active: boolean; notes: string }>) =>
+/** Only the keys present are applied. */
+export const adminUpdateTeam = (id: string, patch: Partial<{ name: string; active: boolean; notes: string }>) =>
   request<AdminTeamDetail>(`/api/admin/teams/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
 export const adminResetPassword = (id: string, password: string) =>
   request<{ status: string }>(`/api/admin/teams/${encodeURIComponent(id)}/password`, { method: "POST", body: JSON.stringify({ password }) });

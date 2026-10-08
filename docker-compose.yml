@@ -30,6 +30,12 @@ services:
       # the committed default (same as settings.py) -- an empty value here
       # would override it and lock the panel. Override it in .env.
       PAKASH_SETTINGS_PASSWORD: ${PAKASH_SETTINGS_PASSWORD:-010802}
+      # The צוות משמרות זהב console at /admin (D28). Empty = same as the
+      # settings password above.
+      PAKASH_ADMIN_PASSWORD: ${PAKASH_ADMIN_PASSWORD:-}
+      # Self-service team creation from the login page. Off: the console
+      # opens teams.
+      PAKASH_OPEN_SIGNUP: ${PAKASH_OPEN_SIGNUP:-false}
       # The model runs on the host, not in the compose network.
       PAKASH_LLM_BASE_URL: ${PAKASH_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       PAKASH_LLM_MODEL: ${PAKASH_LLM_MODEL:-gemma3:27b}

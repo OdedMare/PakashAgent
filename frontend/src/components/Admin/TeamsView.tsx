@@ -16,7 +16,7 @@ import { useMemo, useState } from "react";
 import type { AdminTeam } from "@/types";
 
 import { CreateTeamDialog } from "./CreateTeamDialog";
-import { formatDate, formatRelative, seatState } from "./format";
+import { formatDate, formatRelative } from "./format";
 import { TeamDrawer } from "./TeamDrawer";
 import type { AdminState } from "./useAdmin";
 
@@ -99,7 +99,7 @@ export function TeamsView({ state }: { state: AdminState }) {
           <div className="adm-empty">
             <Building2 size={22} aria-hidden="true" />
             <strong>{teams.length === 0 ? "עדיין לא נפתח אף צוות" : "אין צוותים שמתאימים לחיפוש"}</strong>
-            {teams.length === 0 ? <span>פתחו את הצוות הראשון, וקבעו כמה עובדים הוא יכול לנהל.</span> : null}
+            {teams.length === 0 ? <span>פתחו את הצוות הראשון: שם וסיסמה, והמנהל ממשיך משם.</span> : null}
           </div>
         ) : (
           <TeamTable teams={visible} onOpen={setOpenId} />
@@ -164,7 +164,7 @@ function TeamTable({ teams, onOpen }: { teams: AdminTeam[]; onOpen: (id: string)
       <div className="adm-row is-head" aria-hidden="true">
         <span>צוות</span>
         <span>מצב</span>
-        <span>עובדים / מכסה</span>
+        <span>עובדים</span>
         <span>כניסות אישיות</span>
         <span>תקופות</span>
         <span>פעילות אחרונה</span>
@@ -185,8 +185,8 @@ function TeamTable({ teams, onOpen }: { teams: AdminTeam[]; onOpen: (id: string)
           <span>
             <StatusPill team={team} />
           </span>
-          <span>
-            <SeatMeter used={team.employees} cap={team.max_employees} />
+          <span data-label="עובדים">
+            <EmployeeCount team={team} />
           </span>
           <span data-label="כניסות אישיות">{team.identities}</span>
           <span data-label="תקופות">
@@ -211,19 +211,14 @@ export function StatusPill({ team }: { team: AdminTeam }) {
   return <span className="adm-pill is-on">פעיל</span>;
 }
 
-export function SeatMeter({ used, cap }: { used: number; cap: number | null }) {
-  const state = seatState(used, cap);
-  const share = cap ? Math.min(100, Math.round((used / cap) * 100)) : 0;
+/** How many people the manager has on the team — reported, never limited
+ *  here. Departed employees are mentioned, not counted. */
+export function EmployeeCount({ team }: { team: AdminTeam }) {
+  const departed = team.roster_total - team.employees;
   return (
-    <span className={`adm-seats is-${state}`}>
-      <span className="adm-seats-text">
-        <b>{used}</b> / {cap === null ? "ללא הגבלה" : cap}
-      </span>
-      {cap !== null ? (
-        <span className="adm-seats-bar" aria-hidden="true">
-          <i style={{ width: `${share}%` }} />
-        </span>
-      ) : null}
+    <span className="adm-count">
+      <b>{team.employees}</b>
+      {departed > 0 ? <small> · {departed} סיימו</small> : null}
     </span>
   );
 }

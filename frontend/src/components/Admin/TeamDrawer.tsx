@@ -8,7 +8,7 @@ import type { AdminTeamDetail } from "@/types";
 
 import { formatDate } from "./format";
 import { DangerZone } from "./DangerZone";
-import { StatusPill, SeatMeter } from "./TeamsView";
+import { EmployeeCount, StatusPill } from "./TeamsView";
 import { AccessSection, ActivitySection, PeopleSection, SettingsSection } from "./TeamSections";
 
 /** One workspace in full, beside the list rather than over it, so the
@@ -95,7 +95,7 @@ export function TeamDrawer({
         {team ? (
           <div className="adm-drawer-body">
             <div className="adm-mini-stats">
-              <div><small>עובדים</small><SeatMeter used={team.employees} cap={team.max_employees} /></div>
+              <div><small>עובדים</small><strong><EmployeeCount team={team} /></strong></div>
               <div><small>משמרות מוגדרות</small><strong>{team.shifts}</strong></div>
               <div><small>כניסות אישיות</small><strong>{team.identities}</strong></div>
               <div><small>בקשות ממתינות</small><strong>{team.pending_requests + team.pending_swaps}</strong></div>
@@ -104,7 +104,7 @@ export function TeamDrawer({
                 elsewhere) remounts the form with them rather than syncing
                 props into state. */}
             <SettingsSection
-              key={`${team.id}:${team.name}:${team.max_employees}:${team.notes}`}
+              key={`${team.id}:${team.name}:${team.notes}`}
               team={team}
               onChanged={changed}
             />

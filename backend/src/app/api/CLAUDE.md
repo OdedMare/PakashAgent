@@ -13,7 +13,7 @@ the team scoping.
 | Router | Serves |
 |---|---|
 | `workspace.py` | Enter a workspace, the member share link, logout. Creating one is refused unless `allow_signup` (D28) |
-| `admin.py` | The צוות משמרות זהב console (D28): operator sign-in, every team with its counts, open/edit/suspend/delete a team, reset its manager password, rotate its link |
+| `admin.py` | The צוות משמרות זהב console (D28): operator sign-in, every team with its counts, open (name + password)/rename/suspend/delete a team, reset its manager password, rotate its link |
 | `interview.py` | The intro interview, one turn at a time |
 | `schedules/` | The management area: read/generate a period, open one blank and fill it by hand (D18), propose and apply changes, constraints, history, plus asking (`/ask`, `/tool`), simulating (`/simulate`) and preferences (D19–D21) |
 | `imports.py` | Upload a file, return the inferred interpretation, commit on confirm |
@@ -98,9 +98,9 @@ The only exceptions are the two logins that *issue* that cookie,
 `POST /api/workspace/login` and `POST /api/employee/signin` (D25). Each one
 checks a credential for the team it names before signing anything.
 
-`/api/settings` is process-wide; it admits the operator on its session, or a
-boss who also sends the settings password. It is — it holds the database
-credentials and the model key. See [D10](../../../docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)
+`/api/settings` is process-wide — it holds the database credentials and the
+model key — and admits the operator on its own session, or a boss who also
+sends the settings password. See [D10](../../../docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)
 for why it is not per-team yet.
 
 ## Asking, simulating, remembering

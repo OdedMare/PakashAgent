@@ -10,6 +10,9 @@ import { generatePassword } from "./format";
 
 /** Opening a workspace on a team's behalf (D28).
  *
+ *  A name and the first manager password, nothing else: who is on the team,
+ *  and how many, is the manager's to set up once they are inside.
+ *
  *  Two screens: the form, then a hand-over card with what the manager needs
  *  — the team name, the password, and where to sign in. The password is shown
  *  once, here; the server keeps only its hash, and the manager can change it
@@ -23,9 +26,6 @@ export function CreateTeamDialog({
 }) {
   const [name, setName] = useState("");
   const [password, setPassword] = useState(generatePassword);
-  const [limited, setLimited] = useState(true);
-  const [seats, setSeats] = useState("30");
-  const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<AdminTeamDetail | null>(null);
@@ -36,9 +36,7 @@ export function CreateTeamDialog({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const seatCount = Number.parseInt(seats, 10);
-  const seatsValid = !limited || (Number.isInteger(seatCount) && seatCount >= 1 && seatCount <= 5000);
-  const canSubmit = name.trim().length > 0 && password.length >= 6 && seatsValid && !busy;
+  const canSubmit = name.trim().length > 0 && password.length >= 6 && !busy;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -46,12 +44,7 @@ export function CreateTeamDialog({
     setBusy(true);
     setError(null);
     try {
-      const team = await adminCreateTeam({
-        name: name.trim(),
-        password,
-        max_employees: limited ? seatCount : null,
-        notes: notes.trim(),
-      });
+      const team = await adminCreateTeam({ name: name.trim(), password });
       setCreated(team);
       await onCreated();
     } catch (reason) {
@@ -125,46 +118,9 @@ export function CreateTeamDialog({
               <small>לפחות 6 תווים. המנהל יוכל לשנות אותה בעצמו.</small>
             </label>
 
-            <fieldset className="adm-field adm-seat-field">
-              <legend>כמה עובדים</legend>
-              <div className="adm-chips" role="radiogroup" aria-label="מכסת עובדים">
-                <button type="button" role="radio" aria-checked={limited} onClick={() => setLimited(true)}>
-                  מכסה קבועה
-                </button>
-                <button type="button" role="radio" aria-checked={!limited} onClick={() => setLimited(false)}>
-                  ללא הגבלה
-                </button>
-              </div>
-              {limited ? (
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={1}
-                  max={5000}
-                  value={seats}
-                  onChange={(event) => setSeats(event.target.value)}
-                  aria-label="מספר העובדים המרבי"
-                  aria-invalid={!seatsValid}
-                  disabled={busy}
-                />
-              ) : null}
-              <small>
-                עובדים שסיימו לא נספרים. הצוות לא יוכל להוסיף עובדים מעבר למכסה; אפשר לשנות אותה בכל רגע.
-              </small>
-            </fieldset>
-
-            <label className="adm-field">
-              <span>הערה פנימית <em>(רשות)</em></span>
-              <textarea
-                rows={2}
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                placeholder="איש קשר, יחידה, תאריך חידוש…"
-                maxLength={500}
-                disabled={busy}
-              />
-              <small>נראית רק לצוות משמרות זהב.</small>
-            </label>
+            <p className="adm-muted">
+              את העובדים, את מספרם ואת המשמרות מגדיר מנהל הצוות אחרי הכניסה הראשונה.
+            </p>
 
             {error ? (
               <div className="adm-alert is-danger" role="alert">
@@ -202,7 +158,6 @@ function HandOver({
     `צוות: ${team.name}`,
     `סיסמת מנהל: ${password}`,
     `כניסה: ${address}`,
-    team.max_employees ? `מכסת עובדים: ${team.max_employees}` : "מכסת עובדים: ללא הגבלה",
   ].join("\n");
 
   const copy = async () => {
@@ -220,7 +175,6 @@ function HandOver({
         <div><dt>צוות</dt><dd>{team.name}</dd></div>
         <div><dt>סיסמת מנהל</dt><dd dir="ltr">{password}</dd></div>
         <div><dt>כתובת כניסה</dt><dd dir="ltr">{address}</dd></div>
-        <div><dt>מכסת עובדים</dt><dd>{team.max_employees ?? "ללא הגבלה"}</dd></div>
       </dl>
       <p className="adm-muted">הסיסמה מוצגת עכשיו בלבד. אם תאבד, אפשר לקבוע חדשה מכרטיס הצוות.</p>
       <footer className="adm-dialog-foot">
