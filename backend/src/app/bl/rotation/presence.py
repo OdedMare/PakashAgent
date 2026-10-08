@@ -3,7 +3,7 @@
 import datetime
 
 from app.bl.rotation.closures import closure_days, holds
-from app.bl.rotation.vocabulary import cycle_of_group, exit_pattern, groups_for, text
+from app.bl.rotation.vocabulary import cycle_of_group, exit_pattern, groups_for, parse_date, text
 from app.bl.shared.hebrew_calendar import hebrew_weekday, weekday_key
 
 
@@ -14,11 +14,14 @@ def presence_status(profile, person, slot):
     pattern = exit_pattern(profile, person)
     pattern = pattern if groups_for(pattern) else cycle_of_group(profile, text(person.get("rotation_group")))
     date, shift = slot["slot_date"], slot["shift_name"]
+    day = parse_date(date)
+    if day is None:
+        return None
     matches = [rule for rule in (profile.get("workplace") or {}).get("rotation_presence") or []
                if rule.get("pattern") == pattern and rule.get("group") == person.get("rotation_group")
                and (not rule.get("starts_on") or rule["starts_on"] <= date)
                and (not rule.get("ends_on") or rule["ends_on"] >= date)
-               and (not rule.get("days") or weekday_key(hebrew_weekday(datetime.date.fromisoformat(date)))
+               and (not rule.get("days") or weekday_key(hebrew_weekday(day))
                     in {weekday_key(day) for day in rule["days"]})
                and (not rule.get("shifts") or shift in rule["shifts"])]
     if not matches:
@@ -40,11 +43,14 @@ def closure_status(profile, person, slot):
     if not group:
         return None
     lookup = pattern if groups_for(pattern) else cycle_of_group(profile, group)
-    day = datetime.date.fromisoformat(slot["slot_date"])
+    day = parse_date(slot["slot_date"])
+    if day is None:
+        return None
+    claims = []
     for owner in groups_for(lookup) or ():
         probe = dict(exit_pattern=lookup, rotation_group=owner)
         for row in closure_days(profile, probe, day, day):
             if (row["until_handover"] or row.get("restricted_shifts")) and slot["shift_name"] not in row["shifts"]:
                 continue
-            return owner == group and holds(profile, person, day, slot["shift_name"])
-    return None
+            claims.append(owner == group and holds(profile, person, day, slot["shift_name"]))
+    return all(claims) if claims else None

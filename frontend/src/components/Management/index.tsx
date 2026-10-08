@@ -425,8 +425,8 @@ export function Management({
             type="button"
             className="icon-button"
             onClick={() => setSettingsOpen(true)}
-            aria-label="הגדרות מערכת"
-            title="הגדרות מערכת"
+            aria-label="הגדרות וסבבים"
+            title="הגדרות וסבבים"
           >
             <Settings2 size={17} />
           </button>
@@ -826,7 +826,7 @@ export function Management({
       ) : null}
 
       {settingsOpen ? (
-        <SettingsPanel onClose={() => setSettingsOpen(false)} profile={overview?.profile} onProfileSaved={state.refresh} />
+        <SettingsPanel onClose={() => setSettingsOpen(false)} profile={overview?.profile ?? undefined} onProfileSaved={state.refresh} />
       ) : null}
     </div>
   );

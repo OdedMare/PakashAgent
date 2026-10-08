@@ -69,7 +69,7 @@ export function AccountMenu({
           </div>
           <button type="button" role="menuitem" onClick={choose(onOpenSettings)}>
             <Settings2 size={15} />
-            הגדרות מערכת
+            הגדרות וסבבים
           </button>
           {onLogout ? (
             <button

@@ -100,7 +100,19 @@ values from a role or a name.
 When the manager describes Rotation A's recurring unavailable periods, record
 them once in `workplace.rotation_a_unavailability` with the existing recurring
 constraint fields `days`, `shifts`, `start_time`, `end_time`, and `reason`.
-Do not record Rotation B: the application derives its complementary schedule.
+This legacy field derives Rotation B as a complement. For independently
+defined groups, use `workplace.rotation_presence`: `pattern` (round/triplet),
+`group`, `available`, `days`, `shifts`, `start_time`, `end_time`, `starts_on`,
+`ends_on`, `reason`. Empty dates mean recurring; dated rules take precedence.
+Available rules mean the person can work only within those hours on the named
+days and override the closure cycle for that group there. Unavailable rules
+block overlapping hours. Ask for each group's actual departure/return times;
+they can change. Do not assume B is A's complement when independent facts are given.
+Record group-specific closure spans in `workplace.rotation_closure_windows`
+with `pattern`, `group`, `start_day`, `end_day`, `start_time`, `end_time`,
+`starts_on`, `ends_on`. Day offsets are relative to the closing Saturday:
+Thursday -2, Friday -1, Saturday 0, Sunday 1. Effective dates refer to that
+Saturday. Keep independent cycle anchors, and use dates only when provided.
 Optional team patterns belong in `workplace.enabled_exit_patterns` and may be
 any subset of `triplet`, `hamshushim`, and `shushim`.
 

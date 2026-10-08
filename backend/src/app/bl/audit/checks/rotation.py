@@ -13,7 +13,8 @@ from app.bl.audit.values import text
 class CrossRotationCheck(AuditCheck):
     def run(self, data: AuditInput) -> List[dict]:
         people = index_people(data.profile.get("employees"))
-        shifts = {text(shift.get("name")): shift for shift in data.profile.get("shifts") or []}
+        profile = dict(data.profile, shifts=data.shifts)
+        shifts = data.shift_index
         warnings = []
         for row in data.rows:
             name, date, shift = text(row.get("employee")), text(row.get("date")), text(row.get("shift"))
@@ -21,9 +22,9 @@ class CrossRotationCheck(AuditCheck):
             if person is None or not date:
                 continue
             slot = dict(shifts.get(shift) or {}, slot_date=date, shift_name=shift)
-            status = presence_status(data.profile, person, slot)
+            status = presence_status(profile, person, slot)
             if status is None:
-                status = closure_status(data.profile, person, slot)
+                status = closure_status(profile, person, slot)
             if status is False:
                 warnings.append(warning(
                     CROSS_ROTATION, SEVERITY_WARNING,
