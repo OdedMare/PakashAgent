@@ -36,7 +36,12 @@ uvicorn app.main:app --app-dir src --reload
   hashing (`scrypt`, stdlib) and the member share token.
 - `bl/workspace_service/service.py` — workspace rules: who may enter a team, in which
   role, and what a new workspace inherits.
-- `api/dependencies/dependencies.py` — the route guards (`visitor`, `boss`).
+- `bl/admin_service/` — the צוות משמרות זהב operator console (D28): opening,
+  re-capping, suspending and deleting teams. `dal/repository/admin.py` holds
+  its cross-team queries — the one deliberate exception to team scoping — and
+  `dal/repository/seats.py` the seat cap every roster write is checked against.
+- `api/dependencies/dependencies.py` — the route guards (`visitor`, `boss`,
+  `employee`, `admin`). `visitor` also refuses a suspended or deleted team.
 - `common/sessions/sessions.py` — signed session cookies (HMAC-SHA256, no library).
 - `bl/interview/` — the intro interview, one `plan-chat` turn at a time
   (ported from AiSummryIO). Collects the workplace profile, employees, rules
@@ -247,6 +252,14 @@ package's `__init__` docstring carries a table of which module owns what.
   would let any signed-in employee read a colleague's hours and stated reasons.
 - **Every workplace-owned read is scoped by `team_id`, taken from the signed
   session cookie** and never from the request ([D10](../docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)).
+- **Only the operator opens a team** ([D28](../docs/DECISIONS.md)).
+  `POST /api/workspace` is 403 unless `PAKASH_OPEN_SIGNUP` is on; the console
+  (`/api/admin`, `guards.admin()`) is the door. Its cookie is separate from the
+  team cookie and neither reader accepts the other's role.
+- **A roster may not grow past the team's seat cap.** Checked in the same
+  transaction as the write, on all three writers (interview completion,
+  profile edit, approved chat plan); lowering a cap never blocks an edit that
+  does not add people.
 - **`PAKASH_SESSION_SECRET` must be set in any real deployment.** Unset, each
   worker signs with its own key and rejects the others' cookies.
 - **The interview has two doors, and only a person opens the second one.**

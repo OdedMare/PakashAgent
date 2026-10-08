@@ -20,7 +20,7 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
   draft?: string; draftKey?: number; boardBusy: boolean; hidden?: boolean; onClearFocus?: () => void;
   onPreview: (proposal: Proposal | null) => void; onOpenReceipt: (date: string) => void; onImport: () => void;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => readDraft(agent.chat?.id));
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
@@ -35,7 +35,6 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
   const [conversationId, setConversationId] = useState(agent.chat?.id);
   if (conversationId !== agent.chat?.id) {
     setConversationId(agent.chat?.id); setText(readDraft(agent.chat?.id)); setRevising(false); setDeleteOpen(false);
-    pinned.current = true;
   }
   useEffect(() => {
     if (!conversationId) return;
@@ -62,6 +61,7 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
   }, [preview, last?.content, onPreview]);
   const messageCount = messages.length;
   const lastStatus = last?.status;
+  useEffect(() => { pinned.current = true; }, [agent.chat?.id]);
   useEffect(() => {
     if (log.current && !hidden && pinned.current) log.current.scrollTop = log.current.scrollHeight;
   }, [messageCount, lastStatus, last?.content, last?.payload.steps?.length, agent.chat?.id, hidden]);

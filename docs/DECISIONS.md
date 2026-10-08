@@ -126,6 +126,9 @@ The two sides authenticate differently, on purpose:
 
 - **The boss** picks a password when the workspace is created. It is what
   authorizes authoring — the interview, the settings, and later the schedule.
+  *(Amended by [D28](#d28--teams-are-opened-by-צוות-משמרות-זהב-not-by-whoever-reaches-the-login-page-️-amends-d10):
+  the operator, צוות משמרות זהב, now opens the workspace and sets the first
+  password; the boss can change it from then on.)*
 - **Members** get an unguessable share link (`/team/<token>`) and no account at
   all. Following it grants a read-only session.
 

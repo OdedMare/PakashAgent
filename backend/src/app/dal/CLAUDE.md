@@ -69,7 +69,7 @@ same call. Add a new guarded migration after its own `COMMIT`.
 
 | Table | Holds |
 |---|---|
-| `teams` | One workspace: name, the boss's password hash, the member share token |
+| `teams` | One workspace: name, the boss's password hash, the member share token — plus the operator's controls (D28): `max_employees` (seat cap, NULL = none), `active` (FALSE = suspended), `notes` |
 | `interview_sessions` | One intro interview: its **team**, status, the confirmed profile, the pending question |
 | `interview_turns` | Each turn; assistant turns keep the options they offered as `payload` |
 | `schedules` | One living schedule per period, `draft` or `published` |
@@ -93,6 +93,13 @@ the interview owns its shape.
   to guess, but "hard to guess" is not an access control — one workspace's boss
   holding another's session id must still get a 404. `InterviewRepository` is
   the worked example: the team is a required argument, not an optional filter.
+- **`admin.py` is the one module whose reads cross teams**, for the operator
+  console (D28). Keep every cross-team query there, name the `teams` columns
+  explicitly, and never return a hash.
+- **The seat cap is checked in `seats.py`, inside the writing transaction.**
+  Any new code path that writes a profile's `employees` must call
+  `guard_seats` the way `update_team_profile`, `create_team_profile` and
+  `InterviewRepository.complete` do.
 - **A cross-team miss is a `NotFoundError`, never a distinct "wrong team".**
   Distinguishing them turns any id-taking endpoint into an oracle for which
   rows exist in workspaces the caller cannot see.

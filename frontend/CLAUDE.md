@@ -106,7 +106,8 @@ import screen. All surfaces exist.
 
 | Surface | Purpose |
 |---|---|
-| Workspace gate | Pick the team, then the manager or worker door; team creation — `src/components/Workspace/` |
+| Workspace gate | Pick the team, then the manager or worker door — `src/components/Workspace/`. No team creation here (D28) |
+| Operator console | `/admin` — צוות משמרות זהב: every team with its counts, open/edit/suspend/delete, seat caps, the system settings — `src/components/Admin/` |
 | Member area | The employee's read-only surface — `MemberArea.tsx` |
 | Interview | The intro conversation, one question per turn — `src/components/Interview/` |
 | Management | The manager's control room — `src/components/Management/` |
@@ -288,6 +289,13 @@ replaces the profile everything downstream reads.
   claiming still goes through the share link's `IdentityGate`. Do not put a
   roster picker here: this page is public, and a picker would publish every
   team's names.
+- **Teams are opened at `/admin`, not here** ([D28](../docs/DECISIONS.md)).
+  The gate says so and links to the console. The console has its own
+  HttpOnly cookie, so an operator can also be signed in to a team in the same
+  browser; `useAdmin` asks `/api/admin/me` for the same reason `useWorkspace`
+  asks `/me`. Its "מערכת" tab renders `SystemSettings`, which unlocks on the
+  operator session with no settings password. The new team's manager password
+  is shown once on the hand-over card and never again.
 - **The member share link is `/team/<token>`.** `MemberEntry` exchanges the
   token for a cookie and then `replaceState`s it out of the URL, so the
   credential stops travelling in the address bar and the back stack.

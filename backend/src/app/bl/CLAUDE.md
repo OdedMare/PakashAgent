@@ -14,6 +14,7 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | `interview/` | The intro interview — workplace profile, employees, rules, shift vocabulary |
 | `interview_service/` | Persistence around it: sessions, turns, resume, completion |
 | `workspace_service/` | Workspace rules: entering a team, roles, the share link |
+| `admin_service/` | **The צוות משמרות זהב console** (D28): operator sign-in, opening, re-capping, suspending and deleting teams |
 | `scheduler/` | Checkpointed range generation, one date or one week per call; every assignment carries a reason |
 | `changes/` | Conversational edits and the change log |
 | `briefing/` | **The agent speaking first.** Observes; proposes nothing that lands |

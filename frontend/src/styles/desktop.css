@@ -104,7 +104,7 @@
   .management-workspace.has-drawer .manager-drawer-backdrop { display: none; }
   .manager-chat-resizer { display: grid; }
   .conversation-toolbar { padding: 12px 20px 6px; }
-  .conversation-context { padding-inline: 20px; }
+.conversation-context { padding-inline: 20px; }
   .conversation-log { padding: 28px 24px; }
   .conversation-log:has(.conversation-empty) { display: flex; align-items: center; }
   .management .board-head { gap: 10px; }

@@ -12,7 +12,8 @@ the team scoping.
 
 | Router | Serves |
 |---|---|
-| `workspace.py` | Create/enter a workspace, the member share link, logout |
+| `workspace.py` | Enter a workspace, the member share link, logout. Creating one is refused unless `allow_signup` (D28) |
+| `admin.py` | The צוות משמרות זהב console (D28): operator sign-in, every team with its counts, open/edit/suspend/delete a team, reset its manager password, rotate its link |
 | `interview.py` | The intro interview, one turn at a time |
 | `schedules/` | The management area: read/generate a period, open one blank and fill it by hand (D18), propose and apply changes, constraints, history, plus asking (`/ask`, `/tool`), simulating (`/simulate`) and preferences (D19–D21) |
 | `imports.py` | Upload a file, return the inferred interpretation, commit on confirm |
@@ -68,6 +69,10 @@ and a new route added under the wrong prefix silently inherits the wrong guard.
 - `guards.boss()` — the boss only. **Every schedule-mutating route depends on
   it**, so neither a member nor a signed-in employee can reach a write no
   matter which URL it is pointed at.
+- `guards.admin()` — the operator, on its own `pakash_admin` cookie (D28).
+  Never satisfied by a team cookie, and a team guard is never satisfied by
+  it. The console's routes are the only ones that take a team id from the
+  path, because the operator acts on every team by design.
 - `guards.employee()` — a signed-in employee acting as themselves
   ([D14](../../../docs/DECISIONS.md)). Admits exactly one write, a constraint
   *request*, and nothing that touches a schedule. The identity comes from
@@ -93,7 +98,8 @@ The only exceptions are the two logins that *issue* that cookie,
 `POST /api/workspace/login` and `POST /api/employee/signin` (D25). Each one
 checks a credential for the team it names before signing anything.
 
-`/api/settings` is boss-only and process-wide — it holds the database
+`/api/settings` is process-wide; it admits the operator on its session, or a
+boss who also sends the settings password. It is — it holds the database
 credentials and the model key. See [D10](../../../docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)
 for why it is not per-team yet.
 
