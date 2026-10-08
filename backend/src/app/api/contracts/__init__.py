@@ -12,6 +12,14 @@ from app.api.contracts.interview import (  # noqa: F401
     Option,
     Question,
 )
+from app.api.contracts.admin import (  # noqa: F401
+    AdminCreateTeamRequest,
+    AdminDeleteRequest,
+    AdminLoginRequest,
+    AdminPasswordRequest,
+    AdminReleaseRequest,
+    AdminUpdateTeamRequest,
+)
 from app.api.contracts.settings import (  # noqa: F401
     ModelsProbeRequest,
 )

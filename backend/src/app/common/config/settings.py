@@ -214,4 +214,21 @@ class Settings(BaseSettings):
     opens out of the box; override it with `PAKASH_SETTINGS_PASSWORD` in any
     real deployment. Set to empty, the panel stays locked."""
 
+    admin_password: str = ""
+    """Password of the צוות משמרות זהב operator console (`/admin`, D28).
+
+    Empty -- the default -- means "the same as `settings_password`": the
+    operator is the one person who already holds that password, and the
+    console is where the settings now live too. Set it to give the console a
+    credential of its own. If both are empty the console stays locked."""
+
+    admin_session_hours: int = 12
+    """How long an operator stays signed in. Short, because that session can
+    delete every workspace on the server."""
+
+    open_signup: bool = False
+    """Whether anyone may open a workspace from the login page. Off by
+    default: teams are opened by the operator (D28). Turn on only for an
+    install that genuinely wants self-service teams."""
+
     runtime_settings_file: str = "runtime-settings.json"
