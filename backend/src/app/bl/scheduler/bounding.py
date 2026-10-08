@@ -83,12 +83,14 @@ def _usable(
 
 
 def required_assignments(
-    offered: Any, slots: List[dict], profile: dict
+    offered: Any, slots: List[dict], profile: dict,
+    availability: Optional[List[dict]] = None,
 ) -> List[dict]:
     """Validate and pin the placements explicitly chosen by the manager."""
     if not offered:
         return []
-    known_slots = {(slot["shift_name"], slot["slot_date"]) for slot in slots}
+    known_slots = {(slot["shift_name"], slot["slot_date"]): slot for slot in slots}
+    rotation_rows = [row for row in availability or [] if row.get("source") in ROTATION_SOURCES]
     people = {
         bounded(person.get("name"))
         for person in (profile or {}).get("employees") or []
@@ -109,6 +111,11 @@ def required_assignments(
             raise AgentError("העובד שנבחר סיים את העבודה לפני המשמרת המבוקשת")
         if key[1:] not in known_slots:
             raise AgentError("המשמרת שנבחרה לשיבוץ החובה אינה קיימת בשבוע הזה")
+        slot = known_slots[key[1:]]
+        placed = dict(employee=key[0], shift=key[1], date=key[2],
+                      start_time=slot.get("start_time"), end_time=slot.get("end_time"))
+        if any(constraint_conflicts(placed, row) for row in rotation_rows):
+            raise AgentError("שיבוץ החובה של %s סותר את זמני הנוכחות של הסבב או התלתון" % key[0])
         if key in seen:
             continue
         seen.add(key)

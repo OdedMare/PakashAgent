@@ -157,7 +157,7 @@ class _ChunkedRun:
         self._availability = effective_availability(
             profile, availability, starts_on, ends_on
         )
-        self._required = required_assignments(required, slots, profile)
+        self._required = required_assignments(required, slots, profile, self._availability)
         self.assignments: List[dict] = list(self._required)
         self.notes: List[str] = []
         self.summaries: List[str] = []

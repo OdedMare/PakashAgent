@@ -144,6 +144,14 @@ def test_all_model_generation_paths_require_an_anchor(method):
         getattr(Scheduler(None), method)(p, "2026-08-29", "2026-08-29")
 
 
+@pytest.mark.parametrize("method", ["generate", "generate_span", "generate_verified"])
+def test_pinned_assignments_cannot_override_group_absence(method):
+    p = profile()
+    with pytest.raises(AgentError, match="נוכחות"):
+        getattr(Scheduler(None), method)(p, "2026-08-29", "2026-08-29",
+                                       required_assignments=[dict(employee="ב", shift="בוקר", date="2026-08-29")])
+
+
 @pytest.mark.parametrize("patch", [{"group": "ג"}, {"start_time": "25:00"},
                                      {"starts_on": "2026-09-01", "ends_on": "2026-08-01"},
                                      {"start_day": True}, {"end_day": -1},

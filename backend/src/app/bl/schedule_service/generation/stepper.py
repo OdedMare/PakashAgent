@@ -2,7 +2,9 @@
 
 from typing import List
 
-from app.bl.schedule_service.constants import ACTION_GENERATED
+from app.bl.schedule_service.constants import (
+    ACTION_GENERATED, GENERATION_CANCELLED, GENERATION_FAILED,
+)
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.generation.history import AssignmentHistory
 from app.bl.schedule_service.generation.job import GenerationJob, span_dates
@@ -96,6 +98,20 @@ class GenerationStepper:
         if job.is_complete:
             return self._context.view(schedule, team_id)
         return self._stop(schedule_id, team_id, job, light=False)
+
+    def dismiss(self, team_id: str, schedule_id: str) -> dict:
+        """Hide the banner of a stopped or failed job (keeps every day).
+
+        Refused on a running job: the banner there is the way to stop it."""
+        schedule = self._repository.get_schedule(schedule_id, team_id)
+        job = GenerationJob.of(schedule)
+        if job.status not in (GENERATION_FAILED, GENERATION_CANCELLED):
+            raise AgentError("אפשר להסתיר רק יצירה שהופסקה או נכשלה")
+        job.dismiss()
+        return self._context.view(
+            self._repository.set_generation(schedule_id, team_id, job.to_dict()),
+            team_id,
+        )
 
     def _run_span(
         self,

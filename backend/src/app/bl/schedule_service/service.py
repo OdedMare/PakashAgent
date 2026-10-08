@@ -113,6 +113,9 @@ class ScheduleService:
     def cancel_generation(self, *args, **kwargs):
         return self._stepper.stop(*args, **kwargs)
 
+    def dismiss_generation(self, *args, **kwargs):
+        return self._stepper.dismiss(*args, **kwargs)
+
     def queue_generation(self, *args, **kwargs):
         return self._runner.queue(*args, **kwargs)
 

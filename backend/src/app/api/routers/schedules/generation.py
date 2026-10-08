@@ -71,6 +71,16 @@ class GenerationRoutes(RouteGroup):
             """
             return service.cancel_generation(session["team_id"], schedule_id)
 
+        @router.post("/generate/{schedule_id}/dismiss", response_model=Schedule)
+        def dismiss_generation(
+            schedule_id: str, session: dict = Depends(boss)
+        ) -> dict:
+            """Hide the banner of a stopped or failed build.
+
+            The days already built stay, and `POST /run` still resumes it.
+            """
+            return service.dismiss_generation(session["team_id"], schedule_id)
+
         @router.post("/generate/{schedule_id}/day/start", response_model=Schedule)
         def start_day_generation(
             schedule_id: str,

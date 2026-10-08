@@ -52,7 +52,7 @@ class SpanRequest:
         )
         # Audit the entire saved period; the prompt still carries only boundaries.
         self.committed = [dict(row) for row in already_scheduled or [] if isinstance(row, dict)]
-        self.required = required_assignments(required, slots, self.profile)
+        self.required = required_assignments(required, slots, self.profile, self.availability)
         self.candidates = candidates_for(self.profile, slots, self.availability)
         self.schema = span_schema(slots, self.candidates)
         context_dates = self.dates | {bounded(row.get("date")) for row in self.committed}

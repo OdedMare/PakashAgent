@@ -166,6 +166,7 @@ class GenerationJob:
         self._document.update({
             "status": GENERATION_RUNNING,
             "cancel_requested": False,
+            "dismissed": False,
             "heartbeat": now_stamp(),
         })
 
@@ -245,6 +246,13 @@ class GenerationJob:
             "cancel_requested": True,
         })
         self.recount()
+
+    def dismiss(self) -> None:
+        """Hide the banner of a job that ended short, without touching it.
+
+        The days it built stay and resuming still works; only the board stops
+        announcing it. A later resume clears the flag again."""
+        self._document["dismissed"] = True
 
     def requeue(self, target: dict) -> None:
         target.update({"status": GENERATION_PENDING})

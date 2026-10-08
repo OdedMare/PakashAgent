@@ -84,7 +84,9 @@ def configuration_errors(profile: dict) -> List[str]:
             required.add(lookup)
     for pattern in sorted(required):
         # Existing fixed A/B presence schedules have no alternating phase.
-        if pattern == "round" and workplace.get("rotation_a_unavailability"):
+        if (pattern == "round" and workplace.get("rotation_a_unavailability")
+                and not any(row.get("pattern") == "round"
+                            for row in workplace.get("rotation_closure_windows") or [])):
             continue
         if cycle(profile, pattern) is None:
             errors.append(

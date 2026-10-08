@@ -772,6 +772,33 @@ def test_a_stopped_job_resumes_from_the_first_unfinished_day():
     ]["status"] == "complete"
 
 
+def test_a_stopped_build_banner_can_be_dismissed_and_resume_brings_it_back():
+    launcher = _DeferredLauncher()
+    app, _ = _build_app([_generation([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "כיסוי יום ראשון",
+    }])], launch=launcher)
+    client = _client(app)
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+    dismiss = "/api/schedule/generate/%s/dismiss" % started["id"]
+
+    # A running build is stopped from its banner, not hidden.
+    client.post("/api/schedule/generate/%s/run" % started["id"])
+    assert client.post(dismiss).status_code >= 400
+
+    client.post("/api/schedule/generate/%s/cancel" % started["id"])
+    dismissed = client.post(dismiss).json()
+    assert dismissed["generation"]["status"] == "cancelled"
+    assert dismissed["generation"]["dismissed"] is True
+
+    resumed = client.post(
+        "/api/schedule/generate/%s/run" % started["id"]
+    ).json()
+    assert resumed["generation"]["dismissed"] is False
+
+
 def test_polling_the_same_job_twice_does_not_start_a_second_worker():
     """Two tabs, one job. A second worker would generate every day twice."""
     launcher = _DeferredLauncher()

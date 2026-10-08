@@ -98,6 +98,9 @@ class GenerationProgress(BaseModel):
     # so a job can be `running` with this already true for as long as the
     # current model call takes to answer.
     cancel_requested: bool = False
+    # The manager closed the banner of a stopped or failed job. Cleared when
+    # the job is resumed.
+    dismissed: bool = False
 
 
 class ScheduleProgress(BaseModel):
