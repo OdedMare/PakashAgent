@@ -1036,6 +1036,15 @@ export function rejectSwap(
 
 /* -- the manager's side of the same feature -------------------------------- */
 
+/** The manager's live line (Server-Sent Events). Boss-only.
+ *
+ *  Each event is named for an inbox — `requests` or `swaps` — and carries no
+ *  data: the screen re-reads that inbox through its usual route. Same-origin,
+ *  so the session cookie rides along as it does on `fetch`. */
+export function managerEvents(): EventSource {
+  return new EventSource("/api/schedule/requests/events", { withCredentials: true });
+}
+
 /** Requests awaiting a decision. Boss-only. */
 export function pendingRequests(): Promise<ConstraintRequestRow[]> {
   return request<ConstraintRequestRow[]>("/api/schedule/requests/pending");

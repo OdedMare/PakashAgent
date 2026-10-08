@@ -23,6 +23,7 @@ from app.bl.manager_chat import ManagerChatService
 from app.api.routers import manager_chat
 from app.common.config.settings import Settings
 from app.common.errors.errors import AppError, error_payload
+from app.common.events import TeamEvents
 from app.common.logging_setup.logging_setup import configure_logging
 from app.common.sessions.sessions import generate_secret
 from app.common.throttle.throttle import LoginThrottle
@@ -108,6 +109,9 @@ guards = Guards(session_secret, team_active=repository.team_is_active)
 # One throttle for every password check in the process. Keys are namespaced
 # (`boss:`, `employee:`, `settings:`), so sharing it couples nothing.
 login_throttle = LoginThrottle()
+# Wakes the manager's screen when an employee submits or answers something.
+# Shared by the employee routes that publish and the stream that listens.
+team_events = TeamEvents()
 if not env.settings_password:
     _log.warning(
         "PAKASH_SETTINGS_PASSWORD is not set; the settings panel is locked."
@@ -156,13 +160,15 @@ app.include_router(copilot.build_router(copilot_service, repository, guards))
 app.include_router(
     employee.build_router(
         employee_service, guards, session_secret, env.session_days,
-        login_throttle,
+        login_throttle, events=team_events,
     )
 )
 # The manager's side of constraint requests. A separate router so that every
 # route on it depends on `boss` visibly, rather than sitting next to the
 # employee-guarded ones.
-app.include_router(employee.build_manager_router(employee_service, guards))
+app.include_router(
+    employee.build_manager_router(employee_service, guards, team_events)
+)
 # The manager's side of swaps, on its own prefix. Kept apart from the router
 # above so `/{request_id}` and `/{swap_id}` cannot shadow each other, and so
 # the `boss` guard stays visible on every route of both.

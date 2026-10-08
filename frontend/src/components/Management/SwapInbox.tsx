@@ -28,9 +28,12 @@ import { shortDate } from "@/components/DateInput";
  *  together, and a locally patched panel beside stale warnings is worse than
  *  a brief spinner. */
 export function SwapInbox({
+  version = 0,
   onDecided,
   writeLocked = false,
 }: {
+  /** Changes when an employee touched a swap; re-reads the inbox. */
+  version?: number;
   onDecided: () => void;
   writeLocked?: boolean;
 }) {
@@ -46,7 +49,7 @@ export function SwapInbox({
 
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, version]);
 
   const decide = async (row: SwapRow, approve: boolean) => {
     const reason = (reasons[row.id] ?? "").trim();

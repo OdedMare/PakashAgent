@@ -46,6 +46,7 @@ import { Stats } from "./Stats";
 import { TeamPanel } from "./TeamPanel";
 import { Warnings } from "./Warnings";
 import { useConstraintRequests } from "./useConstraintRequests";
+import { useLiveInbox } from "./useLiveInbox";
 import { useManagement } from "./useManagement";
 import { displayDate } from "@/components/DateInput";
 
@@ -125,6 +126,13 @@ export function Management({
   // the tab can count them and a new one pops up wherever the manager is.
   const requests = useConstraintRequests(section === "requests" && drawerOpen);
   const { dismissArrivals } = requests;
+  // Bumped when an employee answers or withdraws a swap, so the swap inbox
+  // re-reads without waiting for the manager to reopen it.
+  const [swapsVersion, setSwapsVersion] = useState(0);
+  useLiveInbox({
+    requests: requests.reload,
+    swaps: () => setSwapsVersion((version) => version + 1),
+  });
   const openRequests = useCallback(() => {
     setView("board");
     setSection("requests");
@@ -788,6 +796,7 @@ export function Management({
             onDecided={state.refresh}
           />
           <SwapInbox
+            version={swapsVersion}
             onDecided={state.refresh}
             writeLocked={schedule?.status === "published"}
           />

@@ -4,20 +4,33 @@ Every route takes the employee from `session["employee"]` on the signed
 cookie, never from the body or the path (D14).
 """
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends
 
 from app.api.contracts import (
     AssistantQuestion, ConstraintSubmission, SwapAnswer, SwapProposal,
 )
+from app.common.events import REQUESTS, SWAPS, TeamEvents
+
+
+def _notifier(events: Optional[TeamEvents]):
+    """Tell the manager's open screen an inbox moved -- after the write
+    succeeded, so a refused submission wakes nobody."""
+    def notify(team_id: str, kind: str) -> None:
+        if events is not None:
+            events.publish(team_id, kind)
+    return notify
 
 
 class PersonalRoutes:
-    def __init__(self, service, employee):
+    def __init__(self, service, employee, events: Optional[TeamEvents] = None):
         self._service = service
         self._employee = employee
+        self._notify = _notifier(events)
 
     def register(self, router: APIRouter) -> None:
-        service, employee = self._service, self._employee
+        service, employee, notify = self._service, self._employee, self._notify
 
         @router.get("/me")
         def me(session: dict = Depends(employee)) -> dict:
@@ -57,7 +70,7 @@ class PersonalRoutes:
         @router.post("/requests")
         def submit(request: ConstraintSubmission, session: dict = Depends(employee)) -> dict:
             """Submit a constraint request. `200` with a *pending* row."""
-            return service.submit(
+            row = service.submit(
                 session["team_id"],
                 session["employee"],
                 request.constraint_date,
@@ -65,22 +78,27 @@ class PersonalRoutes:
                 available=request.available,
                 reason=request.reason,
             )
+            notify(session["team_id"], REQUESTS)
+            return row
 
         @router.post("/requests/{request_id}/withdraw")
         def withdraw(request_id: str, session: dict = Depends(employee)) -> dict:
             """Take back a pending request. Scoped to the caller's own rows."""
-            return service.withdraw(session["team_id"], session["employee"], request_id)
+            row = service.withdraw(session["team_id"], session["employee"], request_id)
+            notify(session["team_id"], REQUESTS)
+            return row
 
 
 class EmployeeSwapRoutes:
     """Swap offers between colleagues. **None of these moves anything.**"""
 
-    def __init__(self, service, employee):
+    def __init__(self, service, employee, events: Optional[TeamEvents] = None):
         self._service = service
         self._employee = employee
+        self._notify = _notifier(events)
 
     def register(self, router: APIRouter) -> None:
-        service, employee = self._service, self._employee
+        service, employee, notify = self._service, self._employee, self._notify
 
         @router.get("/swaps")
         def my_swaps(session: dict = Depends(employee)) -> list:
@@ -114,11 +132,15 @@ class EmployeeSwapRoutes:
             Scoped to the counterparty inside the repository. Accepting still
             moves nothing: it puts the swap in the manager's inbox.
             """
-            return service.answer_swap(
+            row = service.answer_swap(
                 session["team_id"], session["employee"], swap_id, request.agreed
             )
+            notify(session["team_id"], SWAPS)
+            return row
 
         @router.post("/swaps/{swap_id}/withdraw")
         def withdraw_swap(swap_id: str, session: dict = Depends(employee)) -> dict:
             """The requester taking back their own offer."""
-            return service.withdraw_swap(session["team_id"], session["employee"], swap_id)
+            row = service.withdraw_swap(session["team_id"], session["employee"], swap_id)
+            notify(session["team_id"], SWAPS)
+            return row

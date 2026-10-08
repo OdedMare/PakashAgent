@@ -8,9 +8,11 @@ import type { ConstraintRequestRow } from "@/types";
 /** Pending constraint requests, kept fresh while the manager is on screen.
  *
  *  Lifted out of `RequestInbox` so the drawer tab can carry the count and the
- *  workspace can announce a new submission without the inbox being open. It
- *  polls on the same 15-second beat as `CopilotInbox`; nothing here is a push
- *  channel, and nothing is sent anywhere (D16 — a mark, not a message).
+ *  workspace can announce a new submission without the inbox being open.
+ *  `reload` is what `useLiveInbox` calls the moment an employee submits; the
+ *  15-second poll stays underneath as the backstop for a dropped stream.
+ *  Nothing is sent anywhere (D16 — a mark, not a message): the push only
+ *  reaches the manager's own open screen.
  *
  *  `arrivals` are rows that appeared *after* the first load. Requests already
  *  waiting when the screen opened are counted on the badge but not announced:
@@ -71,5 +73,7 @@ export function useConstraintRequests(watching: boolean) {
 
   const dismissArrivals = useCallback(() => setArrivals([]), []);
 
-  return { rows, arrivals, settle, dismissArrivals };
+  const reload = useCallback(() => void load(), [load]);
+
+  return { rows, arrivals, settle, dismissArrivals, reload };
 }
