@@ -378,6 +378,9 @@ export interface GenerationProgress {
   /** Whether a stop has been asked for. A job can still be `running` with
    *  this true for as long as the current model call takes to answer. */
   cancel_requested?: boolean;
+  /** The manager closed the banner of a stopped or failed job. Cleared
+   *  when the job is resumed. */
+  dismissed?: boolean;
 }
 
 /** What the poller reads while a period is being built.

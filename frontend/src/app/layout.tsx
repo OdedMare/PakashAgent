@@ -3,7 +3,7 @@ import { GuideProvider } from "@/components/Guide";
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {
-  title: "פקש — שיבוצים צבאיים",
+  title: "משמרות זהב — שיבוצים צבאיים",
   description: "מערכת להגדרה ולניהול ידני של שיבוצים צבאיים",
 };
 

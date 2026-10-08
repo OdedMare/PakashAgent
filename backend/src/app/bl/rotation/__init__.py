@@ -12,13 +12,16 @@ Four patterns: `round` (א, ב), `triplet` (תלתון: א, ב, ג), `hamshushim
 (from Thursday) and `shushim` (from Friday). Round and triplet set *who*
 closes; the other two set *how long*. **A closure weekend runs Thursday to
 Sunday morning** — the Sunday tail covers the day's first shift by the clock,
-found from declared start times rather than a Hebrew name (D9).
+found from declared start times rather than a Hebrew name (D9). This is the
+default: `rotation_closure_windows` can change each group's boundaries and
+`rotation_presence` overrides its presence on selected days or dates.
 
 | Module | Owns |
 |---|---|
 | `cycle.py` | One pattern's anchored cycle; configuration errors |
 | `closures.py` | One person's closure days; the handover; `holds` |
 | `views.py` | Per-date and per-weekend views |
+| `presence.py` | Group presence and per-slot closure eligibility |
 | `vocabulary.py` | Groups, labels, patterns, date helpers |
 """
 

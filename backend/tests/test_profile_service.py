@@ -226,3 +226,25 @@ def test_rotation_configuration_rejects_unknown_patterns_and_bad_times():
         ProfileService(repo).update("team", workplace={
             "rotation_a_unavailability": [{"start_time": "29:00"}],
         })
+
+
+def test_group_presence_settings_are_persisted_without_changing_roster_or_shifts():
+    repo = _Repo()
+    employees, shifts = repo.profile["employees"], repo.profile["shifts"]
+    result = ProfileService(repo).update("team", workplace={
+        "name": "יחידה",
+        "round_first_closure_date": "2026-08-29", "round_first_closure_group": "א",
+        "triplet_first_closure_date": "2026-09-05", "triplet_first_closure_group": "ג",
+        "rotation_closure_windows": [{
+            "pattern": "round", "group": "א", "start_day": -2, "end_day": 1,
+            "start_time": "12:00", "end_time": "10:00", "starts_on": "", "ends_on": "",
+        }],
+        "rotation_presence": [{
+            "pattern": "triplet", "group": "ג", "days": ["שישי"], "available": False,
+            "starts_on": "2026-09-04", "ends_on": "2026-09-06",
+        }],
+    })
+    assert repo.profile["workplace"] == result["workplace"]
+    assert result["workplace"]["rotation_presence"][0]["ends_on"] == "2026-09-06"
+    assert result["workplace"]["rotation_closure_windows"][0]["end_time"] == "10:00"
+    assert result["employees"] == employees and result["shifts"] == shifts

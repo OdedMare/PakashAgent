@@ -166,9 +166,9 @@ def _weekend_rows(
 def holds(profile: dict, person: dict, day: datetime.date, shift: str = "") -> bool:
     """Whether this person's own cycle holds `day`, or `shift` on it.
 
-    `shift` matters on the Sunday handover only: the group is in for that
-    morning and out for the rest of the day. Asked with no shift, a handover
-    Sunday counts as held.
+    `shift` matters on the Sunday handover and every configured boundary.
+    A configured stay must contain the entire shift. Asked with no shift,
+    any covered date counts as held.
     """
     return any(
         not shift or shift in row.get("allowed_shifts", row["shifts"])

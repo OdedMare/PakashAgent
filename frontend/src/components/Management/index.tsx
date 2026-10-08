@@ -152,7 +152,9 @@ export function Management({
   // a period left half-built by a closed tab is still a job, and the manager
   // needs to be told so on the next visit.
   const buildState =
-    state.generation && state.generation.status !== "complete"
+    state.generation &&
+    state.generation.status !== "complete" &&
+    !state.generation.dismissed
       ? state.generation.status
       : "";
   const buildId = overview?.schedule?.id ?? "";
@@ -216,7 +218,7 @@ export function Management({
     ? [
         {
           id: "teach",
-          label: "ללמד את פקש על היחידה",
+          label: "ללמד את משמרות זהב על היחידה",
           done: openTopics === 0,
           detail: openTopics ? `${openTopics} נושאים עוד פתוחים בראיון` : "הראיון הושלם",
           actionLabel: "להשלמה",
@@ -494,6 +496,16 @@ export function Management({
                   {buildState === "failed"
                     ? "ניסיון חוזר מהיום שנכשל"
                     : "המשך יצירה מהיום הבא"}
+                </button>
+              ) : null}
+              {buildId && (buildState === "failed" || buildState === "cancelled") ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={state.generating}
+                  onClick={() => void state.dismissGeneration(buildId)}
+                >
+                  הסתרה
                 </button>
               ) : null}
               {buildId && buildState === "running" && state.generating ? (

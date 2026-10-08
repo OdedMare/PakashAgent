@@ -23,7 +23,7 @@ export function Turn({ message, live = false, onSelect }: Props) {
       </div>
       <div className="turn-body">
         <div className="turn-name">
-          {assistant ? "פקש · מסייע AI" : "אתם"}
+          {assistant ? "משמרות זהב · מסייע AI" : "אתם"}
         </div>
         <p className="turn-text">{message.content}</p>
 

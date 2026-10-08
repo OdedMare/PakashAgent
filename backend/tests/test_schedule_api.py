@@ -789,6 +789,7 @@ def test_a_stopped_build_banner_can_be_dismissed_and_resume_brings_it_back():
     assert client.post(dismiss).status_code >= 400
 
     client.post("/api/schedule/generate/%s/cancel" % started["id"])
+    launcher.run_next()
     dismissed = client.post(dismiss).json()
     assert dismissed["generation"]["status"] == "cancelled"
     assert dismissed["generation"]["dismissed"] is True

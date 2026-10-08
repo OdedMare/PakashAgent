@@ -481,6 +481,16 @@ export function cancelScheduleGeneration(
   });
 }
 
+/** Hide the banner of a stopped or failed build. Keeps every day built,
+ *  and the build can still be resumed. */
+export function dismissScheduleGeneration(
+  scheduleId: string,
+): Promise<Schedule> {
+  return request<Schedule>(`/api/schedule/generate/${scheduleId}/dismiss`, {
+    method: "POST",
+  });
+}
+
 /** Rebuild one date in an existing draft, preserving manager-pinned rows. */
 export async function generateScheduleDay(
   body: {

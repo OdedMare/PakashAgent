@@ -125,7 +125,7 @@ admin_service = AdminService(
 )
 
 app = FastAPI(
-    title="PakashAgent",
+    title="משמרות זהב",
     version="0.1.0",
     description="סוכן שבונה ומתחזק סידורי עבודה בשיחה",
 )

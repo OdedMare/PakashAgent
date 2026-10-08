@@ -6,6 +6,7 @@ import {
   assignEmployee,
   blankSchedule,
   cancelScheduleGeneration,
+  dismissScheduleGeneration,
   clearSchedule,
   deleteConstraint,
   deleteSchedule,
@@ -78,6 +79,8 @@ interface ManagementState {
    *  identical from here, and only a person can say whether anyone is still
    *  waiting. */
   cancelGeneration: () => Promise<void>;
+  /** Hide the banner of a stopped or failed build, keeping its days. */
+  dismissGeneration: (scheduleId: string) => Promise<void>;
   /** Set when a build was refused because the interview never taught the
    *  shift vocabulary, and cleared by any later success.
    *
@@ -387,6 +390,19 @@ export function useManagement(): ManagementState {
     await refresh();
   }, [refresh]);
 
+  const dismissGeneration = useCallback(
+    async (scheduleId: string) => {
+      try {
+        const dismissed = await dismissScheduleGeneration(scheduleId);
+        setGeneration(dismissed.generation);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
   /** Open an empty period for the manager to fill in themselves (D18).
    *
    *  The one schedule-building path with no model on it at all. */
@@ -570,6 +586,7 @@ export function useManagement(): ManagementState {
     generating,
     resumeGeneration,
     cancelGeneration,
+    dismissGeneration,
     refresh,
     generate,
     openBlank,
