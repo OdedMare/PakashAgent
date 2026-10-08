@@ -72,4 +72,27 @@ CREATE INDEX IF NOT EXISTS interview_sessions_team_idx
 
 COMMIT;
 
+-- The operator's controls over a workspace (D28). Guarded, after their own
+-- COMMITs, for the same reason as `team_id` above: an existing `teams` table
+-- never sees columns added to its CREATE statement.
+--
+-- `max_employees`: the seat cap the operator sold or granted. NULL means no
+-- cap. Enforced where a profile is written (`seats.py`), and only against
+-- growth -- lowering it never locks a team out of editing who it has.
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS max_employees INTEGER;
+
+COMMIT;
+
+-- `active`: FALSE suspends the team. Its data stays; every sign-in and every
+-- open session is refused until the operator turns it back on.
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
+
+COMMIT;
+
+-- `notes`: the operator's own remark about the team -- a contact, a unit, a
+-- renewal date. Never shown to the team.
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT '';
+
+COMMIT;
+
 """
