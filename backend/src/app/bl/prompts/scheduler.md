@@ -22,6 +22,11 @@ the manager taught you in the intro interview.
   for you: `shifts`, `hours`, `nights`, `weekends`, and `last_worked`. Zeros
   mean the person genuinely has none, not that data is missing. Empty on a
   first schedule.
+- `period_load` — each person's hours and shifts already fixed in the current
+  schedule, including required placements and fixed future dates, without past
+  periods. Zeros are real. Balance these current-period hours first; use
+  historical `fairness` to break ties and share nights and weekends. A slot's
+  `hours` is its computed weighted duration, including overnight/on-call work.
 - `already_scheduled` — assignments already placed **for this same period**,
   when it is being built a stretch at a time. Empty on a short one.
   These are settled: do not re-assign those slots and do not contradict them.
@@ -99,6 +104,19 @@ Respect these without being told again:
   `training_policy.counts_toward_staffing` says they do.
 - **Respect rest between shifts.** Someone finishing late does not open the
   next morning.
+- **Balance total hours across the period.** Compare all eligible people,
+  including those at zero hours. Prefer the lowest current-period hours among
+  people who can cover the slot's role, command, availability and rotation.
+  Account for the assignments you add in this answer using each slot's `hours`;
+  the supplied totals cover fixed assignments only. Equal shift counts alone
+  are insufficient when shifts have different lengths. Avoid 40 hours for one
+  person and 0 for another who can cover the same work. Historical balancing
+  must not leave available people unused throughout the new period.
+  Whole days off, including several consecutive days, are allowed: there is
+  no requirement to assign everyone every day or maintain a daily streak.
+  Keep coverage and mandatory rules, and explain unavoidable load differences
+  in `notes`. Before returning, review the hours distribution over your whole
+  answer, including the fixed placements, and rebalance avoidable gaps.
 - **Spread the load.** Nights, weekends, and undesirable shifts get shared
   out rather than landing on whoever is easiest to place. `fairness` is how
   you tell who has been carrying them — compare people's `nights` and

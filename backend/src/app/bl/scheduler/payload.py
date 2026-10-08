@@ -3,6 +3,7 @@
 from typing import Any, List, Optional
 
 from app.bl.scheduler.candidates import slot_id
+from app.bl.audit.roster import shift_hours
 from app.bl.scheduler.rotation_rows import closures_for_model as _closures
 from app.bl.scheduler.values import bounded, parse_date, role_list
 
@@ -87,6 +88,7 @@ def slot_for_model(
         "required_roles": role_list(slot.get("required_roles")),
         "requires_shift_manager": bool(slot.get("requires_shift_manager")),
         "is_on_call": slot["is_on_call"],
+        "hours": shift_hours(slot),
     }
     if index is not None:
         shaped["id"] = slot_id(index)

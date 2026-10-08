@@ -31,12 +31,15 @@ def uneven_load(span, roster, baseline):
                [span.candidates["name_by_id"][eid]
                 for eid in span.candidates["by_slot"][slot_id(index)] if eid in counting]
                for index, slot in enumerate(span.slots, 1)}
-    normalized = rows_of(roster, index_shifts(span.profile.get("shifts") or []), span.audit_slots)
+    hours_by_row = {(row["employee"], row["date"], row["shift"]): row["hours"]
+                    for row in rows_of(roster, index_shifts(span.profile.get("shifts") or []),
+                                       span.audit_slots)}
     # ponytail: bounded spans; reuse the real audit for each possible transfer.
     # Replace with indexed checks only if profiling shows this scan is costly.
     for index, row in enumerate(roster):
         key = (row.get("date"), row.get("shift"))
-        name, hours = row.get("employee"), normalized[index]["hours"]
+        name = row.get("employee")
+        hours = hours_by_row.get((name, *key), 0)
         if hours <= 0 or (name, *key) in pins or name not in choices.get(key, []):
             continue
         for other in choices[key]:

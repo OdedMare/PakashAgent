@@ -70,6 +70,7 @@ def _slot(shift: dict, day, weekday: str) -> dict:
         "required_roles": required_roles,
         "requires_shift_manager": bool(shift.get("requires_shift_manager")),
         "is_on_call": bool(shift.get("is_on_call")),
+        "hour_weight": shift.get("hour_weight", 1.0),
     }
 
 
