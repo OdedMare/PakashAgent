@@ -6,9 +6,10 @@ Derived from `bl/rotation.py` rather than asked of the model, for the reason
 """
 
 import datetime
-from typing import Dict, List, Optional
+from typing import List
 
 from app.bl import rotation as rotation_cycle
+from app.bl.rotation.presence import closure_status, presence_status
 from app.bl.audit import constraint_conflicts
 from app.bl.shared.hebrew_calendar import weekday_key
 from app.bl.scheduler.slots import build_slots
@@ -21,7 +22,6 @@ from app.bl.scheduler.values import bounded
 ROTATION_SOURCES = frozenset({"rotation", "closure"})
 
 _ROUND_GROUPS = ("א", "ב")
-_ROTATING_PATTERNS = ("round", "triplet", "hamshushim", "shushim")
 
 
 def overridden(keys: set, employee: str, date: str, shift: str) -> bool:
@@ -63,10 +63,10 @@ def rotation_availability(
     for slot in build_slots(profile, start.isoformat(), end.isoformat()):
         unavailable_a = _rotation_a_blocks(slot, rules)
         for employee, group in people:
+            if presence_status(profile, {"exit_pattern": "round", "rotation_group": group}, slot) is not None:
+                continue
             unavailable = unavailable_a if group == "א" else not unavailable_a
-            if not unavailable or overridden(
-                keys, employee, slot["slot_date"], slot["shift_name"]
-            ):
+            if not unavailable:
                 continue
             result.append(_blocked_row(
                 employee, slot, "סבב %s אינו זמין במועד זה" % group,
@@ -121,61 +121,6 @@ def _rotation_a_blocks(slot: dict, rules: List[dict]) -> bool:
 # -- closures ----------------------------------------------------------------
 
 
-class ClosureHoldings:
-    """Who holds each closure date, under which cycle, and for which shifts.
-
-    A person on a rotation the profile never anchored contributes nothing, so
-    their days simply stay unconstrained. `covered` is absent for a whole-day
-    date and a set of shifts for the Sunday handover; a date carrying both
-    kinds is a whole-day date, or the fuller closure would be cut short.
-    """
-
-    def __init__(self, profile: dict, people: List[dict], start, end):
-        self.holders: Dict[str, set] = {}
-        self.cycles: Dict[str, set] = {}
-        self.owners: Dict[str, set] = {}
-        self.covered: Dict[str, Optional[set]] = {}
-        self.on_rotation: Dict[str, bool] = {}
-        for person in people:
-            name = bounded(person.get("name"))
-            rows = rotation_cycle.closure_days(profile, person, start, end)
-            self.on_rotation[name] = bool(rows) or _on_rotation(profile, person)
-            for row in rows:
-                self._hold(name, row)
-
-    def _hold(self, name: str, row: dict) -> None:
-        date = row["date"]
-        self.holders.setdefault(date, set()).add(name)
-        if not row["until_handover"]:
-            self.covered[date] = None
-        elif self.covered.setdefault(date, set()) is not None:
-            self.covered[date].update(row["shifts"])
-        # Only a real rotation displaces anybody. A blank cycle is somebody
-        # out every weekend regardless of whose turn it is.
-        if row["cycle"]:
-            self.cycles.setdefault(date, set()).add(row["cycle"])
-        if row["cycle"] and row["group"]:
-            self.owners.setdefault(date, set()).add((row["cycle"], row["group"]))
-
-    def applies(self, slot: dict) -> bool:
-        """Whether a closure claims this slot at all.
-
-        No group closing the date means an ordinary working day; a Sunday
-        past its handover belongs to whoever is relieved onto it.
-        """
-        date = slot["slot_date"]
-        if not self.holders.get(date):
-            return False
-        limit = self.covered.get(date)
-        return limit is None or slot["shift_name"] in limit
-
-    def owner_label(self, date: str) -> str:
-        return " ו".join(sorted(
-            rotation_cycle.label(cycle, group)
-            for cycle, group in self.owners.get(date, set())
-        ))
-
-
 def closure_availability(
     profile: dict, start: datetime.date, end: datetime.date, keys: set,
 ) -> List[dict]:
@@ -191,61 +136,28 @@ def closure_availability(
         person for person in (profile or {}).get("employees") or []
         if isinstance(person, dict) and bounded(person.get("name"))
     ]
-    holdings = ClosureHoldings(profile, people, start, end)
-    if not holdings.holders:
-        return []
     result = []
     for slot in build_slots(profile, start.isoformat(), end.isoformat()):
-        if not holdings.applies(slot):
-            continue
         for person in people:
-            if _displaced(profile, person, slot, holdings, keys):
+            status = presence_status(profile, person, slot)
+            source = "rotation" if status is not None else "closure"
+            if status is None:
+                status = closure_status(profile, person, slot)
+            if status is False:
                 result.append(_blocked_row(
                     bounded(person.get("name")), slot,
-                    "%s סוגר במועד זה" % holdings.owner_label(slot["slot_date"]),
-                    source="closure",
+                    "%s אינו נוכח במועד זה לפי הגדרות הסבבים והסגירה" % rotation_cycle.label(
+                        rotation_cycle.exit_pattern(profile, person), bounded(person.get("rotation_group")))
+                    if source == "rotation" else "הסגירה במועד זה שייכת ל%s" % rotation_cycle.label(
+                        rotation_cycle.exit_pattern(profile, person), rotation_cycle.closing_group(
+                            profile, datetime.date.fromisoformat(slot["slot_date"]) - datetime.timedelta(
+                                days=1 if datetime.date.fromisoformat(slot["slot_date"]).weekday() == 6 else 0),
+                            rotation_cycle.exit_pattern(profile, person))),
+                    source=source,
                     rotation_group=bounded(person.get("rotation_group")),
-                    derived_from="closure_cycle",
+                    derived_from="rotation_presence" if source == "rotation" else "closure_cycle",
                 ))
     return result
-
-
-def _displaced(
-    profile: dict, person: dict, slot: dict, holdings: ClosureHoldings,
-    keys: set,
-) -> bool:
-    """Whether this person is kept out of a slot another group is closing.
-
-    A person whose own cycle is not the one closing today is not displaced by
-    it -- a תלתון soldier is not off because the round pair happens to be in.
-    """
-    name, date = bounded(person.get("name")), slot["slot_date"]
-    if name in holdings.holders.get(date, set()):
-        return False
-    if not holdings.on_rotation.get(name):
-        return False
-    pattern = rotation_cycle.exit_pattern(profile, person)
-    if _cycle_key(profile, person, pattern) not in holdings.cycles.get(date, set()):
-        return False
-    return not overridden(keys, name, date, slot["shift_name"])
-
-
-def _on_rotation(profile: dict, person: dict) -> bool:
-    """Whether the cycle has any claim on this person at all."""
-    pattern = rotation_cycle.exit_pattern(profile, person)
-    return pattern in _ROTATING_PATTERNS and bool(
-        bounded(person.get("rotation_group"))
-    )
-
-
-def _cycle_key(profile: dict, person: dict, pattern: str) -> str:
-    """The cycle a person turns on: their pattern, or their group's."""
-    if pattern in ("round", "triplet"):
-        return pattern
-    if bounded(person.get("rotation_group")) == "ג":
-        return "triplet"
-    mode = bounded(((profile or {}).get("workplace") or {}).get("rotation_mode"))
-    return mode if mode in ("round", "triplet") else "round"
 
 
 def closures_for_model(profile: dict, start, end) -> List[dict]:

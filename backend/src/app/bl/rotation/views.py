@@ -25,7 +25,7 @@ class _DateEntry:
             self.closing_groups[row["cycle"]] = row["group"]
         if name not in self.employees:
             self.employees.append(name)
-        if not row["until_handover"]:
+        if not (row["until_handover"] or row.get("restricted_shifts")):
             self.until_handover, self.shifts = False, []
         elif self.until_handover:
             self.shifts.extend(s for s in row["shifts"] if s not in self.shifts)

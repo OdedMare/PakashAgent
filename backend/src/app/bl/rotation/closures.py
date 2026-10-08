@@ -63,13 +63,61 @@ def closure_days(
     # the Thursday before `start` -- or a handover on an opening Sunday --
     # still contributes its in-period days.
     saturday = saturday_of(start) - _WEEK
-    while saturday - datetime.timedelta(days=lead) <= end:
+    while saturday - datetime.timedelta(days=6) <= end:
         owner = group if every_weekend else group_for_saturday(state, saturday)
         if owner == group:
-            rows.extend(_weekend_rows(
-                saturday, lead, handover, start, end, owner, pattern, lookup,
-            ))
+            window = configured_window(profile, lookup, owner, saturday)
+            if window:
+                rows.extend(_configured_rows(profile, window, saturday, start, end, owner, pattern, lookup))
+            else:
+                rows.extend(_weekend_rows(
+                    saturday, lead, handover, start, end, owner, pattern, lookup,
+                ))
         saturday += _WEEK
+    return rows
+
+
+def configured_window(profile, pattern, group, saturday):
+    rules = ((profile or {}).get("workplace") or {}).get("rotation_closure_windows") or []
+    matching = [row for row in rules if row.get("pattern") == pattern and row.get("group") == group
+                and (not row.get("starts_on") or row["starts_on"] <= saturday.isoformat())
+                and (not row.get("ends_on") or row["ends_on"] >= saturday.isoformat())]
+    if not matching:
+        return None
+    # Dated changes take precedence over the group's regular window.
+    row = max(enumerate(matching), key=lambda item: (bool(item[1].get("starts_on") or item[1].get("ends_on")), item[0]))[1]
+    return tuple(datetime.datetime.combine(saturday + datetime.timedelta(days=row[key + "_day"]),
+                                           datetime.time.fromisoformat(row[key + "_time"]))
+                 for key in ("start", "end"))
+
+
+def shift_interval(day, shift):
+    start, end = minutes(shift.get("start_time")), minutes(shift.get("end_time"))
+    if start is None or end is None:
+        return None
+    midnight = datetime.datetime.combine(day, datetime.time())
+    return (midnight + datetime.timedelta(minutes=start),
+            midnight + datetime.timedelta(minutes=end + (1440 if end <= start else 0)))
+
+
+def _configured_rows(profile, window, saturday, start, end, owner, pattern, lookup):
+    rows = []
+    # Include overnight shifts starting before the window opens.
+    day = max(start, window[0].date() - _DAY)
+    while day <= min(end, window[1].date()):
+        covered, contained = [], []
+        for shift in profile.get("shifts") or []:
+            interval = shift_interval(day, shift)
+            if interval and interval[0] < window[1] and window[0] < interval[1]:
+                covered.append(text(shift.get("name")))
+                if window[0] <= interval[0] and interval[1] <= window[1]:
+                    contained.append(text(shift.get("name")))
+        if covered:
+            rows.append(dict(date=day.isoformat(), weekend=saturday.isoformat(), group=owner,
+                             pattern=pattern, cycle=lookup, is_saturday=day == saturday,
+                             until_handover=day > saturday, restricted_shifts=True,
+                             shifts=covered, allowed_shifts=contained))
+        day += _DAY
     return rows
 
 
@@ -118,6 +166,7 @@ def holds(profile: dict, person: dict, day: datetime.date, shift: str = "") -> b
     Sunday counts as held.
     """
     return any(
-        not row["until_handover"] or not shift or shift in row["shifts"]
+        not shift or shift in row.get("allowed_shifts", row["shifts"])
+        or not (row["until_handover"] or row.get("restricted_shifts"))
         for row in closure_days(profile, person, day, day)
     )

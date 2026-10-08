@@ -5,6 +5,7 @@ from typing import Any, List
 
 from app.bl.profile_service.validation import text, text_list, valid_time
 from app.common.errors.errors import AgentError
+from app.bl.shared.hebrew_calendar import weekday_key
 
 _OPTIONAL_EXIT_PATTERNS = ("triplet", "hamshushim", "shushim")
 _GROUPS = {"round": ("א", "ב"), "triplet": ("א", "ב", "ג")}
@@ -50,6 +51,50 @@ def workplace(value: Any) -> dict:
     })
     for pattern, groups in _GROUPS.items():
         _pattern_anchor(result, pattern, groups)
+    for field in ("rotation_closure_windows", "rotation_presence"):
+        if field in result:
+            result[field] = _group_rules(result[field], field)
+    return result
+
+
+def _group_rules(value: Any, field: str) -> List[dict]:
+    if not isinstance(value, list):
+        raise AgentError("הגדרות הנוכחות של הסבבים אינן תקינות")
+    result = []
+    for raw in value:
+        if not isinstance(raw, dict):
+            raise AgentError("הגדרת קבוצה אינה תקינה")
+        row = dict(raw)
+        pattern, group = text(row.get("pattern")), text(row.get("group"))
+        if group not in _GROUPS.get(pattern, ()):
+            raise AgentError("הקבוצה אינה מתאימה לסבב או לתלתון")
+        row.update(pattern=pattern, group=group)
+        for key in ("starts_on", "ends_on"):
+            row[key] = text(row.get(key))
+            _check_date(row[key], "תאריך תחולת הנוכחות אינו תקין")
+        if row["starts_on"] and row["ends_on"] and row["starts_on"] > row["ends_on"]:
+            raise AgentError("תאריך סיום התחולה מוקדם מתאריך ההתחלה")
+        for key in ("start_time", "end_time"):
+            row[key] = text(row.get(key))
+            if row[key] and not valid_time(row[key]):
+                raise AgentError("שעות הנוכחות חייבות להיות בפורמט HH:MM")
+        if field == "rotation_closure_windows":
+            for key, allowed in (("start_day", range(-6, 1)), ("end_day", range(0, 7))):
+                if type(row.get(key)) is not int or row[key] not in allowed:
+                    raise AgentError("ימי תחילת וסיום הסגירה אינם תקינים")
+            if not row["start_time"] or not row["end_time"]:
+                raise AgentError("יש להגדיר שעות התחלה וסיום לסגירה")
+            if (row["start_day"], row["start_time"]) >= (row["end_day"], row["end_time"]):
+                raise AgentError("סיום הסגירה חייב להיות אחרי תחילתה")
+        else:
+            if type(row.get("available")) is not bool:
+                raise AgentError("יש לבחור נוכחות או אי־נוכחות")
+            row["days"] = text_list(row.get("days") or [])
+            if any(not weekday_key(day) for day in row["days"]):
+                raise AgentError("יום הנוכחות אינו תקין")
+            row["shifts"] = text_list(row.get("shifts") or [])
+            row["reason"] = text(row.get("reason"))
+        result.append(row)
     return result
 
 
