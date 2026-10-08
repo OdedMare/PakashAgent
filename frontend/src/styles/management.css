@@ -14,6 +14,122 @@
   color: var(--text);
 }
 
+/* The bar over the workspace. Actions sit at the inline end, which in RTL is
+   the top-left corner — opposite the sidebar, where a toolbar is looked for. */
+.management-topbar {
+  position: relative;
+  z-index: 11;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 3.25rem;
+  padding: 0.35rem 1.25rem;
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--border);
+}
+
+.management-topbar .header-actions {
+  gap: 4px;
+}
+
+.account-menu {
+  position: relative;
+  margin-inline-start: 6px;
+  padding-inline-start: 10px;
+  border-inline-start: 1px solid var(--border);
+}
+
+.account-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  max-width: 14rem;
+  padding: 0 10px;
+  color: var(--text-soft);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.account-menu-trigger:hover,
+.account-menu-trigger[aria-expanded="true"] {
+  color: var(--text);
+  background: var(--surface-3);
+}
+
+.account-menu-trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.account-menu-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.account-menu-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-end: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 13rem;
+  padding: 6px;
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.account-menu-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.account-menu-head span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.account-menu-panel button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  padding: 8px 10px;
+  color: var(--text-soft);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.account-menu-panel button:hover,
+.account-menu-panel button:focus-visible {
+  color: var(--text);
+  background: var(--surface-3);
+  outline: none;
+}
+
 .schedule-generation {
   display: grid;
   gap: 0.65rem;
@@ -2779,4 +2895,8 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 13px;
+}
+
+.management-topbar + .share-link {
+  margin-block: 12px;
 }

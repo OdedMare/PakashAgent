@@ -103,3 +103,14 @@ def test_fixed_future_hours_and_overnight_weights_are_counted_in_the_payload():
     assert {row["employee"]: row["hours"] for row in model.calls[0]["period_load"]} == {
         "דנה": 4, "יוסי": 0,
     }
+
+
+def test_coverage_repair_has_priority_even_when_it_cannot_improve_fairness():
+    workplace = dict(profile(), audit_policy={"max_weekly_hours": 60})
+    complete = overloaded() + [assignment("2026-10-10")]
+    model = Model([_reply(overloaded()), _reply(complete)])
+    result = Scheduler(model).generate_span(workplace, "2026-10-05", "2026-10-10")
+    assert result["assignments"] == complete
+    assert not any(item["code"] == "unfilled" for item in result["warnings"])
+    assert any(item["code"] == "uneven_load" for item in result["warnings"])
+    assert any("פער עומס" in note for note in result["notes"])

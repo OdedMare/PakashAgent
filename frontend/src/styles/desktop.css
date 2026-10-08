@@ -82,8 +82,8 @@
   .sidebar-chat-list button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sidebar-chat-list button:hover, .sidebar-chat-list button.is-active { background: var(--surface-3); }
   .sidebar-chat-list p { font-size: 12px; color: var(--text-muted); padding: 12px; }
-  .management .header-actions { margin-top: auto; flex-wrap: wrap; gap: 0; padding-top: 10px; border-top: 1px solid var(--border); }
-  .management .header-actions .icon-button { width: 38px; height: 40px; }
+  .management-topbar { padding-inline: 16px 20px; }
+  .management .header-actions .icon-button { width: 38px; height: 38px; }
   .management-workspace { min-height: 0; overflow: hidden; grid-template-columns: minmax(0, 1fr); }
   /* The split is the manager's (Management/useChatSplit.ts), which also keeps
      both sides above their floors — so the columns here take it as given. */

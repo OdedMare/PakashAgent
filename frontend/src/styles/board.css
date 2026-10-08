@@ -2152,9 +2152,12 @@
     gap: 0.5rem;
   }
 
-  .management > .interview-header .header-actions {
+  .management-topbar .header-actions {
     gap: 0.15rem;
-    margin-inline-start: auto;
+  }
+
+  .account-menu-name {
+    display: none;
   }
 
   .board {

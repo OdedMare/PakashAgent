@@ -1047,7 +1047,10 @@ def test_a_generated_schedule_carries_its_warnings_and_still_returns_200():
     the calls it took to build it.
     """
     app, _ = _build_app([
-        _generation(_days(17, 23)), _generation(_days(24, 24)),
+        # The model leaves the draft unchanged on each fairness repair;
+        # the advisory warnings must still render instead of blocking saving.
+        _generation(_days(17, 23)), _generation(_days(17, 23)),
+        _generation(_days(24, 24)), _generation(_days(24, 24)),
     ])
     response = _client(app).post("/api/schedule/generate", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-24",

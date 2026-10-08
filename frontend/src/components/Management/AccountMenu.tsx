@@ -75,7 +75,6 @@ export function AccountMenu({
             <button
               type="button"
               role="menuitem"
-              className="is-danger"
               onClick={choose(onLogout)}
             >
               <LogOut size={15} />
