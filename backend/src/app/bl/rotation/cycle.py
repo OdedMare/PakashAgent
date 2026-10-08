@@ -83,6 +83,9 @@ def configuration_errors(profile: dict) -> List[str]:
         if lookup:
             required.add(lookup)
     for pattern in sorted(required):
+        # Existing fixed A/B presence schedules have no alternating phase.
+        if pattern == "round" and workplace.get("rotation_a_unavailability"):
+            continue
         if cycle(profile, pattern) is None:
             errors.append(
                 "לא הוגדר עוגן סגירה ל%s (תאריך וקבוצה ראשונה)"

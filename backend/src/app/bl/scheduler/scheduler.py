@@ -4,6 +4,7 @@ import json
 from typing import List, Optional
 
 from app.bl.audit import load_history
+from app.bl import rotation
 from app.bl.prompts import load
 from app.bl.scheduler.availability import (
     availability_for_dates, effective_availability,
@@ -49,6 +50,7 @@ class Scheduler:
         tally is recomputed over the real history *plus* this run, so week two
         sees week one's nights as nights. Nothing is persisted here.
         """
+        _check_rotation(profile)
         slots = build_slots(profile, starts_on, ends_on)
         if not slots:
             raise AgentError("לא ניתן לבנות סידור: לא הוגדרו משמרות לתקופה הזו")
@@ -110,6 +112,7 @@ class Scheduler:
         split_on_failure: bool = True,
     ) -> dict:
         """Generate and verify one contiguous stretch of dates. See `span.py`."""
+        _check_rotation(profile)
         options = dict(availability=availability, history=history, instructions=instructions,
                        required_assignments=required_assignments,
                        already_scheduled=already_scheduled, preferences=preferences)
@@ -131,6 +134,12 @@ class Scheduler:
         if not isinstance(answer, dict):
             raise ModelOutputError("המודל החזיר סידור לא תקין")
         return answer
+
+
+def _check_rotation(profile):
+    errors = rotation.configuration_errors(profile)
+    if errors:
+        raise AgentError("יש להשלים את העוגנים והקבוצות בהגדרות > סבבים ותלתונים: %s" % "; ".join(errors))
 
 
 class _ChunkedRun:

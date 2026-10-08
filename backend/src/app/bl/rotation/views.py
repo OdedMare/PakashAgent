@@ -19,15 +19,17 @@ class _DateEntry:
         # A date is a handover only while *every* closure landing on it is
         # one; otherwise the fuller closure would be cut short.
         self.until_handover = True
+        self.restricted_shifts = True
 
     def add(self, name: str, row: dict) -> None:
         if row["cycle"] and row["group"]:
             self.closing_groups[row["cycle"]] = row["group"]
         if name not in self.employees:
             self.employees.append(name)
+        self.until_handover = self.until_handover and row["until_handover"]
         if not (row["until_handover"] or row.get("restricted_shifts")):
-            self.until_handover, self.shifts = False, []
-        elif self.until_handover:
+            self.restricted_shifts, self.shifts = False, []
+        elif self.restricted_shifts:
             self.shifts.extend(s for s in row["shifts"] if s not in self.shifts)
 
     def to_dict(self) -> dict:

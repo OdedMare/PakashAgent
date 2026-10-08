@@ -19,8 +19,7 @@
 .rotation-days label { flex-direction: row; align-items: center; min-height: 44px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; }
 .rotation-settings .ghost-button { min-height: 44px; margin-block: 4px; }
 @media (max-width: 600px) {
-  .rotation-settings .settings-input-row { flex-wrap: wrap; }
-  .rotation-settings .settings-input-row > label { flex: 1 1 100%; }
+  .rotation-settings .settings-input-row { grid-template-columns: 1fr; gap: 12px; }
   .settings-top-tabs { padding-inline: 10px; }
   .settings-top-tabs button { flex: 1; padding-inline: 8px; }
   .rotation-group { padding: 12px; }
