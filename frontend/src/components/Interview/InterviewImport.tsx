@@ -87,7 +87,7 @@ export function InterviewImport({
           <>
             <p>
               העלו אקסל או וורד בכל מבנה. המערכת תזהה אנשים, שמות משמרות
-              ודפוסים—ואחר כך ישאל רק כדי לאמת ולהשלים.
+              ודפוסים—ואחר כך תשאל רק כדי לאמת ולהשלים.
             </p>
             <div
               className={`interview-import-drop${reading ? " is-reading" : ""}`}

@@ -1,4 +1,7 @@
 import type {
+  AdminOverview,
+  AdminTeam,
+  AdminTeamDetail,
   AssistantReply,
   AgentAnswer,
   Briefing,
@@ -242,20 +245,35 @@ export function probeModels(
 }
 
 
+// --- the צוות משמרות זהב console (D28) --------------------------------------
+// Its own HttpOnly cookie (`pakash_admin`), so it never disturbs a team
+// session in the same browser. Opening a team happens only here.
+
+export const adminLogin = (password: string) =>
+  request<{ role: string }>("/api/admin/login", { method: "POST", body: JSON.stringify({ password }) });
+export const adminLogout = () => request<{ status: string }>("/api/admin/logout", { method: "POST" });
+export const adminMe = () => request<{ role: string; expires: number }>("/api/admin/me");
+export const adminOverview = () => request<AdminOverview>("/api/admin/overview");
+export const adminTeams = () => request<AdminTeam[]>("/api/admin/teams");
+export const adminTeam = (id: string) => request<AdminTeamDetail>(`/api/admin/teams/${encodeURIComponent(id)}`);
+export const adminCreateTeam = (input: { name: string; password: string; max_employees: number | null; notes: string }) =>
+  request<AdminTeamDetail>("/api/admin/teams", { method: "POST", body: JSON.stringify(input) });
+/** Only the keys present are applied; `max_employees: null` removes the cap. */
+export const adminUpdateTeam = (id: string, patch: Partial<{ name: string; max_employees: number | null; active: boolean; notes: string }>) =>
+  request<AdminTeamDetail>(`/api/admin/teams/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+export const adminResetPassword = (id: string, password: string) =>
+  request<{ status: string }>(`/api/admin/teams/${encodeURIComponent(id)}/password`, { method: "POST", body: JSON.stringify({ password }) });
+export const adminRotateLink = (id: string) =>
+  request<AdminTeamDetail>(`/api/admin/teams/${encodeURIComponent(id)}/member-link/rotate`, { method: "POST" });
+export const adminReleaseIdentity = (id: string, employee: string) =>
+  request<AdminTeamDetail>(`/api/admin/teams/${encodeURIComponent(id)}/identities/release`, { method: "POST", body: JSON.stringify({ employee }) });
+/** Irreversible. The team's name must be typed back. */
+export const adminDeleteTeam = (id: string, confirmName: string) =>
+  request<{ status: string }>(`/api/admin/teams/${encodeURIComponent(id)}/delete`, { method: "POST", body: JSON.stringify({ confirm_name: confirmName }) });
+
 /** Teams for the login picker. Served unauthenticated. */
 export function listTeams(): Promise<TeamSummary[]> {
   return request<TeamSummary[]>("/api/workspace/teams");
-}
-
-/** Open a workspace and log in as its boss. */
-export function createTeam(
-  name: string,
-  password: string,
-): Promise<Workspace> {
-  return request<Workspace>("/api/workspace", {
-    method: "POST",
-    body: JSON.stringify({ name, password }),
-  });
 }
 
 export function loginTeam(

@@ -66,9 +66,12 @@ export function MemberArea({
           <span className="brand-mark" aria-hidden="true">
             <Users size={17} />
           </span>
-          <span>
-            {workspace.name}
-            <span className="brand-sub"> · תצוגת צוות</span>
+          <span className="brand-text">
+            <span className="brand-name">משמרות זהב</span>
+            <span>
+              {workspace.name}
+              <span className="brand-sub"> · תצוגת צוות</span>
+            </span>
           </span>
         </div>
         <div className="header-actions">

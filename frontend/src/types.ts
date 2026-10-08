@@ -192,6 +192,76 @@ export interface TeamSummary {
   name: string;
 }
 
+/** One workspace as the צוות משמרות זהב console sees it (D28). Counts only —
+ *  never a password hash; the member token only on the single-team detail. */
+export interface AdminTeam {
+  id: string;
+  name: string;
+  created_at: string;
+  active: boolean;
+  /** null = no cap. */
+  max_employees: number | null;
+  notes: string;
+  /** Employees who still hold a seat (departed ones excluded). */
+  employees: number;
+  roster_total: number;
+  has_profile: boolean;
+  shifts: number;
+  identities: number;
+  periods: number;
+  published: number;
+  pending_requests: number;
+  pending_swaps: number;
+  last_activity: string | null;
+}
+
+export interface AdminTeamDetail extends AdminTeam {
+  member_token: string;
+  profile_employees: {
+    name: string;
+    role: string;
+    service_type?: string;
+    inactive_from: string | null;
+  }[];
+  identities_list: {
+    employee: string;
+    created_at: string;
+    last_seen_at: string | null;
+  }[];
+  periods_list: {
+    id: string;
+    starts_on: string;
+    ends_on: string;
+    status: "draft" | "published";
+    updated_at: string;
+    assignments: number;
+  }[];
+  recent_changes: {
+    action: string;
+    employee: string;
+    replaced_employee: string;
+    slot_date: string | null;
+    shift_name: string;
+    reason: string;
+    created_at: string;
+  }[];
+}
+
+export interface AdminOverview {
+  totals: {
+    teams?: number;
+    active_teams?: number;
+    identities?: number;
+    periods?: number;
+    assignments?: number;
+    changes?: number;
+    pending_requests?: number;
+    database_bytes?: number;
+  };
+  database: "ok" | "error";
+  model: Record<string, string>;
+}
+
 /** The signed-in workspace.
  *
  *  `member_token` is the share link's secret half and is present only for a

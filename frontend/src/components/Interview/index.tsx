@@ -130,9 +130,12 @@ export function Interview({
           <span className="brand-mark" aria-hidden="true">
             <CalendarDays size={17} />
           </span>
-          <span>
-            {workspace ? workspace.name : "פקש"}
-            <span className="brand-sub"> · ראיון היכרות</span>
+          <span className="brand-text">
+            <span className="brand-name">משמרות זהב</span>
+            <span>
+              {workspace ? workspace.name : null}
+              <span className="brand-sub">{workspace ? " · " : ""}ראיון היכרות</span>
+            </span>
           </span>
         </div>
         <div className="header-actions">

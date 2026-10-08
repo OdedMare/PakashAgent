@@ -139,7 +139,8 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const remaining = checklist.filter((item) => !item.done).length;
-  const onTutorialPage = pathname?.startsWith("/tutorial");
+  // The tutorial and the operator console carry no manager tour.
+  const onTutorialPage = pathname?.startsWith("/tutorial") || pathname?.startsWith("/admin");
 
   return (
     <GuideContext.Provider value={api}>

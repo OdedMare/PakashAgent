@@ -80,9 +80,12 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
           <span className="brand-mark" aria-hidden="true">
             <UserCircle size={17} />
           </span>
-          <span>
-            {view.employee}
-            <span className="brand-sub"> · האזור שלי</span>
+          <span className="brand-text">
+            <span className="brand-name">משמרות זהב</span>
+            <span>
+              {view.employee}
+              <span className="brand-sub"> · האזור שלי</span>
+            </span>
           </span>
         </div>
         <div className="header-actions">

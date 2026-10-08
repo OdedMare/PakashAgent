@@ -109,7 +109,7 @@ export function Login({
             <CalendarDays size={18} />
           </span>
           <span>
-            <strong>פקש</strong>
+            <strong className="brand-name">משמרות זהב</strong>
             <small>ניהול סידורי עבודה</small>
           </span>
         </div>

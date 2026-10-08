@@ -293,9 +293,12 @@ export function Management({
           <span className="brand-mark" aria-hidden="true">
             <CalendarDays size={17} />
           </span>
-          <span>
-            {workspace.name}
-            <span className="brand-sub"> · איזור ניהול</span>
+          <span className="brand-text">
+            <span className="brand-name">משמרות זהב</span>
+            <span>
+              {workspace.name}
+              <span className="brand-sub"> · איזור ניהול</span>
+            </span>
           </span>
         </div>
         {/* The board is the workspace; management opens beside it. */}
