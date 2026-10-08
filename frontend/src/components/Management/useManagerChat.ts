@@ -139,6 +139,12 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
       const remaining = await listManagerChats();
       return remaining.length ? readManagerChat(remaining[0].id) : createManagerChat();
     }) : Promise.resolve(false),
+    // Done with this thread: drop it and start clean, rather than landing on
+    // whichever older conversation `remove` would open.
+    restart: () => chatId ? run(async () => {
+      await deleteManagerChat(chatId);
+      return createManagerChat();
+    }) : Promise.resolve(false),
     dismiss: (messageId: string) => chatId ? run(() => dismissManagerPlan(chatId, messageId)) : Promise.resolve(false),
     stop: () => chatId ? run(() => stopManagerReply(chatId)) : Promise.resolve(false),
   };

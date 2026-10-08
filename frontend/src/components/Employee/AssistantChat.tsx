@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeftRight, Check, LoaderCircle, MessageCircle, RotateCcw, Send } from "lucide-react";
+import { ArrowLeftRight, Check, LoaderCircle, MessageCircle, RotateCcw, Send, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Markdown } from "@/components/Management/AgentChat";
@@ -85,6 +85,13 @@ export function AssistantChat({
           <p className="assistant-thinking">
             <LoaderCircle size={14} className="spin" aria-hidden="true" /> בודק את הסידור…
           </p>
+        ) : null}
+        {messages.length > 0 && !asking ? (
+          <div className="assistant-restart">
+            <button type="button" className="ghost-button" onClick={assistant.reset}>
+              <Trash2 size={13} /> מחיקת השיחה ומעבר לשיחה חדשה
+            </button>
+          </div>
         ) : null}
       </div>
 

@@ -20,13 +20,18 @@ def overloaded():
 @pytest.mark.parametrize("method", ["generate", "generate_span"])
 def test_forty_hours_against_zero_gets_one_balanced_repair(method):
     workplace = profile()
-    model = Model([_reply(overloaded()), cover])
+    balanced = [assignment(row["date"], "דנה" if index < 3 else "יוסי")
+                for index, row in enumerate(overloaded())]
+    model = Model([_reply(overloaded(), summary="סידור ראשוני"),
+                   _reply(balanced, summary="סידור מאוזן")])
     result = getattr(Scheduler(model), method)(workplace, "2026-10-05", "2026-10-09")
     hours = sorted(row["hours"] for row in load_history(
         result["assignments"], workplace["shifts"], workplace["employees"]))
     assert hours == [16, 24]
     assert len(model.calls) == 2
     assert len(result["assignments"]) == 5
+    assert result["assignments"] == balanced  # Includes two consecutive days off.
+    assert result["summary"] == "סידור מאוזן"
     assert len(model.calls[1]["period"]["slots"]) == 5
     assert "40" in model.calls[1]["repair"]["warnings"][0]
 

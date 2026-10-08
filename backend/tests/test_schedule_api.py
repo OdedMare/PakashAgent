@@ -1058,6 +1058,7 @@ def test_a_generated_schedule_carries_its_warnings_and_still_returns_200():
     assert response.status_code == 200
     codes = {warning["code"] for warning in response.json()["warnings"]}
     assert "consecutive" in codes
+    assert any("פער עומס" in note for note in response.json()["notes"])
     # The schedule is still there in full, not withheld.
     assert len(response.json()["assignments"]) == 8
 

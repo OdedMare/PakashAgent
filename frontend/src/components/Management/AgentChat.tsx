@@ -21,6 +21,7 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
   const [text, setText] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [restartOpen, setRestartOpen] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const log = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
@@ -29,7 +30,7 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
   const [copyError, setCopyError] = useState("");
   const [conversationId, setConversationId] = useState(agent.chat?.id);
   if (conversationId !== agent.chat?.id) {
-    setConversationId(agent.chat?.id); setText("");
+    setConversationId(agent.chat?.id); setText(""); setRestartOpen(false);
   }
   const [seeded, setSeeded] = useState(draftKey);
   if (seeded !== draftKey) { setSeeded(draftKey); if (draft) setText(draft); }
@@ -130,6 +131,14 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
           }}>{copied === message.id ? <Check size={15} /> : <Copy size={15} />}</button>
         </div> : null}
       </article>)}
+      {!agent.loading && messages.length > 0 && !agent.working ? <div className="conversation-restart">
+        {restartOpen ? <div className="conversation-delete-confirm">
+          <span>למחוק את השיחה ולפתוח שיחה חדשה? השינויים בסידור יישארו.</span>
+          <button type="button" disabled={agent.busy} onClick={() => { void agent.restart(); setRestartOpen(false); }}>מחיקה ושיחה חדשה</button>
+          <button type="button" onClick={() => setRestartOpen(false)}>ביטול</button>
+        </div> : <button type="button" className="ghost-button" disabled={disabled} onClick={() => setRestartOpen(true)}>
+          <Trash2 size={14} /> מחיקת השיחה ומעבר לשיחה חדשה</button>}
+      </div> : null}
     </div>
     {awayFromBottom ? <button type="button" className="conversation-jump" aria-label="מעבר להודעה האחרונה"
       onClick={() => { pinned.current = true; log.current?.scrollTo({ top: log.current.scrollHeight, behavior: "smooth" }); }}><ArrowDown size={17} /></button> : null}

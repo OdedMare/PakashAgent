@@ -360,6 +360,19 @@
   font-size: 0.84rem;
 }
 
+.assistant-restart {
+  display: flex;
+  justify-content: center;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+.assistant-restart .ghost-button {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
 .assistant-error {
   margin: 0;
   color: var(--danger);

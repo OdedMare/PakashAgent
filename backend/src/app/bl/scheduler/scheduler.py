@@ -190,9 +190,7 @@ class _ChunkedRun:
             ),
         )
         self.notes.extend(lines(answer.get("notes")))
-        summary = bounded(answer.get("summary"))
-        if summary:
-            self.summaries.append(summary)
+        self.summaries.append(bounded(answer.get("summary")))
 
     def balance(self, ask, chunk, instructions, preferences) -> None:
         dates = {slot["slot_date"] for slot in chunk}
@@ -212,6 +210,7 @@ class _ChunkedRun:
                     and load_cost(span, second.roster) < load_cost(span, self.assignments):
                 self.assignments = second.roster
                 self.notes.extend(lines(second.answer.get("notes")))
+                self.summaries[-1] = bounded(second.answer.get("summary"))
         except AgentError:
             self.notes.append("בקשת איזון העומס נכשלה; הטיוטה שנבנתה נשמרה.")
         self.notes.extend(item["message"] for item in

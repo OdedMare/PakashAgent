@@ -46,6 +46,9 @@
 .conversation-delete-confirm { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; }
 .conversation-delete-confirm span { width: 100%; }
 .conversation-delete-confirm button { padding: 8px 12px; border: 1px solid var(--border); background: var(--surface); border-radius: 7px; min-height: 44px; }
+.conversation-restart { display: flex; justify-content: center; margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--border); }
+.conversation-restart .conversation-delete-confirm { justify-content: center; text-align: center; }
+.conversation-restart > .ghost-button { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 13px; min-height: 40px; }
 .conversation-log { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 22px 18px; scrollbar-gutter: stable; }
 .conversation-empty { padding: 20px 2px; }
 .conversation-empty-mark { color: var(--primary); margin-bottom: 22px; }
