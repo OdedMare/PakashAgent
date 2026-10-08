@@ -120,7 +120,7 @@ import screen. All surfaces exist.
 | Employee view | **Read-only** schedule — `MemberArea` renders the same `Calendar` with `readOnly` |
 | Personal area | One employee's own shifts, constraint requests and swaps — `src/components/Employee/` |
 | Employee assistant | Swap and "better week" questions; suggests checked swaps, never writes (D27) — `Employee/AssistantChat.tsx` |
-| Request inbox | The manager ruling on submissions — `Management/RequestInbox.tsx` |
+| Request inbox | The manager ruling on submissions — `Management/RequestInbox.tsx`; a new one pops up live (`RequestToast.tsx`, pushed via `useLiveInbox.ts`, D29) |
 
 ## Importing a schedule the workplace already had
 

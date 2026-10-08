@@ -42,6 +42,9 @@ uvicorn app.main:app --app-dir src --reload
 - `api/dependencies/dependencies.py` — the route guards (`visitor`, `boss`,
   `employee`, `admin`). `visitor` also refuses a suspended or deleted team.
 - `common/sessions/sessions.py` — signed session cookies (HMAC-SHA256, no library).
+- `common/events/` — in-process "an inbox moved" signals per team, feeding
+  the manager's SSE stream (`api/routers/employee/live.py`, D29). Signals
+  carry no data; the screen re-reads through the guarded routes.
 - `bl/interview/` — the intro interview, one `plan-chat` turn at a time
   (ported from AiSummryIO). Collects the workplace profile, employees, rules
   (tagged hard/soft), and the **shift vocabulary**. Every turn returns the

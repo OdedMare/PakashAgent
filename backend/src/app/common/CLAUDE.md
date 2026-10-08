@@ -18,6 +18,10 @@ Cross-cutting infrastructure. **Ported from AiSummryIO.**
   `attempt()`, which locks an account for 15 minutes after 5 wrong guesses.
   Keyed by account, not IP — behind the Next proxy every request has the same
   IP. In memory, per process.
+- `events/events.py` — `TeamEvents`: an employee route `publish()`es "the
+  requests (or swaps) inbox moved" from its worker thread, and the manager's
+  SSE stream, waiting on the event loop, wakes up (D29). No payload. In
+  memory, per process; the client's 15-second poll is the backstop.
 
 ## Settings that matter here
 

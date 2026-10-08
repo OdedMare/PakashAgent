@@ -901,6 +901,45 @@ password's default). That was already true of the settings panel, which can
 repoint the database; the console can now also delete teams. Set
 `PAKASH_SETTINGS_PASSWORD` or `PAKASH_ADMIN_PASSWORD` in any real deployment.
 
+## D29 — The manager hears a submission as it happens
+
+When an employee submits or withdraws a constraint request, or answers or
+withdraws a swap, the manager's open screen re-reads that inbox within a
+second, and the existing pop-up announces it. Before this, the screen polled
+every 15 seconds, so a request could sit unannounced for that long while
+the manager was looking straight at the board.
+
+**It is a Server-Sent Events stream, boss-only**
+(`GET /api/schedule/requests/events`). An employee route publishes to it only
+after its write succeeded. A refused submission wakes nobody.
+
+**A signal carries no data.** It names an inbox (`requests` or `swaps`) and
+nothing else. The browser re-reads through the routes it already used, behind
+the same `guards.boss()`. So the stream adds *when* without adding a second
+*what*, and there is no new read path that would need its own scoping or
+could leak a colleague's stated reason.
+
+**It does not cross [D16](#d16--an-employee-is-told-what-changed-and-acknowledging-is-what-marks-it-read)
+or [D17](#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes).**
+Those refuse a *delivery channel*: something that reaches a person who has
+not opened the app, through an address the product does not hold. This
+reaches only a manager's own open tab, which is the same "the app telling
+someone while they are looking at it" that D16 already allows.
+
+**The stream ends itself every five minutes** and `EventSource` reconnects.
+The reconnect passes through the guard again, so a team suspended under
+[D28](#d28--teams-are-opened-by-צוות-משמרות-זהב-not-by-whoever-reaches-the-login-page-️-amends-d10)
+stops listening within minutes rather than holding an authorised stream
+forever.
+
+**⚠️ Per process, like `LoginThrottle`.** `common/events/` is in-memory. A
+submission handled by another worker does not reach this worker's streams.
+The 15-second poll stays underneath as the backstop, so a dropped stream or
+a second worker degrades to the old behaviour rather than to silence. If the
+backend ever runs several workers, Postgres `LISTEN/NOTIFY` is the upgrade.
+
+---
+
 ## Open
 
 - **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment
