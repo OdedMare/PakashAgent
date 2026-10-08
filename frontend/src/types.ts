@@ -54,6 +54,8 @@ export interface WorkplaceProfile {
     triplet_first_closure_date?: string;
     general_exit_schedule?: string;
     enabled_exit_patterns?: Array<"triplet" | "hamshushim" | "shushim">;
+    rotation_closure_windows?: RotationClosureWindow[];
+    rotation_presence?: RotationPresenceRule[];
     rotation_a_unavailability?: Array<{
       days: string[];
       shifts: string[];
@@ -72,6 +74,27 @@ export interface WorkplaceProfile {
    *  `bl/tools.py`'s `profile_gaps`. */
   completeness?: ProfileCompleteness;
   [key: string]: unknown;
+}
+
+export interface RotationGroupRule {
+  pattern: "round" | "triplet";
+  group: string;
+  starts_on: string;
+  ends_on: string;
+  start_time: string;
+  end_time: string;
+}
+
+export interface RotationClosureWindow extends RotationGroupRule {
+  start_day: number;
+  end_day: number;
+}
+
+export interface RotationPresenceRule extends RotationGroupRule {
+  days: string[];
+  shifts: string[];
+  available: boolean;
+  reason: string;
 }
 
 /** What an interview ended early still owes.

@@ -1,13 +1,9 @@
 "use client";
 
 import { Check, Inbox, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
-import {
-  approveRequest,
-  pendingRequests,
-  rejectRequest,
-} from "@/services/api";
+import { approveRequest, rejectRequest } from "@/services/api";
 import type { ConstraintRequestRow } from "@/types";
 import { shortDate } from "@/components/DateInput";
 
@@ -24,23 +20,22 @@ import { shortDate } from "@/components/DateInput";
  *  the reason is captured at the only moment it is cheap — while the manager
  *  still has it in mind ([D8](../../../../docs/DECISIONS.md)).
  *
- *  The decided row settles locally so the inbox does not flash. `onDecided`
- *  refreshes the wider overview independently because approval also changes
- *  constraints and audit warnings. */
-export function RequestInbox({ onDecided }: { onDecided: () => void }) {
-  const [rows, setRows] = useState<ConstraintRequestRow[]>([]);
+ *  The rows come from `useConstraintRequests`, owned by the management area,
+ *  so the drawer tab can count them and a new one can be announced while this
+ *  inbox is closed. A decided row settles through `onSettled` so the inbox
+ *  does not flash. `onDecided` refreshes the wider overview independently
+ *  because approval also changes constraints and audit warnings. */
+export function RequestInbox({
+  rows,
+  onSettled,
+  onDecided,
+}: {
+  rows: ConstraintRequestRow[];
+  onSettled: (id: string) => void;
+  onDecided: () => void;
+}) {
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState("");
-
-  const load = useCallback(async () => {
-    const next = await pendingRequests().catch(() => []);
-    setRows(next);
-  }, []);
-
-  useEffect(() => {
-    const first = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(first);
-  }, [load]);
 
   const decide = async (
     row: ConstraintRequestRow,
@@ -53,7 +48,7 @@ export function RequestInbox({ onDecided }: { onDecided: () => void }) {
       // The write succeeded, so this row is no longer pending. Settle it in
       // place instead of blanking and reloading the whole inbox — the
       // overview can refresh independently without making the card flash.
-      setRows((current) => current.filter((item) => item.id !== row.id));
+      onSettled(row.id);
       setReasons((current) => {
         const next = { ...current };
         delete next[row.id];

@@ -1788,6 +1788,87 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A new constraint request, announced wherever the manager is. It floats
+   over the board rather than inside the drawer, because the drawer may be
+   closed — the "בקשות" badge is what stays once it leaves. */
+.request-toast {
+  position: fixed;
+  z-index: 60;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem 0.8rem;
+  color: var(--text);
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  animation: request-toast-in 220ms ease-out;
+}
+
+.request-toast-icon {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-radius: 10px;
+}
+
+.request-toast-body {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 0.1rem;
+}
+
+.request-toast-body strong {
+  font-size: 0.86rem;
+}
+
+.request-toast-body span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.request-toast-open {
+  flex: none;
+  padding: 0.4rem 0.75rem;
+  color: #ffffff;
+  background: var(--primary-fill);
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.request-toast-close {
+  flex: none;
+}
+
+@keyframes request-toast-in {
+  from { opacity: 0; transform: translate(-50%, -8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .request-toast { animation: none; }
+}
+
 /* Each tool keeps one hue, matching the nav's rhythm. */
 .manager-tab:nth-child(4n + 1) { --tint: var(--hue-blue); --tint-soft: var(--hue-blue-soft); }
 .manager-tab:nth-child(4n + 2) { --tint: var(--hue-violet); --tint-soft: var(--hue-violet-soft); }

@@ -14,6 +14,8 @@ import { FormEvent, useEffect, useState } from "react";
 import { SettingsContent, SettingsNavigation } from "./SettingsSections";
 import type { SettingsController } from "./useSettings";
 import { useSettings } from "./useSettings";
+import { RotationSettings } from "./RotationSettings";
+import type { WorkplaceProfile } from "@/types";
 
 /**
  * The settings modal: model connection and database, saved live.
@@ -23,8 +25,13 @@ import { useSettings } from "./useSettings";
  * and the panel asks for the settings password first. The backend checks it
  * on every call; this screen only collects it.
  */
-export function SettingsPanel({ onClose }: { onClose: () => void }) {
+export function SettingsPanel({ onClose, profile, onProfileSaved }: {
+  onClose: () => void;
+  profile?: WorkplaceProfile;
+  onProfileSaved?: () => void | Promise<void>;
+}) {
   const settings = useSettings();
+  const [tab, setTab] = useState(profile ? "rotation" : "system");
 
   // Escape closes, as a modal should. Bound on the document rather than the
   // dialog so it works before anything inside has taken focus.
@@ -47,7 +54,11 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         onClick={(event) => event.stopPropagation()}
       >
         <ModalHeader onClose={onClose} />
-        <PanelContent settings={settings} />
+        {profile ? <nav className="settings-top-tabs" aria-label="סוג ההגדרות">
+          <button type="button" aria-current={tab === "rotation" ? "page" : undefined} onClick={() => setTab("rotation")}>סבבים ותלתונים</button>
+          <button type="button" aria-current={tab === "system" ? "page" : undefined} onClick={() => setTab("system")}>הגדרות מערכת</button>
+        </nav> : null}
+        {tab === "rotation" && profile ? <RotationSettings profile={profile} onSaved={onProfileSaved ?? (() => undefined)} /> : <PanelContent settings={settings} />}
       </section>
     </div>
   );
@@ -60,8 +71,8 @@ function ModalHeader({ onClose }: { onClose: () => void }) {
         <Settings2 size={20} />
       </span>
       <div>
-        <h2 id="settings-title">הגדרות מערכת</h2>
-        <p>ניהול מודל הבינה ומסד הנתונים.</p>
+        <h2 id="settings-title">הגדרות</h2>
+        <p>סבבים, נוכחות, מודל הבינה ומסד הנתונים.</p>
       </div>
       <button type="button" onClick={onClose} aria-label="סגירת הגדרות">
         <X size={18} />

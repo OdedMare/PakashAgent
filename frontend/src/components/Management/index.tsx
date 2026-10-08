@@ -40,10 +40,12 @@ import { LearnedFromChanges } from "./LearnedFromChanges";
 import { ImportSchedule } from "./ImportSchedule";
 import { Preferences } from "./Preferences";
 import { RequestInbox } from "./RequestInbox";
+import { RequestToast } from "./RequestToast";
 import { SwapInbox } from "./SwapInbox";
 import { Stats } from "./Stats";
 import { TeamPanel } from "./TeamPanel";
 import { Warnings } from "./Warnings";
+import { useConstraintRequests } from "./useConstraintRequests";
 import { useManagement } from "./useManagement";
 import { displayDate } from "@/components/DateInput";
 
@@ -119,6 +121,16 @@ export function Management({
   const focusDate = focusDay.date && inWeek(focusDay.date, state.focusedWeek) ? focusDay.date : "";
   const agent = useManagerChat(workspace.id, state.focusedScheduleId, state.focusedWeek, focusDate, onChatApplied);
   const [copilotPending, setCopilotPending] = useState(0);
+  // Pending constraint requests, polled here rather than inside the inbox so
+  // the tab can count them and a new one pops up wherever the manager is.
+  const requests = useConstraintRequests(section === "requests" && drawerOpen);
+  const { dismissArrivals } = requests;
+  const openRequests = useCallback(() => {
+    setView("board");
+    setSection("requests");
+    setDrawerOpen(true);
+    dismissArrivals();
+  }, [dismissArrivals]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   // The import flow. Opening it writes nothing; the screen's own confirm
@@ -682,7 +694,8 @@ export function Management({
               active={section === "requests"}
               icon={<Inbox size={15} />}
               label="בקשות"
-              onClick={() => setSection("requests")}
+              count={requests.rows.length}
+              onClick={openRequests}
             />
             <ManagerTab
               active={section === "team"}
@@ -753,7 +766,11 @@ export function Management({
               busy={state.busy}
             />
           ) : null}
-          <RequestInbox onDecided={state.refresh} />
+          <RequestInbox
+            rows={requests.rows}
+            onSettled={requests.settle}
+            onDecided={state.refresh}
+          />
           <SwapInbox
             onDecided={state.refresh}
             writeLocked={schedule?.status === "published"}
@@ -786,6 +803,11 @@ export function Management({
           </> : null}
           </div>
         </aside>
+        <RequestToast
+          arrivals={requests.arrivals}
+          onOpen={openRequests}
+          onDismiss={dismissArrivals}
+        />
       </main>
 
       {/* Reading the files writes nothing; this screen's own confirm button
@@ -804,7 +826,7 @@ export function Management({
       ) : null}
 
       {settingsOpen ? (
-        <SettingsPanel onClose={() => setSettingsOpen(false)} />
+        <SettingsPanel onClose={() => setSettingsOpen(false)} profile={overview?.profile} onProfileSaved={state.refresh} />
       ) : null}
     </div>
   );

@@ -3,6 +3,29 @@
    --primary-action* ramp does not exist here, so the brand gradient and
    --primary carry the same roles. */
 
+.settings-top-tabs { display: flex; gap: 8px; padding: 12px 18px; border-bottom: 1px solid var(--border); }
+.settings-top-tabs button { min-height: 44px; padding: 8px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); color: var(--text); }
+.settings-top-tabs button[aria-current="page"] { border-color: var(--primary); color: var(--primary); }
+.rotation-settings { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.rotation-settings > .settings-content { flex: 1; overflow-y: auto; }
+.rotation-settings-fields { border: 0; padding: 0; min-width: 0; }
+.rotation-cycle { margin-block: 18px; }
+.rotation-cycle h4 { font-size: 17px; margin-bottom: 12px; }
+.rotation-group { padding: 16px; margin-block: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.rotation-group h5 { margin: 0 0 8px; font-size: 15px; }
+.rotation-settings-rule { margin-block: 12px; padding-block: 12px; border-block: 1px solid var(--border); }
+.rotation-settings label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; min-width: 0; }
+.rotation-days { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 12px; }
+.rotation-days label { flex-direction: row; align-items: center; min-height: 44px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.rotation-settings .ghost-button { min-height: 44px; margin-block: 4px; }
+@media (max-width: 600px) {
+  .rotation-settings .settings-input-row { flex-wrap: wrap; }
+  .rotation-settings .settings-input-row > label { flex: 1 1 100%; }
+  .settings-top-tabs { padding-inline: 10px; }
+  .settings-top-tabs button { flex: 1; padding-inline: 8px; }
+  .rotation-group { padding: 12px; }
+}
+
 /* --- modal shell ------------------------------------------------------- */
 
 /* `.modal-backdrop`, `.modal`, `.modal-header` and its `h2` are defined once,
