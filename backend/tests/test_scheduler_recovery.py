@@ -28,8 +28,18 @@ def assignment(day, employee="דנה", shift=MORNING):
 
 
 def cover(payload):
-    return _reply([assignment(slot["date"], "דנה" if int(slot["date"][-2:]) % 2 else "יוסי",
-                              slot["shift"]) for slot in payload["period"]["slots"]])
+    loads = {row["employee"]: row["hours"] for row in payload["period_load"]}
+    pinned = {(row["date"], row["shift"]) for row in payload["required_assignments"]}
+    rows = []
+    for slot in payload["period"]["slots"]:
+        if (slot["date"], slot["shift"]) in pinned:
+            continue
+        candidates = [person["name"] for person in payload["candidate_employees"]
+                      if person["id"] in slot["candidate_employee_ids"]]
+        name = min(candidates, key=lambda person: loads[person])
+        rows.append(assignment(slot["date"], name, slot["shift"]))
+        loads[name] += slot["hours"]
+    return _reply(rows)
 
 
 @pytest.mark.parametrize("error", [AgentError("חיבור נקטע"), ModelOutputError("תשובה לא תקינה")])

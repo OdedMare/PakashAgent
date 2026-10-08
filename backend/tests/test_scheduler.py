@@ -839,17 +839,16 @@ def _week_profile():
     }
 
 
-def _covering(first, last, employee="דנה"):
+def _covering(first, last, employee=None):
     return _reply([
-        {"employee": employee, "shift": MORNING,
+        {"employee": employee or ("דנה", "יוסי", "רון")[(day - first) % 3], "shift": MORNING,
          "date": "2026-08-%02d" % day, "reason": "כיסוי"}
         for day in range(first, last + 1)
     ])
 
 
 def test_a_short_period_is_still_one_call():
-    """The common case must not pay for the long one: a single week is built
-    in exactly one model call, as it always was."""
+    """A balanced week needs only one model call."""
     llm = _ScriptedLlm([_covering(17, 23)])
     Scheduler(llm).generate(_week_profile(), "2026-08-17", "2026-08-23")
     assert len(llm.calls) == 1
@@ -924,7 +923,7 @@ def test_a_chunk_never_splits_a_day_across_two_calls():
 def test_a_later_chunk_is_told_what_the_earlier_one_decided():
     """A scheduler that cannot see week one gives week two to the same
     people -- turning the fairness feature into the unfairness it prevents."""
-    llm = _ScriptedLlm([_covering(17, 23), _covering(24, 30, "יוסי")])
+    llm = _ScriptedLlm([_covering(17, 23), _covering(24, 30)])
     Scheduler(llm).generate(_week_profile(), "2026-08-17", "2026-08-30")
     second = json.loads(llm.calls[1]["user"])
     assert len(second["already_scheduled"]) == 7
@@ -936,14 +935,14 @@ def test_a_later_chunk_is_told_what_the_earlier_one_decided():
 
 def test_the_fairness_tally_grows_with_what_this_run_has_placed():
     """Week two must see week one's shifts as shifts already worked."""
-    llm = _ScriptedLlm([_covering(17, 23), _covering(24, 30, "יוסי")])
+    llm = _ScriptedLlm([_covering(17, 23), _covering(24, 30)])
     Scheduler(llm).generate(_week_profile(), "2026-08-17", "2026-08-30")
     first = json.loads(llm.calls[0]["user"])
     second = json.loads(llm.calls[1]["user"])
     before = {row["employee"]: row for row in first["fairness"]}
     after = {row["employee"]: row for row in second["fairness"]}
     assert before["דנה"]["shifts"] == 0
-    assert after["דנה"]["shifts"] == 7
+    assert after["דנה"]["shifts"] == 3
 
 
 def test_an_assignment_repeated_by_a_later_chunk_is_not_duplicated():

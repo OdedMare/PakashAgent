@@ -21,7 +21,8 @@ def uneven_load(span, roster, baseline):
 
     A gap counts only when a seat can be transferred without adding audit
     findings. Unavailable people, specialised roles and pins therefore cannot
-    create an impossible fairness repair. A one-shift gap is normal rounding.
+    create an impossible fairness repair. Only gaps exceeding two of the
+    transferable shift's durations buy another model call.
     """
     loads = {item["employee"]: item["hours"] for item in period_load(span, roster)}
     pins = {(row["employee"], row["date"], row["shift"]) for row in span.required}
@@ -43,7 +44,7 @@ def uneven_load(span, roster, baseline):
         if hours <= 0 or (name, *key) in pins or name not in choices.get(key, []):
             continue
         for other in choices[key]:
-            if loads[name] - loads[other] <= hours + 1e-6:
+            if loads[name] - loads[other] <= 2 * hours + 1e-6:
                 continue
             if any(item.get("employee") == other and
                    (item.get("date"), item.get("shift")) == key for item in roster):

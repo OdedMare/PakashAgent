@@ -17,6 +17,9 @@ from app.bl.scheduler.payload import (
 )
 from app.bl.scheduler.slots import build_slots, chunks
 from app.bl.scheduler.span import MAX_HISTORY_ROWS, SpanGenerator
+from app.bl.scheduler.request import SpanRequest
+from app.bl.scheduler.fairness import load_cost, uneven_load
+from app.bl.scheduler.quality import no_worse
 from app.bl.scheduler.values import bounded, bounded_rows, lines
 from app.common.errors.errors import AgentError, ModelOutputError
 
@@ -54,6 +57,7 @@ class Scheduler:
         for chunk in chunks(slots):
             answer = self._ask(run.payload(chunk, instructions, preferences))
             run.absorb(answer)
+            run.balance(self._ask, chunk, instructions, preferences)
         return run.result()
 
     def generate_day(self, profile: dict, day: str, **kwargs) -> dict:
@@ -166,6 +170,10 @@ class _ChunkedRun:
                 (self._profile or {}).get("shifts") or [],
                 (self._profile or {}).get("employees") or [],
             ),
+            "period_load": load_history(
+                self.assignments, self._profile.get("shifts") or [],
+                self._profile.get("employees") or [], slots=self._slots,
+            ),
             "already_scheduled": committed_for_model(self.assignments),
             "required_assignments": committed_for_model(self._required),
             "instructions": bounded(instructions),
@@ -185,6 +193,29 @@ class _ChunkedRun:
         summary = bounded(answer.get("summary"))
         if summary:
             self.summaries.append(summary)
+
+    def balance(self, ask, chunk, instructions, preferences) -> None:
+        dates = {slot["slot_date"] for slot in chunk}
+        span = SpanRequest(self._profile, min(dates), max(dates), chunk,
+                           self._availability, self.assignments,
+                           [row for row in self._required if row["date"] in dates])
+        baseline = span.audit(self.assignments)
+        findings = uneven_load(span, self.assignments, baseline)
+        if not findings:
+            return
+        payload = span.payload(self._past, instructions, preferences)
+        payload["repair"] = {"warnings": [item["message"] for item in findings],
+                             "instruction": "החזר סידור מלא ומאוזן לתקופה בלבד ושמור על שיבוצי החובה."}
+        try:
+            second = span.read(ask(payload, schema=span.schema))
+            if not second.rejected and no_worse(baseline, span.audit(second.roster)) \
+                    and load_cost(span, second.roster) < load_cost(span, self.assignments):
+                self.assignments = second.roster
+                self.notes.extend(lines(second.answer.get("notes")))
+        except AgentError:
+            self.notes.append("בקשת איזון העומס נכשלה; הטיוטה שנבנתה נשמרה.")
+        self.notes.extend(item["message"] for item in
+                          uneven_load(span, self.assignments, span.audit(self.assignments)))
 
     def result(self) -> dict:
         return {
