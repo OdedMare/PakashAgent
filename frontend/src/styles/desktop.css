@@ -93,7 +93,9 @@
   .management-workspace > .manager-drawer { position: relative; inset: auto; grid-column: 1; grid-row: 1; height: 100%; display: flex; flex-direction: column; border: 0; border-inline-end: 1px solid var(--border); border-radius: 0; transform: none; box-shadow: none; transition: none; }
   .management-workspace > .manager-drawer[hidden] { display: none; }
   .manager-drawer-head { display: none; }
-  .manager-tabs { flex: 0 0 auto; padding: 10px 14px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .manager-tabs { flex: 0 0 auto; padding: 10px 14px; background: var(--surface); border-bottom: 1px solid var(--border); grid-template-columns: repeat(4, minmax(0, 1fr)) auto; align-items: center; }
+  .manager-tabs-close { display: inline-grid; place-items: center; width: 34px; height: 34px; margin-inline-start: 6px; color: var(--text-muted); }
+  .manager-tabs-close:hover { color: var(--text); background: var(--surface-3); }
   .manager-tab { min-height: 36px; font-size: 12px; }
   .manager-tab svg { color: inherit; }
   .manager-tab.is-active { background: var(--surface-3); color: var(--text); box-shadow: none; }

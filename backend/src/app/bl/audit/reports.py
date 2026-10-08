@@ -123,6 +123,7 @@ def fairness(
 
 def load_history(
     assignments: List[dict], shifts: List[dict], employees: List[dict],
+    slots: Optional[List[dict]] = None,
 ) -> List[dict]:
     """How much each person has carried across *past* periods.
 
@@ -134,7 +135,7 @@ def load_history(
     """
     shift_index = index_shifts(shifts)
     totals: Dict[str, dict] = {name: _empty_load() for name in _roster_names(employees)}
-    for row in rows_of(assignments, shift_index):
+    for row in rows_of(assignments, shift_index, slots):
         # A name the roster no longer lists is kept: dropping it would
         # understate how much of the load the people still here carried.
         entry = totals.setdefault(row["employee"], _empty_load())

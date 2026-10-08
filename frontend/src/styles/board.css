@@ -1749,6 +1749,10 @@
   border-bottom: 1px solid var(--border);
 }
 
+.manager-tabs-close {
+  display: none;
+}
+
 .manager-tab {
   position: relative;
   min-height: 3.25rem;

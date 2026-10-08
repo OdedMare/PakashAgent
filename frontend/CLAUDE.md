@@ -189,7 +189,9 @@ impression.
   as a *share* of the workspace rather than pixels, so a split chosen on a
   wide monitor still means the same thing on a laptop, and keeps each side
   above a pixel floor (agent 340, board 320). Remembered per browser, like
-  the shift-row order; nothing is written to the server.
+  the shift-row order; nothing is written to the server. The X at the end
+  of the drawer's tab row closes the agent outright, and the board takes the
+  full width back — full-size cards, roles and the week rail return.
   The autonomous copilot console lives under Overview, and the old invisible
   automatic briefings are disabled for the conversation surface.
 - **Export downloads; it does not navigate.** `downloadSchedule` fetches the

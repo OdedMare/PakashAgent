@@ -698,6 +698,17 @@ export function Management({
               count={copilotPending}
               onClick={() => setSection("overview")}
             />
+            {/* Desktop hides the drawer head, so the way out lives here.
+                Closing hands the whole width back to the board. */}
+            <button
+              type="button"
+              className="icon-button manager-tabs-close"
+              onClick={() => setDrawerOpen(false)}
+              aria-label="סגירת הסוכן"
+              title="סגירת הסוכן — הלוח יתרחב"
+            >
+              <X size={16} />
+            </button>
           </div>
 
           <div className={`manager-drawer-content${section === "agent" ? " is-conversation" : ""}`}>

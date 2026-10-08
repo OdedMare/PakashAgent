@@ -16,6 +16,7 @@ from app.bl.scheduler.request import MAX_HISTORY_ROWS, SpanAttempt, SpanRequest
 from app.bl.scheduler.slots import build_slots
 from app.bl.scheduler.span_audit import add_usage, metrics, usage_of
 from app.bl.scheduler.quality import no_worse, quality
+from app.bl.scheduler.fairness import load_cost, uneven_load
 from app.bl.scheduler.repair import repair_request, repaired_attempt
 from app.bl.scheduler.values import bounded, lines
 from app.common.errors.errors import AgentError
@@ -66,6 +67,8 @@ class SpanGenerator:
     def _complete(self, span, first, history, instructions, preferences, measured, started):
         chosen, rejected = first, list(first.rejected)
         baseline = span.audit(first.roster)
+        imbalance = uneven_load(span, first.roster, baseline)
+        first.warnings.extend(imbalance)
         repair_error, repair_dates = "", []
         if first.problems:
             request, payload = repair_request(span, first, history, instructions, preferences)
@@ -73,7 +76,8 @@ class SpanGenerator:
             try:
                 answer = self._call(payload, request.schema, measured)
                 second = repaired_attempt(span, request, answer, first)
-                if len(second.rejected) <= len(first.rejected) and no_worse(baseline, second.warnings):
+                fairer = not imbalance or load_cost(span, second.roster) < load_cost(span, first.roster)
+                if len(second.rejected) <= len(first.rejected) and no_worse(baseline, second.warnings) and fairer:
                     chosen = second
                 rejected.extend(second.rejected)
             except AgentError as exc:
@@ -81,11 +85,13 @@ class SpanGenerator:
                 _log.warning("schedule repair failed span=%s..%s: %s",
                              request.starts_on, request.ends_on, exc)
         improved = chosen is not first and (len(chosen.rejected) < len(first.rejected)
-                                            or not no_worse(chosen.warnings, baseline))
+                                            or not no_worse(chosen.warnings, baseline)
+                                            or bool(imbalance))
         measured.update(repair_dates=repair_dates, repair_error=repair_error,
                         repair_improved=improved,
                         quality_before=quality(first.roster, span.audit_slots, span.profile, baseline))
         warnings = baseline if chosen is first else chosen.warnings
+        warnings = warnings + uneven_load(span, chosen.roster, warnings)
         return self._finish(span, chosen, rejected, bool(first.problems), measured, started, warnings)
 
     def _call(self, payload, schema, measured):

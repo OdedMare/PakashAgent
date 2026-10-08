@@ -13,6 +13,7 @@ from app.bl.scheduler.payload import (
     closures_for_model, preferences_for_model, profile_beside_candidates, slot_for_model,
 )
 from app.bl.scheduler.slots import build_slots
+from app.bl.scheduler.fairness import period_load
 from app.bl.scheduler.span_audit import span_warnings
 from app.bl.scheduler.values import bounded, bounded_rows, parse_date
 
@@ -81,6 +82,7 @@ class SpanRequest:
                 self.profile, self.starts_on, self.ends_on
             ),
             "fairness": self._fairness(history),
+            "period_load": period_load(self, self._fixed_rows()),
             # Both boundaries protect rest when repairing inside a fixed period;
             # load totals carry the other dates without repeating their reasons.
             "already_scheduled": merge(
@@ -92,15 +94,18 @@ class SpanRequest:
         }
 
     def _fairness(self, history) -> List[dict]:
+        return load_history(
+            bounded_rows(history, MAX_HISTORY_ROWS) + self._fixed_rows(),
+            self.profile.get("shifts") or [],
+            self.profile.get("employees") or [], slots=self.audit_slots,
+        )
+
+    def _fixed_rows(self) -> List[dict]:
         fixed = [
             row for row in self.committed
             if bounded(row.get("date")) not in self.dates
         ]
-        return load_history(
-            bounded_rows(history, MAX_HISTORY_ROWS) + fixed + self.required,
-            self.profile.get("shifts") or [],
-            self.profile.get("employees") or [],
-        )
+        return fixed + self.required
 
     def read(self, answer: dict) -> SpanAttempt:
         accepted, rejected = read_span_assignments(
