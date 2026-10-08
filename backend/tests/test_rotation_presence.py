@@ -124,6 +124,18 @@ def test_closing_group_missing_from_roster_never_frees_the_other_group():
     assert ("ב", "צהריים") in blocked(p, "2026-08-27")
 
 
+def test_presence_over_multiple_days_keeps_overnight_shifts_available():
+    p = profile()
+    p["workplace"]["rotation_presence"] = [rule("א", True, days=["שישי", "שבת"])]
+    assert ("א", "לילה") not in blocked(p, "2026-09-04")
+
+
+def test_missing_shift_clocks_cannot_bypass_a_configured_closure():
+    p = profile()
+    p["shifts"] = [{"name": "ללא שעות"}]
+    assert {("א", "ללא שעות"), ("ב", "ללא שעות")} <= blocked(p, "2026-08-29")
+
+
 @pytest.mark.parametrize("method", ["generate", "generate_span", "generate_verified"])
 def test_all_model_generation_paths_require_an_anchor(method):
     p = profile()

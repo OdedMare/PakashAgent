@@ -11,8 +11,14 @@ from app.common.sessions.sessions import COOKIE_NAME, ROLE_EMPLOYEE, issue
 
 
 class IdentityRoutes:
-    def __init__(self, service, visitor, secret: str, days: int, throttle):
+    def __init__(
+        self, service, visitor, secret: str, days: int, throttle,
+        require_active=None,
+    ):
         self._service = service
+        # Refuses a suspended team's front-door sign-in (D28). The other
+        # routes here already run behind `visitor`, which checks the same.
+        self._require_active = require_active or (lambda team_id: None)
         self._visitor = visitor
         self._secret = secret
         self._days = days
@@ -93,6 +99,7 @@ class IdentityRoutes:
             result = throttle.attempt(key, lambda: service.login(
                 request.team_id, request.employee, request.passcode
             ))
+            self._require_active(request.team_id)
             sign_in(response, request.team_id, result["employee"])
             return result
 

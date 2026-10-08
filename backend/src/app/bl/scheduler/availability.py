@@ -19,8 +19,8 @@ def effective_availability(
 
     Explicit dated rows win for the same person, date and shift. A recurring
     all-shifts rule is expanded per declared shift, which lets one dated shift
-    exception override only that occurrence. The rotation and closure cycles
-    are expressed as hard unavailability too (`rotation_rows.py`).
+    exception override only that occurrence. Group presence and closure cycles
+    remain hard constraints even when a person submits a dated availability.
     """
     start, end = parse_date(starts_on), parse_date(ends_on)
     explicit = _explicit_rows(rows, start, end)

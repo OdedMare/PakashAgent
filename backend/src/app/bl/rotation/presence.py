@@ -41,7 +41,7 @@ def presence_status(profile, person, slot):
     """None leaves the cycle in charge; False blocks the whole assignment.
 
     Dated rules replace recurring rules. Absence always wins over presence;
-    multiple presence windows allow any one window containing the full shift.
+    adjacent presence windows cover a continuous stay across midnight.
     """
     day = parse_date(slot["slot_date"])
     if day is None:
@@ -50,7 +50,10 @@ def presence_status(profile, person, slot):
     matches = _rules_on(profile, person, day, slot["shift_name"])
     if interval is None:
         # Missing clocks cannot make a declared absence or timed presence safe.
-        return False if matches else None
+        if not matches:
+            return None
+        return all(rule["available"] and not rule.get("start_time") and not rule.get("end_time")
+                   for rule in matches)
     positives = []
     for rule_day in (day - _DAY, day, day + _DAY):
         for rule in _rules_on(profile, person, rule_day, slot["shift_name"]):
@@ -61,7 +64,13 @@ def presence_status(profile, person, slot):
             if rule["available"] and (rule_day == day or overlaps):
                 positives.append(window)
     if positives:
-        return any(window[0] <= interval[0] and interval[1] <= window[1] for window in positives)
+        merged = []
+        for start, end in sorted(positives):
+            if merged and start <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+            else:
+                merged.append((start, end))
+        return any(start <= interval[0] and interval[1] <= end for start, end in merged)
     return None
 
 

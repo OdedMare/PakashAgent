@@ -1,7 +1,12 @@
-"""Workspaces: create one, log into one, open a member's share link.
+"""Workspaces: log into one, open a member's share link.
 
 Routers delegate; the decisions live in `bl/`. What this layer owns is the
 cookie -- issuing it on a successful login and clearing it on logout.
+
+Opening a workspace is the operator's act, not a visitor's (D28): it happens
+in the צוות משמרות זהב console (`routers/admin.py`). `POST /api/workspace`
+survives only behind `allow_signup` (`PAKASH_OPEN_SIGNUP`), off by default,
+for an install that genuinely wants self-service teams.
 """
 
 from typing import Optional
@@ -15,14 +20,20 @@ from app.api.contracts import (
     TeamView,
     Workspace,
 )
+from app.common.errors.errors import ForbiddenError
 from app.common.sessions.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 from app.common.throttle.throttle import LoginThrottle
 
 
 class WorkspaceRoutes:
-    def __init__(self, service, guards, secret: str, days: int, throttle):
+    def __init__(
+        self, service, guards, secret: str, days: int, throttle,
+        allow_signup: bool = False,
+    ):
         self._service = service
         self._throttle = throttle
+        self._guards = guards
+        self._allow_signup = allow_signup
         self._boss = guards.boss()
         self._visitor = guards.visitor()
         self._secret = secret
@@ -58,7 +69,8 @@ class WorkspaceRoutes:
     def _register_entry(self, router: APIRouter) -> None:
         """Ways into a workspace: pick it, create it, log in, follow a link."""
         service, set_cookie = self._service, self.set_cookie
-        throttle = self._throttle
+        throttle, guards = self._throttle, self._guards
+        allow_signup = self._allow_signup
 
         @router.get("/teams", response_model=list)
         def teams() -> list:
@@ -68,7 +80,14 @@ class WorkspaceRoutes:
 
         @router.post("", response_model=Workspace)
         def create(request: CreateTeamRequest, response: Response) -> dict:
-            """Open a workspace and log its creator in as the boss."""
+            """Open a workspace and log its creator in as the boss.
+
+            Refused unless self-service signup is switched on: teams are
+            opened from the operator console (D28)."""
+            if not allow_signup:
+                raise ForbiddenError(
+                    "פתיחת צוות חדש נעשית על ידי צוות משמרות זהב"
+                )
             team = service.create(request.name, request.password)
             set_cookie(response, team["id"], ROLE_BOSS)
             return team
@@ -81,6 +100,7 @@ class WorkspaceRoutes:
                 "boss:%s" % request.team_id,
                 lambda: service.login(request.team_id, request.password),
             )
+            guards.require_active(team["id"])
             set_cookie(response, team["id"], ROLE_BOSS)
             return team
 
@@ -93,6 +113,7 @@ class WorkspaceRoutes:
             in history and in any screenshot of the address bar.
             """
             team = service.open_member_link(token)
+            guards.require_active(team["id"])
             set_cookie(response, team["id"], ROLE_MEMBER)
             return team
 
@@ -133,9 +154,11 @@ class WorkspaceRoutes:
 def build_router(
     service, guards, secret: str, days: int,
     throttle: Optional[LoginThrottle] = None,
+    allow_signup: bool = False,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/workspace", tags=["workspace"])
     WorkspaceRoutes(
-        service, guards, secret, days, throttle or LoginThrottle()
+        service, guards, secret, days, throttle or LoginThrottle(),
+        allow_signup,
     ).register(router)
     return router

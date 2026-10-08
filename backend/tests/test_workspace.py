@@ -25,13 +25,14 @@ class _FakeTeams:
         self.orphans = 0
         self._next = 0
 
-    def create_team(self, name, password):
+    def create_team(self, name, password, max_employees=None, notes=""):
         self._next += 1
         team_id = "team-%d" % self._next
         self.teams[team_id] = {
             "id": team_id, "name": name,
             "password_hash": hash_password(password),
             "member_token": new_member_token(),
+            "max_employees": max_employees, "notes": notes, "active": True,
         }
         return dict(self.teams[team_id])
 

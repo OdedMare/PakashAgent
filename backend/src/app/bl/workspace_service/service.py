@@ -5,7 +5,7 @@ owns the rules between them -- what a boss is allowed to do that a member is
 not, and what a freshly created workspace inherits.
 """
 
-from typing import List
+from typing import List, Optional
 
 from app.common.errors.errors import AgentError, ConflictError
 from app.common.sessions.sessions import ROLE_BOSS, ROLE_MEMBER
@@ -16,13 +16,38 @@ from app.common.sessions.sessions import ROLE_BOSS, ROLE_MEMBER
 _MIN_PASSWORD = 6
 _MAX_PASSWORD = 200
 _MAX_NAME = 80
+# A seat cap is a licence size, not a roster: large enough for a battalion,
+# bounded so a typo cannot store a number nobody meant.
+_MAX_SEATS = 5000
+_MAX_NOTES = 500
+
+
+def validate_seats(value: Optional[int]) -> Optional[int]:
+    """None is "no cap"; anything else is a whole number of employees."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise AgentError("מספר העובדים חייב להיות מספר שלם")
+    if value < 1 or value > _MAX_SEATS:
+        raise AgentError("מספר העובדים חייב להיות בין 1 ל-%d" % _MAX_SEATS)
+    return value
+
+
+def validate_notes(value: Optional[str]) -> str:
+    clean = (value or "").strip()
+    if len(clean) > _MAX_NOTES:
+        raise AgentError("ההערה ארוכה מדי")
+    return clean
 
 
 class WorkspaceService:
     def __init__(self, repository):
         self._repository = repository
 
-    def create(self, name: str, password: str) -> dict:
+    def create(
+        self, name: str, password: str,
+        max_employees: Optional[int] = None, notes: str = "",
+    ) -> dict:
         """Open a workspace and return it with a boss session.
 
         The first team created also adopts any interview recorded before
@@ -30,13 +55,13 @@ class WorkspaceService:
         existing install's finished interview becomes unreachable the moment
         every read starts filtering by team.
         """
-        clean_name = (name or "").strip()
-        if not clean_name:
-            raise AgentError("שם הצוות אינו יכול להיות ריק")
-        if len(clean_name) > _MAX_NAME:
-            raise AgentError("שם הצוות ארוך מדי")
+        clean_name = self.validate_name(name)
         self._validate_password(password)
-        team = self._repository.create_team(clean_name, password)
+        team = self._repository.create_team(
+            clean_name, password,
+            max_employees=validate_seats(max_employees),
+            notes=validate_notes(notes),
+        )
         claimed = self._repository.claim_orphan_sessions(team["id"])
         result = _public(team, role=ROLE_BOSS)
         result["claimed_sessions"] = claimed
@@ -59,10 +84,14 @@ class WorkspaceService:
         return _public(team, role=ROLE_MEMBER, include_token=False)
 
     def list_teams(self) -> List[dict]:
-        """Names and ids only -- this is served before anyone has logged in."""
+        """Names and ids only -- this is served before anyone has logged in.
+
+        A suspended team is left out (D28): there is nothing behind its door
+        a visitor could reach, so offering it only invites a refusal."""
         return [
             {"id": row["id"], "name": row["name"]}
             for row in self._repository.list_teams()
+            if row.get("active", True)
         ]
 
     def describe(self, team_id: str, role: str) -> dict:
@@ -97,6 +126,17 @@ class WorkspaceService:
             raise ConflictError("הסיסמה החדשה זהה לנוכחית")
         self._repository.set_password(team_id, replacement)
 
+    def validate_name(self, name: str) -> str:
+        clean_name = (name or "").strip()
+        if not clean_name:
+            raise AgentError("שם הצוות אינו יכול להיות ריק")
+        if len(clean_name) > _MAX_NAME:
+            raise AgentError("שם הצוות ארוך מדי")
+        return clean_name
+
+    def validate_password(self, password: str) -> None:
+        self._validate_password(password)
+
     def _validate_password(self, password: str) -> None:
         value = password or ""
         if len(value) < _MIN_PASSWORD:
@@ -125,4 +165,4 @@ def _public(team: dict, role: str, include_token: bool = True) -> dict:
     return view
 
 
-__all__ = ["WorkspaceService"]
+__all__ = ["WorkspaceService", "validate_seats", "validate_notes"]

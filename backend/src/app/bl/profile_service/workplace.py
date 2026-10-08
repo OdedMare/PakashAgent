@@ -78,6 +78,8 @@ def _group_rules(value: Any, field: str) -> List[dict]:
             row[key] = text(row.get(key))
             if row[key] and not valid_time(row[key]):
                 raise AgentError("שעות הנוכחות חייבות להיות בפורמט HH:MM")
+            if row[key]:
+                row[key] = "%02d:%02d" % tuple(int(part) for part in row[key].split(":"))
         if field == "rotation_closure_windows":
             for key, allowed in (("start_day", range(-6, 1)), ("end_day", range(0, 7))):
                 if type(row.get(key)) is not int or row[key] not in allowed:

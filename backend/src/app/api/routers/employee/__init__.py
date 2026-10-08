@@ -28,7 +28,8 @@ def build_router(
     router = APIRouter(prefix="/api/employee", tags=["employee"])
     employee = guards.employee()
     IdentityRoutes(
-        service, guards.visitor(), secret, days, throttle or LoginThrottle()
+        service, guards.visitor(), secret, days, throttle or LoginThrottle(),
+        guards.require_active,
     ).register(router)
     PersonalRoutes(service, employee).register(router)
     EmployeeSwapRoutes(service, employee).register(router)

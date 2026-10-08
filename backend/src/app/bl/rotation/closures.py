@@ -108,6 +108,11 @@ def _configured_rows(profile, window, saturday, start, end, owner, pattern, look
         covered, contained = [], []
         for shift in profile.get("shifts") or []:
             interval = shift_interval(day, shift)
+            if interval is None:
+                # A missing clock cannot bypass a configured timed closure.
+                if window[0].date() <= day <= window[1].date():
+                    covered.append(text(shift.get("name")))
+                continue
             if interval and interval[0] < window[1] and window[0] < interval[1]:
                 covered.append(text(shift.get("name")))
                 if window[0] <= interval[0] and interval[1] <= window[1]:
