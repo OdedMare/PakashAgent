@@ -1,7 +1,9 @@
 "use client";
 
-import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, Copy, History, LoaderCircle, MessageSquare, Plus, Sparkles, Square, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, Copy, History, LoaderCircle, MessageSquare, Pencil, Plus, RotateCcw, Search, Sparkles, Square, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { Proposal } from "@/types";
 import { displayDate as formatDate } from "@/components/DateInput";
 import { hebrewWeekday } from "./Calendar";
@@ -21,17 +23,27 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
   const [text, setText] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [restartOpen, setRestartOpen] = useState(false);
+  const [historySearch, setHistorySearch] = useState("");
+  const [revising, setRevising] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const log = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
+  const sending = useRef(false);
   const [awayFromBottom, setAwayFromBottom] = useState(false);
   const [copied, setCopied] = useState("");
   const [copyError, setCopyError] = useState("");
   const [conversationId, setConversationId] = useState(agent.chat?.id);
   if (conversationId !== agent.chat?.id) {
-    setConversationId(agent.chat?.id); setText(""); setRestartOpen(false);
+    setConversationId(agent.chat?.id); setText(readDraft(agent.chat?.id)); setRevising(false); setDeleteOpen(false);
+    pinned.current = true;
   }
+  useEffect(() => {
+    if (!conversationId) return;
+    try {
+      if (text) localStorage.setItem(`manager-chat-draft:${conversationId}`, text);
+      else localStorage.removeItem(`manager-chat-draft:${conversationId}`);
+    } catch { /* The composer still works when browser storage is unavailable. */ }
+  }, [text, conversationId]);
   const [seeded, setSeeded] = useState(draftKey);
   if (seeded !== draftKey) { setSeeded(draftKey); if (draft) setText(draft); }
   // Opening the chat on a day puts the cursor in the composer, ready for the
@@ -52,20 +64,26 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
   const lastStatus = last?.status;
   useEffect(() => {
     if (log.current && !hidden && pinned.current) log.current.scrollTop = log.current.scrollHeight;
-  }, [messageCount, lastStatus, agent.chat?.id, hidden]);
-  useEffect(() => { pinned.current = true; }, [agent.chat?.id]);
+  }, [messageCount, lastStatus, last?.content, last?.payload.steps?.length, agent.chat?.id, hidden]);
   useEffect(() => {
     if (input.current) {
       input.current.style.height = "auto";
-      input.current.style.height = `${Math.min(200, Math.max(64, input.current.scrollHeight))}px`;
+      input.current.style.height = `${Math.min(200, Math.max(44, input.current.scrollHeight))}px`;
     }
   }, [text]);
   useEffect(() => { if (copied) { const timer = setTimeout(() => setCopied(""), 2000); return () => clearTimeout(timer); } }, [copied]);
   const send = async (value: string) => {
+    if (disabled || sending.current || !value.trim()) return;
+    sending.current = true;
     pinned.current = true;
-    if (await agent.send(value)) { setText(""); input.current?.focus(); }
+    const draftBefore = text;
+    setText(""); setRevising(false);
+    try {
+      if (!await agent.send(value)) setText((current) => current || draftBefore || value);
+    } finally { sending.current = false; input.current?.focus(); }
   };
   const disabled = agent.busy || agent.working || agent.loading;
+  const scrollBehavior = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" as const : "smooth" as const;
   return <section className="conversation" hidden={hidden} aria-label="שיחה עם סוכן הסידור">
     <header className="conversation-toolbar">
       <div className="conversation-title"><Sparkles size={17} aria-hidden="true" /><strong>{agent.chat?.title === "שיחה חדשה" ? "סוכן הסידור" : agent.chat?.title ?? "סוכן הסידור"}</strong></div>
@@ -73,7 +91,7 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
         <button type="button" className="icon-button" aria-label="היסטוריית שיחות" aria-expanded={historyOpen}
           onClick={() => setHistoryOpen(!historyOpen)}><History size={17} /></button>
         <button type="button" className="icon-button" aria-label="שיחה חדשה" disabled={agent.busy || agent.working || agent.loading}
-          onClick={() => { void agent.newChat(); setText(""); setHistoryOpen(false); }}><Plus size={19} /></button>
+          onClick={() => { void agent.newChat(); setHistoryOpen(false); }}><Plus size={19} /></button>
       </div>
     </header>
     <div className="conversation-context"><span className="conversation-context-dot" aria-hidden="true" />
@@ -81,15 +99,20 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
         {`יום ${hebrewWeekday(focusDate)} · ${formatDate(focusDate)}`}
         {onClearFocus ? <button type="button" aria-label="הסרת המיקוד ביום" title="חזרה לכל השבוע" onClick={onClearFocus}><X size={12} /></button> : null}
       </span> : visibleWeek ? `השבוע שמתחיל ב-${formatDate(visibleWeek)}` : "הצוות וכללי השיבוץ שלך"}
-      <span>אפשר לאשר בכפתור או לכתוב ״כן, תעשה״</span>
     </div>
     {historyOpen ? <div className="conversation-history">
-      <label htmlFor="manager-conversation-picker">השיחות שלי</label>
-      <select id="manager-conversation-picker" value={agent.chat?.id ?? ""} disabled={agent.busy}
-        onChange={(event) => { void agent.select(event.target.value); setText(""); setDeleteOpen(false); }}>
-        {!agent.chats.some((row) => row.id === agent.chat?.id) && agent.chat ? <option value={agent.chat.id}>{agent.chat.title}</option> : null}
-        {agent.chats.map((row) => <option value={row.id} key={row.id}>{row.title}</option>)}
-      </select>
+      <label className="conversation-history-search"><Search size={16} aria-hidden="true" />
+        <span className="sr-only">חיפוש שיחות</span><input value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="חיפוש שיחות…" />
+      </label>
+      <div className="conversation-history-list" aria-label="השיחות שלי">
+        {agent.chats.filter((row) => row.title.includes(historySearch.trim())).map((row) => <button type="button" key={row.id}
+          aria-current={row.id === agent.chat?.id ? "true" : undefined} disabled={agent.busy || agent.loading}
+          onClick={async () => { if (await agent.select(row.id)) { setHistoryOpen(false); input.current?.focus(); } }}>
+          <MessageSquare size={15} aria-hidden="true" /><span>{row.title}</span>
+          <time dateTime={row.updated_at}>{new Date(row.updated_at).toLocaleDateString("he-IL", { timeZone: "Asia/Jerusalem", day: "numeric", month: "short" })}</time>
+        </button>)}
+        {!agent.chats.some((row) => row.title.includes(historySearch.trim())) ? <p>לא נמצאו שיחות.</p> : null}
+      </div>
       {deleteOpen ? <div className="conversation-delete-confirm">
         <span>למחוק את השיחה? השינויים בסידור יישארו.</span>
         <button type="button" disabled={agent.busy} onClick={() => { void agent.remove(); setDeleteOpen(false); }}>מחיקת השיחה</button>
@@ -124,40 +147,42 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
           const previous = [...messages].reverse().find((row) => row.role === "user"); if (previous) void send(previous.content);
         }}>ניסיון נוסף</button> : null}
         {message.payload.receipt?.starts_on ? <button type="button" className="conversation-receipt-link" onClick={() => onOpenReceipt(message.payload.receipt!.starts_on!)}><CalendarDays size={14} />פתיחת הסידור שעודכן</button> : null}
-        {message.role === "assistant" && message.status !== "working" && message.content ? <div className="conversation-message-actions">
-          <button type="button" className="icon-button" aria-label="העתקת התשובה" title="העתקת התשובה" onClick={async () => {
+        {message.status !== "working" && message.content ? <div className="conversation-message-actions">
+          <button type="button" className="icon-button" aria-label={message.role === "assistant" ? "העתקת התשובה" : "העתקת ההודעה"} title="העתקה" onClick={async () => {
             try { await navigator.clipboard.writeText(message.content); setCopied(message.id); setCopyError(""); }
             catch { setCopyError("ההעתקה לא זמינה בדפדפן הזה. אפשר לבחור ולהעתיק את הטקסט."); }
           }}>{copied === message.id ? <Check size={15} /> : <Copy size={15} />}</button>
+          {message.role === "user" ? <button type="button" className="icon-button" aria-label="עריכת הבקשה כהודעת המשך" title="עריכת הבקשה כהודעת המשך" disabled={disabled}
+            onClick={() => { setText(message.content); setRevising(true); input.current?.focus(); }}><Pencil size={15} /></button> : null}
+          {message.id === last?.id && message.role === "assistant" && message.status === "complete" && !message.payload.plan && !message.payload.receipt ?
+            <button type="button" className="icon-button" aria-label="תשובה נוספת" title="תשובה נוספת" disabled={disabled}
+              onClick={() => void send("ענה מחדש על הבקשה האחרונה שלי, בניסוח אחר. זו בקשה לתשובה בלבד, ללא ביצוע או אישור שינויים.")}><RotateCcw size={15} /></button> : null}
         </div> : null}
       </article>)}
-      {!agent.loading && messages.length > 0 && !agent.working ? <div className="conversation-restart">
-        {restartOpen ? <div className="conversation-delete-confirm">
-          <span>למחוק את השיחה ולפתוח שיחה חדשה? השינויים בסידור יישארו.</span>
-          <button type="button" disabled={agent.busy} onClick={() => { void agent.restart(); setRestartOpen(false); }}>מחיקה ושיחה חדשה</button>
-          <button type="button" onClick={() => setRestartOpen(false)}>ביטול</button>
-        </div> : <button type="button" className="ghost-button" disabled={disabled} onClick={() => setRestartOpen(true)}>
-          <Trash2 size={14} /> מחיקת השיחה ומעבר לשיחה חדשה</button>}
-      </div> : null}
     </div>
+    <div className="conversation-bottom">
     {awayFromBottom ? <button type="button" className="conversation-jump" aria-label="מעבר להודעה האחרונה"
-      onClick={() => { pinned.current = true; log.current?.scrollTo({ top: log.current.scrollHeight, behavior: "smooth" }); }}><ArrowDown size={17} /></button> : null}
+      onClick={() => { pinned.current = true; setAwayFromBottom(false); log.current?.scrollTo({ top: log.current.scrollHeight, behavior: scrollBehavior() }); }}><ArrowDown size={17} /></button> : null}
     {preview ? <div className="conversation-pending-bar"><span><Sparkles size={14} />תוכנית ממתינה לאישור</span>
-      <button type="button" onClick={() => document.getElementById(`chat-message-${last.id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" })}>הצגת התוכנית</button></div> : null}
+      <button type="button" onClick={() => document.getElementById(`chat-message-${last.id}`)?.scrollIntoView({ block: "nearest", behavior: scrollBehavior() })}>הצגת התוכנית</button></div> : null}
     {copyError ? <p className="conversation-error" role="status">{copyError}</p> : null}
     {agent.error ? <p className="conversation-error" role="alert">{agent.error}</p> : null}
     <form className="conversation-composer" data-tour="agent-composer" onSubmit={(event) => { event.preventDefault(); if (!disabled) void send(text); }}>
+      {revising ? <div className="conversation-revising"><span>הבקשה הערוכה תישלח כהודעת המשך</span>
+        <button type="button" className="icon-button" aria-label="ביטול עריכת הבקשה" onClick={() => { setRevising(false); setText(""); }}><X size={15} /></button></div> : null}
       <label className="sr-only" htmlFor="agent-composer-input">הודעה לסוכן הסידור</label>
-      <textarea id="agent-composer-input" ref={input} value={text} rows={2} maxLength={4000} placeholder={focusDate ? `בקשה או התייעצות על יום ${hebrewWeekday(focusDate)} ${formatDate(focusDate)}…` : "בקשו שיבוץ, הוסיפו עובד או אילוץ, או התייעצו על בעיה…"}
+      <textarea id="agent-composer-input" ref={input} value={text} rows={1} maxLength={4000} dir="auto" aria-describedby="agent-composer-hint" placeholder={focusDate ? `שאלו על יום ${hebrewWeekday(focusDate)} ${formatDate(focusDate)}…` : "מה תרצו לעשות בסידור?"}
         onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
           if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!disabled && text.trim()) void send(text); }
         }} />
       <div className="conversation-composer-footer"><button type="button" className="icon-button" aria-label="ייבוא סידור מקובץ" title="ייבוא סידור מקובץ" onClick={onImport} disabled={boardBusy}><Plus size={19} /></button>
-        <small>Enter לשליחה · Shift+Enter לשורה חדשה</small>
+        <small id="agent-composer-hint">Enter לשליחה · Shift+Enter לשורה חדשה</small>
         {agent.working ? <button type="button" className="conversation-send" aria-label="עצירת הבקשה" disabled={agent.busy} onClick={() => void agent.stop()}><Square size={16} /></button> :
           <button type="submit" className="conversation-send" aria-label="שליחת הודעה" disabled={disabled || !text.trim()}>{agent.busy ? <LoaderCircle size={17} /> : <ArrowUp size={19} />}</button>}
       </div>
     </form>
+    <p className="conversation-disclaimer">הסוכן יכול לטעות. בדקו את התוכנית לפני האישור.</p>
+    </div>
   </section>;
 }
 
@@ -170,28 +195,32 @@ function Thinking({ steps }: { steps: { tool: string; ok: boolean }[] }) {
       {steps.length > 1 ? <small> · {steps.length} בדיקות עד עכשיו</small> : null}</span></div>;
 }
 
-/** The small Markdown subset the agent is told it may use: `-` and `1.` lists
- *  and **bold**. Rendered as elements, never as HTML, so a reply cannot inject
- *  markup; anything else stays plain text. */
+/** Render Markdown as React elements. Raw HTML and remote images are excluded. */
 export function Markdown({ text }: { text: string }) {
-  const blocks: { list?: "ul" | "ol"; lines: string[] }[] = [];
-  for (const line of text.split("\n")) {
-    const kind = /^\s*[-*•]\s+/.test(line) ? "ul" : /^\s*\d+[.)]\s+/.test(line) ? "ol" : undefined;
-    const body = kind ? line.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, "") : line;
-    const previous = blocks[blocks.length - 1];
-    if (previous && previous.list === kind && (kind || body.trim())) previous.lines.push(body);
-    else if (kind || body.trim()) blocks.push({ list: kind, lines: [body] });
-  }
-  return <div className="conversation-text is-rich">{blocks.map((block, index) => {
-    if (!block.list) return <p key={index}>{block.lines.map((line, row) => <span key={row}>{row ? <br /> : null}{inline(line)}</span>)}</p>;
-    const List = block.list;
-    return <List key={index}>{block.lines.map((line, row) => <li key={row}>{inline(line)}</li>)}</List>;
-  })}</div>;
+  return <div className="conversation-text is-rich" dir="auto"><ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml
+    components={{
+      img: ({ alt }) => <span>{alt}</span>,
+      a: ({ children, href }) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>,
+      table: ({ children }) => <div className="conversation-table" tabIndex={0} role="region" aria-label="טבלה בתשובה"><table>{children}</table></div>,
+      pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
+    }}>{text}</ReactMarkdown></div>;
 }
 
-function inline(line: string) {
-  return line.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
-    part.startsWith("**") && part.endsWith("**") && part.length > 4 ? <strong key={index}>{part.slice(2, -2)}</strong> : part);
+function CodeBlock({ children }: { children: React.ReactNode }) {
+  const code = useRef<HTMLPreElement>(null);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState(false);
+  useEffect(() => { if (copied) { const timer = setTimeout(() => setCopied(false), 2000); return () => clearTimeout(timer); } }, [copied]);
+  return <div className="conversation-code"><header><span>קוד</span><button type="button" onClick={async () => {
+    try { await navigator.clipboard.writeText(code.current?.textContent ?? ""); setCopied(true); setError(false); }
+    catch { setError(true); }
+  }}>{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? "הועתק" : "העתקת קוד"}</button></header>
+    <pre ref={code} dir="ltr">{children}</pre>{error ? <small role="status">אפשר לבחור ולהעתיק את הקוד ידנית.</small> : null}</div>;
+}
+
+function readDraft(id?: string) {
+  try { return id ? localStorage.getItem(`manager-chat-draft:${id}`) ?? "" : ""; }
+  catch { return ""; }
 }
 
 const WEEK_STARTERS = ["תשבץ את שני כמו בשבוע שעבר", "מי יכול להחליף ברביעי?", "מי משובץ הכי הרבה בסופ״ש?", "אני רוצה להוסיף אילוץ קבוע לעובד"];

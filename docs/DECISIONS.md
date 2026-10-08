@@ -833,6 +833,76 @@ The conversation lives in the browser only; nothing is stored server-side.
 **It answers without a model**, listing the clean swaps (narrowed to a weekday
 named in the question), and reports `used_model: false`.
 
+## D28 — Teams are opened by צוות משמרות זהב, not by whoever reaches the login page ⚠️ *(amends D10)*
+
+Before this, anyone who could load the front page could press "פתיחת צוות
+חדש", pick a name and a password, and become the boss of a new workspace.
+D10 said exactly that — *"the boss picks a password when the workspace is
+created"* — and the settings router already admitted the cost in its own
+docstring: *"anyone can open a workspace and become its boss."* The boss asked
+for that door to close, and for one place to control the whole system.
+
+**What is now true:**
+
+- **The operator is צוות משמרות זהב**, with its own console at `/admin` and
+  its own HttpOnly cookie (`pakash_admin`, 12 hours). Not a fourth role on the
+  team cookie: an operator belongs to no team, and the two sessions must
+  coexist in one browser. Each cookie's reader refuses the other's role.
+- **Its password defaults to the settings password** (`010802` unless
+  `PAKASH_SETTINGS_PASSWORD` says otherwise). The operator is the one person
+  who already held that; `PAKASH_ADMIN_PASSWORD` gives the console a separate
+  credential. Both empty keeps the console locked.
+- **`POST /api/workspace` answers 403** unless `PAKASH_OPEN_SIGNUP=true`. The
+  login page no longer offers to open a team; it says who does.
+- **The operator opens a team on its behalf** — name, the first manager
+  password (shown once, then only its hash exists), an optional **seat cap**
+  and a private note — and can later rename, re-cap, reset the manager
+  password, rotate the share link, release a claimed name, **suspend** and
+  **delete**.
+- **The seat cap is enforced on every roster write** (`dal/repository/seats.py`):
+  the interview completing, the profile editor, an approved chat plan. Only
+  *growth* past the cap is refused, so a team whose cap was lowered can still
+  edit and remove people. A departed employee (`inactive_from` ≤ today) does
+  not hold a seat.
+- **A suspended team is refused at every door and under every open session.**
+  `Guards.visitor()` asks the database whether the team is active (cached ten
+  seconds per process, cleared at once by the console), because a signed
+  cookie outlives a suspension by up to thirty days otherwise. The same check
+  makes a *deleted* team's cookies stop working instead of failing deeper.
+  The team's data is untouched; resuming restores access exactly.
+- **Deleting is `DELETE FROM teams`** and every team table cascades — the
+  schedules, the change log, identities, requests, chats, the interview.
+  It asks for the team's name typed back, and suspension is offered first as
+  the reversible version.
+- **The operator reaches `/api/settings` on its own session**, without the
+  `X-Settings-Password` header. The console's "מערכת" tab is where the
+  process-wide settings now live; a boss can still open them the old way.
+
+**What is deliberately unchanged:**
+
+- **The boss still holds the team password and can change it**
+  (`/api/workspace/password`). The operator sets the first one and can reset a
+  forgotten one, but does not keep knowing it.
+- **Every team route still scopes by the team on the signed cookie.** The
+  console's queries are the one deliberate exception — cross-team by design —
+  and they live in one mixin, `dal/repository/admin.py`, so the exception is
+  a single file to review. None returns a password or passcode hash.
+
+*Why the cap is enforced in `dal/` rather than `bl/`:* three different
+writers put a roster into the database, and a rule each of them must remember
+is a rule one of them forgets. It is a quota checked in the same transaction
+as the write, the same class of thing as a UNIQUE constraint.
+
+*Why deleting may remove `change_log` rows when D4 says never to:* D4 is about
+a living schedule's history while the team exists. Deleting the team is the
+operator removing the tenant, not editing its history; there is nobody left
+for that history to serve.
+
+**⚠️ The default operator password is committed** (it is the settings
+password's default). That was already true of the settings panel, which can
+repoint the database; the console can now also delete teams. Set
+`PAKASH_SETTINGS_PASSWORD` or `PAKASH_ADMIN_PASSWORD` in any real deployment.
+
 ## Open
 
 - **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment

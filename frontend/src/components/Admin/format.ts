@@ -22,12 +22,19 @@ export function formatRelative(value: string | null | undefined): string {
   const then = new Date(value).getTime();
   if (Number.isNaN(then)) return "—";
   const minutes = Math.round((then - Date.now()) / 60000);
-  if (Math.abs(minutes) < 60) return RELATIVE.format(minutes, "minute");
+  if (Math.abs(minutes) < 1) return "עכשיו";
+  if (Math.abs(minutes) < 60) return relative(minutes, "minute");
   const hours = Math.round(minutes / 60);
-  if (Math.abs(hours) < 24) return RELATIVE.format(hours, "hour");
+  if (Math.abs(hours) < 24) return relative(hours, "hour");
   const days = Math.round(hours / 24);
-  if (Math.abs(days) < 45) return RELATIVE.format(days, "day");
+  if (Math.abs(days) < 45) return relative(days, "day");
   return formatDate(value);
+}
+
+/** ICU's Hebrew data writes the singular as "לפני דקה (1)"; the bracketed
+ *  count repeats what the word already says. */
+function relative(value: number, unit: Intl.RelativeTimeFormatUnit): string {
+  return RELATIVE.format(value, unit).replace(/\s*\(\d+\)$/, "");
 }
 
 export function formatBytes(bytes: number | undefined): string {
