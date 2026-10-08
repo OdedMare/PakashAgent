@@ -67,6 +67,33 @@ export function SettingsPanel({ onClose, profile, onProfileSaved }: {
   );
 }
 
+/** The system settings inline, for the צוות משמרות זהב console (D28).
+ *
+ *  The operator's own session already passed the operator password, which
+ *  the server accepts in place of the settings password — so this unlocks
+ *  itself on mount with an empty header. Should that ever be refused, the
+ *  ordinary unlock form is what renders, not a dead panel. */
+export function SystemSettings() {
+  const settings = useSettings();
+  const { loaded, loading, unlock } = settings;
+  const [tried, setTried] = useState(false);
+
+  useEffect(() => {
+    if (tried || loaded || loading) return;
+    setTried(true);
+    void unlock("");
+  }, [tried, loaded, loading, unlock]);
+
+  if (!loaded && (!tried || loading)) {
+    return (
+      <p className="settings-loading">
+        <LoaderCircle className="spin" size={16} /> טוען הגדרות…
+      </p>
+    );
+  }
+  return <PanelContent settings={settings} />;
+}
+
 function ModalHeader({ onClose }: { onClose: () => void }) {
   return (
     <header className="modal-header">
