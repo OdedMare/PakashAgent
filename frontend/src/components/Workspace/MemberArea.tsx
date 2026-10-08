@@ -9,7 +9,7 @@ import {
   Users,
 } from "lucide-react";
 
-import { useGuideSurface } from "@/components/Guide";
+import { HelpButton, useGuideSurface } from "@/components/Guide";
 import { useTheme } from "@/components/Interview/useTheme";
 import { Calendar } from "@/components/Management/Calendar";
 import { displayDate } from "@/components/DateInput";
@@ -75,6 +75,7 @@ export function MemberArea({
           </span>
         </div>
         <div className="header-actions">
+          <HelpButton />
           {onOpenPersonal ? (
             <button
               type="button"

@@ -29,7 +29,7 @@ import { InterviewImport } from "./InterviewImport";
 import { ProfileSummary } from "./ProfileSummary";
 import { Turn } from "./Turn";
 import { useInterview } from "./useInterview";
-import { useGuideSurface } from "@/components/Guide";
+import { HelpButton, useGuideSurface } from "@/components/Guide";
 
 import { useTheme } from "./useTheme";
 
@@ -139,6 +139,7 @@ export function Interview({
           </span>
         </div>
         <div className="header-actions">
+          <HelpButton />
           {workspace?.member_token ? (
             <button
               type="button"

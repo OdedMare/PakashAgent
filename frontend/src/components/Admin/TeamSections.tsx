@@ -20,6 +20,7 @@ import {
   adminUpdateTeam,
 } from "@/services/api";
 import type { AdminTeamDetail } from "@/types";
+import { copyText } from "@/lib/clipboard";
 
 import { formatRelative, formatShort, generatePassword } from "./format";
 
@@ -110,11 +111,10 @@ export function AccessSection({ team, onChanged }: { team: AdminTeamDetail; onCh
   const shareUrl = typeof window === "undefined" ? "" : `${window.location.origin}/team/${team.member_token}`;
 
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
+    if (await copyText(shareUrl)) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
-    } catch {
+    } else {
       setCopied(false);
     }
   };

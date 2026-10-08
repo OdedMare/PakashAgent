@@ -47,6 +47,18 @@ interface GuideApi {
 
 const GuideContext = createContext<GuideApi | null>(null);
 
+interface HelpButtonState {
+  open: boolean;
+  remaining: number;
+  toggle: () => void;
+  anchor: React.RefObject<HTMLButtonElement>;
+  dock: () => () => void;
+}
+
+// Kept apart from `GuideContext` so the panel opening re-renders only the
+// button, not every surface that registered with the guide.
+const HelpButtonContext = createContext<HelpButtonState | null>(null);
+
 const SEEN_KEY = (surface: Surface) => `pakash-guide-seen:${surface}`;
 
 export function GuideProvider({ children }: { children: React.ReactNode }) {
@@ -61,6 +73,9 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [touring, setTouring] = useState(false);
   const [welcome, setWelcome] = useState(false);
+  // How many surfaces put the help button in their own header. While any
+  // does, the floating corner button stays away — one help button, not two.
+  const [docked, setDocked] = useState(0);
   const fab = useRef<HTMLButtonElement>(null);
 
   const api = useMemo<GuideApi>(
@@ -142,25 +157,37 @@ export function GuideProvider({ children }: { children: React.ReactNode }) {
   // The tutorial and the operator console carry no manager tour.
   const onTutorialPage = pathname?.startsWith("/tutorial") || pathname?.startsWith("/admin");
 
+  const togglePanel = useCallback(() => setPanelOpen((open) => !open), []);
+  const dock = useCallback(() => {
+    setDocked((count) => count + 1);
+    return () => setDocked((count) => count - 1);
+  }, []);
+  const helpButton = useMemo<HelpButtonState>(
+    () => ({ open: panelOpen, remaining, toggle: togglePanel, anchor: fab, dock }),
+    [panelOpen, remaining, togglePanel, dock],
+  );
+
   return (
     <GuideContext.Provider value={api}>
-      {children}
+      <HelpButtonContext.Provider value={helpButton}>{children}</HelpButtonContext.Provider>
       {onTutorialPage ? null : (
         <>
-          <button
-            ref={fab}
-            type="button"
-            className={`tutorial-fab${panelOpen ? " is-open" : ""}`}
-            onClick={() => setPanelOpen((open) => !open)}
-            aria-expanded={panelOpen}
-            aria-haspopup="dialog"
-            aria-label={remaining ? `עזרה ולמידה — ${remaining} צעדים ראשונים פתוחים` : "עזרה ולמידה"}
-            data-tour="help"
-          >
-            <CircleHelp size={19} />
-            <span>עזרה</span>
-            {remaining ? <em className="guide-fab-badge" aria-hidden="true">{remaining}</em> : null}
-          </button>
+          {docked ? null : (
+            <button
+              ref={fab}
+              type="button"
+              className={`tutorial-fab${panelOpen ? " is-open" : ""}`}
+              onClick={togglePanel}
+              aria-expanded={panelOpen}
+              aria-haspopup="dialog"
+              aria-label={helpLabel(remaining)}
+              data-tour="help"
+            >
+              <CircleHelp size={19} />
+              <span>עזרה</span>
+              {remaining ? <em className="guide-fab-badge" aria-hidden="true">{remaining}</em> : null}
+            </button>
+          )}
 
           {panelOpen ? (
             <HelpPanel
@@ -209,6 +236,38 @@ export function useGuideSurface(surface: Surface | null, registration: Registrat
   useEffect(() => {
     if (surface) api?.update(surface, registration);
   });
+}
+
+/** The help button, placed in a surface's own header instead of floating in
+ *  the corner. Same panel, same tour target, same `?` shortcut — only where
+ *  it sits changes. */
+export function HelpButton() {
+  const help = useContext(HelpButtonContext);
+  const dock = help?.dock;
+  useEffect(() => dock?.(), [dock]);
+  if (!help) return null;
+  const { open, remaining, toggle, anchor } = help;
+  return (
+    <button
+      ref={anchor}
+      type="button"
+      className={`header-help${open ? " is-open" : ""}`}
+      onClick={toggle}
+      aria-expanded={open}
+      aria-haspopup="dialog"
+      aria-label={helpLabel(remaining)}
+      title="עזרה ולמידה (?)"
+      data-tour="help"
+    >
+      <CircleHelp size={16} />
+      <span>עזרה</span>
+      {remaining ? <em className="guide-fab-badge" aria-hidden="true">{remaining}</em> : null}
+    </button>
+  );
+}
+
+function helpLabel(remaining: number) {
+  return remaining ? `עזרה ולמידה — ${remaining} צעדים ראשונים פתוחים` : "עזרה ולמידה";
 }
 
 const WELCOME_COPY: Record<Surface, { title: string; body: string }> = {

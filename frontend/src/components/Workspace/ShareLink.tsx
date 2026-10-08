@@ -1,7 +1,9 @@
 "use client";
 
 import { Check, Copy, Link2, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
+
+import { copyText } from "@/lib/clipboard";
 
 /** The boss's view of the member share link.
  *
@@ -19,6 +21,7 @@ export function ShareLink({
   onRotate: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
   // Built from the live origin rather than a configured base URL, so the link
@@ -29,17 +32,21 @@ export function ShareLink({
       ? ""
       : `${window.location.origin}/team/${token}`;
 
+  const field = useRef<HTMLInputElement>(null);
+
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(url);
+    if (await copyText(url)) {
       setCopied(true);
+      setCopyFailed(false);
       window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard access is refused on insecure origins and in some mobile
-      // browsers. The input beside this stays selectable, so a failed copy
-      // leaves the boss with a link they can still select by hand.
-      setCopied(false);
+      return;
     }
+    // Both clipboard routes refused (some mobile browsers). Select the link
+    // so the boss is one long-press away from copying it by hand.
+    setCopied(false);
+    setCopyFailed(true);
+    field.current?.focus();
+    field.current?.select();
   };
 
   return (
@@ -53,12 +60,17 @@ export function ShareLink({
       </p>
 
       <div className="share-row">
-        <input value={url} readOnly onFocus={(e) => e.target.select()} />
-        <button type="button" onClick={copy} disabled={busy}>
+        <input ref={field} dir="ltr" value={url} readOnly onFocus={(e) => e.target.select()} />
+        <button type="button" onClick={() => void copy()}>
           {copied ? <Check size={15} /> : <Copy size={15} />}
           {copied ? "הועתק" : "העתקה"}
         </button>
       </div>
+      {copyFailed ? (
+        <p className="share-copy-error" role="status">
+          הדפדפן לא איפשר העתקה אוטומטית — הקישור מסומן, העתיקו אותו ידנית.
+        </p>
+      ) : null}
 
       {confirming ? (
         <div className="share-confirm" role="alert">

@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 
 import { adminCreateTeam } from "@/services/api";
 import type { AdminTeamDetail } from "@/types";
+import { copyText } from "@/lib/clipboard";
 
 import { generatePassword } from "./format";
 
@@ -161,12 +162,7 @@ function HandOver({
   ].join("\n");
 
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
+    setCopied(await copyText(text));
   };
 
   return (

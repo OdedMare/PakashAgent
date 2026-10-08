@@ -3,6 +3,7 @@
 import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, Copy, History, LoaderCircle, MessageSquare, Pencil, Plus, RotateCcw, Search, Sparkles, Square, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Markdown } from "@/components/Markdown";
+import { copyText } from "@/lib/clipboard";
 import type { Proposal } from "@/types";
 import { displayDate as formatDate } from "@/components/DateInput";
 import { hebrewWeekday } from "./Calendar";
@@ -148,8 +149,8 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
         {message.payload.receipt?.starts_on ? <button type="button" className="conversation-receipt-link" onClick={() => onOpenReceipt(message.payload.receipt!.starts_on!)}><CalendarDays size={14} />פתיחת הסידור שעודכן</button> : null}
         {message.status !== "working" && message.content ? <div className="conversation-message-actions">
           <button type="button" className="icon-button" aria-label={message.role === "assistant" ? "העתקת התשובה" : "העתקת ההודעה"} title="העתקה" onClick={async () => {
-            try { await navigator.clipboard.writeText(message.content); setCopied(message.id); setCopyError(""); }
-            catch { setCopyError("ההעתקה לא זמינה בדפדפן הזה. אפשר לבחור ולהעתיק את הטקסט."); }
+            if (await copyText(message.content)) { setCopied(message.id); setCopyError(""); }
+            else setCopyError("ההעתקה לא זמינה בדפדפן הזה. אפשר לבחור ולהעתיק את הטקסט.");
           }}>{copied === message.id ? <Check size={15} /> : <Copy size={15} />}</button>
           {message.role === "user" ? <button type="button" className="icon-button" aria-label="עריכת הבקשה כהודעת המשך" title="עריכת הבקשה כהודעת המשך" disabled={disabled}
             onClick={() => { setText(message.content); setRevising(true); input.current?.focus(); }}><Pencil size={15} /></button> : null}

@@ -20,6 +20,43 @@
   line-height: 1;
 }
 
+/* The help button docked in a surface's header, beside the team/account
+   chip. A soft blue pill so it reads as "help is here" without competing
+   with the gold brand mark or the next-action blue. */
+.header-help {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px 0 13px;
+  color: var(--hue-blue);
+  background: var(--hue-blue-soft);
+  border: 1px solid color-mix(in srgb, var(--hue-blue) 22%, transparent);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+.header-help:hover,
+.header-help.is-open {
+  background: color-mix(in srgb, var(--hue-blue) 18%, var(--surface));
+  border-color: color-mix(in srgb, var(--hue-blue) 40%, transparent);
+}
+.header-help:focus-visible { outline: none; box-shadow: var(--focus); }
+.header-help .guide-fab-badge { min-width: 17px; height: 17px; font-size: 10.5px; }
+/* A docked button opens its first-visit offer from the top, under it. */
+body:has(.header-help) .guide-welcome { top: 68px; bottom: auto; }
+
+@media (max-width: 560px) {
+  .header-help { width: 36px; padding: 0; justify-content: center; }
+  .header-help > span { display: none; }
+  .header-help .guide-fab-badge { position: absolute; top: -4px; inset-inline-end: -4px; }
+}
+
 /* Shared controls, local to the guide so they read the same on every surface. */
 .guide-icon-button {
   display: inline-grid;

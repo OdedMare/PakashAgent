@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-import { useGuideSurface } from "@/components/Guide";
+import { HelpButton, useGuideSurface } from "@/components/Guide";
 import { useTheme } from "@/components/Interview/useTheme";
 import { Calendar } from "@/components/Management/Calendar";
 import type { EmployeeView } from "@/types";
@@ -89,6 +89,7 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
           </span>
         </div>
         <div className="header-actions">
+          <HelpButton />
           <button
             type="button"
             className="icon-button"

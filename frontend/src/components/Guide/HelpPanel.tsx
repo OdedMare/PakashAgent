@@ -62,7 +62,8 @@ export function HelpPanel({
   const [position, setPosition] = useState<CSSProperties>({});
 
   // Open beside the button that opened it — which side depends on where the
-  // drawer has pushed that button.
+  // drawer has pushed that button, and below it when the button sits in a
+  // header rather than floating in a bottom corner.
   useLayoutEffect(() => {
     const place = () => {
       const button = anchor.current;
@@ -75,11 +76,14 @@ export function HelpPanel({
         setPosition({});
         return;
       }
-      const bottom = window.innerHeight - box.top + 10;
+      const vertical: CSSProperties =
+        box.top < window.innerHeight / 2
+          ? { top: box.bottom + 10, bottom: "auto" }
+          : { bottom: window.innerHeight - box.top + 10 };
       setPosition(
         box.left < window.innerWidth / 2
-          ? { bottom, left: Math.max(16, box.left) }
-          : { bottom, right: Math.max(16, window.innerWidth - box.right) },
+          ? { ...vertical, left: Math.max(16, box.left), right: "auto" }
+          : { ...vertical, right: Math.max(16, window.innerWidth - box.right), left: "auto" },
       );
     };
     place();

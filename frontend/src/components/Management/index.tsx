@@ -22,7 +22,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { Board } from "@/components/Board";
-import { useGuideSurface } from "@/components/Guide";
+import { HelpButton, useGuideSurface } from "@/components/Guide";
 import type { ChecklistItem } from "@/components/Guide";
 import { useTheme } from "@/components/Interview/useTheme";
 import { SettingsPanel } from "@/components/Settings";
@@ -443,6 +443,7 @@ export function Management({
           >
             {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
           </button>
+          <HelpButton />
           <AccountMenu
             name={workspace.name}
             onOpenSettings={() => setSettingsOpen(true)}
