@@ -137,7 +137,11 @@ class Scheduler:
 
 
 def _check_rotation(profile):
-    errors = rotation.configuration_errors(profile)
+    # Profile normalization also supplies a default pattern to civilian
+    # rosters. A lettered group is what puts a person on an actual cycle.
+    grouped = [person for person in profile.get("employees") or []
+               if isinstance(person, dict) and bounded(person.get("rotation_group"))]
+    errors = rotation.configuration_errors(dict(profile, employees=grouped))
     if errors:
         raise AgentError("יש להשלים את העוגנים והקבוצות בהגדרות > סבבים ותלתונים: %s" % "; ".join(errors))
 
