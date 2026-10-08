@@ -76,7 +76,9 @@ class SpanGenerator:
             try:
                 answer = self._call(payload, request.schema, measured)
                 second = repaired_attempt(span, request, answer, first)
-                fairer = not imbalance or load_cost(span, second.roster) < load_cost(span, first.roster)
+                fairer = (not imbalance
+                          or load_cost(span, second.roster) < load_cost(span, first.roster)
+                          or not no_worse(second.warnings, baseline))
                 if len(second.rejected) <= len(first.rejected) and no_worse(baseline, second.warnings) and fairer:
                     chosen = second
                 rejected.extend(second.rejected)
@@ -114,6 +116,7 @@ class SpanGenerator:
     ) -> dict:
         rows = [row for row in chosen.roster if row.get("date") in span.dates]
         notes = lines(chosen.answer.get("notes"))
+        notes.extend(item["message"] for item in warnings if item.get("code") == "uneven_load")
         if measured["repair_error"]:
             notes.append("בקשת התיקון נכשלה. הטיוטה שנבדקה נשמרה עם האזהרות שנותרו.")
         if rejected:

@@ -5,7 +5,6 @@ import {
   BarChart3,
   CalendarDays,
   Inbox,
-  LogOut,
   LayoutGrid,
   Moon,
   MessagesSquare,
@@ -30,6 +29,7 @@ import { SettingsPanel } from "@/components/Settings";
 import { ShareLink } from "@/components/Workspace/ShareLink";
 import type { ChatPlan, ManagementOverview, Proposal, TeamView } from "@/types";
 
+import { AccountMenu } from "./AccountMenu";
 import { AgentChat } from "./AgentChat";
 import { useManagerChat } from "./useManagerChat";
 import { useChatSplit } from "./useChatSplit";
@@ -353,7 +353,12 @@ export function Management({
             {chatSearch && !agent.chats.some((chat) => chat.title.includes(chatSearch)) ? <p>לא נמצאו שיחות</p> : null}
           </div>
         </section>
+      </header>
 
+      {/* The bar over the workspace: setup, sharing, settings, theme, and
+          the account menu that signs out. Kept out of the sidebar so it sits
+          where the manager looks first rather than under the chat list. */}
+      <div className="management-topbar">
         <div className="header-actions" data-tour="header-actions">
           {onOpenManualSetup ? (
             <button
@@ -421,19 +426,13 @@ export function Management({
           >
             {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
           </button>
-          {onLogout ? (
-            <button
-              type="button"
-              className="icon-button"
-              onClick={onLogout}
-              aria-label="יציאה"
-              title="יציאה"
-            >
-              <LogOut size={17} />
-            </button>
-          ) : null}
+          <AccountMenu
+            name={workspace.name}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onLogout={onLogout}
+          />
         </div>
-      </header>
+      </div>
 
       {shareOpen && workspace.member_token ? (
         <ShareLink

@@ -1,5 +1,7 @@
 """Report avoidable load gaps; the model still chooses every assignment."""
 
+from statistics import pvariance
+
 from app.bl.audit import load_history
 from app.bl.audit.roster import index_shifts, rows_of
 from app.bl.scheduler.candidates import slot_id
@@ -12,8 +14,8 @@ def period_load(span, roster):
 
 
 def load_cost(span, roster):
-    # At fixed coverage, sum of squares falls whenever hours become more equal.
-    return sum(item["hours"] ** 2 for item in period_load(span, roster))
+    hours = [item["hours"] for item in period_load(span, roster)]
+    return pvariance(hours) if hours else 0
 
 
 def uneven_load(span, roster, baseline):
@@ -57,7 +59,7 @@ def uneven_load(span, roster, baseline):
                     "message": "פער עומס שניתן לצמצם: %s עם %g שעות ו-%s עם %g שעות בתקופה. "
                                "אזן את שעות התקופה; מותר להשאיר כמה ימי מנוחה רצופים."
                                % (name, loads[name], other, loads[other]),
-                    "details": {"hours": loads[name], "alternative_hours": loads[other],
+                    "details": {"period_hours": loads[name], "alternative_hours": loads[other],
                                 "alternative_employee": other},
                 }]
     return []
