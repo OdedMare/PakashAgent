@@ -39,6 +39,17 @@ ROLE_EMPLOYEE = "employee"
 
 COOKIE_NAME = "pakash_session"
 
+# The system operator -- the "צוות משמרות זהב" console (D28). A separate cookie
+# rather than a fourth role on `pakash_session`, for two reasons. An operator
+# belongs to no team, and every reader of the team cookie assumes a
+# `team_id`. And the two must coexist: the operator opening a team's
+# management area in the same browser would otherwise sign out of the
+# console. `read()` refuses this role outright, so an admin cookie copied
+# into the team slot authorizes nothing there, and `read_admin()` refuses
+# every team role, so the reverse fails too.
+ADMIN_COOKIE_NAME = "pakash_admin"
+ROLE_ADMIN = "admin"
+
 
 def _b64(raw: bytes) -> str:
     """URL-safe base64 without padding -- `=` is legal in a cookie value but
@@ -115,6 +126,36 @@ def read(secret: str, cookie: Optional[str]) -> Optional[dict]:
     return payload
 
 
+def issue_admin(secret: str, hours: int) -> str:
+    """An operator session, signed like a team session but shorter-lived.
+
+    Hours rather than days: this cookie can delete every workspace on the
+    server, so an unattended browser should stop being able to after a
+    working day, not after a month.
+    """
+    payload = {"role": ROLE_ADMIN, "exp": int(time.time()) + hours * 3600}
+    body = _b64(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    return "%s.%s" % (body, _sign(secret, body))
+
+
+def read_admin(secret: str, cookie: Optional[str]) -> Optional[dict]:
+    """The operator payload if authentic and unexpired, else None."""
+    if not cookie or "." not in cookie:
+        return None
+    body, _, signature = cookie.rpartition(".")
+    if not hmac.compare_digest(_sign(secret, body), signature):
+        return None
+    try:
+        payload = json.loads(_unb64(body).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("role") != ROLE_ADMIN:
+        return None
+    if int(payload.get("exp", 0)) < time.time():
+        return None
+    return payload
+
+
 def _sign(secret: str, body: str) -> str:
     return _b64(hmac.new(
         secret.encode("utf-8"), body.encode("utf-8"), hashlib.sha256
@@ -127,5 +168,6 @@ def generate_secret() -> str:
 
 __all__ = [
     "COOKIE_NAME", "ROLE_BOSS", "ROLE_MEMBER", "ROLE_EMPLOYEE",
-    "issue", "read", "generate_secret",
+    "ADMIN_COOKIE_NAME", "ROLE_ADMIN",
+    "issue", "read", "issue_admin", "read_admin", "generate_secret",
 ]

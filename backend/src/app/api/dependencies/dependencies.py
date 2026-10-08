@@ -7,21 +7,95 @@ new route added under the wrong prefix would silently inherit the wrong one.
 """
 
 import secrets
+import time
+from threading import Lock
 
 from fastapi import Cookie, Depends, Response
-from typing import Optional
+from typing import Callable, Dict, Optional, Tuple
 
-from app.common.errors.errors import AuthError
+from app.common.errors.errors import AuthError, ForbiddenError
 from app.common.sessions.sessions import (
-    COOKIE_NAME, ROLE_BOSS, ROLE_EMPLOYEE, issue, read,
+    ADMIN_COOKIE_NAME, COOKIE_NAME, ROLE_BOSS, ROLE_EMPLOYEE, issue, read,
+    read_admin,
 )
+
+# How long a team's active/suspended answer is trusted before it is asked
+# again. A suspension lands within this window on every worker; the operator
+# console also clears this process's entry at once (`forget_team`).
+_STATUS_TTL_SECONDS = 10.0
+
+SUSPENDED_MESSAGE = "הצוות הושבת על ידי צוות משמרות זהב. פנו אלינו כדי להפעיל אותו מחדש"
 
 
 class Guards:
-    """Dependency factories bound to the process's signing secret."""
+    """Dependency factories bound to the process's signing secret.
 
-    def __init__(self, secret: str):
+    `team_active` answers whether a team still exists and is not suspended
+    (D28). Without it -- the unit tests' default -- every signed cookie is
+    taken at its word, which is how the guards behaved before the operator
+    console existed.
+    """
+
+    def __init__(
+        self, secret: str,
+        team_active: Optional[Callable[[str], bool]] = None,
+    ):
         self._secret = secret
+        self._team_active = team_active
+        self._status = {}  # type: Dict[str, Tuple[bool, float]]
+        self._lock = Lock()
+
+    def is_active(self, team_id: str) -> bool:
+        """Cached `team_active`. A signed cookie outlives a suspension or a
+        deletion by up to 30 days, so the cookie alone cannot answer this."""
+        if self._team_active is None:
+            return True
+        now = time.monotonic()
+        with self._lock:
+            cached = self._status.get(team_id)
+        if cached and now - cached[1] < _STATUS_TTL_SECONDS:
+            return cached[0]
+        active = bool(self._team_active(team_id))
+        with self._lock:
+            self._status[team_id] = (active, now)
+        return active
+
+    def forget_team(self, team_id: str) -> None:
+        """Drop the cached answer, so a suspension applies on the next call."""
+        with self._lock:
+            self._status.pop(team_id, None)
+
+    def require_active(self, team_id: str) -> None:
+        """Refuse a sign-in to a suspended team before a cookie is issued.
+
+        Called by the login routes only after the credential checked out, so
+        the suspension is told to someone who proved they belong to the team
+        rather than to anyone probing team ids.
+        """
+        if not self.is_active(team_id):
+            raise ForbiddenError(SUSPENDED_MESSAGE)
+
+    def admin_session(self, cookie: Optional[str]) -> Optional[dict]:
+        """The operator payload behind a raw cookie value, or None."""
+        return read_admin(self._secret, cookie)
+
+    def admin(self):
+        """The system operator -- the צוות משמרות זהב console (D28).
+
+        Its own cookie, never a team role: an operator is above every
+        workspace and belongs to none, so `boss()` refuses this session and
+        this refuses every team session.
+        """
+        def dependency(
+            pakash_admin: Optional[str] = Cookie(
+                default=None, alias=ADMIN_COOKIE_NAME
+            )
+        ) -> dict:
+            session = read_admin(self._secret, pakash_admin)
+            if session is None:
+                raise AuthError("נדרשת התחברות של צוות משמרות זהב")
+            return session
+        return dependency
 
     def visitor(self):
         """Any authenticated visitor -- boss, member, or employee."""
@@ -31,6 +105,11 @@ class Guards:
             session = read(self._secret, pakash_session)
             if session is None:
                 raise AuthError("נדרשת התחברות")
+            # 401, not 403: the client answers it by returning to the login
+            # screen, which is right for a team that was suspended or deleted
+            # under an open session.
+            if not self.is_active(session["team_id"]):
+                raise AuthError(SUSPENDED_MESSAGE)
             return session
         return dependency
 
@@ -98,4 +177,4 @@ class Guards:
         return dependency
 
 
-__all__ = ["Guards"]
+__all__ = ["Guards", "SUSPENDED_MESSAGE"]
