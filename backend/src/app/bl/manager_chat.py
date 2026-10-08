@@ -21,6 +21,8 @@ from app.bl.chat_contract import (
 )
 from app.bl.chat_lifecycle import future_schedules, prepare_retirement, prepare_structure
 from app.bl.chat_generation import prepare_generation
+from app.bl.chat_constraints import normalize_constraints, constraints_report, affected_periods, constraint_impact
+from app.bl.chat_management import management_state, prepare_management, apply_management
 from app.bl.planner.shaping import question
 from app.bl.placement.values import warning_key
 from app.bl.profile_service import ProfileService
@@ -28,7 +30,7 @@ from app.bl.prompts import load
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.generation.history import AssignmentHistory
 from app.bl.schedule_service.operations import OperationApplier
-from app.bl.scheduler import Scheduler
+from app.bl.scheduler import Scheduler, build_slots
 from app.bl.simulate.hypothetical import Hypothetical, schedule_rows
 from app.bl.tools import ScheduleTools, TOOL_DESCRIPTIONS
 from app.bl.tools.schedule_tools import _invalid_date_argument
@@ -42,6 +44,9 @@ _EXTRA_TOOLS = {
     "workload_report": "השוואת שעות, מספר משמרות וכוננויות בכל טווח תאריכים",
     "change_history": "מה השתנה בסידורים ומדוע",
     "simulate_changes": "בדיקת מה יקרה אם מבצעים כמה שינויים יחד, כולל כיסוי ועומסים; ללא שמירה",
+    "constraints_report": "אילוצים שמורים וקבועים, שעות ועדיפות, בקשות שממתינות לאישור, וכיבוד או התנגשות מול כל הסידורים בטווח",
+    "request_inbox": "בקשות אילוץ והחלפות של הצוות, עם מזהים וסטטוסים אמיתיים להחלטת מנהל",
+    "preference_list": "כל ההעדפות השמורות של הצוות: פעילות, מוצעות ומושבתות, עם מזהים לעריכה",
 }
 _ROUNDS = 7      # model calls per turn; the last one may not request tools
 _REPAIRS = 2     # times a rejected plan is handed back to the model to fix
@@ -340,6 +345,13 @@ class ManagerChatService:
             return {"tool": name, "ok": False, "error": "נדרש תאריך מוחלט עבור " + invalid}
         if name == "list_periods":
             return {"tool": name, "ok": True, "periods": self._repo.list_schedules(team_id)}
+        if name == "constraints_report":
+            return constraints_report(self._repo, team_id, arguments, focused_id=focused_id)
+        if name == "request_inbox":
+            return {"tool": name, "ok": True, "constraint_requests": self._repo.list_requests(team_id),
+                    "swap_requests": self._repo.list_swaps(team_id)}
+        if name == "preference_list":
+            return {"tool": name, "ok": True, "preferences": self._repo.preferences(team_id)}
         if name == "change_history":
             return {"tool": name, "ok": True, "changes": self._repo.change_log(team_id, limit=60)}
         if name == "workload_report":
@@ -428,11 +440,14 @@ class ManagerChatService:
         if (kind != "changes" and (turn.get("operations") or turn.get("constraints"))) \
                 or (kind not in ("profile", "restructure") and turn.get("profile_patch_json")) \
                 or (kind not in ("generate", "restructure") and turn.get("required_assignments")) \
+                or (kind != "manage" and turn.get("management_operations")) \
                 or turn.get("profile_operations"):
             raise _Rejected("סוג התשובה אינו תואם לפעולות. הוראת שיבוץ דורשת kind=changes; התייעצות דורשת kind=answer בלי פעולות; עריכת צוות דורשת kind=profile ו-profile_patch_json")
         if kind == "answer":
             return None
         schedule_id = turn.get("schedule_id") or focused_id
+        if kind in ("manage", "blank"):
+            schedule_id = ""
         if kind == "generate":
             # A new week's dates must not fall back to the week on screen. An
             # exact period wins; otherwise a period that contains the dates is
@@ -457,6 +472,35 @@ class ManagerChatService:
         }
         if schedule and kind != "profile":
             plan.update(starts_on=iso(schedule["starts_on"]), ends_on=iso(schedule["ends_on"]))
+        if kind == "manage":
+            state["management"] = prepare_management(self._repo, team_id, turn, plan, state, request)
+            plan["snapshot"] = _fingerprint(state)
+            return plan
+        if kind == "blank":
+            try:
+                first = datetime.date.fromisoformat(turn.get("starts_on") or "")
+                last = datetime.date.fromisoformat(turn.get("ends_on") or "")
+            except (ValueError, TypeError):
+                raise _Rejected("יש לציין תאריכים מוחלטים לסידור הריק")
+            if first > last or (last - first).days > 30:
+                raise _Rejected("סידור ריק דורש טווח של עד 31 ימים")
+            if any(iso(row["starts_on"]) <= last.isoformat() and first.isoformat() <= iso(row["ends_on"])
+                   for row in state["periods"]):
+                raise _Rejected("כבר קיים סידור בטווח הזה. אין ליצור סידור חופף; אפשר לרוקן או לערוך את הקיים")
+            slots = build_slots(profile, first.isoformat(), last.isoformat())
+            if not slots:
+                raise _Rejected("אין משמרות מוגדרות לתאריכים האלה. יש להשלים את הגדרות המשמרות")
+            plan.update(starts_on=first.isoformat(), ends_on=last.isoformat(), creation_slots=slots)
+            return plan
+        if kind == "delete_period":
+            if not schedule:
+                raise _Rejected("בחרו סידור קיים למחיקה")
+            if schedule.get("status") == "published":
+                raise _Rejected("הסידור מפורסם. יש להחזיר אותו לטיוטה לפני מחיקה")
+            if (schedule.get("generation") or {}).get("status") in ("pending", "queued", "running"):
+                raise _Rejected("לא ניתן למחוק סידור בזמן בנייה")
+            plan["deleted_assignments"] = len(schedule.get("assignments") or [])
+            return plan
         if kind == "retire":
             periods = prepare_retirement(self._repo, self._profiles, team_id, turn, plan, state)
             state = dict(state, future_schedules=periods)
@@ -511,7 +555,7 @@ class ManagerChatService:
                     if row.get("action") == "assign" and person.get("inactive_from") \
                             and (row.get("date") or "") >= person["inactive_from"]:
                         raise _Rejected("העובד סיים את העבודה לפני המשמרת. יש לבחור מחליף פעיל")
-                if any(not row.get("available", False) for row in turn.get("constraints") or []):
+                if any(row.get("action") != "remove" and not row.get("available", False) for row in turn.get("constraints") or []):
                     selections = "\n".join(list(choices) + [request])
                     assignments = [row for row in turn.get("operations") or [] if row.get("action") == "assign"]
                     unselected = [row for row in assignments if row.get("employee") and row["employee"] not in selections]
@@ -527,14 +571,14 @@ class ManagerChatService:
                             if any(result.get("candidates") for result in candidates) else \
                             "לא נמצאו מחליפים שעומדים בכל הכללים. אפשר לשנות את היקף המשמרת או להוסיף תגבור. איך תרצו לפתור את החוסר?"
                         raise _NeedsManager(prompt, candidates, dict(request=request,
-                            constraints=self._constraints(turn.get("constraints") or [], profile)))
+                            constraints=normalize_constraints(turn.get("constraints") or [], profile, state["availability"])))
                 proposal = build_proposal(turn, profile, schedule, plan["reason"])
                 if proposal["needs_input"] or proposal["needs_reason"]:
                     raise _NeedsManager(proposal["reply"] or "נדרשים פרטים נוספים לפני שינוי")
                 if len(proposal["operations"]) != len(turn.get("operations") or []):
                     raise _Rejected("חלק מהשינויים לא תואמים לסידור. יש לבקש תוכנית מעודכנת")
                 plan["operations"] = proposal["operations"]
-                plan["constraints"] = self._constraints(turn.get("constraints") or [], profile)
+                plan["constraints"] = normalize_constraints(turn.get("constraints") or [], profile, state["availability"])
                 if not plan["operations"] and not plan["constraints"]:
                     return None
                 rows = self._changed_rows(schedule, plan["operations"]) if schedule else []
@@ -547,6 +591,14 @@ class ManagerChatService:
                     plan["warnings"] = [row for row in self._audit_plan(
                         profile, schedule, rows, state["availability"], plan["constraints"])
                         if warning_key(row) not in existing]
+                if plan["constraints"]:
+                    periods = affected_periods(self._repo, team_id, plan["constraints"])
+                    state["constraint_periods"] = periods
+                    projected = [dict(period, assignments=rows) if period["id"] == schedule_id else period for period in periods]
+                    plan["constraint_feedback"], impact = constraint_impact(profile, projected, state["availability"], plan["constraints"])
+                    known = {warning_key(row) for row in plan["warnings"]}
+                    plan["warnings"].extend(row for row in impact if warning_key(row) not in known)
+                    plan["snapshot"] = _fingerprint(state)
             elif kind == "clear":
                 plan["operations"] = [dict(action="remove", employee=row["employee"],
                                            date=iso(row["date"]), shift=row["shift"],
@@ -558,20 +610,6 @@ class ManagerChatService:
                 raise _Rejected("הפעולה אינה נתמכת")
         plan["draft_schedule_ids"] = draft_schedule_ids(plan, state)
         return plan
-
-    def _constraints(self, offered, profile):
-        names = {row["name"] for row in profile.get("employees") or []}
-        shifts = {row["name"] for row in profile.get("shifts") or []}
-        result = []
-        for row in offered[:126]:
-            if row.get("employee") not in names or row.get("shift", "") not in shifts | {""}:
-                raise _Rejected("האילוץ חייב להתייחס לעובד ולמשמרת מוכרים")
-            try:
-                date = datetime.date.fromisoformat(row.get("date") or "").isoformat()
-            except ValueError as exc:
-                raise _Rejected("תאריך האילוץ אינו תקין") from exc
-            result.append(dict(row, date=date, available=bool(row.get("available", False))))
-        return result
 
     def _changed_rows(self, schedule, operations):
         if len(operations) > 40:
@@ -595,6 +633,10 @@ class ManagerChatService:
             state = self._state(team_id, plan.get("schedule_id") or "")
             if plan.get("kind") == "retire":
                 state["future_schedules"] = future_schedules(self._repo, team_id, plan["effective_date"])
+            if plan.get("kind") == "manage":
+                state["management"] = management_state(self._repo, team_id, plan["management_operations"])
+            elif plan.get("constraints"):
+                state["constraint_periods"] = affected_periods(self._repo, team_id, plan["constraints"])
             if _fingerprint(state) != plan.get("snapshot"):
                 raise ConflictError("הסידור או כללי הצוות השתנו מאז ההמלצה. בקשו תוכנית מעודכנת")
             if (exception_warnings(plan) or plan.get("exceptions")) and not accept_exceptions:
@@ -608,7 +650,15 @@ class ManagerChatService:
             kind, schedule_id = plan.get("kind"), plan.get("schedule_id") or ""
             for period_id in plan.get("draft_schedule_ids") or []:
                 self._repo.set_schedule_status(period_id, team_id, "draft")
-            if kind == "retire":
+            if kind == "manage":
+                apply_management(self._repo, self._schedules, team_id, plan["management_operations"])
+            elif kind == "blank":
+                created = self._schedules.create_blank(team_id, plan["starts_on"], plan["ends_on"])
+                schedule_id = created["id"]
+            elif kind == "delete_period":
+                self._schedules.delete(schedule_id, team_id)
+                schedule_id = ""
+            elif kind == "retire":
                 for period in plan["affected_schedules"]:
                     for operation in period["operations"]:
                         schedule = self._repo.get_schedule(period["schedule_id"], team_id)
@@ -643,9 +693,14 @@ class ManagerChatService:
                     if not applier.apply(team_id, schedule, operation, reason, agent_reason):
                         raise ConflictError("לא ניתן להחיל את כל התוכנית. לא בוצע שינוי")
                 for row in plan["constraints"]:
+                    if row.get("action") == "remove":
+                        self._repo.delete_availability(row["id"], team_id)
+                        continue
                     self._repo.set_availability(
                         team_id, row["employee"], row["date"], shift_name=row.get("shift") or "",
                         available=row.get("available", False), reason=row.get("reason") or reason,
+                        start_time=row.get("start_time") or "", end_time=row.get("end_time") or "",
+                        is_hard=row.get("is_hard", True),
                         source="agent",
                     )
             else:
@@ -655,6 +710,14 @@ class ManagerChatService:
                 reason=reason, agent_reason=agent_reason,
             )
             receipt = "התוכנית הוחלה בהצלחה"
+            if kind == "manage":
+                receipt = "%d פעולות ניהול בוצעו ונשמרו בהצלחה" % len(plan["management_operations"])
+            elif kind == "blank":
+                receipt = "נפתח סידור ריק לשיבוץ ידני"
+            elif kind == "delete_period":
+                receipt = "הסידור נמחק. היסטוריית השינויים נשמרה"
+            elif plan.get("constraints"):
+                receipt += ". %d אילוצים עודכנו; ההשפעה על השיבוץ מוצגת בתוכנית." % len(plan["constraints"])
             if plan.get("draft_schedule_ids"):
                 receipt = "הסידור הוחזר לטיוטה והתוכנית הוחלה בהצלחה"
             if kind == "retire":

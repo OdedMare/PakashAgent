@@ -182,8 +182,12 @@ def audit_plan(profile, schedule, rows, availability, constraints):
     facts = {(row["employee"], iso(row["constraint_date"]), row.get("shift_name") or ""):
              dict(row, date=iso(row["constraint_date"]), shift=row.get("shift_name") or "")
              for row in availability}
-    facts.update({(row["employee"], row["date"], row.get("shift") or ""): row
-                  for row in constraints})
+    for row in constraints:
+        key = (row["employee"], row["date"], row.get("shift") or "")
+        if row.get("action") == "remove":
+            facts.pop(key, None)
+        else:
+            facts[key] = row
     warnings = audit(
         rows, profile.get("shifts") or [], profile.get("employees") or [],
         effective_availability(profile, list(facts.values()), iso(schedule["starts_on"]),
