@@ -9,7 +9,7 @@ import {
   Settings2,
   X,
 } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { SettingsContent, SettingsNavigation } from "./SettingsSections";
 import type { SettingsController } from "./useSettings";
@@ -75,16 +75,19 @@ export function SettingsPanel({ onClose, profile, onProfileSaved }: {
  *  ordinary unlock form is what renders, not a dead panel. */
 export function SystemSettings() {
   const settings = useSettings();
-  const { loaded, loading, unlock } = settings;
-  const [tried, setTried] = useState(false);
+  const { loaded, error, unlock } = settings;
+  // A ref, not state: whether the one automatic attempt was made is not
+  // something to render, and React's development double-mount must not send
+  // it twice.
+  const started = useRef(false);
 
   useEffect(() => {
-    if (tried || loaded || loading) return;
-    setTried(true);
+    if (started.current) return;
+    started.current = true;
     void unlock("");
-  }, [tried, loaded, loading, unlock]);
+  }, [unlock]);
 
-  if (!loaded && (!tried || loading)) {
+  if (!loaded && !error) {
     return (
       <p className="settings-loading">
         <LoaderCircle className="spin" size={16} /> טוען הגדרות…

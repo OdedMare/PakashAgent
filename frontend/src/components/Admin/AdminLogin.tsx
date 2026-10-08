@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertCircle, ArrowRight, Crown, LockKeyhole } from "lucide-react";
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 
 /** The operator's door. One password, no team picker: the operator belongs
@@ -62,9 +63,9 @@ export function AdminLogin({
           {busy ? "בודק…" : "כניסה למרכז השליטה"}
         </button>
 
-        <a className="adm-back" href="/">
+        <Link className="adm-back" href="/">
           <ArrowRight size={14} /> חזרה למסך הכניסה של הצוותים
-        </a>
+        </Link>
       </form>
     </main>
   );

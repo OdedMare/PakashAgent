@@ -36,8 +36,16 @@ export function TeamDrawer({
   }, [teamId]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    adminTeam(teamId)
+      .then((next) => !cancelled && setTeam(next))
+      .catch((reason) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [teamId]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
@@ -92,7 +100,14 @@ export function TeamDrawer({
               <div><small>כניסות אישיות</small><strong>{team.identities}</strong></div>
               <div><small>בקשות ממתינות</small><strong>{team.pending_requests + team.pending_swaps}</strong></div>
             </div>
-            <SettingsSection team={team} onChanged={changed} />
+            {/* Keyed on the saved values, so a save (or a change made
+                elsewhere) remounts the form with them rather than syncing
+                props into state. */}
+            <SettingsSection
+              key={`${team.id}:${team.name}:${team.max_employees}:${team.notes}`}
+              team={team}
+              onChanged={changed}
+            />
             <AccessSection team={team} onChanged={changed} />
             <PeopleSection team={team} onChanged={changed} />
             <ActivitySection team={team} />

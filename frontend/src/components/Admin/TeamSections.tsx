@@ -11,7 +11,7 @@ import {
   UserX,
   WandSparkles,
 } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 
 import {
   adminReleaseIdentity,
@@ -70,12 +70,6 @@ export function SettingsSection({ team, onChanged }: { team: AdminTeamDetail; on
   const [seats, setSeats] = useState(team.max_employees?.toString() ?? "");
   const [notes, setNotes] = useState(team.notes);
   const action = useAction();
-
-  useEffect(() => {
-    setName(team.name);
-    setSeats(team.max_employees?.toString() ?? "");
-    setNotes(team.notes);
-  }, [team.id, team.name, team.max_employees, team.notes]);
 
   const seatValue = seats.trim() === "" ? null : Number.parseInt(seats, 10);
   const seatsValid = seatValue === null || (Number.isInteger(seatValue) && seatValue >= 1 && seatValue <= 5000);

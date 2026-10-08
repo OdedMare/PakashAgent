@@ -9,6 +9,7 @@ import {
   UserCircle,
   UserCog,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { listTeams } from "@/services/api";
@@ -249,9 +250,9 @@ export function Login({
             <Crown size={14} aria-hidden="true" />
             <span>צריכים צוות חדש? צוות משמרות זהב פותח אותו עבורכם.</span>
           </p>
-          <a className="gate-switch" href="/admin">
+          <Link className="gate-switch" href="/admin">
             <ShieldCheck size={14} /> כניסת צוות משמרות זהב
-          </a>
+          </Link>
         </form>
       )}
     </main>

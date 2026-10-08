@@ -26,10 +26,7 @@ export function useAdmin() {
 
   const reload = useCallback(async () => {
     try {
-      const [nextTeams, nextOverview] = await Promise.all([
-        adminTeams(),
-        adminOverview(),
-      ]);
+      const [nextTeams, nextOverview] = await fetchConsole();
       setTeams(nextTeams);
       setOverview(nextOverview);
       setError(null);
@@ -42,19 +39,25 @@ export function useAdmin() {
     }
   }, []);
 
+  // Asks who is at the door and, if it is the operator, loads both lists in
+  // the same chain — state is set only in the promise callbacks, after the
+  // answers arrive, and never after unmount.
   useEffect(() => {
     let cancelled = false;
     adminMe()
-      .then(() => !cancelled && setSignedIn(true))
+      .then(async () => {
+        if (cancelled) return;
+        setSignedIn(true);
+        const [nextTeams, nextOverview] = await fetchConsole();
+        if (cancelled) return;
+        setTeams(nextTeams);
+        setOverview(nextOverview);
+      })
       .catch(() => !cancelled && setSignedIn(false));
     return () => {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    if (signedIn) void reload();
-  }, [signedIn, reload]);
 
   const login = useCallback(async (password: string) => {
     setBusy(true);
@@ -62,12 +65,13 @@ export function useAdmin() {
     try {
       await adminLogin(password);
       setSignedIn(true);
+      await reload();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [reload]);
 
   const logout = useCallback(async () => {
     await adminLogout().catch(() => undefined);
@@ -87,6 +91,10 @@ export function useAdmin() {
     reload,
     clearError: () => setError(null),
   };
+}
+
+function fetchConsole(): Promise<[AdminTeam[], AdminOverview]> {
+  return Promise.all([adminTeams(), adminOverview()]);
 }
 
 export type AdminState = ReturnType<typeof useAdmin>;
