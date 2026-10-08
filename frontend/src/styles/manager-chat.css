@@ -35,12 +35,20 @@
 .conversation-title > svg { color: var(--primary); }
 .conversation-tools .icon-button { min-width: 44px; min-height: 44px; }
 .conversation-context { display: flex; flex-wrap: wrap; gap: 5px 7px; align-items: center; padding: 0 18px 12px; font-size: 12px; color: var(--text-soft); border-bottom: 1px solid var(--border); }
-.conversation-context > span:last-child { flex-basis: 100%; color: var(--text-muted); }
 .conversation-context-dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; }
 .conversation-focus-day { display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px 3px 9px; border-radius: 999px; background: var(--primary-soft); color: var(--primary); font-weight: 600; font-variant-numeric: tabular-nums; }
-.conversation-focus-day button { display: inline-grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+.conversation-focus-day button { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
 .conversation-focus-day button:hover, .conversation-focus-day button:focus-visible { background: color-mix(in srgb, var(--primary) 18%, transparent); }
-.conversation-history { background: var(--surface-2); padding: 12px 18px; border-bottom: 1px solid var(--border); display: grid; gap: 8px; }
+.conversation-history { background: var(--surface-2); padding: 12px 18px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; max-height: 40%; min-height: 0; }
+.conversation-history-search { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 12px; min-height: 44px; }
+.conversation-history-search input { width: 100%; min-width: 0; background: transparent; border: 0; outline: none; box-shadow: none; }
+.conversation-history-search:focus-within { box-shadow: var(--focus); }
+.conversation-history-list { overflow-y: auto; min-height: 0; }
+.conversation-history-list button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 10px; border: 0; background: transparent; border-radius: 8px; text-align: start; }
+.conversation-history-list button:hover, .conversation-history-list button[aria-current] { background: var(--surface-3); }
+.conversation-history-list button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conversation-history-list time, .conversation-history-list p { font-size: 12px; color: var(--text-muted); }
+.conversation-history-list time { white-space: nowrap; }
 .conversation-history label { font-size: 13px; font-weight: 600; }
 .conversation-history select, .conversation-replacement select { width: 100%; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 7px; min-height: 44px; padding: 8px; }
 .conversation-delete-confirm { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; }
@@ -66,6 +74,26 @@
 .conversation-text.is-rich p { margin: 0 0 8px; }
 .conversation-text.is-rich p:last-child, .conversation-text.is-rich ul:last-child, .conversation-text.is-rich ol:last-child { margin-bottom: 0; }
 .conversation-text.is-rich ul, .conversation-text.is-rich ol { margin: 0 0 8px; padding-inline-start: 20px; }
+.conversation-text.is-rich :is(h1, h2, h3, h4, h5, h6) { margin: 24px 0 12px; line-height: 1.45; font-weight: 650; font-size: 1.1em; }
+.conversation-text.is-rich > :first-child { margin-top: 0; }
+.conversation-text.is-rich p { white-space: pre-wrap; margin-bottom: 16px; }
+.conversation-text.is-rich li { margin-block: 4px; }
+.conversation-text.is-rich a { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+.conversation-text.is-rich blockquote { margin: 16px 0; border-inline-start: 3px solid var(--border-strong); padding-inline-start: 16px; color: var(--text-soft); }
+.conversation-text.is-rich hr { border: 0; border-top: 1px solid var(--border); margin: 24px 0; }
+.conversation-text.is-rich code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.9em; background: var(--surface-3); border-radius: 4px; padding: 2px 5px; }
+.conversation-table { overflow-x: auto; max-width: 100%; margin-block: 16px; border: 1px solid var(--border); border-radius: 12px; }
+.conversation-table table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.conversation-table :is(th, td) { padding: 10px 14px; text-align: start; border-bottom: 1px solid var(--border); white-space: normal; min-width: 100px; }
+.conversation-table th { background: var(--surface-2); font-weight: 600; }
+.conversation-table tr:last-child td { border-bottom: 0; }
+.conversation-code { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-block: 16px; background: var(--surface-2); }
+.conversation-code header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-inline: 14px 6px; background: var(--surface-3); font-size: 12px; }
+.conversation-code button { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 0; min-height: 44px; padding: 8px; border-radius: 8px; }
+.conversation-code button:hover { background: var(--border); }
+.conversation-code pre { margin: 0; padding: 16px; overflow-x: auto; text-align: left; white-space: pre; }
+.conversation-code pre code { padding: 0; background: transparent; }
+.conversation-code > small { display: block; padding: 8px 14px; color: var(--text-muted); }
 .conversation-thinking small { color: var(--text-muted); font-size: 12px; }
 .conversation-message.is-error .conversation-text, .conversation-error { color: var(--danger); }
 .conversation-thinking, .conversation-loading { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); padding: 10px 0; }
@@ -112,6 +140,13 @@
 .conversation-send { width: 44px; height: 44px; border: none; border-radius: 10px; background: var(--primary); color: var(--surface); display: grid; place-items: center; }
 .conversation-send:disabled { opacity: 0.45; cursor: default; }
 .conversation-error { font-size: 13px; padding: 8px 16px; margin: 0; background: var(--danger-soft); }
+.conversation-bottom { position: relative; flex-shrink: 0; width: 100%; max-width: 800px; margin-inline: auto; }
+.conversation-bottom > .conversation-jump { bottom: calc(100% + 8px); width: 44px; height: 44px; }
+.conversation-disclaimer { text-align: center; font-size: 12px; color: var(--text-muted); padding: 0 16px 12px; margin: 0; }
+.conversation-revising { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid var(--border); margin-bottom: 8px; font-size: 12px; color: var(--text-muted); }
+.conversation-message.is-assistant { max-width: 760px; margin-inline: auto; }
+.conversation-log:has(.conversation-empty) { display: flex; align-items: center; }
+.conversation-empty { width: 100%; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 /* Keep the persistent help shortcut away from the chat's Send button. */
 body:has(.management-workspace.has-drawer) .tutorial-fab { left: auto; right: 20px; }
@@ -121,5 +156,6 @@ body:has(.management-workspace.has-drawer) .tutorial-fab { left: auto; right: 20
   .manager-drawer { height: min(85dvh, 48rem); }
   .conversation-log { padding: 16px; }
   body:has(.management-workspace.has-drawer) .tutorial-fab { display: none; }
-  .conversation-composer { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .conversation-disclaimer { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .conversation-focus-day button { width: 44px; height: 44px; }
 }

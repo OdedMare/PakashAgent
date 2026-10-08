@@ -92,18 +92,14 @@ class AdminRoutes:
         def create(
             request: AdminCreateTeamRequest, session: dict = Depends(admin)
         ) -> dict:
-            return service.create(
-                request.name, request.password,
-                max_employees=request.max_employees, notes=request.notes,
-            )
+            return service.create(request.name, request.password)
 
         @router.patch("/teams/{team_id}")
         def update(
             team_id: str, request: AdminUpdateTeamRequest,
             session: dict = Depends(admin),
         ) -> dict:
-            # `exclude_unset`, so `max_employees: null` (remove the cap) and
-            # an absent key (leave it) stay different requests.
+            # `exclude_unset`: a key left out is left alone, not nulled.
             result = service.update(team_id, request.model_dump(exclude_unset=True))
             guards.forget_team(team_id)
             return result

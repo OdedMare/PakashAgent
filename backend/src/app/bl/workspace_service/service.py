@@ -16,21 +16,7 @@ from app.common.sessions.sessions import ROLE_BOSS, ROLE_MEMBER
 _MIN_PASSWORD = 6
 _MAX_PASSWORD = 200
 _MAX_NAME = 80
-# A seat cap is a licence size, not a roster: large enough for a battalion,
-# bounded so a typo cannot store a number nobody meant.
-_MAX_SEATS = 5000
 _MAX_NOTES = 500
-
-
-def validate_seats(value: Optional[int]) -> Optional[int]:
-    """None is "no cap"; anything else is a whole number of employees."""
-    if value is None:
-        return None
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise AgentError("מספר העובדים חייב להיות מספר שלם")
-    if value < 1 or value > _MAX_SEATS:
-        raise AgentError("מספר העובדים חייב להיות בין 1 ל-%d" % _MAX_SEATS)
-    return value
 
 
 def validate_notes(value: Optional[str]) -> str:
@@ -44,10 +30,7 @@ class WorkspaceService:
     def __init__(self, repository):
         self._repository = repository
 
-    def create(
-        self, name: str, password: str,
-        max_employees: Optional[int] = None, notes: str = "",
-    ) -> dict:
+    def create(self, name: str, password: str) -> dict:
         """Open a workspace and return it with a boss session.
 
         The first team created also adopts any interview recorded before
@@ -57,11 +40,7 @@ class WorkspaceService:
         """
         clean_name = self.validate_name(name)
         self._validate_password(password)
-        team = self._repository.create_team(
-            clean_name, password,
-            max_employees=validate_seats(max_employees),
-            notes=validate_notes(notes),
-        )
+        team = self._repository.create_team(clean_name, password)
         claimed = self._repository.claim_orphan_sessions(team["id"])
         result = _public(team, role=ROLE_BOSS)
         result["claimed_sessions"] = claimed
@@ -165,4 +144,4 @@ def _public(team: dict, role: str, include_token: bool = True) -> dict:
     return view
 
 
-__all__ = ["WorkspaceService", "validate_seats", "validate_notes"]
+__all__ = ["WorkspaceService", "validate_notes"]

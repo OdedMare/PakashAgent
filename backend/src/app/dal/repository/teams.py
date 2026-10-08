@@ -24,7 +24,6 @@ from psycopg.types.json import Jsonb
 from app.common.errors.errors import AuthError, NotFoundError
 from app.dal.database.postgres import connect
 from app.dal.repository.base import RepositoryBase, new_id
-from app.dal.repository.seats import guard_seats
 
 # scrypt's cost parameters. n=2**14 with r=8 lands around 16MB and a few tens
 # of milliseconds per verify -- slow enough to make guessing expensive, fast
@@ -85,21 +84,13 @@ def new_member_token() -> str:
 
 
 class TeamRepository(RepositoryBase):
-    def create_team(
-        self, name: str, password: str,
-        max_employees: Optional[int] = None, notes: str = "",
-    ) -> dict:
+    def create_team(self, name: str, password: str) -> dict:
         """Open a workspace. Returns the team *with* its member token."""
         team_id = new_id()
         self._execute("""
-            INSERT INTO teams (
-                id, name, password_hash, member_token, max_employees, notes
-            )
-            VALUES (%s,%s,%s,%s,%s,%s)
-        """, (
-            team_id, name, hash_password(password), new_member_token(),
-            max_employees, notes or "",
-        ))
+            INSERT INTO teams (id, name, password_hash, member_token)
+            VALUES (%s,%s,%s,%s)
+        """, (team_id, name, hash_password(password), new_member_token()))
         return self.get_team(team_id)
 
     def get_team(self, team_id: str) -> dict:
@@ -184,7 +175,7 @@ class TeamRepository(RepositoryBase):
         """
         with connect(self._store) as connection:
             row = connection.execute("""
-                SELECT id, profile FROM interview_sessions
+                SELECT id FROM interview_sessions
                 WHERE team_id=%s AND status='complete' AND profile IS NOT NULL
                 ORDER BY updated_at DESC
                 LIMIT 1
@@ -192,7 +183,6 @@ class TeamRepository(RepositoryBase):
             """, (team_id,)).fetchone()
             if row is None:
                 raise NotFoundError("פרופיל הצוות לא נמצא")
-            guard_seats(connection, team_id, profile, row["profile"])
             connection.execute("""
                 UPDATE interview_sessions
                 SET profile=%s, updated_at=NOW()
@@ -208,13 +198,10 @@ class TeamRepository(RepositoryBase):
         store as an interviewed one, so every downstream reader keeps one
         source of truth.
         """
-        with connect(self._store) as connection:
-            guard_seats(connection, team_id, profile)
-            connection.execute("""
-                INSERT INTO interview_sessions (id, team_id, status, profile)
-                VALUES (%s,%s,'complete',%s)
-            """, (new_id(), team_id, Jsonb(profile)))
-            connection.commit()
+        self._execute("""
+            INSERT INTO interview_sessions (id, team_id, status, profile)
+            VALUES (%s,%s,'complete',%s)
+        """, (new_id(), team_id, Jsonb(profile)))
         return profile
 
     def claim_orphan_sessions(self, team_id: str) -> int:

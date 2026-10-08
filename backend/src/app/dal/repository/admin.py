@@ -12,17 +12,17 @@ are named explicitly for the same reason `_public()` in the workspace
 service names them: a `SELECT *` is one added column away from a leak.
 """
 
+import datetime
 from typing import Any, Dict, List, Optional
 
 from app.common.errors.errors import NotFoundError
 from app.dal.database.postgres import connect
 from app.dal.repository.base import RepositoryBase
-from app.dal.repository.seats import roster_size
 
 # The columns of `teams` the console may see. Not the hash, ever; the member
 # token only in the single-team detail, where the operator may need to hand
 # the link over again.
-_TEAM_COLUMNS = "t.id, t.name, t.created_at, t.active, t.max_employees, t.notes"
+_TEAM_COLUMNS = "t.id, t.name, t.created_at, t.active, t.notes"
 
 # One row per team with its counts, read in a single round trip. The profile
 # comes from the newest completed interview, matching `team_profile()`.
@@ -64,7 +64,7 @@ _TEAM_STATS = """
 # The fields `update_team_admin` may set, and nothing else. A dict of
 # column -> value is built from these names, never from the caller's keys,
 # so a patch cannot name a column into the SQL.
-_EDITABLE = ("name", "max_employees", "active", "notes")
+_EDITABLE = ("name", "active", "notes")
 
 
 class AdminRepository(RepositoryBase):
@@ -161,12 +161,26 @@ class AdminRepository(RepositoryBase):
 
 
 def _with_headcount(row: dict) -> dict:
-    """Swap the raw roster JSON for the counts the console shows."""
+    """Swap the raw roster JSON for the counts the console shows: everyone
+    the manager listed, and how many of them have not left."""
     team = dict(row)
-    roster = team.pop("roster", None)
-    team["employees"] = roster_size({"employees": roster})
-    team["roster_total"] = len(roster) if isinstance(roster, list) else 0
+    rows = _roster_rows(team.pop("roster", None))
+    today = datetime.date.today()
+    team["roster_total"] = len(rows)
+    team["employees"] = sum(
+        1 for item in rows if not _departed(item.get("inactive_from"), today)
+    )
     return team
+
+
+def _departed(value: Any, today: datetime.date) -> bool:
+    """`inactive_from` on or before today: they left."""
+    if not value:
+        return False
+    try:
+        return datetime.date.fromisoformat(str(value)[:10]) <= today
+    except ValueError:
+        return False
 
 
 def _roster_rows(roster: Optional[Any]) -> List[dict]:

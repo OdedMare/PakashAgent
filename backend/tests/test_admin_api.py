@@ -6,8 +6,6 @@ deleted team stops working under cookies already issued, and that deleting
 needs the team's name typed back.
 """
 
-import datetime
-
 import pytest
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -17,12 +15,11 @@ from app.api.dependencies.dependencies import Guards
 from app.api.routers import admin, settings as settings_router, workspace
 from app.bl.admin_service import AdminService
 from app.bl.workspace_service.service import WorkspaceService
-from app.common.errors.errors import AppError, ConflictError, NotFoundError
+from app.common.errors.errors import AppError, NotFoundError
 from app.common.sessions.sessions import (
     ADMIN_COOKIE_NAME, COOKIE_NAME, ROLE_ADMIN, issue, issue_admin, read,
     read_admin,
 )
-from app.dal.repository.seats import guard_seats, roster_size
 
 from tests.test_workspace import _FakeTeams
 
@@ -97,9 +94,9 @@ def _operator(client):
     return response
 
 
-def _open_team(client, name="משמרת א", password="sod-gadol", **extra):
+def _open_team(client, name="משמרת א", password="sod-gadol"):
     response = client.post(
-        "/api/admin/teams", json=dict(name=name, password=password, **extra)
+        "/api/admin/teams", json={"name": name, "password": password}
     )
     assert response.status_code == 200, response.text
     return response.json()
@@ -160,9 +157,9 @@ def test_the_two_cookies_cannot_stand_in_for_each_other():
 def test_a_team_opened_by_the_operator_can_be_entered_by_its_manager(world):
     client, _ = world
     _operator(client)
-    team = _open_team(client, max_employees=12, notes="פלוגה ב")
+    team = _open_team(client)
 
-    assert team["max_employees"] == 12 and team["notes"] == "פלוגה ב"
+    assert team["name"] == "משמרת א" and team["active"] is True
     assert "password_hash" not in team
     login = client.post("/api/workspace/login", json={
         "team_id": team["id"], "password": "sod-gadol",
@@ -203,14 +200,28 @@ def test_resuming_a_team_lets_it_back_in(world):
     assert login.status_code == 200
 
 
-def test_a_null_cap_removes_it_and_an_absent_one_leaves_it(world):
+def test_creating_takes_a_name_and_password_and_nothing_about_headcount(world):
+    """How many employees a team has is its manager's call, made in their
+    own roster -- the operator opens the door and sets the first password."""
     client, _ = world
     _operator(client)
-    team = _open_team(client, max_employees=5)
-    path = "/api/admin/teams/%s" % team["id"]
+    response = client.post("/api/admin/teams", json={
+        "name": "צוות", "password": "sod-gadol", "max_employees": 3,
+    })
 
-    assert client.patch(path, json={"notes": "x"}).json()["max_employees"] == 5
-    assert client.patch(path, json={"max_employees": None}).json()["max_employees"] is None
+    assert response.status_code == 200
+    assert "max_employees" not in response.json()
+
+
+def test_an_edit_applies_only_the_keys_it_sends(world):
+    client, _ = world
+    _operator(client)
+    team = _open_team(client)
+    path = "/api/admin/teams/%s" % team["id"]
+    client.patch(path, json={"notes": "פלוגה ב"})
+
+    updated = client.patch(path, json={"name": "משמרת ב"}).json()
+    assert updated["name"] == "משמרת ב" and updated["notes"] == "פלוגה ב"
 
 
 def test_the_operator_can_reset_a_forgotten_manager_password(world):
@@ -263,44 +274,3 @@ def test_the_operator_reaches_system_settings_without_the_password_header(world)
 
     assert response.status_code == 200
     assert response.json()["openai_api_key"] == "********"
-
-
-# --- the seat cap ------------------------------------------------------------
-
-class _Connection:
-    def __init__(self, limit):
-        self._limit = limit
-
-    def execute(self, query, params):
-        return self
-
-    def fetchone(self):
-        return {"max_employees": self._limit}
-
-
-def _profile(count, departed=0):
-    past = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
-    rows = [{"name": "עובד %d" % index} for index in range(count)]
-    rows += [
-        {"name": "עזב %d" % index, "inactive_from": past}
-        for index in range(departed)
-    ]
-    return {"employees": rows}
-
-
-def test_a_departed_employee_does_not_hold_a_seat():
-    assert roster_size(_profile(3, departed=2)) == 3
-
-
-def test_a_roster_may_not_grow_past_the_cap():
-    with pytest.raises(ConflictError):
-        guard_seats(_Connection(3), "team-1", _profile(4), _profile(3))
-
-
-def test_a_team_over_a_lowered_cap_can_still_edit_without_growing():
-    guard_seats(_Connection(3), "team-1", _profile(5), _profile(5))
-    guard_seats(_Connection(3), "team-1", _profile(4), _profile(5))
-
-
-def test_no_cap_means_no_limit():
-    guard_seats(_Connection(None), "team-1", _profile(400))

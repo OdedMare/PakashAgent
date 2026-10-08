@@ -1,7 +1,8 @@
 """The operator console's rules: who is the operator, and what they may do.
 
 The צוות משמרות זהב console (D28) is the only place a workspace is opened,
-suspended, re-capped or deleted. The repository owns the SQL and the
+suspended or deleted. How many employees a team has is not here: that is the
+team's manager's decision, made in their own roster. The repository owns the SQL and the
 workspace service owns what a valid team name and password are; this owns
 the rules between them -- that deleting asks for the team's name typed back,
 that a suspension is refused for a team that does not exist, and that the
@@ -9,9 +10,9 @@ operator password is compared in constant time.
 """
 
 import hmac
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
-from app.bl.workspace_service.service import validate_notes, validate_seats
+from app.bl.workspace_service.service import validate_notes
 from app.common.errors.errors import AgentError, AuthError, ForbiddenError
 
 # Read from the runtime settings for the overview. Names only, never a key or
@@ -59,32 +60,24 @@ class AdminService:
     def team(self, team_id: str) -> dict:
         return self._repository.admin_team(team_id)
 
-    def create(
-        self, name: str, password: str,
-        max_employees: Optional[int] = None, notes: str = "",
-    ) -> dict:
+    def create(self, name: str, password: str) -> dict:
         """Open a workspace on a team's behalf and hand back its full row.
 
-        The manager password is the operator's to set here and the team's to
-        change later (`/api/workspace/password`), so the operator does not
-        keep knowing it after handing it over.
+        A name and the first manager password, nothing more: everything
+        inside the workspace -- the roster, how many people are on it, the
+        shifts -- is the manager's to set up. The password is the operator's
+        to set here and the team's to change later
+        (`/api/workspace/password`), so the operator does not keep knowing it.
         """
-        created = self._workspace.create(
-            name, password, max_employees=max_employees, notes=notes,
-        )
+        created = self._workspace.create(name, password)
         return self._repository.admin_team(created["id"])
 
     def update(self, team_id: str, patch: Dict[str, Any]) -> dict:
-        """Rename, re-cap, suspend/resume or annotate one team.
-
-        Only the keys present are applied, so "no cap" (`max_employees:
-        null`) and "leave the cap alone" (key absent) stay different things.
-        """
+        """Rename, suspend/resume or annotate one team. Only the keys
+        present are applied."""
         fields = {}  # type: Dict[str, Any]
         if "name" in patch:
             fields["name"] = self._workspace.validate_name(patch["name"])
-        if "max_employees" in patch:
-            fields["max_employees"] = validate_seats(patch["max_employees"])
         if "active" in patch:
             if not isinstance(patch["active"], bool):
                 raise AgentError("מצב הצוות אינו תקין")

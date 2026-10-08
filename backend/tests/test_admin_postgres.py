@@ -13,7 +13,6 @@ import pytest
 from psycopg import sql
 
 from app.common.config.settings import Settings
-from app.common.errors.errors import ConflictError
 from app.dal.database import postgres
 from app.dal.repository import Repository
 
@@ -46,14 +45,15 @@ def _profile(*names):
 
 
 def test_the_team_list_counts_without_leaking_the_hash(repo):
-    team = repo.create_team("משמרת א", "sod-gadol", max_employees=3, notes="פלוגה")
+    team = repo.create_team("משמרת א", "sod-gadol")
+    repo.update_team_admin(team["id"], {"notes": "פלוגה"})
     repo.create_team_profile(team["id"], _profile("דנה", "יוסי"))
     repo.create_schedule(team["id"], "2026-10-04", "2026-10-10")
 
     [row] = repo.admin_teams()
 
     assert row["employees"] == 2 and row["periods"] == 1 and row["shifts"] == 1
-    assert row["max_employees"] == 3 and row["notes"] == "פלוגה"
+    assert row["notes"] == "פלוגה" and "max_employees" not in row
     assert row["active"] is True and row["has_profile"] is True
     assert "password_hash" not in row and "member_token" not in row
 
@@ -83,10 +83,11 @@ def test_suspending_and_deleting(repo):
     assert repo.admin_totals()["teams"] == 0
 
 
-def test_the_cap_is_enforced_on_a_real_profile_write(repo):
-    team = repo.create_team("משמרת א", "sod-gadol", max_employees=2)
-    repo.create_team_profile(team["id"], _profile("דנה", "יוסי"))
+def test_a_departed_employee_is_listed_but_not_counted_as_current(repo):
+    team = repo.create_team("משמרת א", "sod-gadol")
+    profile = _profile("דנה", "יוסי")
+    profile["employees"][1]["inactive_from"] = "2020-01-01"
+    repo.create_team_profile(team["id"], profile)
 
-    with pytest.raises(ConflictError):
-        repo.update_team_profile(team["id"], _profile("דנה", "יוסי", "רון"))
-    repo.update_team_profile(team["id"], _profile("דנה"))
+    [row] = repo.admin_teams()
+    assert row["employees"] == 1 and row["roster_total"] == 2
