@@ -24,6 +24,7 @@ from app.bl.schedule_service.constraints import ConstraintService
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.generation.builder import PeriodBuilder
 from app.bl.schedule_service.generation.history import AssignmentHistory
+from app.bl.schedule_service.generation.range import RangeBuilder
 from app.bl.schedule_service.generation.runner import GenerationRunner
 from app.bl.schedule_service.generation.stepper import GenerationStepper
 from app.bl.schedule_service.importing import ImportCommitter, ImportPreview
@@ -53,6 +54,7 @@ class ScheduleService:
         self._reader = ScheduleReader(context)
         self._stats = StatsReader(context, self._reader.periods_between)
         self._builder = PeriodBuilder(context, scheduler, gate, history, settings)
+        self._range = RangeBuilder(context, gate, settings)
         self._stepper = stepper
         self._runner = GenerationRunner(context, stepper, launch, sleep)
         self._import_preview = ImportPreview(RuleLearner(llm))
@@ -116,7 +118,7 @@ class ScheduleService:
         return self._builder.start_day_generation(*args, **kwargs)
 
     def start_range_generation(self, *args, **kwargs):
-        return self._builder.start_range_generation(*args, **kwargs)
+        return self._range.start_range_generation(*args, **kwargs)
 
     def generate_next(self, *args, **kwargs):
         return self._stepper.generate_next(*args, **kwargs)
