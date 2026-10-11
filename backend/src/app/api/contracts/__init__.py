@@ -67,6 +67,7 @@ from app.api.contracts.briefing import (  # noqa: F401
 from app.api.contracts.generation import (  # noqa: F401
     BlankRequest,
     GenerateDayRequest,
+    GenerateRangeRequest,
     GenerateRequest,
     RequiredAssignment,
 )

@@ -18,6 +18,11 @@ class GenerateRequest(BaseModel):
 
     starts_on: Optional[str] = None
     ends_on: Optional[str] = None
+    # The dates the agent is asked for, when that is less than the period.
+    # The period keeps its whole-week bounds so the board can find it by its
+    # Sunday; the days outside this run open empty, for the manager (D18).
+    build_from: Optional[str] = Field(default=None, max_length=10)
+    build_through: Optional[str] = Field(default=None, max_length=10)
     instructions: str = Field(default="", max_length=2000)
     required_assignments: List[RequiredAssignment] = Field(
         default=[], max_length=100
@@ -28,6 +33,14 @@ class GenerateDayRequest(BaseModel):
     """Rebuild one date inside an existing draft."""
 
     date: str = Field(min_length=10, max_length=10)
+    instructions: str = Field(default="", max_length=2000)
+
+
+class GenerateRangeRequest(BaseModel):
+    """Build a run of dates inside an existing draft."""
+
+    starts_on: str = Field(min_length=10, max_length=10)
+    ends_on: str = Field(min_length=10, max_length=10)
     instructions: str = Field(default="", max_length=2000)
 
 

@@ -115,6 +115,9 @@ class ScheduleService:
     def start_day_generation(self, *args, **kwargs):
         return self._builder.start_day_generation(*args, **kwargs)
 
+    def start_range_generation(self, *args, **kwargs):
+        return self._builder.start_range_generation(*args, **kwargs)
+
     def generate_next(self, *args, **kwargs):
         return self._stepper.generate_next(*args, **kwargs)
 

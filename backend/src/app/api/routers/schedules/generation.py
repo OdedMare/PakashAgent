@@ -3,7 +3,8 @@
 from fastapi import APIRouter, Depends
 
 from app.api.contracts import (
-    BlankRequest, GenerateDayRequest, GenerateRequest, Schedule,
+    BlankRequest, GenerateDayRequest, GenerateRangeRequest, GenerateRequest,
+    Schedule,
 )
 from app.api.routers.schedules.base import RouteGroup
 
@@ -41,6 +42,8 @@ class GenerationRoutes(RouteGroup):
                 session["team_id"],
                 starts_on=request.starts_on,
                 ends_on=request.ends_on,
+                build_from=request.build_from,
+                build_through=request.build_through,
                 instructions=request.instructions,
                 required_assignments=_required(request),
             )
@@ -91,6 +94,24 @@ class GenerationRoutes(RouteGroup):
             return service.start_day_generation(
                 session["team_id"], schedule_id,
                 day=request.date, instructions=request.instructions,
+            )
+
+        @router.post("/generate/{schedule_id}/range/start", response_model=Schedule)
+        def start_range_generation(
+            schedule_id: str,
+            request: GenerateRangeRequest,
+            session: dict = Depends(boss),
+        ) -> dict:
+            """Prepare a run of dates in an existing draft; no model call yet.
+
+            "From this day until Saturday": what the agent built on those
+            dates is replaced, what the manager placed there is kept as a pin
+            (D18), and every other date of the period is left alone.
+            """
+            return service.start_range_generation(
+                session["team_id"], schedule_id,
+                starts_on=request.starts_on, ends_on=request.ends_on,
+                instructions=request.instructions,
             )
 
         @router.post("/blank", response_model=Schedule)
