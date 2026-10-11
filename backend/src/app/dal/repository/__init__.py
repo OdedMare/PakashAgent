@@ -6,6 +6,7 @@ from app.dal.repository.identities import IdentityRepository
 from app.dal.repository.interviews import InterviewRepository
 from app.dal.repository.copilot import CopilotRepository
 from app.dal.repository.chat import ChatRepository
+from app.dal.repository.jobs import JobsRepository
 from app.dal.repository.schedules import ScheduleRepository
 from app.dal.repository.schema import SCHEMA
 from app.dal.repository.teams import TeamRepository
@@ -13,7 +14,7 @@ from app.dal.repository.teams import TeamRepository
 
 class Repository(
     InterviewRepository, TeamRepository, ScheduleRepository, IdentityRepository,
-    CopilotRepository, ChatRepository, AdminRepository,
+    CopilotRepository, ChatRepository, AdminRepository, JobsRepository,
 ):
     """One repository object composed of the per-concern mixins.
 

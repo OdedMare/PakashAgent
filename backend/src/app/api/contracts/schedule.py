@@ -94,6 +94,7 @@ class GenerationProgress(BaseModel):
     # on a job opened before this field existed, which the client reads as
     # "cannot tell" rather than as "stalled".
     heartbeat: str = ""
+    activity: str = ""
     # Whether the manager asked to stop. The worker checks it between days,
     # so a job can be `running` with this already true for as long as the
     # current model call takes to answer.

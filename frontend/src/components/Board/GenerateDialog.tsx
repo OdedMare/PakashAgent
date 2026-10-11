@@ -5,25 +5,39 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DateInput, displayDate } from "@/components/DateInput";
 import { hebrewWeekday } from "@/components/Management/Calendar";
-import type { RequiredAssignment } from "@/types";
+import type { RequiredAssignment, Schedule } from "@/types";
 
-import { addDays } from "./useBoard";
+import { addDays, sundayOf } from "./dates";
 
 type Row = RequiredAssignment & { id: number };
 
+/** Ask the agent for a run of days.
+ *
+ *  One dialog for both places a build starts. On a week with nothing stored
+ *  it opens a period; handed a `period`, it builds inside that draft instead
+ *  — "from this day until Saturday, or until the day I choose". The second
+ *  takes no list of required shifts, because the board behind it already is
+ *  one: whatever the manager placed by hand is kept and filled around (D18).
+ */
 export function GenerateDialog({
   employees,
   shifts,
-  weekStart,
-  weekEnd,
+  from,
+  through,
+  period = null,
   busy,
   onConfirm,
   onCancel,
 }: {
   employees: string[];
   shifts: Record<string, unknown>[];
-  weekStart: string;
-  weekEnd: string;
+  /** The run the dialog opens on. Both ends stay editable. */
+  from: string;
+  through: string;
+  /** The draft being built into, when there is one. Its dates bound the
+   *  run: a build is one job on one period, and a run that spilled past it
+   *  would have nowhere to write the days beyond. */
+  period?: Schedule | null;
   busy: boolean;
   onConfirm: (input: {
     starts_on: string;
@@ -33,8 +47,8 @@ export function GenerateDialog({
   }) => void;
   onCancel: () => void;
 }) {
-  const [startsOn, setStartsOn] = useState(weekStart);
-  const [endsOn, setEndsOn] = useState(weekEnd);
+  const [startsOn, setStartsOn] = useState(from);
+  const [endsOn, setEndsOn] = useState(through);
   const [instructions, setInstructions] = useState("");
   const dates = useMemo(
     () => dateRange(startsOn, endsOn),
@@ -70,9 +84,20 @@ export function GenerateDialog({
     (row) => row.employee && dates.includes(row.date) && row.shift,
   );
 
-  const chooseLength = (days: number) => {
-    setEndsOn(addDays(startsOn, days - 1));
-  };
+  const presets = useMemo(
+    () => rangePresets(startsOn, period?.ends_on),
+    [startsOn, period?.ends_on],
+  );
+  // What the run would do to days that already hold something. Counted from
+  // the period on screen rather than asked for: it is the same rule the
+  // server applies — the manager's rows stay, everything else is replaced.
+  const standing = useMemo(() => {
+    const rows = (period?.assignments ?? []).filter(
+      (row) => row.date >= startsOn && row.date <= endsOn,
+    );
+    const kept = rows.filter((row) => row.source === "manager").length;
+    return { kept, replaced: rows.length - kept };
+  }, [period, startsOn, endsOn]);
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onCancel}>
@@ -85,7 +110,8 @@ export function GenerateDialog({
       >
         <header className="modal-header">
           <h2 id="generate-dialog-title">
-            <CalendarPlus size={17} /> בניית סידור לתאריך או לטווח
+            <CalendarPlus size={17} />{" "}
+            {period ? "בניית ימים בסידור הקיים" : "בניית סידור לתאריך או לטווח"}
           </h2>
           <button type="button" className="icon-button" onClick={onCancel} aria-label="סגירה">
             <X size={17} />
@@ -93,8 +119,9 @@ export function GenerateDialog({
         </header>
 
         <p className="modal-summary">
-          בחרו טווח, הוסיפו כללים לבקשה, ואם צריך גם שיבוצים שחייבים להופיע.
-          הסוכן יבנה כל יום בנפרד ויתחשב בכל מה שכבר נקבע.
+          {period
+            ? "בחרו מאיזה יום ועד איזה יום לבנות. הסוכן יבנה רק את הימים האלה ויתחשב בכל מה שכבר נקבע בשאר הסידור."
+            : "בחרו טווח, הוסיפו כללים לבקשה, ואם צריך גם שיבוצים שחייבים להופיע. הסוכן יבנה כל יום בנפרד ויתחשב בכל מה שכבר נקבע."}
         </p>
 
         <form onSubmit={(event) => {
@@ -120,13 +147,13 @@ export function GenerateDialog({
             </div>
 
             <div className="generate-range-presets" aria-label="אורך התקופה">
-              {[{ days: 1, label: "יום אחד" }, { days: 7, label: "שבוע" }, { days: 14, label: "שבועיים" }].map((preset) => (
+              {presets.map((preset) => (
                 <button
-                  key={preset.days}
+                  key={preset.label}
                   type="button"
-                  className={dates.length === preset.days ? "is-active" : ""}
-                  aria-pressed={dates.length === preset.days}
-                  onClick={() => chooseLength(preset.days)}
+                  className={endsOn === preset.end ? "is-active" : ""}
+                  aria-pressed={endsOn === preset.end}
+                  onClick={() => setEndsOn(preset.end)}
                 >
                   {preset.label}
                 </button>
@@ -137,6 +164,8 @@ export function GenerateDialog({
               <label>
                 <span>מתאריך</span>
                 <DateInput
+                  min={period?.starts_on}
+                  max={period?.ends_on}
                   value={startsOn}
                   onChange={(next) => {
                     setStartsOn(next);
@@ -150,6 +179,7 @@ export function GenerateDialog({
                 <span>עד תאריך</span>
                 <DateInput
                   min={startsOn}
+                  max={period?.ends_on}
                   value={endsOn}
                   onChange={setEndsOn}
                   required
@@ -175,6 +205,18 @@ export function GenerateDialog({
               onChange={(event) => setInstructions(event.target.value)}
             />
           </label>
+          {period ? (
+            <p className="modal-note">
+              {standing.replaced
+                ? `${standing.replaced} שיבוצים שנבנו בימים האלה יוחלפו. `
+                : ""}
+              {standing.kept
+                ? `${standing.kept} שיבוצים ששיבצתם ידנית נשארים במקומם, והסוכן ימלא סביבם.`
+                : "מה שתשבצו ידנית על הלוח נשאר במקומו, והסוכן ממלא סביבו."}
+            </p>
+          ) : null}
+          {period ? null : (
+            <>
           <div className="generate-required-list">
             {rows.map((row, index) => {
               const availableShifts = shiftsForDate(options, row.date);
@@ -244,9 +286,14 @@ export function GenerateDialog({
           >
             <Plus size={15} /> הוספת שיבוץ חובה
           </button>
+            </>
+          )}
 
           <p className="modal-hint">
             טווח הבנייה: {hebrewWeekday(startsOn)} {displayDate(startsOn)} עד {hebrewWeekday(endsOn)} {displayDate(endsOn)}. כללי מקום העבודה והאילוצים הקיימים חלים על כל יום.
+            {!period && validRange && !fillsItsWeeks(startsOn, endsOn)
+              ? " שאר ימי השבוע ייפתחו ריקים — לשיבוץ ידני או לבנייה בהמשך."
+              : ""}
           </p>
           <div className="modal-actions">
             <button type="button" className="ghost-button" onClick={onCancel}>ביטול</button>
@@ -280,6 +327,40 @@ function shiftsForDate(shifts: ShiftOption[], date: string): ShiftOption[] {
   return shifts.filter((shift) =>
     !shift.days.length || shift.days.some((day) => day.replace(/^יום /, "") === weekday),
   );
+}
+
+/** The shortcuts for where a run ends, given where it starts.
+ *
+ *  "עד שבת" is the one a manager reaches for mid-week: the rest of this
+ *  week, whatever day it is. Inside a period the weeks-long ones give way to
+ *  the period's own end, and any two that land on the same date are offered
+ *  once — from a Sunday, "until Saturday" *is* the week. */
+function rangePresets(
+  start: string,
+  limit?: string,
+): { label: string; end: string }[] {
+  const saturday = addDays(sundayOf(start), 6);
+  const offered = [
+    { label: "יום אחד", end: start },
+    { label: "עד שבת", end: saturday },
+    ...(limit
+      ? [{ label: "עד סוף הסידור", end: limit }]
+      : [
+          { label: "שבוע", end: addDays(start, 6) },
+          { label: "שבועיים", end: addDays(start, 13) },
+        ]),
+  ];
+  const seen = new Set<string>();
+  return offered.filter((preset) => {
+    if ((limit && preset.end > limit) || seen.has(preset.end)) return false;
+    seen.add(preset.end);
+    return true;
+  });
+}
+
+/** Whether a run is whole weeks, Sunday through Saturday. */
+function fillsItsWeeks(first: string, last: string): boolean {
+  return sundayOf(first) === first && addDays(sundayOf(last), 6) === last;
 }
 
 function dateRange(first: string, last: string): string[] {

@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 
@@ -44,14 +44,11 @@ def build_router(service, repository, guards):
         return {"status": "ok"}
 
     @router.post("/{chat_id}/messages")
-    def message(chat_id: str, request: ChatTurn, background: BackgroundTasks,
+    def message(chat_id: str, request: ChatTurn,
                 session: dict = Depends(manager)):
-        message_id = service.start_turn(
+        service.start_turn(
             session["team_id"], session["manager_id"], chat_id, request.model_dump(),
         )
-        if message_id:
-            background.add_task(service.reply, session["team_id"], session["manager_id"],
-                                chat_id, message_id)
         return repository.get_chat(session["team_id"], session["manager_id"], chat_id)
 
     @router.post("/{chat_id}/messages/{message_id}/apply")

@@ -364,11 +364,17 @@ export function updateProfile(body: {
   });
 }
 
-/** Build a date range one checkpointed day per HTTP/model request. */
+/** Build a date range one checkpointed day per HTTP/model request.
+ *
+ *  `build_from`/`build_through` ask the agent for part of the period only.
+ *  The period itself stays whole weeks, because the board reads a week by
+ *  its Sunday and a period beginning mid-week would not be found by it. */
 export async function generateSchedule(
   body: {
     starts_on?: string;
     ends_on?: string;
+    build_from?: string;
+    build_through?: string;
     instructions?: string;
     required_assignments?: import("@/types").RequiredAssignment[];
   } = {},
@@ -543,6 +549,34 @@ export async function generateScheduleDay(
       method: "POST",
       body: JSON.stringify({
         date: body.date,
+        instructions: body.instructions ?? "",
+      }),
+    },
+  );
+  onProgress?.(schedule);
+  return resumeScheduleGeneration(body.schedule_id, onProgress, options);
+}
+
+/** Build a run of dates in an existing draft — "from this day until
+ *  Saturday". What the agent built there is replaced; what the manager
+ *  placed there is kept, and every other date is left alone. */
+export async function generateScheduleRange(
+  body: {
+    schedule_id: string;
+    starts_on: string;
+    ends_on: string;
+    instructions?: string;
+  },
+  onProgress?: (schedule: Schedule) => void,
+  options?: { signal?: AbortSignal },
+): Promise<Schedule> {
+  const schedule = await request<Schedule>(
+    `/api/schedule/generate/${body.schedule_id}/range/start`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        starts_on: body.starts_on,
+        ends_on: body.ends_on,
         instructions: body.instructions ?? "",
       }),
     },

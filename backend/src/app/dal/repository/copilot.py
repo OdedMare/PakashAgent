@@ -18,68 +18,6 @@ ACTION_TYPES = (
 
 
 class CopilotRepository(RepositoryBase):
-    def enqueue_copilot_job(
-        self, team_id: str, dedupe_key: str, kind: str = "scan",
-        payload: Optional[Dict[str, Any]] = None,
-    ) -> Optional[dict]:
-        job_id = new_id()
-        rows = self._all("""
-            INSERT INTO copilot_jobs (
-                id, team_id, kind, payload, dedupe_key
-            ) VALUES (%s,%s,%s,%s,%s)
-            ON CONFLICT (team_id, dedupe_key) DO NOTHING
-            RETURNING *
-        """, (job_id, team_id, kind, Jsonb(payload or {}), dedupe_key))
-        return rows[0] if rows else None
-
-    def claim_copilot_job(self) -> Optional[dict]:
-        """Atomically claim one due job across any number of workers."""
-        with connect(self._store) as connection:
-            row = connection.execute("""
-                WITH next_job AS (
-                    SELECT id FROM copilot_jobs
-                    WHERE status='queued' AND run_after <= NOW()
-                    ORDER BY run_after, created_at
-                    FOR UPDATE SKIP LOCKED
-                    LIMIT 1
-                )
-                UPDATE copilot_jobs AS job
-                SET status='running', attempts=attempts+1,
-                    started_at=NOW(), error=''
-                FROM next_job
-                WHERE job.id=next_job.id
-                RETURNING job.*
-            """).fetchone()
-            connection.commit()
-        return dict(row) if row else None
-
-    def finish_copilot_job(
-        self, job_id: str, error: str = "", retry: bool = False
-    ) -> None:
-        if retry:
-            self._execute("""
-                UPDATE copilot_jobs
-                SET status='queued', run_after=NOW() + INTERVAL '1 minute',
-                    error=%s
-                WHERE id=%s
-            """, (error[:2000], job_id))
-            return
-        self._execute("""
-            UPDATE copilot_jobs
-            SET status=%s, finished_at=NOW(), error=%s
-            WHERE id=%s
-        """, ("failed" if error else "complete", error[:2000], job_id))
-
-    def recover_copilot_jobs(self) -> None:
-        """Return work abandoned by a dead process to the queue."""
-        self._execute("""
-            UPDATE copilot_jobs
-            SET status='queued', run_after=NOW(),
-                error='worker stopped before completion'
-            WHERE status='running'
-              AND started_at < NOW() - INTERVAL '10 minutes'
-        """)
-
     def create_copilot_item(
         self, team_id: str, fingerprint: str, kind: str,
         action_type: str, title: str, detail: str = "",

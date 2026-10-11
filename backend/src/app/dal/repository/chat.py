@@ -8,6 +8,7 @@ from psycopg.types.json import Jsonb
 from app.common.errors.errors import ConflictError, NotFoundError
 from app.dal.database.postgres import atomic, connect
 from app.dal.repository.base import RepositoryBase, new_id
+from app.dal.repository.jobs import enqueue
 
 CHAT_DDL = """
 CREATE TABLE IF NOT EXISTS manager_chats (
@@ -119,6 +120,9 @@ class ChatRepository(RepositoryBase):
                     title=CASE WHEN title='שיחה חדשה' THEN %s ELSE title END
                 WHERE id=%s
             """, (content[:70], chat_id))
+            enqueue(connection, team_id, "chat:" + assistant_id, "manager_chat", {
+                "manager_id": manager_id, "chat_id": chat_id, "message_id": assistant_id,
+            })
             connection.commit()
         return assistant_id
 
@@ -134,6 +138,13 @@ class ChatRepository(RepositoryBase):
             UPDATE manager_chat_messages SET payload=%s
             WHERE id=%s AND chat_id=%s AND status='working'
         """, (Jsonb(payload), message_id, chat_id))
+
+    def chat_activity(self, chat_id, message_id, activity):
+        self._execute("""
+            UPDATE manager_chat_messages
+            SET payload=jsonb_set(payload, '{activity}', to_jsonb(%s::text), true)
+            WHERE id=%s AND chat_id=%s AND status='working'
+        """, (activity, message_id, chat_id))
 
     def stop_chat_turn(self, team_id, manager_id, chat_id):
         self.get_chat(team_id, manager_id, chat_id)

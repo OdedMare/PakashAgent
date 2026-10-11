@@ -1086,9 +1086,12 @@
   font-size: 0.76rem;
 }
 
+/* As many equal columns as there are shortcuts: the list is two long inside
+   an existing period and four on an empty week. */
 .generate-range-presets {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   gap: 0.35rem;
   padding: 0.25rem;
   background: var(--surface);

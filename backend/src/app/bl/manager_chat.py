@@ -150,6 +150,7 @@ class ManagerChatService:
                 "schedule_id": request.get("schedule_id") or "",
                 "visible_week": request.get("visible_week") or "",
                 "focus_date": _iso_or_blank(request.get("focus_date")),
+                "activity": "הבקשה נשמרה וממתינה להתחלת העבודה…",
             },
         )
 

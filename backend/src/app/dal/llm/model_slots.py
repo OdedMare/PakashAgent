@@ -6,6 +6,8 @@ import time
 from contextlib import contextmanager
 from typing import Optional
 
+from app.common.activity import report_activity
+
 
 INTERACTIVE = 0
 BACKGROUND = 1
@@ -39,9 +41,12 @@ class ModelSlots:
     def reserve(
         self, priority: int = INTERACTIVE, timeout: Optional[float] = None,
     ):
+        report_activity("ממתין למודל…")
         self._acquire(priority, timeout)
         try:
+            report_activity("המודל מכין תשובה…")
             yield
+            report_activity("בודק את התוצאה…")
         finally:
             self._release()
 

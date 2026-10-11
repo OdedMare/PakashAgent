@@ -43,6 +43,7 @@ _pool = None
 _pool_key = None
 _pool_lock = threading.Lock()
 _transaction = ContextVar("pakash_transaction", default=None)
+_job_connection = ContextVar("pakash_job_connection", default=None)
 
 
 class _TransactionConnection:
@@ -136,13 +137,41 @@ def connect(store: RuntimeSettingsStore):
     active = _transaction.get()
     if active is not None and active[0] is store:
         return nullcontext(active[1])
+    job = _job_connection.get()
+    if job is not None and job[0] is store:
+        return _borrow_job_connection(job[1])
     return _pool_for(store.get()).connection()
+
+
+@contextmanager
+def bind_job_connection(store, connection):
+    # Writes must use the session owning the job lock. A lost session must
+    # fail the old worker, never reconnect and write over its replacement.
+    token = _job_connection.set((store, connection))
+    try:
+        yield
+    finally:
+        _job_connection.reset(token)
+
+
+@contextmanager
+def _borrow_job_connection(connection):
+    try:
+        yield connection
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
 
 
 @contextmanager
 def atomic(store):
     """Compose existing repository writes without intermediate commits."""
-    with _pool_for(store.get()).connection() as connection:
+    active = _transaction.get()
+    if active is not None and active[0] is store:
+        yield active[1]
+        return
+    with connect(store) as connection:
         with connection.transaction():
             connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
             token = _transaction.set((store, _TransactionConnection(connection)))

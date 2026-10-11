@@ -581,6 +581,133 @@ def test_one_existing_day_can_be_rebuilt_with_board_instructions():
     assert completed["assignments"][0]["employee"] == "יוסי"
 
 
+def test_a_run_of_days_is_built_inside_an_existing_draft():
+    """"From this day until Saturday" on a week that already has a period.
+
+    The job is planned for the run and nothing else: no model call is spent
+    on the days before it, what the manager placed inside it survives as a
+    pin (D18), and what sits outside it is not rewritten.
+    """
+    app, repo = _build_app([
+        _generation([{
+            "employee": "דנה", "shift": MORNING, "date": "2026-08-20",
+            "reason": "כיסוי יום חמישי",
+        }]),
+        _generation([{
+            "employee": "דנה", "shift": MORNING, "date": "2026-08-21",
+            "reason": "כיסוי יום שישי",
+        }]),
+        _generation([{
+            "employee": "דנה", "shift": MORNING, "date": "2026-08-22",
+            "reason": "כיסוי שבת",
+        }]),
+    ])
+    client = _client(app)
+    opened = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+    }).json()
+    for day in ("2026-08-17", "2026-08-21"):
+        client.post("/api/schedule/assign", json={
+            "shift_name": MORNING, "slot_date": day,
+            "employee": "יוסי", "schedule_id": opened["id"],
+        })
+    path = "/api/schedule/generate/%s" % opened["id"]
+
+    prepared = client.post(path + "/range/start", json={
+        "starts_on": "2026-08-20", "ends_on": "2026-08-22",
+    }).json()
+
+    assert prepared["generation"]["total_days"] == 3
+    assert [day["date"] for day in prepared["generation"]["days"]] == [
+        "2026-08-20", "2026-08-21", "2026-08-22",
+    ]
+    assert repo.model_calls == []
+    for _ in range(3):
+        built = client.post(path + "/next").json()
+    assert built["generation"]["status"] == "complete"
+    assert len(repo.model_calls) == 3
+    placed = {
+        (row["date"], row["employee"], row["source"])
+        for row in built["assignments"]
+    }
+    assert placed == {
+        ("2026-08-17", "יוסי", "manager"),
+        ("2026-08-20", "דנה", "agent"),
+        ("2026-08-21", "יוסי", "manager"),
+        ("2026-08-21", "דנה", "agent"),
+        ("2026-08-22", "דנה", "agent"),
+    }
+
+
+def test_a_run_of_days_is_refused_on_a_published_period_and_off_its_dates():
+    app, _ = _build_app()
+    client = _client(app)
+    opened = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+    }).json()
+    path = "/api/schedule/generate/%s/range/start" % opened["id"]
+
+    outside = client.post(path, json={
+        "starts_on": "2026-08-23", "ends_on": "2026-08-29",
+    })
+    backwards = client.post(path, json={
+        "starts_on": "2026-08-22", "ends_on": "2026-08-20",
+    })
+    client.post("/api/schedule/%s/publish" % opened["id"])
+    published = client.post(path, json={
+        "starts_on": "2026-08-20", "ends_on": "2026-08-22",
+    })
+
+    assert outside.status_code == 502
+    assert backwards.status_code == 502
+    assert published.status_code == 502
+
+
+def test_a_new_period_can_be_built_from_a_day_inside_its_week():
+    """The period keeps its week; the job covers only what was asked for.
+
+    A period beginning on the Thursday would not contain the Sunday the
+    board reads that week by, and would be invisible on it.
+    """
+    app, repo = _build_app([_generation([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-20",
+        "reason": "כיסוי יום חמישי",
+    }])])
+    client = _client(app)
+
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+        "build_from": "2026-08-20", "build_through": "2026-08-22",
+    }).json()
+
+    assert (started["starts_on"], started["ends_on"]) == (
+        "2026-08-16", "2026-08-22",
+    )
+    assert len({slot["slot_date"] for slot in started["slots"]}) == 7
+    assert started["generation"]["total_days"] == 3
+    assert [day["date"] for day in started["generation"]["days"]] == [
+        "2026-08-20", "2026-08-21", "2026-08-22",
+    ]
+    first = client.post(
+        "/api/schedule/generate/%s/next" % started["id"]
+    ).json()
+    assert first["generation"]["completed_days"] == 1
+    assert len(repo.model_calls) == 1
+    assert [row["date"] for row in first["assignments"]] == ["2026-08-20"]
+
+
+def test_a_build_range_outside_its_period_is_refused():
+    app, _ = _build_app()
+    client = _client(app)
+
+    refused = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+        "build_from": "2026-08-20", "build_through": "2026-08-25",
+    })
+
+    assert refused.status_code == 502
+
+
 def test_progressive_long_range_is_one_persisted_request_per_day():
     app, _ = _build_app([
         _generation([{

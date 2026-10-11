@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  CalendarPlus,
   Clock,
   Eraser,
   GripVertical,
@@ -86,6 +87,7 @@ export function BoardGrid({
   onOpenCard,
   onAddShift,
   onOpenDay,
+  onBuildFrom,
   onClearDay,
   onOpenDate,
 }: {
@@ -121,6 +123,10 @@ export function BoardGrid({
   onOpenCard?: (assignment: Assignment) => void;
   onAddShift?: (input: { shift_name: string; slot_date: string }) => void;
   onOpenDay?: (date: string) => void;
+  /** Ask for a build starting on this day — until Saturday, or until a day
+   *  the manager picks. Opens the build dialog and writes nothing itself.
+   *  Withheld wherever clearing is, and for the same reasons. */
+  onBuildFrom?: (date: string) => void;
   /** Clear one day's shifts. Withheld on a published board, where every
    *  write is refused, and while a build is running on this period. */
   onClearDay?: (date: string) => void;
@@ -331,6 +337,16 @@ export function BoardGrid({
             closure={closures.get(date)}
             columnRef={date === today ? todayColumn : undefined}
             onOpenAgent={onOpenDay ? () => onOpenDay(date) : undefined}
+            // Only on a day the period actually holds: a build aimed at a
+            // column the period never opened has no rows to fill.
+            onBuildFrom={
+              onBuildFrom &&
+              schedule &&
+              date >= schedule.starts_on &&
+              date <= schedule.ends_on
+                ? () => onBuildFrom(date)
+                : undefined
+            }
             onClear={onClearDay ? () => onClearDay(date) : undefined}
             // Nothing to open when the day is already the only column.
             onOpen={
@@ -397,6 +413,7 @@ function DayHead({
   closure,
   columnRef,
   onOpenAgent,
+  onBuildFrom,
   onClear,
   onOpen,
 }: {
@@ -411,6 +428,7 @@ function DayHead({
   /** Set on today's head only, so the scroller can bring it into view. */
   columnRef?: React.Ref<HTMLDivElement>;
   onOpenAgent?: () => void;
+  onBuildFrom?: () => void;
   onClear?: () => void;
   /** Open this day on its own. The name of the day is the control, as it is
    *  in any calendar: the thing you read is the thing you press. */
@@ -495,6 +513,18 @@ function DayHead({
           >
             <Sparkles size={12} />
             סוכן ליום
+          </button>
+        ) : null}
+        {onBuildFrom ? (
+          <button
+            type="button"
+            className="board-dayhead-generate"
+            onClick={onBuildFrom}
+            aria-label={`בניית הסידור מיום ${hebrewWeekday(date)} ${displayDate(date)} והלאה`}
+            title="בניית הסידור מהיום הזה עד שבת, או עד תאריך שתבחרו"
+          >
+            <CalendarPlus size={12} />
+            בנייה מכאן
           </button>
         ) : null}
         {onClear ? (

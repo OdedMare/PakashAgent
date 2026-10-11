@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  CalendarPlus,
   Download,
   Eraser,
   Eye,
@@ -41,6 +42,7 @@ import { ConfirmDrop } from "./ConfirmDrop";
 import type { RemovalTarget } from "./ConfirmRemoval";
 import { ConfirmRemoval } from "./ConfirmRemoval";
 import { CoverageBar } from "./CoverageBar";
+import { sundayOf } from "./dates";
 import { FilterBar } from "./FilterBar";
 import { GenerateDialog } from "./GenerateDialog";
 import { fillsASeat, rotationLabel } from "./person";
@@ -52,7 +54,7 @@ import { ViewSwitch } from "./ViewSwitch";
 import { isOverview } from "./views";
 import { WeekNav } from "./WeekNav";
 import { WeekRail } from "./WeekRail";
-import { useBoard, weekDates } from "./useBoard";
+import { addDays, useBoard, weekDates } from "./useBoard";
 import { useBoardKeys } from "./useBoardKeys";
 
 /** The manager's operational home screen.
@@ -124,8 +126,13 @@ export function Board({
    *  rebuilding a single day inside it — read this. */
   generating: boolean;
   onGenerate: (input: {
+    /** The draft to build into. Without it a period is opened. */
+    schedule_id?: string;
     starts_on?: string;
     ends_on?: string;
+    /** The days the agent fills, when that is less than the new period. */
+    build_from?: string;
+    build_through?: string;
     instructions?: string;
     required_assignments?: RequiredAssignment[];
   }) => void;
@@ -354,7 +361,15 @@ export function Board({
   const [removal, setRemoval] = useState<RemovalTarget | null>(null);
   const [check, setCheck] = useState<PlacementCheck | null>(null);
   const [checking, setChecking] = useState(false);
-  const [generationOpen, setGenerationOpen] = useState(false);
+  // The run the build dialog is open on, or null while it is closed.
+  // `inPeriod` is fixed by where it was opened from — a day's column head,
+  // or the card of a week with nothing stored — so a period landing
+  // underneath an open dialog cannot change what its button will do.
+  const [building, setBuilding] = useState<{
+    from: string;
+    through: string;
+    inPeriod: boolean;
+  } | null>(null);
 
   // Every check is answered against the request that is still the newest.
   // Without this, a manager clicking through a dropdown gets whichever
@@ -437,7 +452,7 @@ export function Board({
     onNext: board.next,
     onToday: board.goToToday,
     enabled:
-      !pendingMove && !editor && !generationOpen && !removal,
+      !pendingMove && !editor && !building && !removal,
   });
 
   // Whether this week can still be written to at all. Publishing locks the
@@ -791,6 +806,18 @@ export function Board({
                 });
               }}
               onOpenDay={onOpenDay}
+              // "From this day until Saturday" — the rest of the week from
+              // wherever the manager is standing in it. The dialog lets
+              // them end it on any other day the period holds.
+              onBuildFrom={
+                writable
+                  ? (date) =>
+                      setBuilding({
+                        from: date,
+                        through: earlier(saturdayOf(date), schedule.ends_on),
+                        inPeriod: true,
+                      })
+                  : undefined}
               onClearDay={
                 writable
                   ? (date) =>
@@ -812,7 +839,22 @@ export function Board({
           profile={overview?.profile ?? null}
           weekStart={board.weekStart}
           weekEnd={board.weekEnd}
-          onGenerate={() => setGenerationOpen(true)}
+          // The day a partial build would start on: the one on screen, or
+          // today when this is today's week. On any other week there is no
+          // day the manager is standing on, and the whole week is the offer.
+          fromDay={
+            day ||
+            (board.today >= board.weekStart && board.today <= board.weekEnd
+              ? board.today
+              : "")
+          }
+          onGenerate={(from) =>
+            setBuilding({
+              from: from ?? board.weekStart,
+              through: board.weekEnd,
+              inPeriod: false,
+            })
+          }
           onOpenBlank={() =>
             onOpenBlank({ starts_on: board.weekStart, ends_on: board.weekEnd })
           }
@@ -898,17 +940,27 @@ export function Board({
         />
       ) : null}
 
-      {generationOpen ? (
+      {building && (!building.inPeriod || schedule) ? (
         <GenerateDialog
           employees={roster}
           shifts={overview?.shifts ?? []}
-          weekStart={board.weekStart}
-          weekEnd={board.weekEnd}
+          from={building.from}
+          through={building.through}
+          period={building.inPeriod ? schedule : null}
           busy={busy || generating}
-          onCancel={() => setGenerationOpen(false)}
+          onCancel={() => setBuilding(null)}
           onConfirm={(input) => {
-            onGenerate(input);
-            setGenerationOpen(false);
+            onGenerate(
+              building.inPeriod && schedule
+                ? {
+                    schedule_id: schedule.id,
+                    starts_on: input.starts_on,
+                    ends_on: input.ends_on,
+                    instructions: input.instructions,
+                  }
+                : inWholeWeeks(input),
+            );
+            setBuilding(null);
           }}
         />
       ) : null}
@@ -935,6 +987,36 @@ export function Board({
 
     </div>
   );
+}
+
+function saturdayOf(day: string): string {
+  return addDays(sundayOf(day), 6);
+}
+
+function earlier(first: string, second: string): string {
+  return first <= second ? first : second;
+}
+
+/** A new period for a run of days, widened to the weeks the run touches.
+ *
+ *  The board finds a week's period by its Sunday, so one opened from a
+ *  Wednesday would be stored and never drawn — and the week would go on
+ *  offering to be built. The period therefore takes the whole weeks, and the
+ *  run itself travels beside it as what the agent is asked to fill; the days
+ *  outside it open empty, like any cell nobody has been placed in yet. */
+function inWholeWeeks<T extends { starts_on: string; ends_on: string }>(
+  input: T,
+): T & { build_from?: string; build_through?: string } {
+  const starts_on = sundayOf(input.starts_on);
+  const ends_on = saturdayOf(input.ends_on);
+  if (starts_on === input.starts_on && ends_on === input.ends_on) return input;
+  return {
+    ...input,
+    starts_on,
+    ends_on,
+    build_from: input.starts_on,
+    build_through: input.ends_on,
+  };
 }
 
 /** Whether a stored period covers the displayed week at all.
@@ -1205,6 +1287,7 @@ function EmptyWeek({
   profile,
   weekStart,
   weekEnd,
+  fromDay,
   onGenerate,
   onOpenBlank,
   onImport,
@@ -1214,7 +1297,11 @@ function EmptyWeek({
   profile: WorkplaceProfile | null;
   weekStart: string;
   weekEnd: string;
-  onGenerate: () => void;
+  /** The day a build of the rest of the week would start on, or empty when
+   *  there is none to offer. */
+  fromDay: string;
+  /** Open the build dialog on the whole week, or from one day of it. */
+  onGenerate: (from?: string) => void;
   onOpenBlank: () => void;
   onImport?: () => void;
 }) {
@@ -1288,10 +1375,28 @@ function EmptyWeek({
           <PencilLine size={14} />
           שבוע ריק
         </button>
+        {/* The rest of the week, from the day the manager is on. Not
+            offered from a Sunday, where it is the week and the button beside
+            it already says so. The end is a default: the dialog it opens
+            takes any other day. */}
+        {fromDay && fromDay !== weekStart ? (
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => onGenerate(fromDay)}
+            disabled={busy || generating}
+            title="בניית הסידור מהיום הזה עד שבת, או עד תאריך שתבחרו"
+          >
+            <CalendarPlus size={14} />
+            {fromDay === weekEnd
+              ? "בנייה ליום שבת בלבד"
+              : `בנייה מיום ${hebrewWeekday(fromDay)} עד שבת`}
+          </button>
+        ) : null}
         <button
           type="button"
           className="primary-button"
-          onClick={onGenerate}
+          onClick={() => onGenerate()}
           disabled={busy || generating}
         >
           {generating ? "בונה…" : "בניית הסידור לשבוע"}

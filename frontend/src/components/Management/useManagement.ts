@@ -12,6 +12,7 @@ import {
   deleteSchedule,
   downloadSchedule,
   generateSchedule,
+  generateScheduleRange,
   GenerationStoppedError,
   moveAssignment,
   ProfileIncompleteError,
@@ -91,9 +92,17 @@ interface ManagementState {
   gaps: ProfileGaps | null;
   dismissGaps: () => void;
   refresh: (required?: boolean) => Promise<void>;
+  /** Build a period, part of one, or a run of days in one that exists.
+   *
+   *  `schedule_id` aims the build at a stored draft, where `starts_on` and
+   *  `ends_on` are the days to build. Without it a period is opened on those
+   *  dates and `build_from`/`build_through` narrow what the agent fills. */
   generate: (input: {
+    schedule_id?: string;
     starts_on?: string;
     ends_on?: string;
+    build_from?: string;
+    build_through?: string;
     instructions?: string;
     required_assignments?: import("@/types").RequiredAssignment[];
   }) => Promise<void>;
@@ -336,18 +345,23 @@ export function useManagement(): ManagementState {
 
   const generate = useCallback(
     async (input: {
+      schedule_id?: string;
       starts_on?: string;
       ends_on?: string;
+      build_from?: string;
+      build_through?: string;
       instructions?: string;
       required_assignments?: import("@/types").RequiredAssignment[];
     }) => {
-      const totalDays = inclusiveDays(input.starts_on, input.ends_on) ?? 7;
+      const firstDay = input.build_from ?? input.starts_on;
+      const lastDay = input.build_through ?? input.ends_on;
+      const totalDays = inclusiveDays(firstDay, lastDay) ?? 7;
       // Show progress from the click, including the short request that opens
       // the persisted job. Waiting for that response left the board looking
       // idle even though generation had already started.
       setGeneration({
         status: "running",
-        current_date: input.starts_on ?? "",
+        current_date: firstDay ?? "",
         total_days: totalDays,
         completed_days: 0,
         failed_days: 0,
@@ -357,8 +371,23 @@ export function useManagement(): ManagementState {
         // the second before the first response, on a build that may not be.
         mode: "",
       });
+      const { schedule_id: scheduleId, ...period } = input;
+      if (scheduleId && period.starts_on && period.ends_on) {
+        const days = {
+          schedule_id: scheduleId,
+          starts_on: period.starts_on,
+          ends_on: period.ends_on,
+          instructions: period.instructions,
+        };
+        await watchGeneration(
+          (onProgress, signal) =>
+            generateScheduleRange(days, onProgress, { signal }),
+          scheduleId,
+        );
+        return;
+      }
       await watchGeneration((onProgress, signal) =>
-        generateSchedule(input, onProgress, { signal }),
+        generateSchedule(period, onProgress, { signal }),
       );
     },
     [watchGeneration],

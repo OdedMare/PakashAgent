@@ -63,6 +63,10 @@ class GenerationRunner:
             return self._context.view(schedule, team_id)
         if not job.days:
             raise AgentError("לסידור הזה אין תהליך יצירה שניתן להמשיך")
+        enqueue = getattr(self._repository, "queue_generation_job", None)
+        if enqueue is not None:
+            enqueue(team_id, schedule_id)
+            return self._context.fresh_view(schedule_id, team_id)
         key = (team_id, schedule_id)
         if not self._claim(key):
             # Somebody is already on it. Saying so through the stored state
@@ -81,6 +85,10 @@ class GenerationRunner:
             self._release(key)
             raise
         return self._context.view(schedule, team_id)
+
+    def run_durable(self, team_id: str, schedule_id: str) -> None:
+        """The queue owns the database lock; keep completed checkpoints."""
+        self._run(team_id, schedule_id)
 
     def progress(self, team_id: str, schedule_id: str) -> dict:
         """Just the progress of a job, for the poll that watches it.

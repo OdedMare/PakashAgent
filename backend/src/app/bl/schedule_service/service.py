@@ -135,6 +135,9 @@ class ScheduleService:
     def generation_progress(self, *args, **kwargs):
         return self._runner.progress(*args, **kwargs)
 
+    def run_generation(self, *args, **kwargs):
+        return self._runner.run_durable(*args, **kwargs)
+
     # -- import (D7) ---------------------------------------------------------
 
     def preview_import(self, team_id, files, learn_rules=True):
