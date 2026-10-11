@@ -1,8 +1,11 @@
-"""Reading the management area: the overview, the period in play, a date."""
+"""Reading the management area: the overview, the period in play, a date,
+a span of dates."""
+
+from typing import List
 
 from fastapi import APIRouter, Depends
 
-from app.api.contracts import ManagementOverview
+from app.api.contracts import ManagementOverview, Schedule
 from app.api.routers.schedules.base import RouteGroup
 
 
@@ -36,3 +39,16 @@ class ReadingRoutes(RouteGroup):
             reaches only published periods exactly as `/current` gives them.
             """
             return service.period_at(session["team_id"], day, session["role"])
+
+        @router.get("/between", response_model=List[Schedule])
+        def between(start: str, end: str, session: dict = Depends(visitor)):
+            """Every stored period touching a span of dates, oldest first.
+
+            What the board's two-week and month views read: one request for
+            a span no single period covers. An empty list is a normal answer.
+            `visitor` for the reason `/at` is — the role is passed down, and
+            a member reaches published periods only.
+            """
+            return service.periods_between(
+                session["team_id"], start, end, session["role"]
+            )

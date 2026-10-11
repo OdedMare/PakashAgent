@@ -6,7 +6,7 @@ from app.bl.audit import load_history
 from app.bl.audit.roster import index_shifts, rows_of
 from app.bl.scheduler.candidates import slot_id
 from app.bl.scheduler.quality import no_worse
-from app.bl.scheduler.values import bounded_rows
+from app.bl.scheduler.values import MAX_HISTORY_ROWS, bounded_rows
 
 
 def period_load(span, roster):
@@ -15,7 +15,7 @@ def period_load(span, roster):
 
 
 def night_load(span, roster, history):
-    return load_history(bounded_rows(history, 400) + roster,
+    return load_history(bounded_rows(history, MAX_HISTORY_ROWS) + roster,
                         span.profile.get("shifts") or [],
                         span.profile.get("employees") or [], slots=span.audit_slots)
 

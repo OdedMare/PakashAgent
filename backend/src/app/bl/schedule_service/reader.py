@@ -1,14 +1,23 @@
 """Reading the schedule: the period in play, the board's overview, a check."""
 
+import datetime
 from typing import List, Optional
 
 from app.bl.audit import shift_stats
 from app.bl.placement import check as check_placement
 from app.bl.schedule_service import rows
-from app.bl.schedule_service.constants import RECENT_CHANGES
+from app.bl.schedule_service.constants import MAX_SPAN_DAYS, RECENT_CHANGES
 from app.bl.schedule_service.context import ScheduleContext
 from app.common.errors.errors import AgentError
 from app.common.time_context.time_context import israel_today
+
+
+def _day(value: str) -> Optional[datetime.date]:
+    """A request's date, or None when it is not one."""
+    try:
+        return datetime.date.fromisoformat(rows.iso(value))
+    except ValueError:
+        return None
 
 
 class ScheduleReader:
@@ -57,6 +66,42 @@ class ScheduleReader:
             if rows.iso(period["starts_on"]) <= wanted <= rows.iso(period["ends_on"]):
                 return self._context.fresh_view(period["id"], team_id)
         return None
+
+    def periods_between(
+        self, team_id: str, start: str, end: str, role: str = "boss"
+    ) -> List[dict]:
+        """Every stored period touching `start`..`end`, oldest first.
+
+        What the board's two-week and month views read. Overlap rather than
+        the containment `period_at` uses, and the difference is the question:
+        that one asks which period a day belongs to, this one asks what there
+        is to draw across a span no single period covers. An empty list is a
+        normal answer -- a month nobody has scheduled yet.
+
+        The span is capped at `MAX_SPAN_DAYS`. Each period returned carries a
+        fresh audit, and an open-ended range would let one request audit a
+        team's whole history to draw six rows of a calendar.
+
+        A member gets published periods only, exactly as `period_at` does (D5).
+        """
+        first, last = _day(start), _day(end)
+        if first is None or last is None or first > last:
+            raise AgentError("טווח התאריכים אינו תקין")
+        if (last - first).days >= MAX_SPAN_DAYS:
+            raise AgentError("טווח התאריכים ארוך מדי")
+        found = []
+        for period in self._repository.list_schedules(team_id):
+            if role != "boss" and period.get("status") != "published":
+                continue
+            if (
+                rows.iso(period["starts_on"]) <= last.isoformat()
+                and rows.iso(period["ends_on"]) >= first.isoformat()
+            ):
+                found.append(period)
+        found.sort(key=lambda period: rows.iso(period["starts_on"]))
+        return [
+            self._context.fresh_view(period["id"], team_id) for period in found
+        ]
 
     def check_placement(
         self,

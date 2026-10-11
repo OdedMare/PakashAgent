@@ -2293,6 +2293,69 @@ def test_one_workspace_cannot_read_another_by_date():
     ).json() is None
 
 
+# -- the board: every period across a span ---------------------------------
+
+def test_a_span_serves_every_period_it_touches_oldest_first():
+    """What the two-week and month views read: one request, several periods,
+    each one whole even where the span only clips it."""
+    app, repo = _build_app([])
+    client = _client(app)
+    for starts_on, ends_on in (
+        ("2026-08-23", "2026-08-29"),
+        ("2026-08-16", "2026-08-22"),
+        ("2026-09-20", "2026-09-26"),
+    ):
+        client.post("/api/schedule/blank", json={
+            "starts_on": starts_on, "ends_on": ends_on,
+        })
+    body = client.get("/api/schedule/between", params={
+        "start": "2026-08-20", "end": "2026-08-25",
+    }).json()
+    assert [row["starts_on"] for row in body] == ["2026-08-16", "2026-08-23"]
+    assert "warnings" in body[0] and "slots" in body[0]
+
+
+def test_a_span_nobody_scheduled_answers_an_empty_list():
+    """Empty rather than an error: a month with nothing built is a state the
+    board draws, not a failure."""
+    app, repo = _build_app([])
+    client = _client(app)
+    response = client.get("/api/schedule/between", params={
+        "start": "2026-10-01", "end": "2026-10-31",
+    })
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_a_member_reaches_only_published_periods_across_a_span():
+    """The same line `/at` draws (D5): a draft is the manager's until they
+    publish it, however wide the read."""
+    app, repo = _build_app([])
+    boss = _client(app)
+    boss.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+    })
+    member = _client(app, role=ROLE_MEMBER)
+    assert member.get("/api/schedule/between", params={
+        "start": "2026-08-16", "end": "2026-08-29",
+    }).json() == []
+
+
+def test_a_span_that_is_backwards_or_too_wide_is_refused():
+    """A read that audits every period it returns is not open-ended."""
+    app, repo = _build_app([])
+    client = _client(app)
+    for start, end in (
+        ("2026-08-22", "2026-08-16"),
+        ("2026-01-01", "2026-12-31"),
+        ("not-a-date", "2026-08-22"),
+    ):
+        response = client.get("/api/schedule/between", params={
+            "start": start, "end": end,
+        })
+        assert response.status_code >= 400
+
+
 # -- a partial profile is a fork in the flow, not a dead end ---------------
 
 def _ended_early(repo, **overrides):

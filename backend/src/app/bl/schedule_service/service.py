@@ -87,6 +87,9 @@ class ScheduleService:
     def period_at(self, *args, **kwargs):
         return self._reader.period_at(*args, **kwargs)
 
+    def periods_between(self, *args, **kwargs):
+        return self._reader.periods_between(*args, **kwargs)
+
     def check_placement(self, *args, **kwargs):
         return self._reader.check_placement(*args, **kwargs)
 

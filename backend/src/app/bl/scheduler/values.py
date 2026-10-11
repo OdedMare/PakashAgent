@@ -4,6 +4,7 @@ import datetime
 from typing import Any, List, Optional
 
 MAX_TEXT_CHARS = 4000
+MAX_HISTORY_ROWS = 400
 
 
 def bounded(value: Any, limit: int = MAX_TEXT_CHARS) -> str:

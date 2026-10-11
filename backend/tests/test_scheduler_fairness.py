@@ -186,6 +186,28 @@ def test_historical_imbalance_does_not_concentrate_the_current_period_nights():
     assert not result["warnings"]
 
 
+def test_four_night_seats_among_three_workers_reach_the_smallest_possible_maximum():
+    workplace = night_profile()
+    workplace["employees"].append({"name": "רון"})
+    balanced = [night(5), night(6, "יוסי"), night(7, "רון"), night(8)]
+    model = Model([_reply([night(day) for day in range(5, 9)]), _reply(balanced)])
+    result = Scheduler(model).generate_span(workplace, "2026-10-05", "2026-10-08")
+    loads = load_history(result["assignments"], workplace["shifts"], workplace["employees"])
+    assert sorted(row["nights"] for row in loads) == [1, 1, 2]
+    assert not result["warnings"]
+
+
+def test_required_night_stays_fixed_while_the_other_night_moves():
+    pinned = [night(5)]
+    model = Model([_reply([night(5), night(6)]), _reply([night(6, "יוסי")])])
+    result = Scheduler(model).generate_span(night_profile(), "2026-10-05", "2026-10-06",
+                                            required_assignments=pinned)
+    assert [(row["employee"], row["date"]) for row in result["assignments"]] == [
+        ("דנה", "2026-10-05"), ("יוסי", "2026-10-06"),
+    ]
+    assert not result["warnings"]
+
+
 @pytest.mark.parametrize("restriction", ["unavailable", "ineligible", "pinned", "rest", "hours"])
 def test_unavoidable_night_gaps_do_not_trigger_an_impossible_repair(restriction):
     workplace, options = night_profile(), {}
@@ -221,14 +243,12 @@ def test_unsuccessful_night_repair_preserves_the_draft_and_reports_remaining_gap
     elif repair == "unfilled":
         second = _reply([night(5)])
     elif repair == "short_rest":
-        second = _reply([night(5, "יוסי"), night(6)])
+        second = _reply([night(5), night(6, "יוסי")])
     else:
         second = _reply(original)
     options = {"already_scheduled": [assignment("2026-10-07", "יוסי", "משמרת יום")]}
     workplace = night_profile()
     workplace["shifts"].append(dict(profile()["shifts"][0], name="משמרת יום", days=["רביעי"]))
-    if repair == "short_rest":
-        second = _reply([night(5), night(6, "יוסי")])
     model = Model([_reply(original), second])
     result = Scheduler(model).generate_span(workplace, "2026-10-05", "2026-10-06", **options)
     assert result["assignments"] == original

@@ -27,6 +27,11 @@ ACTION_IMPORTED = "imported"
 # arithmetic, not context.
 LEARN_HISTORY = 500
 
+# The widest span `periods_between` will read in one request. A month drawn as
+# whole weeks is at most six of them; every period returned is audited afresh,
+# so the ceiling is what keeps a calendar view from auditing a team's history.
+MAX_SPAN_DAYS = 62
+
 # The states a persisted range job can be in. Written into the schedule's
 # `generation` document and read back by the browser, so they are named here
 # rather than spelled out at every comparison.

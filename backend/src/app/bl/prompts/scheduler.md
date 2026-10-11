@@ -105,7 +105,7 @@ Respect these without being told again:
   `training_policy.counts_toward_staffing` says they do.
 - **Respect rest between shifts.** Someone finishing late does not open the
   next morning.
-- **Balance total hours across the period.** Compare all eligible people,
+- **Balance total hours across the period after balancing nights.** Compare all eligible people,
   including those at zero hours. Prefer the lowest current-period hours among
   people who can cover the slot's role, command, availability and rotation.
   Account for the assignments you add in this answer using each slot's `hours`;

@@ -15,9 +15,7 @@ from app.bl.scheduler.payload import (
 from app.bl.scheduler.slots import build_slots
 from app.bl.scheduler.fairness import period_load
 from app.bl.scheduler.span_audit import span_warnings
-from app.bl.scheduler.values import bounded, bounded_rows, parse_date
-
-MAX_HISTORY_ROWS = 400
+from app.bl.scheduler.values import MAX_HISTORY_ROWS, bounded, bounded_rows, parse_date
 
 
 class SpanAttempt:
