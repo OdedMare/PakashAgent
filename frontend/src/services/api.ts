@@ -639,6 +639,21 @@ export function scheduleAt(day: string): Promise<Schedule | null> {
   );
 }
 
+/** Every stored period touching a span of dates, oldest first.
+ *
+ *  What the board's two-week and month views read: one request for a span
+ *  no single period covers. An empty list is a normal answer — a month with
+ *  nothing built yet — and each period comes back whole, even where the span
+ *  only clips it. */
+export function schedulesBetween(
+  start: string,
+  end: string,
+): Promise<Schedule[]> {
+  return request<Schedule[]>(
+    `/api/schedule/between?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+  );
+}
+
 /** Take one person off a slot, by hand (D18). */
 export function unassignEmployee(body: {
   assignment_id: string;

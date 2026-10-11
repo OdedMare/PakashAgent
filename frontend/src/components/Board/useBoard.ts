@@ -2,10 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { checkPlacement, scheduleAt } from "@/services/api";
+import { checkPlacement, scheduleAt, schedulesBetween } from "@/services/api";
 import type { PlacementCheck, Schedule } from "@/types";
 
-/** The board's own state: which week is on screen, and what is filtered out.
+import { addDays, isDay, localToday, sundayOf } from "./dates";
+import type { BoardView } from "./views";
+import {
+  isBoardView,
+  isOverview,
+  rangeOf,
+  showsToday,
+  stepFocus,
+} from "./views";
+
+export { addDays, weekDates } from "./dates";
+
+/** The board's own state: which dates are on screen, and what is filtered out.
  *
  *  Deliberately *beside* `useManagement` rather than inside it. That hook
  *  owns the server's answer — the overview, its warnings, the change log —
@@ -42,7 +54,20 @@ const EMPTY_FILTERS: BoardFilters = {
 };
 
 interface BoardState {
-  /** The Sunday of the week on screen, ISO. */
+  /** How much of the calendar is on screen: a day, a week, two, or a month. */
+  view: BoardView;
+  setView: (view: BoardView) => void;
+  /** The day the view is anchored on, ISO. The day view shows exactly this
+   *  date; every wider view shows the whole weeks around it. */
+  focus: string;
+  /** The first and last date the view draws. */
+  rangeStart: string;
+  rangeEnd: string;
+  /** The Sunday of the week the anchor is in, ISO.
+   *
+   *  Present in every view, because it is what names *the period in play*:
+   *  the day and week views render it, and under a two-week or month view it
+   *  is still the week the agent's conversation is about. */
   weekStart: string;
   /** Its Saturday. Sunday-based because the workweek here is Israeli —
    *  the source files run ראשון through שבת, and a Monday-based week would
@@ -52,12 +77,17 @@ interface BoardState {
    *  one they mean by "today", and computing it server-side would put a
    *  manager in Israel on the server's date. */
   today: string;
-  /** Whether the week on screen is the one containing today. */
-  isCurrentWeek: boolean;
-  previousWeek: () => void;
-  nextWeek: () => void;
+  /** Whether the span on screen is the one containing today. */
+  isCurrent: boolean;
+  /** One view-width back or forward: a day, a week, two weeks, a month. */
+  previous: () => void;
+  next: () => void;
   goToToday: () => void;
   goToWeekOf: (iso: string) => void;
+  /** Open one date as a day, or the week around it — what a click in the
+   *  two-week and month views does. */
+  openDay: (iso: string) => void;
+  openWeek: (iso: string) => void;
   filters: BoardFilters;
   setFilters: (next: Partial<BoardFilters>) => void;
   clearFilters: () => void;
@@ -76,6 +106,14 @@ interface BoardState {
   weekError: string | null;
   /** Re-read the displayed week from the server. */
   reloadWeek: () => Promise<void>;
+  /** Every period touching the span on screen, for the two views that cross
+   *  periods. Empty under the day and week views, which never ask. */
+  rangeSchedules: Schedule[];
+  rangeBusy: boolean;
+  /** Why the span could not be read. As with `weekError`, kept apart from an
+   *  empty list, which means the server answered and nothing is stored. */
+  rangeError: string | null;
+  reloadRange: () => Promise<void>;
   /** Ask what a placement would cost. No model call. */
   check: (input: {
     employee: string;
@@ -95,6 +133,13 @@ interface BoardState {
  *  tomorrow means *this* week, not the one they last had open. */
 const WEEK_KEY = "pakash.board.week";
 
+/** Which view the board opens in.
+ *
+ *  `localStorage`, unlike the date beside it, and for the reason the shift-row
+ *  order is: *which week* is something you are in the middle of today, but
+ *  *how wide you like to look* is a habit, and it holds tomorrow too. */
+const VIEW_KEY = "pakash.board.view";
+
 /** The week on hand: which one it is for, what it holds, and why it is empty
  *  if it is. `for` trailing `weekStart` is what "still loading" means. */
 interface WeekState {
@@ -110,12 +155,29 @@ interface WeekRead {
   week: WeekState;
 }
 
+/** The same two shapes for a span of periods. `for` is the span's own
+ *  `start|end`, so paging and re-reading are told apart the same way. */
+interface SpanState {
+  for: string | null;
+  schedules: Schedule[];
+  error: string | null;
+}
+
+interface SpanRead {
+  token: number;
+  span: SpanState;
+}
+
+/** One array for "no periods", so a view that never asked does not hand its
+ *  readers a fresh list — and a fresh memo — on every render. */
+const NO_SCHEDULES: Schedule[] = [];
+
 export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
   const today = useMemo(() => localToday(), []);
-  const [weekStart, setWeekStart] = useState<string>(() => {
-    const remembered = readRememberedWeek();
-    return remembered ?? sundayOf(today);
-  });
+  const [focus, setFocus] = useState<string>(
+    () => readRememberedDay() ?? today,
+  );
+  const [view, setViewState] = useState<BoardView>(readRememberedView);
   const [filters, setFiltersState] = useState<BoardFilters>(EMPTY_FILTERS);
   // The fetched week and whether a fetch is outstanding, as one value. Held
   // together rather than as two `useState`s because they change together and
@@ -140,31 +202,71 @@ export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
   // finished answer for the 27th, putting the board back into its loading
   // state for a week it had already read.
   const weekToken = useRef(0);
+  const [span, setSpan] = useState<SpanState>({
+    for: null,
+    schedules: NO_SCHEDULES,
+    error: null,
+  });
+  const spanToken = useRef(0);
 
+  const weekStart = useMemo(() => sundayOf(focus), [focus]);
   const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
+  const range = useMemo(() => rangeOf(view, focus), [view, focus]);
+  // What the span read is *for*. Null under the day and week views: they
+  // are one period, which the week read below already has, and asking for
+  // the span as well would audit the same period twice per render of it.
+  const spanKey = isOverview(view) ? `${range.start}|${range.end}` : null;
 
   // Remembered on every move rather than on unmount: a manager who closes
   // the tab from a different week still comes back to it, and an unmount
   // handler does not run on a hard close.
-  const goToWeek = useCallback((iso: string) => {
-    const sunday = sundayOf(iso);
-    setWeekStart(sunday);
+  //
+  // The day itself is kept, not its Sunday. The week views only ever read
+  // the week around it, so nothing changes for them; the day view needs to
+  // know *which* day, and a week step keeps the weekday so that paging
+  // forward from Tuesday and opening the day lands on next Tuesday.
+  const goTo = useCallback((iso: string) => {
+    if (!isDay(iso)) return;
+    setFocus(iso);
     try {
-      window.sessionStorage.setItem(WEEK_KEY, sunday);
+      window.sessionStorage.setItem(WEEK_KEY, iso);
     } catch {
       // A browser refusing storage is not a reason to refuse navigation.
     }
   }, []);
 
-  const previousWeek = useCallback(
-    () => goToWeek(addDays(weekStart, -7)),
-    [goToWeek, weekStart],
+  const setView = useCallback((next: BoardView) => {
+    setViewState(next);
+    try {
+      window.localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      // Likewise: the view still changes, it is only not remembered.
+    }
+  }, []);
+
+  const previous = useCallback(
+    () => goTo(stepFocus(view, focus, -1)),
+    [goTo, view, focus],
   );
-  const nextWeek = useCallback(
-    () => goToWeek(addDays(weekStart, 7)),
-    [goToWeek, weekStart],
+  const next = useCallback(
+    () => goTo(stepFocus(view, focus, 1)),
+    [goTo, view, focus],
   );
-  const goToToday = useCallback(() => goToWeek(today), [goToWeek, today]);
+  const goToToday = useCallback(() => goTo(today), [goTo, today]);
+  const openDay = useCallback(
+    (iso: string) => {
+      goTo(iso);
+      setView("day");
+    },
+    [goTo, setView],
+  );
+  const openWeek = useCallback(
+    (iso: string) => {
+      goTo(iso);
+      setView("week");
+    },
+    [goTo, setView],
+  );
 
   /** Read one week, and resolve to how it should settle.
    *
@@ -222,6 +324,51 @@ export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
     // freshly generated week would render against the pre-write copy.
   }, [fetchWeek, weekStart, scheduleId, refreshKey]);
 
+  /** Read every period touching a span. The week read's twin, and settled
+   *  the same way: by the caller, against the newest token, and marked for
+   *  its span even when it failed so the view always leaves its loading
+   *  state. */
+  const fetchSpan = useCallback(
+    async (start: string, end: string): Promise<SpanRead> => {
+      const token = ++spanToken.current;
+      const wanted = `${start}|${end}`;
+      try {
+        const found = await schedulesBetween(start, end);
+        return {
+          token,
+          span: { for: wanted, schedules: found, error: null },
+        };
+      } catch (reason) {
+        return {
+          token,
+          span: {
+            for: wanted,
+            schedules: NO_SCHEDULES,
+            error:
+              reason instanceof Error && reason.message
+                ? reason.message
+                : "לא הצלחנו לטעון את הסידור",
+          },
+        };
+      }
+    },
+    [],
+  );
+
+  const reloadRange = useCallback(async () => {
+    if (!spanKey) return;
+    const read = await fetchSpan(range.start, range.end);
+    if (read.token !== spanToken.current) return;
+    setSpan(read.span);
+  }, [fetchSpan, spanKey, range.start, range.end]);
+
+  useEffect(() => {
+    if (!spanKey) return;
+    fetchSpan(range.start, range.end).then((read) => {
+      if (read.token === spanToken.current) setSpan(read.span);
+    });
+  }, [fetchSpan, spanKey, range.start, range.end, scheduleId, refreshKey]);
+
   const setFilters = useCallback((next: Partial<BoardFilters>) => {
     setFiltersState((current) => ({ ...current, ...next }));
   }, []);
@@ -263,15 +410,27 @@ export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
     [],
   );
 
+  // Settled only when the answer on hand is for the span on screen — the
+  // same derivation the week uses, so a month paged away from never lends
+  // its periods to the one being read.
+  const spanSettled = spanKey !== null && span.for === spanKey;
+
   return {
+    view,
+    setView,
+    focus,
+    rangeStart: range.start,
+    rangeEnd: range.end,
     weekStart,
     weekEnd,
     today,
-    isCurrentWeek: weekStart === sundayOf(today),
-    previousWeek,
-    nextWeek,
+    isCurrent: showsToday(view, focus, today),
+    previous,
+    next,
     goToToday,
-    goToWeekOf: goToWeek,
+    goToWeekOf: goTo,
+    openDay,
+    openWeek,
     filters,
     setFilters,
     clearFilters,
@@ -283,63 +442,38 @@ export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
     weekBusy: week.for !== weekStart,
     weekError: week.for === weekStart ? week.error : null,
     reloadWeek,
+    rangeSchedules: spanSettled ? span.schedules : NO_SCHEDULES,
+    rangeBusy: spanKey !== null && !spanSettled,
+    rangeError: spanSettled ? span.error : null,
+    reloadRange,
     check,
   };
 }
 
-/** The week the manager last had open this session, if any.
+/** The day the manager last had the board on this session, if any.
  *
  *  Read once at mount. A stored value that is not a date is discarded rather
  *  than trusted — `sessionStorage` is writable by anything on the origin,
- *  and a malformed week would render a board of `Invalid Date`. */
-function readRememberedWeek(): string | null {
+ *  and a malformed day would render a board of `Invalid Date`. */
+function readRememberedDay(): string | null {
   try {
     const stored = window.sessionStorage.getItem(WEEK_KEY);
-    if (!stored) return null;
-    return Number.isNaN(new Date(`${stored}T00:00:00`).getTime())
-      ? null
-      : stored;
+    return stored && isDay(stored) ? stored : null;
   } catch {
     return null;
   }
 }
 
-/** Today, in the browser's own timezone, as `YYYY-MM-DD`.
+/** The view the manager last chose in this browser, or the week.
  *
- *  Built from the local date parts rather than `toISOString()`, which
- *  converts to UTC first: at 01:00 in Israel that returns *yesterday*, which
- *  would open the board on the previous week for two hours every night. */
-function localToday(): string {
-  return isoOf(new Date());
-}
-
-/** The Sunday on or before this date.
- *
- *  Sunday-based to match `week_bounds()` in the repository, which is itself
- *  Sunday-based because the real source files run ראשון through שבת. The two
- *  must agree: a board built on a Monday week would ask the server for a
- *  period whose bounds never line up with what it renders. */
-function sundayOf(iso: string): string {
-  const date = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return iso;
-  date.setDate(date.getDate() - date.getDay());
-  return isoOf(date);
-}
-
-export function addDays(iso: string, days: number): string {
-  const date = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return iso;
-  date.setDate(date.getDate() + days);
-  return isoOf(date);
-}
-
-/** The seven dates of the week starting here, in order. */
-export function weekDates(start: string): string[] {
-  return Array.from({ length: 7 }, (_, index) => addDays(start, index));
-}
-
-function isoOf(date: Date): string {
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${date.getFullYear()}-${month}-${day}`;
+ *  The week is the default because it is the unit a schedule is built in:
+ *  a manager who has never touched the switch should land on the board they
+ *  can build on, not on an overview of it. */
+function readRememberedView(): BoardView {
+  try {
+    const stored = window.localStorage.getItem(VIEW_KEY);
+    return isBoardView(stored) ? stored : "week";
+  } catch {
+    return "week";
+  }
 }
