@@ -7,6 +7,7 @@ import type { PlacementCheck, Schedule } from "@/types";
 
 import { addDays, isDay, localToday, sundayOf } from "./dates";
 import type { BoardView } from "./views";
+import { BoardReadCache } from "./readCache";
 import {
   isBoardView,
   isOverview,
@@ -115,6 +116,7 @@ interface BoardState {
   rangeError: string | null;
   reloadRange: () => Promise<void>;
   refresh: (date?: string) => Promise<void>;
+  invalidate: () => void;
   /** Ask what a placement would cost. No model call. */
   check: (input: {
     employee: string;
@@ -209,6 +211,13 @@ export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
     error: null,
   });
   const spanToken = useRef(0);
+  const reads = useMemo(() => new BoardReadCache(), [scheduleId, refreshKey]);
+  const invalidate = useCallback(() => {
+    reads.clear();
+    ++weekToken.current;
+    ++spanToken.current;
+  }, [reads]);
+  useEffect(() => invalidate, [invalidate]);
 
   const weekStart = useMemo(() => sundayOf(focus), [focus]);
   const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
@@ -281,10 +290,10 @@ export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
    *  week*: the week is settled either way, so the board always leaves its
    *  loading state. A failure that left `for` behind `weekStart` would spin
    *  forever, which is the one outcome worse than the failure itself. */
-  const fetchWeek = useCallback(async (wanted: string): Promise<WeekRead> => {
+  const fetchWeek = useCallback(async (wanted: string, fresh = false): Promise<WeekRead> => {
     const token = ++weekToken.current;
     try {
-      const found = await scheduleAt(wanted);
+      const found = await reads.read("week", `week:${wanted}`, (signal) => scheduleAt(wanted, signal), fresh);
       return { token, week: { for: wanted, schedule: found, error: null } };
     } catch (reason) {
       return {
@@ -299,7 +308,7 @@ export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
         },
       };
     }
-  }, []);
+  }, [reads]);
 
   /** Re-read the period covering the displayed week.
    *
@@ -307,7 +316,7 @@ export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
    *  manager on this week — costs no extra request, and paging away is what
    *  fetches. */
   const reloadWeek = useCallback(async () => {
-    const read = await fetchWeek(weekStart);
+    const read = await fetchWeek(weekStart, true);
     if (read.token !== weekToken.current) return;
     setWeek(read.week);
   }, [fetchWeek, weekStart]);
@@ -330,11 +339,11 @@ export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
    *  its span even when it failed so the view always leaves its loading
    *  state. */
   const fetchSpan = useCallback(
-    async (start: string, end: string): Promise<SpanRead> => {
+    async (start: string, end: string, fresh = false): Promise<SpanRead> => {
       const token = ++spanToken.current;
       const wanted = `${start}|${end}`;
       try {
-        const found = await schedulesBetween(start, end);
+        const found = await reads.read("span", `span:${wanted}`, (signal) => schedulesBetween(start, end, signal), fresh);
         return {
           token,
           span: { for: wanted, schedules: found, error: null },
@@ -353,12 +362,12 @@ export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
         };
       }
     },
-    [],
+    [reads],
   );
 
   const reloadRange = useCallback(async () => {
     if (!spanKey) return;
-    const read = await fetchSpan(range.start, range.end);
+    const read = await fetchSpan(range.start, range.end, true);
     if (read.token !== spanToken.current) return;
     setSpan(read.span);
   }, [fetchSpan, spanKey, range.start, range.end]);
@@ -371,6 +380,7 @@ export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
   }, [fetchSpan, spanKey, range.start, range.end, scheduleId, refreshKey]);
 
   const refresh = useCallback(async (date?: string) => {
+    invalidate();
     const day = date || focus;
     const wantedRange = rangeOf(view, day);
     const [weekRead, spanRead] = await Promise.all([
@@ -383,7 +393,7 @@ export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
     if (error) throw new Error(error);
     // Navigate only after the updated data arrives, without undoing a newer navigation.
     if (weekRead.token === weekToken.current && (!spanRead || spanRead.token === spanToken.current)) goTo(day);
-  }, [focus, view, fetchWeek, fetchSpan, goTo]);
+  }, [focus, view, fetchWeek, fetchSpan, goTo, invalidate]);
 
   const setFilters = useCallback((next: Partial<BoardFilters>) => {
     setFiltersState((current) => ({ ...current, ...next }));
@@ -463,6 +473,7 @@ export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
     rangeError: spanSettled ? span.error : null,
     reloadRange,
     refresh,
+    invalidate,
     check,
   };
 }

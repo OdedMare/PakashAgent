@@ -487,7 +487,7 @@ export function Management({
                 ? `היצירה נעצרה בתאריך ${state.generation?.current_date ?? ""}`
                 : buildState === "cancelled"
                 ? `היצירה הופסקה — ${state.generation?.completed_days ?? 0} מתוך ${state.generation?.total_days ?? 7} ימים נשמרו`
-                : `בונים את הסידור — ${state.generation?.completed_days ?? 0} מתוך ${state.generation?.total_days ?? 7} ימים`}
+                : `${state.generation?.activity || "בונים את הסידור"} — ${state.generation?.completed_days ?? 0} מתוך ${state.generation?.total_days ?? 7} ימים נשמרו`}
             </strong>
             {/* Which width this build is running at. Worth saying on the
                 banner and not only in the settings panel: it is the single
@@ -542,12 +542,11 @@ export function Management({
                   className="ghost-button"
                   onClick={() => void state.resumeGeneration(buildId)}
                 >
-                  המשך יצירה מהיום הבא
+                  הצגת התקדמות היצירה
                 </button>
               ) : null}
               <span className="schedule-generation-note">
-                הסוכן בונה כל יום בנפרד ומתחשב במה שכבר שובץ — אפשר לשבץ ידנית
-                בזמן שהוא עובד.
+                ההתקדמות נשמרת אוטומטית. אפשר לשבץ ידנית או לחזור מאוחר יותר.
               </span>
             </span>
           </div>
@@ -648,6 +647,7 @@ export function Management({
           </section>
         ) : (
           <Board
+            key={workspace.id}
             overview={overview}
             busy={state.busy}
             generating={state.generating}

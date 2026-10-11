@@ -132,7 +132,7 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
       </div> : null}
       {messages.map((message) => <article id={`chat-message-${message.id}`} key={message.id} className={`conversation-message is-${message.role}${message.status === "error" ? " is-error" : ""}`}>
         <div className="conversation-speaker">{message.role === "assistant" ? <><Sparkles size={13} /> סוכן הסידור</> : "את/ה"}</div>
-        {message.status === "working" ? <Thinking steps={message.payload.steps ?? []} /> :
+        {message.status === "working" ? <Thinking steps={message.payload.steps ?? []} activity={message.payload.activity} /> :
           message.role === "assistant" ? <Markdown text={message.content} /> : <div className="conversation-text">{message.content}</div>}
         {message.payload.plan ? <ChatPlanCard message={message} employees={employees} disabled={disabled || boardBusy}
           onApply={(exceptions) => void agent.apply(message.id, exceptions)} onDismiss={() => void agent.dismiss(message.id)} onAdjust={(value) => void send(value)} /> : null}
@@ -190,10 +190,10 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
 
 /** What the agent is checking right now. The server saves each round's checks
  *  on the working message, and the existing poll brings them here. */
-function Thinking({ steps }: { steps: { tool: string; ok: boolean }[] }) {
+function Thinking({ steps, activity }: { steps: { tool: string; ok: boolean }[]; activity?: string }) {
   const current = steps.length ? TOOL_LABELS[steps[steps.length - 1].tool] ?? "בדיקת הסידור" : "";
   return <div className="conversation-thinking" role="status"><LoaderCircle size={16} />
-    <span>{current ? `${current}…` : "בודק את הסידור, האילוצים והכללים…"}
+    <span>{activity || (current ? `${current}…` : "הבקשה נשמרה וממתינה להתחלת העבודה…")}
       {steps.length > 1 ? <small> · {steps.length} בדיקות עד עכשיו</small> : null}</span></div>;
 }
 

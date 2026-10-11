@@ -81,6 +81,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       headers: { "Content-Type": "application/json", ...options?.headers },
     });
   } catch (reason) {
+    if (options?.signal?.aborted) throw reason;
     // A network-level failure never reaches the code below, so it would
     // otherwise surface as a bare "Failed to fetch" with no route attached.
     console.error(`[api] ✗ ${label} network error`, reason);
@@ -684,9 +685,10 @@ export function checkPlacement(body: {
  *
  *  What the board opens on. Null is a normal answer — "no schedule that
  *  week" is a state the board renders as an empty week, not an error. */
-export function scheduleAt(day: string): Promise<Schedule | null> {
+export function scheduleAt(day: string, signal?: AbortSignal): Promise<Schedule | null> {
   return request<Schedule | null>(
     `/api/schedule/at?day=${encodeURIComponent(day)}`,
+    { signal },
   );
 }
 
@@ -699,9 +701,11 @@ export function scheduleAt(day: string): Promise<Schedule | null> {
 export function schedulesBetween(
   start: string,
   end: string,
+  signal?: AbortSignal,
 ): Promise<Schedule[]> {
   return request<Schedule[]>(
     `/api/schedule/between?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+    { signal },
   );
 }
 

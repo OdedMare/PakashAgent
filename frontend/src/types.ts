@@ -425,6 +425,7 @@ export interface GenerationQuality {
 }
 
 export interface GenerationProgress {
+  activity?: string;
   /** `cancelled` is the manager stopping the wait, not a failure — every
    *  day already built is kept and resuming continues from the next one. */
   status: "" | "running" | "complete" | "failed" | "cancelled";
@@ -1313,6 +1314,7 @@ export interface ManagerChatMessage {
   created_at: string;
   request_id?: string;
   payload: {
+    activity?: string;
     plan?: ChatPlan;
     results?: { tool: string; ok?: boolean; date?: string; shift?: string; replacing?: string;
       candidates?: { employee: string; hours?: number; why?: string; requires_exception?: boolean }[] }[];

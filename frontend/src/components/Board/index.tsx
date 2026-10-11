@@ -245,16 +245,17 @@ export function Board({
   );
 
   // Writes refresh the overview; paged weeks and calendar ranges have their own reads.
-  const { reloadWeek, reloadRange } = board;
+  const { reloadWeek, reloadRange, invalidate } = board;
   const previousOverview = useRef(overview);
   useEffect(() => {
     const changed = previousOverview.current !== overview;
     previousOverview.current = overview;
     if (changed && overview) {
+      invalidate();
       if (!current || !covers(current, board.weekStart, board.weekEnd)) void reloadWeek();
       void reloadRange();
     }
-  }, [overview, current, board.weekStart, board.weekEnd, reloadWeek, reloadRange]);
+  }, [overview, current, board.weekStart, board.weekEnd, reloadWeek, reloadRange, invalidate]);
 
   // Whether the *schedule area* has nothing to draw yet.
   //
