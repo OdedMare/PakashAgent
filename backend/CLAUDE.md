@@ -81,6 +81,12 @@ uvicorn app.main:app --app-dir src --reload
   clean is computed in `swap_options.py` by re-auditing each trade, and the
   model may only pick from that list by id. It writes nothing, and
   colleagues' constraints never reach the model.
+- `bl/schedule_service/generation/` — opening a period and running its
+  checkpointed job. A job may cover less than its period: `start_generation`
+  takes `build_from`/`build_through` (the grid opens whole, the agent is
+  asked for the run), and `range.py` opens a job over a run of dates inside
+  a draft that already exists — manager-placed rows there are pins, the rest
+  of those dates is replaced, every other date is untouched.
 - `bl/schedule_service.create_blank/assign/unassign` — the manual path (D18).
   The only schedule writes with no model call anywhere on them.
 - `bl/export/export.py` — a period out as `.xlsx`. Pure functions, no model, no

@@ -241,6 +241,20 @@ impression.
   tab ([D17](../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
   It is the one management action that does *not* go through `run()` — a
   download changes nothing for a refetch or a briefing to react to.
+- **A build can start on any day and end on any day.** "בנייה מכאן" on a
+  day's column head, and "בנייה מיום … עד שבת" on the card of an unbuilt
+  week, open the one build dialog (`Board/GenerateDialog.tsx`) on that day
+  through Saturday; both ends stay editable and "עד שבת" is a shortcut, not
+  a limit. Inside a draft that exists it is `generateScheduleRange`: only
+  those days are asked for, what the agent built on them is replaced, and
+  what the manager placed is kept and filled around (D18) — the dialog counts
+  both before the click, and takes no list of required shifts because the
+  board behind it already is one. The run is bounded by the period: a build
+  is one job on one period. On a week with nothing stored, the period is
+  still opened as **whole weeks** (`inWholeWeeks`) with the run sent beside
+  it as `build_from`/`build_through`. The board finds a week by its Sunday,
+  so a period beginning on a Wednesday would be stored and never drawn; the
+  days outside the run open empty instead.
 - **Building a period does not lock the area.** `generate` and its two
   siblings report through `state.generating`, never through `state.busy`:
   a build runs for minutes, and routing it through the helper the board's own
