@@ -33,6 +33,7 @@ from app.bl.schedule_service.preferences import PreferenceService
 from app.bl.schedule_service.profile_gate import ProfileGate
 from app.bl.schedule_service.reader import ScheduleReader
 from app.bl.schedule_service.speaking import BriefingService, WorkbookExporter
+from app.bl.schedule_service.statistics import StatsReader
 
 
 class ScheduleService:
@@ -50,6 +51,7 @@ class ScheduleService:
         stepper = GenerationStepper(context, scheduler, gate, history)
 
         self._reader = ScheduleReader(context)
+        self._stats = StatsReader(context, self._reader.periods_between)
         self._builder = PeriodBuilder(context, scheduler, gate, history, settings)
         self._stepper = stepper
         self._runner = GenerationRunner(context, stepper, launch, sleep)
@@ -95,6 +97,9 @@ class ScheduleService:
 
     def overview(self, *args, **kwargs):
         return self._reader.overview(*args, **kwargs)
+
+    def stats(self, *args, **kwargs):
+        return self._stats.between(*args, **kwargs)
 
     # -- building ------------------------------------------------------------
 

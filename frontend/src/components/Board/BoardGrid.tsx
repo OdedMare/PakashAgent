@@ -40,11 +40,14 @@ import type { ShiftOrder } from "./shiftOrder";
 import { SHIFT_DRAG_TYPE, useShiftOrder } from "./shiftOrder";
 import { ShiftCard } from "./ShiftCard";
 import type { BoardFilters } from "./useBoard";
-import { weekDates } from "./useBoard";
 import type { MoveMode } from "./useMoveMode";
 import { useMoveMode } from "./useMoveMode";
 
 /** The week as a board: days across, shifts down, cards inside.
+ *
+ *  The same grid draws a single day: `dates` is one column then, and every
+ *  gesture below works unchanged, because a day is the week with six columns
+ *  put away rather than a second board.
  *
  *  Days are the primary timeline because that is how the manager thinks —
  *  "who is on Tuesday" is the question, and the existing product direction
@@ -68,7 +71,7 @@ import { useMoveMode } from "./useMoveMode";
  */
 export function BoardGrid({
   schedule,
-  weekStart,
+  dates,
   today,
   constraints,
   employees,
@@ -84,9 +87,11 @@ export function BoardGrid({
   onAddShift,
   onOpenDay,
   onClearDay,
+  onOpenDate,
 }: {
   schedule: Schedule | null;
-  weekStart: string;
+  /** The columns to draw, in order: the seven days of a week, or one. */
+  dates: string[];
   today: string;
   constraints: Constraint[];
   employees: string[];
@@ -119,6 +124,9 @@ export function BoardGrid({
   /** Clear one day's shifts. Withheld on a published board, where every
    *  write is refused, and while a build is running on this period. */
   onClearDay?: (date: string) => void;
+  /** Show one column on its own. A change of view and nothing else — which
+   *  is why it is offered on a published board too. */
+  onOpenDate?: (date: string) => void;
 }) {
   const [dragging, setDragging] = useState<Assignment | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -133,7 +141,6 @@ export function BoardGrid({
   // same confirmation (D12).
   const move = useMoveMode();
 
-  const dates = useMemo(() => weekDates(weekStart), [weekStart]);
   const hueOf = useMemo(() => buildPalette(employees), [employees]);
 
   // Bringing today into view on a board wider than the screen.
@@ -163,9 +170,9 @@ export function BoardGrid({
         ? "auto"
         : "smooth",
     });
-    // Re-run when the week changes: paging back to this week should land on
+    // Re-run when the dates change: paging back to this week should land on
     // today again rather than wherever the previous week was scrolled to.
-  }, [showsToday, weekStart]);
+  }, [showsToday, dates]);
 
   // The week bucketed by cell, once. Every lookup below reads from this
   // instead of walking the assignment, slot and warning lists per cell.
@@ -307,7 +314,7 @@ export function BoardGrid({
       ) : null}
 
       <div
-        className="board-grid"
+        className={`board-grid${dates.length === 1 ? " is-day" : ""}`}
         dir="rtl"
         style={{ "--board-days": dates.length } as React.CSSProperties}
       >
@@ -325,6 +332,12 @@ export function BoardGrid({
             columnRef={date === today ? todayColumn : undefined}
             onOpenAgent={onOpenDay ? () => onOpenDay(date) : undefined}
             onClear={onClearDay ? () => onClearDay(date) : undefined}
+            // Nothing to open when the day is already the only column.
+            onOpen={
+              onOpenDate && dates.length > 1
+                ? () => onOpenDate(date)
+                : undefined
+            }
           />
         ))}
 
@@ -385,6 +398,7 @@ function DayHead({
   columnRef,
   onOpenAgent,
   onClear,
+  onOpen,
 }: {
   date: string;
   isToday: boolean;
@@ -398,8 +412,17 @@ function DayHead({
   columnRef?: React.Ref<HTMLDivElement>;
   onOpenAgent?: () => void;
   onClear?: () => void;
+  /** Open this day on its own. The name of the day is the control, as it is
+   *  in any calendar: the thing you read is the thing you press. */
+  onOpen?: () => void;
 }) {
   const { assigned, required } = coverage;
+  const name = (
+    <>
+      <span className="board-dayhead-weekday">{hebrewWeekday(date)}</span>
+      <span className="board-dayhead-date">{shortDate(date)}</span>
+    </>
+  );
 
   return (
     <div
@@ -412,8 +435,19 @@ function DayHead({
         .filter(Boolean)
         .join(" ")}
     >
-      <span className="board-dayhead-weekday">{hebrewWeekday(date)}</span>
-      <span className="board-dayhead-date">{shortDate(date)}</span>
+      {onOpen ? (
+        <button
+          type="button"
+          className="board-dayhead-open"
+          onClick={onOpen}
+          aria-label={`תצוגת יום: ${hebrewWeekday(date)} ${displayDate(date)}`}
+          title="פתיחת היום בתצוגת יום"
+        >
+          {name}
+        </button>
+      ) : (
+        name
+      )}
       {required ? (
         <span
           className={`board-dayhead-coverage${

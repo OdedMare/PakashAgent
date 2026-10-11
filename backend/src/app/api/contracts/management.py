@@ -92,8 +92,16 @@ class EmployeeLoad(BaseModel):
     employee: str
     hours: float = 0.0
     shifts: int = 0
+    # How many of `shifts` were nights, by `audit.roster.is_night`.
+    nights: int = 0
     on_call: int = 0
     days: int = 0
+    # Findings at `warning` severity naming this person.
+    conflicts: int = 0
+    # The roster's own rotation fields, as stored. Empty for somebody the
+    # roster no longer lists.
+    exit_pattern: str = ""
+    rotation_group: str = ""
 
 
 class WarningCount(BaseModel):
@@ -129,12 +137,16 @@ class ShiftStats(BaseModel):
 
     total_hours: float = 0.0
     total_shifts: int = 0
+    total_nights: int = 0
     people_working: int = 0
     coverage: Coverage = Coverage()
     by_shift: List[ShiftLoad] = []
     by_day: List[DayLoad] = []
     by_employee: List[EmployeeLoad] = []
     warning_counts: List[WarningCount] = []
+    # Findings at `warning` severity -- the board's "התנגשויות" tile, counted
+    # here so the two can never show different numbers for one week.
+    conflicts: int = 0
     constraint_pressure: ConstraintPressure = ConstraintPressure()
 
 

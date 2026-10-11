@@ -8,7 +8,7 @@ quota, or a threshold the schedule is graded against.
 
 from typing import Dict, List, Optional
 
-from app.bl.audit.codes import SEVERITY_NOTICE, severity_rank
+from app.bl.audit.codes import SEVERITY_NOTICE, SEVERITY_WARNING, severity_rank
 from app.bl.audit.constraints import constraint_conflicts
 from app.bl.audit.roster import index_shifts, rows_of
 from app.bl.audit.staffing_rules import checked_slots, required_headcount, seat_counts
@@ -24,21 +24,59 @@ def shift_stats(
     warnings: Optional[List[dict]] = None,
     availability: Optional[List[dict]] = None,
     profile: Optional[dict] = None,
+    employee: str = "",
 ) -> dict:
-    """Everyone on the roster appears in `by_employee`, zeros included."""
+    """Everyone on the roster appears in `by_employee`, zeros included.
+
+    `employee` narrows the report to one person: their shifts, the findings
+    naming them, their constraints. Coverage is the exception and stays the
+    span's own -- a seat belongs to the slot, and one person's share of the
+    required seats is not a figure anybody staffs against.
+    """
     shift_index = index_shifts(((profile or {}).get("archived_shifts") or []) + (shifts or []))
-    rows = rows_of(assignments, shift_index, slots)
+    everyone = rows_of(assignments, shift_index, slots)
+    rows = _of(everyone, employee)
+    people = [
+        person for person in employees or []
+        if not employee or person_name(person) == employee
+    ]
+    warnings, availability = _of(warnings, employee), _of(availability, employee)
     return {
         "total_hours": round(sum(row["hours"] for row in rows), 2),
         "total_shifts": len(rows),
+        "total_nights": sum(1 for row in rows if row["is_night"]),
         "people_working": len(set(row["employee"] for row in rows)),
-        "coverage": coverage(rows, shifts or [], slots, employees or [], profile or {}),
+        "coverage": coverage(everyone, shifts or [], slots, employees or [], profile or {}),
         "by_shift": _by_shift(rows, shift_index),
         "by_day": _by_day(rows, slots),
-        "by_employee": _by_employee(rows, employees or []),
-        "warning_counts": _warning_counts(warnings or []),
-        "constraint_pressure": _constraint_pressure(rows, availability or []),
+        "by_employee": _by_employee(rows, people, warnings),
+        "warning_counts": _warning_counts(warnings),
+        "conflicts": len(_conflicts(warnings)),
+        "constraint_pressure": _constraint_pressure(rows, availability),
     }
+
+
+def _of(items: Optional[List[dict]], employee: str) -> List[dict]:
+    """The items naming one person, or all of them when nobody is named."""
+    if not employee:
+        return list(items or [])
+    return [
+        item for item in items or []
+        if isinstance(item, dict) and text(item.get("employee")) == employee
+    ]
+
+
+def _conflicts(warnings: List[dict]) -> List[dict]:
+    """The findings a manager has to look at.
+
+    Notices are left out, as the board's own tile leaves them out:
+    overstaffing costs money and breaks nothing, and a count the manager
+    reacts to should not include things needing no reaction.
+    """
+    return [
+        item for item in warnings
+        if isinstance(item, dict) and item.get("severity") == SEVERITY_WARNING
+    ]
 
 
 def coverage(
@@ -110,28 +148,63 @@ def _by_day(rows: List[dict], slots: Optional[List[dict]]) -> List[dict]:
     return [days[key] for key in sorted(days)]
 
 
-def _by_employee(rows: List[dict], employees: List[dict]) -> List[dict]:
-    """Per-person load, heaviest first, everyone on the roster present."""
+def _by_employee(
+    rows: List[dict], employees: List[dict], warnings: Optional[List[dict]] = None,
+) -> List[dict]:
+    """Per-person load, most shifts first, everyone on the roster present.
+
+    Ordered by shifts because that is the count the panel draws; hours break
+    a tie, so two people on equal shifts still read heaviest first.
+    """
     totals: Dict[str, dict] = {}
 
     def entry(name: str) -> dict:
-        return totals.setdefault(name, {
-            "employee": name, "hours": 0.0, "shifts": 0, "on_call": 0, "days": 0,
-        })
+        return totals.setdefault(name, _empty_person(name))
 
     for employee in employees:
         if person_name(employee):
-            entry(person_name(employee))
+            entry(person_name(employee)).update(_rotation(employee))
     worked: Dict[str, set] = {}
     for row in rows:
         item = entry(row["employee"])
         item["hours"] = round(item["hours"] + row["hours"], 2)
         item["shifts"] += 1
+        item["nights"] += bool(row["is_night"])
         item["on_call"] += bool(row["is_on_call"])
         worked.setdefault(row["employee"], set()).add(row["date"])
     for name, dates in worked.items():
         totals[name]["days"] = len(dates)
-    return sorted(totals.values(), key=lambda item: (-item["hours"], item["employee"]))
+    for item in _conflicts(warnings or []):
+        if text(item.get("employee")) in totals:
+            totals[text(item.get("employee"))]["conflicts"] += 1
+    return sorted(
+        totals.values(),
+        key=lambda item: (-item["shifts"], -item["hours"], item["employee"]),
+    )
+
+
+def _empty_person(name: str) -> dict:
+    return {
+        "employee": name, "hours": 0.0, "shifts": 0, "nights": 0,
+        "on_call": 0, "days": 0, "conflicts": 0,
+        "exit_pattern": "", "rotation_group": "",
+    }
+
+
+def _rotation(employee) -> dict:
+    """The roster's own two rotation fields, passed through unread.
+
+    Which cycle a person is on and which arm of it are the manager's entries,
+    not arithmetic, so they travel as stored and the screen words them the
+    way the board's cards do. Somebody the roster no longer lists keeps both
+    empty rather than being handed a rotation nobody recorded.
+    """
+    if not isinstance(employee, dict):
+        return {}
+    return {
+        "exit_pattern": text(employee.get("exit_pattern")),
+        "rotation_group": text(employee.get("rotation_group")),
+    }
 
 
 def _warning_counts(warnings: List[dict]) -> List[dict]:

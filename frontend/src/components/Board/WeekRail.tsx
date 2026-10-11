@@ -18,10 +18,20 @@ export function WeekRail({
   today,
   schedule,
   busy = false,
+  selected,
+  onPickDay,
 }: {
   weekStart: string;
   today: string;
   schedule: Schedule | null;
+  /** The one day the board below is showing, when it is showing one. Marked
+   *  on the rail so the week around a day view stays readable as a week —
+   *  the rail is then what says which of the seven the grid is. */
+  selected?: string;
+  /** Open a day from the rail. When given, each segment is a button; the
+   *  rail already names every day of the week, so it is the nearest thing
+   *  the board has to a date picker and costs no new control. */
+  onPickDay?: (date: string) => void;
   /** The week's schedule is still being read.
    *
    *  The rail renders from `weekStart` alone, so it is already correct for
@@ -79,24 +89,54 @@ export function WeekRail({
         <strong>מסילת השבוע</strong>
         <span>{busy ? "טוען…" : "איוש מול צורך"}</span>
       </div>
-      <div className="week-rail-days" role="list">
-        {days.map((day) => (
-          <div
-            key={day.date}
-            className={`week-rail-day is-${busy ? "loading" : day.tone}${day.date === today ? " is-today" : ""}`}
-            role="listitem"
-            aria-label={`${hebrewWeekday(day.date)} ${displayDate(day.date)}: ${busy ? "נטען" : dayLabel(day)}`}
-          >
-            <div className="week-rail-day-head">
-              <strong>{hebrewWeekday(day.date)}</strong>
-              <span>{displayDate(day.date)}</span>
+      <div className="week-rail-days" role={onPickDay ? "group" : "list"}>
+        {days.map((day) => {
+          const className = [
+            "week-rail-day",
+            `is-${busy ? "loading" : day.tone}`,
+            day.date === today ? "is-today" : "",
+            day.date === selected ? "is-selected" : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+          const label = `${hebrewWeekday(day.date)} ${displayDate(day.date)}: ${busy ? "נטען" : dayLabel(day)}`;
+          // Spans rather than divs inside, so the same body is valid in the
+          // button a pickable day becomes.
+          const body = (
+            <>
+              <span className="week-rail-day-head">
+                <strong>{hebrewWeekday(day.date)}</strong>
+                <span>{displayDate(day.date)}</span>
+              </span>
+              <span className="week-rail-track" aria-hidden="true">
+                <span style={{ width: busy ? "0%" : `${day.percent}%` }} />
+              </span>
+              <small>{busy ? "טוען…" : dayLabel(day)}</small>
+            </>
+          );
+          return onPickDay ? (
+            <button
+              key={day.date}
+              type="button"
+              className={className}
+              aria-label={label}
+              aria-pressed={day.date === selected}
+              title="פתיחת היום"
+              onClick={() => onPickDay(day.date)}
+            >
+              {body}
+            </button>
+          ) : (
+            <div
+              key={day.date}
+              className={className}
+              role="listitem"
+              aria-label={label}
+            >
+              {body}
             </div>
-            <div className="week-rail-track" aria-hidden="true">
-              <span style={{ width: busy ? "0%" : `${day.percent}%` }} />
-            </div>
-            <small>{busy ? "טוען…" : dayLabel(day)}</small>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

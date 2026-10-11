@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-11T13:48:15.549960+00:00",
+  "generated_at": "2026-10-11T13:55:48.620877+00:00",
   "nodes": {
     "backend_app_api_claude_http_layer": {
       "code_fingerprint": "",
@@ -12,7 +12,7 @@
           "q": "עכשיו יש לי בעיה אני יוצר סידור אוטומטי אבל המודל מחזיר תשובה חיובית ו200 api אבל ui מחזיר שגיאת רשת 500"
         }
       ],
-      "score": 0.329006861,
+      "score": 0.328967001,
       "source_file": "backend/app/api/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -28,7 +28,7 @@
           "q": "How does the current manager chat connect to schedule questions and changes?"
         }
       ],
-      "score": 0.867932208,
+      "score": 0.867827056,
       "source_file": "backend/app/api/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -44,7 +44,7 @@
           "q": "אשמח שתבצע את כלל השיפורים"
         }
       ],
-      "score": 0.896864891,
+      "score": 0.896756234,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -52,8 +52,13 @@
     "backend_app_bl_claude_agent_decides_code_audits": {
       "code_fingerprint": "",
       "label": "Agent Decides; Code Audits",
-      "last": "2026-10-08T11:39:06.564813+00:00",
+      "last": "2026-10-11T13:53:23.456364+00:00",
       "provenance": [
+        {
+          "date": "2026-10-11T13:53:23.456364+00:00",
+          "outcome": "useful",
+          "q": "Verify fair scheduling with emphasis on minimizing each employee night shifts"
+        },
         {
           "date": "2026-10-08T11:39:06.564813+00:00",
           "outcome": "useful",
@@ -73,17 +78,12 @@
           "date": "2026-08-21T08:02:17.271238+00:00",
           "outcome": "useful",
           "q": "בוא נתכנן איך לממש את זה"
-        },
-        {
-          "date": "2026-08-21T07:59:07.483050+00:00",
-          "outcome": "useful",
-          "q": "זה לא יפגע באיכות?"
         }
       ],
-      "score": 2.481709294,
+      "score": 3.481369812,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
-      "uses": 6
+      "uses": 7
     },
     "backend_app_bl_claude_interview_workflow": {
       "code_fingerprint": "",
@@ -116,7 +116,7 @@
           "q": "בוא נחשוב איך נשפר את חווית הראיון היא משמעותית מאוד"
         }
       ],
-      "score": 4.366295198,
+      "score": 4.365766212,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
       "uses": 14
@@ -137,7 +137,7 @@
           "q": "בוא נחשוב איך נשפר את חווית הראיון היא משמעותית מאוד"
         }
       ],
-      "score": 0.647867687,
+      "score": 0.647789197,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
       "uses": 2
@@ -145,8 +145,13 @@
     "backend_app_bl_claude_schedule_generation": {
       "code_fingerprint": "",
       "label": "Schedule Generation",
-      "last": "2026-10-08T11:39:06.564813+00:00",
+      "last": "2026-10-11T13:53:23.456364+00:00",
       "provenance": [
+        {
+          "date": "2026-10-11T13:53:23.456364+00:00",
+          "outcome": "useful",
+          "q": "Verify fair scheduling with emphasis on minimizing each employee night shifts"
+        },
         {
           "date": "2026-10-08T11:39:06.564813+00:00",
           "outcome": "useful",
@@ -166,17 +171,12 @@
           "date": "2026-08-24T15:13:27.098807+00:00",
           "outcome": "useful",
           "q": "היום אני חוטף שגיאות של שגיאות רשת אבל המודל חוזר ומחזיר תשובה תעשה את זה לא בסטרימינג אלא בפולינג ככה שהכל יעבוד כמו שצריך בנוסף אני רוצה ממש אופציה לפתוח ולשבץ יום ספציפי כמו כפתור על יום ואז לתת הנחיות על הלוח אני רוצה שסוכן וקופיילוט יתאחדו אני רוצה שתשפר את הפרומפטים לסגירות ליציאות היום הוא מאזן בין הסבבים אבל לא מבין שזה סגירות שבתות סבבים"
-        },
-        {
-          "date": "2026-08-24T14:17:00.063395+00:00",
-          "outcome": "useful",
-          "q": "בשיבוץ למשמרות התשובה מהמודל מגיעה תוך 120 עד 300 שניות תוודא שהui לא מחזיר לי timeout כי עכשיו הוא מחזיר"
         }
       ],
-      "score": 4.365920079,
+      "score": 5.36535232,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
-      "uses": 8
+      "uses": 9
     },
     "backend_app_dal_claude_assignments_with_agent_reason": {
       "code_fingerprint": "",
@@ -189,7 +189,7 @@
           "q": "הראיון ארוך וחוזר על שאלות, ויצירת לוח המשמרות הראשוני לפעמים טועה"
         }
       ],
-      "score": 0.323726559,
+      "score": 0.323687339,
       "source_file": "backend/app/dal/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -220,7 +220,7 @@
           "q": "בוא נתכנן איך לממש את זה"
         }
       ],
-      "score": 1.269981453,
+      "score": 1.269827593,
       "source_file": "backend/app/dal/CLAUDE.md",
       "status": "preferred",
       "uses": 4
@@ -256,7 +256,7 @@
           "q": "תממש את זה ואני רוצה שזה יהיה בpolling ולא בstream כמו שעכשוי"
         }
       ],
-      "score": 4.234318068,
+      "score": 4.233805072,
       "source_file": "backend/app/dal/llm/CLAUDE.md",
       "status": "preferred",
       "uses": 10
@@ -272,7 +272,7 @@
           "q": "תבנה"
         }
       ],
-      "score": 0.323978956,
+      "score": 0.323939705,
       "source_file": "backend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -298,7 +298,7 @@
           "q": "hey i want to start work the agent init interview here some qusetions that give as the base the do interview from that mock the missing question that you miss then we implament this part"
         }
       ],
-      "score": 0.908072906,
+      "score": 0.907962891,
       "source_file": "backend/CLAUDE.md",
       "status": "preferred",
       "uses": 3
@@ -314,7 +314,7 @@
           "q": "in the pakash agent app"
         }
       ],
-      "score": 0.302779043,
+      "score": 0.302742361,
       "source_file": "backend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -330,7 +330,7 @@
           "q": "היום הבעיה החמורה היא שהמידע שנשמר בראיון לא עובר במצב לטוב לתהליך בניית הסידור איך אתה מציע שנעשה את זה ונמקסם על זה"
         }
       ],
-      "score": 0.328253534,
+      "score": 0.328213765,
       "source_file": "docs/DECISIONS.md",
       "status": "tentative",
       "uses": 1
@@ -346,7 +346,7 @@
           "q": "How should PakashAgent make manager chat the primary scheduling workspace while remaining maintainable?"
         }
       ],
-      "score": 0.888830873,
+      "score": 0.888723189,
       "source_file": "docs/DECISIONS.md",
       "status": "tentative",
       "uses": 1
@@ -362,7 +362,7 @@
           "q": "היי כיום הצאט עובד איך לפעמים משבץ לא טוב ומבקש סיבה אני רוצה שכל מה שהמשתמש אומר הוא עושה אלא אם זה ממש לא הגיוני ובכך הוא מתקן אני גם רוצה שהצאט יאפשר למנהל להייתעץ ולשאול איך לפתור בעיה מסוימת אני רוצה לשייף את כל יכולות הצאט בין עם הכנסת עוד עובד או הכנסת אילוץ להיות הסוכן הראשי והיחיד"
         }
       ],
-      "score": 0.888809155,
+      "score": 0.888701474,
       "source_file": "docs/DECISIONS.md",
       "status": "tentative",
       "uses": 1
@@ -378,7 +378,7 @@
           "q": "How does the current manager chat connect to schedule questions and changes?"
         }
       ],
-      "score": 0.867932208,
+      "score": 0.867827056,
       "source_file": "frontend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -414,7 +414,7 @@
           "q": "בשיבוץ למשמרות התשובה מהמודל מגיעה תוך 120 עד 300 שניות תוודא שהui לא מחזיר לי timeout כי עכשיו הוא מחזיר"
         }
       ],
-      "score": 4.908932025,
+      "score": 4.908337298,
       "source_file": "frontend/CLAUDE.md",
       "status": "preferred",
       "uses": 10
@@ -430,7 +430,7 @@
           "q": "תעצב לי tutorial למערכת עם סקרינשוטים והכל לכל פונקציונליות"
         }
       ],
-      "score": 0.315928923,
+      "score": 0.315890648,
       "source_file": "frontend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -446,7 +446,7 @@
           "q": "How should PakashAgent make manager chat the primary scheduling workspace while remaining maintainable?"
         }
       ],
-      "score": 0.888830873,
+      "score": 0.888723189,
       "source_file": "frontend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -462,7 +462,7 @@
           "q": "תעצב לי tutorial למערכת עם סקרינשוטים והכל לכל פונקציונליות"
         }
       ],
-      "score": 0.315928923,
+      "score": 0.315890648,
       "source_file": "README.md",
       "status": "tentative",
       "uses": 1
@@ -483,7 +483,7 @@
           "q": "בשיבוץ למשמרות התשובה מהמודל מגיעה תוך 120 עד 300 שניות תוודא שהui לא מחזיר לי timeout כי עכשיו הוא מחזיר"
         }
       ],
-      "score": 0.660357342,
+      "score": 0.660277339,
       "source_file": "README.md",
       "status": "preferred",
       "uses": 2

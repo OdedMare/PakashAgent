@@ -143,7 +143,7 @@ def _check_rotation(profile):
                if isinstance(person, dict) and bounded(person.get("rotation_group"))]
     errors = rotation.configuration_errors(dict(profile, employees=grouped))
     if errors:
-        raise AgentError("יש להשלים את העוגנים והקבוצות בהגדרות > סבבים ותלתונים: %s" % "; ".join(errors))
+        raise AgentError("יש להשלים את העוגנים והקבוצות בהגדרת היחידה > סבבים ותלתונים: %s" % "; ".join(errors))
 
 
 class _ChunkedRun:

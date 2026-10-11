@@ -20,12 +20,14 @@ from app.api.routers.schedules.manual import ManualRoutes
 from app.api.routers.schedules.periods import PeriodRoutes
 from app.api.routers.schedules.reading import ReadingRoutes
 from app.api.routers.schedules.records import ConstraintRoutes, PreferenceRoutes
+from app.api.routers.schedules.statistics import StatisticsRoutes
 from app.api.routers.schedules.transfer import TransferRoutes
 
 # Order matters: every literal path is registered before `PeriodRoutes`,
 # whose `/{schedule_id}` would otherwise swallow them.
 _GROUPS = (
     ReadingRoutes,
+    StatisticsRoutes,
     GenerationRoutes,
     ManualRoutes,
     ChangeRoutes,

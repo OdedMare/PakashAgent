@@ -21,6 +21,7 @@ saving, D3 has been reversed — re-read it before doing that.
 | `constraints.py` | Whether an assignment falls outside an availability |
 | `reports.py` | `personal_summary`, `fairness`, `load_history` |
 | `stats.py` | `shift_stats` for the control room's charts |
+| `window.py` | Which facts fall inside a span of dates |
 """
 
 from app.bl.audit.auditor import audit
@@ -42,10 +43,12 @@ from app.bl.audit.constraints import constraint_conflicts
 from app.bl.audit.reports import fairness, load_history, personal_summary
 from app.bl.audit.staffing_rules import counts_toward_staffing, required_headcount
 from app.bl.audit.stats import shift_stats
+from app.bl.audit.window import in_window, warning_in_window
 
 __all__ = [
     "audit", "personal_summary", "fairness", "load_history", "shift_stats",
     "counts_toward_staffing", "required_headcount", "constraint_conflicts",
+    "in_window", "warning_in_window",
     "OVER_HOURS", "CONSECUTIVE", "SHORT_REST", "DOUBLE_BOOKED",
     "UNAVAILABLE", "UNFILLED", "OVERSTAFFED", "MISSING_ROLE",
     "MISSING_COMMANDER", "CROSS_ROTATION",

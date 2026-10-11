@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple
 from app.bl.rotation.cycle import cycle, group_for_saturday
 from app.bl.rotation.vocabulary import (
     CLOSURE_LEAD_DAYS, GROUPED_PATTERNS, HANDOVER_TAIL_DAYS, cycle_of_group,
-    exit_pattern, minutes, saturday_of, text,
+    exit_pattern, groups_for, minutes, saturday_of, text,
 )
 
 _WEEK = datetime.timedelta(days=7)
@@ -78,10 +78,20 @@ def closure_days(
 
 
 def configured_window(profile, pattern, group, saturday):
+    """The hours `group` holds its closure on `saturday`, or None for the default.
+
+    **A cycle's hours are stated once, for its first group.** Every other
+    group inherits them on its own weekend, the way its turn is derived from
+    the same anchor. A row naming another group is that group's own exception
+    and wins for it.
+    """
     rules = ((profile or {}).get("workplace") or {}).get("rotation_closure_windows") or []
-    matching = [row for row in rules if row.get("pattern") == pattern and row.get("group") == group
+    in_force = [row for row in rules if row.get("pattern") == pattern
                 and (not row.get("starts_on") or row["starts_on"] <= saturday.isoformat())
                 and (not row.get("ends_on") or row["ends_on"] >= saturday.isoformat())]
+    first = (groups_for(pattern) or (group,))[0]
+    matching = ([row for row in in_force if row.get("group") == group]
+                or [row for row in in_force if row.get("group") == first])
     if not matching:
         return None
     # Dated changes take precedence over the group's regular window.

@@ -80,6 +80,23 @@ def test_dated_departure_change_expires_without_changing_cycle_phase():
     assert rotation.closing_group(p, datetime.date(2026, 9, 12)) == "א"
 
 
+def test_first_group_hours_are_inherited_by_every_other_group_of_the_cycle():
+    p = profile()
+    # 05/09 is ב's weekend. Only א carries hours, so ב closes on the same ones.
+    thursday = blocked(p, "2026-09-03")
+    assert ("א", "בוקר") not in thursday and ("א", "צהריים") in thursday
+    sunday = blocked(p, "2026-09-06")
+    assert ("א", "בוקר") in sunday and ("א", "צהריים") not in sunday
+    # A dated change stated for א moves ב's weekend too.
+    p["workplace"]["rotation_closure_windows"].append(window(
+        start_time="16:00", starts_on="2026-09-05", ends_on="2026-09-05"))
+    assert ("א", "צהריים") not in blocked(p, "2026-09-03")
+    # A row naming ב is ב's own exception; א's weekend keeps א's hours.
+    p["workplace"]["rotation_closure_windows"] = [window(), window(group="ב", start_time="08:00")]
+    assert ("א", "בוקר") in blocked(p, "2026-09-03")
+    assert ("ב", "בוקר") not in blocked(p, "2026-08-27")
+
+
 def test_absence_survives_employee_availability_and_model_balancing():
     p = profile()
     p["workplace"]["rotation_presence"] = [rule()]
