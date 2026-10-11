@@ -67,7 +67,7 @@ class SpanGenerator:
     def _complete(self, span, first, history, instructions, preferences, measured, started):
         chosen, rejected = first, list(first.rejected)
         baseline = span.audit(first.roster)
-        imbalance = uneven_load(span, first.roster, baseline)
+        imbalance = uneven_load(span, first.roster, baseline, history)
         first.warnings.extend(imbalance)
         repair_error, repair_dates = "", []
         if first.problems:
@@ -77,7 +77,7 @@ class SpanGenerator:
                 answer = self._call(payload, request.schema, measured)
                 second = repaired_attempt(span, request, answer, first)
                 fairer = (not imbalance
-                          or load_cost(span, second.roster) < load_cost(span, first.roster)
+                          or load_cost(span, second.roster, history) < load_cost(span, first.roster, history)
                           or not no_worse(second.warnings, baseline))
                 if len(second.rejected) <= len(first.rejected) and no_worse(baseline, second.warnings) and fairer:
                     chosen = second
@@ -93,7 +93,7 @@ class SpanGenerator:
                         repair_improved=improved,
                         quality_before=quality(first.roster, span.audit_slots, span.profile, baseline))
         warnings = baseline if chosen is first else chosen.warnings
-        warnings = warnings + uneven_load(span, chosen.roster, warnings)
+        warnings = warnings + uneven_load(span, chosen.roster, warnings, history)
         return self._finish(span, chosen, rejected, bool(first.problems), measured, started, warnings)
 
     def _call(self, payload, schema, measured):
@@ -116,7 +116,8 @@ class SpanGenerator:
     ) -> dict:
         rows = [row for row in chosen.roster if row.get("date") in span.dates]
         notes = lines(chosen.answer.get("notes"))
-        notes.extend(item["message"] for item in warnings if item.get("code") == "uneven_load")
+        notes.extend(item["message"] for item in warnings
+                     if item.get("code") in ("uneven_load", "uneven_nights"))
         if measured["repair_error"]:
             notes.append("בקשת התיקון נכשלה. הטיוטה שנבדקה נשמרה עם האזהרות שנותרו.")
         if rejected:

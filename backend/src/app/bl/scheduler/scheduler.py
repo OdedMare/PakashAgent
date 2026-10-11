@@ -211,7 +211,7 @@ class _ChunkedRun:
                            self._availability, self.assignments,
                            [row for row in self._required if row["date"] in dates])
         baseline = span.audit(self.assignments)
-        findings = uneven_load(span, self.assignments, baseline)
+        findings = uneven_load(span, self.assignments, baseline, self._past)
         if not findings:
             return
         payload = span.payload(self._past, instructions, preferences)
@@ -220,14 +220,14 @@ class _ChunkedRun:
         try:
             second = span.read(ask(payload, schema=span.schema))
             if not second.rejected and no_worse(baseline, span.audit(second.roster)) \
-                    and load_cost(span, second.roster) < load_cost(span, self.assignments):
+                    and load_cost(span, second.roster, self._past) < load_cost(span, self.assignments, self._past):
                 self.assignments = second.roster
                 self.notes.extend(lines(second.answer.get("notes")))
                 self.summaries[-1] = bounded(second.answer.get("summary"))
         except AgentError:
             self.notes.append("בקשת איזון העומס נכשלה; הטיוטה שנבנתה נשמרה.")
         self.notes.extend(item["message"] for item in
-                          uneven_load(span, self.assignments, span.audit(self.assignments)))
+                          uneven_load(span, self.assignments, span.audit(self.assignments), self._past))
 
     def result(self) -> dict:
         return {

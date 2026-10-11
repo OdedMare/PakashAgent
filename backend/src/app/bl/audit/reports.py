@@ -141,7 +141,7 @@ def load_history(
         entry = totals.setdefault(row["employee"], _empty_load())
         entry["shifts"] += 1
         entry["hours"] = round(entry["hours"] + row["hours"], 2)
-        if row["is_on_call"] or _is_night(shift_index.get(row["shift"])):
+        if row["is_night"]:
             entry["nights"] += 1
         if row["day"] is not None and row["day"].weekday() in _WEEKEND_WEEKDAYS:
             entry["weekends"] += 1
@@ -151,17 +151,6 @@ def load_history(
         [dict(counts, employee=name) for name, counts in totals.items()],
         key=lambda item: (-item["nights"], -item["hours"], item["employee"]),
     )
-
-
-def _is_night(shift: Optional[dict]) -> bool:
-    """Whether the vocabulary marks this shift as a night.
-
-    Read off the shift definition, never inferred from its name or start time
-    (D9). A workplace that never flags a night honestly reports zero.
-    """
-    if not isinstance(shift, dict):
-        return False
-    return bool(shift.get("is_night") or shift.get("is_overnight"))
 
 
 def _empty_load() -> dict:

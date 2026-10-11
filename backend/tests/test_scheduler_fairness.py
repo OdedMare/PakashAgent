@@ -119,3 +119,119 @@ def test_coverage_repair_has_priority_even_when_it_cannot_improve_fairness():
     assert not any(item["code"] == "unfilled" for item in result["warnings"])
     assert any(item["code"] == "uneven_load" for item in result["warnings"])
     assert any("פער עומס" in note for note in result["notes"])
+
+
+def night_profile():
+    return dict(profile(), shifts=[dict(profile()["shifts"][0], name="משמרת ג",
+                                       start_time="23:00", end_time="07:00")])
+
+
+def night(day, employee="דנה"):
+    return assignment("2026-10-%02d" % day, employee, "משמרת ג")
+
+
+@pytest.mark.parametrize("method", ["generate", "generate_span"])
+def test_two_nights_against_zero_gets_repaired_even_below_the_hours_threshold(method):
+    original, balanced = [night(5), night(6)], [night(5), night(6, "יוסי")]
+    model = Model([_reply(original), _reply(balanced)])
+    result = getattr(Scheduler(model), method)(night_profile(), "2026-10-05", "2026-10-06")
+    assert result["assignments"] == balanced
+    assert len(model.calls) == 2
+    assert all(slot["is_night"] for slot in model.calls[0]["period"]["slots"])
+    assert "פער לילות" in model.calls[1]["repair"]["warnings"][0]
+    if method == "generate_span":
+        assert not result["warnings"]
+
+
+def test_balanced_hours_still_require_night_repair_through_a_day_night_exchange():
+    workplace = night_profile()
+    workplace["shifts"][0]["days"] = ["שני", "רביעי"]
+    workplace["shifts"].append(dict(profile()["shifts"][0], days=["שלישי", "חמישי"]))
+    original = [night(5), assignment("2026-10-06", "יוסי"),
+                night(7), assignment("2026-10-08", "יוסי")]
+    balanced = [night(5, "יוסי"), assignment("2026-10-06"),
+                night(7), assignment("2026-10-08", "יוסי")]
+    model = Model([_reply(original), _reply(balanced)])
+    result = Scheduler(model).generate_span(workplace, "2026-10-05", "2026-10-08")
+    assert result["assignments"] == balanced
+    assert not result["warnings"]
+    assert len(model.calls) == 2
+    assert {row["hours"] for row in result["metrics"]["quality"]["by_employee"]} == {16}
+
+
+@pytest.mark.parametrize("method", ["generate", "generate_span"])
+def test_one_extra_night_is_unavoidable_when_the_number_of_seats_is_odd(method):
+    balanced = [night(5), night(6, "יוסי"), night(7)]
+    model = Model([_reply(balanced)])
+    result = getattr(Scheduler(model), method)(night_profile(), "2026-10-05", "2026-10-07")
+    assert result["assignments"] == balanced
+    assert len(model.calls) == 1
+
+
+@pytest.mark.parametrize("method", ["generate", "generate_span"])
+def test_history_breaks_a_tie_between_equally_balanced_current_night_loads(method):
+    model = Model([_reply([night(5)]), _reply([night(5, "יוסי")])])
+    result = getattr(Scheduler(model), method)(night_profile(), "2026-10-05", "2026-10-05",
+        history=[assignment("2026-09-%02d" % day, "דנה", "משמרת ג") for day in range(1, 4)])
+    assert result["assignments"] == [night(5, "יוסי")]
+    assert len(model.calls) == 2
+
+
+def test_historical_imbalance_does_not_concentrate_the_current_period_nights():
+    balanced = [night(5), night(6, "יוסי")]
+    model = Model([_reply([night(5), night(6)]), _reply(balanced)])
+    result = Scheduler(model).generate_span(night_profile(), "2026-10-05", "2026-10-06",
+        history=[assignment("2026-09-%02d" % day, "יוסי", "משמרת ג") for day in range(1, 5)])
+    assert result["assignments"] == balanced
+    assert not result["warnings"]
+
+
+@pytest.mark.parametrize("restriction", ["unavailable", "ineligible", "pinned", "rest", "hours"])
+def test_unavoidable_night_gaps_do_not_trigger_an_impossible_repair(restriction):
+    workplace, options = night_profile(), {}
+    original = [night(5), night(6)]
+    if restriction == "unavailable":
+        options["availability"] = [dict(employee="יוסי", date=row["date"], available=False)
+                                   for row in original]
+    elif restriction == "ineligible":
+        workplace["employees"][1]["eligible_shifts"] = [MORNING]
+    elif restriction == "pinned":
+        options["required_assignments"] = original
+    elif restriction == "hours":
+        workplace["employees"][1]["max_weekly_hours"] = 4
+    else:
+        workplace["shifts"].append(dict(profile()["shifts"][0]))
+        options["already_scheduled"] = [assignment("2026-10-06", "יוסי"),
+                                        assignment("2026-10-07", "יוסי")]
+        original.append(assignment("2026-10-06", "יוסי"))
+        options["required_assignments"] = [assignment("2026-10-06", "יוסי")]
+        # The unfilled Monday morning is intentionally outside this request.
+        workplace["shifts"][1]["days"] = ["שלישי", "רביעי"]
+    model = Model([_reply(original)])
+    result = Scheduler(model).generate_span(workplace, "2026-10-05", "2026-10-06", **options)
+    assert len(model.calls) == 1
+    assert not any(item["code"] == "uneven_nights" for item in result["warnings"])
+
+
+@pytest.mark.parametrize("repair", ["unchanged", "short_rest", "unfilled", "failed"])
+def test_unsuccessful_night_repair_preserves_the_draft_and_reports_remaining_gap(repair):
+    original = [night(5), night(6)]
+    if repair == "failed":
+        second = AgentError("המודל אינו זמין")
+    elif repair == "unfilled":
+        second = _reply([night(5)])
+    elif repair == "short_rest":
+        second = _reply([night(5, "יוסי"), night(6)])
+    else:
+        second = _reply(original)
+    options = {"already_scheduled": [assignment("2026-10-07", "יוסי", "משמרת יום")]}
+    workplace = night_profile()
+    workplace["shifts"].append(dict(profile()["shifts"][0], name="משמרת יום", days=["רביעי"]))
+    if repair == "short_rest":
+        second = _reply([night(5), night(6, "יוסי")])
+    model = Model([_reply(original), second])
+    result = Scheduler(model).generate_span(workplace, "2026-10-05", "2026-10-06", **options)
+    assert result["assignments"] == original
+    assert any(item["code"] == "uneven_nights" for item in result["warnings"])
+    assert any("פער לילות" in note for note in result["notes"])
+    assert not result["metrics"]["repair_improved"]

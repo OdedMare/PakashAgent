@@ -465,11 +465,13 @@ whose turn the next one is. Both keep people with nothing on the roster — a
 zero is the most useful row in either table, and an absent row reads as missing
 data. Neither decides anything.
 
-**A night comes off the shift's own flag** (`is_night` / `is_on_call`), never
-from its name or its start time. The vocabulary is per-workplace
-([D9](../../../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)), so
-matching against a list of names nobody declared is exactly the hardcoding that
-decision forbids. A workplace that flags no nights honestly reports zero.
+**Night counts use `audit.roster.is_night`.** Declared nights/overnight/on-call
+shifts count, as do shifts crossing midnight or starting from 22:00 through
+05:59. Effective slot hours take precedence over vocabulary hours. Names are
+never matched: the editor records times without requiring a night flag.
+Scheduling requests one repair for an avoidable night gap, including safe
+day/night exchanges. Current-period nights take priority, history breaks ties,
+and current hours follow; the model still chooses the assignments.
 
 **Pass `slots` when you have them.** `audit()` takes the schedule's slot grid as
 well as the assignments. A slot with nobody on it leaves no row among the

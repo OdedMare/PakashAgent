@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-08T11:34:35.200219+00:00",
+  "generated_at": "2026-10-11T13:48:15.549960+00:00",
   "nodes": {
     "backend_app_api_claude_http_layer": {
       "code_fingerprint": "",
@@ -12,7 +12,7 @@
           "q": "עכשיו יש לי בעיה אני יוצר סידור אוטומטי אבל המודל מחזיר תשובה חיובית ו200 api אבל ui מחזיר שגיאת רשת 500"
         }
       ],
-      "score": 0.35337793,
+      "score": 0.329006861,
       "source_file": "backend/app/api/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -28,7 +28,7 @@
           "q": "How does the current manager chat connect to schedule questions and changes?"
         }
       ],
-      "score": 0.932223985,
+      "score": 0.867932208,
       "source_file": "backend/app/api/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -44,7 +44,7 @@
           "q": "אשמח שתבצע את כלל השיפורים"
         }
       ],
-      "score": 0.963299847,
+      "score": 0.896864891,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -52,8 +52,13 @@
     "backend_app_bl_claude_agent_decides_code_audits": {
       "code_fingerprint": "",
       "label": "Agent Decides; Code Audits",
-      "last": "2026-08-24T12:44:20.840181+00:00",
+      "last": "2026-10-08T11:39:06.564813+00:00",
       "provenance": [
+        {
+          "date": "2026-10-08T11:39:06.564813+00:00",
+          "outcome": "useful",
+          "q": "Why does scheduling leave some soldiers at 40 hours and others at zero, and can they have days off?"
+        },
         {
           "date": "2026-08-24T12:44:20.840181+00:00",
           "outcome": "useful",
@@ -73,17 +78,12 @@
           "date": "2026-08-21T07:59:07.483050+00:00",
           "outcome": "useful",
           "q": "זה לא יפגע באיכות?"
-        },
-        {
-          "date": "2026-08-20T20:46:01.724923+00:00",
-          "outcome": "useful",
-          "q": "in the pakash agent app"
         }
       ],
-      "score": 1.665468479,
+      "score": 2.481709294,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
-      "uses": 5
+      "uses": 6
     },
     "backend_app_bl_claude_interview_workflow": {
       "code_fingerprint": "",
@@ -116,7 +116,7 @@
           "q": "בוא נחשוב איך נשפר את חווית הראיון היא משמעותית מאוד"
         }
       ],
-      "score": 4.689727,
+      "score": 4.366295198,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
       "uses": 14
@@ -137,7 +137,7 @@
           "q": "בוא נחשוב איך נשפר את חווית הראיון היא משמעותית מאוד"
         }
       ],
-      "score": 0.695858262,
+      "score": 0.647867687,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
       "uses": 2
@@ -145,8 +145,13 @@
     "backend_app_bl_claude_schedule_generation": {
       "code_fingerprint": "",
       "label": "Schedule Generation",
-      "last": "2026-10-06T20:44:14.533898+00:00",
+      "last": "2026-10-08T11:39:06.564813+00:00",
       "provenance": [
+        {
+          "date": "2026-10-08T11:39:06.564813+00:00",
+          "outcome": "useful",
+          "q": "Why does scheduling leave some soldiers at 40 hours and others at zero, and can they have days off?"
+        },
         {
           "date": "2026-10-06T20:44:14.533898+00:00",
           "outcome": "useful",
@@ -166,17 +171,12 @@
           "date": "2026-08-24T14:17:00.063395+00:00",
           "outcome": "useful",
           "q": "בשיבוץ למשמרות התשובה מהמודל מגיעה תוך 120 עד 300 שניות תוודא שהui לא מחזיר לי timeout כי עכשיו הוא מחזיר"
-        },
-        {
-          "date": "2026-08-24T11:03:38.925277+00:00",
-          "outcome": "useful",
-          "q": "עכשיו יש לי בעיה אני יוצר סידור אוטומטי אבל המודל מחזיר תשובה חיובית ו200 api אבל ui מחזיר שגיאת רשת 500"
         }
       ],
-      "score": 3.689251524,
+      "score": 4.365920079,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
-      "uses": 7
+      "uses": 8
     },
     "backend_app_dal_claude_assignments_with_agent_reason": {
       "code_fingerprint": "",
@@ -189,7 +189,7 @@
           "q": "הראיון ארוך וחוזר על שאלות, ויצירת לוח המשמרות הראשוני לפעמים טועה"
         }
       ],
-      "score": 0.347706492,
+      "score": 0.323726559,
       "source_file": "backend/app/dal/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -220,7 +220,7 @@
           "q": "בוא נתכנן איך לממש את זה"
         }
       ],
-      "score": 1.364054889,
+      "score": 1.269981453,
       "source_file": "backend/app/dal/CLAUDE.md",
       "status": "preferred",
       "uses": 4
@@ -256,13 +256,13 @@
           "q": "תממש את זה ואני רוצה שזה יהיה בpolling ולא בstream כמו שעכשוי"
         }
       ],
-      "score": 4.54797371,
+      "score": 4.234318068,
       "source_file": "backend/app/dal/llm/CLAUDE.md",
       "status": "preferred",
       "uses": 10
     },
     "backend_claude_confirm_before_import_persistence": {
-      "code_fingerprint": "1a1de1b96257332c5fd116cf382aa7c02e1e97f588b804a6174b0da894daf00f",
+      "code_fingerprint": "f2088cf4a4c4e539661d49cf4fe4e232857423faebe1cc665670e5c94e615d97",
       "label": "Confirm Before Import Persistence",
       "last": "2026-08-23T19:03:51.003530+00:00",
       "provenance": [
@@ -272,13 +272,13 @@
           "q": "תבנה"
         }
       ],
-      "score": 0.347977585,
+      "score": 0.323978956,
       "source_file": "backend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
     },
     "backend_claude_per_workplace_shift_vocabulary": {
-      "code_fingerprint": "1a1de1b96257332c5fd116cf382aa7c02e1e97f588b804a6174b0da894daf00f",
+      "code_fingerprint": "f2088cf4a4c4e539661d49cf4fe4e232857423faebe1cc665670e5c94e615d97",
       "label": "Per-Workplace Shift Vocabulary",
       "last": "2026-08-24T12:37:54.497384+00:00",
       "provenance": [
@@ -298,13 +298,13 @@
           "q": "hey i want to start work the agent init interview here some qusetions that give as the base the do interview from that mock the missing question that you miss then we implament this part"
         }
       ],
-      "score": 0.975338091,
+      "score": 0.908072906,
       "source_file": "backend/CLAUDE.md",
       "status": "preferred",
       "uses": 3
     },
     "backend_claude_runtime_settings": {
-      "code_fingerprint": "1a1de1b96257332c5fd116cf382aa7c02e1e97f588b804a6174b0da894daf00f",
+      "code_fingerprint": "f2088cf4a4c4e539661d49cf4fe4e232857423faebe1cc665670e5c94e615d97",
       "label": "Live Runtime Settings",
       "last": "2026-08-20T20:46:01.724923+00:00",
       "provenance": [
@@ -314,13 +314,13 @@
           "q": "in the pakash agent app"
         }
       ],
-      "score": 0.325207296,
+      "score": 0.302779043,
       "source_file": "backend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
     },
     "docs_decisions_d1_hard_and_soft_rules": {
-      "code_fingerprint": "32a68636826c12286ca5efb6e9483a4bb53e6edb2c8e4674928db65422ee9f89",
+      "code_fingerprint": "3f08ccedd6e8d4694dda46a6abd4b8ae38e41963384f777ad3143c953f771592",
       "label": "D1 Hard and Soft Rules",
       "last": "2026-08-24T08:40:46.853992+00:00",
       "provenance": [
@@ -330,13 +330,13 @@
           "q": "היום הבעיה החמורה היא שהמידע שנשמר בראיון לא עובר במצב לטוב לתהליך בניית הסידור איך אתה מציע שנעשה את זה ונמקסם על זה"
         }
       ],
-      "score": 0.3525688,
+      "score": 0.328253534,
       "source_file": "docs/DECISIONS.md",
       "status": "tentative",
       "uses": 1
     },
     "docs_decisions_d3_agent_decides_code_audits": {
-      "code_fingerprint": "32a68636826c12286ca5efb6e9483a4bb53e6edb2c8e4674928db65422ee9f89",
+      "code_fingerprint": "3f08ccedd6e8d4694dda46a6abd4b8ae38e41963384f777ad3143c953f771592",
       "label": "D3 Agent Decides; Code Only Audits",
       "last": "2026-10-06T11:23:25.870323+00:00",
       "provenance": [
@@ -346,13 +346,13 @@
           "q": "How should PakashAgent make manager chat the primary scheduling workspace while remaining maintainable?"
         }
       ],
-      "score": 0.954670711,
+      "score": 0.888830873,
       "source_file": "docs/DECISIONS.md",
       "status": "tentative",
       "uses": 1
     },
     "docs_decisions_d8_two_required_reasons": {
-      "code_fingerprint": "32a68636826c12286ca5efb6e9483a4bb53e6edb2c8e4674928db65422ee9f89",
+      "code_fingerprint": "3f08ccedd6e8d4694dda46a6abd4b8ae38e41963384f777ad3143c953f771592",
       "label": "D8 Two Reasons, Both Required",
       "last": "2026-10-06T11:21:54.499744+00:00",
       "provenance": [
@@ -362,13 +362,13 @@
           "q": "היי כיום הצאט עובד איך לפעמים משבץ לא טוב ומבקש סיבה אני רוצה שכל מה שהמשתמש אומר הוא עושה אלא אם זה ממש לא הגיוני ובכך הוא מתקן אני גם רוצה שהצאט יאפשר למנהל להייתעץ ולשאול איך לפתור בעיה מסוימת אני רוצה לשייף את כל יכולות הצאט בין עם הכנסת עוד עובד או הכנסת אילוץ להיות הסוכן הראשי והיחיד"
         }
       ],
-      "score": 0.954647385,
+      "score": 0.888809155,
       "source_file": "docs/DECISIONS.md",
       "status": "tentative",
       "uses": 1
     },
     "frontend_claude_change_confirmation_surface": {
-      "code_fingerprint": "ced4e99bf27d7fbff5c84d5f44252f674591710b5765207ff69801af8c25883b",
+      "code_fingerprint": "670b08608219733fc3d891596fc6385f194c64887b9da416431016904ec71bff",
       "label": "Change Confirmation Surface",
       "last": "2026-10-05T10:40:31.410171+00:00",
       "provenance": [
@@ -378,13 +378,13 @@
           "q": "How does the current manager chat connect to schedule questions and changes?"
         }
       ],
-      "score": 0.932223985,
+      "score": 0.867932208,
       "source_file": "frontend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
     },
     "frontend_claude_chat_first_frontend": {
-      "code_fingerprint": "ced4e99bf27d7fbff5c84d5f44252f674591710b5765207ff69801af8c25883b",
+      "code_fingerprint": "670b08608219733fc3d891596fc6385f194c64887b9da416431016904ec71bff",
       "label": "Chat-First Frontend",
       "last": "2026-10-06T11:23:25.870323+00:00",
       "provenance": [
@@ -414,13 +414,13 @@
           "q": "בשיבוץ למשמרות התשובה מהמודל מגיעה תוך 120 עד 300 שניות תוודא שהui לא מחזיר לי timeout כי עכשיו הוא מחזיר"
         }
       ],
-      "score": 5.272559462,
+      "score": 4.908932025,
       "source_file": "frontend/CLAUDE.md",
       "status": "preferred",
       "uses": 10
     },
     "frontend_claude_read_only_employee_view": {
-      "code_fingerprint": "ced4e99bf27d7fbff5c84d5f44252f674591710b5765207ff69801af8c25883b",
+      "code_fingerprint": "670b08608219733fc3d891596fc6385f194c64887b9da416431016904ec71bff",
       "label": "Read-Only Employee View",
       "last": "2026-08-22T16:55:41.180609+00:00",
       "provenance": [
@@ -430,13 +430,13 @@
           "q": "תעצב לי tutorial למערכת עם סקרינשוטים והכל לכל פונקציונליות"
         }
       ],
-      "score": 0.339331248,
+      "score": 0.315928923,
       "source_file": "frontend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
     },
     "frontend_claude_rtl_schedule_grid": {
-      "code_fingerprint": "ced4e99bf27d7fbff5c84d5f44252f674591710b5765207ff69801af8c25883b",
+      "code_fingerprint": "670b08608219733fc3d891596fc6385f194c64887b9da416431016904ec71bff",
       "label": "RTL Schedule Grid",
       "last": "2026-10-06T11:23:25.870323+00:00",
       "provenance": [
@@ -446,13 +446,13 @@
           "q": "How should PakashAgent make manager chat the primary scheduling workspace while remaining maintainable?"
         }
       ],
-      "score": 0.954670711,
+      "score": 0.888830873,
       "source_file": "frontend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
     },
     "readme_schedule_import": {
-      "code_fingerprint": "4cd4a4049a29c86fe64c190a54ef7b685045c52b09be47a87cde514af2563f68",
+      "code_fingerprint": "30fe9d435b0cad3ea0aa4cdd45813443454f64347b7b660e170d4c60728f22c0",
       "label": "Schedule Import from Excel or Documents",
       "last": "2026-08-22T16:55:41.180609+00:00",
       "provenance": [
@@ -462,13 +462,13 @@
           "q": "תעצב לי tutorial למערכת עם סקרינשוטים והכל לכל פונקציונליות"
         }
       ],
-      "score": 0.339331248,
+      "score": 0.315928923,
       "source_file": "README.md",
       "status": "tentative",
       "uses": 1
     },
     "readme_shift_loading_and_generation": {
-      "code_fingerprint": "4cd4a4049a29c86fe64c190a54ef7b685045c52b09be47a87cde514af2563f68",
+      "code_fingerprint": "30fe9d435b0cad3ea0aa4cdd45813443454f64347b7b660e170d4c60728f22c0",
       "label": "Shift Loading and Generation",
       "last": "2026-08-24T15:13:27.098807+00:00",
       "provenance": [
@@ -483,7 +483,7 @@
           "q": "בשיבוץ למשמרות התשובה מהמודל מגיעה תוך 120 עד 300 שניות תוודא שהui לא מחזיר לי timeout כי עכשיו הוא מחזיר"
         }
       ],
-      "score": 0.709273083,
+      "score": 0.660357342,
       "source_file": "README.md",
       "status": "preferred",
       "uses": 2

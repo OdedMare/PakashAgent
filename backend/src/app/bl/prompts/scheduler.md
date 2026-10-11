@@ -22,10 +22,11 @@ the manager taught you in the intro interview.
   for you: `shifts`, `hours`, `nights`, `weekends`, and `last_worked`. Zeros
   mean the person genuinely has none, not that data is missing. Empty on a
   first schedule.
-- `period_load` — each person's hours and shifts already fixed in the current
+- `period_load` — each person's hours, shifts and nights already fixed in the current
   schedule, including required placements and fixed future dates, without past
-  periods. Zeros are real. Balance these current-period hours first; use
-  historical `fairness` to break ties and share nights and weekends. A slot's
+  periods. Zeros are real. Minimize avoidable differences in current-period
+  nights first; use historical `fairness.nights` to break equally balanced
+  night choices, then balance hours and share weekends. A slot's
   `hours` is its computed weighted duration, including overnight/on-call work.
 - `already_scheduled` — assignments already placed **for this same period**,
   when it is being built a stretch at a time. Empty on a short one.
@@ -117,10 +118,24 @@ Respect these without being told again:
   Keep coverage and mandatory rules, and explain unavoidable load differences
   in `notes`. Before returning, review the hours distribution over your whole
   answer, including the fixed placements, and rebalance avoidable gaps.
-- **Spread the load.** Nights, weekends, and undesirable shifts get shared
+- **Minimize each person's night burden.** A slot's `is_night` is computed
+  from the shift flags and hours; use it even if the shift has a different name.
+  Fill only the required night seats plus required placements. Compare all
+  eligible, available employees, including people at zero nights. Count both
+  `period_load.nights` and the nights you add in this answer. Aim for a gap of
+  at most one night among interchangeable people; never give someone an extra
+  night when a person with fewer nights can take it under the mandatory rules.
+  When current-period distributions are equally balanced, favor the person
+  with fewer historical nights using `fairness.nights` plus your new assignments.
+  Review the complete roster before returning: exchanging a day and night
+  assignment can improve nights while preserving hours, coverage and rest.
+  Keep required placements, availability, roles, command and rotation; explain
+  unavoidable night differences in `notes`. Equal total hours do not imply
+  equal night burden.
+- **Spread the load.** Weekends and undesirable shifts get shared
   out rather than landing on whoever is easiest to place. `fairness` is how
-  you tell who has been carrying them — compare people's `nights` and
-  `weekends` against each other, and give the next one to someone low.
+  you tell who has been carrying them — compare people's `weekends`
+  against each other, and give the next one to someone low.
   Do not re-count anything; the numbers are already correct.
 
 ## סגירות, שבתות וסבבי יציאות

@@ -57,6 +57,15 @@ def shift_hours(shift: dict) -> float:
     return round((minutes / MINUTES_PER_HOUR) * weight, 2)
 
 
+def is_night(shift: dict) -> bool:
+    """Count declared nights and overnight/early shifts from their actual times."""
+    if shift.get("is_on_call") or shift.get("is_night") or shift.get("is_overnight"):
+        return True
+    start, end = parse_time(shift.get("start_time")), parse_time(shift.get("end_time"))
+    return bool(start is not None and end is not None and
+                (end <= start or start.hour >= 22 or start.hour < 6))
+
+
 def row(item: Any, shift_index: Dict[str, dict]) -> Optional[dict]:
     """One assignment, normalized, with its shift's hours resolved.
 
@@ -72,7 +81,7 @@ def row(item: Any, shift_index: Dict[str, dict]) -> Optional[dict]:
         return None
     shift_name = text(item.get("shift"))
     shift = dict(shift_index.get(shift_name) or {})
-    for key in ("start_time", "end_time", "hour_weight", "is_on_call"):
+    for key in ("start_time", "end_time", "hour_weight", "is_on_call", "is_night", "is_overnight"):
         if item.get(key) is not None and item.get(key) != "":
             shift[key] = item[key]
     return {
@@ -84,6 +93,7 @@ def row(item: Any, shift_index: Dict[str, dict]) -> Optional[dict]:
         "end": parse_time(shift.get("end_time")),
         "hours": shift_hours(shift),
         "is_on_call": bool(shift.get("is_on_call")),
+        "is_night": is_night(shift),
     }
 
 
@@ -91,7 +101,7 @@ def rows_of(assignments: Optional[List[dict]], shift_index: Dict[str, dict], slo
     grid = {(text(slot.get("shift_name")), str(slot.get("slot_date"))): slot for slot in slots or []}
     enriched = [dict(item, **{key: value for key, value in
                 grid.get((item.get("shift"), str(item.get("date"))), {}).items()
-                if key in ("start_time", "end_time", "is_on_call", "hour_weight")})
+                if key in ("start_time", "end_time", "is_on_call", "hour_weight", "is_night", "is_overnight")})
                 if isinstance(item, dict) else item for item in assignments or []]
     rows = [row(item, shift_index) for item in enriched]
     return [item for item in rows if item is not None]

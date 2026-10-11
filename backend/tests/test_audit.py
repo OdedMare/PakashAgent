@@ -537,12 +537,32 @@ def test_on_call_counts_as_a_night():
 
 
 def test_a_shift_the_vocabulary_does_not_mark_is_not_guessed_into_a_night():
-    """Never inferred from the name or the start time — the vocabulary is
-    per-workplace, and guessing is the hardcoding D9 forbids."""
+    """A regular daytime shift carries no night burden."""
     by_name = _load([
         {"employee": "רון", "shift": "בוקר", "date": "2026-08-03"},
     ])
     assert by_name["רון"]["nights"] == 0
+
+
+@pytest.mark.parametrize("start,end,expected", [
+    ("23:00", "07:00", 1), ("00:00", "08:00", 1),
+    ("22:00", "23:59", 1), ("05:00", "13:00", 1),
+    ("07:00", "15:00", 0), ("15:00", "23:00", 0), ("", "", 0),
+])
+def test_nights_are_counted_from_times_without_a_special_name_or_flag(start, end, expected):
+    rows = load_history([_assign("דנה", "משמרת", "2026-10-05")],
+                        [{"name": "משמרת", "start_time": start, "end_time": end}],
+                        [{"name": "דנה"}])
+    assert rows[0]["nights"] == expected
+
+
+def test_night_count_uses_the_saved_slot_times():
+    rows = load_history([_assign("דנה", "בוקר", "2026-10-05")],
+                        _LOAD_SHIFTS, [{"name": "דנה"}], slots=[{
+                            "shift_name": "בוקר", "slot_date": "2026-10-05",
+                            "start_time": "23:00", "end_time": "07:00",
+                        }])
+    assert rows[0]["nights"] == 1
 
 
 def test_load_history_counts_weekends():
