@@ -3,27 +3,20 @@
 Next.js App Router, TypeScript, plain CSS. Deps and conventions ported from
 AiSummryIO.
 
-**The look is "Aurora": Apple-calm neutrals, lit glass, deliberate colour.**
-Tokens live in `src/styles/tokens.css`; the finish that spends them lives in
-`src/styles/aurora.css`, imported last so it sits over every surface. Apple
-grays and the system face (SF Pro / SF Hebrew on Apple devices, Inter and
-Noto Sans Hebrew elsewhere), a canvas lit by a soft `--aurora` wash rather
-than blank white, and frosted `--glass` chrome — the sidebar, the chat drawer,
-the composer, dialogs — so the canvas reads through the edges. Colour has
-jobs: system blue `--primary` is the next action (filled controls use
-`--primary-fill`, which stays deep enough in dark mode for white text to clear
-4.5:1); the blue→indigo→violet→rose `--brand-gradient` marks the agent (the
-composer's focus ring, the send button, the empty-chat heading); **gold marks
-the product, משמרות זהב** — `--gold-gradient` paints every `.brand-mark` (with
-a dark `--on-gold` glyph, since white on gold fails contrast), `.brand-name`
-is the wordmark each header stacks over the workspace name, `src/app/icon.svg`
-is the favicon, and a warm gold wash sits in a corner of `--aurora`. Gold is
-identity, never status: it stays off the board, where amber means warning;
-and four area hues (`--hue-blue|violet|teal|pink` plus `-soft`)
-tint the nav, the drawer tabs, the chat starters and every row of stat tiles
-by position. Warning, danger and success are **not** area hues — they stay
-reserved for schedule meaning, so amber on the board always means "look at
-this". There is no navy chrome outside the tutorial page.
+**The look is native-inspired and restrained, following Apple's productivity apps.**
+Tokens live in `src/styles/tokens.css`; the shared finish lives in
+`src/styles/aurora.css`, imported last. Use Apple grays, the system face
+(SF Pro / SF Hebrew on Apple devices, Inter and Noto Sans Hebrew elsewhere),
+opaque working surfaces and thin separators. Translucent `--glass` is reserved
+for navigation and toolbars, with an opaque fallback for reduced transparency.
+System blue `--primary` identifies actions and selection; filled controls use
+`--primary-fill` so white labels stay readable in both themes. Avoid decorative
+colour cycling, canvas washes, gradient text and glowing shadows. Gold is
+reserved for the product mark and favicon. Person colours identify employees;
+warning, danger and success retain their scheduling meaning. The legacy
+`--brand-gradient` and `--aurora` tokens are neutral compatibility surfaces,
+not invitations to add decoration. Keep keyboard focus visible, touch controls
+at least 44px, and motion short with reduced-motion support.
 
 `next.config.ts` proxies `/api/*` to FastAPI, so the browser sees one origin
 and there is no CORS setup.

@@ -1526,10 +1526,6 @@
   border: 0;
 }
 
-.management-nav-item:nth-child(4n + 1) { --tint: var(--hue-blue); --tint-soft: var(--hue-blue-soft); }
-.management-nav-item:nth-child(4n + 2) { --tint: var(--hue-violet); --tint-soft: var(--hue-violet-soft); }
-.management-nav-item:nth-child(4n + 3) { --tint: var(--hue-teal); --tint-soft: var(--hue-teal-soft); }
-.management-nav-item:nth-child(4n + 4) { --tint: var(--hue-pink); --tint-soft: var(--hue-pink-soft); }
 
 .management-nav-item svg {
   color: var(--tint, currentColor);
@@ -1868,12 +1864,6 @@
 @media (prefers-reduced-motion: reduce) {
   .request-toast { animation: none; }
 }
-
-/* Each tool keeps one hue, matching the nav's rhythm. */
-.manager-tab:nth-child(4n + 1) { --tint: var(--hue-blue); --tint-soft: var(--hue-blue-soft); }
-.manager-tab:nth-child(4n + 2) { --tint: var(--hue-violet); --tint-soft: var(--hue-violet-soft); }
-.manager-tab:nth-child(4n + 3) { --tint: var(--hue-teal); --tint-soft: var(--hue-teal-soft); }
-.manager-tab:nth-child(4n + 4) { --tint: var(--hue-pink); --tint-soft: var(--hue-pink-soft); }
 
 .manager-tab svg {
   color: var(--tint, currentColor);

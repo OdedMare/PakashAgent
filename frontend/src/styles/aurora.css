@@ -1,253 +1,164 @@
-/* Aurora — the finish over every surface, loaded last.
-
-   Three ideas, all from tokens.css:
-   - a canvas that is lit rather than blank (`--aurora` behind everything),
-   - chrome that is frosted glass, so the canvas reads through the edges,
-   - colour that means something: system blue for the next action, the
-     brand gradient for the agent and the brand, the area hues by position.
-   Warning, danger and success are untouched here — they still belong to the
-   schedule, not to the decoration. */
-
-/* -- the canvas ----------------------------------------------------------- */
-
-html,
-body {
-  background: var(--aurora), var(--bg);
-  background-attachment: fixed;
-}
+/* Shared finish, loaded last: quiet content, translucent navigation and
+   restrained controls. Layout and scheduling states belong to their screens. */
 
 ::selection {
-  background: color-mix(in srgb, var(--primary) 24%, transparent);
+  background: color-mix(in srgb, var(--primary) 20%, transparent);
 }
 
 * {
-  scrollbar-color: color-mix(in srgb, var(--text) 18%, transparent) transparent;
-}
-
-/* Page roots stop painting their own white so the canvas shows through. */
-.interview,
-.management,
-.workspace-gate,
-.workspace-gate.identity-gate,
-.manual-setup,
-.management-workspace > .board {
-  background: transparent;
-}
-
-/* -- brand ---------------------------------------------------------------- */
-
-/* The mark is gold everywhere it appears — headers, the gate, the panels
-   that carry it as their badge — so the brand reads as one object. */
-.brand-mark,
-.gate-story .brand-mark {
-  color: var(--on-gold);
-  background: var(--gold-gradient);
-  border-radius: 9px;
-  box-shadow: var(--gold-glow), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 .brand {
+  font-weight: 600;
   letter-spacing: -0.02em;
 }
 
-/* The header stacks the product name over the place you are in. */
+.brand-mark,
+.gate-story .brand-mark {
+  color: var(--gold);
+  background: var(--gold-soft);
+  border: 1px solid color-mix(in srgb, var(--gold) 18%, transparent);
+  border-radius: 10px;
+  box-shadow: none;
+}
+
 .brand-text {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  line-height: 1.2;
+  line-height: 1.3;
 }
 
 .brand-name {
-  color: var(--gold);
-  background: var(--gold-text);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  font-weight: 800;
-  letter-spacing: -0.01em;
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .brand-text > .brand-name {
-  font-size: 11px;
-  margin-bottom: 1px;
+  font-size: 12px;
+  margin-bottom: 3px;
 }
 
 .gate-story-brand .brand-name {
-  font-size: 1.15rem;
+  font-size: 16px;
 }
 
-/* -- chrome --------------------------------------------------------------- */
-
-.interview-header {
+/* Navigation is the glass layer; working content stays opaque. */
+.interview-header,
+.management-topbar {
   background: var(--glass);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
-  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  border-color: var(--border);
 }
 
 .management-nav-item svg,
 .manager-tab svg {
-  color: var(--tint, currentColor);
+  color: inherit;
+  stroke-width: 1.75;
 }
 
-.management-nav-item.is-active,
-.manager-tab.is-active {
-  color: var(--tint, var(--primary));
-  background: var(--tint-soft, var(--primary-soft));
+.management-nav-item.is-active {
+  color: var(--primary);
+  background: var(--primary-soft);
+  box-shadow: none;
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tint, var(--primary)) 16%, transparent);
 }
 
 .management-nav-item:hover:not(.is-active),
 .manager-tab:hover:not(.is-active) {
   color: var(--text);
-  background: color-mix(in srgb, var(--tint, var(--primary)) 8%, transparent);
+  background: var(--surface-3);
 }
 
-@media (min-width: 900px) {
-  .management > .interview-header {
-    background: var(--glass);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-    border-inline-end: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  }
-
-  .management-nav-item.is-active,
-  .management-nav-item:hover {
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tint, var(--primary)) 16%, transparent);
-  }
-
-  .management-nav-item:hover:not(.is-active) {
-    box-shadow: none;
-  }
-
-  .sidebar-new-chat {
-    color: var(--primary);
-    font-weight: 600;
-  }
-
-  .sidebar-new-chat:hover {
-    background: var(--primary-soft);
-  }
-
-  .sidebar-search {
-    background: color-mix(in srgb, var(--text) 5%, transparent);
-  }
-
-  .sidebar-chat-list button:hover {
-    background: color-mix(in srgb, var(--text) 6%, transparent);
-  }
-
-  .sidebar-chat-list button.is-active {
-    color: var(--primary);
-    background: var(--primary-soft);
-    font-weight: 600;
-  }
-
-  .management-workspace > .manager-drawer {
-    background: var(--glass-strong);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-    border-inline-end-color: color-mix(in srgb, var(--border) 80%, transparent);
-  }
-
-  .manager-tabs {
-    background: transparent;
-  }
+.manager-tab.is-active {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  font-weight: 600;
 }
-
-/* -- buttons -------------------------------------------------------------- */
 
 .primary-button,
 .ghost-button,
 .start-button {
-  border-radius: 999px;
-  transition:
-    background-color 180ms ease,
-    box-shadow 180ms ease,
-    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    filter 180ms ease;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+  transition: background-color 180ms ease, border-color 180ms ease, opacity 180ms ease;
 }
 
-.primary-button {
-  color: #fff;
+.primary-button,
+.start-button {
+  color: var(--on-primary);
   background: var(--primary-fill);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--primary) 30%, transparent), 0 6px 16px -6px color-mix(in srgb, var(--primary) 70%, transparent);
-}
-
-.primary-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--primary-fill) 90%, #000000);
+  justify-content: center;
 }
 
 .primary-button:hover:not(:disabled),
 .start-button:hover:not(:disabled) {
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--primary-fill) 88%, #000);
+  transform: none;
+  filter: none;
 }
 
 .primary-button:active:not(:disabled),
-.ghost-button:active:not(:disabled),
-.start-button:active:not(:disabled) {
-  transform: scale(0.97);
+.start-button:active:not(:disabled),
+.ghost-button:active:not(:disabled) {
+  opacity: 0.8;
 }
 
 .ghost-button {
-  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text-soft);
+  background: var(--surface-3);
 }
 
 .ghost-button:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text) 10%, transparent);
+  background: color-mix(in srgb, var(--text) 10%, var(--surface));
 }
 
-.start-button {
-  color: #fff;
-  background: var(--brand-gradient);
-  background-size: 140% 100%;
-  box-shadow: var(--brand-glow);
+button:disabled {
+  cursor: default;
 }
 
-.start-button:hover:not(:disabled) {
-  background-position: 100% 0;
-  filter: saturate(1.15);
-}
-
-.icon-button {
-  border-radius: 10px;
-}
-
-/* -- the login gate ------------------------------------------------------- */
-
-.gate-card {
-  background: transparent;
+/* The entrance uses the same grouped surfaces as a settings screen. */
+.workspace-gate:has(.gate-story) {
+  padding: 112px 24px 48px;
+  background: var(--bg);
 }
 
 .workspace-gate:has(.gate-story) .gate-card,
 .identity-gate .gate-card {
-  background: var(--glass-strong);
-  -webkit-backdrop-filter: var(--glass-blur);
-  backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  border-radius: 28px;
-  box-shadow: var(--shadow);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  box-shadow: var(--shadow-soft);
+}
+
+.gate-card {
+  gap: 22px;
 }
 
 .gate-card h2 {
-  letter-spacing: -0.03em;
+  font-size: 28px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.025em;
 }
 
 .gate-form-head > span,
 .gate-eyebrow {
-  color: transparent;
-  background: var(--brand-gradient);
-  -webkit-background-clip: text;
-  background-clip: text;
+  color: var(--text-muted);
+  background: none;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .gate-field input,
 .gate-field select {
-  background: color-mix(in srgb, var(--text) 5%, var(--surface));
-  border-radius: 12px;
-  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 
 .gate-field input:focus,
@@ -258,43 +169,78 @@ body {
   outline: none;
 }
 
+.gate-doors {
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-3);
+  border-radius: 12px;
+}
+
 .gate-door {
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
-  border-color: var(--border);
-  border-radius: 14px;
+  min-height: 44px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
 }
 
-.gate-door.is-selected {
-  color: var(--primary);
-  background: var(--primary-soft);
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+.gate-door:hover:not(:disabled) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
 }
 
-/* -- the board ------------------------------------------------------------ */
-
-.board-coverage,
-.board-grid-scroll {
+.gate-door.is-selected,
+.gate-door.is-selected:hover:not(:disabled) {
+  color: var(--text);
   background: var(--surface);
-  border-color: color-mix(in srgb, var(--border) 80%, transparent);
+  border-color: transparent;
   box-shadow: var(--shadow-soft);
 }
 
-.board-tile-icon {
-  color: #fff;
-  background: linear-gradient(135deg, var(--tint, var(--primary)), color-mix(in srgb, var(--tint, var(--primary)) 55%, #ffffff));
-  border-radius: 9px;
-  box-shadow: 0 4px 12px -4px color-mix(in srgb, var(--tint, var(--primary)) 70%, transparent);
+/* A calendar, with thin separators and a single emphasis for today. */
+.board-coverage,
+.board-grid-scroll {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: none;
 }
 
-:root[data-theme="dark"] .board-tile-icon {
-  color: var(--bg);
+.board > * {
+  flex-shrink: 0;
 }
 
-.board-tile-value {
-  font-weight: 700;
+.board-tile-icon,
+.stats-tile .stat-icon {
+  color: var(--text-muted);
+  background: var(--surface-3);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.board-tile.is-attention .board-tile-icon {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, var(--surface));
+}
+
+.management .board-tile {
+  border-radius: 0;
+}
+
+.board-tile-value,
+.stats-tile .stat-value {
+  font-weight: 600;
   letter-spacing: -0.035em;
   font-variant-numeric: tabular-nums;
+}
+
+.week-rail-label {
+  background: var(--surface-2);
+}
+
+.week-rail-label strong {
+  color: var(--text-soft);
 }
 
 .board-corner,
@@ -303,101 +249,328 @@ body {
 }
 
 .board-dayhead.is-today {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--primary) 14%, var(--surface)), var(--surface));
-  box-shadow: inset 0 3px 0 0 var(--primary);
+  background: var(--primary-soft);
+  box-shadow: inset 0 2px 0 var(--primary);
 }
 
 .board-card {
+  border-radius: 8px;
+  box-shadow: none;
+  transition: box-shadow 180ms ease, opacity 180ms ease;
+}
+
+.board-card:hover:not(.is-touched):not(.is-picked):not(:focus-visible) {
+  transform: none;
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.board-card-meta {
+  flex-wrap: wrap;
+}
+
+.board-card-hours {
+  white-space: nowrap;
+}
+
+.board-dayhead-generate,
+.board-dayhead-clear {
+  background: transparent;
+  font-weight: 500;
+}
+
+.board-views {
   border-radius: 10px;
-  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease;
+  padding: 3px;
 }
 
-.board-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px -10px rgba(16, 24, 64, 0.35);
+.board-view.is-on {
+  color: var(--text);
 }
 
-.schedule-generation-track span {
-  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 60%, transparent);
+/* Long conversations get quiet surfaces and a clearly marked send action. */
+.conversation {
+  background: var(--surface);
 }
 
-/* The conversation uses quiet neutral surfaces; schedule cards retain
-   their action, success and warning colors. */
-.conversation { background: var(--surface); }
 .conversation-title > svg,
 .conversation-message.is-assistant .conversation-speaker,
-.conversation-message.is-assistant .conversation-speaker svg { color: var(--text-soft); }
+.conversation-message.is-assistant .conversation-speaker svg {
+  color: var(--text-muted);
+}
+
 .conversation-message.is-user {
-  color: var(--text); background: var(--surface-3); border-radius: 24px;
+  color: var(--text);
+  background: var(--surface-3);
+  border-radius: 20px;
   box-shadow: none;
 }
+
 .conversation-empty-mark {
-  display: grid; place-items: center; width: 52px; height: 52px;
-  margin: 0 auto 24px; border-radius: 50%; background: var(--surface-3);
-  color: var(--text); box-shadow: none;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 24px;
+  border-radius: 16px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  box-shadow: none;
 }
-.conversation-empty-mark svg { color: inherit; }
-.conversation-empty h3 { color: var(--text); background: none; }
+
+.conversation-empty-mark svg {
+  color: inherit;
+}
+
+.conversation-empty h3 {
+  color: var(--text);
+  background: none;
+  letter-spacing: -0.02em;
+}
+
 .conversation-starters button {
-  background: var(--surface); border-color: var(--border); border-radius: 16px;
-  box-shadow: none; transform: none;
+  background: var(--surface-2);
+  border-color: var(--border);
+  border-radius: 12px;
+  box-shadow: none;
+  transform: none;
 }
+
 .conversation-starters button:hover {
-  background: var(--surface-3); border-color: var(--border-strong);
-  box-shadow: none; transform: none;
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+  box-shadow: none;
+  transform: none;
 }
+
 .conversation-composer {
-  background: var(--surface-3); border: 1px solid var(--border);
-  box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 20px;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
+
 .conversation-composer:focus-within {
-  background: var(--surface-3); border-color: var(--border-strong);
-  box-shadow: 0 0 0 2px var(--border);
-}
-.conversation-send, .conversation-send:not(:disabled) {
-  background: var(--text); color: var(--surface); box-shadow: none;
+  background: var(--surface);
+  border-color: var(--primary);
+  box-shadow: var(--focus);
 }
 
-/* -- dialogs -------------------------------------------------------------- */
+.conversation-send,
+.conversation-send:not(:disabled) {
+  background: var(--primary-fill);
+  color: var(--on-primary);
+  box-shadow: none;
+}
 
+.center {
+  background: var(--bg);
+}
+
+.welcome-panel {
+  border-color: var(--border);
+  border-radius: 24px;
+  box-shadow: var(--shadow-soft);
+}
+
+.welcome-panel h1 {
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.manual-kicker {
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+body:has(.manual-setup) .tutorial-fab {
+  bottom: calc(80px + env(safe-area-inset-bottom));
+}
+
+.turn.assistant .avatar {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.composer {
+  border-radius: 20px;
+  box-shadow: none;
+}
+
+/* Dialogs share one shell; the scrim separates them from the workspace. */
 .modal-backdrop,
+.modal-backdrop.settings-backdrop,
 .manager-drawer-backdrop {
-  background: rgba(8, 10, 24, 0.32);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
-  backdrop-filter: blur(12px) saturate(140%);
+  background: rgba(0, 0, 0, 0.38);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
 }
 
 .modal,
 .settings-dialog,
 .confirm-drop,
 .shift-editor {
-  border: 1px solid var(--glass-border);
-  border-radius: 22px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
   box-shadow: var(--shadow);
 }
 
-/* -- help ----------------------------------------------------------------- */
+.modal-icon {
+  color: var(--primary);
+  background: var(--primary-soft);
+  box-shadow: none;
+}
+
+/* Gold identifies the console; its actions use the same blue as the app. */
+.adm-crest {
+  color: var(--gold);
+  background: var(--gold-soft);
+  box-shadow: none;
+}
+
+.adm-gold-button {
+  color: var(--on-primary);
+  background: var(--primary-fill);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+}
+
+.adm-gold-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary-fill) 88%, #000);
+  filter: none;
+  transform: none;
+}
+
+.adm-tile {
+  --tint: var(--text-muted);
+  --tint-soft: var(--surface-3);
+}
 
 .tutorial-fab {
-  color: #fff;
-  background: var(--brand-gradient);
-  border: 0;
-  box-shadow: var(--brand-glow);
+  color: var(--text-soft);
+  background: var(--glass-strong);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
 }
 
 .tutorial-fab:hover {
-  background: var(--brand-gradient);
-  filter: saturate(1.15) brightness(1.05);
+  color: var(--primary);
+  background: var(--surface);
+  filter: none;
 }
 
-/* -- motion --------------------------------------------------------------- */
+@media (min-width: 900px) {
+  .management > .interview-header {
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
 
-@media (prefers-reduced-motion: reduce) {
-  .primary-button,
-  .ghost-button,
-  .start-button,
-  .board-card,
-  .conversation-starters button {
-    transform: none !important;
+  .management-workspace > .manager-drawer {
+    background: var(--surface);
+  }
+
+  /* Keep names legible beside the chat; overflow stays inside the board. */
+  .management-workspace.has-drawer .board-grid {
+    min-width: calc(80px + var(--board-days, 7) * 132px);
+    grid-template-columns: 80px repeat(var(--board-days, 7), minmax(132px, 1fr));
+  }
+
+  .management-workspace.has-drawer .board-card {
+    padding: 9px;
+  }
+
+  .board-dayhead-generate,
+  .board-dayhead-clear {
+    min-width: 0;
+    min-height: 32px;
+    padding: 4px 6px;
+  }
+
+  .management-workspace.has-drawer .board-dayhead-actions {
+    flex-direction: row;
+  }
+
+  .manager-tabs {
+    background: var(--surface-2);
+    gap: 4px;
+  }
+
+  .sidebar-new-chat {
+    color: var(--primary);
+    font-weight: 500;
+  }
+
+  .sidebar-new-chat:hover {
+    background: var(--primary-soft);
+  }
+
+  .sidebar-search {
+    background: var(--surface-3);
+  }
+
+  .sidebar-chat-list button.is-active {
+    color: var(--text);
+    background: var(--surface-3);
+    font-weight: 500;
+  }
+}
+
+@media (max-width: 600px) {
+  .workspace-gate:has(.gate-story) {
+    padding: 96px 16px 32px;
+  }
+
+  .workspace-gate:has(.gate-story) .gate-story {
+    inset: 24px 24px auto auto;
+  }
+
+  .workspace-gate:has(.gate-story) .gate-card {
+    padding: 24px;
+    border-radius: 20px;
+  }
+
+  .gate-card h2 {
+    font-size: 25px;
+  }
+
+  .gate-field input,
+  .gate-field select {
+    font-size: 16px;
+  }
+
+  .conversation-composer {
+    margin-inline: 12px;
+  }
+}
+
+@media (pointer: coarse) {
+  .board-view,
+  .manager-tab,
+  .management .header-actions .icon-button,
+  .interview-header .icon-button,
+  .modal-header > button,
+  .settings-footer button,
+  .guide-icon-button,
+  .adm-icon-button,
+  .adm-quiet-button,
+  .adm-gold-button,
+  .board-dayhead-generate,
+  .board-dayhead-clear {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .interview-header,
+  .management-topbar,
+  .management > .interview-header,
+  .account-menu-panel {
+    background: var(--surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }

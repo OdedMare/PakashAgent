@@ -415,10 +415,6 @@
   box-shadow: var(--shadow-soft);
 }
 
-.adm-tile:nth-child(4n + 1) { --tint: var(--hue-blue); --tint-soft: var(--hue-blue-soft); }
-.adm-tile:nth-child(4n + 2) { --tint: var(--hue-violet); --tint-soft: var(--hue-violet-soft); }
-.adm-tile:nth-child(4n + 3) { --tint: var(--hue-pink); --tint-soft: var(--hue-pink-soft); }
-.adm-tile:nth-child(4n + 4) { --tint: var(--hue-teal); --tint-soft: var(--hue-teal-soft); }
 
 .adm-tile-icon {
   grid-area: icon;
