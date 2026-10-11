@@ -15,7 +15,7 @@ the team scoping.
 | `workspace.py` | Enter a workspace, the member share link, logout. Creating one is refused unless `allow_signup` (D28) |
 | `admin.py` | The צוות משמרות זהב console (D28): operator sign-in, every team with its counts, open (name + password)/rename/suspend/delete a team, reset its manager password, rotate its link |
 | `interview.py` | The intro interview, one turn at a time |
-| `schedules/` | The management area: read/generate a period, open one blank and fill it by hand (D18), propose and apply changes, constraints, history, plus asking (`/ask`, `/tool`), simulating (`/simulate`) and preferences (D19–D21) |
+| `schedules/` | The management area: read/generate a period, read every period across a span of dates for the board's two-week and month views (`/between`, capped at 62 days), the stats panel's numbers for a span of dates or one person (`/stats`, boss-only, same cap), open one blank and fill it by hand (D18), propose and apply changes, constraints, history, plus asking (`/ask`, `/tool`), simulating (`/simulate`) and preferences (D19–D21) |
 | `imports.py` | Upload a file, return the inferred interpretation, commit on confirm |
 | `employees.py` | Roster management |
 | `health.py` | Liveness |

@@ -99,10 +99,14 @@ export function Management({
   // so opening the same day twice still focuses the composer.
   const [focusDay, setFocusDay] = useState<{ date: string; n: number }>({ date: "", n: 0 });
   const refresh = state.refresh;
+  const boardRefresh = useRef<((date?: string) => Promise<void>) | null>(null);
+  const registerBoardRefresh = useCallback((reload: ((date?: string) => Promise<void>) | null) => {
+    boardRefresh.current = reload;
+  }, []);
   const onChatApplied = useCallback(async (plan?: ChatPlan) => {
     const date = plan?.operations[0]?.date || plan?.starts_on || plan?.constraints[0]?.date;
-    if (date) setChatWeek((previous) => ({ date, n: (previous?.n ?? 0) + 1 }));
-    await refresh();
+    await boardRefresh.current?.(date);
+    await refresh(true);
   }, [refresh]);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -390,8 +394,8 @@ export function Management({
               type="button"
               className="icon-button"
               onClick={onOpenManualSetup}
-              aria-label="הגדרה ידנית של היחידה"
-              title="הגדרה ידנית של היחידה"
+              aria-label="הגדרת היחידה, הסבבים והתלתונים"
+              title="הגדרת היחידה, הסבבים והתלתונים"
             >
               <SlidersHorizontal size={17} />
             </button>
@@ -438,8 +442,8 @@ export function Management({
             type="button"
             className="icon-button"
             onClick={() => setSettingsOpen(true)}
-            aria-label="הגדרות וסבבים"
-            title="הגדרות וסבבים"
+            aria-label="הגדרות"
+            title="הגדרות"
           >
             <Settings2 size={17} />
           </button>
@@ -660,6 +664,7 @@ export function Management({
             onExport={state.exportSchedule}
             onPeriodChange={state.focusPeriod}
             navigateToWeek={chatWeek}
+            onRefreshReady={registerBoardRefresh}
             onOpenAgent={() => openAgent()}
             onImport={() => setImportOpen(true)}
             // What the agent is currently saying, so the board can show
@@ -822,7 +827,7 @@ export function Management({
           {section === "overview" ? <>
             {schedule?.notes?.length ? <ul className="schedule-notes">{schedule.notes.map((note, index) => <li key={index}>{note}</li>)}</ul> : null}
             {schedule ? <Warnings warnings={schedule.warnings} /> : null}
-            {overview?.stats ? <Stats stats={overview.stats} /> : null}
+            {overview ? <Stats overview={overview} /> : null}
             <History entries={overview?.changes ?? []} />
             <LearnedFromChanges />
           </> : null}
@@ -851,7 +856,7 @@ export function Management({
       ) : null}
 
       {settingsOpen ? (
-        <SettingsPanel onClose={() => setSettingsOpen(false)} profile={overview?.profile ?? undefined} onProfileSaved={state.refresh} />
+        <SettingsPanel onClose={() => setSettingsOpen(false)} />
       ) : null}
     </div>
   );
@@ -894,7 +899,7 @@ function ManagerAnalytics({
         ) : null}
       </header>
 
-      {overview ? <Stats stats={overview.stats} expanded /> : (
+      {overview ? <Stats overview={overview} expanded /> : (
         <div className="manager-analytics-loading" aria-busy="true">
           טוען את נתוני התקופה…
         </div>

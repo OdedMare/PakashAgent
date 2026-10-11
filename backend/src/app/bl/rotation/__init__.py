@@ -13,8 +13,13 @@ Four patterns: `round` (א, ב), `triplet` (תלתון: א, ב, ג), `hamshushim
 closes; the other two set *how long*. **A closure weekend runs Thursday to
 Sunday morning** — the Sunday tail covers the day's first shift by the clock,
 found from declared start times rather than a Hebrew name (D9). This is the
-default: `rotation_closure_windows` can change each group's boundaries and
-`rotation_presence` overrides its presence on selected days or dates.
+default: `rotation_closure_windows` can change a cycle's boundaries and
+`rotation_presence` overrides one group's presence on selected days or dates.
+
+**A cycle is stated once, for its first group.** One anchor places every
+group's turn, and group א's closure hours are every group's hours on its own
+weekend; a row naming another group is that group's exception. Presence is
+the one thing that stays per group.
 
 | Module | Owns |
 |---|---|

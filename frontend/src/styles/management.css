@@ -1331,6 +1331,164 @@
   transform: rotate(180deg);
 }
 
+/* -- the filter ----------------------------------------------------------- */
+
+/* One row that wraps: the span, the dates it covers, the person. It sits
+   above the tiles because it narrows them too. */
+.stats-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.7rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.78rem;
+}
+
+.stats-spans {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--surface-3);
+  border-radius: 999px;
+}
+
+.stats-span {
+  padding: 0.28rem 0.7rem;
+  font: inherit;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.stats-span:hover {
+  color: var(--text);
+}
+
+.stats-span.is-on {
+  color: var(--primary);
+  font-weight: 600;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.stats-nav,
+.stats-dates {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.stats-nav-button,
+.stats-today,
+.stats-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font: inherit;
+  color: var(--text-soft);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.stats-nav-button {
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+}
+
+.stats-today,
+.stats-reset {
+  padding: 0.25rem 0.5rem;
+}
+
+.stats-reset {
+  border-color: transparent;
+  color: var(--text-muted);
+}
+
+:is(.stats-nav-button, .stats-today, .stats-reset):hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.stats-today:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+:is(.stats-span, .stats-nav-button, .stats-today, .stats-reset, .stats-select, .stats-date):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.stats-nav-label {
+  min-width: 7.5rem;
+  padding: 0 0.2rem;
+  text-align: center;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-muted);
+}
+
+/* Pushed to the far end where there is room, so the person reads as a
+   second, independent filter and not as part of the dates. */
+.stats-person {
+  margin-inline-start: auto;
+}
+
+.stats-select,
+.stats-date {
+  font: inherit;
+  padding: 0.3rem 0.55rem;
+  color: var(--text);
+  background: var(--surface-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+.stats-select {
+  max-width: 11rem;
+  cursor: pointer;
+}
+
+.stats-date {
+  width: 6.6rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The previous answer stays up, dimmed, while the next one is fetched. */
+.stats-body {
+  transition: opacity 160ms ease;
+}
+
+.stats-body.is-loading {
+  opacity: 0.5;
+}
+
+.stats-notice {
+  margin: 0;
+  padding: 0.9rem 0.2rem;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.stats-notice.is-error {
+  color: var(--danger);
+}
+
 /* -- the headline tiles --------------------------------------------------- */
 
 .stats-tiles {
@@ -1392,10 +1550,34 @@
 }
 
 .stats-chart figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   margin-bottom: 0.5rem;
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--text-soft);
+}
+
+.stats-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.stats-legend-swatch {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 2px;
+  background: var(--primary);
+}
+
+.stats-legend-swatch.is-night {
+  background: var(--hue-violet);
 }
 
 /* Days: vertical columns, one per date in the period. */
@@ -1454,6 +1636,18 @@
 .day-bar-label {
   font-size: 0.7rem;
   color: var(--text-muted);
+  min-height: 0.9rem;
+  white-space: nowrap;
+}
+
+/* A month of columns: no room for a gap or a figure each. The mark under a
+   week's first day is allowed to spill past its own narrow column. */
+.day-bars.is-dense {
+  gap: 2px;
+}
+
+.day-bars.is-dense .day-bar-value {
+  display: none;
 }
 
 /* People and shifts: horizontal rows, growing from the inline start. */
@@ -1528,6 +1722,58 @@
   color: var(--warning);
 }
 
+/* A person's row: the name over its rotation, and the nights stacked inside
+   the bar. Violet rather than amber — amber on this screen means "look at
+   this", and a night shift is a fact, not a finding. */
+.load-row.is-person {
+  grid-template-columns: minmax(4.5rem, 7.5rem) 1fr auto;
+}
+
+.load-row.is-person .load-name {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  line-height: 1.25;
+}
+
+.load-person,
+.load-rotation {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.load-rotation {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.load-row.is-person .load-fill {
+  display: flex;
+}
+
+.load-fill-night {
+  height: 100%;
+  background: var(--hue-violet);
+  border-radius: 999px;
+}
+
+.load-night {
+  color: var(--hue-violet);
+}
+
+.load-conflict {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin-inline-start: 0.4rem;
+  padding: 0.02rem 0.3rem;
+  font-size: 0.7rem;
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-radius: 999px;
+}
+
 /* Warning counts: a tally per code, never summed into a score. */
 
 .warning-counts {
@@ -1576,7 +1822,12 @@
 }
 
 .stats-page .stats-tiles {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+}
+
+.stats-page .stats-filter {
+  margin-bottom: 1rem;
+  font-size: 0.84rem;
 }
 
 .stats-page .stats-tile {

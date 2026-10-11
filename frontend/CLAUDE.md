@@ -61,6 +61,38 @@ and the third of them is not an edit at all:
   nothing is written, this works on a published board too, where every write
   is refused.
 
+**The board has four widths, and they are two kinds of screen.** The switch
+beside the arrows (`Board/ViewSwitch.tsx`, arithmetic in `Board/views.ts`)
+chooses יום, שבוע, שבועיים or חודש, and the arrows step by whichever is
+showing.
+
+- **Day and week are the working board.** Both sit inside one stored period,
+  so every gesture above is there, aimed at it. A day is `BoardGrid` handed
+  one date instead of seven — the week with six columns put away, not a
+  second screen — and the rail above it keeps the other six in sight and
+  moves between them.
+- **Two weeks and a month are for reading** (`Board/RangeGrid.tsx`). They
+  cross periods, and every write the board makes names the one period it
+  lands on, so nothing there writes: a day is a button that opens that day,
+  a week's label opens that week, and the period's own actions — publish,
+  clear, delete, export — are withheld because there is no one period for
+  them to mean. Do not add a drag here. It would be a move between two
+  periods with no dialog able to say which audit it answers to
+  ([D12](../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
+- **A span is one read.** `GET /api/schedule/between` returns every period
+  touching the dates; `Board/span.ts` clips and joins them into an ordinary
+  `Schedule`, which is what lets the index, the tiles and the filters count a
+  day or a month exactly as they count a week. That joined span has no id on
+  purpose — it is not something a write could be aimed at.
+- **The anchor is a day, remembered per session; the view is a habit,
+  remembered per browser.** Switching views never moves the anchor, so a
+  month narrows to the week the manager was already in. Under the two wide
+  views the anchor's week is still the period reported upward
+  (`onPeriodChange`), so the agent's conversation stays about a real week.
+- **A day with no period says "לא תוכנן".** That and an empty day inside a
+  built week are different facts, and only the first is an invitation to
+  build something.
+
 **A day column says whose closure it is.** `schedule.closures` arrives with
 the period, computed by `bl/rotation.py`, and the board renders it on the
 column head and in the placement dialog. It is not derived here on purpose:
@@ -68,6 +100,16 @@ which group closes on 12/09 is arithmetic, and a browser-side cycle would be
 a second answer to a question that must have exactly one. The Sunday a
 closure hands over on reads dimmer and says `חילוף` — the group is in for
 that morning and out for the rest of the day.
+
+**A cycle is typed once, in the team setup screen** (`ManualSetup/`, the
+sliders icon — not the settings modal, which holds only the server-wide
+model and database settings). `ManualSetup/RotationSetup.tsx` asks, per
+cycle, for the weekend group א closes and for group א's closure hours; the
+other groups' turns and hours are derived by the server. The dates shown
+beside the anchor are a preview of that one typed fact, and an anchor stored
+for another group is shown as א's next turn in the same cycle. Presence rules
+stay per group. The whole screen saves in one `updateProfile`, and a saved
+change applies to the next build — an existing schedule is not rebuilt.
 
 **Taking a week back is two different acts.** *ניקוי* empties the
 assignments and keeps the shift rows, so the week can be filled in again
@@ -255,6 +297,18 @@ impression.
   active and archived rows and lets the manager reword, approve, archive or
   delete any of them — a preference they cannot see is a rule they never
   agreed to (D21).
+- **The stats panel counts shifts, and its filter asks the server.**
+  `Stats` reports load per person in shifts — how many, how many of them
+  nights, and the person's rotation in the words a board card uses — plus
+  the number of conflicts (audit findings at `warning` severity, the board
+  tile's own cut). Hours are weighted, so they stay in the hover and are no
+  longer what the chart is drawn in. `StatsFilter` narrows all of it to a
+  day, a week, a calendar month, a chosen range, or one person; unfiltered
+  it renders the overview's own `stats`, and any other choice is
+  `GET /api/schedule/stats` (`useStats`). Never a `.filter()` over the rows
+  on screen: those are one period, a month is several, and a second count
+  in the browser is how a tile comes to disagree with the warning under it.
+  Coverage is hidden for one person — a seat belongs to the slot.
 - **Constraints show their source.** `source` says whether the manager decided
   it, the agent recorded it, or it came from the employee — an approved
   submission is stored as `employee_reported`, keeping "Dana said she cannot

@@ -14,9 +14,12 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { DateInput } from "@/components/DateInput";
 import { updateProfile } from "@/services/api";
-import type { TeamView, WorkplaceProfile } from "@/types";
+import type { RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
+
+import { CheckboxGrid, Field } from "./fields";
+import { CYCLES, CycleSetup, firstGroupAnchor } from "./RotationSetup";
+import type { Cycle } from "./RotationSetup";
 
 const DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 const SERVICE_TYPES = {
@@ -60,23 +63,30 @@ export function ManualSetup({
   const [rotationMode] = useState<"round" | "triplet">(
     initialWorkplace.rotation_mode === "triplet" ? "triplet" : "round",
   );
-  const [roundFirstClosureGroup, setRoundFirstClosureGroup] = useState(
-    text(initialWorkplace.round_first_closure_group)
-      || (rotationMode === "round" ? text(initialWorkplace.first_closure_group) : "")
-      || "א",
+  // Each cycle is anchored on the weekend its group א closes; an anchor that
+  // was stored for another group is read as א's next turn in the same cycle.
+  const [anchors, setAnchors] = useState<Record<Cycle, string>>(() => {
+    const stored = (pattern: Cycle) => firstGroupAnchor(
+      pattern,
+      text(initialWorkplace[`${pattern}_first_closure_date`])
+        || (rotationMode === pattern ? text(initialWorkplace.first_closure_date) : ""),
+      text(initialWorkplace[`${pattern}_first_closure_group`])
+        || (rotationMode === pattern ? text(initialWorkplace.first_closure_group) : ""),
+    );
+    return { round: stored("round"), triplet: stored("triplet") };
+  });
+  const [closureWindows, setClosureWindows] = useState<RotationClosureWindow[]>(
+    profile.workplace?.rotation_closure_windows ?? [],
   );
-  const [roundFirstClosureDate, setRoundFirstClosureDate] = useState(
-    text(initialWorkplace.round_first_closure_date)
-      || (rotationMode === "round" ? text(initialWorkplace.first_closure_date) : ""),
-  );
-  const [tripletFirstClosureGroup, setTripletFirstClosureGroup] = useState(
-    text(initialWorkplace.triplet_first_closure_group)
-      || (rotationMode === "triplet" ? text(initialWorkplace.first_closure_group) : "")
-      || "א",
-  );
-  const [tripletFirstClosureDate, setTripletFirstClosureDate] = useState(
-    text(initialWorkplace.triplet_first_closure_date)
-      || (rotationMode === "triplet" ? text(initialWorkplace.first_closure_date) : ""),
+  const [rotationPresence, setRotationPresence] = useState<RotationPresenceRule[]>(() =>
+    (profile.workplace?.rotation_presence ?? []).map((row) => ({
+      ...row,
+      days: strings(row.days),
+      shifts: strings(row.shifts),
+      start_time: inputText(row.start_time),
+      end_time: inputText(row.end_time),
+      reason: inputText(row.reason),
+    })),
   );
   const [generalExitSchedule, setGeneralExitSchedule] = useState(
     inputText(initialWorkplace.general_exit_schedule),
@@ -121,6 +131,12 @@ export function ManualSetup({
     () => new Set(["round", ...enabledExitPatterns, ...usedExitPatterns]),
     [enabledExitPatterns, usedExitPatterns],
   );
+  // A lettered group cannot be scheduled without its cycle's anchor. The one
+  // exception is a round unit on fixed א/ב presence, which has no phase.
+  const needsAnchor = (pattern: Cycle) =>
+    employees.some((person) => named(person) && exitPattern(person, rotationMode) === pattern)
+    && !(pattern === "round" && rotationAUnavailability.length > 0
+      && !closureWindows.some((row) => row.pattern === "round"));
   const ready = Boolean(unitName.trim() && employees.some(named) && shifts.some(named));
 
   const save = async () => {
@@ -135,14 +151,17 @@ export function ManualSetup({
           planning_horizon: planningHorizon.trim() || "שבוע",
           operating_days: operatingDays,
           rotation_mode: rotationMode,
-          // Keep the old pair readable by older deployments while the two
-          // real cycles use their own independent anchors.
-          first_closure_group: rotationMode === "triplet" ? tripletFirstClosureGroup : roundFirstClosureGroup,
-          first_closure_date: rotationMode === "triplet" ? tripletFirstClosureDate : roundFirstClosureDate,
-          round_first_closure_group: roundFirstClosureGroup,
-          round_first_closure_date: roundFirstClosureDate,
-          triplet_first_closure_group: tripletFirstClosureGroup,
-          triplet_first_closure_date: tripletFirstClosureDate,
+          // Every anchor is saved as group א's weekend; the server derives
+          // the other groups' turns from it. The old pair stays readable by
+          // older deployments while the two cycles keep independent anchors.
+          first_closure_group: "א",
+          first_closure_date: anchors[rotationMode],
+          round_first_closure_group: "א",
+          round_first_closure_date: anchors.round,
+          triplet_first_closure_group: "א",
+          triplet_first_closure_date: anchors.triplet,
+          rotation_closure_windows: closureWindows,
+          rotation_presence: rotationPresence,
           general_exit_schedule: generalExitSchedule.trim(),
           enabled_exit_patterns: enabledExitPatterns,
           rotation_a_unavailability: rotationAUnavailability.map((rule) => ({
@@ -241,45 +260,30 @@ export function ManualSetup({
           <PatternOptions selected={enabledExitPatterns} locked={usedExitPatterns} onChange={setEnabledExitPatterns} />
         </SetupSection>
 
-        <SetupSection icon={<Repeat2 />} title="סבבים ותלתונים" hint="קודם מגדירים מי סוגר בסופ״ש עוגן בכל מחזור; אחר כך אפשר להוסיף זמני אי־זמינות קבועים לסבב א׳.">
+        <SetupSection icon={<Repeat2 />} title="סבבים ותלתונים" hint="מגדירים עוגן ושעות סגירה לקבוצה א׳ בלבד, בסבב ובתלתון; הקבוצות האחרות נגזרות ממנה. ההגדרות חלות על השיבוץ הבא — סידור קיים לא נבנה מחדש.">
+          <PatternOptions selected={enabledExitPatterns} locked={usedExitPatterns} onChange={setEnabledExitPatterns} />
+
+          <div className="rotation-cycles" aria-label="מחזורי הסגירה">
+            {(Object.keys(CYCLES) as Cycle[]).filter((pattern) => availableExitPatterns.has(pattern)).map((pattern) => (
+              <CycleSetup
+                key={pattern}
+                pattern={pattern}
+                anchor={anchors[pattern]}
+                onAnchor={(iso) => setAnchors((current) => ({ ...current, [pattern]: iso }))}
+                needsAnchor={needsAnchor(pattern)}
+                windows={closureWindows}
+                onWindows={setClosureWindows}
+                presence={rotationPresence}
+                onPresence={setRotationPresence}
+                shiftNames={shiftNames}
+              />
+            ))}
+          </div>
+
           <div className="rotation-pair" aria-label="הקשר בין סבב א לסבב ב">
             <div><strong>סבב א׳</strong><span>אתם מגדירים את זמני אי־הזמינות.</span></div>
             <Repeat2 aria-hidden="true" />
             <div className="is-derived"><strong>סבב ב׳</strong><span>מחושב בשרת ואינו ניתן לעריכה נפרדת.</span></div>
-          </div>
-
-          <PatternOptions selected={enabledExitPatterns} locked={usedExitPatterns} onChange={setEnabledExitPatterns} />
-
-          <div className="rotation-anchors" aria-label="נקודות ההתחלה של מחזורי הסגירה">
-            <article className="rotation-anchor-card">
-              <header><strong>סבב א / ב</strong><span>מחזור של שני סופי־שבוע</span></header>
-              <div className="manual-grid three">
-                <Field label="מי סוגר בסופ״ש העוגן">
-                  <select value={roundFirstClosureGroup} onChange={(event) => setRoundFirstClosureGroup(event.target.value)}>
-                    {["א", "ב"].map((group) => <option key={group} value={group}>סבב {group}</option>)}
-                  </select>
-                </Field>
-                <Field label="סופ״ש עוגן (רשות)">
-                  <DateInput value={roundFirstClosureDate} onChange={setRoundFirstClosureDate} />
-                </Field>
-              </div>
-            </article>
-
-            {availableExitPatterns.has("triplet") ? (
-              <article className="rotation-anchor-card is-triplet">
-                <header><strong>תלתון א / ב / ג</strong><span>מחזור של שלושה סופי־שבוע, בנפרד מהסבב</span></header>
-                <div className="manual-grid three">
-                  <Field label="מי סוגר בסופ״ש העוגן">
-                    <select value={tripletFirstClosureGroup} onChange={(event) => setTripletFirstClosureGroup(event.target.value)}>
-                      {["א", "ב", "ג"].map((group) => <option key={group} value={group}>תלתון {group}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="סופ״ש עוגן (רשות)">
-                    <DateInput value={tripletFirstClosureDate} onChange={setTripletFirstClosureDate} />
-                  </Field>
-                </div>
-              </article>
-            ) : null}
           </div>
 
           <div className="manual-list">
@@ -393,14 +397,6 @@ export function ManualSetup({
 
 function SetupSection({ icon, title, hint, children }: { icon: React.ReactNode; title: string; hint: string; children: React.ReactNode }) {
   return <section className="manual-section"><header><span>{icon}</span><div><h2>{title}</h2><p>{hint}</p></div></header><div className="manual-section-body">{children}</div></section>;
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="manual-field"><span>{label}</span>{children}</label>;
-}
-
-function CheckboxGrid({ label, values, selected, onChange }: { label: string; values: string[]; selected: string[]; onChange: (value: string[]) => void }) {
-  return <fieldset className="manual-checkboxes"><legend>{label}</legend>{values.map((value) => <label key={value}><input type="checkbox" checked={selected.includes(value)} onChange={(event) => onChange(event.target.checked ? [...selected, value] : selected.filter((item) => item !== value))} /><span>{value}</span></label>)}</fieldset>;
 }
 
 function PatternOptions({ selected, locked, onChange }: { selected: string[]; locked: Set<string>; onChange: (value: string[]) => void }) {

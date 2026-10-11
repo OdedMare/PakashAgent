@@ -76,18 +76,32 @@
 .rotation-pair > svg { align-self: center; justify-self: center; width: 1.15rem; color: var(--primary); }
 .rotation-pair strong { font-size: 0.9rem; }
 .rotation-pair span, .rotation-rule-head span { color: var(--text-muted); font-size: 0.76rem; line-height: 1.5; }
-.rotation-anchors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; }
-.rotation-anchor-card { display: grid; gap: 0.75rem; padding: 0.85rem; background: var(--surface); border: 1px solid var(--border-strong); border-inline-start: 3px solid var(--primary); border-radius: var(--radius-sm); }
-.rotation-anchor-card.is-triplet { border-inline-start-color: var(--accent); }
-.rotation-anchor-card > header { display: flex; flex-direction: column; gap: 0.15rem; }
-.rotation-anchor-card > header strong { font-size: 0.86rem; }
-.rotation-anchor-card > header span { color: var(--text-muted); font-size: 0.73rem; line-height: 1.45; }
-.rotation-anchor-card .manual-grid.three { grid-template-columns: minmax(8rem, 0.8fr) minmax(11rem, 1.2fr); }
+.rotation-cycles { display: grid; gap: 0.65rem; }
+.rotation-cycle-card { display: grid; gap: 0.75rem; min-width: 0; padding: 0.85rem; background: var(--surface); border: 1px solid var(--border-strong); border-inline-start: 3px solid var(--primary); border-radius: var(--radius-sm); }
+.rotation-cycle-card.is-triplet { border-inline-start-color: var(--accent); }
+.rotation-cycle-card > header, .rotation-block > header { display: flex; flex-direction: column; gap: 0.15rem; }
+.rotation-cycle-card > header strong { font-size: 0.92rem; }
+.rotation-block > header strong { font-size: 0.84rem; }
+.rotation-cycle-card > header span, .rotation-block > header span { color: var(--text-muted); font-size: 0.73rem; line-height: 1.45; }
+/* The one typed fact beside what the server derives from it. A dashed edge
+   means "derived" everywhere in this section, as on `.rotation-pair`. */
+.rotation-anchor { display: grid; grid-template-columns: minmax(11rem, 15rem) minmax(0, 1fr); align-items: end; gap: 0.75rem; }
+.rotation-derived { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0; padding: 0; list-style: none; }
+.rotation-derived li { display: grid; gap: 0.1rem; min-width: 6.5rem; min-height: 44px; padding: 0.4rem 0.75rem; background: var(--primary-soft); border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border)); border-radius: var(--radius-sm); }
+.rotation-derived li.is-derived { background: var(--surface-2); border-style: dashed; }
+.rotation-derived strong { font-size: 0.8rem; }
+.rotation-derived span { color: var(--text-muted); font-size: 0.74rem; font-variant-numeric: tabular-nums; }
+.rotation-hint { margin: 0; color: var(--text-muted); font-size: 0.76rem; line-height: 1.55; }
+.rotation-block { display: grid; gap: 0.65rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+.rotation-block > .ghost-button { justify-self: start; }
+.rotation-window-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.rotation-link { padding: 0; color: var(--primary); background: none; border: 0; font: inherit; text-decoration: underline; cursor: pointer; }
 .rotation-rule { gap: 0.9rem; }
 .rotation-rule-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .rotation-rule-head > div { display: grid; gap: 0.15rem; }
 .rotation-empty, .rotation-derived-note { margin: 0; padding: 0.75rem 0.85rem; color: var(--text-muted); background: var(--surface-2); border-inline-start: 3px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 0.78rem; line-height: 1.55; }
 .rotation-derived-note { border-inline-start-color: var(--primary); }
+.rotation-derived-note.is-warning { color: var(--warning); background: var(--warning-soft); border-inline-start-color: var(--warning); }
 .manual-error { width: min(76rem, calc(100% - 2rem)); margin: 1rem auto 0; padding: 0.75rem 1rem; color: var(--danger); background: var(--danger-soft); border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border)); border-radius: var(--radius-sm); }
 .manual-savebar { position: fixed; z-index: 8; inset: auto 0 0; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem clamp(1rem, 4vw, 3rem); background: color-mix(in srgb, var(--surface) 94%, transparent); border-top: 1px solid var(--border-strong); box-shadow: 0 -8px 30px rgba(16, 24, 40, 0.08); backdrop-filter: blur(10px); }
 .manual-savebar span { color: var(--text-muted); font-size: 0.8rem; }
@@ -96,7 +110,7 @@
   .manual-section { grid-template-columns: 1fr; }
   .manual-section > header { border-inline-end: 0; border-bottom: 1px solid var(--border); }
   .manual-grid.three, .employee-grid, .shift-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .rotation-anchors { grid-template-columns: 1fr; }
+  .rotation-window-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 620px) {
@@ -107,7 +121,7 @@
   .manual-row-foot { align-items: flex-start; flex-direction: column; }
   .rotation-pair { grid-template-columns: 1fr; }
   .rotation-pair > svg { transform: rotate(90deg); }
-  .rotation-anchor-card .manual-grid.three { grid-template-columns: 1fr; }
+  .rotation-anchor, .rotation-window-grid { grid-template-columns: 1fr; }
   .manual-savebar span { display: none; }
   .manual-savebar button { width: 100%; justify-content: center; }
 }

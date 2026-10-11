@@ -342,6 +342,16 @@ anchor dates and first groups. Legacy profiles fall back to
 `first_closure_*`; with no anchor for a pattern every function returns nothing
 rather than guess a phase that puts the wrong group in.
 
+**A cycle is stated once, for its first group, and the rest is derived.** The
+anchor is one weekend and one group; every other group's turn follows from
+it. Closure hours work the same way: `closures.configured_window` reads the
+rows `rotation_closure_windows` carries for group א and applies them to
+whichever group owns the weekend, so the manager types one definition per
+cycle. A row naming another group is that group's own exception and wins for
+it — the shape the interview uses when a manager says ב leaves at a different
+hour. `rotation_presence` is deliberately **not** derived: "ב is out on
+Tuesdays" says nothing about א.
+
 Read by four callers, which is the point of it being one module:
 `scheduler.py` turns it into hard availability rows and refuses assignments
 that contradict them, `audit.py` warns about a schedule that already drifted

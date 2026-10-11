@@ -17,7 +17,9 @@ Two properties here are worth more than the rest, and each has its own test:
   scheduled" into "no such thing" -- opposite meanings.
 """
 
-from app.bl.audit import fairness, personal_summary, shift_stats
+from app.bl.audit import (
+    fairness, in_window, personal_summary, shift_stats, warning_in_window,
+)
 
 # This workplace's own vocabulary, never known in advance (D9).
 MORNING = "בוקר"
@@ -348,4 +350,207 @@ def test_stats_hours_match_the_audits_own_arithmetic():
     # And the period total is the sum of the people on it.
     assert stats["total_hours"] == round(
         sum(row["hours"] for row in stats["by_employee"]), 2
+    )
+
+
+# --- shifts, nights and rotation per person ---------------------------------
+
+def test_nights_are_counted_out_of_the_shifts_not_beside_them():
+    """"Five shifts, two of them nights" -- one person, two counts."""
+    rows = [
+        _assignment(DANA, MORNING, MONDAY),
+        _assignment(DANA, ON_CALL, MONDAY),
+        _assignment(DANA, ON_CALL, TUESDAY),
+        _assignment(YOSSI, EVENING, MONDAY),
+    ]
+
+    stats = shift_stats(rows, SHIFTS, EMPLOYEES)
+    by_name = {row["employee"]: row for row in stats["by_employee"]}
+
+    assert (by_name[DANA]["shifts"], by_name[DANA]["nights"]) == (3, 2)
+    assert (by_name[YOSSI]["shifts"], by_name[YOSSI]["nights"]) == (1, 0)
+    assert by_name[RON]["nights"] == 0
+    assert stats["total_nights"] == 2
+
+
+def test_a_shift_crossing_midnight_is_a_night_without_being_declared_one():
+    """The editor records times and no night flag, so the clock decides."""
+    late = "סגירה"
+    shifts = SHIFTS + [{"name": late, "start_time": "22:00", "end_time": "06:00"}]
+
+    stats = shift_stats([_assignment(DANA, late, MONDAY)], shifts, EMPLOYEES)
+
+    assert stats["by_employee"][0]["nights"] == 1
+
+
+def test_people_are_ordered_by_shifts_since_that_is_what_is_drawn():
+    """Three weighted on-calls are 12 hours against one morning's 8 -- and
+    still three shifts against one."""
+    rows = [
+        _assignment(RON, ON_CALL, MONDAY),
+        _assignment(RON, ON_CALL, TUESDAY),
+        _assignment(DANA, MORNING, MONDAY),
+        _assignment(DANA, EVENING, TUESDAY),
+        _assignment(YOSSI, MORNING, TUESDAY),
+    ]
+
+    by_employee = shift_stats(rows, SHIFTS, EMPLOYEES)["by_employee"]
+
+    # Dana and Ron both have two; her sixteen hours outweigh his eight.
+    assert [row["employee"] for row in by_employee] == [DANA, RON, YOSSI]
+
+
+def test_a_person_carries_the_rosters_own_rotation_fields():
+    """Passed through as stored: which cycle and which arm are the manager's
+    entries, and the screen words them the way the board's cards do."""
+    employees = [
+        {"name": DANA, "exit_pattern": "triplet", "rotation_group": "ג"},
+        {"name": YOSSI, "rotation_group": "א"},
+        {"name": RON},
+    ]
+
+    by_name = {
+        row["employee"]: row
+        for row in shift_stats([], SHIFTS, employees)["by_employee"]
+    }
+
+    assert (by_name[DANA]["exit_pattern"], by_name[DANA]["rotation_group"]) == ("triplet", "ג")
+    assert (by_name[YOSSI]["exit_pattern"], by_name[YOSSI]["rotation_group"]) == ("", "א")
+    assert (by_name[RON]["exit_pattern"], by_name[RON]["rotation_group"]) == ("", "")
+
+
+def test_somebody_the_roster_no_longer_lists_has_no_rotation_invented():
+    gone = "נועה"
+
+    row = shift_stats([_assignment(gone, MORNING, MONDAY)], SHIFTS, EMPLOYEES)["by_employee"][0]
+
+    assert row["employee"] == gone
+    assert (row["exit_pattern"], row["rotation_group"]) == ("", "")
+
+
+# --- conflicts --------------------------------------------------------------
+
+WARNINGS = [
+    {"code": "double_booked", "severity": "warning", "employee": DANA, "date": MONDAY},
+    {"code": "short_rest", "severity": "warning", "employee": DANA, "date": TUESDAY},
+    {"code": "unavailable", "severity": "notice", "employee": DANA, "date": MONDAY},
+    {"code": "unfilled", "severity": "warning", "date": MONDAY},
+    {"code": "overstaffed", "severity": "notice", "date": TUESDAY},
+]
+
+
+def test_conflicts_count_the_warnings_and_leave_the_notices_out():
+    """The board's tile makes the same cut: a notice needs no reaction."""
+    stats = shift_stats([], SHIFTS, EMPLOYEES, warnings=WARNINGS)
+
+    assert stats["conflicts"] == 3
+    assert sum(row["count"] for row in stats["warning_counts"]) == 5
+
+
+def test_a_persons_conflicts_are_the_ones_naming_them():
+    """A short slot is a conflict of the week's and of no one person."""
+    by_name = {
+        row["employee"]: row
+        for row in shift_stats([], SHIFTS, EMPLOYEES, warnings=WARNINGS)["by_employee"]
+    }
+
+    assert by_name[DANA]["conflicts"] == 2
+    assert by_name[YOSSI]["conflicts"] == 0
+
+
+# --- one person -------------------------------------------------------------
+
+def test_one_persons_report_counts_only_their_shifts():
+    rows = [
+        _assignment(DANA, MORNING, MONDAY),
+        _assignment(DANA, ON_CALL, TUESDAY),
+        _assignment(YOSSI, MORNING, MONDAY),
+    ]
+
+    stats = shift_stats(rows, SHIFTS, EMPLOYEES, warnings=WARNINGS, employee=DANA)
+
+    assert stats["total_shifts"] == 2
+    assert stats["total_nights"] == 1
+    assert stats["people_working"] == 1
+    assert [row["employee"] for row in stats["by_employee"]] == [DANA]
+    assert sum(row["count"] for row in stats["by_day"]) == 2
+    # The unfilled slot names nobody, so it is not hers.
+    assert stats["conflicts"] == 2
+    assert {row["code"] for row in stats["warning_counts"]} == {
+        "double_booked", "short_rest", "unavailable",
+    }
+
+
+def test_one_persons_report_counts_only_their_constraints():
+    rows = [_assignment(DANA, MORNING, MONDAY)]
+    availability = [
+        {"employee": DANA, "date": MONDAY, "shift": MORNING, "available": False},
+        {"employee": YOSSI, "date": MONDAY, "shift": MORNING, "available": False},
+    ]
+
+    pressure = shift_stats(
+        rows, SHIFTS, EMPLOYEES, availability=availability, employee=DANA,
+    )["constraint_pressure"]
+
+    assert pressure == {"blocked": 1, "people": 1, "conflicts": 1, "honored": 0}
+
+
+def test_coverage_stays_the_spans_own_when_one_person_is_chosen():
+    """A seat belongs to the slot. One person's share of the required seats
+    would read as a week 33% covered to a manager who filled every seat."""
+    rows = [
+        _assignment(DANA, MORNING, MONDAY),
+        _assignment(YOSSI, MORNING, MONDAY),
+    ]
+    slots = [_slot(MORNING, MONDAY)]
+
+    whole = shift_stats(rows, SHIFTS, EMPLOYEES, slots=slots)
+    hers = shift_stats(rows, SHIFTS, EMPLOYEES, slots=slots, employee=DANA)
+
+    assert hers["coverage"] == whole["coverage"]
+    assert hers["coverage"]["percent"] == 100.0
+
+
+def test_a_name_nobody_carries_is_an_empty_report_rather_than_an_error():
+    stats = shift_stats(
+        [_assignment(DANA, MORNING, MONDAY)], SHIFTS, EMPLOYEES, employee="אין כזה",
+    )
+
+    assert stats["total_shifts"] == 0
+    assert stats["by_employee"] == []
+
+
+# --- a span of dates --------------------------------------------------------
+
+def test_a_date_is_in_a_span_including_both_of_its_ends():
+    assert in_window(MONDAY, MONDAY, TUESDAY)
+    assert in_window(TUESDAY, MONDAY, TUESDAY)
+    assert not in_window("2026-03-04", MONDAY, TUESDAY)
+    assert not in_window("", MONDAY, TUESDAY)
+
+
+def test_a_dated_warning_belongs_to_the_span_holding_its_date():
+    finding = {"code": "short_rest", "date": TUESDAY}
+
+    assert warning_in_window(finding, MONDAY, TUESDAY)
+    assert not warning_in_window(finding, MONDAY, MONDAY)
+
+
+def test_the_weekly_hours_warning_belongs_to_any_span_touching_its_week():
+    """`over_hours` names an ISO week and no date. 2026-W10 is Monday the 2nd
+    of March to Sunday the 8th."""
+    finding = {"code": "over_hours", "details": {"week": 10, "year": 2026}}
+
+    assert warning_in_window(finding, "2026-03-08", "2026-03-14")
+    assert warning_in_window(finding, "2026-03-04", "2026-03-04")
+    assert not warning_in_window(finding, "2026-03-09", "2026-03-15")
+    assert not warning_in_window(finding, "2026-02-22", "2026-03-01")
+
+
+def test_a_warning_with_nothing_to_date_it_by_is_kept():
+    """It came from a period touching the span, and it is still printed
+    under that period's calendar."""
+    assert warning_in_window({"code": "something_new"}, MONDAY, TUESDAY)
+    assert warning_in_window(
+        {"code": "over_hours", "details": {"week": "x"}}, MONDAY, TUESDAY,
     )

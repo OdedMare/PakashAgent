@@ -17,6 +17,7 @@ Two shapes are load-bearing here:
 | `service.py` | The facade: wires collaborators, forwards calls |
 | `context.py` | Shared reads: the audited view, the period in play |
 | `reader.py` | Current period, overview, placement check |
+| `statistics.py` | The stats panel's numbers for a span of dates or one person |
 | `generation/` | Opening a period, stepping and running a range job |
 | `importing.py` | Import preview and commit (D7) |
 | `manual.py` | The manual path (D18) |

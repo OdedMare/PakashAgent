@@ -44,8 +44,12 @@ import { CoverageBar } from "./CoverageBar";
 import { FilterBar } from "./FilterBar";
 import { GenerateDialog } from "./GenerateDialog";
 import { fillsASeat, rotationLabel } from "./person";
+import { RangeGrid } from "./RangeGrid";
 import { orderByHours } from "./shiftOrder";
 import { EditorTarget, ShiftEditor } from "./ShiftEditor";
+import { clipTo, mergePeriods } from "./span";
+import { ViewSwitch } from "./ViewSwitch";
+import { isOverview } from "./views";
 import { WeekNav } from "./WeekNav";
 import { WeekRail } from "./WeekRail";
 import { useBoard, weekDates } from "./useBoard";
@@ -66,6 +70,13 @@ import { useBoardKeys } from "./useBoardKeys";
  *  `bl/audit.py`, neither of which contains an LLM call. The agent is what
  *  makes this conversational — it explains, it notices, it proposes in
  *  words — and none of that is load-bearing for getting a week scheduled.
+ *
+ *  **Four widths, two kinds.** A day and a week are this board, aimed at the
+ *  one period they sit inside, with everything above available. Two weeks
+ *  and a month cross periods, so they are drawn by `RangeGrid` for reading
+ *  and open a day or a week on click; the period's own actions — publish,
+ *  clear, delete, export — are withheld there because there is no one
+ *  period for them to mean (`views.ts`).
  *
  *  The decisions this screen is bound by are unchanged, and it goes out of
  *  its way not to route around them:
@@ -98,6 +109,7 @@ export function Board({
   onImport,
   onPeriodChange,
   navigateToWeek,
+  onRefreshReady,
   agent,
   dark,
 }: {
@@ -168,6 +180,7 @@ export function Board({
    *  thing that knows which week is on screen, so it is what says so. */
   onPeriodChange?: (scheduleId: string, weekStart?: string) => void;
   navigateToWeek?: { date: string; n: number };
+  onRefreshReady?: (refresh: ((date?: string) => Promise<void>) | null) => void;
   /** Open the conversation with the agent — the control room beside this. */
   onOpenAgent?: () => void;
   /** Open the import screen. Opening it writes nothing (D7). */
@@ -185,6 +198,11 @@ export function Board({
 }) {
   const current = overview?.schedule ?? null;
   const board = useBoard(current?.id, navigateToWeek?.n);
+  const refreshBoard = board.refresh;
+  useEffect(() => {
+    onRefreshReady?.(refreshBoard);
+    return () => onRefreshReady?.(null);
+  }, [onRefreshReady, refreshBoard]);
   const goToWeekOf = board.goToWeekOf;
   useEffect(() => {
     if (navigateToWeek?.date) goToWeekOf(navigateToWeek.date);
@@ -200,23 +218,36 @@ export function Board({
     return board.weekSchedule;
   }, [current, board.weekSchedule, board.weekStart, board.weekEnd]);
 
-  // Every write refreshes the overview, but the overview only carries the
-  // current/newest period. When the manager is editing another week, that
-  // refresh therefore leaves `weekSchedule` untouched and the successful
-  // write stays invisible until a browser reload. Re-read only that paged
-  // week; the current period already arrived fresh in `overview`.
+  // A day and a week are one period; two weeks and a month are several,
+  // and are drawn for reading rather than for writing (`views.ts`).
+  const overviewMode = isOverview(board.view);
+  // The columns of the working board: the week, or the one day of it.
+  // Memoised because the grid re-centres on today whenever these change, and
+  // a fresh array per render would do that on every keystroke elsewhere.
+  const dates = useMemo(
+    () => (board.view === "day" ? [board.focus] : weekDates(board.weekStart)),
+    [board.view, board.focus, board.weekStart],
+  );
+  // The periods under a two-week or month view, as one clipped span.
+  const span = useMemo(
+    () =>
+      overviewMode
+        ? mergePeriods(board.rangeSchedules, board.rangeStart, board.rangeEnd)
+        : null,
+    [overviewMode, board.rangeSchedules, board.rangeStart, board.rangeEnd],
+  );
+
+  // Writes refresh the overview; paged weeks and calendar ranges have their own reads.
+  const { reloadWeek, reloadRange } = board;
   const previousOverview = useRef(overview);
   useEffect(() => {
     const changed = previousOverview.current !== overview;
     previousOverview.current = overview;
-    if (
-      changed &&
-      overview &&
-      (!current || !covers(current, board.weekStart, board.weekEnd))
-    ) {
-      void board.reloadWeek();
+    if (changed && overview) {
+      if (!current || !covers(current, board.weekStart, board.weekEnd)) void reloadWeek();
+      void reloadRange();
     }
-  }, [overview, current, board.weekStart, board.weekEnd, board.reloadWeek]);
+  }, [overview, current, board.weekStart, board.weekEnd, reloadWeek, reloadRange]);
 
   // Whether the *schedule area* has nothing to draw yet.
   //
@@ -300,14 +331,14 @@ export function Board({
   const shiftOptions = useMemo(() => {
     const seen = new Set<string>();
     const startTimes: Record<string, string> = {};
-    for (const slot of schedule?.slots ?? []) {
+    for (const slot of (overviewMode ? span : schedule)?.slots ?? []) {
       seen.add(slot.shift_name);
       if (slot.start_time && !startTimes[slot.shift_name]) {
         startTimes[slot.shift_name] = slot.start_time;
       }
     }
     return orderByHours(Array.from(seen), startTimes);
-  }, [schedule?.slots]);
+  }, [overviewMode, span, schedule]);
 
   // A drop parks the intended move here and opens the confirmation. Nothing
   // has reached the server at this point — the dialog is what writes (D12).
@@ -397,12 +428,13 @@ export function Board({
   const stats = overview?.stats ?? EMPTY_STATS;
   const constraints: Constraint[] = overview?.availability ?? [];
 
-  // Arrow keys page the week; `T` returns to today. Disabled while a dialog
-  // is open — the confirmation owns the keyboard then, and paging underneath
-  // it would leave it describing a cell no longer on screen.
+  // Arrow keys page by whatever is on screen — a day, a week, a month; `T`
+  // returns to today. Disabled while a dialog is open — the confirmation
+  // owns the keyboard then, and paging underneath it would leave it
+  // describing a cell no longer on screen.
   useBoardKeys({
-    onPrevious: board.previousWeek,
-    onNext: board.nextWeek,
+    onPrevious: board.previous,
+    onNext: board.next,
     onToday: board.goToToday,
     enabled:
       !pendingMove && !editor && !generationOpen && !removal,
@@ -418,31 +450,61 @@ export function Board({
   // *current* period; a week the manager paged to counts itself. Memoised
   // because that count walks the slot and assignment lists, and it has no
   // reason to run again while neither changed.
-  const shownStats = useMemo(
+  //
+  // A single day counts itself too, for the same reason in the other
+  // direction: tiles reading "4 משמרות פתוחות" over a column with none open
+  // would be the week's answer to a question about Tuesday. Its hours are
+  // the one figure borrowed — `audit.py` already worked them out per date
+  // for the current period, and that is the only place they are not a guess.
+  const day = board.view === "day" ? board.focus : "";
+  const shownStats = useMemo(() => {
+    if (!schedule) return stats;
+    const own = schedule.id === current?.id;
+    if (!day) return own ? stats : statsFor(schedule, people);
+    const counted = statsFor(clipTo(schedule, day, day), people);
+    const load = own
+      ? stats.by_day.find((row) => row.date === day)
+      : undefined;
+    return load ? { ...counted, total_hours: load.hours } : counted;
+  }, [schedule, current?.id, stats, people, day]);
+  const shownWarnings = useMemo(
     () =>
-      schedule && schedule.id !== current?.id
-        ? statsFor(schedule, people)
-        : stats,
-    [schedule, current?.id, stats, people],
+      schedule && day
+        ? schedule.warnings.filter((row) => row.date === day)
+        : (schedule?.warnings ?? []),
+    [schedule, day],
   );
+  const spanStats = useMemo(
+    () => (span ? statsFor(span, people) : EMPTY_STATS),
+    [span, people],
+  );
+  // The period the header's own actions act on. None under a two-week or
+  // month view: "publish" and "clear the week" have no one period to mean
+  // there, and guessing which is how the wrong week gets cleared.
+  const period = overviewMode ? null : schedule;
 
   return (
     <div className="board">
       <div className="board-head">
-        <WeekNav
-          weekStart={board.weekStart}
-          weekEnd={board.weekEnd}
-          isCurrentWeek={board.isCurrentWeek}
-          busy={busy || board.weekBusy}
-          onPrevious={board.previousWeek}
-          onNext={board.nextWeek}
-          onToday={board.goToToday}
-        />
+        <div className="board-head-nav">
+          <WeekNav
+            view={board.view}
+            focus={board.focus}
+            rangeStart={board.rangeStart}
+            rangeEnd={board.rangeEnd}
+            isCurrent={board.isCurrent}
+            busy={busy || (overviewMode ? board.rangeBusy : board.weekBusy)}
+            onPrevious={board.previous}
+            onNext={board.next}
+            onToday={board.goToToday}
+          />
+          <ViewSwitch view={board.view} onChange={board.setView} />
+        </div>
 
         <div className="board-head-actions" data-tour="board-actions">
-          {schedule ? (
-            <span className={`board-status is-${schedule.status}`}>
-              {schedule.status === "published" ? "פורסם" : "טיוטה"}
+          {period ? (
+            <span className={`board-status is-${period.status}`}>
+              {period.status === "published" ? "פורסם" : "טיוטה"}
             </span>
           ) : null}
           {onOpenAgent ? (
@@ -467,11 +529,11 @@ export function Board({
               ) : null}
             </button>
           ) : null}
-          {schedule ? (
+          {period ? (
             <button
               type="button"
               className="ghost-button"
-              onClick={() => onExport(schedule.id)}
+              onClick={() => onExport(period.id)}
               disabled={busy}
               title="הורדת הסידור כקובץ אקסל"
             >
@@ -485,12 +547,12 @@ export function Board({
               Both are withheld while the board is not writable — a published
               week refuses every write, and a running build owns the days it
               has not reached. */}
-          {schedule && writable ? (
+          {period && writable ? (
             <button
               type="button"
               className="ghost-button"
               onClick={() =>
-                setRemoval({ mode: "week", count: schedule.assignments.length })
+                setRemoval({ mode: "week", count: period.assignments.length })
               }
               title="מחיקת כל השיבוצים בשבוע, בלי למחוק את שורות המשמרות"
             >
@@ -498,14 +560,14 @@ export function Board({
               ניקוי השבוע
             </button>
           ) : null}
-          {schedule && writable ? (
+          {period && writable ? (
             <button
               type="button"
               className="ghost-button is-danger"
               onClick={() =>
                 setRemoval({
                   mode: "period",
-                  count: schedule.assignments.length,
+                  count: period.assignments.length,
                 })
               }
               title="מחיקת הסידור לשבוע הזה, כולל שורות המשמרות"
@@ -514,16 +576,16 @@ export function Board({
               מחיקת הסידור
             </button>
           ) : null}
-          {schedule ? (
+          {period ? (
             <button
               type="button"
               className="ghost-button"
               onClick={() =>
-                onPublish(schedule.id, schedule.status !== "published")
+                onPublish(period.id, period.status !== "published")
               }
               disabled={busy}
             >
-              {schedule.status === "published" ? (
+              {period.status === "published" ? (
                 <>
                   <EyeOff size={14} />
                   החזרה לטיוטה
@@ -539,12 +601,19 @@ export function Board({
         </div>
       </div>
 
-      <WeekRail
-        weekStart={board.weekStart}
-        today={board.today}
-        schedule={schedule}
-        busy={showingLoader}
-      />
+      {/* The rail is one week, so it belongs to the two views that are one
+          week. Under a day view it is also what keeps the other six days in
+          sight, and what moves between them. */}
+      {overviewMode ? null : (
+        <WeekRail
+          weekStart={board.weekStart}
+          today={board.today}
+          schedule={schedule}
+          busy={showingLoader}
+          selected={day || undefined}
+          onPickDay={board.openDay}
+        />
+      )}
 
       {/* Loading first, and *before* the empty state.
           A week the manager paged to is unknown until `/at` answers, and
@@ -554,8 +623,77 @@ export function Board({
           לשבוע הזה", offering to build a week that may already exist, for
           as long as the request took. The skeleton holds that ground until
           there is an actual answer to render. */}
-      {showingLoader ? (
-        <BoardLoading weekStart={board.weekStart} weekEnd={board.weekEnd} />
+      {overviewMode ? (
+        board.rangeError ? (
+          <BoardLoadError
+            span
+            message={board.rangeError}
+            onRetry={() => void board.reloadRange()}
+          />
+        ) : (
+          <>
+            {/* Tiles and filters wait for something to count. The grid does
+                not: its dates come from the view alone, so it stands in
+                place while the span is read and says nothing about a day
+                until there is an answer for it. */}
+            {span ? (
+              <>
+                <CoverageBar
+                  stats={spanStats}
+                  warnings={span.warnings}
+                  conflictsActive={board.filters.conflictsOnly}
+                  unassignedActive={board.filters.unassignedOnly}
+                  onFocusConflicts={() =>
+                    board.setFilters({
+                      conflictsOnly: !board.filters.conflictsOnly,
+                      unassignedOnly: false,
+                    })
+                  }
+                  onFocusUnassigned={() =>
+                    board.setFilters({
+                      unassignedOnly: !board.filters.unassignedOnly,
+                      conflictsOnly: false,
+                    })
+                  }
+                />
+                <FilterBar
+                  filters={board.filters}
+                  employees={roster}
+                  roles={roleOptions}
+                  shifts={shiftOptions}
+                  active={board.filtersActive}
+                  onChange={board.setFilters}
+                  onClear={board.clearFilters}
+                />
+              </>
+            ) : null}
+            <RangeGrid
+              start={board.rangeStart}
+              end={board.rangeEnd}
+              month={
+                board.view === "month" ? board.focus.slice(0, 7) : undefined
+              }
+              today={board.today}
+              span={span}
+              periods={board.rangeSchedules}
+              employees={roster}
+              roles={roles}
+              people={people}
+              filters={board.filters}
+              dark={dark}
+              busy={board.rangeBusy}
+              touches={touches}
+              onOpenDay={board.openDay}
+              onOpenWeek={board.openWeek}
+            />
+          </>
+        )
+      ) : showingLoader ? (
+        <BoardLoading
+          dates={dates}
+          weekStart={board.weekStart}
+          weekEnd={board.weekEnd}
+        />
       ) : showingError ? (
         <BoardLoadError
           message={board.weekError ?? ""}
@@ -569,7 +707,7 @@ export function Board({
             // warnings on the schedule itself, so the tiles fall back to
             // counting that rather than reporting another week's totals.
             stats={shownStats}
-            warnings={schedule.warnings}
+            warnings={shownWarnings}
             conflictsActive={board.filters.conflictsOnly}
             unassignedActive={board.filters.unassignedOnly}
             onFocusConflicts={() =>
@@ -627,7 +765,7 @@ export function Board({
 
           <BoardGrid
               schedule={schedule}
-              weekStart={board.weekStart}
+              dates={dates}
               today={board.today}
               constraints={constraints}
               employees={roster}
@@ -664,6 +802,7 @@ export function Board({
                         ).length,
                       })
                   : undefined}
+              onOpenDate={board.openDay}
           />
         </>
       ) : (
@@ -925,12 +1064,14 @@ function statsFor(
 const EMPTY_STATS: ShiftStats = {
   total_hours: 0,
   total_shifts: 0,
+  total_nights: 0,
   people_working: 0,
   coverage: { required: 0, assigned: 0, unfilled_slots: 0, percent: 100 },
   by_shift: [],
   by_day: [],
   by_employee: [],
   warning_counts: [],
+  conflicts: 0,
   constraint_pressure: { blocked: 0, people: 0, conflicts: 0, honored: 0 },
 };
 
@@ -951,14 +1092,15 @@ const EMPTY_STATS: ShiftStats = {
  *  `role="status"` rather than `alert`: a screen reader is told the week is
  *  loading once, without the interruption an alert carries. */
 function BoardLoading({
+  dates,
   weekStart,
   weekEnd,
 }: {
+  /** The columns the grid will have: a week's seven, or a day view's one. */
+  dates: string[];
   weekStart: string;
   weekEnd: string;
 }) {
-  const dates = weekDates(weekStart);
-
   return (
     <div className="board-loading" role="status" aria-busy="true">
       <p className="board-loading-line">
@@ -969,7 +1111,10 @@ function BoardLoading({
       {/* Marked hidden from assistive tech: the line above already says
           what is happening, and a screen reader walking twenty-one empty
           placeholder cells is noise, not information. */}
-      <div className="board-loading-grid" aria-hidden="true">
+      <div
+        className={`board-loading-grid${dates.length === 1 ? " is-day" : ""}`}
+        aria-hidden="true"
+      >
         <div className="board-loading-row is-head">
           <div className="board-loading-corner" />
           {dates.map((date) => (
@@ -1017,9 +1162,12 @@ const SKELETON_ROWS = [0, 1, 2];
 function BoardLoadError({
   message,
   onRetry,
+  span = false,
 }: {
   message: string;
   onRetry: () => void;
+  /** The read that failed was a two-week or month span, not one week. */
+  span?: boolean;
 }) {
   return (
     <div className="board-empty board-load-error" role="alert">
@@ -1028,8 +1176,10 @@ function BoardLoadError({
         לא הצלחנו לטעון את הסידור
       </h2>
       <p>
-        השבוע הזה לא נקרא מהשרת, כך שאיננו יודעים אם יש בו סידור. אפשר לנסות
-        שוב — שום דבר לא נכתב ולא נמחק.
+        {span
+          ? "התאריכים האלה לא נקראו מהשרת, כך שאיננו יודעים אם יש בהם סידור."
+          : "השבוע הזה לא נקרא מהשרת, כך שאיננו יודעים אם יש בו סידור."}{" "}
+        אפשר לנסות שוב — שום דבר לא נכתב ולא נמחק.
       </p>
       <p className="board-load-error-detail">{message}</p>
       <div className="board-empty-actions">

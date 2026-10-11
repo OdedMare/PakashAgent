@@ -90,7 +90,7 @@ interface ManagementState {
    *  only part the manager can act on. */
   gaps: ProfileGaps | null;
   dismissGaps: () => void;
-  refresh: () => Promise<void>;
+  refresh: (required?: boolean) => Promise<void>;
   generate: (input: {
     starts_on?: string;
     ends_on?: string;
@@ -170,6 +170,7 @@ export function useManagement(): ManagementState {
     undefined,
   );
   const [busy, setBusy] = useState(false);
+  const overviewToken = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [generation, setGeneration] = useState<GenerationProgress | null>(null);
   // A build is running and this browser is watching it. Kept apart from
@@ -211,9 +212,13 @@ export function useManagement(): ManagementState {
   );
   const [gaps, setGaps] = useState<ProfileGaps | null>(null);
 
-  const refresh = useCallback(async () => {
-    const next = await scheduleOverview().catch(() => null);
-    if (next) setOverview(next);
+  const refresh = useCallback(async (required = false) => {
+    const token = ++overviewToken.current;
+    const next = await scheduleOverview().catch((reason) => {
+      if (required) throw reason;
+      return null;
+    });
+    if (next && token === overviewToken.current) setOverview(next);
   }, []);
 
   /** Run a write, surface its Hebrew error, and re-read the world after.
@@ -552,10 +557,11 @@ export function useManagement(): ManagementState {
   // than theoretical.
   useEffect(() => {
     let cancelled = false;
+    const token = ++overviewToken.current;
     scheduleOverview()
       .catch(() => null)
       .then((next) => {
-        if (!cancelled && next) {
+        if (!cancelled && next && token === overviewToken.current) {
           setOverview(next);
           if (next.schedule?.generation.status === "running") {
             void resumeGeneration(next.schedule.id);

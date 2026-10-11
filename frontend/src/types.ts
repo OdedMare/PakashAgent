@@ -657,8 +657,17 @@ export interface EmployeeLoad {
   employee: string;
   hours: number;
   shifts: number;
+  /** How many of `shifts` were nights, by the audit's own definition. */
+  nights: number;
   on_call: number;
   days: number;
+  /** Audit findings at `warning` severity naming this person. */
+  conflicts: number;
+  /** The roster's two rotation fields as stored — worded for the screen by
+   *  `rotationLabel`, the way a board card words them. Both empty for
+   *  somebody the roster no longer lists. */
+  exit_pattern: string;
+  rotation_group: string;
 }
 
 /** How many audit findings of one code. A count, never a score. */
@@ -684,12 +693,17 @@ export interface ConstraintPressure {
 export interface ShiftStats {
   total_hours: number;
   total_shifts: number;
+  /** How many of `total_shifts` were nights. */
+  total_nights: number;
   people_working: number;
   coverage: Coverage;
   by_shift: ShiftLoad[];
   by_day: DayLoad[];
   by_employee: EmployeeLoad[];
   warning_counts: WarningCount[];
+  /** Audit findings at `warning` severity. Notices are left out, as the
+   *  board's own tile leaves them out. */
+  conflicts: number;
   constraint_pressure: ConstraintPressure;
 }
 

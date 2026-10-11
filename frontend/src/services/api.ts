@@ -29,6 +29,7 @@ import type {
   RuntimeSettings,
   Schedule,
   ScheduleProgress,
+  ShiftStats,
   Simulation,
   SwapRow,
   TeamSummary,
@@ -72,6 +73,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   try {
     response = await fetch(path, {
       ...options,
+      cache: "no-store",
       // The workspace session is an HttpOnly cookie. Without this the browser
       // withholds it on anything it treats as cross-origin, and every guarded
       // route answers 401 while the user is plainly logged in.
@@ -319,6 +321,21 @@ export function rotateMemberLink(): Promise<Workspace> {
  *  backend shapes it by role, giving them published periods only. */
 export function scheduleOverview(): Promise<ManagementOverview> {
   return request<ManagementOverview>("/api/schedule/overview");
+}
+
+/** The stats panel's numbers for a span of dates, optionally one person's.
+ *
+ *  The same shape the overview carries for the current period, counted by
+ *  the same code — the span may be a day inside a period or a month across
+ *  several. Manager only. */
+export function scheduleStats(
+  start: string,
+  end: string,
+  employee = "",
+): Promise<ShiftStats> {
+  const query = new URLSearchParams({ start, end });
+  if (employee) query.set("employee", employee);
+  return request<ShiftStats>(`/api/schedule/stats?${query}`);
 }
 
 /** Create or patch the workplace profile manually, without a model call.

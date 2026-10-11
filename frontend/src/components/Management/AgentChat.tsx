@@ -167,6 +167,8 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
       <button type="button" onClick={() => document.getElementById(`chat-message-${last.id}`)?.scrollIntoView({ block: "nearest", behavior: scrollBehavior() })}>הצגת התוכנית</button></div> : null}
     {copyError ? <p className="conversation-error" role="status">{copyError}</p> : null}
     {agent.error ? <p className="conversation-error" role="alert">{agent.error}</p> : null}
+    {agent.refreshPending ? <button type="button" className="ghost-button" disabled={agent.busy}
+      onClick={() => void agent.retryRefresh()}><RotateCcw size={14} />רענון הלוח</button> : null}
     <form className="conversation-composer" data-tour="agent-composer" onSubmit={(event) => { event.preventDefault(); if (!disabled) void send(text); }}>
       {revising ? <div className="conversation-revising"><span>הבקשה הערוכה תישלח כהודעת המשך</span>
         <button type="button" className="icon-button" aria-label="ביטול עריכת הבקשה" onClick={() => { setRevising(false); setText(""); }}><X size={15} /></button></div> : null}

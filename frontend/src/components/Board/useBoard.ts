@@ -114,6 +114,7 @@ interface BoardState {
    *  empty list, which means the server answered and nothing is stored. */
   rangeError: string | null;
   reloadRange: () => Promise<void>;
+  refresh: (date?: string) => Promise<void>;
   /** Ask what a placement would cost. No model call. */
   check: (input: {
     employee: string;
@@ -369,6 +370,21 @@ export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
     });
   }, [fetchSpan, spanKey, range.start, range.end, scheduleId, refreshKey]);
 
+  const refresh = useCallback(async (date?: string) => {
+    const day = date || focus;
+    const wantedRange = rangeOf(view, day);
+    const [weekRead, spanRead] = await Promise.all([
+      fetchWeek(sundayOf(day)),
+      isOverview(view) ? fetchSpan(wantedRange.start, wantedRange.end) : Promise.resolve(null),
+    ]);
+    if (weekRead.token === weekToken.current) setWeek(weekRead.week);
+    if (spanRead && spanRead.token === spanToken.current) setSpan(spanRead.span);
+    const error = weekRead.week.error || spanRead?.span.error;
+    if (error) throw new Error(error);
+    // Navigate only after the updated data arrives, without undoing a newer navigation.
+    if (weekRead.token === weekToken.current && (!spanRead || spanRead.token === spanToken.current)) goTo(day);
+  }, [focus, view, fetchWeek, fetchSpan, goTo]);
+
   const setFilters = useCallback((next: Partial<BoardFilters>) => {
     setFiltersState((current) => ({ ...current, ...next }));
   }, []);
@@ -446,6 +462,7 @@ export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
     rangeBusy: spanKey !== null && !spanSettled,
     rangeError: spanSettled ? span.error : null,
     reloadRange,
+    refresh,
     check,
   };
 }

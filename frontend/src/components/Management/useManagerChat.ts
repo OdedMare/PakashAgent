@@ -28,6 +28,7 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshPending, setRefreshPending] = useState<ChatPlan | null>(null);
   const inFlight = useRef(false);
   const mounted = useRef(true);
   const workingId = chat?.messages.find((message) => message.status === "working")?.id;
@@ -90,6 +91,16 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
     }
   }, []);
 
+  const syncBoard = useCallback(async (plan: ChatPlan) => {
+    try {
+      await onApplied(plan);
+      if (mounted.current) setRefreshPending(null);
+    } catch {
+      if (mounted.current) setRefreshPending(plan);
+      throw new Error("התוכנית נשמרה, אבל לא ניתן לטעון את הלוח המעודכן. לחצו על רענון הלוח כדי לנסות שוב.");
+    }
+  }, [onApplied]);
+
   const send = useCallback(async (content: string) => {
     if (!chatId || working || !content.trim()) return false;
     // An id survives a lost response, so re-fetching recovers the accepted turn.
@@ -108,30 +119,42 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
       }
       if (mounted.current) setChat(next);
       if (latest?.status === "pending" && next.messages.find((message) => message.id === latest.id)?.status === "applied")
-        await onApplied(latest.payload.plan);
+        await syncBoard(latest.payload.plan!);
       return next;
     });
-  }, [chat, chatId, working, scheduleId, visibleWeek, focusDate, run, onApplied]);
+  }, [chat, chatId, working, scheduleId, visibleWeek, focusDate, run, syncBoard]);
 
   const apply = useCallback(async (messageId: string, exceptions: boolean) => {
     if (!chatId || working) return;
     await run(async () => {
-      let next: ManagerConversation;
-      try {
-        next = await applyManagerPlan(chatId, messageId, exceptions);
-      } catch (reason) {
-        const recovered = await readManagerChat(chatId).catch(() => null);
-        if (recovered?.messages.find((message) => message.id === messageId)?.status === "applied") next = recovered;
-        else throw reason;
+      let next: ManagerConversation | undefined;
+      // Approval is idempotent by message id; recover or retry a lost response once.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          next = await applyManagerPlan(chatId, messageId, exceptions);
+          break;
+        } catch (reason) {
+          const recovered = await readManagerChat(chatId).catch(() => null);
+          const status = recovered?.messages.find((message) => message.id === messageId)?.status;
+          if (status === "applied") { next = recovered!; break; }
+          if (attempt === 1 || (recovered && status !== "pending")) throw reason;
+        }
       }
-      if (mounted.current) setChat(next);
-      await onApplied(next.messages.find((message) => message.id === messageId)?.payload.plan);
-      return next;
+      const applied = next?.messages.find((message) => message.id === messageId);
+      if (applied?.status !== "applied" || !applied.payload.plan)
+        throw new Error("השרת לא אישר שהתוכנית נשמרה. נסו שוב להחיל את התוכנית.");
+      if (mounted.current) setChat(next!);
+      await syncBoard(applied.payload.plan);
+      return next!;
     });
-  }, [chatId, working, run, onApplied]);
+  }, [chatId, working, run, syncBoard]);
 
   return {
-    chat, chats, busy, working, loading, error, send, apply,
+    chat, chats, busy, working, loading, error, send, apply, refreshPending,
+    retryRefresh: () => chat && refreshPending ? run(async () => {
+      await syncBoard(refreshPending);
+      return chat;
+    }) : Promise.resolve(false),
     select: (id: string) => run(() => readManagerChat(id)),
     newChat: () => run(createManagerChat),
     remove: () => chatId ? run(async () => {

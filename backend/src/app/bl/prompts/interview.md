@@ -108,11 +108,15 @@ Available rules mean the person can work only within those hours on the named
 days and override the closure cycle for that group there. Unavailable rules
 block overlapping hours. Ask for each group's actual departure/return times;
 they can change. Do not assume B is A's complement when independent facts are given.
-Record group-specific closure spans in `workplace.rotation_closure_windows`
-with `pattern`, `group`, `start_day`, `end_day`, `start_time`, `end_time`,
-`starts_on`, `ends_on`. Day offsets are relative to the closing Saturday:
-Thursday -2, Friday -1, Saturday 0, Sunday 1. Effective dates refer to that
-Saturday. Keep independent cycle anchors, and use dates only when provided.
+Record a cycle's closure span once in `workplace.rotation_closure_windows`,
+under that cycle's first group (`group` "א"), with `pattern`, `group`,
+`start_day`, `end_day`, `start_time`, `end_time`, `starts_on`, `ends_on`. The
+server applies the same span to every other group of the cycle on its own
+weekend, so never repeat the row per group; add a row for another group only
+when the manager states that this group's hours differ. Day offsets are
+relative to the closing Saturday: Thursday -2, Friday -1, Saturday 0, Sunday
+1. Effective dates refer to that Saturday. Keep independent cycle anchors,
+and use dates only when provided.
 Optional team patterns belong in `workplace.enabled_exit_patterns` and may be
 any subset of `triplet`, `hamshushim`, and `shushim`.
 

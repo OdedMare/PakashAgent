@@ -70,7 +70,10 @@ uvicorn app.main:app --app-dir src --reload
   warnings. Never blocks. Also owns `personal_summary()` and `fairness()`, which
   the employee area and the manager's stats read — they live here so one
   person's hours are literally the same arithmetic as the manager's warnings,
-  not a second implementation.
+  not a second implementation. `shift_stats` counts load in shifts and
+  nights as well as hours, takes an `employee` to narrow to one person, and
+  is what `schedule_service/statistics.py` runs over any span of dates
+  (`window.py` decides which rows and which findings fall inside it).
 - `bl/employee_service/` — identity claims, the personal view, constraint
   requests, and the unread-change mark. Approval is the only thing that writes
   a constraint (D14).

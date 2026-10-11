@@ -2277,10 +2277,10 @@
     justify-content: center;
   }
 
-  /* The board keeps all seven days and scrolls, rather than dropping to a
-     day view. A week is the unit the manager schedules in, and a phone-sized
-     board that can only show one day is a different product — every core
-     action stays reachable, the grid just moves under the finger. */
+  /* The week keeps all seven days and scrolls, rather than collapsing to a
+     day by itself. A week is the unit the manager schedules in, and a board
+     that decided on its own to show one day would hide the other six — the
+     day view is there, one tap away on the switch, as a thing they chose. */
   .board-grid {
     min-width: 54rem;
   }
@@ -2734,4 +2734,547 @@
   color: var(--text-muted) !important;
   font-family: var(--font-mono, ui-monospace, monospace);
   word-break: break-word;
+}
+
+/* -- how wide the board looks: day, week, two weeks, month ----------------
+   One control beside the arrows it changes the meaning of. A segmented row
+   rather than a menu: four choices are few enough to see at once, and the
+   one in force should be readable without opening anything. */
+
+.board-head-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.board-views {
+  display: inline-flex;
+  gap: 0.15rem;
+  padding: 0.2rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+
+.board-view {
+  min-height: 2.35rem;
+  padding: 0 0.8rem;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 3px);
+  background: transparent;
+  color: var(--text-soft);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.board-view:hover {
+  color: var(--text);
+}
+
+/* The chosen one is lifted, not coloured in: a filled blue segment would
+   read as the next action, and choosing a view is not one. */
+.board-view.is-on {
+  background: var(--surface);
+  color: var(--primary);
+  font-weight: 600;
+  box-shadow: var(--shadow-soft);
+}
+
+.board-view:focus-visible,
+.board-dayhead-open:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+/* -- a day's name as the way into that day --------------------------------
+   The column head's weekday and date become one button under a week view.
+   It keeps the text it had; only the hover says it can be pressed, so a
+   week nobody clicks on looks exactly as it did. */
+
+.board-dayhead-open {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.1rem 0.55rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.board-dayhead-open:hover {
+  background: color-mix(in srgb, var(--primary-soft) 80%, transparent);
+}
+
+.board-dayhead-open:hover .board-dayhead-weekday,
+.board-dayhead-open:hover .board-dayhead-date {
+  color: var(--primary);
+}
+
+/* The rail's segments as buttons. Only the three borders the segment never
+   had are removed — the dividing one is the rail's own structure. */
+button.week-rail-day {
+  appearance: none;
+  border-width: 0;
+  border-inline-end: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+button.week-rail-day:hover {
+  background: var(--surface-2);
+}
+
+button.week-rail-day.is-today:hover {
+  background: var(--primary-soft);
+}
+
+/* Inset, because the rail clips its overflow and an outer ring would be cut
+   off at the first and last day. */
+button.week-rail-day:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+/* The day the board below is showing. A ring rather than today's fill, so
+   "the day on screen" and "today" stay two different marks when they are
+   two different days — and stack when they are the same one. */
+.week-rail-day.is-selected {
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+/* -- the board as one day -------------------------------------------------
+   The same grid with a single column. The column is as wide as the board,
+   so cards run across it and wrap instead of stacking into a thin tower
+   down the middle of an empty screen. */
+
+.board-grid.is-day {
+  grid-template-columns: 9rem minmax(0, 1fr);
+  min-width: 0;
+}
+
+.board-grid.is-day .board-cell {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
+  gap: 0.45rem;
+  padding: 0.6rem;
+}
+
+.board-grid.is-day .board-card {
+  flex: 0 1 15rem;
+  min-width: 10rem;
+}
+
+.board-loading-grid.is-day {
+  min-width: 0;
+}
+
+.board-loading-grid.is-day .board-loading-row {
+  grid-template-columns: 9rem minmax(0, 1fr);
+}
+
+/* -- two weeks and a month ------------------------------------------------
+   Weeks down, days across — the board from further away. It borrows the
+   board's own vocabulary on purpose: the same amber for a short day, the
+   same accent for today, the same hue per person, so nothing learned on the
+   week has to be re-learned here. A day is one button; nothing inside it
+   is separately pressable, because from this far out the day is the
+   smallest thing worth aiming at. */
+
+.range-grid {
+  display: grid;
+  grid-template-columns: 5.6rem repeat(7, minmax(7.6rem, 1fr));
+  min-width: 60rem;
+}
+
+.range-grid.is-month {
+  grid-template-columns: 5.6rem repeat(7, minmax(6.8rem, 1fr));
+  min-width: 54rem;
+}
+
+/* A week contributes its cells straight to the grid above, so the eight
+   columns line up down the whole month. */
+.range-week {
+  display: contents;
+}
+
+.range-corner,
+.range-weekday {
+  padding: 0.55rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.range-corner {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 2;
+}
+
+.range-weekday {
+  text-align: center;
+  color: var(--text-soft);
+  border-inline-start: 1px solid var(--border);
+}
+
+.range-weekday.is-weekend {
+  background: color-mix(in srgb, var(--surface-3) 60%, var(--surface-2));
+}
+
+.range-weekhead {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding: 0.55rem 0.5rem;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-soft);
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.range-weekhead:hover {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.range-weekhead-dates {
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* The board's own draft and published chips, smaller. "אין סידור" is dashed
+   and uncoloured: it is an absence, not a third state of a period. */
+.range-weekhead-status {
+  white-space: nowrap;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.64rem;
+  font-weight: 600;
+}
+
+.range-weekhead-status.is-draft {
+  background: var(--surface-3);
+  color: var(--text-soft);
+  border-color: var(--border-strong);
+}
+
+.range-weekhead-status.is-published {
+  background: var(--success-soft);
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 35%, transparent);
+}
+
+.range-weekhead-status.is-none {
+  color: var(--text-muted);
+  border-style: dashed;
+  border-color: var(--border-strong);
+}
+
+.range-day {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.32rem;
+  min-width: 0;
+  min-height: 7.6rem;
+  padding: 0.4rem 0.45rem 0.5rem;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-inline-start: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.range-grid.is-month .range-day {
+  min-height: 6.4rem;
+}
+
+.range-day.is-weekend {
+  background: color-mix(in srgb, var(--surface-3) 35%, transparent);
+}
+
+.range-day.has-warning {
+  background: color-mix(in srgb, var(--warning-soft) 55%, transparent);
+}
+
+.range-day.is-today {
+  background: color-mix(in srgb, var(--primary-soft) 45%, transparent);
+  box-shadow: inset 0 3px 0 0 var(--primary);
+}
+
+.range-day.is-short {
+  box-shadow: inset 0 -2px 0 0 color-mix(in srgb, var(--warning) 55%, transparent);
+}
+
+.range-day.is-today.is-short {
+  box-shadow:
+    inset 0 3px 0 0 var(--primary),
+    inset 0 -2px 0 0 color-mix(in srgb, var(--warning) 55%, transparent);
+}
+
+.range-day:hover {
+  background: var(--surface-2);
+}
+
+.range-day.is-today:hover {
+  background: var(--primary-soft);
+}
+
+/* What the agent is talking about, at the only resolution this view has. */
+.range-day.is-touched {
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+/* Inset for the same reason the rail's is: the scroller clips. Declared
+   after every state above so a focused day always shows that it is. */
+.range-day:focus-visible,
+.range-weekhead:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+/* The days that only finish a month's first and last week. Their contents
+   recede; their borders do not, or the grid would look torn at the edges. */
+.range-day.is-outside > * {
+  opacity: 0.5;
+}
+
+.range-day.is-filtered {
+  background: var(--surface-2);
+}
+
+.range-day.is-filtered > * {
+  opacity: 0.4;
+}
+
+/* Wraps rather than overflows: beside the open conversation a day is a
+   few characters wide, and a count pushed out of its own cell lands on the
+   next day's date and reads as that day's. */
+.range-day-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.3rem;
+  min-height: 1.2rem;
+}
+
+.range-day-number {
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.range-day.is-today .range-day-number,
+.range-day-pill {
+  color: var(--primary);
+}
+
+.range-day-pill {
+  font-size: 0.6rem;
+  font-weight: 600;
+}
+
+.range-day-touch {
+  display: inline-flex;
+  color: var(--primary);
+}
+
+.range-day-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: 0.64rem;
+  font-weight: 600;
+  color: var(--warning);
+}
+
+.range-day-coverage {
+  margin-inline-start: auto;
+  padding: 0.03rem 0.32rem;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.range-day-coverage.is-short {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.range-day-closure {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 0.2rem;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+}
+
+.range-day-closure.is-handover {
+  opacity: 0.7;
+}
+
+.range-day-none {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.range-shift {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.range-shift-name {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.range-shift-people {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+/* A name in its own hue — the card's colour without the card. Truncated
+   rather than wrapped: a long name must not push a day taller than its
+   week, and the full name is one click away. */
+.range-person {
+  max-width: 100%;
+  padding: 0.08rem 0.38rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.range-grid.is-month .range-person {
+  padding: 0.04rem 0.32rem;
+  font-size: 0.66rem;
+}
+
+.range-more {
+  font-size: 0.64rem;
+  color: var(--text-muted);
+}
+
+.range-short {
+  padding: 0.04rem 0.35rem;
+  border-radius: 999px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 0.62rem;
+  white-space: nowrap;
+}
+
+/* A day still being read: its date is known, nothing else is, and a bar is
+   all that says so. The board's own skeleton pulse, so the two loading
+   states read as the same thing happening. */
+.range-day.is-loading::after {
+  content: "";
+  width: 70%;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--surface-3);
+  animation: board-skeleton 1.4s ease-in-out infinite;
+}
+
+/* Beside the open conversation the board has half a screen. The week grid
+   fits itself to that rather than scrolling, and so does this one. */
+@media (min-width: 900px) {
+  .management-workspace.has-drawer .range-grid,
+  .management-workspace.has-drawer .range-grid.is-month {
+    min-width: 0;
+    grid-template-columns: 3.9rem repeat(7, minmax(0, 1fr));
+  }
+
+  .management-workspace.has-drawer .range-day {
+    padding: 0.35rem 0.25rem 0.4rem;
+  }
+
+  .management-workspace.has-drawer .range-weekhead {
+    padding-inline: 0.3rem;
+  }
+
+  .management-workspace.has-drawer .range-weekhead-dates {
+    font-size: 0.62rem;
+  }
+
+  .management-workspace.has-drawer .range-weekhead-status {
+    padding-inline: 0.28rem;
+    font-size: 0.6rem;
+  }
+
+  /* One column has the width the seven were sharing, so its two actions
+     sit side by side again instead of stacking into a tall head. */
+  .management-workspace.has-drawer .board-grid.is-day .board-dayhead-actions {
+    flex-direction: row;
+  }
+}
+
+@media (max-width: 820px) {
+  .board-head-nav {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .board-view {
+    min-height: 2.75rem;
+    padding-inline: 0.95rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-view,
+  .board-dayhead-open,
+  button.week-rail-day,
+  .range-weekhead,
+  .range-day {
+    transition: none;
+  }
+
+  .range-day.is-loading::after {
+    animation: none;
+  }
 }
