@@ -9,7 +9,8 @@ from app.bl.audit import (
     UNAVAILABLE, audit, constraint_conflicts, counts_toward_staffing,
     load_history,
 )
-from app.bl.audit.roster import index_shifts, shift_hours
+from app.bl.audit.roster import index_shifts, is_night, shift_hours
+from app.bl.deterministic_scheduler.outlook import outlook
 from app.bl.deterministic_scheduler.rows import (
     assignment, eligible, employees, roles, same_slot, text, unique,
 )
@@ -27,6 +28,7 @@ class DayPlan:
         self.employees = employees(profile)
         self.people = {text(row.get("name")): row for row in self.employees}
         self.shifts = (profile or {}).get("shifts") or []
+        self.raw_availability = availability
         self.availability = effective_availability(profile, availability, day, day)
         self.slot_keys = {(slot["shift_name"], slot["slot_date"]) for slot in slots}
         committed = [row for row in map(assignment, already_scheduled or []) if row]
@@ -64,8 +66,7 @@ class DayPlan:
     def fill(self, history) -> None:
         """Scarce and specialised slots first; stable tie-breakers make a
         rerun of the same day produce the same result."""
-        rows = load_history(list(history or []) + self.current, self.shifts, self.employees)
-        self.loads = {row["employee"]: row["hours"] for row in rows}
+        self.loads = self._loads(history)
         self.slots.sort(key=lambda slot: (
             self._legal_count(slot),
             not bool(slot.get("required_roles")),
@@ -88,8 +89,33 @@ class DayPlan:
             _, chosen, person = min(candidates, key=lambda item: item[0])
             chosen["reason"] = self._reason(person, slot)
             self.current.append(chosen)
-            hours = shift_hours(index_shifts(self.shifts).get(chosen["shift"]) or {})
-            self.loads[chosen["employee"]] = self.loads.get(chosen["employee"], 0.0) + hours
+            shift = index_shifts(self.shifts).get(chosen["shift"]) or {}
+            load = self.loads.setdefault(chosen["employee"], _empty_load())
+            load["hours"] += shift_hours(shift)
+            if is_night(shift):
+                load["period_nights"] += 1
+                load["nights"] += 1
+
+    def _loads(self, history) -> dict:
+        """Worked load (history and this period) plus the outlook ahead.
+
+        `period_nights` counts this period alone, the figure the manager's
+        chart shows; history breaks ties between equal periods, as the
+        model path's fairness check does.
+        """
+        total = load_history(list(history or []) + self.current, self.shifts, self.employees)
+        period = {row["employee"]: row for row in
+                  load_history(self.current, self.shifts, self.employees)}
+        ahead = outlook(self.profile, self.people, self.raw_availability, self.day, self.current)
+        loads = {}
+        for row in total:
+            name, coming = row["employee"], ahead.get(row["employee"], {})
+            loads[name] = {
+                "hours": row["hours"] + coming.get("hours", 0.0),
+                "period_nights": period.get(name, {}).get("nights", 0) + coming.get("nights", 0.0),
+                "nights": row["nights"],
+            }
+        return loads
 
     def _candidates(self, slot: dict) -> list:
         found = []
@@ -101,12 +127,14 @@ class DayPlan:
             row = {"employee": name, "shift": slot["shift_name"], "date": slot["slot_date"], "reason": ""}
             if self._hard_conflict(row, self.slots) or self._introduces_blocking(row):
                 continue
-            found.append((self._candidate_key(slot, person, self.loads.get(name, 0.0)), row, person))
+            found.append((self._candidate_key(slot, person, self.loads.get(name) or _empty_load()), row, person))
         return found
 
-    def _candidate_key(self, slot: dict, person: dict, hours: float) -> tuple:
+    def _candidate_key(self, slot: dict, person: dict, load: dict) -> tuple:
         """Unmet mandatory capabilities first, then the closing group, then
-        the lightest accumulated load."""
+        the lightest load. A night goes to whoever has the fewest nights
+        before hours are compared, so nights spread evenly rather than
+        landing on whoever happens to be lightest in hours."""
         missing = self._missing_roles(self.current, slot)
         covers_roles = len(missing.intersection(roles(person)))
         manager_missing = bool(slot.get("requires_shift_manager")) and not any(
@@ -118,8 +146,10 @@ class DayPlan:
             self.profile, person, datetime.date.fromisoformat(slot["slot_date"]), slot["shift_name"]
         )
         remaining = len(missing) - covers_roles + int(manager_missing and not covers_manager)
+        night = is_night(index_shifts(self.shifts).get(slot["shift_name"]) or {})
+        nights = (load["period_nights"], load["nights"]) if night else (0, 0)
         return (remaining, not covers_manager, -covers_roles, not closing,
-                float(hours), text(person.get("name")))
+                *nights, round(load["hours"], 6), text(person.get("name")))
 
     def _introduces_blocking(self, row: dict) -> bool:
         warnings = audit(
@@ -194,6 +224,10 @@ class DayPlan:
             )
             if row.get("date") in (None, "", self.day)
         ]
+
+
+def _empty_load() -> dict:
+    return {"hours": 0.0, "period_nights": 0.0, "nights": 0}
 
 
 def _cycle(profile: dict, group: str) -> str:
