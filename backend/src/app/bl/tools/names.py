@@ -33,7 +33,10 @@ TOOL_DESCRIPTIONS = {
     TOOL_EMPLOYEE_STATE: "המשמרות, השעות והאילוצים של עובד אחד",
     TOOL_COVERAGE_GAPS: "משמרות שחסרים בהן אנשים",
     TOOL_VALIDATE_PLACEMENT: "בדיקה מה יקרה אם משבצים מישהו למשמרת",
-    TOOL_FIND_REPLACEMENTS: "מי יכול לקחת משמרת במקום מישהו אחר",
+    TOOL_FIND_REPLACEMENTS: (
+        "מי יכול לקחת משמרת במקום מישהו אחר; חובה לשלוח employee, "
+        "shift_name ו-slot_date בפורמט YYYY-MM-DD"
+    ),
     TOOL_PUBLISH_READINESS: "מה חסר לפני פרסום התקופה לצוות",
     TOOL_PROFILE_GAPS: "מה הסוכן עדיין לא יודע על מקום העבודה",
 }

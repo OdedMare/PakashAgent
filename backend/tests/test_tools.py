@@ -434,6 +434,15 @@ def test_find_replacements_offers_qualified_free_colleagues(repo, tools):
     assert DANA not in names
 
 
+def test_find_replacements_names_every_missing_required_argument(tools):
+    answer = tools.run(TEAM, TOOL_FIND_REPLACEMENTS, {"employee": YOSSI})
+    assert answer == {
+        "tool": TOOL_FIND_REPLACEMENTS,
+        "ok": False,
+        "error": "חסרים פרטי חובה לכלי: shift_name, slot_date",
+    }
+
+
 def test_every_candidate_carries_its_reason(repo, tools):
     _schedule(repo, assignments=[
         {"employee": YOSSI, "shift": EVENING, "date": "2026-08-17"},

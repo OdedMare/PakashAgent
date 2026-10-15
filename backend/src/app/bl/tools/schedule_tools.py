@@ -65,8 +65,14 @@ class ScheduleTools:
         tool = self._menu.get(name)
         if tool is None:
             return _failure(name, "אין כלי בשם הזה")
+        arguments = _arguments_for(tool, arguments)
+        missing = _missing_arguments(tool, arguments)
+        if missing:
+            return _failure(
+                name, "חסרים פרטי חובה לכלי: " + ", ".join(missing)
+            )
         try:
-            result = tool(team_id, **_arguments_for(tool, arguments))
+            result = tool(team_id, **arguments)
         except AgentError as failure:
             # A tool refusing malformed input is still an answer the turn can
             # use, surfaced in Hebrew like everything leaving the backend.
@@ -90,6 +96,15 @@ def _arguments_for(tool: Callable, arguments: dict) -> dict:
     """
     accepted = set(inspect.signature(tool).parameters) - {"team_id"}
     return {key: value for key, value in arguments.items() if key in accepted}
+
+
+def _missing_arguments(tool: Callable, arguments: dict) -> list:
+    """Required model arguments, named so the next round can repair its call."""
+    return [
+        name for name, parameter in inspect.signature(tool).parameters.items()
+        if name != "team_id" and parameter.default is inspect.Parameter.empty
+        and not arguments.get(name)
+    ]
 
 
 def _invalid_date_argument(arguments: dict) -> str:
