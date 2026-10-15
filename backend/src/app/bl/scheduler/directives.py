@@ -3,9 +3,9 @@
 import json
 from typing import Any, List, Optional
 
-from app.bl.deterministic_scheduler.rows import text
 from app.bl.scheduler.slots import build_slots
 from app.bl.scheduler.span_audit import usage_of
+from app.bl.scheduler.values import bounded
 
 
 DIRECTIVE_RESPONSE_SCHEMA = {
@@ -69,7 +69,7 @@ def semantic_sources(profile, availability=None, instructions="", preferences=No
     add("instructions", instructions)
     for row in preferences or []:
         add("preference", row.get("text") if isinstance(row, dict) else row,
-            text(row.get("subject")) if isinstance(row, dict) else "")
+            bounded(row.get("subject")) if isinstance(row, dict) else "")
     for row in (profile or {}).get("rules") or []:
         add("rule", row)
     for key in _TEXT_POLICIES:
@@ -82,7 +82,7 @@ def semantic_sources(profile, availability=None, instructions="", preferences=No
     for person in (profile or {}).get("employees") or []:
         if not isinstance(person, dict):
             continue
-        name = text(person.get("name"))
+        name = bounded(person.get("name"))
         for key in _EMPLOYEE_SEMANTICS:
             add("employee_" + key, person.get(key), name)
         for row in person.get("recurring_constraints") or []:
@@ -90,7 +90,7 @@ def semantic_sources(profile, availability=None, instructions="", preferences=No
                 add("recurring_constraint", row, name)
     for row in availability or []:
         if isinstance(row, dict) and row.get("is_hard", True) is False:
-            add("soft_availability", row, text(row.get("employee")))
+            add("soft_availability", row, bounded(row.get("employee")))
     return sources
 
 
@@ -105,15 +105,15 @@ def read_translation(answer: Any, sources: List[dict], profile: dict,
     source_ids = {row["id"] for row in sources}
     covered, unresolved_ids = set(), set()
     for row in unresolved:
-        if not isinstance(row, dict) or row.get("source_id") not in source_ids or not text(row.get("reason")):
+        if not isinstance(row, dict) or row.get("source_id") not in source_ids or not bounded(row.get("reason")):
             return None
         unresolved_ids.add(row["source_id"])
     if unresolved_ids:
         return None
 
     people = {
-        text(row.get("name")): row for row in (profile or {}).get("employees") or []
-        if isinstance(row, dict) and text(row.get("name"))
+        bounded(row.get("name")): row for row in (profile or {}).get("employees") or []
+        if isinstance(row, dict) and bounded(row.get("name"))
     }
     slots = {
         (row["shift_name"], row["slot_date"])
@@ -124,8 +124,8 @@ def read_translation(answer: Any, sources: List[dict], profile: dict,
         if not isinstance(row, dict):
             return None
         source_id = row.get("source_id")
-        action, employee = row.get("action"), text(row.get("employee"))
-        date, shift, reason = text(row.get("date")), text(row.get("shift")), text(row.get("reason"))
+        action, employee = row.get("action"), bounded(row.get("employee"))
+        date, shift, reason = bounded(row.get("date")), bounded(row.get("shift")), bounded(row.get("reason"))
         if (source_id not in source_ids or action not in ("unavailable", "required_assignment")
                 or employee not in people or (shift, date) not in slots or not reason):
             return None
