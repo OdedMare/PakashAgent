@@ -31,20 +31,11 @@ class WorkspaceService:
         self._repository = repository
 
     def create(self, name: str, password: str) -> dict:
-        """Open a workspace and return it with a boss session.
-
-        The first team created also adopts any interview recorded before
-        workspaces existed -- see `claim_orphan_sessions`. Without that, an
-        existing install's finished interview becomes unreachable the moment
-        every read starts filtering by team.
-        """
+        """Open a workspace and return it with a boss session."""
         clean_name = self.validate_name(name)
         self._validate_password(password)
         team = self._repository.create_team(clean_name, password)
-        claimed = self._repository.claim_orphan_sessions(team["id"])
-        result = _public(team, role=ROLE_BOSS)
-        result["claimed_sessions"] = claimed
-        return result
+        return _public(team, role=ROLE_BOSS)
 
     def login(self, team_id: str, password: str) -> dict:
         """Verify the boss password. Raises `AuthError` if it does not match."""

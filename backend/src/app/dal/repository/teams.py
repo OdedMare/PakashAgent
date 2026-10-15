@@ -153,77 +153,28 @@ class TeamRepository(RepositoryBase):
         )
 
     def team_profile(self, team_id: str) -> Optional[dict]:
-        """The workplace profile from this team's finished interview.
-
-        The newest completed one wins. Re-running the interview is how a
-        workplace gets re-taught, and the most recent answer is the one the
-        boss meant.
-        """
-        rows = self._all("""
-            SELECT profile FROM interview_sessions
-            WHERE team_id=%s AND status='complete' AND profile IS NOT NULL
-            ORDER BY updated_at DESC
-            LIMIT 1
-        """, (team_id,))
+        """The workplace profile saved by the manager."""
+        rows = self._all(
+            "SELECT profile FROM team_profiles WHERE team_id=%s", (team_id,)
+        )
         return rows[0]["profile"] if rows else None
 
     def update_team_profile(self, team_id: str, profile: dict) -> dict:
-        """Replace the newest completed interview's working profile.
-
-        Manual edits update the same durable profile instead of creating a
-        second source of truth. Stored schedules keep their historical slots.
-        """
-        with connect(self._store) as connection:
-            row = connection.execute("""
-                SELECT id FROM interview_sessions
-                WHERE team_id=%s AND status='complete' AND profile IS NOT NULL
-                ORDER BY updated_at DESC
-                LIMIT 1
-                FOR UPDATE
-            """, (team_id,)).fetchone()
-            if row is None:
-                raise NotFoundError("פרופיל הצוות לא נמצא")
-            connection.execute("""
-                UPDATE interview_sessions
-                SET profile=%s, updated_at=NOW()
-                WHERE id=%s AND team_id=%s
-            """, (Jsonb(profile), row["id"], team_id))
-            connection.commit()
+        """Replace the team's working profile."""
+        rows = self._all("""
+            UPDATE team_profiles SET profile=%s, updated_at=NOW()
+            WHERE team_id=%s RETURNING team_id
+        """, (Jsonb(profile), team_id))
+        if not rows:
+            raise NotFoundError("פרופיל הצוות לא נמצא")
         return profile
 
     def create_team_profile(self, team_id: str, profile: dict) -> dict:
-        """Create the first profile without requiring an AI interview.
-
-        A manually configured profile lives in the same completed-session
-        store as an interviewed one, so every downstream reader keeps one
-        source of truth.
-        """
+        """Create the team's first manually configured profile."""
         self._execute("""
-            INSERT INTO interview_sessions (id, team_id, status, profile)
-            VALUES (%s,%s,'complete',%s)
-        """, (new_id(), team_id, Jsonb(profile)))
+            INSERT INTO team_profiles (team_id, profile) VALUES (%s,%s)
+        """, (team_id, Jsonb(profile)))
         return profile
-
-    def claim_orphan_sessions(self, team_id: str) -> int:
-        """Adopt interviews recorded before workspaces existed.
-
-        Those rows have `team_id IS NULL` and are otherwise unreachable once
-        every read is scoped. Claiming them into the first team that is
-        created is what keeps an existing install's interview from vanishing
-        the moment this feature ships. Only ever claims once -- after the
-        first team exists there are no NULL rows left to take.
-        """
-        with connect(self._store) as connection:
-            row = connection.execute("""
-                WITH claimed AS (
-                    UPDATE interview_sessions SET team_id=%s
-                    WHERE team_id IS NULL
-                    RETURNING 1
-                )
-                SELECT count(*) AS n FROM claimed
-            """, (team_id,)).fetchone()
-            connection.commit()
-        return int(row["n"]) if row else 0
 
 
 __all__ = [

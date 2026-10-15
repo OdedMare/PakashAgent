@@ -24,8 +24,7 @@ from app.dal.repository.base import RepositoryBase
 # the link over again.
 _TEAM_COLUMNS = "t.id, t.name, t.created_at, t.active, t.notes"
 
-# One row per team with its counts, read in a single round trip. The profile
-# comes from the newest completed interview, matching `team_profile()`.
+# One row per team with its counts, read in a single round trip.
 _TEAM_STATS = """
     SELECT """ + _TEAM_COLUMNS + """,
         p.profile -> 'employees' AS roster,
@@ -49,16 +48,11 @@ _TEAM_STATS = """
             (SELECT max(s.updated_at) FROM schedules s WHERE s.team_id = t.id),
             (SELECT max(i.last_seen_at) FROM employee_identities i
                 WHERE i.team_id = t.id),
-            (SELECT max(v.updated_at) FROM interview_sessions v
-                WHERE v.team_id = t.id)
+            (SELECT p2.updated_at FROM team_profiles p2
+                WHERE p2.team_id = t.id)
         ) AS last_activity
     FROM teams t
-    LEFT JOIN LATERAL (
-        SELECT profile FROM interview_sessions
-        WHERE team_id = t.id AND status = 'complete' AND profile IS NOT NULL
-        ORDER BY updated_at DESC
-        LIMIT 1
-    ) p ON TRUE
+    LEFT JOIN team_profiles p ON p.team_id = t.id
 """
 
 # The fields `update_team_admin` may set, and nothing else. A dict of

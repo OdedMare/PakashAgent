@@ -1,4 +1,4 @@
-"""Teams and the intro interview's tables."""
+"""Teams and their scheduling profiles."""
 
 WORKSPACE_DDL = """
 CREATE TABLE IF NOT EXISTS teams (
@@ -17,58 +17,35 @@ CREATE TABLE IF NOT EXISTS teams (
 
 COMMIT;
 
-CREATE TABLE IF NOT EXISTS interview_sessions (
-    id TEXT PRIMARY KEY,
-    team_id TEXT REFERENCES teams(id) ON DELETE CASCADE,
-    status TEXT NOT NULL DEFAULT 'active'
-        CHECK (status IN ('active','complete')),
-    -- The confirmed workplace profile, written once the model returns
-    -- status=complete and the boss has approved the summary. NULL until then.
-    profile JSONB,
-    -- The last question served, so a browser refresh can resume the interview
-    -- at the turn it left off without replaying the model.
-    pending JSONB,
+CREATE TABLE IF NOT EXISTS team_profiles (
+    team_id TEXT PRIMARY KEY REFERENCES teams(id) ON DELETE CASCADE,
+    profile JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 COMMIT;
 
-CREATE TABLE IF NOT EXISTS interview_turns (
-    id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL
-        REFERENCES interview_sessions(id) ON DELETE CASCADE,
-    role TEXT NOT NULL CHECK (role IN ('assistant','user')),
-    content TEXT NOT NULL,
-    -- The question payload the assistant turn carried (options, the
-    -- recommendation, the topic id). NULL on user turns. Kept so the UI can
-    -- re-render a past turn's answer buttons exactly as they were offered,
-    -- rather than reconstructing them from prose.
-    payload JSONB,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+-- Preserve the latest completed profile when upgrading an installation that
+-- used the removed interview flow. Dynamic SQL keeps this migration valid on
+-- fresh databases where the legacy table never existed.
+DO $$
+BEGIN
+    IF to_regclass('interview_sessions') IS NOT NULL THEN
+        EXECUTE '
+            INSERT INTO team_profiles (team_id, profile, created_at, updated_at)
+            SELECT DISTINCT ON (team_id) team_id, profile, created_at, updated_at
+            FROM interview_sessions
+            WHERE team_id IS NOT NULL AND status = ''complete'' AND profile IS NOT NULL
+            ORDER BY team_id, updated_at DESC
+            ON CONFLICT (team_id) DO NOTHING';
+    END IF;
+END $$;
 
 COMMIT;
 
-CREATE INDEX IF NOT EXISTS interview_turns_session_idx
-    ON interview_turns (session_id, created_at);
-
-COMMIT;
-
--- Guarded migration: `CREATE TABLE IF NOT EXISTS` above is a no-op against a
--- database that predates workspaces, so the new column has to be added
--- separately or it silently never appears on an existing install.
-ALTER TABLE interview_sessions
-    ADD COLUMN IF NOT EXISTS team_id TEXT REFERENCES teams(id) ON DELETE CASCADE;
-
-COMMIT;
-
--- Nullable on purpose. Interviews recorded before workspaces existed have no
--- team to point at, and inventing one for them would be a guess; NULL says
--- "unclaimed" honestly, and `claim_orphan_sessions` is what adopts them into
--- the first team that is created.
-CREATE INDEX IF NOT EXISTS interview_sessions_team_idx
-    ON interview_sessions (team_id, created_at);
+DROP TABLE IF EXISTS interview_turns;
+DROP TABLE IF EXISTS interview_sessions;
 
 COMMIT;
 
