@@ -1,10 +1,9 @@
 """Fast, deterministic assignment of people into an existing slot grid.
 
-**Not wired into generation.** The model assigns and `scheduler` bounds what
-it returns (D3); an outage parks the job for a person to resume rather than
-quietly building a schedule the model never saw. This package is kept as a
-worked reference for that arithmetic -- the same inputs always produce the
-same schedule -- and is covered by its own tests.
+Wired into the selectable generation engine (D31). Structured requests run
+here with zero model calls; automatic mode may first compile narrow semantic
+instructions into validated availability or required-assignment rows. The
+same inputs always produce the same schedule.
 """
 
 import time

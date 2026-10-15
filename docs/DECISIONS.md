@@ -977,15 +977,20 @@ generation. Code uses the existing availability, qualification, staffing,
 rest, load and rotation arithmetic and spends zero model tokens.
 
 **The boundary is representability, not roster size.** Code runs only when
-all placement inputs are structured. Natural-language rules or policies,
-manager instructions, confirmed preferences, soft constraints and active
-training policy require AI. Explicit code mode refuses such a request; it
-never silently drops context. Auto tries code only inside that boundary and
-keeps the result only when its audit has no warnings. Otherwise it asks AI.
+all placement inputs are structured. Explicit code mode refuses semantic
+input and never silently drops context. In auto mode, a small model call may
+compile an exact instruction into one of two validated operations: a named
+employee is unavailable, or a named employee is required, for one existing
+shift on one existing date. Code then builds the roster. Every semantic
+source must be accounted for, and the server rejects invented people, shifts,
+dates and unsupported operations. Ambiguous rules, preferences, policy,
+training judgment, incomplete translation and a deterministic result with
+warnings fall back to the full scheduling model.
 
-This is the narrow exception to D3. It does not turn natural-language rules
-into a second rule engine and it does not make warnings blocking for an AI
-answer. The deterministic result carries a reason per assignment and remains
+This is the narrow exception to D3. The translator is a compiler into existing
+structured inputs, not a second rule engine and not an assignment agent. It
+does not make warnings blocking for an AI answer. Hybrid results report their
+translation token usage and carry a reason per assignment; every result remains
 an ordinary draft the manager may inspect and edit. The selected engine is
 stamped when the build opens; changing the setting affects the next build.
 
