@@ -35,6 +35,7 @@ class DayPlan:
         # A targeted shift rebuild preserves the other shifts on the same date.
         self.current = [row for row in committed if not self._in_plan(row)]
         self.loads = {}
+        self.worked_days = {}
         self.notes: List[str] = []
 
     def _in_plan(self, row: dict) -> bool:
@@ -67,6 +68,7 @@ class DayPlan:
         """Scarce and specialised slots first; stable tie-breakers make a
         rerun of the same day produce the same result."""
         self.loads = self._loads(history)
+        self.worked_days = self._worked_days(list(history or []) + self.current)
         self.slots.sort(key=lambda slot: (
             self._legal_count(slot),
             not bool(slot.get("required_roles")),
@@ -95,6 +97,9 @@ class DayPlan:
             if is_night(shift):
                 load["period_nights"] += 1
                 load["nights"] += 1
+            self.worked_days.setdefault(chosen["employee"], set()).add(
+                datetime.date.fromisoformat(chosen["date"])
+            )
 
     def _loads(self, history) -> dict:
         """Worked load (history and this period) plus the outlook ahead.
@@ -132,9 +137,8 @@ class DayPlan:
 
     def _candidate_key(self, slot: dict, person: dict, load: dict) -> tuple:
         """Unmet mandatory capabilities first, then the closing group, then
-        the lightest load. A night goes to whoever has the fewest nights
-        before hours are compared, so nights spread evenly rather than
-        landing on whoever happens to be lightest in hours."""
+        nights and the lightest load. Among equally loaded legal choices,
+        avoid consecutive days and maximize the distance from nearby work."""
         missing = self._missing_roles(self.current, slot)
         covers_roles = len(missing.intersection(roles(person)))
         manager_missing = bool(slot.get("requires_shift_manager")) and not any(
@@ -148,8 +152,29 @@ class DayPlan:
         remaining = len(missing) - covers_roles + int(manager_missing and not covers_manager)
         night = is_night(index_shifts(self.shifts).get(slot["shift_name"]) or {})
         nights = (load["period_nights"], load["nights"]) if night else (0, 0)
+        spacing = self._spacing_key(text(person.get("name")), slot["slot_date"])
         return (remaining, not covers_manager, -covers_roles, not closing,
-                *nights, round(load["hours"], 6), text(person.get("name")))
+                *nights, round(load["hours"], 6), *spacing, text(person.get("name")))
+
+    def _spacing_key(self, name: str, day: str) -> tuple:
+        target = datetime.date.fromisoformat(day)
+        distances = [abs((target - worked).days)
+                     for worked in self.worked_days.get(name, set())]
+        nearest = min(distances) if distances else float("inf")
+        return (nearest <= 1, -nearest)
+
+    @staticmethod
+    def _worked_days(rows) -> dict:
+        result = {}
+        for row in map(assignment, rows):
+            if row is None:
+                continue
+            try:
+                day = datetime.date.fromisoformat(row["date"])
+            except ValueError:
+                continue
+            result.setdefault(row["employee"], set()).add(day)
+        return result
 
     def _introduces_blocking(self, row: dict) -> bool:
         warnings = audit(

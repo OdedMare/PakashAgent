@@ -191,5 +191,9 @@ def _short_rest(employee, earlier, later, gap, minimum) -> dict:
         % (employee, gap, earlier["shift"], earlier["date"],
            later["shift"], later["date"], minimum),
         employee=employee, date=later["date"], shift=later["shift"],
-        details={"rest_hours": round(gap, 2), "minimum": minimum},
+        details={
+            "rest_hours": round(gap, 2), "minimum": minimum,
+            "earlier_date": earlier["date"], "earlier_shift": earlier["shift"],
+            "later_date": later["date"], "later_shift": later["shift"],
+        },
     )

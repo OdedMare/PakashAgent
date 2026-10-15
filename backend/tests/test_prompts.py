@@ -51,6 +51,23 @@ def test_scheduler_distinguishes_closures_from_shift_count_fairness():
     assert "triplet_first_closure" in text
 
 
+def test_scheduler_asks_for_rest_spacing_without_overriding_rotations_or_nights():
+    text = prompts.load("scheduler")
+
+    assert "consecutive calendar days" in text
+    assert "maximize the gap" in text
+    assert "Do not create an extra night" in text
+
+
+def test_scheduler_enforces_eight_hours_and_directives_expand_absence_ranges():
+    scheduler = prompts.load("scheduler")
+    directives = prompts.load("scheduler_directives")
+
+    assert "minimum is\n  eight hours" in scheduler
+    assert "בין שני לחמישי" in directives
+    assert "every supplied\nshift" in directives
+
+
 def test_briefing_prioritizes_the_closing_group_before_fairness():
     text = prompts.load("briefing", reload=True)
 

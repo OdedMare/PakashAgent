@@ -47,6 +47,8 @@ def audit_for_span(
     return [
         item for item in warnings
         if not item.get("date") or bounded(item.get("date")) in dates
+        or (item.get("code") == SHORT_REST
+            and bounded((item.get("details") or {}).get("earlier_date")) in dates)
     ]
 
 

@@ -141,3 +141,22 @@ def test_open_days_lean_away_from_the_group_closing_the_coming_weekend():
     shifts = _counts(result["assignments"])
     assert sum(shifts.values()) == 12
     assert max(shifts.values()) - min(shifts.values()) <= 1
+
+
+def test_equal_load_is_spread_with_a_day_off_between_assignments():
+    profile = {
+        "workplace": {"name": "יחידה"},
+        "employees": [{"name": "אבי"}, {"name": "בני"}],
+        "shifts": [{
+            "name": SHIFT, "start_time": "07:00", "end_time": "15:00", "days": [],
+            "staffing": [{"days": [], "headcount": 1, "required_roles": []}],
+        }],
+    }
+    history = [
+        {"employee": "אבי", "shift": SHIFT, "date": "2026-08-30"},
+        {"employee": "בני", "shift": SHIFT, "date": "2026-08-21"},
+    ]
+
+    result = generate_day(profile, "2026-08-31", history=history)
+
+    assert [row["employee"] for row in result["assignments"]] == ["בני"]

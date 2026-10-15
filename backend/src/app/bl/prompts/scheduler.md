@@ -103,8 +103,12 @@ Respect these without being told again:
   qualified when one exists.
 - **Trainees do not count toward headcount** unless the profile's
   `training_policy.counts_toward_staffing` says they do.
-- **Respect rest between shifts.** Someone finishing late does not open the
-  next morning.
+- **Respect the minimum rest between shifts as a hard limit.** Read
+  `profile.audit_policy.min_rest_hours`; when it is absent, the minimum is
+  eight hours. Measure from the actual end of the earlier shift (including an
+  overnight shift ending the next day) to the actual start of the later one.
+  Someone finishing a night at 07:00 cannot start a 07:00 morning, and a
+  person with fewer than eight hours must not be assigned even to fill a gap.
 - **Balance total hours across the period after balancing nights.** Compare all eligible people,
   including those at zero hours. Prefer the lowest current-period hours among
   people who can cover the slot's role, command, availability and rotation.
@@ -137,6 +141,13 @@ Respect these without being told again:
   you tell who has been carrying them — compare people's `weekends`
   against each other, and give the next one to someone low.
   Do not re-count anything; the numbers are already correct.
+- **Spread each person's shifts over time.** After coverage, hard rules,
+  rotation/closure ownership and night balancing, avoid assigning a person on
+  consecutive calendar days when an interchangeable person can cover the
+  shift. Among otherwise equivalent choices, maximize the gap from that
+  person's nearest assignment on either side, including `already_scheduled`
+  boundary rows and `fairness.last_worked`. Do not create an extra night,
+  break a closure, or leave a slot short merely to improve spacing.
 
 ## סגירות, שבתות וסבבי יציאות
 

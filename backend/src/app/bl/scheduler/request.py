@@ -3,7 +3,7 @@
 import datetime
 from typing import List
 
-from app.bl.audit import audit, load_history
+from app.bl.audit import SHORT_REST, audit, load_history
 from app.bl.scheduler.availability import effective_availability
 from app.bl.scheduler.bounding import (
     committed_for_model, merge, replace_span, required_assignments,
@@ -110,12 +110,32 @@ class SpanRequest:
             answer.get("assignments"), self.slots, self.profile,
             self.candidates, self.availability,
         )
-        roster = replace_span(self.committed, self.required + accepted, self.dates)
-        warnings = span_warnings(
-            roster, self.slots, self.profile, self.availability,
-            self.candidates, self.dates,
-        )
+        while True:
+            roster = replace_span(self.committed, self.required + accepted, self.dates)
+            warnings = span_warnings(
+                roster, self.slots, self.profile, self.availability,
+                self.candidates, self.dates,
+            )
+            rest = next((item for item in warnings if item.get("code") == SHORT_REST), None)
+            victim = self._generated_rest_conflict(accepted, rest) if rest else None
+            if victim is None:
+                break
+            accepted.remove(victim)
+            rejected.append({
+                "date": victim["date"],
+                "reason": "fewer than the required rest hours between shifts",
+            })
         return SpanAttempt(answer, roster, rejected, warnings)
+
+    @staticmethod
+    def _generated_rest_conflict(accepted: List[dict], warning: dict):
+        details = warning.get("details") or {}
+        keys = [
+            (warning.get("employee"), details.get("later_shift"), details.get("later_date")),
+            (warning.get("employee"), details.get("earlier_shift"), details.get("earlier_date")),
+        ]
+        return next((row for key in keys for row in accepted
+                     if (row.get("employee"), row.get("shift"), row.get("date")) == key), None)
 
     def audit(self, roster: List[dict]) -> List[dict]:
         return audit(roster, self.profile.get("shifts") or [],

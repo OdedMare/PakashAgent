@@ -8,14 +8,20 @@ The only supported actions are:
 - `required_assignment`: an explicit instruction that a named employee must
   work one exact shift on one exact date.
 
-Use only employee names, dates and shift names supplied in the input. Never
-infer a missing date, choose between people, expand a recurring rule, or turn
-words such as "prefer", "if possible", fairness, training, rest, rotation or
-general policy into a hard directive. Put those sources in `unresolved`.
+Use only employee names, dates and shift names supplied in the input. You may
+expand an explicit absence over a named date range or weekday range into one
+`unavailable` directive for every matching supplied slot. Treat both ends of
+"between Monday and Thursday" / "בין שני לחמישי" as included unless the
+source says otherwise. If no shift is named, the absence covers every supplied
+shift on those dates. Never extend it beyond the supplied period, infer which
+person the manager meant, choose between people, expand a recurring rule into
+future periods, or turn words such as "prefer", "if possible", fairness,
+training, rest, rotation or general policy into a hard directive. Put those
+sources in `unresolved`.
 
 Every source id must appear in at least one directive or exactly once in
-`unresolved`. A source may produce several directives when it explicitly names
-several exact employee/date/shift combinations. Give each directive a short
-Hebrew reason that preserves the source's meaning.
+`unresolved`. A source may produce several directives when it names several
+exact combinations or an explicit bounded date/weekday range. Give each
+directive a short Hebrew reason that preserves the source's meaning.
 
 Return JSON matching the supplied schema only.
