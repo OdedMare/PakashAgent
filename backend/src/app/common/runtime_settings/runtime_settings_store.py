@@ -10,7 +10,7 @@ from dataclasses import asdict, fields, replace
 from pathlib import Path
 
 from app.common.config.settings import (
-    GENERATION_MODES, MODE_DAY, Settings,
+    ENGINE_AUTO, GENERATION_ENGINES, GENERATION_MODES, MODE_DAY, Settings,
 )
 from app.common.runtime_settings.normalizers import (
     MASKED_SECRET,
@@ -83,6 +83,9 @@ class RuntimeSettingsStore:
             llm_queue_seconds=env.llm_queue_seconds,
             schedule_generation_mode=_safe_generation_mode(
                 env.schedule_generation_mode
+            ),
+            schedule_generation_engine=_safe_generation_engine(
+                env.schedule_generation_engine
             ),
         )
         if self._path.exists():
@@ -177,6 +180,8 @@ def _normalized(key: str, value, patch: dict, settings):
         return max(1, int(value))
     if key == "schedule_generation_mode":
         return _generation_mode(value)
+    if key == "schedule_generation_engine":
+        return _generation_engine(value)
     return value
 
 
@@ -224,6 +229,23 @@ def _safe_generation_mode(value) -> str:
         return _generation_mode(value)
     except (TypeError, ValueError):
         return MODE_DAY
+
+
+def _generation_engine(value) -> str:
+    cleaned = str(value or "").strip().lower()
+    if cleaned not in GENERATION_ENGINES:
+        raise ValueError(
+            "schedule_generation_engine must be one of: %s"
+            % ", ".join(GENERATION_ENGINES)
+        )
+    return cleaned
+
+
+def _safe_generation_engine(value) -> str:
+    try:
+        return _generation_engine(value)
+    except (TypeError, ValueError):
+        return ENGINE_AUTO
 
 
 def _safe_schema(value: str) -> str:

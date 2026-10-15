@@ -43,3 +43,4 @@ class RuntimeSettings:
     # applies to the next build without a restart. See
     # `Settings.schedule_generation_mode` for the tradeoff.
     schedule_generation_mode: str = "day"
+    schedule_generation_engine: str = "auto"

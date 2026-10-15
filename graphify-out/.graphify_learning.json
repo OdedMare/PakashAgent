@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-15T11:35:57.513167+00:00",
+  "generated_at": "2026-10-15T12:23:22.508592+00:00",
   "nodes": {
     "backend_app_api_claude_http_layer": {
       "code_fingerprint": "",
@@ -12,7 +12,7 @@
           "q": "עכשיו יש לי בעיה אני יוצר סידור אוטומטי אבל המודל מחזיר תשובה חיובית ו200 api אבל ui מחזיר שגיאת רשת 500"
         }
       ],
-      "score": 0.300600383,
+      "score": 0.300371773,
       "source_file": "backend/app/api/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -20,8 +20,13 @@
     "backend_app_api_claude_two_step_change_contract": {
       "code_fingerprint": "",
       "label": "Two-Step Change Contract",
-      "last": "2026-10-15T11:31:40.899139+00:00",
+      "last": "2026-10-15T11:44:22.697165+00:00",
       "provenance": [
+        {
+          "date": "2026-10-15T11:44:22.697165+00:00",
+          "outcome": "useful",
+          "q": "How should manager-chat shift replacement be optimized for LLM cost without weakening approval safety?"
+        },
         {
           "date": "2026-10-15T11:31:40.899139+00:00",
           "outcome": "useful",
@@ -33,10 +38,10 @@
           "q": "How does the current manager chat connect to schedule questions and changes?"
         }
       ],
-      "score": 1.792926255,
+      "score": 2.790937199,
       "source_file": "backend/app/api/CLAUDE.md",
       "status": "preferred",
-      "uses": 2
+      "uses": 3
     },
     "backend_app_bl_claude_advisory_checker": {
       "code_fingerprint": "",
@@ -49,7 +54,7 @@
           "q": "אשמח שתבצע את כלל השיפורים"
         }
       ],
-      "score": 0.819429509,
+      "score": 0.818806321,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -57,8 +62,13 @@
     "backend_app_bl_claude_agent_decides_code_audits": {
       "code_fingerprint": "",
       "label": "Agent Decides; Code Audits",
-      "last": "2026-10-15T11:31:40.899139+00:00",
+      "last": "2026-10-15T11:44:22.697165+00:00",
       "provenance": [
+        {
+          "date": "2026-10-15T11:44:22.697165+00:00",
+          "outcome": "useful",
+          "q": "How should manager-chat shift replacement be optimized for LLM cost without weakening approval safety?"
+        },
         {
           "date": "2026-10-15T11:31:40.899139+00:00",
           "outcome": "useful",
@@ -78,17 +88,12 @@
           "date": "2026-08-24T12:44:20.840181+00:00",
           "outcome": "useful",
           "q": "I want fulley working co pilot better at the ui better the ability’s"
-        },
-        {
-          "date": "2026-08-21T08:14:12.433730+00:00",
-          "outcome": "useful",
-          "q": "תממש את זה ואני רוצה שזה יהיה בpolling ולא בstream כמו שעכשוי"
         }
       ],
-      "score": 4.181104863,
+      "score": 5.177299565,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
-      "uses": 8
+      "uses": 9
     },
     "backend_app_bl_claude_interview_workflow": {
       "code_fingerprint": "",
@@ -121,7 +126,7 @@
           "q": "תבנה"
         }
       ],
-      "score": 4.903540266,
+      "score": 4.899811058,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
       "uses": 15
@@ -142,7 +147,7 @@
           "q": "בוא נחשוב איך נשפר את חווית הראיון היא משמעותית מאוד"
         }
       ],
-      "score": 0.591930742,
+      "score": 0.591480571,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
       "uses": 2
@@ -150,8 +155,13 @@
     "backend_app_bl_claude_schedule_generation": {
       "code_fingerprint": "",
       "label": "Schedule Generation",
-      "last": "2026-10-11T14:41:12.173324+00:00",
+      "last": "2026-10-15T12:19:19.245730+00:00",
       "provenance": [
+        {
+          "date": "2026-10-15T12:19:19.245730+00:00",
+          "outcome": "useful",
+          "q": "איך אני מוזיל את כמות הטוקנים עבור גינרוט משמרת ליום ולשבוע"
+        },
         {
           "date": "2026-10-11T14:41:12.173324+00:00",
           "outcome": "useful",
@@ -171,17 +181,28 @@
           "date": "2026-10-06T20:44:14.533898+00:00",
           "outcome": "useful",
           "q": "אשמח שתבצע את כלל השיפורים"
-        },
-        {
-          "date": "2026-10-06T20:26:28.885659+00:00",
-          "outcome": "useful",
-          "q": "Weekly schedule generation fails around Tuesday; what should be done?"
         }
       ],
-      "score": 5.817137761,
+      "score": 6.812648699,
       "source_file": "backend/app/bl/CLAUDE.md",
       "status": "preferred",
-      "uses": 10
+      "uses": 11
+    },
+    "backend_app_common_config_settings_settings": {
+      "code_fingerprint": "",
+      "label": "Settings",
+      "last": "2026-10-15T12:19:19.245730+00:00",
+      "provenance": [
+        {
+          "date": "2026-10-15T12:19:19.245730+00:00",
+          "outcome": "useful",
+          "q": "איך אני מוזיל את כמות הטוקנים עבור גינרוט משמרת ליום ולשבוע"
+        }
+      ],
+      "score": 0.999934949,
+      "source_file": "backend/app/common/config/settings.py",
+      "status": "tentative",
+      "uses": 1
     },
     "backend_app_dal_claude_assignments_with_agent_reason": {
       "code_fingerprint": "",
@@ -194,7 +215,7 @@
           "q": "הראיון ארוך וחוזר על שאלות, ויצירת לוח המשמרות הראשוני לפעמים טועה"
         }
       ],
-      "score": 0.295775984,
+      "score": 0.295551042,
       "source_file": "backend/app/dal/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -230,16 +251,37 @@
           "q": "בוא נתכנן איך לממש את זה"
         }
       ],
-      "score": 2.074767554,
+      "score": 2.073189665,
       "source_file": "backend/app/dal/CLAUDE.md",
       "status": "preferred",
       "uses": 5
     },
+    "backend_app_dal_llm_claude_complete_json": {
+      "code_fingerprint": "",
+      "label": "complete_json",
+      "last": "2026-10-15T12:19:19.245730+00:00",
+      "provenance": [
+        {
+          "date": "2026-10-15T12:19:19.245730+00:00",
+          "outcome": "useful",
+          "q": "איך אני מוזיל את כמות הטוקנים עבור גינרוט משמרת ליום ולשבוע"
+        }
+      ],
+      "score": 0.999934949,
+      "source_file": "backend/app/dal/llm/CLAUDE.md",
+      "status": "tentative",
+      "uses": 1
+    },
     "backend_app_dal_llm_claude_openai_compatible_json_client": {
       "code_fingerprint": "",
       "label": "OpenAI-Compatible JSON Client",
-      "last": "2026-10-15T11:31:40.899139+00:00",
+      "last": "2026-10-15T11:44:22.697165+00:00",
       "provenance": [
+        {
+          "date": "2026-10-15T11:44:22.697165+00:00",
+          "outcome": "useful",
+          "q": "How should manager-chat shift replacement be optimized for LLM cost without weakening approval safety?"
+        },
         {
           "date": "2026-10-15T11:31:40.899139+00:00",
           "outcome": "useful",
@@ -259,20 +301,15 @@
           "date": "2026-10-06T20:26:28.885659+00:00",
           "outcome": "useful",
           "q": "Weekly schedule generation fails around Tuesday; what should be done?"
-        },
-        {
-          "date": "2026-08-24T14:17:00.063395+00:00",
-          "outcome": "useful",
-          "q": "בשיבוץ למשמרות התשובה מהמודל מגיעה תוך 120 עד 300 שניות תוודא שהui לא מחזיר לי timeout כי עכשיו הוא מחזיר"
         }
       ],
-      "score": 5.783094499,
+      "score": 6.778070867,
       "source_file": "backend/app/dal/llm/CLAUDE.md",
       "status": "preferred",
-      "uses": 12
+      "uses": 13
     },
     "backend_claude_confirm_before_import_persistence": {
-      "code_fingerprint": "63ae74c631103842ff90f5d71cb9475aaa13d289c262eef29bedebcca952434a",
+      "code_fingerprint": "0b576ac3e4f8e1d9e611f449ef62539625196ff531f17590f2cf1e8b63e66ced",
       "label": "Confirm Before Import Persistence",
       "last": "2026-08-23T19:03:51.003530+00:00",
       "provenance": [
@@ -282,13 +319,13 @@
           "q": "תבנה"
         }
       ],
-      "score": 0.296006588,
+      "score": 0.295781471,
       "source_file": "backend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
     },
     "backend_claude_per_workplace_shift_vocabulary": {
-      "code_fingerprint": "63ae74c631103842ff90f5d71cb9475aaa13d289c262eef29bedebcca952434a",
+      "code_fingerprint": "0b576ac3e4f8e1d9e611f449ef62539625196ff531f17590f2cf1e8b63e66ced",
       "label": "Per-Workplace Shift Vocabulary",
       "last": "2026-08-24T12:37:54.497384+00:00",
       "provenance": [
@@ -308,13 +345,13 @@
           "q": "hey i want to start work the agent init interview here some qusetions that give as the base the do interview from that mock the missing question that you miss then we implament this part"
         }
       ],
-      "score": 0.829669822,
+      "score": 0.829038847,
       "source_file": "backend/CLAUDE.md",
       "status": "preferred",
       "uses": 3
     },
     "backend_claude_runtime_settings": {
-      "code_fingerprint": "63ae74c631103842ff90f5d71cb9475aaa13d289c262eef29bedebcca952434a",
+      "code_fingerprint": "0b576ac3e4f8e1d9e611f449ef62539625196ff531f17590f2cf1e8b63e66ced",
       "label": "Live Runtime Settings",
       "last": "2026-08-20T20:46:01.724923+00:00",
       "provenance": [
@@ -324,13 +361,13 @@
           "q": "in the pakash agent app"
         }
       ],
-      "score": 0.276637078,
+      "score": 0.276426692,
       "source_file": "backend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
     },
     "docs_decisions_d1_hard_and_soft_rules": {
-      "code_fingerprint": "3f08ccedd6e8d4694dda46a6abd4b8ae38e41963384f777ad3143c953f771592",
+      "code_fingerprint": "382af97a9cc524a78676dc4d4e784472d6d7384bd5bf711b58c41324ced4841b",
       "label": "D1 Hard and Soft Rules",
       "last": "2026-08-24T08:40:46.853992+00:00",
       "provenance": [
@@ -340,13 +377,13 @@
           "q": "היום הבעיה החמורה היא שהמידע שנשמר בראיון לא עובר במצב לטוב לתהליך בניית הסידור איך אתה מציע שנעשה את זה ונמקסם על זה"
         }
       ],
-      "score": 0.299912099,
+      "score": 0.299684012,
       "source_file": "docs/DECISIONS.md",
       "status": "tentative",
       "uses": 1
     },
     "docs_decisions_d3_agent_decides_code_audits": {
-      "code_fingerprint": "3f08ccedd6e8d4694dda46a6abd4b8ae38e41963384f777ad3143c953f771592",
+      "code_fingerprint": "382af97a9cc524a78676dc4d4e784472d6d7384bd5bf711b58c41324ced4841b",
       "label": "D3 Agent Decides; Code Only Audits",
       "last": "2026-10-06T11:23:25.870323+00:00",
       "provenance": [
@@ -356,13 +393,13 @@
           "q": "How should PakashAgent make manager chat the primary scheduling workspace while remaining maintainable?"
         }
       ],
-      "score": 0.812089148,
+      "score": 0.811471543,
       "source_file": "docs/DECISIONS.md",
       "status": "tentative",
       "uses": 1
     },
     "docs_decisions_d8_two_required_reasons": {
-      "code_fingerprint": "3f08ccedd6e8d4694dda46a6abd4b8ae38e41963384f777ad3143c953f771592",
+      "code_fingerprint": "382af97a9cc524a78676dc4d4e784472d6d7384bd5bf711b58c41324ced4841b",
       "label": "D8 Two Reasons, Both Required",
       "last": "2026-10-06T11:21:54.499744+00:00",
       "provenance": [
@@ -372,7 +409,7 @@
           "q": "היי כיום הצאט עובד איך לפעמים משבץ לא טוב ומבקש סיבה אני רוצה שכל מה שהמשתמש אומר הוא עושה אלא אם זה ממש לא הגיוני ובכך הוא מתקן אני גם רוצה שהצאט יאפשר למנהל להייתעץ ולשאול איך לפתור בעיה מסוימת אני רוצה לשייף את כל יכולות הצאט בין עם הכנסת עוד עובד או הכנסת אילוץ להיות הסוכן הראשי והיחיד"
         }
       ],
-      "score": 0.812069305,
+      "score": 0.811451716,
       "source_file": "docs/DECISIONS.md",
       "status": "tentative",
       "uses": 1
@@ -393,7 +430,7 @@
           "q": "How does the current manager chat connect to schedule questions and changes?"
         }
       ],
-      "score": 1.706844034,
+      "score": 1.705545957,
       "source_file": "frontend/CLAUDE.md",
       "status": "preferred",
       "uses": 2
@@ -429,7 +466,7 @@
           "q": "How does the current manager chat connect to schedule questions and changes?"
         }
       ],
-      "score": 6.398874999,
+      "score": 6.394008569,
       "source_file": "frontend/CLAUDE.md",
       "status": "preferred",
       "uses": 12
@@ -445,7 +482,7 @@
           "q": "תעצב לי tutorial למערכת עם סקרינשוטים והכל לכל פונקציונליות"
         }
       ],
-      "score": 0.288651596,
+      "score": 0.288432072,
       "source_file": "frontend/CLAUDE.md",
       "status": "tentative",
       "uses": 1
@@ -466,7 +503,7 @@
           "q": "How should PakashAgent make manager chat the primary scheduling workspace while remaining maintainable?"
         }
       ],
-      "score": 1.726525543,
+      "score": 1.725212497,
       "source_file": "frontend/CLAUDE.md",
       "status": "preferred",
       "uses": 2
@@ -474,18 +511,23 @@
     "readme_conversational_changes": {
       "code_fingerprint": "30fe9d435b0cad3ea0aa4cdd45813443454f64347b7b660e170d4c60728f22c0",
       "label": "Conversational Schedule Changes",
-      "last": "2026-10-15T11:31:40.899139+00:00",
+      "last": "2026-10-15T11:44:22.697165+00:00",
       "provenance": [
+        {
+          "date": "2026-10-15T11:44:22.697165+00:00",
+          "outcome": "useful",
+          "q": "How should manager-chat shift replacement be optimized for LLM cost without weakening approval safety?"
+        },
         {
           "date": "2026-10-15T11:31:40.899139+00:00",
           "outcome": "useful",
           "q": "אוקיי אני רוצה לייעל את הקוד שלי ואת הפנוית בllm תסביר לי על תהליך החלפת המשמרות דרך הצאט ונראה איך אנחנו מייעלים אותו ומוזילים אותו"
         }
       ],
-      "score": 0.999931379,
+      "score": 1.998545406,
       "source_file": "README.md",
-      "status": "tentative",
-      "uses": 1
+      "status": "preferred",
+      "uses": 2
     },
     "readme_hebrew_rtl_product": {
       "code_fingerprint": "30fe9d435b0cad3ea0aa4cdd45813443454f64347b7b660e170d4c60728f22c0",
@@ -498,7 +540,7 @@
           "q": "Apple-inspired visual refinement for PakashAgent"
         }
       ],
-      "score": 0.914231327,
+      "score": 0.913536042,
       "source_file": "README.md",
       "status": "tentative",
       "uses": 1
@@ -514,7 +556,7 @@
           "q": "תעצב לי tutorial למערכת עם סקרינשוטים והכל לכל פונקציונליות"
         }
       ],
-      "score": 0.288651596,
+      "score": 0.288432072,
       "source_file": "README.md",
       "status": "tentative",
       "uses": 1
@@ -535,7 +577,7 @@
           "q": "בשיבוץ למשמרות התשובה מהמודל מגיעה תוך 120 עד 300 שניות תוודא שהui לא מחזיר לי timeout כי עכשיו הוא מחזיר"
         }
       ],
-      "score": 0.603342039,
+      "score": 0.602883189,
       "source_file": "README.md",
       "status": "preferred",
       "uses": 2

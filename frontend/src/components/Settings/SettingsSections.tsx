@@ -139,11 +139,32 @@ const GENERATION_MODES = [
   { value: "week", label: "עד שבוע בכל פנייה — מהיר יותר" },
 ];
 
+const GENERATION_ENGINES = [
+  { value: "auto", label: "אוטומטי — קוד כשאפשר, AI כשצריך" },
+  { value: "ai", label: "AI — שיקול דעת מלא" },
+  { value: "code", label: "קוד — ללא טוקנים" },
+];
+
 function ScheduleSettings({ settings }: { settings: SettingsController }) {
   const weekly = settings.text("schedule_generation_mode") === "week";
+  const engine = settings.text("schedule_generation_engine") || "auto";
   return (
     <section className="settings-section">
-      <h3>רוחב הפנייה למודל</h3>
+      <h3>מנוע בניית הסידור</h3>
+      <Select
+        settings={settings}
+        name="schedule_generation_engine"
+        label="מי משבץ"
+        options={GENERATION_ENGINES}
+        hint={
+          engine === "code"
+            ? "הקוד משבץ בלי טוקנים. אם יש כלל טקסטואלי, העדפה או אילוץ רך הוא יעצור ויבקש לבחור AI או אוטומטי — לעולם לא יתעלם מהם."
+            : engine === "ai"
+            ? "המודל יבנה כל סידור, גם כשנדרש לפרש כללים והעדפות בשפה חופשית."
+            : "הקוד נבחר רק כשהקלט מובנה והתוצאה עוברת ביקורת ללא אזהרות. בכל מקרה אחר המערכת עוברת ל-AI."
+        }
+      />
+      <h3>רוחב פנייה ל־AI</h3>
       <Select
         settings={settings}
         name="schedule_generation_mode"
@@ -160,7 +181,7 @@ function ScheduleSettings({ settings }: { settings: SettingsController }) {
           ? "בכל מקרה שבוע הוא תקרה ולא הבטחה: שבוע עמוס מדי לתשובה אחת מפוצל לכמה פניות."
           : "אפשר לעבור למצב שבועי אם בניית סידור לוקחת יותר מדי זמן."}
         {" "}
-        המצב נקבע כשלוחצים על בניית סידור — שינוי כאן לא משפיע על בנייה שכבר רצה.
+        המנוע והרוחב נקבעים כשלוחצים על בניית סידור — שינוי כאן לא משפיע על בנייה שכבר רצה.
       </p>
     </section>
   );

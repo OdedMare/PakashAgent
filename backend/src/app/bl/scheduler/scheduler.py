@@ -23,6 +23,7 @@ from app.bl.scheduler.fairness import load_cost, uneven_load
 from app.bl.scheduler.quality import no_worse
 from app.bl.scheduler.values import bounded, bounded_rows, lines
 from app.common.errors.errors import AgentError, ModelOutputError
+from app.common.config.settings import ENGINE_AI, ENGINE_AUTO, ENGINE_CODE
 
 
 class Scheduler:
@@ -42,6 +43,7 @@ class Scheduler:
         instructions: str = "",
         required_assignments: Optional[List[dict]] = None,
         preferences: Optional[List[dict]] = None,
+        engine: str = ENGINE_AI,
     ) -> dict:
         """Slots for the period plus the model's assignments, chunk by chunk.
 
@@ -50,6 +52,12 @@ class Scheduler:
         tally is recomputed over the real history *plus* this run, so week two
         sees week one's nights as nights. Nothing is persisted here.
         """
+        code = self._code_result(
+            engine, profile, starts_on, ends_on, availability, history,
+            instructions, required_assignments, None, preferences,
+        )
+        if code is not None:
+            return code
         _check_rotation(profile)
         slots = build_slots(profile, starts_on, ends_on)
         if not slots:
@@ -110,8 +118,15 @@ class Scheduler:
         already_scheduled: Optional[List[dict]] = None,
         preferences: Optional[List[dict]] = None,
         split_on_failure: bool = True,
+        engine: str = ENGINE_AI,
     ) -> dict:
         """Generate and verify one contiguous stretch of dates. See `span.py`."""
+        code = self._code_result(
+            engine, profile, starts_on, ends_on, availability, history,
+            instructions, required_assignments, already_scheduled, preferences,
+        )
+        if code is not None:
+            return code
         _check_rotation(profile)
         options = dict(availability=availability, history=history, instructions=instructions,
                        required_assignments=required_assignments,
@@ -123,6 +138,32 @@ class Scheduler:
                 raise
             from app.bl.scheduler.recovery import generate_split
             return generate_split(self, profile, starts_on, ends_on, options, exc)
+
+    def _code_result(
+        self, engine, profile, starts_on, ends_on, availability, history,
+        instructions, required_assignments, already_scheduled, preferences,
+    ):
+        """Return a safe code result, or None when AI should take the request."""
+        if engine not in (ENGINE_CODE, ENGINE_AUTO):
+            return None
+        from app.bl.deterministic_scheduler import generate_span, unsupported_reason
+
+        reason = unsupported_reason(profile, availability, instructions, preferences)
+        if reason:
+            if engine == ENGINE_CODE:
+                raise AgentError(reason + ". בחרו במצב AI או אוטומטי.")
+            return None
+        result = generate_span(
+            profile, starts_on, ends_on, availability=availability,
+            history=history, required_assignments=required_assignments,
+            already_scheduled=already_scheduled,
+        )
+        # Auto keeps free code only when it is already as clean as the audited
+        # model path. Code mode remains useful for an intentionally partial
+        # draft and exposes the same warnings to the manager.
+        if engine == ENGINE_AUTO and result.get("warnings"):
+            return None
+        return result
 
     def _ask(self, payload: dict, schema: Optional[dict] = None) -> dict:
         answer = self._llm.complete_json(

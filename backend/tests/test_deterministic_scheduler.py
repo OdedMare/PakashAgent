@@ -5,7 +5,7 @@ The model assigns (D3); this engine runs only when it cannot be reached.
 
 import pytest
 
-from app.bl.deterministic_scheduler import generate_day
+from app.bl.deterministic_scheduler import generate_day, generate_span, unsupported_reason
 from app.common.errors.errors import AgentError
 
 
@@ -71,3 +71,19 @@ def test_declared_rotation_without_an_anchor_blocks_generation():
 
     with pytest.raises(AgentError, match="תלתון"):
         generate_day(profile, "2026-08-29")
+
+
+def test_span_builds_each_day_in_code_without_tokens():
+    result = generate_span(_profile(), "2026-08-29", "2026-08-30")
+
+    assert {row["date"] for row in result["assignments"]} == {
+        "2026-08-29", "2026-08-30",
+    }
+    assert result["metrics"]["engine"] == "code"
+    assert result["metrics"]["total_tokens"] == 0
+
+
+def test_semantic_inputs_are_not_silently_sent_to_code():
+    profile = dict(_profile(), rules=[{"text": "תעדף את דנה", "priority": "soft"}])
+
+    assert "AI" in unsupported_reason(profile)

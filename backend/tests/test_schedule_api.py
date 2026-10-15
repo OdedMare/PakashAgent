@@ -2590,13 +2590,17 @@ def test_shifts_that_never_run_in_the_window_blame_the_dates_not_the_interview()
 
 
 class _FakeSettings:
-    """The runtime-settings store, reduced to the one field this reads."""
+    """The runtime-settings store, reduced to the generation fields."""
 
-    def __init__(self, mode):
+    def __init__(self, mode, engine="ai"):
         self._mode = mode
+        self._engine = engine
 
     def get(self):
-        return SimpleNamespace(schedule_generation_mode=self._mode)
+        return SimpleNamespace(
+            schedule_generation_mode=self._mode,
+            schedule_generation_engine=self._engine,
+        )
 
 
 def test_week_mode_builds_a_week_in_one_model_call():
@@ -2664,6 +2668,27 @@ def test_day_mode_is_the_default_and_asks_once_per_date():
     assert client.get("/api/schedule/%s" % started["id"]).json()[
         "generation"
     ]["status"] == "complete"
+
+
+def test_code_engine_builds_the_period_without_a_model_reply():
+    launcher = _DeferredLauncher()
+    app, _ = _build_app(
+        [], launch=launcher, settings=_FakeSettings("week", "code")
+    )
+    client = _client(app)
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+
+    assert started["generation"]["engine"] == "code"
+    client.post("/api/schedule/generate/%s/run" % started["id"])
+    launcher.run_next()
+
+    body = client.get("/api/schedule/%s" % started["id"]).json()
+    assert body["generation"]["status"] == "complete"
+    assert len(body["assignments"]) == 2
+    assert body["generation"]["days"][0]["metrics"]["engine"] == "code"
+    assert body["generation"]["days"][0]["metrics"]["total_tokens"] == 0
 
 
 def test_a_checkpoint_leaves_earlier_days_rows_alone():

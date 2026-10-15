@@ -167,6 +167,8 @@ export interface RuntimeSettings {
   llm_queue_seconds: number;
   llm_base_url: string | null;
   openai_api_key: string;
+  schedule_generation_mode: "day" | "week";
+  schedule_generation_engine: "auto" | "ai" | "code";
 }
 
 /** Who the current visitor is inside a workspace.
@@ -400,6 +402,8 @@ export interface GenerationDay {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
+    /** Engine that actually produced this checkpoint. */
+    engine?: "ai" | "code";
     /** Logical model requests, including failed attempts. */
     model_calls?: number;
     failed_calls?: number;
@@ -438,6 +442,9 @@ export interface GenerationProgress {
    *  the settings panel and stamped when the period was opened. Empty on a
    *  job opened before the setting existed, which reads as `"day"`. */
   mode?: "" | "day" | "week";
+  /** Requested engine. In automatic mode each completed day's metrics names
+   *  whether code or AI actually produced it. */
+  engine?: "" | "auto" | "ai" | "code";
   /** When a worker last said it was still on this job, UTC ISO-8601.
    *
    *  What separates a slow model from a hung one: with no LLM timeout

@@ -298,3 +298,16 @@ def test_an_unknown_generation_mode_is_refused_rather_than_defaulted(store):
     with pytest.raises(ValueError):
         store.update({"schedule_generation_mode": "month"})
     assert store.get().schedule_generation_mode == "week"
+
+
+def test_generation_engine_defaults_to_safe_automatic_selection(store):
+    assert store.get().schedule_generation_engine == "auto"
+
+
+def test_generation_engine_can_be_forced_and_rejects_unknown_values(store):
+    store.update({"schedule_generation_engine": "code"})
+    assert store.get().schedule_generation_engine == "code"
+
+    with pytest.raises(ValueError):
+        store.update({"schedule_generation_engine": "hybrid"})
+    assert store.get().schedule_generation_engine == "code"

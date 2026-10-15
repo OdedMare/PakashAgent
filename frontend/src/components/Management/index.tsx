@@ -498,6 +498,15 @@ export function Management({
                 בנייה שבועית — עד שבוע בכל פנייה למודל
               </span>
             ) : null}
+            {state.generation?.engine ? (
+              <span className="schedule-generation-mode">
+                {state.generation.engine === "code"
+                  ? "מנוע קוד — ללא שימוש בטוקנים"
+                  : state.generation.engine === "auto"
+                  ? "מנוע אוטומטי — קוד כשאפשר, AI כשצריך"
+                  : "מנוע AI"}
+              </span>
+            ) : null}
             {buildState === "failed" && buildError ? (
               <span className="schedule-generation-why">{buildError}</span>
             ) : null}

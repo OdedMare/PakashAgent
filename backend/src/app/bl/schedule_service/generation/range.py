@@ -4,7 +4,7 @@ from typing import List
 
 from app.bl.scheduler import plan_spans
 from app.bl.schedule_service.context import ScheduleContext
-from app.bl.schedule_service.generation.builder import generation_mode
+from app.bl.schedule_service.generation.builder import generation_engine, generation_mode
 from app.bl.schedule_service.generation.job import GenerationJob
 from app.bl.schedule_service.profile_gate import ProfileGate
 from app.bl.schedule_service.rows import iso
@@ -40,12 +40,14 @@ class RangeBuilder:
             raise AgentError("יש להחזיר את הסידור לטיוטה לפני בניית ימים בו")
         spans = self._spans(team_id, schedule, iso(starts_on), iso(ends_on))
         mode = generation_mode(self._settings)
+        engine = generation_engine(self._settings)
         job = GenerationJob.open(
             spans,
             total_days=sum(len(span["dates"]) for span in spans),
             mode=mode,
             instructions=instructions,
             required=[],
+            engine=engine,
         )
         return self._context.view(
             self._repository.set_generation(schedule_id, team_id, job.to_dict()),

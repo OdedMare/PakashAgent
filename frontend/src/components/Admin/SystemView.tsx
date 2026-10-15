@@ -8,6 +8,7 @@ import { formatBytes } from "./format";
 import type { AdminState } from "./useAdmin";
 
 const MODE_LABEL: Record<string, string> = { day: "יום בכל קריאה", week: "שבוע בכל קריאה" };
+const ENGINE_LABEL: Record<string, string> = { auto: "אוטומטי", ai: "AI", code: "קוד" };
 
 /** The server as a whole: is it healthy, what model is it running, and the
  *  settings every workspace shares. The settings used to be reachable only
@@ -47,7 +48,11 @@ export function SystemView({ state }: { state: AdminState }) {
           <Activity size={18} aria-hidden="true" />
           <span>
             <small>בניית סידור</small>
-            <strong>{MODE_LABEL[model.schedule_generation_mode] ?? (model.schedule_generation_mode || "—")}</strong>
+            <strong>
+              {ENGINE_LABEL[model.schedule_generation_engine] ?? (model.schedule_generation_engine || "—")}
+              {" · "}
+              {MODE_LABEL[model.schedule_generation_mode] ?? (model.schedule_generation_mode || "—")}
+            </strong>
           </span>
         </div>
         <div className="adm-health-card">

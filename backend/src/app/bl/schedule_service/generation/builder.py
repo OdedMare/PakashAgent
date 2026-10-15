@@ -11,6 +11,9 @@ from app.bl.schedule_service.generation.pins import required_rows
 from app.bl.schedule_service.profile_gate import ProfileGate
 from app.bl.schedule_service.rows import iso, slot_index
 from app.common.errors.errors import AgentError
+from app.common.config.settings import (
+    ENGINE_AI, ENGINE_AUTO, GENERATION_ENGINES,
+)
 from app.dal.repository.schedules import ASSIGNED_BY_MANAGER, week_bounds
 
 
@@ -60,6 +63,7 @@ class PeriodBuilder:
             instructions=instructions,
             required_assignments=required_assignments,
             preferences=self._context.active_preferences(team_id),
+            engine=self._generation_engine(),
         )
         schedule_id = self._store(team_id, starts_on, ends_on, result)
         self._repository.append_change(
@@ -135,6 +139,7 @@ class PeriodBuilder:
         # changes the setting while a build is running is choosing how the
         # *next* one runs.
         mode = self._generation_mode()
+        engine = self._generation_engine()
         job = GenerationJob.open(
             plan_spans(profile, first, last, mode,
                        self._repository.availability(team_id, starts_on, ends_on)),
@@ -145,6 +150,7 @@ class PeriodBuilder:
             mode=mode,
             instructions=instructions,
             required=required_assignments or [],
+            engine=engine,
         )
         schedule = self._repository.set_generation(
             schedule["id"], team_id, job.to_dict()
@@ -176,6 +182,7 @@ class PeriodBuilder:
             mode=MODE_DAY,
             instructions=instructions,
             required=_manager_pins_on(schedule, target),
+            engine=self._generation_engine(),
         )
         return self._context.view(
             self._repository.set_generation(schedule_id, team_id, job.to_dict()),
@@ -205,6 +212,9 @@ class PeriodBuilder:
     def _generation_mode(self) -> str:
         return generation_mode(self._settings)
 
+    def _generation_engine(self) -> str:
+        return generation_engine(self._settings)
+
 
 def generation_mode(store) -> str:
     """How wide one model call is for the next build the manager opens.
@@ -218,6 +228,15 @@ def generation_mode(store) -> str:
         return MODE_DAY
     mode = getattr(settings(), "schedule_generation_mode", MODE_DAY)
     return mode if mode in (MODE_DAY, MODE_WEEK) else MODE_DAY
+
+
+def generation_engine(store) -> str:
+    """The engine stamped on the next job; old test stores preserve AI."""
+    settings = getattr(store, "get", None)
+    if settings is None:
+        return ENGINE_AI
+    engine = getattr(settings(), "schedule_generation_engine", ENGINE_AI)
+    return engine if engine in GENERATION_ENGINES else ENGINE_AUTO
 
 
 def _bounds(starts_on: Optional[str], ends_on: Optional[str]) -> tuple:

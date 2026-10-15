@@ -16,6 +16,7 @@ from app.bl.schedule_service.generation.pins import (
 from app.bl.schedule_service.profile_gate import ProfileGate
 from app.bl.schedule_service.rows import iso
 from app.common.errors.errors import AgentError, ModelOutputError
+from app.common.config.settings import ENGINE_AI
 
 
 class GenerationStepper:
@@ -177,6 +178,7 @@ class GenerationStepper:
             ],
             preferences=self._context.active_preferences(team_id),
             split_on_failure=False,  # The job checkpoints each smaller span separately.
+            engine=job.get("engine") or ENGINE_AI,
         )
 
     def _write_span(

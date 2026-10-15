@@ -15,6 +15,11 @@ MODE_DAY = "day"
 MODE_WEEK = "week"
 GENERATION_MODES = (MODE_DAY, MODE_WEEK)
 
+ENGINE_AI = "ai"
+ENGINE_CODE = "code"
+ENGINE_AUTO = "auto"
+GENERATION_ENGINES = (ENGINE_AUTO, ENGINE_AI, ENGINE_CODE)
+
 
 class Settings(BaseSettings):
     """Env-derived DEFAULTS. Values the boss can edit in the UI live in
@@ -207,6 +212,14 @@ class Settings(BaseSettings):
     so the mode a build runs under is the one saved at the moment the manager
     pressed the button, and a job already under way keeps the mode it started
     with."""
+
+    schedule_generation_engine: str = ENGINE_AUTO
+    """Assign with the model, deterministic code, or a safe automatic mix.
+
+    Auto uses code only for structured inputs it can represent and keeps its
+    answer only when the deterministic audit is clean. Explicit code mode
+    refuses semantic rules rather than silently ignoring them.
+    """
 
     session_secret: str = ""
     """Key that signs the workspace session cookie.

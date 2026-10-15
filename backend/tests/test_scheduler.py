@@ -131,6 +131,46 @@ def test_generating_without_any_shift_is_an_error_not_an_empty_schedule():
         scheduler.generate({"shifts": []}, "2026-08-17", "2026-08-18")
 
 
+def test_auto_uses_zero_token_code_for_a_clean_structured_request():
+    profile = {
+        "employees": [{"name": "דנה", "eligible_shifts": [MORNING]}],
+        "shifts": [{
+            "name": MORNING, "start_time": "07:00", "end_time": "15:00",
+            "days": [], "staffing": [{"days": [], "headcount": 1}],
+        }],
+    }
+    llm = _ScriptedLlm([])
+
+    result = Scheduler(llm).generate_span(
+        profile, "2026-08-17", "2026-08-17", engine="auto",
+    )
+
+    assert result["metrics"]["engine"] == "code"
+    assert result["metrics"]["total_tokens"] == 0
+    assert llm.calls == []
+
+
+def test_code_refuses_rules_that_only_the_model_can_interpret():
+    with pytest.raises(AgentError, match="AI"):
+        Scheduler(_ScriptedLlm([])).generate_span(
+            PROFILE, "2026-08-17", "2026-08-17", engine="code",
+        )
+
+
+def test_auto_uses_ai_when_the_profile_contains_semantic_rules():
+    llm = _ScriptedLlm([_reply([{
+        "employee_id": "employee-1", "slot_id": "slot-1",
+        "reason": "דנה מתאימה לפי הכלל והזמינות",
+    }])])
+
+    result = Scheduler(llm).generate_span(
+        PROFILE, "2026-08-17", "2026-08-17", engine="auto",
+    )
+
+    assert result["metrics"]["engine"] == "ai"
+    assert len(llm.calls) == 1
+
+
 # -- assignments -----------------------------------------------------------
 
 def _reply(assignments, notes=None, summary="סידור לשבוע"):

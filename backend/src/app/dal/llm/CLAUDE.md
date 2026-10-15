@@ -73,6 +73,18 @@ at server start by `--max-model-len` and there is no per-request override, so
 correction instruction are appended and the ladder runs once more. Two failures
 raise an `AgentError` in Hebrew.
 
+**An empty reply is a rejected reply, not an exception.** `response_data`
+returns `""` with the usage rather than raising, so the empty reply goes
+through the same retry, its tokens are added, and two in a row raise
+`ModelOutputError(usage=...)` with a `FAILED` log line. Raising inside the
+ladder lost the tokens: they reached neither the log nor `_usage`, and a
+flow's cost read as zero for a call that was paid for. It is common, not
+exotic — gpt-oss, trained on native tool calling, answers a prompt that
+describes tools with `finish_reason=tool_calls` and empty `content` on
+roughly a quarter to half of manager-chat rounds, on every rung. The retry's
+correction (`_NO_CONTENT`) tells it not to call functions, which "not valid
+JSON" would not.
+
 `llm_diet_mode` caps completion tokens.
 
 **3. The total budget** — `_TOTAL_BUDGET_SECONDS` bounds one logical

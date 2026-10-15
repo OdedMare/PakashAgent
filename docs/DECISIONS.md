@@ -23,7 +23,7 @@ UI. The boss's own sentences are kept and passed to the model as context.
 if code isn't enforcing rules, code doesn't need to represent them. Follows from
 D3; don't reintroduce structured rules without revisiting that.
 
-## D3 — The agent decides; code only audits ⚠️
+## D3 — The agent decides; code only audits ⚠️ *(amended by D31)*
 
 **The most important decision here.**
 
@@ -969,6 +969,25 @@ The exception is narrow:
 *Why Python moved to 3.11 in the same change:* Opik's SDK dropped 3.8 long
 ago, and the 3.8.10 pin was already the costliest line in the build (EOL
 Debian, compiling `backports.zoneinfo`). See BUILD_ORDER.md.
+
+## D31 — Structured schedules may be assigned by code ⚠️ *(amends D3)*
+
+The manager can choose `AI`, deterministic `code`, or `auto` for schedule
+generation. Code uses the existing availability, qualification, staffing,
+rest, load and rotation arithmetic and spends zero model tokens.
+
+**The boundary is representability, not roster size.** Code runs only when
+all placement inputs are structured. Natural-language rules or policies,
+manager instructions, confirmed preferences, soft constraints and active
+training policy require AI. Explicit code mode refuses such a request; it
+never silently drops context. Auto tries code only inside that boundary and
+keeps the result only when its audit has no warnings. Otherwise it asks AI.
+
+This is the narrow exception to D3. It does not turn natural-language rules
+into a second rule engine and it does not make warnings blocking for an AI
+answer. The deterministic result carries a reason per assignment and remains
+an ordinary draft the manager may inspect and edit. The selected engine is
+stamped when the build opens; changing the setting affects the next build.
 
 ---
 

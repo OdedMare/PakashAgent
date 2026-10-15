@@ -136,4 +136,5 @@ def metrics(
         "prompt_tokens": int(usage.get("prompt_tokens") or 0),
         "completion_tokens": int(usage.get("completion_tokens") or 0),
         "total_tokens": int(usage.get("total_tokens") or 0),
+        "engine": "ai",
     }

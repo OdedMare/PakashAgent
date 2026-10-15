@@ -90,6 +90,9 @@ class GenerationProgress(BaseModel):
     # re-planning the spans of a job already half checkpointed. Empty on a
     # job opened before the setting existed, which reads as "day".
     mode: str = ""
+    # The requested assignment engine: "ai", "code" or "auto". Auto may
+    # use a different actual engine per span; each span's metrics records it.
+    engine: str = ""
     # When a worker last said it was still on this job, UTC ISO-8601. Empty
     # on a job opened before this field existed, which the client reads as
     # "cannot tell" rather than as "stalled".

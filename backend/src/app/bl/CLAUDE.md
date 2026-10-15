@@ -152,6 +152,13 @@ which a bad call gets caught while it's still cheap ([D8](../../../docs/DECISION
 Handles both generation and schedules the boss authored or imported — they share
 one representation ([D6](../../../docs/DECISIONS.md#d6--the-boss-can-author-or-generate)).
 
+**The assignment engine is selectable.** `schedule_generation_engine` is
+`ai`, `code`, or `auto` ([D31](../../../docs/DECISIONS.md#d31--structured-schedules-may-be-assigned-by-code-️-amends-d3)).
+Auto uses the deterministic scheduler only for structured inputs and accepts
+it only with a clean audit; semantic inputs and imperfect code drafts go to
+the model. Explicit code mode refuses semantic inputs rather than dropping
+them.
+
 **Past assignments are counted, not sent.** The scheduler used to hand the
 model several hundred raw history rows and let it work out who had been taking
 the nights. That was wrong twice: on a two-week period those rows were roughly

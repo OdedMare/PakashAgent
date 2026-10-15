@@ -21,6 +21,7 @@ from app.common.errors.errors import AgentError, AuthError, ForbiddenError
 _MODEL_FIELDS = (
     "llm_model", "llm_base_url", "llm_model_fast", "llm_model_default",
     "llm_model_advanced", "schedule_generation_mode",
+    "schedule_generation_engine",
 )
 
 

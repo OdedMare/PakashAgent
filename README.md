@@ -164,6 +164,14 @@ schedules the manager has published.
 Postgres must be reachable at `PAKASH_DATABASE_URL`; the app creates its own
 tables on startup (the schema itself must already exist).
 
+**Who builds the schedule is also a setting.** *הגדרות ← בניית סידור* offers
+`AI`, zero-token deterministic `code`, and `auto` (the default). Auto uses code
+only when every placement input is structured and keeps the result only when
+the deterministic audit is clean. Free-text rules, preferences, instructions,
+soft constraints, training policy, or a code result with warnings route the
+request to AI. Explicit code mode refuses semantic input instead of ignoring
+it. Also settable as `PAKASH_SCHEDULE_GENERATION_ENGINE`.
+
 **How fast a schedule builds is a setting.** *הגדרות ← בניית סידור* chooses
 how wide one model call is: `day` (the default) asks for one date at a time
 and verifies and repairs each on its own; `week` asks for up to seven in one
