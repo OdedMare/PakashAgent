@@ -135,7 +135,7 @@ never share a client or one would authenticate as the other.
 | Role | Model setting | URL setting | Key setting | Flows |
 |---|---|---|---|---|
 | `advanced` | `llm_model_advanced` | `llm_base_url_advanced` | `llm_api_key_advanced` | `scheduler` |
-| `default` | `llm_model_default` | `llm_base_url_default` | `llm_api_key_default` | `interview`, `changes`, `planner`, `learn`, and anything unmapped |
+| `default` | `llm_model_default` | `llm_base_url_default` | `llm_api_key_default` | `changes`, `planner`, `learn`, and anything unmapped |
 | `fast` | `llm_model_fast` | `llm_base_url_fast` | `llm_api_key_fast` | `briefing` |
 
 **A key travels with the URL it authenticates, not with the process.** One
@@ -228,12 +228,12 @@ tell a misrouted flow from a misconfigured role, which is the question these
 lines get asked once more than one model is in play.
 
 `flow` is what the `flow=` argument on `complete_json` exists for —
-`scheduler`, `interview`, `changes`, `briefing`. Without it every measurement
+`scheduler`, `changes`, `briefing`. Without it every measurement
 reads "some model call", and the first question anyone asks of the numbers is
 which feature is the expensive one.
 
 This was added because nothing recorded it: `_usage` came back from here and
-only `bl/interview.py` ever read it, and even that dropped it. "How many
+no active flow reads it. "How many
 tokens does a schedule cost" had no answer, so every performance decision was
 an estimate.
 

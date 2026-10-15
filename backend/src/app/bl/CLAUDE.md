@@ -97,7 +97,7 @@ could clear it.
 authoritative list — filtered to who is legally available, keyed by the ids
 the schema accepts — so `_profile_beside_candidates` drops `employees` from
 the profile beside it. A blacklist of one key, never a whitelist: a field list
-here is how newly collected interview facts silently stop travelling.
+here is how newly saved profile facts silently stop travelling.
 
 **Interactive generation is one checkpoint per request.**
 `ScheduleService.start_generation()` stores the whole slot grid, plans the
@@ -256,7 +256,7 @@ it. Closure hours work the same way: `closures.configured_window` reads the
 rows `rotation_closure_windows` carries for group א and applies them to
 whichever group owns the weekend, so the manager types one definition per
 cycle. A row naming another group is that group's own exception and wins for
-it — the shape the interview uses when a manager says ב leaves at a different
+it — the shape setup uses when group ב leaves at a different
 hour. `rotation_presence` is deliberately **not** derived: "ב is out on
 Tuesdays" says nothing about א.
 
@@ -372,7 +372,7 @@ override the agent. If you find yourself giving it veto power, re-read
 [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-) — the
 boss chose this shape knowingly, including its tradeoff with D1.
 
-On-call shifts may weight differently — read the weighting from the interview's
+On-call shifts may weight differently — read the weighting from the profile's
 shift vocabulary rather than assuming.
 
 `fairness()` and `load_history()` answer two different questions from the same
@@ -475,7 +475,7 @@ one of those, so none may be assumed.
 Each cell is classified: name → assignment, `לא זמין`/`לא זמינה` → unavailability,
 empty → nothing. **Availability and assignments share one grid.**
 
-Shift headers match against the interview's vocabulary ([D9](../../../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)).
+Shift headers match against the profile vocabulary ([D9](../../../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)).
 Hebrew weekdays and both date formats (`d/M/yy`, `d.M`) parse via a shared
 vocabulary module.
 
@@ -491,7 +491,7 @@ confirmation** ([D7](../../../docs/DECISIONS.md#d7--import-infers-layout-boss-co
   `planner.py` and `simulate.py` are handed no repository to write with.
 - An answer carries no operations, and a simulation is approved through the
   ordinary `apply()` with the manager's reason — never through a shortcut.
-- Shift names come from the interview — never hardcoded.
+- Shift names come from unit setup — never hardcoded.
 - Rules stay natural language.
 - Every assignment carries the agent's reason; every change also carries the
   boss's.

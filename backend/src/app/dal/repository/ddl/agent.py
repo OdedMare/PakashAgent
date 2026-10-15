@@ -2,7 +2,7 @@
 
 AGENT_DDL = """-- What this workplace has taught the agent, beyond the one-off decisions.
 --
--- The intro interview collects rules; this collects the *operational
+-- Unit setup collects rules; this collects the *operational
 -- preferences* that only surface later -- "always ask יוסי before רון for a
 -- weekend", "notifications go out short and without the reason", "מאיה
 -- prefers mornings". They are not rules (D1/D2 govern those and they stay

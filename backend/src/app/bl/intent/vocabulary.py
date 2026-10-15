@@ -12,7 +12,7 @@ INTENT_PERIOD = "period"
 INTENT_TEAM = "team"
 INTENT_UNKNOWN = "unknown"
 
-# Hebrew weekdays as the product writes them everywhere else -- the interview
+# Hebrew weekdays as the product writes them everywhere else -- setup
 # collects them, `audit.py` prints them, the source files use them. Sunday is
 # index 0 because the Israeli week runs ראשון through שבת, the same basis
 # `week_bounds()` and `useBoard.sundayOf()` are built on.

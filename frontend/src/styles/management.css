@@ -1,6 +1,6 @@
 /* The management area: calendar, agent chat, roster, constraints, history.
    Uses the shared tokens in tokens.css so this reads as one system with the
-   interview — depth from borders and space, not elevation and glow.
+   conversation UI — depth from borders and space, not elevation and glow.
 
    RTL throughout. The calendar reads right-to-left like the source files it
    mirrors; `dir="rtl"` on the table plus logical properties keeps that true
@@ -1213,12 +1213,6 @@
   font-size: 0.82rem;
   color: var(--text-muted);
   margin: 0;
-}
-
-.interview-done {
-  display: flex;
-  justify-content: center;
-  padding: 0 1.25rem 1.5rem;
 }
 
 .visually-hidden {
@@ -3082,7 +3076,7 @@
 /* --- a build refused for a reason the manager can close ----------------- */
 
 /* Deliberately the warning palette rather than the danger one used by
-   `.error`. Nothing failed here: the interview is unfinished, and painting a
+   `.error`. Nothing failed here: setup is incomplete, and painting a
    skipped step in the colour of a fault tells the manager they hit a bug when
    they hit a step. It also has to look like something with actions in it, so
    it is a panel rather than the single-line strip an error gets. */
@@ -3117,7 +3111,7 @@
   flex-shrink: 0;
 }
 
-/* The interview's own lines. `list-style-position: inside` keeps the markers
+/* The profile's own lines. `list-style-position: inside` keeps the markers
    inside the tinted panel in RTL, where an outside marker hangs into the
    border. */
 .gaps-list,

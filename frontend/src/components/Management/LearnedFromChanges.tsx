@@ -25,10 +25,10 @@ import type { ChangeLearning } from "@/types";
  *  one they must trust — the same reason the import screen shows counts.
  *
  *  Adding a rule is deliberately **not** a button here. Rules live on the
- *  workplace profile, which the interview owns; a second write path into it
+ *  workplace profile, which setup owns; a second write path into it
  *  would mean two places that can define what the workplace requires. The
  *  panel names the rule in the manager's own register so it can be said to
- *  the agent or added in the interview, which is where rules are authored. */
+ *  the agent or added in setup, which is where rules are authored. */
 export function LearnedFromChanges() {
   const [data, setData] = useState<ChangeLearning | null>(null);
   const [busy, setBusy] = useState(true);

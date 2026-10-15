@@ -44,7 +44,7 @@ _CONSTRAINT_SCHEMA = {
     "properties": {
         "employee": {"type": "string"},
         "date": {"type": "string"},
-        # Empty means the whole day, the same convention the interview and
+        # Empty means the whole day, the same convention setup and
         # `audit.py` use.
         "shift": {"type": "string"},
         "reason": {"type": "string"},

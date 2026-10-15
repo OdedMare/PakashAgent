@@ -43,14 +43,14 @@ COMMIT;
 -- A slot is one shift on one date: the thing a person is assigned INTO.
 -- Kept as rows rather than derived from the profile's shift vocabulary on
 -- read, because a schedule must stay readable exactly as it was built even
--- after the manager re-runs the interview and changes the vocabulary under
+-- after the manager changes the setup vocabulary under
 -- it.
 CREATE TABLE IF NOT EXISTS shift_slots (
     id TEXT PRIMARY KEY,
     team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
     schedule_id TEXT NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
     -- The workplace's own shift name (D9). Never an enum: the vocabulary is
-    -- per-workplace data collected in the interview.
+    -- per-workplace data collected in setup.
     shift_name TEXT NOT NULL,
     slot_date DATE NOT NULL,
     start_time TEXT NOT NULL DEFAULT '',
@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS assignments (
     team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
     schedule_id TEXT NOT NULL REFERENCES schedules(id) ON DELETE CASCADE,
     slot_id TEXT NOT NULL REFERENCES shift_slots(id) ON DELETE CASCADE,
-    -- The employee's name as the interview recorded it. There is no
+    -- The employee's name as the profile records it. There is no
     -- employees table yet and no per-member identity at all (D10), so the
     -- name from the profile is the identifier the whole product uses.
     employee TEXT NOT NULL,

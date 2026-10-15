@@ -41,7 +41,7 @@ class BriefingService:
     ) -> dict:
         profile = self._context.profile(team_id)
         if not profile:
-            # Before the interview the agent knows neither the shifts nor the
+            # Before setup the agent knows neither the shifts nor the
             # people; a briefing would be invented rather than observed.
             return rows.quiet_briefing()
         # Learning rides on the agent's own unprompted read, before the

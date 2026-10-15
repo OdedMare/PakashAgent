@@ -1,4 +1,4 @@
-"""Hebrew weekday names, as the interview collects them and the files write them.
+"""Hebrew weekday names, as setup and imported files write them.
 
 Hebrew is data here, not presentation: a shift's `days`, a staffing group's
 `days` and a recurring constraint's `days` are all lists of these names, and
@@ -25,7 +25,7 @@ def hebrew_weekday(day: Optional[datetime.date]) -> str:
 def weekday_key(value: Any) -> str:
     """The weekday independent of the optional Hebrew ``יום`` prefix.
 
-    Interview answers naturally contain both ``ראשון`` and ``יום ראשון``.
+    Saved profiles naturally contain both ``ראשון`` and ``יום ראשון``.
     They name the same day, and treating them as different silently removed
     every prefixed weekday except שבת from generated schedules.
     """

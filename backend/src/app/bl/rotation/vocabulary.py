@@ -4,7 +4,7 @@ import datetime
 from typing import Any, List, Optional
 
 # Group orders per cycle length. Hebrew letters are data here, matching how
-# the interview collects them and how `profile_service` validates them.
+# setup collects them and `profile_service` validates them.
 ROUND_GROUPS = ("א", "ב")
 TRIPLET_GROUPS = ("א", "ב", "ג")
 

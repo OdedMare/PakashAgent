@@ -8,7 +8,7 @@ member, which is why "his hours" could not be expressed at all.
 - **`employee_identities`** (`identity_claims.py`) -- a claim over a NAME from
   the workplace profile, protected by a personal passcode. Not a user record:
   `employee` matches `assignments.employee` exactly, because the whole product
-  identifies people by the name the interview recorded.
+  identifies people by the name saved in the profile.
 - **`constraint_requests`** (`constraint_requests.py`) -- a submission awaiting
   the manager. Deliberately NOT a row in `availability`, so asking cannot move
   the arithmetic (D3). Approval is a manager action.

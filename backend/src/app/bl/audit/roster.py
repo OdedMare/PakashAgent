@@ -43,7 +43,7 @@ def shift_hours(shift: dict) -> float:
 
     On-call is the reason the weight exists: `כונן לילה` in one of the real
     files is a night a person is *available* rather than working, and the
-    interview asks how it counts toward hours precisely so this does not have
+    setup records how it counts toward hours precisely so this does not have
     to assume (D9). A weight of 0.5 makes an eight-hour on-call count as four.
     """
     start = parse_time(shift.get("start_time"))
@@ -127,7 +127,7 @@ def ends_at(item: dict) -> datetime.datetime:
 def policy(profile: Optional[dict]) -> dict:
     """Thresholds, taken from the profile where it states them.
 
-    The interview collects rest and weekend policy as the manager's own
+    Unit setup collects rest and weekend policy as the manager's own
     sentences (D2), which is not a number this can read. So the thresholds
     come from an explicit `audit_policy` block when one exists and fall back
     to the defaults otherwise -- deliberately NOT parsed out of the Hebrew.

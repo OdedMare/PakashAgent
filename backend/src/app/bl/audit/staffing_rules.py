@@ -144,7 +144,7 @@ def requires_shift_manager(
 def _staffing_value(shift: dict, day: Optional[datetime.date], read):
     """The per-weekday staffing group's value, or the no-days default.
 
-    Weekdays are normalised on both sides: the interview collects `שישי` and
+    Weekdays are normalised on both sides: setup may store `שישי` and
     `יום שישי` as the same day, and comparing raw strings once graded a
     ten-person Friday against the weekday default.
     """

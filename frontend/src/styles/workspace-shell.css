@@ -86,33 +86,6 @@
   background: var(--sidebar-2);
 }
 
-/* A count on a header icon — used for the topics an ended interview left
-   open. Positioned rather than inline so the icon stays centred in its
-   34px box and the row's rhythm is unchanged whether or not it is there. */
-.icon-button.has-badge {
-  position: relative;
-  color: var(--text);
-}
-
-.icon-badge {
-  position: absolute;
-  top: 1px;
-  inset-inline-end: 1px;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  display: grid;
-  place-items: center;
-  font-size: 0.6rem;
-  font-weight: 600;
-  line-height: 1;
-  /* White on the brand colour, the same pairing `.primary-button` uses in
-     both themes rather than a token invented for one badge. */
-  color: #fff;
-  background: var(--primary);
-  border-radius: 7px;
-}
-
 /* --- empty / loading --------------------------------------------------- */
 
 .center {

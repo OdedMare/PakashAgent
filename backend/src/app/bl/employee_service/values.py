@@ -28,7 +28,7 @@ def iso_date(value: Any) -> str:
 
 
 def roster_names(profile: dict) -> List[str]:
-    """Employee names as the interview recorded them.
+    """Employee names as unit setup recorded them.
 
     Read defensively: the profile is model-produced JSON, so a missing or
     differently-shaped field degrades to an empty roster rather than throwing

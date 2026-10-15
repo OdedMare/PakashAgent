@@ -49,7 +49,7 @@ export function FilterBar({
         onChange={(employee) => onChange({ employee })}
       />
       {/* Only when the workplace actually recorded roles. An empty dropdown
-          is a promise the profile cannot keep, and the interview does not
+          is a promise the profile cannot keep, and setup does not
           require the field. */}
       {roles.length ? (
         <Select

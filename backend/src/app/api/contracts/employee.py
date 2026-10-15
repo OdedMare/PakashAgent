@@ -17,7 +17,7 @@ class ClaimRequest(BaseModel):
     """Claim a roster name and set a personal passcode.
 
     Requires a valid share-link session to reach, and the name must be one
-    the interview actually recorded — a free-text claim would let anyone
+    the profile actually records — a free-text claim would let anyone
     holding the link invent an employee.
     """
 

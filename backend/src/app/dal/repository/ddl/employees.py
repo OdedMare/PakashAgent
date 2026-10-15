@@ -12,7 +12,7 @@ EMPLOYEE_DDL = """-- -----------------------------------------------------------
 -- The identity is a claim over a NAME from the workplace profile, not a user
 -- record. `employee` matches `assignments.employee` and
 -- `availability.employee` exactly -- the whole product identifies people by
--- the name the interview recorded, and inventing a separate id here would
+-- the name saved in the profile, and inventing a separate id here would
 -- mean reconciling two identifiers for one person on every read.
 CREATE TABLE IF NOT EXISTS employee_identities (
     id TEXT PRIMARY KEY,
@@ -123,7 +123,7 @@ COMMIT;
 --
 -- Both sides are named by `assignments.employee` strings, exactly as
 -- `employee_identities` is: the product identifies people by the name the
--- interview recorded, and a second identifier would need reconciling on
+-- profile recorded, and a second identifier would need reconciling on
 -- every read.
 CREATE TABLE IF NOT EXISTS swap_requests (
     id TEXT PRIMARY KEY,

@@ -136,7 +136,7 @@ class AdminRepository(RepositoryBase):
 
         Every team-owned table references `teams(id) ON DELETE CASCADE`, so
         this one statement is the whole deletion -- schedules, assignments,
-        the change log, identities, requests, chats, the interview. There is
+        the change log, identities, requests, chats, and the profile. There is
         no soft delete and no undo; suspending (`active=FALSE`) is the
         reversible version, and the console offers it first.
         """

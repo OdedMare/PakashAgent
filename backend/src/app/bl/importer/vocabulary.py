@@ -41,7 +41,7 @@ class ShiftVocabulary:
         shift's own hours all land on the one name the workplace uses.
 
         **An unmatched header is not discarded.** The file is a real schedule
-        the workplace ran; a sheet naming a shift the interview never
+        the workplace ran; a sheet naming a shift the profile never
         mentioned is describing something that genuinely happened. So the
         cell's own text is taken, and the confirm screen is where the manager
         reconciles it. Nothing is *invented*: a name is either the
@@ -94,4 +94,3 @@ class ShiftVocabulary:
             filled += 1
             matched += bool(self.declared(row[column]))
         return filled > 0 and matched == filled
-

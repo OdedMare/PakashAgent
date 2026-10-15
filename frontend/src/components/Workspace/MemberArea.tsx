@@ -156,10 +156,10 @@ export function MemberArea({
   );
 }
 
-/** Shift names as the interview recorded them.
+/** Shift names as unit setup recorded them.
  *
  *  Read defensively: the profile is model-produced JSON whose exact shape the
- *  interview owns, so a missing or differently-keyed field must degrade to
+ *  profile owns, so a missing or differently-keyed field must degrade to
  *  showing nothing rather than throwing. Never hardcode shift names — they
  *  are per-workplace data (D9). */
 function readShiftNames(profile: TeamView["profile"]): string[] {

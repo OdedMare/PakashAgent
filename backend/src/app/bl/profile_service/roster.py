@@ -57,7 +57,7 @@ def _validate_recurring(rows: list) -> None:
     fields = {"days", "shifts", "available", "is_hard", "start_time", "end_time", "reason", "source"}
     for rule in rows:
         if isinstance(rule, str):
-            # Older interview prose is preserved; only structured rules expand.
+            # Older free-text profile prose is preserved; only structured rules expand.
             continue
         if not isinstance(rule, dict) or set(rule) - fields \
                 or not isinstance(rule.get("days"), list) \

@@ -435,7 +435,7 @@ function SwapAlert({ waiting }: { waiting: number }) {
 /** Shift names as the profile recorded them.
  *
  *  Read defensively: the profile is model-produced JSON whose shape the
- *  interview owns, so anything unexpected degrades to an empty list rather
+ *  profile owns, so anything unexpected degrades to an empty list rather
  *  than throwing. Never hardcode shift names — they are per-workplace data
  *  (D9). */
 function readShiftNames(shifts: EmployeeView["shifts"]): string[] {

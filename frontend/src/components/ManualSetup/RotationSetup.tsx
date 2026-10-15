@@ -153,7 +153,7 @@ function DateRange({ startsOn, endsOn, onChange }: { startsOn: string; endsOn: s
 
 /** The weekend group א closes on, from an anchor stated for any group.
  *
- *  A profile taught by the interview may anchor on whichever group the
+ *  An older profile may anchor on whichever group the
  *  manager happened to name. Moving that to א's next turn describes the same
  *  cycle, and lets this screen ask for one date instead of a date and a group. */
 export function firstGroupAnchor(pattern: Cycle, date: string, group: string): string {

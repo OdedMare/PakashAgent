@@ -2,7 +2,7 @@
 
 The business half of D14:
 
-- **Claiming a name** (`identity.py`) — the name must be one the interview
+- **Claiming a name** (`identity.py`) — the name must be one the profile
   recorded; a free-text claim would let anyone with the link invent a person.
 - **The personal view** (`personal.py`) — hours, shifts, warnings computed by
   `bl/audit`, so the employee's arithmetic is the manager's arithmetic.

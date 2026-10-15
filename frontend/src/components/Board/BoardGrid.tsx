@@ -937,7 +937,7 @@ function BoardRow({
 
 /** Whether a recorded constraint contradicts this cell.
  *
- *  An empty `shift_name` covers the whole day — the convention the interview
+ *  An empty `shift_name` covers the whole day — the convention setup
  *  collects and `audit.py` reads. */
 /** What the badge on a touched cell says.
  *

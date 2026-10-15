@@ -37,7 +37,7 @@ MAX_ASSIGNMENTS_PER_SPAN = 70
 def build_slots(profile: dict, starts_on: str, ends_on: str) -> List[dict]:
     """One slot per shift per day the shift actually runs.
 
-    A shift with no `days` runs every day — the interview is instructed to
+    A shift with no `days` runs every day — setup leaves it empty to
     confirm the days, so an empty list means "not restricted" rather than
     "never", and treating it as "never" would produce an empty schedule from
     a profile that looks complete.
@@ -78,7 +78,7 @@ def _slot(shift: dict, day, weekday: str) -> dict:
 def staffing_requirements(shift: dict, weekday: str) -> tuple:
     """How many people and which roles this shift needs on this weekday.
 
-    `staffing` is per group of days because the interview asks whether the
+    `staffing` is per group of days because setup records whether the
     standard changes across the week. A group naming this weekday wins over
     the group naming none, which is the default.
     """

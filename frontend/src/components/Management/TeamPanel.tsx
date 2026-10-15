@@ -735,7 +735,7 @@ function ConstraintForm({
           onChange={(event) => setShift(event.target.value)}
         >
           {/* The empty option is the whole-day constraint, which is the
-              interview's own convention and how the audit reads it. */}
+              profile's own convention and how the audit reads it. */}
           <option value="">כל היום</option>
           {shiftNames.map((name) => (
             <option key={name} value={name}>
