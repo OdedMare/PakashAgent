@@ -41,10 +41,9 @@ class Workspace(BaseModel):
     name: str
     role: str
     member_token: Optional[str] = None
-    claimed_sessions: Optional[int] = None
 
 
 class TeamView(Workspace):
-    """A workspace plus the workplace profile its interview produced."""
+    """A workspace plus its saved workplace profile."""
 
     profile: Optional[Dict[str, Any]] = None

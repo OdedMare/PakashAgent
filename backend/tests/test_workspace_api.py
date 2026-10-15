@@ -1,9 +1,4 @@
-"""The workspace HTTP boundary: cookies, guards, and tenant isolation.
-
-The isolation tests are the point of the feature. They assert the thing a
-reviewer would otherwise have to take on trust -- that one workspace cannot
-read or write another's interview even when it knows the session id.
-"""
+"""The workspace HTTP boundary: cookies and guards."""
 
 import pytest
 from fastapi import FastAPI
@@ -11,29 +6,20 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from app.api.dependencies.dependencies import Guards
-from app.api.routers import interview, workspace
-from app.bl.interview_service import InterviewService
+from app.api.routers import workspace
 from app.bl.workspace_service.service import WorkspaceService
 from app.common.errors.errors import AppError
 from app.common.sessions.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 
-from tests.test_interview_api import _FakeRepository, _ScriptedLlm, _question
 from tests.test_workspace import _FakeTeams
 
 SECRET = "test-secret"
-
-
-class _FakeRepo(_FakeRepository, _FakeTeams):
-    """Both halves, composed exactly as the real `Repository` composes them."""
-
-    def __init__(self):
-        _FakeRepository.__init__(self)
-        _FakeTeams.__init__(self)
+_FakeRepo = _FakeTeams
 
 
 @pytest.fixture
 def app_and_repo():
-    repository = _FakeRepo()
+    repository = _FakeTeams()
     guards = Guards(SECRET)
     app = FastAPI()
     # Self-service signup is off in production (D28); these tests open
@@ -41,13 +27,6 @@ def app_and_repo():
     # about who may open a team. `test_admin_api.py` covers that.
     app.include_router(workspace.build_router(
         WorkspaceService(repository), guards, SECRET, 30, allow_signup=True,
-    ))
-    app.include_router(interview.build_router(
-        InterviewService(
-            repository, _ScriptedLlm([_question()]),
-            launch=lambda target, *args: target(*args),
-        ),
-        guards,
     ))
 
     @app.exception_handler(AppError)
@@ -114,27 +93,8 @@ def test_a_short_password_is_a_422_from_the_contract(client):
 
 # --- the guard --------------------------------------------------------------
 
-def test_an_anonymous_visitor_cannot_reach_the_interview(client):
-    assert client.post("/api/interview").status_code == 401
+def test_an_anonymous_visitor_cannot_read_a_workspace(client):
     assert client.get("/api/workspace/me").status_code == 401
-
-
-def test_a_forged_cookie_cannot_reach_the_interview(client):
-    client.cookies.set(COOKIE_NAME, issue("wrong-secret", "team-1", ROLE_BOSS, 30))
-
-    assert client.post("/api/interview").status_code == 401
-
-
-def test_a_member_cannot_start_or_answer_an_interview(client):
-    """D5 at the routing layer: the member area is a view, not a second
-    editing surface, so no member session reaches an authoring route."""
-    team = _make_team(client)
-    client.cookies.set(COOKIE_NAME, issue(SECRET, team["id"], ROLE_MEMBER, 30))
-
-    started = client.post("/api/interview")
-
-    assert started.status_code == 401
-    assert "מנהל" in started.json()["detail"]
 
 
 def test_a_member_cannot_rotate_the_share_link(client):
@@ -190,66 +150,3 @@ def test_the_team_list_is_public_and_carries_no_secrets(client):
     assert listed[0]["name"] == "צוות א"
     assert "member_token" not in listed[0]
     assert "password_hash" not in listed[0]
-
-
-# --- tenant isolation -------------------------------------------------------
-
-def test_one_workspace_cannot_read_another_s_interview(app_and_repo):
-    """The headline guarantee. Knowing the session id is not enough --
-    the row is filtered by the team in the cookie."""
-    app, _ = app_and_repo
-    boss_a = TestClient(app)
-    boss_b = TestClient(app)
-    _make_team(boss_a, name="צוות א", password="sod-alef")
-    _make_team(boss_b, name="צוות ב", password="sod-bet")
-
-    session_id = boss_a.post("/api/interview").json()["session_id"]
-
-    assert boss_a.get("/api/interview/%s" % session_id).status_code == 200
-    assert boss_b.get("/api/interview/%s" % session_id).status_code == 404
-
-
-def test_one_workspace_cannot_answer_another_s_interview(app_and_repo):
-    app, _ = app_and_repo
-    boss_a = TestClient(app)
-    boss_b = TestClient(app)
-    _make_team(boss_a, name="צוות א", password="sod-alef")
-    _make_team(boss_b, name="צוות ב", password="sod-bet")
-    session_id = boss_a.post("/api/interview").json()["session_id"]
-
-    response = boss_b.post(
-        "/api/interview/%s/answer" % session_id, json={"content": "כן"}
-    )
-
-    assert response.status_code == 404
-
-
-def test_each_workspace_gets_its_own_interview(app_and_repo):
-    app, _ = app_and_repo
-    boss_a = TestClient(app)
-    boss_b = TestClient(app)
-    _make_team(boss_a, name="צוות א", password="sod-alef")
-    _make_team(boss_b, name="צוות ב", password="sod-bet")
-
-    first = boss_a.post("/api/interview").json()["session_id"]
-    second = boss_b.post("/api/interview").json()["session_id"]
-
-    assert first != second
-
-
-def test_a_second_device_continues_the_same_interview(app_and_repo):
-    """The interview belongs to the workspace, not to the browser that began
-    it -- otherwise logging in on a phone silently starts a parallel one."""
-    app, _ = app_and_repo
-    laptop = TestClient(app)
-    team = _make_team(laptop, name="צוות א", password="sod-alef")
-    started = laptop.post("/api/interview").json()["session_id"]
-
-    phone = TestClient(app)
-    phone.post(
-        "/api/workspace/login",
-        json={"team_id": team["id"], "password": "sod-alef"},
-    )
-    resumed = phone.post("/api/interview").json()["session_id"]
-
-    assert resumed == started

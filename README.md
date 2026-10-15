@@ -5,9 +5,9 @@ database keep the `pakash` prefix.*
 
 An agent that builds and maintains work shift schedules through conversation.
 
-The boss teaches the agent the workplace once, in an intro interview. After that
-the agent builds schedules, absorbs schedules the boss already has (Excel or
-docs), and rearranges them on request — always explaining what it did and why.
+The boss defines the workplace once in a structured, zero-token setup form.
+After that the agent builds schedules, absorbs schedules the boss already has
+(Excel or docs), and rearranges them on request — always explaining what it did and why.
 Employees see the result; they do not edit it.
 
 **Each team gets its own workspace.** The boss logs in with a password; team
@@ -19,14 +19,13 @@ markers, and errors are all Hebrew. See [`backend/src/app/bl/CLAUDE.md`](backend
 
 ## Status
 
-**The intro interview works end to end.** The boss opens the app, answers one
-question per turn (a selectable answer or their own words), and reaches a
-confirmed workplace profile stored in Postgres.
+**Unit setup works end to end without a model call.** The boss defines the
+roster, shifts, rotations and rules in a structured form saved in Postgres.
 
 **Workspaces work end to end.** A boss opens a team, gets a share link for the
 employees, and everything they author is scoped to that team.
 
-**The management area works end to end.** Once the interview is done the manager
+**The management area works end to end.** Once setup is done the manager
 lands in a control room holding the shift calendar, the roster and its
 constraints, and a conversation with the agent about the current and future
 schedule. They can generate one date or any date range with persistent
@@ -44,7 +43,7 @@ confirms with their reason
 
 **The copilot stays awake when the browser closes.** A separate durable worker
 checks every workspace, records profile gaps and schedule problems in a
-manager inbox, retries failed work, and opens focused follow-up interviews.
+manager inbox, retries failed work, and points profile gaps back to unit setup.
 Permissions are set per action type; every decision, verification and rollback
 is recorded in an append-only audit trail
 ([D23](docs/DECISIONS.md#d23--the-copilot-is-durable-permissioned-and-reversible)).
@@ -86,8 +85,8 @@ and imported back. A message for the group chat is asked of the agent instead
 — it is writing, and writing here is the agent's job
 ([D17](docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
 
-Built: the ported `dal/llm` client, settings and runtime settings, the interview
-and its prompt, the workspace layer (teams, boss login, member share links, route
+Built: the ported `dal/llm` client, settings and runtime settings, structured
+unit setup, the workspace layer (teams, boss login, member share links, route
 guards), `bl/audit.py` and its table-driven tests, `bl/scheduler.py`,
 `bl/changes.py`, `bl/briefing/briefing.py`, `bl/export/export.py`, `bl/placement.py`, the agent's
 tool layer (`bl/tools.py`, `bl/planner.py`, `bl/intent.py`, `bl/simulate.py`),
@@ -103,9 +102,8 @@ accepted tradeoff.
 
 ## The four steps the product exists to serve
 
-1. **Intro interview** — the agent asks about the job, the employees, the shift
-   structure, dependencies, and the mission. This is where the workplace's own
-   shift vocabulary is collected (every workplace names shifts differently).
+1. **Unit setup** — the boss defines employees, the workplace's own shift
+   vocabulary, rotations, dependencies and rules in a structured form.
 2. **The boss loads shifts** — or asks the agent to generate them. Both are
    supported and land in the same representation.
 3. **Import from Excel/docs** — real files vary structurally. The agent infers
@@ -124,7 +122,7 @@ See [Manager chat](docs/MANAGER_CHAT.md) for supported actions and approval beha
 ```
 backend/              FastAPI + Postgres, layered api / bl / dal
   src/app/api/        HTTP contracts and routers
-  src/app/bl/         Decisions: interview, scheduling, changes, audit, import
+  src/app/bl/         Decisions: profiles, scheduling, changes, audit, import
   src/app/dal/        Data access: Postgres, LLM client
   src/app/common/     Config, runtime settings, logging, errors
 frontend/             Next.js, RTL, chat-first with a schedule grid
@@ -155,8 +153,8 @@ npm install
 npm run dev                            # :3000, proxies /api to the backend
 ```
 
-Then open <http://localhost:3000>, create a team, and start the interview.
-Finishing it opens the management area, where "בניית סידור לשבוע" generates a
+Then open <http://localhost:3000>, create a team, and complete unit setup.
+Saving it opens the management area, where "בניית סידור לשבוע" generates a
 week. The share button in the header reveals the link employees open
 (`/team/<token>`); it grants a read-only view and no password, and shows only
 schedules the manager has published.

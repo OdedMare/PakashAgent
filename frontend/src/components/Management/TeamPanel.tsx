@@ -1,12 +1,14 @@
 "use client";
 
-import { CalendarOff, Clock3, GripVertical, Pencil, Plus, Repeat2, Trash2, UserRound } from "lucide-react";
+import { CalendarOff, Clock3, GripVertical, Pencil, Plus, Repeat2, Trash2, Undo2, UserMinus, UserRound } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { EMPLOYEE_DRAG_TYPE } from "@/components/Board/dragData";
 import { DateInput, displayDate } from "@/components/DateInput";
+import type { Departure } from "@/services/api";
 import type { Constraint, ShiftStats } from "@/types";
 
+import { ConfirmDeparture } from "./ConfirmDeparture";
 import { buildPalette, colorStyle } from "./palette";
 
 /** The roster and the constraints recorded against it.
@@ -33,6 +35,8 @@ export function TeamPanel({
   onAdd,
   onRemove,
   onSaveProfile,
+  onPreviewDeparture,
+  onDepart,
 }: {
   employees: Record<string, unknown>[];
   shifts: Record<string, unknown>[];
@@ -60,8 +64,13 @@ export function TeamPanel({
     employees?: Record<string, unknown>[];
     shifts?: Record<string, unknown>[];
   }) => void;
+  /** Deleting an employee is a departure: an end date, later shifts vacated. */
+  onPreviewDeparture?: (input: { employee: string; effective_date?: string }) => Promise<Departure>;
+  onDepart?: (input: { employee: string; effective_date?: string; reason?: string }) => Promise<boolean>;
 }) {
   const [adding, setAdding] = useState(false);
+  const [departing, setDeparting] = useState<string | null>(null);
+  const [departBusy, setDepartBusy] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<string | null>(null);
   const [addingEmployee, setAddingEmployee] = useState(false);
   const [editingShift, setEditingShift] = useState<string | null>(null);
@@ -83,6 +92,14 @@ export function TeamPanel({
     [stats?.by_employee],
   );
   const archived = employees.filter((row) => row.inactive_from && today && text(row.inactive_from) <= today);
+  /** Undo a departure. Only the end date goes; vacated shifts stay vacated. */
+  const restore = (name: string) => onSaveProfile?.({
+    employees: employees.map((row) => {
+      if (text(row.name) !== name) return row;
+      const { inactive_from: _ended, ...rest } = row;
+      return rest;
+    }),
+  });
 
   return (
     <aside className="team-panel" aria-label="כוח האדם, התקינה והאילוצים">
@@ -135,6 +152,7 @@ export function TeamPanel({
                     {text(person?.rotation_group) ? ` ${text(person?.rotation_group)}` : ""}
                     {text(person?.service_type) ? ` · ${SERVICE_TYPE_LABELS[text(person?.service_type)] ?? text(person?.service_type)}` : ""}
                   </span>
+                  {text(person?.inactive_from) ? <span className="roster-note">מסיים/ת · {displayDate(text(person?.inactive_from))}</span> : null}
                   {person?.is_shift_manager ? <span className="roster-capability">מפקד/ת משמרת</span> : null}
                   {person?.can_train ? <span className="roster-capability">מוסמך/ת לחפוף</span> : null}
                   {text(person?.notes) ? <span className="roster-note">{text(person?.notes)}</span> : null}
@@ -166,6 +184,27 @@ export function TeamPanel({
                     <Pencil size={13} />
                   </button>
                 ) : null}
+                {onSaveProfile && text(person?.inactive_from) ? (
+                  <button
+                    type="button"
+                    className="icon-button subtle"
+                    onClick={() => restore(name)}
+                    aria-label={`ביטול סיום העבודה של ${name}`}
+                    title="ביטול סיום העבודה"
+                  >
+                    <Undo2 size={13} />
+                  </button>
+                ) : onDepart && onPreviewDeparture ? (
+                  <button
+                    type="button"
+                    className="icon-button subtle"
+                    onClick={() => setDeparting(name)}
+                    aria-label={`הוצאת ${name} מהסגל`}
+                    title="הוצאה מהסגל"
+                  >
+                    <UserMinus size={13} />
+                  </button>
+                ) : null}
               </li>
             );
           })}
@@ -175,8 +214,29 @@ export function TeamPanel({
         </ul>
         {archived.length ? <details className="roster-archive"><summary>עובדים שסיימו את העבודה ({archived.length})</summary>
           <ul>{archived.map((person) => <li key={text(person.name)}><strong>{text(person.name)}</strong>
-            <span>סיום עבודה · {displayDate(text(person.inactive_from))}</span></li>)}</ul>
+            <span>סיום עבודה · {displayDate(text(person.inactive_from))}</span>
+            {onSaveProfile ? <button type="button" className="ghost-button" onClick={() => restore(text(person.name))}>
+              <Undo2 size={13} /> החזרה לסגל
+            </button> : null}</li>)}</ul>
         </details> : null}
+        {departing && onDepart && onPreviewDeparture ? (
+          <ConfirmDeparture
+            employee={departing}
+            today={today}
+            busy={departBusy}
+            onPreview={onPreviewDeparture}
+            onCancel={() => setDeparting(null)}
+            onConfirm={async ({ effective_date, reason }) => {
+              setDepartBusy(true);
+              const done = await onDepart({ employee: departing, effective_date, reason });
+              setDepartBusy(false);
+              if (done) {
+                setDeparting(null);
+                if (editingEmployee === departing) setEditingEmployee(null);
+              }
+            }}
+          />
+        ) : null}
         {onSaveProfile ? (
           addingEmployee || editingEmployee ? (
             <EmployeeForm
@@ -771,7 +831,7 @@ const SOURCE_LABELS: Record<string, string> = {
   manager: "המנהל",
   agent: "הסוכן",
   employee_reported: "העובד מסר",
-  interview: "מהראיון",
+  interview: "מהגדרה קודמת",
 };
 
 const SERVICE_TYPE_LABELS: Record<string, string> = {

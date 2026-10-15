@@ -10,33 +10,32 @@ import type { ProfileGaps } from "./useManagement";
  *  vocabulary — D9 forbids inventing shift names, so there is genuinely no
  *  grid to make. That refusal used to arrive as a bare 502 and the manager
  *  had nowhere to go from it: both buttons failed, the message named no
- *  cause, and the interview that could fix it was behind an icon they had no
+ *  cause, and the setup editor that could fix it was behind an icon they had no
  *  reason to press.
  *
  *  So this names the gap and offers the two ways to close it, which are
  *  genuinely different acts:
  *
- *  - **The interview** is where a profile is written. It is the only thing
- *    that writes one, which is why it is the primary action here.
+ *  - **Setup** is where the profile is written, so it is the primary action.
  *  - **The agent** can be asked about the week without writing anything
  *    (D15). It reads the same `completeness` record this panel renders, so a
  *    manager who wants to work out *what* is missing before answering for it
  *    has somewhere to think out loud.
  *
- *  Deliberately not a red error box. Nothing broke — the interview is
- *  unfinished, and styling that as a fault would tell the manager they hit a
+ *  Deliberately not a red error box. Nothing broke — setup is incomplete,
+ *  and styling that as a fault would tell the manager they hit a
  *  bug when they hit a step they skipped. */
 export function ProfileGapsNotice({
   gaps,
-  onOpenInterview,
+  onOpenSetup,
   onDiscuss,
   onDismiss,
 }: {
   gaps: ProfileGaps;
-  /** Opens the intro interview. Absent when the host screen has no route to
+  /** Opens unit setup. Absent when the host screen has no route to
    *  it, in which case the panel simply omits the button rather than
    *  offering one that goes nowhere. */
-  onOpenInterview?: () => void;
+  onOpenSetup?: () => void;
   /** Seeds the control room's composer with a question about this week and
    *  switches to it. Seeded, never sent: the manager presses send, the same
    *  rule every other agent suggestion follows (D15). */
@@ -58,7 +57,7 @@ export function ProfileGapsNotice({
         </button>
       </div>
 
-      {/* What the interview still owes, in its own words. Listed rather than
+      {/* What setup still lacks. Listed rather than
           summarised into a count: the manager is about to go and answer
           these, and a number tells them nothing about what to say. */}
       {gaps.gaps.length ? (
@@ -82,13 +81,13 @@ export function ProfileGapsNotice({
       ) : null}
 
       <div className="gaps-actions">
-        {onOpenInterview ? (
+        {onOpenSetup ? (
           <button
             type="button"
             className="primary-button"
-            onClick={onOpenInterview}
+            onClick={onOpenSetup}
           >
-            השלמת ראיון ההיכרות
+            השלמת הגדרת היחידה
           </button>
         ) : null}
         <button type="button" className="ghost-button" onClick={onDiscuss}>

@@ -22,7 +22,6 @@ class _FakeTeams:
 
     def __init__(self):
         self.teams = {}
-        self.orphans = 0
         self._next = 0
 
     def create_team(self, name, password):
@@ -63,11 +62,6 @@ class _FakeTeams:
 
     def team_profile(self, team_id):
         return None
-
-    def claim_orphan_sessions(self, team_id):
-        claimed, self.orphans = self.orphans, 0
-        return claimed
-
 
 @pytest.fixture
 def service():
@@ -286,14 +280,3 @@ def test_reusing_the_same_password_is_refused(service):
     with pytest.raises(ConflictError):
         service.change_password(created["id"], "sod-gadol", "sod-gadol")
 
-
-def test_the_first_workspace_adopts_interviews_that_predate_workspaces(service):
-    """An existing install's finished interview would otherwise become
-    unreachable the moment every read starts filtering by team."""
-    service._repository.orphans = 3
-
-    first = service.create("צוות א", "sod-gadol")
-    second = service.create("צוות ב", "sod-gadol")
-
-    assert first["claimed_sessions"] == 3
-    assert second["claimed_sessions"] == 0

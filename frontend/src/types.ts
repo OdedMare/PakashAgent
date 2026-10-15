@@ -16,28 +16,7 @@ export interface Question {
   options: Option[];
 }
 
-export interface Message {
-  role: "assistant" | "user";
-  content: string;
-  question: Question | null;
-  options: Option[];
-  recommendation: string | null;
-  mode?: "" | "answer" | "correction";
-}
-
-/** Facts inferred from an existing schedule before the first question. */
-export interface InterviewSeed {
-  workplace_name?: string;
-  source_files?: string[];
-  employees?: Record<string, string[]>;
-  shifts?: Record<string, string[]>;
-  starts_on?: string;
-  ends_on?: string;
-}
-
-/** The workplace profile as it stands. Only the fields the summary screen
- *  reads are named — the rest is shown as JSON, since the interview owns the
- *  full shape and duplicating it here would drift. */
+/** The saved workplace profile. Only fields read by the UI are named. */
 export interface WorkplaceProfile {
   workplace?: {
     name?: string;
@@ -68,10 +47,7 @@ export interface WorkplaceProfile {
   shifts?: unknown[];
   rules?: unknown[];
   summary?: string;
-  /** Present only on a profile whose interview was ended early. Its absence
-   *  means the interview was confirmed the ordinary way, so nothing is
-   *  outstanding — written by `interview_service.end`, read here and by
-   *  `bl/tools.py`'s `profile_gaps`. */
+  /** Legacy or partial setup gaps, read by the board and profile tools. */
   completeness?: ProfileCompleteness;
   [key: string]: unknown;
 }
@@ -97,7 +73,7 @@ export interface RotationPresenceRule extends RotationGroupRule {
   reason: string;
 }
 
-/** What an interview ended early still owes.
+/** What a legacy or partial setup still owes.
  *
  *  Two lists because they answer different questions. `missing_topics` is
  *  what the scheduler cannot run without; `open_points` is what the agent
@@ -108,30 +84,6 @@ export interface ProfileCompleteness {
   missing_topics: string[];
   open_points: string[];
   resolved?: string[];
-}
-
-export interface InterviewTurn {
-  session_id: string;
-  status: "processing" | "question" | "complete" | "error";
-  /** What the agent says this turn, above the question. */
-  reply: string;
-  question: Question | null;
-  /** What is settled, and what still is not — the interview's own state,
-   *  rendered beside the conversation so progress is visible. */
-  resolved: string[];
-  open_points: string[];
-  /** The summary is on screen awaiting a yes. `ready` follows on the turn
-   *  after the boss confirms it. */
-  awaiting_confirmation: boolean;
-  ready: boolean;
-  /** The profile so far. Present on every turn, so the summary panel fills
-   *  in as the interview proceeds. */
-  draft: WorkplaceProfile | null;
-  turns: Message[];
-  /** The confirmed result. Null until the interview is complete — `draft` is
-   *  a proposal, this is the durable answer. */
-  profile: WorkplaceProfile | null;
-  error?: string | null;
 }
 
 /** Mirrors `RuntimeSettings` in `backend/src/app/common/runtime_settings/`.
@@ -173,7 +125,7 @@ export interface RuntimeSettings {
 
 /** Who the current visitor is inside a workspace.
  *
- *  `boss` authors — the interview, the settings, the schedule.
+ *  `boss` authors — the profile, the settings, and the schedule.
  *
  *  `member` is the share link: it reads the published roster and carries no
  *  identity at all (D10), so nothing personal can be scoped to it.
@@ -273,12 +225,9 @@ export interface Workspace {
   name: string;
   role: Role;
   member_token: string | null;
-  /** Interviews recorded before workspaces existed, adopted by the first
-   *  team created. Present only on that first creation. */
-  claimed_sessions?: number | null;
 }
 
-/** A workspace plus the profile its interview produced. */
+/** A workspace plus its saved profile. */
 export interface TeamView extends Workspace {
   profile: WorkplaceProfile | null;
 }

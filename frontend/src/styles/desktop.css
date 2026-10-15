@@ -7,7 +7,7 @@
 .gate-story h1 { font-weight: 650; letter-spacing: -0.04em; line-height: 1.18; }
 .gate-week-preview { border: 1px solid var(--border); box-shadow: var(--shadow-soft); }
 .gate-story .brand-mark { color: var(--on-primary); }
-.interview-thread, .manual-setup, .settings-body { scrollbar-width: thin; }
+.manual-setup, .settings-body { scrollbar-width: thin; }
 .settings-dialog, .modal, .confirm-drop, .shift-editor { border-radius: 18px; }
 .workspace-conversations { display: none; }
 .workspace-gate:has(.gate-story) { grid-template-columns: minmax(0, 1fr); place-items: center; }
@@ -62,7 +62,7 @@
 
 @media (min-width: 900px) {
   .management { --navigation-width: 220px; padding-inline-start: var(--navigation-width); height: 100dvh; min-height: 0; overflow: hidden; background: var(--surface); }
-  .management > .interview-header { position: fixed; inset-inline-start: 0; inset-block: 0; width: var(--navigation-width); height: 100dvh; flex-direction: column; align-items: stretch; justify-content: flex-start; padding: 20px 12px 12px; background: var(--sidebar); backdrop-filter: none; border: 0; border-inline-end: 1px solid var(--border); gap: 20px; z-index: 12; }
+  .management > .workspace-sidebar { position: fixed; inset-inline-start: 0; inset-block: 0; width: var(--navigation-width); height: 100dvh; flex-direction: column; align-items: stretch; justify-content: flex-start; padding: 20px 12px 12px; background: var(--sidebar); backdrop-filter: none; border: 0; border-inline-end: 1px solid var(--border); gap: 20px; z-index: 12; }
   .management .brand { padding-inline: 6px; font-size: 14px; }
   .management .brand-sub { display: block; margin-top: 3px; font-size: 11px; }
   .management-nav { flex-direction: column; gap: 4px; background: transparent; padding: 0; width: 100%; }

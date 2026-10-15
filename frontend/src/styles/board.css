@@ -2221,7 +2221,7 @@
 /* -- narrow screens ------------------------------------------------------- */
 
 @media (max-width: 820px) {
-  .management > .interview-header {
+  .management > .workspace-sidebar {
     flex-wrap: wrap;
     gap: 0.5rem;
   }

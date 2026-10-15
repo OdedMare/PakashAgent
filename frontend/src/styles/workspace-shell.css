@@ -1,0 +1,294 @@
+/* Shared workspace, setup, login and conversation surfaces. */
+
+.workspace-surface {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+/* --- header ------------------------------------------------------------ */
+
+.workspace-sidebar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 3.5rem;
+  padding: 0.5rem 1.25rem;
+  color: var(--text);
+  background: color-mix(in srgb, var(--sidebar) 92%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.brand-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  place-items: center;
+  color: var(--text-on-dark);
+  background: var(--brand-gradient);
+  border: 0;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 6px color-mix(in srgb, #6a45e0 30%, transparent);
+}
+
+.workspace-sidebar .brand-sub {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+.icon-button:hover {
+  color: var(--text);
+  background: var(--surface-3);
+}
+
+.workspace-sidebar .icon-button {
+  width: 40px;
+  height: 40px;
+  color: var(--text-muted);
+}
+
+.workspace-sidebar .icon-button:hover {
+  color: var(--text);
+  background: var(--sidebar-2);
+}
+
+/* A count on a header icon — used for the topics an ended interview left
+   open. Positioned rather than inline so the icon stays centred in its
+   34px box and the row's rhythm is unchanged whether or not it is there. */
+.icon-button.has-badge {
+  position: relative;
+  color: var(--text);
+}
+
+.icon-badge {
+  position: absolute;
+  top: 1px;
+  inset-inline-end: 1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  display: grid;
+  place-items: center;
+  font-size: 0.6rem;
+  font-weight: 600;
+  line-height: 1;
+  /* White on the brand colour, the same pairing `.primary-button` uses in
+     both themes rather than a token invented for one badge. */
+  color: #fff;
+  background: var(--primary);
+  border-radius: 7px;
+}
+
+/* --- empty / loading --------------------------------------------------- */
+
+.center {
+  display: grid;
+  place-items: center;
+  min-height: calc(100dvh - 4.5rem);
+  padding: clamp(2.5rem, 7vw, 6rem) 24px;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--border) 42%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--border) 42%, transparent) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
+
+.welcome-panel {
+  width: min(58rem, 100%);
+  padding: clamp(1.5rem, 4vw, 3rem);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 24px 70px color-mix(in srgb, #0b1220 10%, transparent);
+}
+
+.welcome-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.welcome-panel h1 {
+  max-width: 38rem;
+  margin: 1.45rem 0 0.75rem;
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+}
+
+.welcome-panel > p {
+  max-width: 38rem;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.welcome-paths {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 12px;
+  margin-top: 2rem;
+}
+
+.welcome-path {
+  display: grid;
+  min-height: 9.5rem;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 13px;
+  padding: 18px;
+  color: var(--text);
+  text-align: right;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.welcome-path:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-soft);
+  transform: translateY(-1px);
+}
+
+.welcome-path.recommended {
+  background: var(--primary-soft);
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
+}
+
+.welcome-path-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  color: var(--primary);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
+  border-radius: 10px;
+}
+
+.welcome-path-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.welcome-path-label {
+  color: var(--primary);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.welcome-path-copy strong {
+  font-size: 1rem;
+}
+
+.welcome-path-copy small {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.welcome-path > svg {
+  margin-top: 9px;
+  color: var(--text-muted);
+}
+
+.welcome-map {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  border-block: 1px solid var(--border);
+}
+
+.welcome-save-note {
+  margin: 1rem 0 0 !important;
+  color: var(--text-muted) !important;
+  font-size: 0.74rem !important;
+}
+
+.welcome-map li {
+  display: grid;
+  gap: 0.2rem;
+  padding: 1rem;
+  border-inline-end: 1px solid var(--border);
+}
+
+.welcome-map li:last-child {
+  border-inline-end: 0;
+}
+
+.welcome-map li > span {
+  color: var(--primary);
+  font-size: 0.66rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.welcome-map strong {
+  font-size: 0.88rem;
+}
+
+.welcome-map small {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.start-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 22px;
+  color: #fff;
+  background: var(--brand-gradient);
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.start-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

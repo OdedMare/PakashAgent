@@ -55,7 +55,6 @@ _ROLE_KEY_FIELDS = {
 # conversation-shaped and sits on the default.
 _FLOW_ROLES = {
     "scheduler": ADVANCED,
-    "interview": DEFAULT,
     "changes": DEFAULT,
     "planner": DEFAULT,
     "employee_assistant": DEFAULT,

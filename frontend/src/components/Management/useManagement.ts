@@ -10,12 +10,14 @@ import {
   clearSchedule,
   deleteConstraint,
   deleteSchedule,
+  departEmployee,
   downloadSchedule,
   generateSchedule,
   generateScheduleRange,
   GenerationStoppedError,
   moveAssignment,
   ProfileIncompleteError,
+  previewDeparture,
   publishSchedule,
   resumeScheduleGeneration,
   scheduleOverview,
@@ -24,6 +26,7 @@ import {
   unpublishSchedule,
   updateProfile,
 } from "@/services/api";
+import type { Departure } from "@/services/api";
 import type {
   GenerationProgress,
   ManagementOverview,
@@ -43,10 +46,8 @@ import type {
  */
 /** A refused build, as the UI renders it.
  *
- *  `gaps` are the interview's own required-topic lines and `blocks` says what
- *  each one costs. Both come from the backend rather than being written here:
- *  one definition of "missing" lives in `bl/interview.py`, and a second copy
- *  in the client would drift from the gate that actually refuses. */
+ *  `gaps` name missing profile data and `blocks` says what each one costs.
+ *  Both come from the backend so the UI cannot drift from the build gate. */
 export interface ProfileGaps {
   message: string;
   gaps: string[];
@@ -82,7 +83,7 @@ interface ManagementState {
   cancelGeneration: () => Promise<void>;
   /** Hide the banner of a stopped or failed build, keeping its days. */
   dismissGeneration: (scheduleId: string) => Promise<void>;
-  /** Set when a build was refused because the interview never taught the
+  /** Set when a build was refused because setup lacks the
    *  shift vocabulary, and cleared by any later success.
    *
    *  Kept apart from `error` because it is not the same kind of thing. An
@@ -171,6 +172,8 @@ interface ManagementState {
     employees?: Record<string, unknown>[];
     shifts?: Record<string, unknown>[];
   }) => Promise<void>;
+  previewDeparture: (input: { employee: string; effective_date?: string }) => Promise<Departure>;
+  depart: (input: { employee: string; effective_date?: string; reason?: string }) => Promise<boolean>;
   clearError: () => void;
 }
 
@@ -541,6 +544,19 @@ export function useManagement(): ManagementState {
     await run(() => updateProfile(input));
   }, [run]);
 
+  /** Not `run()`: a preview writes nothing, and its error belongs in the
+   *  dialog that asked rather than in the area's banner. */
+  const preview = useCallback(
+    (input: { employee: string; effective_date?: string }) => previewDeparture(input),
+    [],
+  );
+
+  const depart = useCallback(
+    async (input: { employee: string; effective_date?: string; reason?: string }) =>
+      (await run(() => departEmployee(input))) !== null,
+    [run],
+  );
+
   const move = useCallback(
     async (input: {
       assignment_id: string;
@@ -636,6 +652,8 @@ export function useManagement(): ManagementState {
     addConstraint,
     removeConstraint,
     saveProfile,
+    previewDeparture: preview,
+    depart,
     clearError,
     gaps,
     dismissGaps,

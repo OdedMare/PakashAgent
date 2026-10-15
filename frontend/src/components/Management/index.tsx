@@ -50,7 +50,7 @@ import { useLiveInbox } from "./useLiveInbox";
 import { useManagement } from "./useManagement";
 import { displayDate } from "@/components/DateInput";
 
-/** The manager's board-first workspace, opened once the interview is done.
+/** The manager's board-first workspace, opened once setup is complete.
  *
  *  The week remains visible while the agent and management tools open in a
  *  contextual drawer. Both render from the same `useManagement` state, so a
@@ -69,7 +69,6 @@ export function Management({
   busy: workspaceBusy = false,
   onLogout,
   onRotateLink,
-  onOpenInterview,
   onOpenManualSetup,
   autoGenerate = false,
   onAutoGenerateStarted,
@@ -78,7 +77,6 @@ export function Management({
   busy?: boolean;
   onLogout?: () => void;
   onRotateLink?: () => void;
-  onOpenInterview?: () => void;
   onOpenManualSetup?: () => void;
   autoGenerate?: boolean;
   onAutoGenerateStarted?: () => void;
@@ -177,11 +175,8 @@ export function Management({
   // manager with nothing to do but press retry and watch it fail again.
   const buildError =
     state.generation?.days?.find((day) => day.status === "failed")?.error ?? "";
-  // How many topics the interview left unsettled. Counted from the profile's
-  // own record rather than re-derived, so the badge, the board's notice and
-  // what the agent says when asked are all reading one answer. Zero — and no
-  // badge — is the ordinary case: a confirmed interview carries no record at
-  // all, because the gate refused to let it finish owing anything.
+  // Legacy profiles may carry unresolved setup topics. Keep the checklist
+  // useful until the manager saves them through the profile editor.
   const completeness = overview?.profile?.completeness;
   const openTopics =
     completeness && !completeness.complete
@@ -232,9 +227,9 @@ export function Management({
           id: "teach",
           label: "ללמד את משמרות זהב על היחידה",
           done: openTopics === 0,
-          detail: openTopics ? `${openTopics} נושאים עוד פתוחים בראיון` : "הראיון הושלם",
+          detail: openTopics ? `${openTopics} נושאים עוד חסרים בפרופיל` : "הגדרת היחידה הושלמה",
           actionLabel: "להשלמה",
-          onAction: onOpenInterview,
+          onAction: onOpenManualSetup,
         },
         {
           id: "week",
@@ -300,7 +295,7 @@ export function Management({
 
   return (
     <div className="management">
-      <header className="interview-header">
+      <header className="workspace-sidebar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
             <CalendarDays size={17} />
@@ -398,32 +393,6 @@ export function Management({
               title="הגדרת היחידה, הסבבים והתלתונים"
             >
               <SlidersHorizontal size={17} />
-            </button>
-          ) : null}
-          {onOpenInterview ? (
-            <button
-              type="button"
-              className={
-                openTopics ? "icon-button has-badge" : "icon-button"
-              }
-              onClick={onOpenInterview}
-              aria-label={
-                openTopics
-                  ? `ראיון היכרות — ${openTopics} נושאים פתוחים`
-                  : "ראיון היכרות"
-              }
-              title={
-                openTopics
-                  ? `הראיון לא הושלם — ${openTopics} נושאים עוד לא סוכמו`
-                  : "ראיון היכרות"
-              }
-            >
-              <Sparkles size={17} />
-              {openTopics ? (
-                <span className="icon-badge" aria-hidden="true">
-                  {openTopics > 9 ? "9+" : openTopics}
-                </span>
-              ) : null}
             </button>
           ) : null}
           {workspace.member_token ? (
@@ -595,13 +564,13 @@ export function Management({
       {state.gaps ? (
         <ProfileGapsNotice
           gaps={state.gaps}
-          onOpenInterview={onOpenInterview}
+          onOpenSetup={onOpenManualSetup}
           onDiscuss={() => {
             // Seed the composer and move to the room. The question is
             // written for the manager rather than sent for them — the agent
             // answers questions and writes nothing (D15), so the point of
-            // arriving here is to work out what the interview is owed
-            // before going and answering it.
+            // arriving here is to work out what setup is missing before
+            // opening the profile editor.
             setSuggested((previous) => ({
               text: "אני רוצה לבנות סידור לשבוע הקרוב. מה חסר לך כדי לבנות אותו, ואיך נשלים את זה?",
               n: previous.n + 1,
@@ -647,6 +616,8 @@ export function Management({
                 onAdd={state.addConstraint}
                 onRemove={state.removeConstraint}
                 onSaveProfile={state.saveProfile}
+                onPreviewDeparture={state.previewDeparture}
+                onDepart={state.depart}
               />
             ) : (
               <div className="manager-analytics-loading" aria-busy="true">
@@ -788,7 +759,7 @@ export function Management({
 
           <div hidden={section !== "overview"}>
           <CopilotInbox
-            onOpenInterview={onOpenInterview}
+            onOpenSetup={onOpenManualSetup}
             onPendingChange={setCopilotPending}
             onAct={(text) => {
               setSuggested((previous) => ({ text, n: previous.n + 1 }));
@@ -830,6 +801,8 @@ export function Management({
             onAdd={state.addConstraint}
             onRemove={state.removeConstraint}
             onSaveProfile={state.saveProfile}
+            onPreviewDeparture={state.previewDeparture}
+            onDepart={state.depart}
           />
           </> : null}
 

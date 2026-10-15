@@ -46,7 +46,7 @@
 }
 
 /* Navigation is the glass layer; working content stays opaque. */
-.interview-header,
+.workspace-sidebar,
 .management-topbar {
   background: var(--glass);
   -webkit-backdrop-filter: var(--glass-blur);
@@ -462,7 +462,7 @@ body:has(.manual-setup) .tutorial-fab {
 }
 
 @media (min-width: 900px) {
-  .management > .interview-header {
+  .management > .workspace-sidebar {
     background: var(--glass);
     -webkit-backdrop-filter: var(--glass-blur);
     backdrop-filter: var(--glass-blur);
@@ -550,7 +550,7 @@ body:has(.manual-setup) .tutorial-fab {
   .board-view,
   .manager-tab,
   .management .header-actions .icon-button,
-  .interview-header .icon-button,
+  .workspace-sidebar .icon-button,
   .modal-header > button,
   .settings-footer button,
   .guide-icon-button,
@@ -565,9 +565,9 @@ body:has(.manual-setup) .tutorial-fab {
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .interview-header,
+  .workspace-sidebar,
   .management-topbar,
-  .management > .interview-header,
+  .management > .workspace-sidebar,
   .account-menu-panel {
     background: var(--surface);
     -webkit-backdrop-filter: none;

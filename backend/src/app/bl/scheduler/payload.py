@@ -38,10 +38,10 @@ SCHEDULE_RESPONSE_SCHEMA = {
 
 
 def profile_for_model(profile: dict) -> dict:
-    """The complete canonical interview profile used for scheduling.
+    """The complete canonical workplace profile used for scheduling.
 
-    The interview schema is already the boundary. A second field list here
-    made newly collected facts disappear until both contracts were updated.
+    The profile is already the boundary. A second field list here made newly
+    saved facts disappear until both contracts were updated.
     """
     return profile if isinstance(profile, dict) else {}
 
@@ -53,7 +53,7 @@ def profile_beside_candidates(profile: dict) -> dict:
     legally available and keyed by the ids the schema accepts. Sending
     `employees` too repeated the roster verbatim -- roughly a third of the
     request on a thirty-person team. A blacklist of one key rather than a
-    field list, so newly collected interview facts keep travelling.
+    field list, so newly saved profile facts keep travelling.
     """
     if not isinstance(profile, dict):
         return {}

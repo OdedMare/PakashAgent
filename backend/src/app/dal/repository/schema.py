@@ -1,7 +1,7 @@
 """Database definition applied during repository initialization.
 
-The tables the intro interview needs, plus `teams` — the workspace every
-other row hangs off — plus the scheduling half: `schedules`, `shift_slots`,
+The `teams` and `team_profiles` tables, plus the scheduling half:
+`schedules`, `shift_slots`,
 `assignments`, `availability`, and the append-only `change_log`. Each of
 those carries `team_id` from the day it is created, because retrofitting a
 tenant key onto a populated table is the expensive version of this.

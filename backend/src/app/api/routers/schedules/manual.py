@@ -3,7 +3,8 @@
 from fastapi import APIRouter, Depends
 
 from app.api.contracts import (
-    AssignRequest, CheckRequest, PlacementCheck, Schedule, UnassignRequest,
+    AssignRequest, CheckRequest, Departure, DepartureRequest, PlacementCheck,
+    Schedule, UnassignRequest,
 )
 from app.api.routers.schedules.base import RouteGroup
 
@@ -53,4 +54,27 @@ class ManualRoutes(RouteGroup):
                 slot_date=request.slot_date,
                 schedule_id=request.schedule_id,
                 moving_assignment_id=request.moving_assignment_id,
+            )
+
+        @router.post("/departure/preview", response_model=Departure)
+        def departure_preview(request: DepartureRequest, session: dict = Depends(boss)) -> dict:
+            """How many shifts a departure would vacate. **Writes nothing.**"""
+            return service.departure_preview(
+                session["team_id"],
+                employee=request.employee,
+                effective_date=request.effective_date,
+            )
+
+        @router.post("/departure", response_model=Departure)
+        def depart(request: DepartureRequest, session: dict = Depends(boss)) -> dict:
+            """Take somebody off the active roster: end date set, later shifts vacated.
+
+            The name stays in the profile — it is the key their history hangs
+            on — so this is the chat's `retire` plan without the model.
+            """
+            return service.depart(
+                session["team_id"],
+                employee=request.employee,
+                effective_date=request.effective_date,
+                reason=request.reason,
             )

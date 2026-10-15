@@ -3,7 +3,6 @@
 import { useState } from "react";
 
 import { Employee } from "@/components/Employee";
-import { Interview } from "@/components/Interview";
 import { Management } from "@/components/Management";
 import { ManualSetup } from "@/components/ManualSetup";
 
@@ -54,16 +53,7 @@ export function Workspace({ memberToken }: { memberToken?: string }) {
   return <BossSurface state={state} workspace={workspace} />;
 }
 
-/** The manager's side: the interview until the workplace is taught, the
- *  management area after.
- *
- *  The profile is what switches them. It is the interview's durable result,
- *  so its presence means the workplace has been taught and there is
- *  something to schedule against — which is exactly the condition the
- *  management area needs. A manager can still reopen the interview to
- *  re-teach the workplace, and `reinterview` is that door; it is deliberately
- *  an explicit choice rather than something the app decides for them, since
- *  re-running the interview replaces the profile everything downstream reads. */
+/** The manager completes manual setup once, then works from the board. */
 function BossSurface({
   state,
   workspace,
@@ -71,59 +61,29 @@ function BossSurface({
   state: ReturnType<typeof useWorkspace>;
   workspace: NonNullable<ReturnType<typeof useWorkspace>["workspace"]>;
 }) {
-  const [setupMode, setSetupMode] = useState<"interview" | "manual" | null>(null);
-  const [buildAfterInterview, setBuildAfterInterview] = useState(false);
+  const [editingSetup, setEditingSetup] = useState(false);
   const taught = Boolean(workspace.profile);
 
-  if (setupMode === "manual") {
+  if (!taught || editingSetup) {
     return (
       <ManualSetup
         workspace={workspace}
-        onCancel={taught ? () => setSetupMode(null) : undefined}
+        onCancel={taught ? () => setEditingSetup(false) : undefined}
         onDone={async () => {
-          setSetupMode(null);
+          setEditingSetup(false);
           await state.refresh();
         }}
       />
     );
   }
 
-  if (taught && setupMode !== "interview") {
-    return (
-      <Management
-        workspace={workspace}
-        busy={state.busy}
-        onLogout={state.logout}
-        onRotateLink={state.rotateLink}
-        onOpenInterview={() => setSetupMode("interview")}
-        onOpenManualSetup={() => setSetupMode("manual")}
-        autoGenerate={buildAfterInterview}
-        onAutoGenerateStarted={() => setBuildAfterInterview(false)}
-      />
-    );
-  }
-
-  // Always supplied now, taught or not. `refresh` re-reads the profile the
-  // interview just wrote, so a first interview ended early lands on a
-  // management area that already knows what it was given — without it,
-  // `taught` is still false from the last fetch and the router sends the
-  // manager straight back into the interview they just left.
   return (
-    <Interview
+    <Management
       workspace={workspace}
       busy={state.busy}
       onLogout={state.logout}
       onRotateLink={state.rotateLink}
-      onDone={async () => {
-        setSetupMode(null);
-        await state.refresh();
-      }}
-      onBuild={async () => {
-        setBuildAfterInterview(true);
-        setSetupMode(null);
-        await state.refresh();
-      }}
-      onManualSetup={() => setSetupMode("manual")}
+      onOpenManualSetup={() => setEditingSetup(true)}
     />
   );
 }

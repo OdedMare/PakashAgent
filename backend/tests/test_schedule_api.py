@@ -1175,14 +1175,14 @@ def test_a_write_naming_no_period_still_means_the_current_one():
     assert placed.json()["id"] == newer["id"]
 
 
-def test_generating_without_a_finished_interview_is_refused():
+def test_generating_without_unit_setup_is_refused():
     """No profile means no shift vocabulary, and guessing one is exactly
     the hardcoding D9 forbids."""
     app, repo = _build_app([])
     repo.profiles[TEAM] = None
     response = _client(app).post("/api/schedule/generate", json={})
     assert response.status_code == 502
-    assert "ראיון" in response.json()["detail"]
+    assert "הגדרת היחידה" in response.json()["detail"]
 
 
 def _days(first, last):
@@ -1308,14 +1308,14 @@ def test_opening_a_blank_period_calls_no_model():
     assert body["assignments"] == []
 
 
-def test_a_blank_period_without_a_finished_interview_is_refused():
-    """Skipping the agent does not mean skipping the interview: without the
+def test_a_blank_period_without_unit_setup_is_refused():
+    """Skipping the agent does not mean skipping setup: without the
     shift vocabulary there is no grid to build (D9)."""
     app, repo = _build_app([])
     repo.profiles[TEAM] = None
     response = _client(app).post("/api/schedule/blank", json={})
     assert response.status_code == 502
-    assert "ראיון" in response.json()["detail"]
+    assert "הגדרת היחידה" in response.json()["detail"]
 
 
 def test_a_manual_assignment_is_marked_as_the_managers_and_calls_no_model():
@@ -1440,6 +1440,74 @@ def test_unassigning_removes_the_row_and_logs_it():
     removed = [row for row in repo.changes if row["action"] == "removed"][0]
     assert removed["employee"] == "דנה"
     assert removed["reason"] == "דנה התחלפה"
+
+
+def _week_with_dana(client, days=("2026-08-17", "2026-08-18")):
+    created = client.post("/api/schedule/blank", json={
+        "starts_on": days[0], "ends_on": days[-1],
+    }).json()
+    for day in days:
+        client.post("/api/schedule/assign", json={
+            "shift_name": MORNING, "slot_date": day, "employee": "דנה",
+            "schedule_id": created["id"],
+        })
+    return created
+
+
+def test_a_departure_preview_counts_the_shifts_and_writes_nothing():
+    app, repo = _build_app([])
+    client = _client(app)
+    created = _week_with_dana(client)
+    repo.schedules[created["id"]]["status"] = "published"
+    changes = len(repo.changes)
+
+    response = client.post("/api/schedule/departure/preview", json={
+        "employee": "דנה", "effective_date": "2026-08-18",
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["shifts"] == 1 and body["effective_date"] == "2026-08-18"
+    assert [row["id"] for row in body["published"]] == [created["id"]]
+    assert len(repo.changes) == changes
+    assert repo.schedules[created["id"]]["status"] == "published"
+    assert not repo.profiles[TEAM]["employees"][0].get("inactive_from")
+
+
+def test_a_departure_vacates_later_shifts_and_keeps_the_name_and_history():
+    """Deleting an employee is a departure: the name is an identity key (D4)."""
+    app, repo = _build_app([])
+    client = _client(app)
+    created = _week_with_dana(client)
+    repo.schedules[created["id"]]["status"] = "published"
+
+    response = client.post("/api/schedule/departure", json={
+        "employee": "דנה", "effective_date": "2026-08-18", "reason": "סיימה שירות",
+    })
+
+    assert response.status_code == 200
+    assert response.json()["shifts"] == 1
+    left = repo.assignments(created["id"], TEAM)
+    assert [str(row["date"])[:10] for row in left] == ["2026-08-17"]
+    assert repo.schedules[created["id"]]["status"] == "draft"
+    people = {row["name"]: row for row in repo.profiles[TEAM]["employees"]}
+    assert people["דנה"]["inactive_from"] == "2026-08-18"
+    assert not people["יוסי"].get("inactive_from")
+    removed = [row for row in repo.changes if row["action"] == "removed"]
+    assert len(removed) == 1 and removed[0]["reason"] == "סיימה שירות"
+
+    again = client.post("/api/schedule/departure", json={"employee": "דנה"})
+    assert again.status_code == 409
+
+
+def test_a_departure_is_refused_for_a_name_not_on_the_roster_and_for_a_member():
+    app, _ = _build_app([])
+    assert _client(app).post("/api/schedule/departure", json={
+        "employee": "אין כזו",
+    }).status_code == 404
+    assert _client(app, role=ROLE_MEMBER).post("/api/schedule/departure", json={
+        "employee": "דנה",
+    }).status_code in (401, 403)
 
 
 def test_clearing_a_day_empties_it_and_leaves_the_rest_of_the_week():
@@ -2485,14 +2553,8 @@ def test_a_span_that_is_backwards_or_too_wide_is_refused():
 
 # -- a partial profile is a fork in the flow, not a dead end ---------------
 
-def _ended_early(repo, **overrides):
-    """A profile shaped like one `interview_service.end` wrote.
-
-    The escape hatch is allowed to complete an interview with whatever was
-    collected, recording the rest on `completeness`. That profile is real and
-    `team_profile()` serves it, so every "is the interview done" check passes
-    and only the shift vocabulary is actually absent.
-    """
+def _partial_profile(repo, **overrides):
+    """A saved profile that still lacks shift vocabulary."""
     profile = {
         "workplace": {"name": "מוקד"},
         "employees": [{"name": "דנה"}],
@@ -2512,14 +2574,14 @@ def _ended_early(repo, **overrides):
 def test_a_blank_period_over_a_profile_with_no_shifts_says_what_is_missing():
     """The bug this guard exists for.
 
-    An interview ended early leaves a profile that exists but carries no
+    Partial setup leaves a profile that exists but carries no
     shift vocabulary. It used to pass the `if not profile` check, reach
     `build_slots`, come back empty, and fail as an unexplained 502 -- the
     manual path looking broken rather than unfinished. The refusal now names
-    the gap and says the interview can be resumed.
+    the gap and points back to setup.
     """
     app, repo = _build_app([])
-    _ended_early(repo)
+    _partial_profile(repo)
     response = _client(app).post("/api/schedule/blank", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-18",
     })
@@ -2527,7 +2589,7 @@ def test_a_blank_period_over_a_profile_with_no_shifts_says_what_is_missing():
     body = response.json()
     assert "משמרות" in body["detail"]
     # The part a client can act on: which topics, and that there is a door.
-    assert body["can_resume_interview"] is True
+    assert body["can_edit_profile"] is True
     assert "לא הוגדר אף סוג משמרת." in body["gaps"]
     assert body["blocks"], "a gap that blocks says what it costs"
 
@@ -2540,11 +2602,11 @@ def test_generating_over_a_profile_with_no_shifts_fails_the_same_way():
     button must not find the other reporting something else.
     """
     app, repo = _build_app([])
-    _ended_early(repo)
+    _partial_profile(repo)
     response = _client(app).post("/api/schedule/generate", json={})
     assert response.status_code == 502
     body = response.json()
-    assert body["can_resume_interview"] is True
+    assert body["can_edit_profile"] is True
     assert "לא הוגדר אף סוג משמרת." in body["gaps"]
 
 
@@ -2557,17 +2619,17 @@ def test_a_shift_the_grid_builder_would_skip_counts_as_no_vocabulary():
     exists to stop.
     """
     app, repo = _build_app([])
-    _ended_early(repo, shifts=[{"start_time": "07:00", "end_time": "15:00"}])
+    _partial_profile(repo, shifts=[{"start_time": "07:00", "end_time": "15:00"}])
     response = _client(app).post("/api/schedule/blank", json={})
     assert response.status_code == 502
-    assert response.json()["can_resume_interview"] is True
+    assert response.json()["can_edit_profile"] is True
 
 
-def test_shifts_that_never_run_in_the_window_blame_the_dates_not_the_interview():
+def test_shifts_that_never_run_in_the_window_blame_the_dates_not_setup():
     """A different failure deserves a different sentence.
 
     The vocabulary is complete here -- the shift simply does not run on the
-    days asked for. Re-opening the interview would teach nothing, so this
+    days asked for. Re-opening setup would teach nothing, so this
     stays an ordinary refusal with no resume offered.
     """
     app, repo = _build_app([])
@@ -2583,7 +2645,7 @@ def test_shifts_that_never_run_in_the_window_blame_the_dates_not_the_interview()
     assert response.status_code == 502
     body = response.json()
     assert "תאריכים" in body["detail"]
-    assert "can_resume_interview" not in body
+    assert "can_edit_profile" not in body
 
 
 # -- how wide a build's model calls are ------------------------------------

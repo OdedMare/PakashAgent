@@ -78,6 +78,8 @@ from app.api.contracts.placement import (  # noqa: F401
     CheckRequest,
     ClearRequest,
     ConstraintRequest,
+    Departure,
+    DepartureRequest,
     MoveRequest,
     PlacementCandidate,
     PlacementCheck,

@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     `llm_model`."""
 
     llm_model_default: str = ""
-    """Model for conversation-shaped work — interview, changes, planner,
+    """Model for conversation-shaped work — changes, planner,
     learn — and for any call naming no role. Empty = use `llm_model`."""
 
     llm_model_advanced: str = ""

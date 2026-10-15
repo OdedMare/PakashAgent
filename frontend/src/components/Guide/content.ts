@@ -8,7 +8,7 @@
  *  Steps point at `data-tour` attributes on real elements rather than at
  *  class names, so restyling a screen cannot silently detach the tour. */
 
-export type Surface = "manager" | "employee" | "member" | "interview";
+export type Surface = "manager" | "employee" | "member";
 
 export interface TourStep {
   /** The `data-tour` value of the element to spotlight. */
@@ -86,7 +86,7 @@ export const TOURS: Partial<Record<Surface, TourStep[]>> = {
     {
       target: "header-actions",
       title: "הגדרות היחידה",
-      body: "הנצנוץ פותח מחדש את ראיון ההיכרות (מספר עליו = נושאים פתוחים). אייקון השיתוף מציג את קישור הצפייה לצוות. אייקון המחוונים פותח את הגדרת היחידה, ושם מגדירים גם את הסבבים והתלתונים: עוגן ושעות סגירה לקבוצה א׳ בלבד — הקבוצות האחרות נגזרות ממנה — וכן שינויים זמניים לפי תאריכים ונוכחות חריגה של קבוצה. בגלגל השיניים נמצאות הגדרות המודל. מתפריט החשבון בקצה הסרגל מתנתקים.",
+      body: "אייקון המחוונים פותח את הגדרת היחידה, ושם מגדירים עובדים, משמרות, סבבים ותלתונים: עוגן ושעות סגירה לקבוצה א׳ בלבד — הקבוצות האחרות נגזרות ממנה — וכן שינויים זמניים לפי תאריכים ונוכחות חריגה של קבוצה. אייקון השיתוף מציג את קישור הצפייה לצוות, ובגלגל השיניים נמצאות הגדרות המודל. מתפריט החשבון בקצה הסרגל מתנתקים.",
     },
     {
       target: "help",
@@ -210,7 +210,7 @@ export const GLOSSARY: GlossaryEntry[] = [
   },
   {
     term: "אילוץ",
-    definition: "מתי מישהו לא יכול או מעדיף שלא לעבוד. כל אילוץ מסומן במקור שלו: מנהל, סוכן, דיווח של העובד או הראיון.",
+    definition: "מתי מישהו לא יכול או מעדיף שלא לעבוד. כל אילוץ מסומן במקור שלו: מנהל, סוכן, דיווח של העובד או הגדרה קודמת.",
     audience: ["manager", "team"],
   },
   {
@@ -250,12 +250,12 @@ export const GLOSSARY: GlossaryEntry[] = [
   },
   {
     term: "כוננות",
-    definition: "משמרת כונן, למשל כונן לילה. איך היא נספרת לשעות ולהוגנות נקבע בראיון ההיכרות.",
+    definition: "משמרת כונן, למשל כונן לילה. איך היא נספרת לשעות ולהוגנות נקבע בהגדרת היחידה.",
     audience: ["manager", "team"],
   },
   {
-    term: "ראיון היכרות",
-    definition: "השיחה שבה המערכת לומדת את היחידה: עובדים, משמרות, צרכים וכללים. אפשר לעצור באמצע ולחזור; המספר על כפתור הראיון סופר נושאים פתוחים.",
+    term: "הגדרת יחידה",
+    definition: "הטופס שבו מגדירים עובדים, משמרות, סבבים וכללים. השמירה מעדכנת את הפרופיל שממנו נבנים הסידורים.",
     audience: ["manager"],
   },
   {
@@ -282,7 +282,7 @@ export const GLOSSARY: GlossaryEntry[] = [
 
 export function glossaryFor(surface: Surface | null): GlossaryEntry[] {
   // Nobody signed in yet: show everything, the visitor may be either.
-  if (surface === null || surface === "manager" || surface === "interview") {
+  if (surface === null || surface === "manager") {
     return GLOSSARY;
   }
   return GLOSSARY.filter((entry) => entry.audience.includes("team"));

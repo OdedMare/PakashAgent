@@ -43,10 +43,10 @@ should — that is what the repository does, and it stays correct either way.
 
 ## Tables
 
-Built so far: `teams`, `interview_sessions`, `interview_turns`, `schedules`,
+Built so far: `teams`, `team_profiles`, `schedules`,
 `shift_slots`, `assignments`, `availability`, `change_log`, `manager_chats` and
 `manager_chat_messages` (composed in `schema.py`). The workplace, employee roster
-and rules remain JSON on the interview's confirmed profile, which is what
+and rules remain JSON on the team's profile, which is what
 `team_profile()` reads. Manager conversations are separate durable rows: the
 parent carries `team_id` and signed browser `manager_id`; messages belong to that
 parent. Reads and approvals verify the parent owner before accessing messages.
@@ -70,8 +70,7 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | Table | Holds |
 |---|---|
 | `teams` | One workspace: name, the boss's password hash, the member share token — plus the operator's controls (D28): `active` (FALSE = suspended) and `notes` |
-| `interview_sessions` | One intro interview: its **team**, status, the confirmed profile, the pending question |
-| `interview_turns` | Each turn; assistant turns keep the options they offered as `payload` |
+| `team_profiles` | One structured workplace profile per team |
 | `schedules` | One living schedule per period, `draft` or `published` |
 | `shift_slots` | One shift on one date — the thing an assignment points into |
 | `assignments` | person → slot, **with the agent's reason** (`NOT NULL`). `source` records whether the agent generated the row, the manager placed it by hand, or it was imported ([D18](../../../docs/DECISIONS.md#d18--the-boss-can-place-a-shift-without-the-agent-️-completes-d6)) |
@@ -82,17 +81,17 @@ same call. Add a new guarded migration after its own `COMMIT`.
 
 The workplace profile — the mission, the **shift vocabulary** (names, times,
 on-call flags and weighting), the employees, and the rules — lives as JSON on
-`interview_sessions.profile` rather than in tables of its own. It is written
-once when the interview is confirmed and read through `team_profile()`. Splitting
+`team_profiles.profile` rather than in tables of its own. It is written by unit
+setup and read through `team_profile()`. Splitting
 it into relational tables would buy nothing today: nothing queries across it, and
-the interview owns its shape.
+the setup form owns its shape.
 
 ## Rules
 
 - **Every read of a workplace-owned row filters by `team_id`.** A UUID is hard
   to guess, but "hard to guess" is not an access control — one workspace's boss
-  holding another's session id must still get a 404. `InterviewRepository` is
-  the worked example: the team is a required argument, not an optional filter.
+  holding another's row id must still get a 404. The team is a required
+  argument, not an optional filter.
 - **`admin.py` is the one module whose reads cross teams**, for the operator
   console (D28). Keep every cross-team query there, name the `teams` columns
   explicitly, and never return a hash.

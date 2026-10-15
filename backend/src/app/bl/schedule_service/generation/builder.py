@@ -46,7 +46,7 @@ class PeriodBuilder:
     ) -> dict:
         """Build a period in one call and store it as a draft.
 
-        The interview must have produced a profile first: without the shift
+        Unit setup must have produced a profile first: without the shift
         vocabulary there is nothing to build a grid out of, and guessing one
         would be exactly the hardcoding D9 forbids.
         """
@@ -86,14 +86,14 @@ class PeriodBuilder:
         The boss authoring rather than generating (D6). No model is called:
         which dates fall in a period and which shifts run on them is
         arithmetic. The profile is still required — the manual path skips
-        the agent, not the interview (D9).
+        the agent, not unit setup (D9).
         """
         profile = self._gate.buildable_profile(team_id)
         starts_on, ends_on = _bounds(starts_on, ends_on)
         slots = build_slots(profile, starts_on, ends_on)
         if not slots:
             # The vocabulary exists but none of it runs in this window. The
-            # interview is finished, so this points at the dates instead.
+            # Setup is complete, so this points at the dates instead.
             raise AgentError(
                 "לא ניתן לבנות סידור: אף משמרת מוגדרת לא חלה בתאריכים האלה"
             )

@@ -59,10 +59,9 @@ class ScheduleService:
         self._runner = GenerationRunner(context, stepper, launch, sleep)
         self._import_preview = ImportPreview(RuleLearner(llm))
         self._import_commit = ImportCommitter(context)
-        self._manual = ManualEditor(context)
-        self._changes = ChangeService(
-            context, ChangeAgent(llm), ProfileService(repository)
-        )
+        profiles = ProfileService(repository)
+        self._manual = ManualEditor(context, profiles)
+        self._changes = ChangeService(context, ChangeAgent(llm), profiles)
         self._constraints = ConstraintService(repository)
         self._learning = CorrectionLearning(repository, RuleLearner(llm))
         self._questions = QuestionService(
@@ -158,6 +157,12 @@ class ScheduleService:
 
     def clear(self, *args, **kwargs):
         return self._manual.clear(*args, **kwargs)
+
+    def departure_preview(self, *args, **kwargs):
+        return self._manual.departure_preview(*args, **kwargs)
+
+    def depart(self, *args, **kwargs):
+        return self._manual.depart(*args, **kwargs)
 
     def publish(self, *args, **kwargs):
         return self._manual.publish(*args, **kwargs)

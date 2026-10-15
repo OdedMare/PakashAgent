@@ -70,7 +70,7 @@ export function CreateTeamDialog({
           </span>
           <div>
             <h2 id="adm-create-title">{created ? "הצוות נפתח" : "פתיחת צוות חדש"}</h2>
-            <p>{created ? "מסרו למנהל הצוות את פרטי הכניסה." : "מרחב עבודה נפרד — ראיון, סידור והגדרות משלו."}</p>
+            <p>{created ? "מסרו למנהל הצוות את פרטי הכניסה." : "מרחב עבודה נפרד — פרופיל יחידה, סידור והגדרות משלו."}</p>
           </div>
           <button type="button" className="adm-icon-button" onClick={onClose} aria-label="סגירה">
             <X size={17} />

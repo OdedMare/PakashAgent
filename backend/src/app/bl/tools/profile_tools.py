@@ -1,4 +1,4 @@
-"""What the interview never taught, and what each gap costs."""
+"""What unit setup still lacks, and what each gap costs."""
 
 from typing import List
 
@@ -9,11 +9,9 @@ from app.bl.tools.values import employees, shifts, text
 class ProfileGaps(Tool):
     """The answer to *"מה אתה עוד לא יודע"*.
 
-    The profile carries its own `completeness` record (written by
-    `interview_service.end`), so this reports what was already decided rather
-    than re-deriving it. **Read-only**: naming a gap does not fill it, and an
-    agent that could record the answer would be conducting the interview from
-    the control room (D19). `blocks` says which gaps stop a grid outright.
+    Legacy and partial profiles may carry a `completeness` record, so this
+    reports what was already decided rather than re-deriving it. **Read-only**:
+    naming a gap does not fill it. `blocks` says which gaps stop a grid outright.
     """
 
     def __call__(self, team_id: str) -> dict:
@@ -21,12 +19,11 @@ class ProfileGaps(Tool):
         if not profile:
             return {
                 "found": False, "complete": False,
-                "reason": "לא נערך ראיון היכרות עדיין",
+                "reason": "הגדרת היחידה עדיין לא הושלמה",
             }
         completeness = profile.get("completeness")
         if not isinstance(completeness, dict):
-            # No record means the interview was confirmed the ordinary way,
-            # through a gate that refuses to finish owing a required field.
+            # New structured setup validates required fields before saving.
             return {"found": True, "complete": True, "gaps": [], "blocks": []}
         missing = _lines(completeness.get("missing_topics"))
         return {

@@ -300,6 +300,16 @@ impression.
   or plans and never perform domain writes. Only the separate Apply endpoint
   commits the stored plan, with snapshot checks and an atomic transaction.
   The legacy `/ask` and `/changes/propose` routes remain available to other callers.
+- **Deleting an employee is a departure, not an erasure.** The roster card's
+  "הוצאה מהסגל" opens `ConfirmDeparture`, which counts first
+  (`/api/schedule/departure/preview`, writes nothing): how many shifts from
+  the chosen date on will be vacated, and which published weeks return to
+  draft. Confirming sets `inactive_from` and vacates those shifts, each one
+  logged — the chat's `retire` plan without the model. The name stays in the
+  profile because it is the key history, identity and colour hang on
+  (`keep_existing_names` refuses a removal outright). The person moves to
+  "עובדים שסיימו", where "החזרה לסגל" clears the date; vacated shifts stay
+  vacated.
 - **Every stored preference is on screen.** `Preferences` lists suggested,
   active and archived rows and lets the manager reword, approve, archive or
   delete any of them — a preference they cannot see is a rule they never

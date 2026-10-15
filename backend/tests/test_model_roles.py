@@ -51,7 +51,6 @@ class _OldSettings:
 
 @pytest.mark.parametrize("flow, expected", [
     ("scheduler", ADVANCED),
-    ("interview", DEFAULT),
     ("changes", DEFAULT),
     ("planner", DEFAULT),
     ("learn", DEFAULT),
@@ -66,7 +65,7 @@ def test_generation_is_the_only_advanced_flow():
     # flow onto the expensive model.
     advanced = [
         flow for flow in
-        ("scheduler", "interview", "changes", "planner", "learn", "briefing")
+        ("scheduler", "changes", "planner", "learn", "briefing")
         if role_for_flow(flow) == ADVANCED
     ]
     assert advanced == ["scheduler"]
@@ -185,5 +184,5 @@ def test_every_flow_the_backend_actually_passes_is_mapped():
 
 
 _MAPPED = {
-    "scheduler", "interview", "changes", "planner", "learn", "briefing",
+    "scheduler", "changes", "planner", "learn", "briefing",
 }

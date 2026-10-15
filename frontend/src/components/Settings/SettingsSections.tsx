@@ -208,7 +208,7 @@ const MODEL_ROLES = [
     urlName: "llm_base_url_default",
     keyName: "llm_api_key_default",
     label: "מודל רגיל",
-    optional: "ראיון, שיחה, שינויים ולמידה; ריק = המודל הכללי",
+    optional: "שיחה, שינויים ולמידה; ריק = המודל הכללי",
   },
   {
     role: "advanced",

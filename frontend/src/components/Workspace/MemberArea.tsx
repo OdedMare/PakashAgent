@@ -60,8 +60,8 @@ export function MemberArea({
     .filter((name) => name !== "");
 
   return (
-    <div className="interview">
-      <header className="interview-header">
+    <div className="workspace-surface">
+      <header className="workspace-sidebar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
             <Users size={17} />

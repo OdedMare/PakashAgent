@@ -283,10 +283,6 @@ const WELCOME_COPY: Record<Surface, { title: string; body: string }> = {
     title: "זה הסידור של הצוות",
     body: "סיור קצר: מה רואים כאן ואיך נכנסים לאזור האישי.",
   },
-  interview: {
-    title: "ברוכים הבאים",
-    body: "",
-  },
 };
 
 function WelcomePrompt({

@@ -127,6 +127,34 @@ class ClearRequest(BaseModel):
     reason: str = Field(default="", max_length=1000)
 
 
+class DepartureRequest(BaseModel):
+    """Take one person off the active roster, by hand.
+
+    `effective_date` empty means today. `reason` is optional: it is recorded
+    against every shift the departure vacates, and the log already says a
+    manager did it.
+    """
+
+    employee: str = Field(min_length=1, max_length=120)
+    effective_date: str = Field(default="", max_length=20)
+    reason: str = Field(default="", max_length=1000)
+
+
+class DeparturePeriod(BaseModel):
+    id: str
+    starts_on: str
+    ends_on: str
+
+
+class Departure(BaseModel):
+    """What a departure vacates — before the click, and after it."""
+
+    employee: str
+    effective_date: str
+    shifts: int
+    published: List[DeparturePeriod]
+
+
 class MoveRequest(BaseModel):
     """A confirmed drag on the calendar.
 

@@ -59,7 +59,7 @@ import { useBoardKeys } from "./useBoardKeys";
 
 /** The manager's operational home screen.
  *
- *  This is where a manager with a finished interview lands, and it opens on
+ *  This is where a manager with completed setup lands, and it opens on
  *  the week containing today in *their* timezone — the week they are working
  *  in is the only week worth defaulting to. The control room, the roster and
  *  the conversation with the agent are all still there, one click away
@@ -1309,16 +1309,16 @@ function EmptyWeek({
   if (!profile) {
     return (
       <div className="board-empty">
-        <h2>צריך להשלים את ראיון ההיכרות</h2>
+        <h2>צריך להשלים את הגדרת היחידה</h2>
         <p>
-          הראיון הוא מה שמלמד את הסוכן את המשמרות, העובדים והכללים. בלעדיו אין
-          ממה לבנות סידור — גם לא ידנית, כי המשמרות עצמן מגיעות משם.
+          הגדרת היחידה מספקת את המשמרות, העובדים והכללים. בלעדיה אין ממה לבנות
+          סידור — גם לא ידנית, כי סוגי המשמרות עדיין אינם מוגדרים.
         </p>
       </div>
     );
   }
 
-  // A profile exists but its interview was ended early. The distinction that
+  // A profile exists but setup is incomplete. The distinction that
   // matters is the shift vocabulary: without it there is no grid at all, not
   // even one built by hand, because inventing shift names is what D9
   // forbids. Everything else missing degrades the result rather than
@@ -1329,9 +1329,8 @@ function EmptyWeek({
       <div className="board-empty">
         <h2>עוד לא הוגדרו סוגי משמרות</h2>
         <p>
-          הראיון נסגר לפני שהוגדרו המשמרות, ובלי סוגי המשמרות אין שורות לבנות
-          מהן לוח — גם לא ידנית. אפשר לחזור לראיון מהכפתור בסרגל העליון
-          ולהשלים אותן.
+          בלי סוגי משמרות אין שורות שמהן אפשר לבנות לוח — גם לא ידנית. פתחו
+          את הגדרת היחידה מהכפתור בסרגל העליון והשלימו אותן.
         </p>
       </div>
     );
@@ -1346,8 +1345,8 @@ function EmptyWeek({
       </p>
       {gaps && !gaps.complete ? (
         <p className="board-empty-partial">
-          הראיון עוד לא הושלם, כך שהסוכן בונה על סמך מה שהספיק ללמוד. אפשר
-          לשאול אותו בחדר הבקרה מה עוד חסר לו.
+          פרופיל היחידה עדיין חלקי, כך שהסוכן בונה על סמך המידע שנשמר. אפשר
+          להשלים אותו בהגדרת היחידה או לשאול את הסוכן מה חסר.
         </p>
       ) : null}
       <div className="board-empty-actions">

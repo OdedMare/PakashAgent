@@ -74,8 +74,8 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
   const shiftNames = readShiftNames(view.shifts);
 
   return (
-    <div className="interview">
-      <header className="interview-header">
+    <div className="workspace-surface">
+      <header className="workspace-sidebar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
             <UserCircle size={17} />

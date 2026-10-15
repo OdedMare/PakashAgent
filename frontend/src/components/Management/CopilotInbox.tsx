@@ -31,14 +31,12 @@ import type {
 } from "@/types";
 
 const ACTION_LABELS: Record<string, string> = {
-  follow_up_interview: "השלמת הראיון",
   profile_review: "רענון פרופיל",
   schedule_repair: "תיקון הסידור",
   system_health: "תקינות הסוכן",
 };
 
 const ACTION_DESCRIPTIONS: Record<string, string> = {
-  follow_up_interview: "זיהוי מידע שחסר כדי לתכנן סידור אמין.",
   profile_review: "בדיקה תקופתית שהצוות, המשמרות והכללים עדיין נכונים.",
   schedule_repair: "זיהוי בעיות בסידור והכנת תיקון לאישור שלך.",
 };
@@ -53,11 +51,11 @@ type ConsoleTab = "attention" | "permissions" | "history";
 
 export function CopilotInbox({
   onAct,
-  onOpenInterview,
+  onOpenSetup,
   onPendingChange,
 }: {
   onAct: (suggestion: string) => void;
-  onOpenInterview?: () => void;
+  onOpenSetup?: () => void;
   onPendingChange?: (count: number) => void;
 }) {
   const [data, setData] = useState<CopilotInboxData>();
@@ -108,14 +106,14 @@ export function CopilotInbox({
       if (item.action_type === "schedule_repair") {
         onAct(String(item.payload.suggestion ?? item.detail));
       } else {
-        onOpenInterview?.();
+        onOpenSetup?.();
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "אישור הפעולה נכשל");
     } finally {
       setBusy("");
     }
-  }, [load, onAct, onOpenInterview]);
+  }, [load, onAct, onOpenSetup]);
 
   const dismiss = useCallback(async (item: CopilotItem) => {
     setBusy(item.id);
@@ -375,7 +373,7 @@ function CopilotCard({ item, busy, onApprove, onDismiss, onRetry }: { item: Copi
       <div className="copilot-actions">
         {item.kind === "proposal" ? (
           <button type="button" className="primary-button" disabled={busy} onClick={onApprove}>
-            <Check size={14} />{item.action_type === "schedule_repair" ? "המשך להכנת תיקון" : "פתיחת ראיון המשך"}
+            <Check size={14} />{item.action_type === "schedule_repair" ? "המשך להכנת תיקון" : "פתיחת הגדרת היחידה"}
           </button>
         ) : null}
         {item.kind === "failure" ? (

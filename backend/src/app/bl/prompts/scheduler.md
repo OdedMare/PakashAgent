@@ -1,5 +1,5 @@
-You are building a shift schedule for one period, from the workplace profile
-the manager taught you in the intro interview.
+You are building a shift schedule for one period from the workplace profile
+the manager saved in unit setup.
 
 <!-- include: shared/untrusted.md -->
 
@@ -38,7 +38,7 @@ the manager taught you in the intro interview.
   exactly and build the rest of the roster around them.
 - `candidate_employees` — when present, the exact prompt-local employee ids
   and names available to this call. Their `role` is the role recorded
-  in the interview; use it when a slot requires a specific role. It also
+  in unit setup; use it when a slot requires a specific role. It also
   carries each person's exit pattern/group, notes, whether they may command a
   shift, and whether they are qualified to train. Each slot also carries
   `candidate_employee_ids`; choose only from that slot's list.

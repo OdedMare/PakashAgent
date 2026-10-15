@@ -16,8 +16,6 @@ import type {
   EmployeeView,
   ImportedConstraint,
   ImportPreview,
-  InterviewTurn,
-  InterviewSeed,
   ManagementOverview,
   Operation,
   PlacementCheck,
@@ -100,7 +98,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 /** A refusal the manager can act on rather than only read.
  *
- *  The backend raises this when the interview finished without a shift
+ *  The backend raises this when the profile has no shift
  *  vocabulary: there is no grid to build, but the fix is a conversation
  *  rather than a bug report. It carries the missing topics so the UI can
  *  name them and offer the way back in, which is the whole difference
@@ -125,11 +123,11 @@ export class ProfileIncompleteError extends Error {
 function apiError(data: unknown, status: number): Error {
   const message = errorDetail(data, status);
   const body = data as {
-    can_resume_interview?: unknown;
+    can_edit_profile?: unknown;
     gaps?: unknown;
     blocks?: unknown;
   };
-  if (body?.can_resume_interview === true) {
+  if (body?.can_edit_profile === true) {
     return new ProfileIncompleteError(
       message,
       lines(body.gaps),
@@ -156,45 +154,6 @@ function errorDetail(data: unknown, status: number): string {
     if (first?.msg) return first.msg;
   }
   return `שגיאת שרת (${status})`;
-}
-
-export function startInterview(seed?: InterviewSeed): Promise<InterviewTurn> {
-  return request<InterviewTurn>("/api/interview", {
-    method: "POST",
-    body: seed ? JSON.stringify(seed) : undefined,
-  });
-}
-
-export function resumeInterview(sessionId: string): Promise<InterviewTurn> {
-  return request<InterviewTurn>(`/api/interview/${sessionId}`);
-}
-
-export function answerInterview(
-  sessionId: string,
-  content: string,
-  mode: "answer" | "correction" = "answer",
-): Promise<InterviewTurn> {
-  return request<InterviewTurn>(`/api/interview/${sessionId}/answer`, {
-    method: "POST",
-    body: JSON.stringify({ content, mode }),
-  });
-}
-
-export function retryInterview(sessionId: string): Promise<InterviewTurn> {
-  return request<InterviewTurn>(`/api/interview/${sessionId}/retry`, {
-    method: "POST",
-  });
-}
-
-/** Close the interview now, keeping whatever has been collected.
- *
- *  Costs no model call on the server — this is the way out of an interview
- *  the manager does not have time to finish, and a way out that needs the
- *  model is not one. What the profile still owes is recorded on it. */
-export function endInterview(sessionId: string): Promise<InterviewTurn> {
-  return request<InterviewTurn>(`/api/interview/${sessionId}/end`, {
-    method: "POST",
-  });
 }
 
 /** The settings password travels as a header on every settings call. It is
@@ -716,6 +675,39 @@ export function unassignEmployee(body: {
   schedule_id?: string;
 }): Promise<Schedule> {
   return request<Schedule>("/api/schedule/unassign", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** What taking somebody off the roster vacates. */
+export interface Departure {
+  employee: string;
+  effective_date: string;
+  shifts: number;
+  published: { id: string; starts_on: string; ends_on: string }[];
+}
+
+/** Count what a departure would vacate. **Writes nothing.** */
+export function previewDeparture(body: {
+  employee: string;
+  effective_date?: string;
+}): Promise<Departure> {
+  return request<Departure>("/api/schedule/departure/preview", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Take somebody off the active roster. The name stays in the profile with
+ *  an end date — it is what their history hangs on — and every shift from
+ *  that date on is vacated and logged. */
+export function departEmployee(body: {
+  employee: string;
+  effective_date?: string;
+  reason?: string;
+}): Promise<Departure> {
+  return request<Departure>("/api/schedule/departure", {
     method: "POST",
     body: JSON.stringify(body),
   });

@@ -37,7 +37,6 @@ const SURFACE_LABEL: Record<Surface, string> = {
   manager: "אזור הניהול",
   employee: "האזור האישי",
   member: "תצוגת הצוות",
-  interview: "ראיון ההיכרות",
 };
 
 export function HelpPanel({

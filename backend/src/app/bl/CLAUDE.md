@@ -5,14 +5,13 @@ a file; `dal/` only fetches and sends. Nothing here imports `psycopg` or `openai
 directly — it goes through the repository and the LLM client it was constructed
 with.
 
-Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
-`audit.py`, `scheduler.py`, `changes.py`, `briefing.py`, `export.py`,
+Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
+`scheduler.py`, `changes.py`, `briefing.py`, `export.py`,
 `schedule_service.py`, `prompts/`. Only `importer.py` remains.
 
 | File | Owns |
 |---|---|
-| `interview/` | The intro interview — workplace profile, employees, rules, shift vocabulary |
-| `interview_service/` | Persistence around it: sessions, turns, resume, completion |
+| `profile_service/` | Structured workplace profile validation and updates |
 | `workspace_service/` | Workspace rules: entering a team, roles, the share link |
 | `admin_service/` | **The צוות משמרות זהב console** (D28): operator sign-in, opening, re-capping, suspending and deleting teams |
 | `scheduler/` | Checkpointed range generation, one date or one week per call; every assignment carries a reason |
@@ -23,7 +22,7 @@ Built so far: `interview.py`, `interview_service.py`, `workspace_service.py`,
 | `audit/` | **Pure-Python advisory checks. No LLM.** Also the fairness arithmetic the scheduler and the employee area read |
 | `export/` | **A period out as `.xlsx`.** Pure functions, no model, no repository |
 | `importer/` | Excel/doc ingest with layout inference |
-| `tools/` | **The named questions the agent may ask. Pure Python, no LLM, no write** — including `profile_gaps`, what the interview never taught |
+| `tools/` | **The named questions the agent may ask. Pure Python, no LLM, no write** — including `profile_gaps`, what setup still lacks |
 | `planner/` | The tool loop, with a deterministic fallback when no model is reachable |
 | `intent/` | **Reading a Hebrew sentence with no model.** Seven shapes; never guesses |
 | `simulate/` | **What a change would do.** No model, no repository, persists nothing |
@@ -41,106 +40,6 @@ reads. `audit.py` is the opposite: no model, no prose, just arithmetic over a
 roster returning a list of warnings. That split is deliberate and load-bearing —
 an LLM asked "has anyone exceeded 5 shifts?" is doing arithmetic by generation,
 and a wrong answer looks identical to a right one.
-
-## `interview.py`
-
-The turn shape is ported from the `plan-chat` planners in AiSummryIO
-(`bl/workflow_engine_pkg/conversational_planning.py`). One question per turn,
-each carrying the agent's own `recommendation`, a `why`, and two to four
-clickable `options`. An option's `answer` is a full sentence sent verbatim as
-the boss's own message — never a label, never an index, because a bare number
-may be either a selection or a real value and the interview must clarify
-rather than guess. Below two options the list is dropped: one option is not a
-choice.
-
-**Options are asked for on every question, including open-ended ones.** The
-free-text composer sits beside the buttons and never goes away, so offering a
-concrete sentence to correct costs the boss nothing and beats handing them an
-empty field. `_options` is the bound, not the policy — the policy is in
-`prompts/shared/interview_method.md`.
-
-**The model is shown what it already asked.** `recent_conversation` carries
-the recent stretch of the thread and `questions_already_asked` carries every
-question put so far, including ones scrolled out of that window. Neither the
-draft nor `resolved` records *questions* — only settled facts — so a model
-given the last exchange alone cannot tell a fresh topic from one it just
-covered, and re-asks until the interview circles instead of ending.
-
-**`resolved` and `open_points` are deduplicated, not concatenated.** Both are
-replayed to the model as `*_so_far` every turn and come back carried forward,
-and `open_points` then has `missing_topics()` appended to it in code. A blind
-`+` therefore stacked the code-generated sentence beside the model's echo of
-that same sentence, once per turn, for as long as the gap stayed open — so
-"נשאר לסגור" grew a longer and longer list of one line. `_unique` preserves
-the agent's own ordering rather than sorting: the panel is read top to bottom.
-
-**A `reply` that promises an update it did not make is caught in code.**
-`reply` is prose the manager reads; `draft_update` is what is stored. A model
-answering "אני מעדכן את המדיניות" with an empty update has silently dropped
-what the manager just said. `_promised_unkept` requires *both* halves — an
-empty update alone is ordinary, since a clarifying question settles nothing —
-and records the loss as an open point so it is visible instead of vanishing.
-Compared against the merged draft, so re-sending a field's existing value
-counts as recording nothing too.
-
-Every turn also returns `draft` — the profile so far — plus `resolved` and
-`open_points`, the agent's own account of what is settled and what is not. The
-draft is **merged** across turns (`_merged_draft`): the model rebuilds it from
-scratch each turn, so a narrow answer that re-emits only the field it touched
-would otherwise blank the twenty it did not, precisely at the confirmation
-turn. A field is carried forward only when the new turn left it empty, so a
-correction still lands.
-
-**The interview never acts on its own conclusion.** `_is_ready` is the gate,
-enforced in code rather than trusted to the prompt: a turn that still asks
-something, or that is only now presenting its summary for approval
-(`awaiting_confirmation`), is never `ready` however the model labelled itself.
-A draft still missing a required topic is not ready either — the gap resurfaces
-in `open_points` instead of the boss discovering it after the session closed.
-`ready` is what closes the session and writes the profile.
-
-**There is a second door, and only the manager opens it.** `end()` closes the
-interview with whatever has been collected, records what it still owes on the
-profile as `completeness`, and **calls no model**
-([D22](../../../docs/DECISIONS.md#d22--the-interview-can-be-ended-early-and-the-profile-says-what-it-owes-️-amends-d18)).
-The gate above is unchanged — it governs what the *model* may declare
-finished. Keeping them separate is the decision: an agent that could reach
-`end` would be deciding it had asked enough. `missing_topics()` is public so
-both doors and `tools.profile_gaps` share one definition of "missing".
-
-Collects:
-- the workplace profile (what the job is, the mission) — free text
-- the employees
-- **the shift vocabulary** — the workplace's own shift names, their times, and
-  **whether any are on-call**. On-call (`כונן לילה` in one real file) may count
-  differently toward hours and fairness; ask, because `audit.py` needs the weight.
-- dependencies between workers
-- rules, each tagged **hard** or **soft** as it is stated
-
-Rules are stored as **the boss's own sentences** ([D2](../../../docs/DECISIONS.md#d2--rules-stay-natural-language)).
-Do not parse them into typed records — that was considered and rejected.
-
-The declared shift vocabulary is what `importer.py` matches sheet headers against,
-so this must run before a meaningful import.
-
-The completed product mock and the prompt lessons it exposed are documented in
-[`../../../docs/INTERVIEW_REFERENCE.md`](../../../docs/INTERVIEW_REFERENCE.md).
-
-`IntroInterview` is **stateless on purpose** — it is a function of the
-conversation plus the draft it is handed, which is what lets its whole
-contract be tested against a fake model with no database.
-`interview_service.py` is the piece that owns remembering: it appends each
-turn, stores the pending turn so a refresh resumes without a model call, and
-writes the profile once `ready` turns true. Keep that split. Folding
-persistence into `IntroInterview` would cost the tests that make its gating
-trustworthy.
-
-The reference is stateless on *both* sides — its client replays the history
-and the draft on every turn. Here the session holds them instead, so a boss
-who refreshes or opens the app on a second machine resumes the profile they
-had rather than the empty one their browser happened to keep. The draft handed
-to the model is read back from the session, never taken from the request, so a
-stale client copy cannot rewrite what was already agreed.
 
 ## `scheduler.py`
 

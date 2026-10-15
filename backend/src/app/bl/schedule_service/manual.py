@@ -5,6 +5,7 @@ land immediately, and every one of them still leaves a reasoned row in the
 change log.
 """
 
+import datetime
 from typing import Optional
 
 from app.bl.schedule_service.constants import (
@@ -15,14 +16,19 @@ from app.bl.schedule_service.constants import (
 )
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.rows import find_assignment, iso
-from app.common.errors.errors import AgentError, NotFoundError
+from app.common.errors.errors import AgentError, AppError, ConflictError, NotFoundError
+from app.common.time_context.time_context import israel_today
 from app.dal.repository.schedules import ASSIGNED_BY_MANAGER
 
 
+DEPARTURE_REASON = "סיום עבודה — הוצא/ה מהסגל על ידי המנהל"
+
+
 class ManualEditor:
-    def __init__(self, context: ScheduleContext):
+    def __init__(self, context: ScheduleContext, profiles=None):
         self._context = context
         self._repository = context.repository
+        self._profiles = profiles
 
     def assign(
         self,
@@ -149,6 +155,78 @@ class ManualEditor:
 
     def delete(self, schedule_id: str, team_id: str) -> None:
         self._repository.delete_schedule(schedule_id, team_id)
+
+    def departure_preview(
+        self, team_id: str, employee: str, effective_date: str = "",
+    ) -> dict:
+        """What taking somebody off the roster would cost. **Writes nothing.**"""
+        _, first, rows, published = self._departure(team_id, employee, effective_date)
+        return {
+            "employee": employee.strip(),
+            "effective_date": first,
+            "shifts": len(rows),
+            "published": published,
+        }
+
+    def depart(
+        self, team_id: str, employee: str, effective_date: str = "",
+        reason: str = "",
+    ) -> dict:
+        """Take somebody off the active roster, by hand.
+
+        The button twin of the chat's `retire` plan: the name stays in the
+        profile with `inactive_from` set — it is the key their history, their
+        identity and their past colour hang on — and every shift from that
+        date on is vacated, each one logged. A published period that loses a
+        shift goes back to draft, which the preview said before the click.
+
+        The shifts go before the profile changes, so a failure halfway leaves
+        a roster that still lists them and the same click can simply be
+        repeated.
+        """
+        people, first, rows, published = self._departure(team_id, employee, effective_date)
+        name = employee.strip()
+        roster = [dict(row, inactive_from=first) if row.get("name") == name else row
+                  for row in people]
+        # Validated before anything is vacated, so a roster the profile rules
+        # would refuse fails here rather than after the shifts are gone.
+        self._profiles.preview(team_id, employees=roster)
+        for period in published:
+            self._repository.set_schedule_status(period["id"], team_id, "draft")
+        stated = (reason or "").strip()
+        for schedule_id, row in rows:
+            self._remove(team_id, schedule_id, row, stated, DEPARTURE_REASON)
+        self._profiles.update(team_id, employees=roster)
+        return {
+            "employee": name, "effective_date": first,
+            "shifts": len(rows), "published": published,
+        }
+
+    def _departure(self, team_id: str, employee: str, effective_date: str):
+        name = (employee or "").strip()
+        people = self._context.profile(team_id).get("employees") or []
+        person = next((row for row in people if row.get("name") == name), None)
+        if person is None:
+            raise NotFoundError("העובד לא נמצא בסגל")
+        if person.get("inactive_from"):
+            raise ConflictError("%s כבר הוצא/ה מהסגל הפעיל" % name)
+        first = (effective_date or "").strip() or israel_today().isoformat()
+        try:
+            first = datetime.date.fromisoformat(first).isoformat()
+        except ValueError:
+            raise AppError("תאריך סיום העבודה חייב להיות בפורמט YYYY-MM-DD")
+        rows, published = [], []
+        for period in self._repository.list_schedules(team_id):
+            if iso(period["ends_on"]) < first:
+                continue
+            schedule = self._repository.get_schedule(period["id"], team_id)
+            going = [row for row in schedule.get("assignments") or []
+                     if row.get("employee") == name and iso(row.get("date")) >= first]
+            rows += [(schedule["id"], row) for row in going]
+            if going and schedule.get("status") == "published":
+                published.append({"id": schedule["id"], "starts_on": iso(schedule["starts_on"]),
+                                  "ends_on": iso(schedule["ends_on"])})
+        return people, first, rows, published
 
     def _remove(
         self,

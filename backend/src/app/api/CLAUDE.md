@@ -5,7 +5,7 @@ the result.
 
 ## Routers
 
-Built so far: `workspace.py`, `interview.py`, `schedules.py`, `health.py`.
+Built so far: `workspace.py`, `profile.py`, `schedules.py`, `health.py`.
 `imports.py` arrives with `bl/importer/`; `changes.py` and `employees.py` were
 folded into `schedules.py` rather than split, since they share the schedule and
 the team scoping.
@@ -14,30 +14,12 @@ the team scoping.
 |---|---|
 | `workspace.py` | Enter a workspace, the member share link, logout. Creating one is refused unless `allow_signup` (D28) |
 | `admin.py` | The צוות משמרות זהב console (D28): operator sign-in, every team with its counts, open (name + password)/rename/suspend/delete a team, reset its manager password, rotate its link |
-| `interview.py` | The intro interview, one turn at a time |
-| `schedules/` | The management area: read/generate a period — whole, from one day to another (`build_from`/`build_through`), or a run of days inside an existing draft (`/generate/{id}/range/start`) — read every period across a span of dates for the board's two-week and month views (`/between`, capped at 62 days), the stats panel's numbers for a span of dates or one person (`/stats`, boss-only, same cap), open one blank and fill it by hand (D18), propose and apply changes, constraints, history, plus asking (`/ask`, `/tool`), simulating (`/simulate`) and preferences (D19–D21) |
+| `profile.py` | Boss-only structured unit setup and profile updates |
+| `schedules/` | The management area: read/generate a period — whole, from one day to another (`build_from`/`build_through`), or a run of days inside an existing draft (`/generate/{id}/range/start`) — read every period across a span of dates for the board's two-week and month views (`/between`, capped at 62 days), the stats panel's numbers for a span of dates or one person (`/stats`, boss-only, same cap), open one blank and fill it by hand (D18), take somebody off the roster (`/departure`, with a writing-nothing `/departure/preview` first: end date set, later shifts vacated, name kept), propose and apply changes, constraints, history, plus asking (`/ask`, `/tool`), simulating (`/simulate`) and preferences (D19–D21) |
 | `imports.py` | Upload a file, return the inferred interpretation, commit on confirm |
 | `employees.py` | Roster management |
 | `health.py` | Liveness |
 | `employee/` | The employee's own area: claim an identity, read your own shifts, submit a constraint request or swap, ask the assistant (`/assistant`, read-only, D27) — plus the boss-guarded router that rules on them and `GET /api/schedule/requests/events`, the manager's SSE stream that says an inbox moved (D29) |
-
-## The interview contract
-
-`POST /api/interview` opens a session and returns its first question.
-`POST /api/interview/{id}/answer` records an answer and returns the next
-question — or `status: "complete"` with the confirmed profile.
-`POST /api/interview/{id}/end` closes the interview with what has been
-collected and returns the same completed shape — the manager's own way out,
-and it **costs no model call** either (D22).
-`GET /api/interview/{id}` re-serves the pending question and **costs no model
-call**: a refresh must not re-ask the model, because the same conversation
-would come back differently worded and the boss would see their answered
-question replaced by a near-duplicate.
-
-The answer body carries the option's **label**, never its index. A bare number
-is ambiguous by design — it may be a choice or a real value like a headcount —
-and `bl/prompts/interview.md` instructs the model to ask rather than guess.
-Sending "2" would manufacture exactly that ambiguity.
 
 ## The two-step contracts
 
