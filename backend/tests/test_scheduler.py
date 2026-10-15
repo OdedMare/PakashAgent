@@ -162,7 +162,13 @@ def test_code_refuses_rules_that_only_the_model_can_interpret():
 
 
 def test_auto_uses_ai_when_the_profile_contains_semantic_rules():
-    llm = _ScriptedLlm([_reply([{
+    llm = _ScriptedLlm([{
+        "directives": [],
+        "unresolved": [{
+            "source_id": "source-1",
+            "reason": "הכלל מתאר מנוחה כללית ולא פעולה לתאריך ומשמרת מדויקים",
+        }],
+    }, _reply([{
         "employee_id": "employee-1", "slot_id": "slot-1",
         "reason": "דנה מתאימה לפי הכלל והזמינות",
     }])])
@@ -172,7 +178,47 @@ def test_auto_uses_ai_when_the_profile_contains_semantic_rules():
     )
 
     assert result["metrics"]["engine"] == "ai"
+    assert len(llm.calls) == 2
+
+
+def test_auto_translates_an_exact_instruction_then_assigns_in_code():
+    profile = {
+        "employees": [
+            {"name": "דנה", "eligible_shifts": [MORNING]},
+            {"name": "יוסי", "eligible_shifts": [MORNING]},
+        ],
+        "shifts": [{
+            "name": MORNING, "start_time": "07:00", "end_time": "15:00",
+            "days": [], "staffing": [{"days": [], "headcount": 1}],
+        }],
+    }
+    llm = _ScriptedLlm([{
+        "directives": [{
+            "source_id": "source-1",
+            "action": "unavailable",
+            "employee": "דנה",
+            "date": "2026-08-17",
+            "shift": MORNING,
+            "reason": "המנהל ביקש שדנה לא תעבוד במשמרת הזו",
+        }],
+        "unresolved": [],
+        "_usage": {
+            "prompt_tokens": 90, "completion_tokens": 30, "total_tokens": 120,
+        },
+    }])
+
+    result = Scheduler(llm).generate_span(
+        profile, "2026-08-17", "2026-08-17",
+        instructions="דנה לא תעבוד בבוקר ב-17 באוגוסט 2026",
+        engine="auto",
+    )
+
+    assert [row["employee"] for row in result["assignments"]] == ["יוסי"]
+    assert result["metrics"]["engine"] == "hybrid"
+    assert result["metrics"]["model_calls"] == 1
+    assert result["metrics"]["total_tokens"] == 120
     assert len(llm.calls) == 1
+    assert llm.calls[0]["schema"]["required"] == ["directives", "unresolved"]
 
 
 # -- assignments -----------------------------------------------------------

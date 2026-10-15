@@ -403,7 +403,7 @@ export interface GenerationDay {
     completion_tokens?: number;
     total_tokens?: number;
     /** Engine that actually produced this checkpoint. */
-    engine?: "ai" | "code";
+    engine?: "ai" | "code" | "hybrid";
     /** Logical model requests, including failed attempts. */
     model_calls?: number;
     failed_calls?: number;

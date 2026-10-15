@@ -216,9 +216,10 @@ class Settings(BaseSettings):
     schedule_generation_engine: str = ENGINE_AUTO
     """Assign with the model, deterministic code, or a safe automatic mix.
 
-    Auto uses code only for structured inputs it can represent and keeps its
-    answer only when the deterministic audit is clean. Explicit code mode
-    refuses semantic rules rather than silently ignoring them.
+    Auto compiles narrow semantic instructions into validated directives,
+    runs them in code, and falls back to full AI when translation is unsafe or
+    the deterministic audit is not clean. Explicit code mode remains zero-token
+    and refuses semantic rules rather than silently ignoring them.
     """
 
     session_secret: str = ""

@@ -154,9 +154,11 @@ one representation ([D6](../../../docs/DECISIONS.md#d6--the-boss-can-author-or-g
 
 **The assignment engine is selectable.** `schedule_generation_engine` is
 `ai`, `code`, or `auto` ([D31](../../../docs/DECISIONS.md#d31--structured-schedules-may-be-assigned-by-code-️-amends-d3)).
-Auto uses the deterministic scheduler only for structured inputs and accepts
-it only with a clean audit; semantic inputs and imperfect code drafts go to
-the model. Explicit code mode refuses semantic inputs rather than dropping
+Auto uses the deterministic scheduler for structured inputs. For semantic
+inputs it first asks the model for only validated `unavailable` and
+`required_assignment` directives, then lets code assign the roster; ambiguous
+directives and imperfect code drafts go to the full scheduling model. Explicit
+code mode stays zero-token and refuses semantic inputs rather than dropping
 them.
 
 **Past assignments are counted, not sent.** The scheduler used to hand the
