@@ -940,9 +940,38 @@ backend ever runs several workers, Postgres `LISTEN/NOTIFY` is the upgrade.
 
 ---
 
+## D30 — Model calls are traced to Opik, prompts and replies included
+
+With `OPIK_API_KEY` set, every `complete_json` is one trace in Opik, named by
+its flow, with each HTTP completion under it as an LLM span: messages, reply,
+model, tokens, duration, and the error when it failed
+(`dal/llm/tracing.py`). Without the key nothing is sent and nothing changes.
+
+**This is a deliberate exception to "never log full prompts".** Prompts carry
+employee names, stated reasons for absence and the manager's own sentences
+about their staff, and with the key set they leave the machine for the
+configured Opik workspace (Comet's hosted Opik unless `OPIK_URL_OVERRIDE`
+points at a self-hosted one). The boss chose this knowingly: a token count
+can say a call was expensive but never *why the model answered that*, and
+that is the question every prompt fix starts from.
+
+The exception is narrow:
+
+- **Opik only, and only behind the key.** The `pakash.llm` log line stays
+  counts and timings (`telemetry.py`). No other log, error or response gains
+  prompt text because tracing exists.
+- **Env-only and read at start-up.** Not in the settings panel: a team
+  manager must not be able to start shipping every team's prompts to an
+  account of their choosing. Turning it on is the operator's act.
+- **It never fails a call.** A tracing error is logged and the call runs
+  untraced.
+
+*Why Python moved to 3.11 in the same change:* Opik's SDK dropped 3.8 long
+ago, and the 3.8.10 pin was already the costliest line in the build (EOL
+Debian, compiling `backports.zoneinfo`). See BUILD_ORDER.md.
+
+---
+
 ## Open
 
-- **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment
-  constraint there. Mirroring it unless PakashAgent targets a newer environment —
-  the boss hasn't answered. If 3.8.10 holds: no `X | Y`, no `list[str]`, no
-  `match`; use `Optional`, `List`, `Dict`.
+- *(none)* — the Python version is settled at **3.11** (D30).

@@ -69,6 +69,10 @@ services:
       PAKASH_LLM_DIET_MODE: "true"
       # Ollama ignores the value but the SDK requires a non-empty key.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-ollama}
+      # Opik tracing; empty key = off.
+      OPIK_API_KEY: ${OPIK_API_KEY:-}
+      OPIK_WORKSPACE: ${OPIK_WORKSPACE:-}
+      OPIK_PROJECT_NAME: ${OPIK_PROJECT_NAME:-pakash-sandbox}
 
       PAKASH_LOG_LEVEL: ${PAKASH_LOG_LEVEL:-DEBUG}
     extra_hosts:

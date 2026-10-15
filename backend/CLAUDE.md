@@ -14,10 +14,8 @@ decision and recording every reason.
 
 ## Runtime and commands
 
-Python is **3.8.10**, mirroring AiSummryIO. Keep annotations compatible: use
-`Optional`, `List`, `Dict`; do **not** use `X | Y`, `list[str]`, or `match`.
-*(If the deployment target turns out to be newer, this is the one open question
-in DECISIONS.md — resolve it before writing much code.)*
+Python is **3.11** (it was 3.8.10 until [D30](../docs/DECISIONS.md#d30--model-calls-are-traced-to-opik-prompts-and-replies-included)).
+The code still writes `Optional`, `List`, `Dict`; match the file you are in.
 
 ```bash
 cd backend
@@ -32,6 +30,7 @@ uvicorn app.main:app --app-dir src --reload
 - `dal/database/postgres.py` — connection; verifies the schema exists.
 - `dal/llm/` — the OpenAI-compatible JSON client and its degradation ladder,
   ported unchanged from AiSummryIO. Model/base URL/API key stay live per call.
+  `tracing.py` sends every call to Opik when `OPIK_API_KEY` is set (D30).
 - `dal/repository/` — the only SQL owner. `teams.py` also owns password
   hashing (`scrypt`, stdlib) and the member share token.
 - `bl/workspace_service/service.py` — workspace rules: who may enter a team, in which
@@ -348,4 +347,6 @@ package's `__init__` docstring carries a table of which module owns what.
   lives only in the log ([D4](../docs/DECISIONS.md#d4--living-schedule-not-versioned)).
 - Errors leaving the backend are `AgentError` in Hebrew.
 - Never log API keys or full prompts containing employee personal details.
+  The one exception is Opik tracing, which is opt-in by `OPIK_API_KEY` and
+  lives in `dal/llm/tracing.py` only ([D30](../docs/DECISIONS.md#d30--model-calls-are-traced-to-opik-prompts-and-replies-included)).
 - Keep the design simple: add a module only when it owns a distinct boundary.

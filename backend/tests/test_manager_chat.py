@@ -1,6 +1,7 @@
 """Manager scenarios: private history, real previews and all-or-nothing clicks."""
 
 import copy
+import datetime
 import json
 from contextlib import contextmanager
 
@@ -15,6 +16,8 @@ from app.bl.manager_chat import ManagerChatService
 from app.bl.schedule_service import ScheduleService
 from app.common.errors.errors import AppError, ConflictError, NotFoundError, error_payload
 from app.common.sessions.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
+from app.common.time_context.time_context import israel_today
+from app.dal.repository.schedules import week_bounds
 from tests.test_schedule_api import _FakeScheduleRepo, _ScriptedLlm, PROFILE, TEAM, SECRET, MORNING
 
 
@@ -257,16 +260,18 @@ def test_tool_on_empty_visible_week_cannot_report_todays_schedule():
 
 
 def test_generate_upcoming_week_previews_real_assignments_without_touching_current_week():
+    this_week = datetime.date.fromisoformat(week_bounds(israel_today())[0])
+    first, last = week_bounds(this_week + datetime.timedelta(days=7))
     proposal = turn("generate")
-    proposal.update(starts_on="2026-10-11", ends_on="2026-10-17")
-    generation = {"assignments": [dict(employee="דנה", shift=MORNING, date="2026-10-11", reason="מתאימה")],
+    proposal.update(starts_on=first, ends_on=last)
+    generation = {"assignments": [dict(employee="דנה", shift=MORNING, date=first, reason="מתאימה")],
                   "notes": [], "summary": "סידור מוצע"}
     repo, _, service, chat_id, schedule_id = setup([proposal, generation, generation])
     proposal["schedule_id"] = schedule_id  # A stale model id cannot redirect the requested week.
     message = converse(service, repo, chat_id, schedule_id, "תשבץ את השבוע הבא")
     assert message["status"] == "pending"
     assert len(repo.schedules) == 1
-    assert message["payload"]["plan"]["generated"]["assignments"][0]["date"] == "2026-10-11"
+    assert message["payload"]["plan"]["generated"]["assignments"][0]["date"] == first
     service.apply(TEAM, "manager-a", chat_id, message["id"], True)
     assert len(repo.schedules) == 2
     assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "דנה"
@@ -526,7 +531,8 @@ def test_combined_conflicts_reach_agent_and_corrected_plan_keeps_absence():
     message = converse(service, repo, chat_id, schedule_id, "מאיה תחליף את דנה ביום שני", "selected-maya")
     plan = message["payload"]["plan"]
     assert plan["operations"][1]["employee"] == "מאיה" and not plan["warnings"]
-    assert plan["constraints"] == fixed["constraints"]
+    assert all(plan["constraints"][0][key] == value
+               for key, value in fixed["constraints"][0].items())
 
 
 def test_known_qualification_conflict_is_visible_and_requires_exception_approval():

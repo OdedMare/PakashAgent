@@ -58,6 +58,12 @@ services:
       # span when one row is wrong. Also editable live in the settings panel.
       PAKASH_SCHEDULE_GENERATION_MODE: ${PAKASH_SCHEDULE_GENERATION_MODE:-day}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Opik tracing of every model call, prompts and replies included
+      # (dal/llm/tracing.py). Empty key = off. The worker gets the same
+      # values so a build it runs is traced like one the API runs.
+      OPIK_API_KEY: ${OPIK_API_KEY:-}
+      OPIK_WORKSPACE: ${OPIK_WORKSPACE:-}
+      OPIK_PROJECT_NAME: ${OPIK_PROJECT_NAME:-pakash}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -88,6 +94,9 @@ services:
       PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-1}
       PAKASH_SCHEDULE_GENERATION_MODE: ${PAKASH_SCHEDULE_GENERATION_MODE:-day}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPIK_API_KEY: ${OPIK_API_KEY:-}
+      OPIK_WORKSPACE: ${OPIK_WORKSPACE:-}
+      OPIK_PROJECT_NAME: ${OPIK_PROJECT_NAME:-pakash}
       PAKASH_COPILOT_SCAN_SECONDS: ${PAKASH_COPILOT_SCAN_SECONDS:-1800}
     extra_hosts:
       - "host.docker.internal:host-gateway"
