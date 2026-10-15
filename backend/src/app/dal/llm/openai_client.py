@@ -56,6 +56,13 @@ _LOCAL_SERVER_KEY_PLACEHOLDER = "null"
 _DEFAULT_BASE_URL = "https://api.openai.com/v1"
 _MODELS_PROBE_TIMEOUT_SECONDS = 30
 _NOT_JSON = "The response was not valid JSON. Return only one JSON object."
+# An empty reply is usually a native function call (gpt-oss answers a prompt
+# that describes tools with `tool_calls` and no content), so "not valid JSON"
+# would not tell it what it did wrong.
+_NO_CONTENT = (
+    "The response had no content. Do not call functions: write the answer as "
+    "one JSON object in the message content."
+)
 
 _log = logging.getLogger("pakash.llm")
 
@@ -153,10 +160,10 @@ class OpenAIJsonClient:
             try:
                 result = extract_json(content)
             except json.JSONDecodeError as exc:
-                last_error = str(exc)
+                last_error = str(exc) if content else "empty reply"
                 messages = messages + [
                     {"role": "assistant", "content": content},
-                    {"role": "user", "content": _NOT_JSON},
+                    {"role": "user", "content": _NOT_JSON if content else _NO_CONTENT},
                 ]
                 continue
             if usage["total_tokens"]:

@@ -9,7 +9,7 @@ import httpx
 import pytest
 from openai import BadRequestError
 
-from app.common.errors.errors import AgentError
+from app.common.errors.errors import AgentError, ModelOutputError
 from app.dal.llm.json_response_parser import extract_json
 from app.dal.llm.message_merger import merge_system_into_user
 from app.dal.llm.model_id_extractor import extract_model_ids
@@ -225,9 +225,25 @@ def test_two_invalid_replies_raise_agent_error():
 
 
 def test_an_empty_reply_is_an_error_not_an_empty_object():
-    llm, _ = _client([_Response("")])
+    llm, _ = _client([_Response(""), _Response("")])
     with pytest.raises(AgentError):
         llm.complete_json("sys", "usr")
+
+
+def test_an_empty_reply_is_retried_and_its_tokens_still_counted():
+    # gpt-oss answers with a native function call and no content; it was paid for.
+    llm, fake = _client([_Response(None), _Response('{"ok": true}')])
+    result = llm.complete_json("sys", "usr")
+    assert result["ok"] is True
+    assert result["_usage"]["total_tokens"] == 30
+    assert "Do not call functions" in fake.completions.calls[1]["messages"][-1]["content"]
+
+
+def test_two_empty_replies_raise_with_the_tokens_they_spent():
+    llm, _ = _client([_Response(""), _Response("")])
+    with pytest.raises(ModelOutputError) as raised:
+        llm.complete_json("sys", "usr")
+    assert raised.value.usage["total_tokens"] == 30
 
 
 # --- usage, diet mode, penalty --------------------------------------------

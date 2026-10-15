@@ -124,9 +124,15 @@ def attempts(messages, max_tokens, schema, penalty=NEUTRAL_PENALTY) -> List[dict
 
 
 def response_data(response):
-    content = response.choices[0].message.content
-    if not content:
-        raise AgentError("המודל החזיר תשובה ריקה")
+    """`(content, usage)`, with `content` an empty string when there is none.
+
+    An empty reply is not raised here: it was still paid for, and only the
+    caller's parse retry counts and logs what a rejected reply cost. gpt-oss
+    produces one routinely -- trained on native tool calling, it answers a
+    prompt that describes tools with `finish_reason=tool_calls` and the
+    answer in `message.tool_calls`, leaving `content` empty.
+    """
+    content = response.choices[0].message.content or ""
     usage = response.usage
     return content, {
         "prompt_tokens": usage.prompt_tokens if usage else 0,
