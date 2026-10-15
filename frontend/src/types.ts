@@ -546,7 +546,7 @@ export interface Constraint {
   end_time: string;
   is_hard: boolean;
   reason: string;
-  source: "manager" | "agent" | "employee_reported" | "interview";
+  source: "manager" | "agent" | "employee_reported" | "setup";
 }
 
 /** One append-only change-log row. Both reasons are present because they

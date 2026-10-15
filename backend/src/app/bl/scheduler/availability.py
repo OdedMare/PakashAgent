@@ -15,7 +15,7 @@ from app.bl.scheduler.values import (
 def effective_availability(
     profile: dict, rows: Any, starts_on: str, ends_on: str
 ) -> List[dict]:
-    """Dated constraints plus structured recurring constraints from interview.
+    """Dated constraints plus structured recurring constraints from setup.
 
     Explicit dated rows win for the same person, date and shift. A recurring
     all-shifts rule is expanded per declared shift, which lets one dated shift
@@ -125,7 +125,7 @@ def _expand_rule(
                 "end_time": bounded(rule.get("end_time")),
                 "is_hard": rule.get("is_hard", True) is not False,
                 "reason": bounded(rule.get("reason")),
-                "source": bounded(rule.get("source")) or "interview",
+                "source": bounded(rule.get("source")) or "setup",
             })
     return rows
 

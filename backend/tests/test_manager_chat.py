@@ -477,7 +477,7 @@ def test_recurring_constraint_profile_plan_preserves_roster_and_employee_details
     assert not repo.availability_rows
     from app.bl.scheduler.availability import effective_availability
     recurring = [row for row in effective_availability(repo.profiles[TEAM], [], "2026-10-04", "2026-10-10")
-                 if row["source"] == "interview"]
+                 if row["source"] == "setup"]
     assert [(row["date"], row["shift"]) for row in recurring] == [("2026-10-06", MORNING)]
 
 

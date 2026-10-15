@@ -332,7 +332,7 @@ def test_structured_recurring_constraint_filters_daily_candidates():
     assert payload["period"]["slots"][0]["candidate_employee_ids"] == [
         "employee-2"
     ]
-    assert payload["availability"][0]["source"] == "interview"
+    assert payload["availability"][0]["source"] == "setup"
 
 
 def test_range_generation_receives_a_recurring_hard_rule_as_dated_context():
@@ -357,7 +357,7 @@ def test_range_generation_receives_a_recurring_hard_rule_as_dated_context():
         "employee": "דנה", "date": "2026-08-17", "shift": MORNING,
         "available": False, "start_time": "", "end_time": "",
         "is_hard": True, "reason": "דנה לא עובדת בימי שני",
-        "source": "interview",
+        "source": "setup",
     }]
 
 

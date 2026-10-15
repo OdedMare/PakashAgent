@@ -39,7 +39,7 @@ from app.dal.repository.schedule_vocabulary import (  # noqa: F401
     PREFERENCE_SUGGESTED,
     SOURCE_AGENT,
     SOURCE_EMPLOYEE_REPORTED,
-    SOURCE_INTERVIEW,
+    SOURCE_SETUP,
     SOURCE_MANAGER,
 )
 
@@ -67,5 +67,5 @@ def week_bounds(day: Optional[datetime.date] = None) -> tuple:
 __all__ = [
     "ScheduleRepository", "week_bounds",
     "SOURCE_MANAGER", "SOURCE_AGENT", "SOURCE_EMPLOYEE_REPORTED",
-    "SOURCE_INTERVIEW",
+    "SOURCE_SETUP",
 ]

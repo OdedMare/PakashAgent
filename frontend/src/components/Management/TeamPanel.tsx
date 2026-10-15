@@ -831,7 +831,7 @@ const SOURCE_LABELS: Record<string, string> = {
   manager: "המנהל",
   agent: "הסוכן",
   employee_reported: "העובד מסר",
-  interview: "מהגדרה קודמת",
+  setup: "מהגדרת היחידה",
 };
 
 const SERVICE_TYPE_LABELS: Record<string, string> = {

@@ -11,9 +11,9 @@ the repository, `bl/`, and the tests all spell them the same way.
 SOURCE_MANAGER = "manager"
 SOURCE_AGENT = "agent"
 SOURCE_EMPLOYEE_REPORTED = "employee_reported"
-SOURCE_INTERVIEW = "interview"
+SOURCE_SETUP = "setup"
 SOURCES = (
-    SOURCE_MANAGER, SOURCE_AGENT, SOURCE_EMPLOYEE_REPORTED, SOURCE_INTERVIEW,
+    SOURCE_MANAGER, SOURCE_AGENT, SOURCE_EMPLOYEE_REPORTED, SOURCE_SETUP,
 )
 
 # Where an *assignment* came from (D18). A narrower set than the constraint

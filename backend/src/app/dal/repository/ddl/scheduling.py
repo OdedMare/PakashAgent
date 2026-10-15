@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS availability (
     employee TEXT NOT NULL,
     constraint_date DATE NOT NULL,
     -- Empty means the constraint covers the whole day, which is the answer
-    -- the interview asks for explicitly ("does a daily constraint rule out
+    -- setup records explicitly ("does a daily constraint rule out
     -- every shift that day?"). `audit.py` reads it the same way.
     shift_name TEXT NOT NULL DEFAULT '',
     available BOOLEAN NOT NULL DEFAULT FALSE,
@@ -127,10 +127,18 @@ CREATE TABLE IF NOT EXISTS availability (
     is_hard BOOLEAN NOT NULL DEFAULT TRUE,
     reason TEXT NOT NULL DEFAULT '',
     source TEXT NOT NULL DEFAULT 'manager'
-        CHECK (source IN ('manager','agent','employee_reported','interview')),
+        CHECK (source IN ('manager','agent','employee_reported','setup')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (team_id, employee, constraint_date, shift_name)
 );
+
+COMMIT;
+
+-- Rename the provenance value left by the removed interview flow.
+ALTER TABLE availability DROP CONSTRAINT IF EXISTS availability_source_check;
+UPDATE availability SET source='setup' WHERE source='interview';
+ALTER TABLE availability ADD CONSTRAINT availability_source_check
+    CHECK (source IN ('manager','agent','employee_reported','setup'));
 
 COMMIT;
 

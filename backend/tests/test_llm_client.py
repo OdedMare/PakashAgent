@@ -476,7 +476,7 @@ def test_every_role_uses_its_configured_endpoint():
         return fake
 
     llm._client_for = record
-    for flow in ("briefing", "interview", "scheduler"):
+    for flow in ("briefing", "changes", "scheduler"):
         llm.complete_json("sys", "usr", flow=flow)
 
     assert fake.completions.models == ["small-model", "chat-model", "big-model"]
@@ -523,7 +523,7 @@ def test_every_role_sends_its_own_api_key_to_its_own_endpoint():
         return fake
 
     llm._client_for = record
-    for flow in ("briefing", "interview", "scheduler"):
+    for flow in ("briefing", "changes", "scheduler"):
         llm.complete_json("sys", "usr", flow=flow)
 
     assert built == [
@@ -618,7 +618,7 @@ def test_the_budget_always_leaves_room_for_one_round_trip():
     """
     for timeout in (30, 120, 300, 600, 900):
         settings = _Settings(llm_timeout_seconds=timeout)
-        for flow in ("interview", "changes", ""):
+        for flow in ("planner", "changes", ""):
             assert _budget_seconds(settings, flow) > timeout, (timeout, flow)
 
 
@@ -628,7 +628,7 @@ def test_no_timeout_means_no_budget_either():
     turning the timeout off is meant to avoid."""
     for timeout in (0, -30):
         settings = _Settings(llm_timeout_seconds=timeout)
-        for flow in ("scheduler", "interview", ""):
+        for flow in ("scheduler", "changes", ""):
             assert _budget_seconds(settings, flow) is None, (timeout, flow)
 
 
@@ -654,8 +654,8 @@ def test_a_slow_model_widens_the_budget_with_it():
     Raising the timeout used to do nothing, because the budget was hardcoded
     below it.
     """
-    slow = _budget_seconds(_Settings(llm_timeout_seconds=600), "interview")
-    quick = _budget_seconds(_Settings(llm_timeout_seconds=120), "interview")
+    slow = _budget_seconds(_Settings(llm_timeout_seconds=600), "changes")
+    quick = _budget_seconds(_Settings(llm_timeout_seconds=120), "changes")
     assert slow > quick
 
 
@@ -679,7 +679,7 @@ def test_building_a_schedule_is_never_cut_off_by_the_timeout():
         assert read_timeout_for(settings, "scheduler") == 0, timeout
         assert _budget_seconds(settings, "scheduler") is None, timeout
         # Every other flow still honours the manager's setting exactly.
-        assert read_timeout_for(settings, "interview") == timeout, timeout
+        assert read_timeout_for(settings, "changes") == timeout, timeout
 
 
 def test_the_scheduler_client_is_built_with_no_read_ceiling():
@@ -711,4 +711,4 @@ def test_a_settings_object_without_the_field_still_resolves():
     a missing attribute.
     """
     assert _budget_seconds(object(), "scheduler") is None
-    assert _budget_seconds(object(), "interview") is None
+    assert _budget_seconds(object(), "changes") is None
