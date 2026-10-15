@@ -129,6 +129,10 @@ def test_generating_without_any_shift_is_an_error_not_an_empty_schedule():
     scheduler = Scheduler(_ScriptedLlm([]))
     with pytest.raises(AgentError):
         scheduler.generate({"shifts": []}, "2026-08-17", "2026-08-18")
+    with pytest.raises(AgentError):
+        scheduler.generate(
+            {"shifts": []}, "2026-08-17", "2026-08-18", engine="code"
+        )
 
 
 def test_auto_uses_zero_token_code_for_a_clean_structured_request():

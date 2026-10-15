@@ -57,6 +57,8 @@ class Scheduler:
             instructions, required_assignments, None, preferences,
         )
         if code is not None:
+            if not code["slots"]:
+                raise AgentError("לא ניתן לבנות סידור: לא הוגדרו משמרות לתקופה הזו")
             return code
         _check_rotation(profile)
         slots = build_slots(profile, starts_on, ends_on)
