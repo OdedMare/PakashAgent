@@ -60,6 +60,17 @@ directives and imperfect code drafts go to the full scheduling model. Explicit
 code mode stays zero-token and refuses semantic inputs rather than dropping
 them.
 
+**Code balances nights and rounds, not just hours.** The deterministic
+filler goes one date at a time, so ranking by hours worked so far was blind
+twice: nights landed on whoever was lightest in hours (one person took five
+of seven), and the open days were split evenly although one group would
+carry the coming closure on top. A night now goes to the fewest nights this
+period (history breaks ties, as in the model path), and every load compared
+includes `deterministic_scheduler/outlook.py` — each person's expected share
+of the seats still open over the next six days. That share is equal on an
+open day and falls on the closers alone on a closing one, so the open days
+before a closure lean towards the other group.
+
 **Past assignments are counted, not sent.** The scheduler used to hand the
 model several hundred raw history rows and let it work out who had been taking
 the nights. That was wrong twice: on a two-week period those rows were roughly

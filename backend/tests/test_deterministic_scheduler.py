@@ -87,3 +87,57 @@ def test_semantic_inputs_are_not_silently_sent_to_code():
     profile = dict(_profile(), rules=[{"text": "תעדף את דנה", "priority": "soft"}])
 
     assert "AI" in unsupported_reason(profile)
+
+
+def _counts(assignments, shift=None):
+    counts = {}
+    for row in assignments:
+        if shift is None or row["shift"] == shift:
+            counts[row["employee"]] = counts.get(row["employee"], 0) + 1
+    return counts
+
+
+def test_nights_are_spread_rather_than_given_to_the_lightest_in_hours():
+    people = ["אבי", "בני", "גדי", "דני", "הדר", "ורד"]
+    profile = {
+        "workplace": {"name": "יחידה"},
+        "employees": [{"name": name} for name in people],
+        "shifts": [
+            {"name": "בוקר", "start_time": "07:00", "end_time": "15:00", "days": [],
+             "staffing": [{"days": [], "headcount": 2, "required_roles": []}]},
+            {"name": "לילה", "start_time": "23:00", "end_time": "07:00", "days": [],
+             "staffing": [{"days": [], "headcount": 1, "required_roles": []}]},
+        ],
+    }
+
+    result = generate_span(profile, "2026-08-30", "2026-09-10")
+
+    nights = _counts(result["assignments"], "לילה")
+    assert sum(nights.values()) == 12
+    assert max(nights.values()) - min(nights.get(name, 0) for name in people) <= 1
+
+
+def test_open_days_lean_away_from_the_group_closing_the_coming_weekend():
+    """ב closes Thursday to Saturday; Monday to Wednesday should go to א, or
+    ב ends the week carrying both the weekdays and its own closure."""
+    profile = {
+        "workplace": {
+            "name": "יחידה",
+            "round_first_closure_date": "2026-08-29",
+            "round_first_closure_group": "א",
+        },
+        "employees": [
+            {"name": name, "exit_pattern": "round", "rotation_group": group}
+            for name, group in (("א1", "א"), ("א2", "א"), ("ב1", "ב"), ("ב2", "ב"))
+        ],
+        "shifts": [{
+            "name": SHIFT, "start_time": "07:00", "end_time": "15:00", "days": [],
+            "staffing": [{"days": [], "headcount": 2, "required_roles": []}],
+        }],
+    }
+
+    result = generate_span(profile, "2026-08-31", "2026-09-05")
+
+    shifts = _counts(result["assignments"])
+    assert sum(shifts.values()) == 12
+    assert max(shifts.values()) - min(shifts.values()) <= 1
