@@ -3,7 +3,7 @@
 import { Building2, Crown, LogOut, Moon, RefreshCw, Server, Sun } from "lucide-react";
 import { useState } from "react";
 
-import { useTheme } from "@/components/Interview/useTheme";
+import { useTheme } from "@/hooks/useTheme";
 
 import { AdminLogin } from "./AdminLogin";
 import { SystemView } from "./SystemView";

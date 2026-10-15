@@ -11,7 +11,6 @@ import threading
 import time
 
 from app.bl.copilot.copilot import CopilotService
-from app.bl.interview_service import InterviewService
 from app.bl.schedule_service import ScheduleService
 from app.bl.manager_chat import ManagerChatService
 from app.common.activity import track_activity
@@ -108,9 +107,8 @@ def _build():
     repository = Repository(store)
     llm = OpenAIJsonClient(store)
     schedules = ScheduleService(repository, llm, settings=store)
-    interviews = InterviewService(repository, llm)
     return repository, CopilotWorker(
-        repository, CopilotService(repository, schedules, interviews),
+        repository, CopilotService(repository, schedules),
         schedules=schedules, chat=ManagerChatService(repository, llm, schedules),
     )
 

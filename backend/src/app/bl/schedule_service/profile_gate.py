@@ -15,14 +15,10 @@ class ProfileGate:
 
     Two distinct failures, deliberately not merged:
 
-    - **No profile at all.** The interview was never run. There is nothing
-      to resume, so this stays a plain `AgentError`.
-    - **A profile that cannot carry a grid.** The interview ended early
-      through `interview_service.end` and recorded what it still owes on
-      `completeness`. That record is read back through `profile_gaps` rather
-      than recomputed, so the gate and the agent's own answer to *"what are
-      you missing"* can never drift apart. It is a `ProfileIncompleteError`
-      because the manager can fix it -- the missing topics travel with it.
+    - **No profile at all.** Initial setup was never saved.
+    - **A profile that cannot carry a grid.** It is a
+      `ProfileIncompleteError` because the manager can fix it in setup and
+      the missing details travel with the response.
 
     Shift vocabulary is the only true stop. Missing rules or employees
     degrade the result, and refusing over them would be worse than building
@@ -38,7 +34,7 @@ class ProfileGate:
         profile = self._repository.team_profile(team_id)
         if not profile:
             raise AgentError(
-                "צריך להשלים את ראיון ההיכרות לפני בניית סידור"
+                "צריך להשלים את הגדרת היחידה לפני בניית סידור"
             )
         if has_shifts(profile):
             return profile
@@ -46,8 +42,8 @@ class ProfileGate:
         # is read here to *explain* this failure rather than to detect it.
         gaps = self._tools.profile_gaps(team_id)
         raise ProfileIncompleteError(
-            "לא ניתן לבנות סידור: לא הוגדרו סוגי משמרות בראיון ההיכרות. "
-            "אפשר להשלים את החסר בשיחה עם הסוכן.",
+            "לא ניתן לבנות סידור: לא הוגדרו סוגי משמרות. "
+            "אפשר להשלים אותם בהגדרת היחידה.",
             gaps=gaps.get("gaps") or [],
             blocks=gaps.get("blocks") or [],
         )

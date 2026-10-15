@@ -9,13 +9,12 @@ from fastapi.responses import JSONResponse
 
 from app.api.dependencies.dependencies import Guards
 from app.api.routers import (
-    admin, copilot, employee, health, interview, profile, schedules, settings,
+    admin, copilot, employee, health, profile, schedules, settings,
     workspace,
 )
 from app.bl.admin_service import AdminService
 from app.bl.copilot.copilot import CopilotService
 from app.bl.employee_service import EmployeeService
-from app.bl.interview_service import InterviewService
 from app.bl.profile_service import ProfileService
 from app.bl.schedule_service import ScheduleService
 from app.bl.workspace_service.service import WorkspaceService
@@ -63,7 +62,6 @@ tracing.init(env)
 store = RuntimeSettingsStore(env)
 repository = Repository(store)
 llm = OpenAIJsonClient(store)
-interview_service = InterviewService(repository, llm)
 workspace_service = WorkspaceService(repository)
 # Handed the settings store, not just the repository: `schedule_generation_mode`
 # is read when a period is opened, so a mode saved in the panel applies to the
@@ -71,9 +69,7 @@ workspace_service = WorkspaceService(repository)
 schedule_service = ScheduleService(repository, llm, settings=store)
 profile_service = ProfileService(repository)
 manager_chat_service = ManagerChatService(repository, llm, schedule_service)
-copilot_service = CopilotService(
-    repository, schedule_service, interview_service
-)
+copilot_service = CopilotService(repository, schedule_service)
 # Takes the schedule service, not just the repository: the personal view needs
 # an audited schedule, and recomputing the audit for the employee would be a
 # second implementation of the arithmetic the manager sees (D14).
@@ -149,7 +145,6 @@ app.include_router(
         login_throttle,
     )
 )
-app.include_router(interview.build_router(interview_service, guards))
 app.include_router(schedules.build_router(schedule_service, guards))
 app.include_router(profile.build_router(profile_service, guards))
 app.include_router(manager_chat.build_router(manager_chat_service, repository, guards))

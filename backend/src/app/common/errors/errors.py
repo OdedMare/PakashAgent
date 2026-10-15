@@ -29,19 +29,18 @@ class ModelOutputError(AgentError):
 
 
 class ProfileIncompleteError(AgentError):
-    """The interview finished, but not with enough to build a grid.
+    """The saved profile does not contain enough to build a grid.
 
     Its own type rather than a bare `AgentError` because the caller can *do*
     something about this one: the profile names exactly which required topics
     are still owed, so the failure carries them and the UI opens the
-    interview on them instead of showing a dead end. Everything else in
+    profile editor on them instead of showing a dead end. Everything else in
     `bl/` failing is genuinely terminal for the request; this is a fork in
     the flow, and collapsing the two into one type is what made the manual
     path look broken rather than unfinished.
 
-    `gaps` are the lines `bl/interview.py` produced -- the same definition
-    the readiness gate uses, never a second copy. `blocks` says what each
-    gap costs in the manager's terms.
+    `gaps` describe missing profile data and `blocks` says what each gap costs
+    in the manager's terms.
     """
 
     def __init__(
@@ -110,5 +109,5 @@ def error_payload(exc: AppError) -> dict:
         # The one failure a caller can act on rather than only report.
         payload["gaps"] = exc.gaps
         payload["blocks"] = exc.blocks
-        payload["can_resume_interview"] = True
+        payload["can_edit_profile"] = True
     return payload

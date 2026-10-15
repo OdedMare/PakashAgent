@@ -18,7 +18,7 @@ _OBJECT_SECTIONS = ("training_policy", "audit_policy")
 
 
 class ProfileService:
-    """Keep profile edits on the interview profile, with small validation."""
+    """Keep profile edits on the team's profile, with small validation."""
 
     def __init__(self, repository):
         self._repository = repository

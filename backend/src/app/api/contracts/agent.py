@@ -5,8 +5,22 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 from app.api.contracts.changes import Operation
-from app.api.contracts.interview import Question
 from app.api.contracts.schedule import Warning
+
+
+class Option(BaseModel):
+    label: str
+    answer: str
+
+
+class Question(BaseModel):
+    """A focused follow-up question in a manager conversation."""
+
+    topic_id: str = ""
+    question: str
+    recommendation: str = ""
+    why: str = ""
+    options: List[Option] = []
 
 
 class AskRequest(BaseModel):

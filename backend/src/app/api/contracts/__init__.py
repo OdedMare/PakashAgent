@@ -4,14 +4,6 @@ One module per area of the API; everything is re-exported here so
 routers import from `app.api.contracts` as before.
 """
 
-from app.api.contracts.interview import (  # noqa: F401
-    AnswerRequest,
-    InterviewSeed,
-    InterviewTurn,
-    Message,
-    Option,
-    Question,
-)
 from app.api.contracts.admin import (  # noqa: F401
     AdminCreateTeamRequest,
     AdminDeleteRequest,
@@ -123,6 +115,8 @@ from app.api.contracts.agent import (  # noqa: F401
     SkippedOperation,
     ToolRequest,
     WorkloadImpact,
+    Option,
+    Question,
 )
 from app.api.contracts.preferences import (  # noqa: F401
     Preference,

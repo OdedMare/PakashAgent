@@ -2,7 +2,7 @@
 
 A team is the tenant. Every row that belongs to a workplace hangs off one,
 which is why this module also owns the *scoped* reads — a caller that wants a
-team's interviews asks here rather than filtering in `bl/`, so a forgotten
+team's profile asks here rather than filtering in `bl/`, so a forgotten
 WHERE clause cannot become a data leak between workplaces.
 
 Passwords are hashed with `hashlib.scrypt` from the standard library. bcrypt
@@ -22,8 +22,7 @@ from typing import List, Optional
 from psycopg.types.json import Jsonb
 
 from app.common.errors.errors import AuthError, NotFoundError
-from app.dal.database.postgres import connect
-from app.dal.repository.base import RepositoryBase, new_id
+from app.dal.repository.base import RepositoryBase
 
 # scrypt's cost parameters. n=2**14 with r=8 lands around 16MB and a few tens
 # of milliseconds per verify -- slow enough to make guessing expensive, fast

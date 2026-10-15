@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 
 import { HelpButton, useGuideSurface } from "@/components/Guide";
-import { useTheme } from "@/components/Interview/useTheme";
+import { useTheme } from "@/hooks/useTheme";
 import { Calendar } from "@/components/Management/Calendar";
 import { displayDate } from "@/components/DateInput";
 import { useManagement } from "@/components/Management/useManagement";

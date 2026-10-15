@@ -4,17 +4,13 @@ from typing import Any, Dict, List, Optional
 
 from psycopg.types.json import Jsonb
 
-from app.common.errors.errors import AgentError, ConflictError
-from app.dal.database.postgres import connect
+from app.common.errors.errors import AgentError
 from app.dal.repository.base import RepositoryBase, new_id
 
 MODES = ("observe", "suggest", "auto")
-ACTION_FOLLOW_UP = "follow_up_interview"
 ACTION_PROFILE_REVIEW = "profile_review"
 ACTION_SCHEDULE_REPAIR = "schedule_repair"
-ACTION_TYPES = (
-    ACTION_FOLLOW_UP, ACTION_PROFILE_REVIEW, ACTION_SCHEDULE_REPAIR,
-)
+ACTION_TYPES = (ACTION_PROFILE_REVIEW, ACTION_SCHEDULE_REPAIR)
 
 
 class CopilotRepository(RepositoryBase):
@@ -181,39 +177,13 @@ class CopilotRepository(RepositoryBase):
         """, (team_id, int(limit)))
 
     def latest_profile_updated_at(self, team_id: str):
-        rows = self._all("""
-            SELECT updated_at FROM interview_sessions
-            WHERE team_id=%s AND status='complete' AND profile IS NOT NULL
-            ORDER BY updated_at DESC LIMIT 1
-        """, (team_id,))
+        rows = self._all(
+            "SELECT updated_at FROM team_profiles WHERE team_id=%s", (team_id,)
+        )
         return rows[0]["updated_at"] if rows else None
-
-    def discard_follow_up(self, session_id: str, team_id: str) -> None:
-        """Delete an untouched follow-up session; answered ones are history."""
-        with connect(self._store) as connection:
-            row = connection.execute("""
-                SELECT status, pending, EXISTS (
-                    SELECT 1 FROM interview_turns
-                    WHERE session_id=%s AND role='user'
-                ) AS answered
-                FROM interview_sessions WHERE id=%s AND team_id=%s
-                FOR UPDATE
-            """, (session_id, session_id, team_id)).fetchone()
-            processing = bool((row["pending"] or {}).get("_processing")) if row else False
-            if processing:
-                raise ConflictError("הראיון עדיין מכין שאלה; נסה שוב בעוד רגע")
-            if not row or row["status"] != "active" or row["answered"]:
-                raise ConflictError(
-                    "לא ניתן לבטל ראיון המשך שכבר נענה או הושלם"
-                )
-            connection.execute(
-                "DELETE FROM interview_sessions WHERE id=%s AND team_id=%s",
-                (session_id, team_id),
-            )
-            connection.commit()
 
 
 __all__ = [
-    "CopilotRepository", "MODES", "ACTION_TYPES", "ACTION_FOLLOW_UP",
+    "CopilotRepository", "MODES", "ACTION_TYPES",
     "ACTION_PROFILE_REVIEW", "ACTION_SCHEDULE_REPAIR",
 ]
