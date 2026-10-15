@@ -166,6 +166,22 @@ class Settings(BaseSettings):
     """Read unprefixed, as the SDK expects. Empty is fine when a local
     `llm_base_url` is set — those servers ignore auth."""
 
+    opik_api_key: str = Field(default="", validation_alias="OPIK_API_KEY")
+    """Turns on Opik tracing of every model call (`dal/llm/tracing.py`).
+    Empty = off. Read unprefixed, as Opik's own SDK names it. Env-only: the
+    client is set up once at start-up, so a change needs a restart."""
+
+    opik_workspace: str = Field(default="", validation_alias="OPIK_WORKSPACE")
+    """The Opik workspace. Empty = the key's default workspace."""
+
+    opik_project_name: str = Field(
+        default="pakash", validation_alias="OPIK_PROJECT_NAME"
+    )
+    """The Opik project traces land in."""
+
+    opik_url: str = Field(default="", validation_alias="OPIK_URL_OVERRIDE")
+    """A self-hosted Opik's API. Empty = Comet's hosted Opik."""
+
     schedule_generation_mode: str = MODE_DAY
     """How wide one model call is when a period is built: `day` or `week`.
 

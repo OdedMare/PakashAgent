@@ -42,6 +42,7 @@ class FallbackAnswers:
         shifts = [
             row for row in state.get("shifts") or []
             if not date or row.get("date") == date
+            if not read.get("shift") or row.get("shift") == read["shift"]
         ]
         if not shifts:
             when = " ב-%s" % date if date else " בתקופה הזאת"

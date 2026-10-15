@@ -19,6 +19,7 @@ from app.common.errors.errors import NotFoundError
 from app.common.config.settings import Settings
 from app.common.logging_setup.logging_setup import configure_logging
 from app.common.runtime_settings.runtime_settings_store import RuntimeSettingsStore
+from app.dal.llm import tracing
 from app.dal.llm.openai_client import OpenAIJsonClient
 from app.dal.repository import Repository
 
@@ -102,6 +103,7 @@ class CopilotWorker:
 
 def _build():
     env = Settings()
+    tracing.init(env)
     store = RuntimeSettingsStore(env)
     repository = Repository(store)
     llm = OpenAIJsonClient(store)
@@ -131,6 +133,7 @@ def main() -> None:
         except Exception:
             _log.exception("worker connection failed; retrying")
         stopped.wait(_POLL_SECONDS)
+    tracing.flush()
     _log.info("copilot worker stopped")
 
 

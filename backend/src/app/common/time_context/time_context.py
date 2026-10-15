@@ -3,10 +3,7 @@
 import datetime
 from typing import Optional
 
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # Python 3.8 deployment target
-    from backports.zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo
 
 
 ISRAEL_TIMEZONE = "Asia/Jerusalem"

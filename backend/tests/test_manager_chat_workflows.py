@@ -221,11 +221,30 @@ def test_text_approval_preserves_exception_and_stale_state_guards():
 
 
 def test_sickness_requires_manager_candidate_selection_before_a_plan():
-    repo, _, service, chat_id, schedule_id = setup([sickness()])
+    repo, llm, service, chat_id, schedule_id = setup([sickness()])
     message = converse(service, repo, chat_id, schedule_id, "דנה חולה ביום שני, תמצא מחליף")
     assert message["status"] == "complete" and "plan" not in message["payload"]
     assert message["payload"]["results"][-1]["candidates"][0]["employee"] == "יוסי"
+    assert message["payload"]["task"]["constraints"][0]["employee"] == "דנה"
+    assert message["payload"]["_usage"] == {
+        "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "model_rounds": 0,
+    }
+    assert not llm.calls
     assert not repo.changes
+
+
+def test_candidate_selection_reuses_fast_lookup_context_and_returns_to_model_plan():
+    repo, llm, service, chat_id, schedule_id = setup([sickness()])
+    converse(service, repo, chat_id, schedule_id, "דנה חולה ביום שני, תמצא מחליף")
+    message = converse(service, repo, chat_id, schedule_id,
+                       "יוסי יחליף את דנה ביום שני", "selected-yossi")
+    conversation = json.loads(llm.calls[0]["user"])["conversation"]
+    task = next(row["context"]["task"] for row in conversation
+                if row["context"].get("task"))
+    assert task["constraints"][0]["employee"] == "דנה"
+    assert message["status"] == "pending"
+    assert message["payload"]["plan"]["operations"][1]["employee"] == "יוסי"
+    assert len(llm.calls) == 1
 
 
 def test_retirement_removes_future_work_across_periods_and_keeps_history():

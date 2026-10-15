@@ -1321,6 +1321,7 @@ export interface ManagerChatMessage {
     question?: { question: string; recommendation: string; why: string; options: { label: string; answer: string }[] } | null;
     steps?: { tool: string; ok: boolean }[];
     receipt?: { schedule_id: string; starts_on?: string; message: string };
+    _usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number; model_rounds: number };
   };
 }
 

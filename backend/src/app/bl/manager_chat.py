@@ -23,6 +23,8 @@ from app.bl.chat_lifecycle import future_schedules, prepare_retirement, prepare_
 from app.bl.chat_generation import prepare_generation
 from app.bl.chat_constraints import normalize_constraints, constraints_report, affected_periods, constraint_impact
 from app.bl.chat_management import management_state, prepare_management, apply_management
+from app.bl import intent as intent_reader
+from app.bl.planner.fallback_answers import FallbackAnswers
 from app.bl.planner.shaping import question
 from app.bl.placement.values import warning_key
 from app.bl.profile_service import ProfileService
@@ -31,6 +33,7 @@ from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.generation.history import AssignmentHistory
 from app.bl.schedule_service.operations import OperationApplier
 from app.bl.scheduler import Scheduler, build_slots
+from app.bl.scheduler.span_audit import add_usage, usage_of
 from app.bl.simulate.hypothetical import Hypothetical, schedule_rows
 from app.bl.tools import ScheduleTools, TOOL_DESCRIPTIONS
 from app.bl.tools.schedule_tools import _invalid_date_argument
@@ -114,11 +117,16 @@ def _fingerprint(value):
     return hashlib.sha256(_json(value).encode("utf-8")).hexdigest()
 
 
+def _turn_usage(usage, model_rounds):
+    return dict(usage, model_rounds=model_rounds)
+
+
 class ManagerChatService:
     def __init__(self, repository, llm, schedules):
         self._repo, self._llm, self._schedules = repository, llm, schedules
         self._context = ScheduleContext(repository)
         self._tools = ScheduleTools(repository)
+        self._fallback = FallbackAnswers(self._tools)
         self._profiles = ProfileService(repository)
         self._scheduler = Scheduler(llm)
         self._history = AssignmentHistory(repository)
@@ -156,6 +164,8 @@ class ManagerChatService:
 
     def reply(self, team_id, manager_id, chat_id, message_id):
         steps = []
+        usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        model_rounds = 0
         try:
             chat = self._repo.get_chat(team_id, manager_id, chat_id)
             message = next(row for row in chat["messages"] if row["id"] == message_id)
@@ -167,6 +177,16 @@ class ManagerChatService:
             profile = self._context.profile(team_id)
             # One clock for every round, so the rounds' prompts share a prefix.
             clock = agent_time_context()
+            conversation = self._conversation(chat, message_id)
+            request = next((row["content"] for row in reversed(conversation)
+                            if row["role"] == "user"), "")
+            fast_reply = self._replacement_lookup(team_id, request, context, schedule, profile)
+            if fast_reply:
+                reply, output = fast_reply
+                output["_usage"] = _turn_usage(usage, model_rounds)
+                self._repo.finish_chat_turn(chat_id, message_id, reply, "complete", output)
+                _log.info("chat usage rounds=0 prompt=0 completion=0 total=0")
+                return
             payload = {
                 "clock": clock, "profile": profile,
                 "profile_sections": PROFILE_SECTIONS,
@@ -179,23 +199,24 @@ class ManagerChatService:
                     team_id, starts_on=_availability_since(schedule))),
                 "preferences": self._context.active_preferences(team_id),
                 "history": self._repo.change_log(team_id, limit=12),
-                "conversation": self._conversation(chat, message_id),
+                "conversation": conversation,
                 "tools": dict(TOOL_DESCRIPTIONS, **_EXTRA_TOOLS),
             }
             results, steps = [], []
             plan, asked, repairs, task = None, "", 0, None
             reviewed = False
-            request = next((row["content"] for row in reversed(payload["conversation"])
-                            if row["role"] == "user"), "")
             payload["current_request"] = request
             for round_ in range(_ROUNDS):
                 final = round_ == _ROUNDS - 1
+                model_rounds += 1
                 turn = self._llm.complete_json(
                     load("manager_chat"), _model_input(payload, results, final),
                     schema=CHAT_SCHEMA, flow="planner", time_context=clock,
                 )
                 if not isinstance(turn, dict):
                     raise AgentError("הסוכן החזיר תשובה לא תקינה. אפשר לנסות שוב")
+                usage = add_usage(usage, usage_of(turn))
+                turn.pop("_usage", None)
                 calls = turn.get("tool_calls") or []
                 if calls and not final:
                     for call in calls[_MAX_CALLS:]:
@@ -258,7 +279,8 @@ class ManagerChatService:
                     continue
                 break
             output = {"steps": steps, "results": results,
-                      "question": None if asked or plan else question(turn.get("question"))}
+                      "question": None if asked or plan else question(turn.get("question")),
+                      "_usage": _turn_usage(usage, model_rounds)}
             if task:
                 output["task"] = task
             if plan:
@@ -276,11 +298,45 @@ class ManagerChatService:
                 chat_id, message_id, reply or "מה תרצה לבדוק בסידור?",
                 "pending" if plan else "complete", json.loads(_json(output)),
             )
+            _log.info("chat usage rounds=%d prompt=%d completion=%d total=%d",
+                      model_rounds, usage["prompt_tokens"], usage["completion_tokens"],
+                      usage["total_tokens"])
         except Exception as exc:
+            usage = add_usage(usage, getattr(exc, "usage", {}))
             _log.exception("chat reply failed chat=%s message=%s", chat_id, message_id)
             content = str(exc) if isinstance(exc, AppError) else \
                 "לא הצלחתי להשלים את הבקשה. לא בוצע שינוי בסידור; אפשר לנסות שוב"
-            self._repo.finish_chat_turn(chat_id, message_id, content, "error", {"steps": steps})
+            self._repo.finish_chat_turn(chat_id, message_id, content, "error", {
+                "steps": steps, "_usage": _turn_usage(usage, model_rounds),
+            })
+
+    def _replacement_lookup(self, team_id, request, context, schedule, profile):
+        """Answer one clear candidate lookup without paying for a model round."""
+        employees = [row.get("name") or "" for row in profile.get("employees") or []]
+        mentioned = {name for name in employees if name and name in request}
+        if len(mentioned) != 1:
+            return None
+        shifts = [row.get("name") or "" for row in profile.get("shifts") or []]
+        read = intent_reader.read(request, employees, shifts,
+                                  today=israel_today().isoformat(), period=schedule)
+        if read["intent"] not in (intent_reader.INTENT_REPLACEMENTS, intent_reader.INTENT_ABSENCE):
+            return None
+        if not read["date"]:
+            read = dict(read, date=context.get("focus_date") or "")
+        if not read["employee"] or not read["date"]:
+            return None
+        reply, steps, results, _ = self._fallback.replacements(team_id, read)
+        candidates = [row for row in results if row.get("tool") == "find_replacements"]
+        if not candidates or not any(row.get("candidates") for row in candidates):
+            return None
+        output = {"steps": steps, "results": results, "question": None}
+        if read["intent"] == intent_reader.INTENT_ABSENCE:
+            constraints = normalize_constraints([{
+                "employee": read["employee"], "date": read["date"], "shift": "",
+                "available": False, "reason": request,
+            }], profile, self._repo.availability(team_id))
+            output["task"] = {"request": request, "constraints": constraints}
+        return reply, output
 
     @staticmethod
     def _focus_arguments(name, arguments, schedule_id, context):

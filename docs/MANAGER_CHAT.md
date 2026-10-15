@@ -50,6 +50,14 @@ check that fails, such as an incomplete date range, comes back to the model as
 a fact. It does not end the turn. The seventh round may not ask for checks. It
 answers from what was found instead of failing.
 
+A clear request to find a replacement for one named employee on a resolved date
+uses the same deterministic availability, qualification and workload tools
+directly, without a model round. It only presents candidates and never writes.
+Selecting a candidate returns to the ordinary model-backed proposal, audit and
+approval flow. Ambiguous requests, explicit swaps and missing dates stay in that
+flow. Every saved assistant turn also records aggregate prompt, completion and
+total tokens plus the number of model rounds in `payload._usage`.
+
 A plan the server refuses, such as an unknown slot, a period that is already
 published, or a range outside the period, is handed back to the model as a
 `plan_check` result. The model gets two chances to correct it before the turn

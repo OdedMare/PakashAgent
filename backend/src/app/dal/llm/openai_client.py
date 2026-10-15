@@ -32,7 +32,7 @@ from openai import OpenAI
 
 from app.common.errors.errors import AgentError, ModelOutputError
 from app.common.time_context.time_context import agent_time_context
-from app.dal.llm import ladder
+from app.dal.llm import ladder, tracing
 from app.dal.llm.budgets import (  # noqa: F401  (re-exported for tests)
     budget_seconds as _budget_seconds,
     httpx_timeout,
@@ -110,7 +110,8 @@ class OpenAIJsonClient:
              "content": system.rstrip() + "\n\n" + (time_context or agent_time_context())},
             {"role": "user", "content": user},
         ]
-        return self._until_json(call, messages, schema, flow, started)
+        with tracing.call(flow, call.role, call.model):
+            return self._until_json(call, messages, schema, flow, started)
 
     def _connect(self, flow: str, role: str, model: str) -> _Call:
         try:
@@ -205,9 +206,9 @@ class OpenAIJsonClient:
         """
         cache_key = (api_key, base_url, timeout)
         if cache_key not in self._cached_clients:
-            self._cached_clients[cache_key] = OpenAI(
+            self._cached_clients[cache_key] = tracing.wrap(OpenAI(
                 api_key=api_key or _LOCAL_SERVER_KEY_PLACEHOLDER,
                 base_url=base_url or None,
                 timeout=httpx_timeout(timeout),
-            )
+            ))
         return self._cached_clients[cache_key]

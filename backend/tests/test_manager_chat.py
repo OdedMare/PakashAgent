@@ -138,6 +138,20 @@ def sickness():
     return result
 
 
+def test_chat_accumulates_usage_across_model_rounds():
+    lookup = turn()
+    lookup["tool_calls"] = [{"tool": "list_periods", "arguments": {}}]
+    lookup["_usage"] = {"prompt_tokens": 10, "completion_tokens": 3, "total_tokens": 13}
+    answer = turn()
+    answer["_usage"] = {"prompt_tokens": 20, "completion_tokens": 5, "total_tokens": 25}
+    repo, llm, service, chat_id, schedule_id = setup([lookup, answer])
+    message = converse(service, repo, chat_id, schedule_id, "אילו סידורים שמורים?", "usage")
+    assert message["payload"]["_usage"] == {
+        "prompt_tokens": 30, "completion_tokens": 8, "total_tokens": 38, "model_rounds": 2,
+    }
+    assert len(llm.calls) == 2
+
+
 def test_sickness_preview_writes_nothing_then_click_applies_plan_and_absence_once():
     repo, llm, service, chat_id, schedule_id = setup([sickness()])
     message = converse(service, repo, chat_id, schedule_id)
