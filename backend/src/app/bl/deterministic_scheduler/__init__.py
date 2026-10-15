@@ -45,7 +45,7 @@ def generate_day(
         slots = [slot for slot in slots if slot["shift_name"] in wanted]
     if not slots:
         return _result(day, started, [], [], [])
-    plan = DayPlan(profile, day, slots, availability, already_scheduled)
+    plan = DayPlan(profile, day, slots, availability, already_scheduled, history)
     plan.pin(required_assignments)
     plan.fill(history)
     return _result(day, started, plan.slots, plan.final(), plan.notes, plan.warnings())

@@ -23,7 +23,8 @@ _BLOCKING_CODES = frozenset({
 
 
 class DayPlan:
-    def __init__(self, profile: dict, day: str, slots: List[dict], availability, already_scheduled):
+    def __init__(self, profile: dict, day: str, slots: List[dict], availability,
+                 already_scheduled, history=None):
         self.profile, self.day, self.slots = profile, day, slots
         self.employees = employees(profile)
         self.people = {text(row.get("name")): row for row in self.employees}
@@ -32,6 +33,9 @@ class DayPlan:
         self.availability = effective_availability(profile, availability, day, day)
         self.slot_keys = {(slot["shift_name"], slot["slot_date"]) for slot in slots}
         committed = [row for row in map(assignment, already_scheduled or []) if row]
+        target = datetime.date.fromisoformat(day)
+        self.context = [row for row in map(assignment, history or []) if row and
+                        _near(row["date"], target)]
         # A targeted shift rebuild preserves the other shifts on the same date.
         self.current = [row for row in committed if not self._in_plan(row)]
         self.loads = {}
@@ -178,7 +182,7 @@ class DayPlan:
 
     def _introduces_blocking(self, row: dict) -> bool:
         warnings = audit(
-            self.current + [row], self.shifts, self.employees, self.availability,
+            self.context + self.current + [row], self.shifts, self.employees, self.availability,
             self.profile, self.slots,
         )
         return any(
@@ -244,7 +248,7 @@ class DayPlan:
     def warnings(self) -> List[dict]:
         return [
             row for row in audit(
-                self.current, self.shifts, self.employees, self.availability,
+                self.context + self.current, self.shifts, self.employees, self.availability,
                 self.profile, self.slots,
             )
             if row.get("date") in (None, "", self.day)
@@ -260,3 +264,10 @@ def _cycle(profile: dict, group: str) -> str:
         return "triplet"
     mode = text(((profile or {}).get("workplace") or {}).get("rotation_mode"))
     return mode if mode in ("round", "triplet") else "round"
+
+
+def _near(value: str, target: datetime.date) -> bool:
+    try:
+        return abs((datetime.date.fromisoformat(value) - target).days) <= 1
+    except ValueError:
+        return False

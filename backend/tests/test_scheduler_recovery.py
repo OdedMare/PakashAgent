@@ -91,6 +91,22 @@ def test_repair_that_fills_tuesday_but_breaks_wednesday_rest_is_discarded():
     assert not any(item["code"] == "short_rest" for item in result["warnings"])
 
 
+def test_generated_row_with_too_little_rest_is_never_saved_after_a_bad_repair():
+    profile = dict(_week_profile(), employees=[{"name": "דנה"}], shifts=[
+        dict(PROFILE["shifts"][0], days=["רביעי"]),
+        dict(PROFILE["shifts"][0], name="לילה", start_time="23:00", end_time="07:00",
+             days=["שלישי"]),
+    ])
+    invalid = [assignment("2026-10-06", shift="לילה"), assignment("2026-10-07")]
+    model = Model([_reply(invalid), _reply([assignment("2026-10-07")])])
+
+    result = Scheduler(model).generate_span(profile, "2026-10-06", "2026-10-07")
+
+    assert result["assignments"] == [assignment("2026-10-06", shift="לילה")]
+    assert not any(item["code"] == "short_rest" for item in result["warnings"])
+    assert result["metrics"]["rejected"] == 2
+
+
 def test_repair_cannot_buy_coverage_with_new_or_worse_weekly_hour_violations():
     profile = dict(_week_profile(), employees=[
         {"name": "דנה", "max_weekly_hours": 8}, {"name": "יוסי"},

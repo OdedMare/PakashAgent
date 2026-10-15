@@ -160,3 +160,24 @@ def test_equal_load_is_spread_with_a_day_off_between_assignments():
     result = generate_day(profile, "2026-08-31", history=history)
 
     assert [row["employee"] for row in result["assignments"]] == ["בני"]
+
+
+def test_previous_period_night_protects_eight_hours_of_rest():
+    profile = {
+        "workplace": {"name": "יחידה"},
+        "employees": [{"name": "אבי"}],
+        "shifts": [
+            {"name": SHIFT, "start_time": "07:00", "end_time": "15:00", "days": [],
+             "staffing": [{"days": [], "headcount": 1, "required_roles": []}]},
+            {"name": "לילה", "start_time": "23:00", "end_time": "07:00", "days": [],
+             "staffing": [{"days": [], "headcount": 1, "required_roles": []}]},
+        ],
+    }
+
+    result = generate_day(
+        profile, "2026-08-31", shift_names=[SHIFT],
+        history=[{"employee": "אבי", "shift": "לילה", "date": "2026-08-30"}],
+    )
+
+    assert result["assignments"] == []
+    assert "נשארה בחוסר" in result["notes"][0]
