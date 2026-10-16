@@ -2,22 +2,13 @@
 
 import datetime
 import re
-from typing import Any, Optional
+from typing import Optional
 
 from app.bl.intent.vocabulary import WEEKDAYS
+from app.bl.shared import iso as _iso, text as _text
 from app.common.time_context import israel_today
 
 _RELATIVE = (("מחרתיים", 2), ("מחר", 1), ("אתמול", -1), ("היום", 0))
-
-
-def _text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
-
-
-def _iso(value: Any) -> str:
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    return _text(value)
 
 
 def parse(value: Optional[str]) -> Optional[datetime.date]:

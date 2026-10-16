@@ -5,7 +5,6 @@ under a separate, private, atomic approval. Background replies are read-only.
 """
 
 import datetime
-import hashlib
 import json
 import logging
 
@@ -18,6 +17,7 @@ from app.bl.chat_contract import (
     NeedsManager as _NeedsManager, RejectedPlan as _Rejected,
     approval_text, add_coverage, audit_plan, exception_warnings, whole_day_request, normalize_day_turn,
     normalize_week_turn, draft_schedule_ids, confirmation_question,
+    fingerprint,
 )
 from app.bl.chat_lifecycle import future_schedules, prepare_retirement, prepare_structure
 from app.bl.chat_generation import prepare_generation
@@ -111,10 +111,6 @@ def _plan_for_model(plan, whole):
                 operations=len(shown.get("operations") or []),
                 constraints=len(shown.get("constraints") or []),
                 generated_assignments=len((shown.get("generated") or {}).get("assignments") or []))
-
-
-def _fingerprint(value):
-    return hashlib.sha256(_json(value).encode("utf-8")).hexdigest()
 
 
 def _turn_usage(usage, model_rounds):
@@ -524,14 +520,14 @@ class ManagerChatService:
             "kind": kind, "schedule_id": schedule_id,
             "agent_reason": (turn.get("agent_reason") or turn.get("reply") or "").strip(),
             "reason": (turn.get("stated_reason") or request).strip(),
-            "snapshot": _fingerprint(state), "operations": [], "constraints": [],
+            "snapshot": fingerprint(state), "operations": [], "constraints": [],
             "warnings": [], "exceptions": (turn.get("exceptions") or [])[:20],
         }
         if schedule and kind != "profile":
             plan.update(starts_on=iso(schedule["starts_on"]), ends_on=iso(schedule["ends_on"]))
         if kind == "manage":
             state["management"] = prepare_management(self._repo, team_id, turn, plan, state, request)
-            plan["snapshot"] = _fingerprint(state)
+            plan["snapshot"] = fingerprint(state)
             return plan
         if kind == "blank":
             try:
@@ -561,7 +557,7 @@ class ManagerChatService:
         if kind == "retire":
             periods = prepare_retirement(self._repo, self._profiles, team_id, turn, plan, state)
             state = dict(state, future_schedules=periods)
-            plan["snapshot"] = _fingerprint(state)
+            plan["snapshot"] = fingerprint(state)
             plan["draft_schedule_ids"] = draft_schedule_ids(plan, state)
             return plan
         if kind == "restructure":
@@ -655,7 +651,7 @@ class ManagerChatService:
                     plan["constraint_feedback"], impact = constraint_impact(profile, projected, state["availability"], plan["constraints"])
                     known = {warning_key(row) for row in plan["warnings"]}
                     plan["warnings"].extend(row for row in impact if warning_key(row) not in known)
-                    plan["snapshot"] = _fingerprint(state)
+                    plan["snapshot"] = fingerprint(state)
             elif kind == "clear":
                 plan["operations"] = [dict(action="remove", employee=row["employee"],
                                            date=iso(row["date"]), shift=row["shift"],
@@ -694,7 +690,7 @@ class ManagerChatService:
                 state["management"] = management_state(self._repo, team_id, plan["management_operations"])
             elif plan.get("constraints"):
                 state["constraint_periods"] = affected_periods(self._repo, team_id, plan["constraints"])
-            if _fingerprint(state) != plan.get("snapshot"):
+            if fingerprint(state) != plan.get("snapshot"):
                 raise ConflictError("הסידור או כללי הצוות השתנו מאז ההמלצה. בקשו תוכנית מעודכנת")
             if (exception_warnings(plan) or plan.get("exceptions")) and not accept_exceptions:
                 raise ConflictError("יש לאשר במפורש את החריגות המוצגות בתוכנית")

@@ -1,19 +1,10 @@
 """Reading the stored schedule and the roster the way the placement checks do."""
 
 import datetime
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from app.bl.audit.stats import shift_stats
-
-
-def text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
-
-
-def iso(value: Any) -> str:
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    return text(value)
+from app.bl.shared import employees, iso, shifts, text
 
 
 def parse(value: str) -> Optional[datetime.date]:
@@ -26,16 +17,6 @@ def parse(value: str) -> Optional[datetime.date]:
 def pretty(hours: float) -> str:
     """A round number without its trailing zero. 8.0 reads as 8."""
     return "%g" % round(hours, 1)
-
-
-def employees(profile: dict) -> List[dict]:
-    rows = (profile or {}).get("employees")
-    return [row for row in rows or [] if isinstance(row, dict)]
-
-
-def shifts(profile: dict) -> List[dict]:
-    rows = (profile or {}).get("shifts")
-    return [row for row in rows or [] if isinstance(row, dict)]
 
 
 def rows(schedule: dict, drop: str = "") -> List[dict]:

@@ -2,18 +2,8 @@
 
 from typing import List, Optional
 
-from app.bl.shared import iso, number, text
+from app.bl.shared import employees, iso, number, shifts, text
 from app.common.time_context import israel_today
-
-
-def employees(profile: dict) -> List[dict]:
-    rows = (profile or {}).get("employees")
-    return [row for row in rows or [] if isinstance(row, dict)]
-
-
-def shifts(profile: dict) -> List[dict]:
-    rows = (profile or {}).get("shifts")
-    return [row for row in rows or [] if isinstance(row, dict)]
 
 
 def eligible(person: dict) -> List[str]:

@@ -44,12 +44,6 @@ def _insert_all(connection, team_id: str, schedule_id: str, assignments: List[di
         ))
 
 
-def _touch(connection, schedule_id: str) -> None:
-    connection.execute(
-        "UPDATE schedules SET updated_at=NOW() WHERE id=%s", (schedule_id,),
-    )
-
-
 class AssignmentRepository(RepositoryBase):
     def assignments(self, schedule_id: str, team_id: str) -> List[dict]:
         """Every assignment, joined to the slot that gives it a date.
@@ -80,7 +74,7 @@ class AssignmentRepository(RepositoryBase):
                 (schedule_id, team_id),
             )
             _insert_all(connection, team_id, schedule_id, assignments)
-            _touch(connection, schedule_id)
+            self._touch_schedule(connection, schedule_id)
             connection.commit()
         return self.assignments(schedule_id, team_id)
 
@@ -110,7 +104,7 @@ class AssignmentRepository(RepositoryBase):
                 )
             """, (schedule_id, team_id, schedule_id, wanted))
             _insert_all(connection, team_id, schedule_id, assignments)
-            _touch(connection, schedule_id)
+            self._touch_schedule(connection, schedule_id)
             connection.commit()
         return self.assignments(schedule_id, team_id)
 
@@ -137,7 +131,7 @@ class AssignmentRepository(RepositoryBase):
                 slot_id, employee or row["employee"], reason.strip(),
                 assignment_id, team_id,
             ))
-            _touch(connection, row["schedule_id"])
+            self._touch_schedule(connection, row["schedule_id"])
             connection.commit()
         return self._one(
             _ROW_WITH_SLOT.format(extra=", a.schedule_id")

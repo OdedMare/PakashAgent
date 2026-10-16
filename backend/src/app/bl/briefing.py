@@ -31,7 +31,7 @@ import json
 from typing import Any, List, Optional
 
 from app.bl.prompts import load
-from app.bl.shared import profile_for_model as _profile_for_model
+from app.bl.shared import dict_rows as _rows, profile_for_model as _profile_for_model
 from app.common.errors import AgentError
 
 _MAX_TEXT_CHARS = 4000
@@ -260,12 +260,6 @@ def _readiness_for_model(readiness: Optional[dict]) -> dict:
             _bounded(line) for line in readiness.get("blockers") or []
         ][:6],
     }
-
-
-def _rows(rows: Any, limit: int = 200) -> List[dict]:
-    if not isinstance(rows, list):
-        return []
-    return [row for row in rows if isinstance(row, dict)][-limit:]
 
 
 def _date(value: Any) -> str:

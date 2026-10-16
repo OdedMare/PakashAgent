@@ -32,7 +32,7 @@ import datetime
 import io
 from typing import Any, Dict, List, Optional
 
-from app.bl.shared import hebrew_weekday
+from app.bl.shared import hebrew_weekday, text as _text
 from app.common.errors import AgentError
 
 # A slot nobody is on. Said out loud rather than left blank: an empty cell in
@@ -238,10 +238,6 @@ def _iso(value: Any) -> str:
     if hasattr(value, "isoformat"):
         return value.isoformat()[:10]
     return _text(value)[:10]
-
-
-def _text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
 
 
 __all__ = ["as_workbook", "filename", "UNFILLED"]

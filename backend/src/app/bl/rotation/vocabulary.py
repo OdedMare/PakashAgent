@@ -3,6 +3,8 @@
 import datetime
 from typing import Any, List, Optional
 
+from app.bl.shared import text
+
 # Group orders per cycle length. Hebrew letters are data here, matching how
 # setup collects them and `profile_service` validates them.
 ROUND_GROUPS = ("א", "ב")
@@ -29,10 +31,6 @@ HANDOVER_TAIL_DAYS = 1
 
 # `datetime.date.weekday()` numbering: Monday is 0, so Saturday is 5.
 _SATURDAY = 5
-
-
-def text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
 
 
 def parse_date(value: Any) -> Optional[datetime.date]:

@@ -1,9 +1,12 @@
 """Small, deterministic conversation contracts shared by proposals and approvals."""
 
 import datetime
+import hashlib
+import json
 import re
 
 from app.bl.audit import audit
+from app.bl.changes.values import json_default
 from app.bl.placement.values import is_eligible
 from app.bl.scheduler.availability import effective_availability
 from app.bl.audit.staffing_rules import required_headcount, seat_counts
@@ -13,6 +16,13 @@ from app.common.time_context import israel_today
 from app.common.errors import AgentError
 
 GAP_CODES = frozenset({"unfilled", "missing_role", "missing_commander"})
+
+
+def fingerprint(value) -> str:
+    encoded = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, default=json_default,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 class RejectedPlan(AgentError):

@@ -3,25 +3,11 @@
 from typing import Any, List, Optional
 
 from app.bl.planner.schema import MAX_CALLS_PER_TURN, MAX_OPTIONS
+from app.bl.shared import bounded, iso, text
 from app.bl.tools import TOOL_NAMES
 
-MAX_TEXT_CHARS = 4000
 _MAX_OPTION_LABEL_CHARS = 120
 _MAX_PREFERENCES = 40
-
-
-def text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
-
-
-def bounded(value: Any, limit: int = MAX_TEXT_CHARS) -> str:
-    return value.strip()[:limit] if isinstance(value, str) else ""
-
-
-def iso(value: Any) -> str:
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    return text(value)
 
 
 def pretty(hours: Any) -> str:

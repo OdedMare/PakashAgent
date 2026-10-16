@@ -136,7 +136,7 @@ class PeriodRepository(RepositoryBase):
                     ON CONFLICT (schedule_id, shift_name, slot_date)
                     DO NOTHING
                 """, _slot_values(team_id, schedule_id, slot))
-            _touch(connection, schedule_id)
+            self._touch_schedule(connection, schedule_id)
             connection.commit()
         return self.slots(schedule_id, team_id)
 
@@ -161,7 +161,7 @@ class PeriodRepository(RepositoryBase):
                         start_time,end_time,headcount,required_roles,requires_shift_manager,is_on_call)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, _slot_values(team_id, schedule_id, slot))
-            _touch(connection, schedule_id)
+            self._touch_schedule(connection, schedule_id)
             connection.commit()
         return self.slots(schedule_id, team_id)
 
@@ -197,10 +197,4 @@ def _slot_values(team_id: str, schedule_id: str, slot: dict) -> tuple:
         Jsonb(slot.get("required_roles") or []),
         bool(slot.get("requires_shift_manager", False)),
         bool(slot.get("is_on_call", False)),
-    )
-
-
-def _touch(connection, schedule_id: str) -> None:
-    connection.execute(
-        "UPDATE schedules SET updated_at=NOW() WHERE id=%s", (schedule_id,),
     )

@@ -6,18 +6,9 @@ is what lets each collaborator share one spelling of "a date as a string" or
 """
 
 import datetime
-from typing import Any, List, Optional
+from typing import List, Optional
 
-
-def iso(value: Any) -> str:
-    """Dates arrive as `datetime.date` from SQL and as strings from the model."""
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    return value.strip() if isinstance(value, str) else ""
-
-
-def text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
+from app.bl.shared import iso, text
 
 
 def now_stamp() -> str:

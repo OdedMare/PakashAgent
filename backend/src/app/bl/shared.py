@@ -15,8 +15,8 @@ def text(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-def bounded(value: Any) -> str:
-    return text(value)[:_MAX_TEXT_CHARS]
+def bounded(value: Any, limit: int = _MAX_TEXT_CHARS) -> str:
+    return text(value)[:limit]
 
 
 def iso(value: Any) -> str:
@@ -27,6 +27,24 @@ def number(value: Any, fallback: float) -> float:
     if isinstance(value, bool):
         return fallback
     return float(value) if isinstance(value, (int, float)) else fallback
+
+
+def dict_items(rows: Any) -> list[dict]:
+    if not isinstance(rows, list):
+        return []
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def dict_rows(rows: Any, limit: int = 200) -> list[dict]:
+    return dict_items(rows)[-limit:]
+
+
+def employees(profile: dict) -> list[dict]:
+    return dict_items((profile or {}).get("employees"))
+
+
+def shifts(profile: dict) -> list[dict]:
+    return dict_items((profile or {}).get("shifts"))
 
 
 def resume(pending: str, reply: str) -> str:

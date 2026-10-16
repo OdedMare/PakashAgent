@@ -40,3 +40,9 @@ class RepositoryBase:
         with connect(self._store) as connection:
             connection.execute(query, params)
             connection.commit()
+
+    @staticmethod
+    def _touch_schedule(connection, schedule_id: str) -> None:
+        connection.execute(
+            "UPDATE schedules SET updated_at=NOW() WHERE id=%s", (schedule_id,),
+        )
