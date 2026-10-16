@@ -31,7 +31,7 @@ from app.bl.scheduler.availability import effective_availability
 from app.bl.scheduler.payload import SCHEDULE_RESPONSE_SCHEMA
 from app.bl.scheduler.scheduler import Scheduler
 from app.bl.scheduler.slots import build_slots, plan_spans
-from app.common.config.settings import GENERATION_MODES, MODE_DAY, MODE_WEEK
+from app.common.config import GENERATION_MODES, MODE_DAY, MODE_WEEK
 
 __all__ = [
     "Scheduler", "SCHEDULE_RESPONSE_SCHEMA", "build_slots",

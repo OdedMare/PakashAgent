@@ -1,17 +1,10 @@
 """Measuring what a hypothetical change would move. Counts, not judgments."""
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from app.bl.audit import counts_toward_staffing
+from app.bl.shared import number
 from app.bl.simulate.hypothetical import iso, text
-
-
-def _number(value: Any, fallback: float) -> float:
-    if isinstance(value, bool):
-        return fallback
-    if isinstance(value, (int, float)):
-        return float(value)
-    return fallback
 
 
 def _percent(part: int, whole: int) -> int:
@@ -48,7 +41,7 @@ def coverage(
         for person in employees or []
         if isinstance(person, dict) and text(person.get("name"))
     }
-    required = sum(int(_number(slot.get("headcount"), 1)) for slot in slots)
+    required = sum(int(number(slot.get("headcount"), 1)) for slot in slots)
 
     def filled(rows: List[dict]) -> int:
         counts: Dict[tuple, int] = {}
@@ -58,7 +51,7 @@ def coverage(
                 counts[key] = counts.get(key, 0) + 1
         return sum(
             min(counts.get((text(slot.get("shift_name")), iso(slot.get("slot_date"))), 0),
-                int(_number(slot.get("headcount"), 1)))
+                int(number(slot.get("headcount"), 1)))
             for slot in slots
         )
 

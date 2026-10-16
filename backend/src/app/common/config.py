@@ -1,4 +1,4 @@
-"""Environment defaults; UI overrides are applied by RuntimeSettingsStore."""
+"""Environment defaults; RuntimeSettingsStore applies UI overrides."""
 
 from typing import Optional
 

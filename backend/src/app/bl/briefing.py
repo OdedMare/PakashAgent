@@ -1,4 +1,4 @@
-"""The agent speaking first — what it noticed, without being asked.
+"""The agent speaking first: what it noticed without being asked.
 
 Every other model call in this package answers something the manager said.
 This one is the agent's own turn: it reads the current state, the audit's
@@ -31,6 +31,7 @@ import json
 from typing import Any, List, Optional
 
 from app.bl.prompts import load
+from app.bl.shared import profile_for_model as _profile_for_model
 from app.common.errors import AgentError
 
 _MAX_TEXT_CHARS = 4000
@@ -202,21 +203,6 @@ def _trigger(value: Any) -> str:
     """
     text = _bounded(value)
     return text if text in _TRIGGERS else TRIGGER_OPENED
-
-
-def _profile_for_model(profile: dict) -> dict:
-    profile = profile if isinstance(profile, dict) else {}
-    return {
-        "workplace": profile.get("workplace") or {},
-        "employees": profile.get("employees") or [],
-        "shifts": profile.get("shifts") or [],
-        "rules": profile.get("rules") or [],
-        "rest_policy": profile.get("rest_policy") or "",
-        "fairness_policy": profile.get("fairness_policy") or "",
-        "conflict_policy": profile.get("conflict_policy") or "",
-    }
-
-
 def _schedule_for_model(schedule: Optional[dict]) -> Optional[dict]:
     """The period as the model reads it, or None when none has been built.
 

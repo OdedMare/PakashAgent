@@ -23,7 +23,7 @@ from app.bl.schedule_service.constants import (
     SUMMARY_LIMIT,
 )
 from app.bl.schedule_service.rows import iso, now_stamp, text
-from app.common.config.settings import ENGINE_AI
+from app.common.config import ENGINE_AI
 
 # A span the worker may still take: never started, interrupted, or failed.
 _TAKEABLE = (GENERATION_FAILED, GENERATION_RUNNING, GENERATION_PENDING)

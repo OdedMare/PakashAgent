@@ -7,20 +7,20 @@ import secrets
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from app.api.dependencies.dependencies import Guards
+from app.api.dependencies import Guards
 from app.api.routers import (
     admin, copilot, employee, health, profile, schedules, settings,
     workspace,
 )
 from app.bl.admin_service import AdminService
-from app.bl.copilot.copilot import CopilotService
+from app.bl.copilot import CopilotService
 from app.bl.employee_service import EmployeeService
 from app.bl.profile_service import ProfileService
 from app.bl.schedule_service import ScheduleService
-from app.bl.workspace_service.service import WorkspaceService
+from app.bl.workspace_service import WorkspaceService
 from app.bl.manager_chat import ManagerChatService
 from app.api.routers import manager_chat
-from app.common.config.settings import Settings
+from app.common.config import Settings
 from app.common.errors import AppError, error_payload
 from app.common.events import TeamEvents
 from app.common.logging_setup import configure_logging
@@ -29,7 +29,7 @@ from app.common.throttle import LoginThrottle
 from app.common.runtime_settings.runtime_settings_store import (
     RuntimeSettingsStore,
 )
-from app.dal.database.postgres import close_pool
+from app.dal.database import close_pool
 from app.dal.llm import tracing
 from app.dal.llm.openai_client import OpenAIJsonClient
 from app.dal.repository import Repository

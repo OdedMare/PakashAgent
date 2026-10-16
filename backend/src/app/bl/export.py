@@ -1,4 +1,4 @@
-"""Handing a finished schedule back as a file.
+"""Export a finished schedule as a file.
 
 The other half of [D6](../../../docs/DECISIONS.md#d6--the-boss-can-author-or-generate):
 the product absorbs a schedule the manager already had, so it must also give
@@ -32,7 +32,7 @@ import datetime
 import io
 from typing import Any, Dict, List, Optional
 
-from app.bl.shared.hebrew_calendar import hebrew_weekday
+from app.bl.shared import hebrew_weekday
 from app.common.errors import AgentError
 
 # A slot nobody is on. Said out loud rather than left blank: an empty cell in

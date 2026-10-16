@@ -8,7 +8,7 @@ import uuid
 from typing import List
 
 from app.common.errors import NotFoundError
-from app.dal.database.postgres import connect
+from app.dal.database import connect
 
 
 def new_id() -> str:

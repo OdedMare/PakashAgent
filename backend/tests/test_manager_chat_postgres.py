@@ -11,8 +11,8 @@ from psycopg import sql
 
 from app.bl.manager_chat import ManagerChatService
 from app.bl.schedule_service import ScheduleService
-from app.common.config.settings import Settings
-from app.dal.database import postgres
+from app.common.config import Settings
+from app.dal import database as postgres
 from app.dal.repository import Repository
 from tests.test_schedule_api import _ScriptedLlm, PROFILE, MORNING
 from tests.test_manager_chat import sickness, turn

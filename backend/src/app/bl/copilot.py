@@ -1,4 +1,4 @@
-"""The durable copilot's deterministic observation and action boundary."""
+"""Durable copilot observation and action boundary."""
 
 import datetime
 from typing import List, Optional

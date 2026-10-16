@@ -22,7 +22,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from app.api.dependencies.dependencies import Guards
+from app.api.dependencies import Guards
 from app.api.routers import employee as employee_router
 from app.bl.employee_service import EmployeeService
 from app.common.errors import (

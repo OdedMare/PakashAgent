@@ -8,7 +8,7 @@ so every write path here refuses one.
 from typing import List, Optional
 
 from app.common.errors import AgentError, NotFoundError
-from app.dal.database.postgres import connect
+from app.dal.database import connect
 from app.dal.repository.base import RepositoryBase, new_id
 from app.dal.repository.schedule_vocabulary import (
     ASSIGNED_BY_AGENT, ASSIGNMENT_SOURCES,

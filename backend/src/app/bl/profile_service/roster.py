@@ -4,7 +4,7 @@ import datetime
 from typing import Any, List
 
 from app.bl.profile_service.validation import named_rows, text, text_list, valid_time
-from app.bl.shared.hebrew_calendar import HEBREW_WEEKDAYS, weekday_key
+from app.bl.shared import HEBREW_WEEKDAYS, weekday_key
 from app.common.errors import AgentError
 
 _SERVICE_TYPES = ("standard", "overlap", "reserve")

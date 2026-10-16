@@ -16,7 +16,7 @@ import datetime
 from typing import Any, Dict, List, Optional
 
 from app.common.errors import NotFoundError
-from app.dal.database.postgres import connect
+from app.dal.database import connect
 from app.dal.repository.base import RepositoryBase
 
 # The columns of `teams` the console may see. Not the hash, ever; the member
