@@ -1,10 +1,4 @@
-"""The checkpoint document of one range build, and its state transitions.
-
-Stored on the schedule as `generation` and read back by the browser's poll.
-Every transition the worker makes -- start a span, finish it, fail it, stop,
-requeue -- is a method here, so the counters (`completed_days`,
-`failed_days`) are recomputed in one place instead of at every call site.
-"""
+"""The checkpoint document and state transitions of one range build."""
 
 import datetime
 from typing import List, Optional
@@ -113,8 +107,6 @@ class GenerationJob:
             ],
         })
 
-    # -- reading -------------------------------------------------------------
-
     def get(self, key: str, default=None):
         return self._document.get(key, default)
 
@@ -161,8 +153,6 @@ class GenerationJob:
         document = dict(self._document)
         document["days"] = self.days
         return document
-
-    # -- transitions ---------------------------------------------------------
 
     def resume(self) -> None:
         """Back to running, with the stop flag cleared."""

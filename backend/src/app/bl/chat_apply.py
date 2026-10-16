@@ -47,7 +47,7 @@ class ChatPlanApplier:
         return self._repo.get_chat(team_id, manager_id, chat_id)
 
     def _validate(self, team_id, plan, accept_exceptions):
-        state = self._state(team_id, plan.get("schedule_id") or "")
+        state = self._context.snapshot(team_id, plan.get("schedule_id") or "")
         if plan.get("kind") == "retire":
             state["future_schedules"] = future_schedules(
                 self._repo, team_id, plan["effective_date"],
@@ -66,15 +66,6 @@ class ChatPlanApplier:
             )
         if (exception_warnings(plan) or plan.get("exceptions")) and not accept_exceptions:
             raise ConflictError("יש לאשר במפורש את החריגות המוצגות בתוכנית")
-
-    def _state(self, team_id, schedule_id):
-        return {
-            "profile": self._context.profile(team_id),
-            "availability": self._repo.availability(team_id),
-            "preferences": self._context.active_preferences(team_id),
-            "schedule": self._repo.get_schedule(schedule_id, team_id) if schedule_id else None,
-            "periods": self._repo.list_schedules(team_id) if not schedule_id else [],
-        }
 
     @staticmethod
     def _reasons(plan, message):

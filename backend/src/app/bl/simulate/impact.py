@@ -11,20 +11,6 @@ def _percent(part: int, whole: int) -> int:
     return 100 if whole <= 0 else int(round(100.0 * part / whole))
 
 
-def warning_key(warning: dict) -> tuple:
-    """What makes two warnings the same warning.
-
-    The message carries running totals, so diffing on it would report a
-    warning that merely got worse as a warning that is new.
-    """
-    return (
-        text(warning.get("code")),
-        text(warning.get("employee")),
-        iso(warning.get("date")),
-        text(warning.get("shift")),
-    )
-
-
 def coverage(
     before: List[dict], after: List[dict], slots: List[dict],
     employees: Optional[List[dict]] = None, profile: Optional[dict] = None,

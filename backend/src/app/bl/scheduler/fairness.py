@@ -31,6 +31,50 @@ def load_cost(span, roster, history=None):
     ))
 
 
+def _choices(span):
+    counting = {item["id"] for item in span.candidates["employees"]
+                if item["counts_toward_staffing"]}
+    return {(slot["slot_date"], slot["shift_name"]):
+            [span.candidates["name_by_id"][eid]
+             for eid in span.candidates["by_slot"][slot_id(index)] if eid in counting]
+            for index, slot in enumerate(span.slots, 1)}
+
+
+def _exchange_day(span, roster, trial, name, other, choices, pins, row_info, baseline):
+    for index, swap in enumerate(roster):
+        key = swap.get("date"), swap.get("shift")
+        if swap.get("employee") != other or name not in choices.get(key, []):
+            continue
+        if (other, *key) in pins or row_info[(other, *key)]["is_night"]:
+            continue
+        exchanged = list(trial)
+        exchanged[index] = dict(swap, employee=name)
+        if no_worse(baseline, span.audit(exchanged)):
+            return exchanged, True
+    return trial, False
+
+
+def _finding(code, name, other, row, loads, recent):
+    if code == "uneven_nights":
+        message = ("פער לילות שניתן לצמצם: %s עם %d לילות ו-%s עם %d לילות בתקופה "
+                   "(%d ו-%d כולל היסטוריה). פזר את הלילות למינימום האפשרי לכל עובד; "
+                   "אפשר להחליף משמרת יום ולילה תוך שמירה על כיסוי, מנוחה ושיבוצי חובה."
+                   % (name, loads[name]["nights"], other, loads[other]["nights"],
+                      recent[name]["nights"], recent[other]["nights"]))
+        details = {"period_nights": loads[name]["nights"],
+                   "alternative_nights": loads[other]["nights"]}
+    else:
+        message = ("פער עומס שניתן לצמצם: %s עם %g שעות ו-%s עם %g שעות בתקופה. "
+                   "אזן את שעות התקופה; מותר להשאיר כמה ימי מנוחה רצופים."
+                   % (name, loads[name]["hours"], other, loads[other]["hours"]))
+        details = {"period_hours": loads[name]["hours"],
+                   "alternative_hours": loads[other]["hours"]}
+    details["alternative_employee"] = other
+    return [{"code": code, "severity": "notice", "date": "",
+             "employee": name, "shift": row["shift"],
+             "message": message, "details": details}]
+
+
 def uneven_load(span, roster, baseline, history=None):
     """One finding suffices to request a complete, balanced span once.
 
@@ -44,17 +88,10 @@ def uneven_load(span, roster, baseline, history=None):
     recent = {item["employee"]: item for item in night_load(span, roster, history)}
     original_cost = load_cost(span, roster, history)
     pins = {(row["employee"], row["date"], row["shift"]) for row in span.required}
-    counting = {item["id"] for item in span.candidates["employees"]
-                if item["counts_toward_staffing"]}
-    choices = {(slot["slot_date"], slot["shift_name"]):
-               [span.candidates["name_by_id"][eid]
-                for eid in span.candidates["by_slot"][slot_id(index)] if eid in counting]
-               for index, slot in enumerate(span.slots, 1)}
+    choices = _choices(span)
     row_info = {(row["employee"], row["date"], row["shift"]): row
                 for row in rows_of(roster, index_shifts(span.profile.get("shifts") or []),
                                    span.audit_slots)}
-    # ponytail: bounded spans; reuse the real audit for each possible transfer.
-    # Replace with indexed checks only if profiling shows this scan is costly.
     for index, row in sorted(enumerate(roster), key=lambda pair:
             not row_info[(pair[1]["employee"], pair[1]["date"], pair[1]["shift"])]["is_night"]):
         key = (row.get("date"), row.get("shift"))
@@ -76,38 +113,12 @@ def uneven_load(span, roster, baseline, history=None):
             trial = roster[:index] + [dict(row, employee=other)] + roster[index + 1:]
             valid = no_worse(baseline, span.audit(trial))
             if not valid and night_gap:
-                for swap_index, swap in enumerate(roster):
-                    swap_key = (swap.get("date"), swap.get("shift"))
-                    if swap.get("employee") != other or name not in choices.get(swap_key, []):
-                        continue
-                    if (other, *swap_key) in pins or row_info[(other, *swap_key)]["is_night"]:
-                        continue
-                    exchanged = list(trial)
-                    exchanged[swap_index] = dict(swap, employee=name)
-                    if no_worse(baseline, span.audit(exchanged)):
-                        trial, valid = exchanged, True
-                        break
+                trial, valid = _exchange_day(
+                    span, roster, trial, name, other, choices, pins, row_info, baseline,
+                )
             if valid and load_cost(span, trial, history) < original_cost:
-                if night_gap:
-                    return [{
-                        "code": "uneven_nights", "severity": "notice", "date": "",
-                        "employee": name, "shift": row["shift"],
-                        "message": "פער לילות שניתן לצמצם: %s עם %d לילות ו-%s עם %d לילות בתקופה "
-                                   "(%d ו-%d כולל היסטוריה). פזר את הלילות למינימום האפשרי לכל עובד; "
-                                   "אפשר להחליף משמרת יום ולילה תוך שמירה על כיסוי, מנוחה ושיבוצי חובה."
-                                   % (name, loads[name]["nights"], other, loads[other]["nights"],
-                                      recent[name]["nights"], recent[other]["nights"]),
-                        "details": {"period_nights": loads[name]["nights"],
-                                    "alternative_nights": loads[other]["nights"],
-                                    "alternative_employee": other},
-                    }]
-                return [{
-                    "code": "uneven_load", "severity": "notice", "date": "",
-                    "employee": name, "shift": row["shift"],
-                    "message": "פער עומס שניתן לצמצם: %s עם %g שעות ו-%s עם %g שעות בתקופה. "
-                               "אזן את שעות התקופה; מותר להשאיר כמה ימי מנוחה רצופים."
-                               % (name, loads[name]["hours"], other, loads[other]["hours"]),
-                    "details": {"period_hours": loads[name]["hours"], "alternative_hours": loads[other]["hours"],
-                                "alternative_employee": other},
-                }]
+                return _finding(
+                    "uneven_nights" if night_gap else "uneven_load",
+                    name, other, row, loads, recent,
+                )
     return []

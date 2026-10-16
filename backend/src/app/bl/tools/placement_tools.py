@@ -17,6 +17,29 @@ _RANKED_BY = (
 _NO_PERIOD = "אין סידור מאוחסן לתאריך הזה"
 
 
+def _exception_candidates(reads, team_id, schedule, profile, leaving, shift, date):
+    candidates = []
+    availability = reads.availability(team_id, window(schedule))
+    for person in profile.get("employees") or []:
+        name = text(person.get("name"))
+        if not name or name == leaving:
+            continue
+        verdict = check_placement(
+            schedule, profile, employee=name, shift_name=shift, slot_date=date,
+            availability=availability,
+            moving_assignment_id=assignment_id(schedule, leaving, shift, date),
+        )
+        warnings = verdict.get("introduced") or verdict.get("warnings") or []
+        candidates.append({
+            "employee": name,
+            "hours": hours_for(name, schedule, profile),
+            "warnings": warnings,
+            "requires_exception": bool(warnings),
+            "why": "נדרשת בחינת החריגות המפורטות לפני אישור",
+        })
+    return sorted(candidates, key=lambda row: (len(row.get("warnings") or []), row["hours"]))
+
+
 class ValidatePlacement(Tool):
     """What placing this person on this slot would cost. Writes nothing.
 
@@ -81,26 +104,9 @@ class FindReplacements(Tool):
         )
         candidates = alternatives.get("employees") or []
         if include_exceptions and not candidates:
-            # Exceptions remain proposals; the manager sees every conflict.
-            for person in profile.get("employees") or []:
-                name = text(person.get("name"))
-                if not name or name == leaving:
-                    continue
-                verdict = check_placement(
-                    schedule, profile, employee=name, shift_name=shift,
-                    slot_date=date,
-                    availability=self._reads.availability(team_id, window(schedule)),
-                    moving_assignment_id=assignment_id(schedule, leaving, shift, date),
-                )
-                warnings = verdict.get("introduced") or verdict.get("warnings") or []
-                candidates.append({
-                    "employee": name,
-                    "hours": hours_for(name, schedule, profile),
-                    "warnings": warnings,
-                    "requires_exception": bool(warnings),
-                    "why": "נדרשת בחינת החריגות המפורטות לפני אישור",
-                })
-            candidates.sort(key=lambda row: (len(row.get("warnings") or []), row["hours"]))
+            candidates = _exception_candidates(
+                self._reads, team_id, schedule, profile, leaving, shift, date,
+            )
         return {
             "found": True,
             "schedule_id": text(schedule.get("id")),

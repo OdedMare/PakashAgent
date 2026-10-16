@@ -65,6 +65,18 @@ class ScheduleContext:
             return []
         return self._repository.preferences(team_id, status=PREFERENCE_ACTIVE)
 
+    def snapshot(self, team_id: str, schedule_id: str = "") -> dict:
+        """Profile and schedule inputs used to validate a prepared plan."""
+        return {
+            "profile": self.profile(team_id),
+            "availability": self._repository.availability(team_id),
+            "preferences": self.active_preferences(team_id),
+            "schedule": self._repository.get_schedule(schedule_id, team_id)
+            if schedule_id else None,
+            "periods": self._repository.list_schedules(team_id)
+            if not schedule_id else [],
+        }
+
     # -- the audited view ----------------------------------------------------
 
     def view(self, schedule: dict, team_id: str) -> dict:

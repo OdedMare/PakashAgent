@@ -219,14 +219,14 @@ def test_second_write_failure_rolls_back_the_entire_plan():
 
 def test_add_employee_preview_preserves_existing_fields_and_applies_profile():
     proposal = turn("profile")
-    repo, _, service, chat_id, schedule_id = setup([])
+    repo, llm, service, chat_id, schedule_id = setup([])
     profile = repo.profiles[TEAM]
     profile["employees"][0].update(rotation_group="א", can_train=True, notes="חשוב")
     proposal["profile_patch_json"] = json.dumps({"employees": profile["employees"] + [
         {"name": "מאיה", "role": "נציגת שירות", "eligible_shifts": [MORNING],
          "rotation_group": "ב", "exit_pattern": "round", "service_type": "standard"},
     ]})
-    service._llm._answers.append(proposal)
+    llm._answers.append(proposal)
     message = converse(service, repo, chat_id, schedule_id, "תוסיף את מאיה לצוות")
     assert message["status"] == "pending" and len(profile["employees"]) == 2
     service.apply(TEAM, "manager-a", chat_id, message["id"])
@@ -448,7 +448,7 @@ def test_simulation_checks_named_week_and_reports_qualification_conflicts():
     other = repo.create_schedule(TEAM, "2026-10-11", "2026-10-17")
     repo.replace_slots(other["id"], TEAM, [dict(shift_name=MORNING, slot_date="2026-10-12", headcount=1)])
     repo.profiles[TEAM]["employees"][1]["eligible_shifts"] = ["צהריים"]
-    result = service._run_tool(TEAM, "simulate_changes", dict(day="2026-10-12", operations=[
+    result = service._chat_tools.run(TEAM, "simulate_changes", dict(day="2026-10-12", operations=[
         dict(action="assign", employee="יוסי", shift=MORNING, date="2026-10-12", reason="בדיקה"),
     ]), focused_id)
     assert result["schedule_id"] == other["id"]
@@ -457,7 +457,7 @@ def test_simulation_checks_named_week_and_reports_qualification_conflicts():
 
 
 def test_recurring_constraint_profile_plan_preserves_roster_and_employee_details():
-    repo, _, service, chat_id, schedule_id = setup([])
+    repo, llm, service, chat_id, schedule_id = setup([])
     profile = repo.profiles[TEAM]
     profile["employees"][0].update(can_train=True, rotation_group="א", notes="פרט קיים")
     employees = copy.deepcopy(profile["employees"])
@@ -465,7 +465,7 @@ def test_recurring_constraint_profile_plan_preserves_roster_and_employee_details
                                                 reason="אילוץ קבוע")]
     proposal = turn("profile")
     proposal.update(stated_reason="", profile_patch_json=json.dumps(dict(employees=employees)))
-    service._llm._answers.append(proposal)
+    llm._answers.append(proposal)
     message = converse(service, repo, chat_id, schedule_id, "דנה לא זמינה בכל יום שלישי")
     assert message["status"] == "pending"
     assert "recurring_constraints" not in profile["employees"][0]

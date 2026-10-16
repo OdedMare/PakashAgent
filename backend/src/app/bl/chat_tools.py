@@ -6,7 +6,7 @@ from app.bl.changes.proposal import build_proposal
 from app.bl.chat_constraints import constraints_report, normalize_constraints
 from app.bl.chat_contract import RejectedPlan, audit_plan, changed_rows, plan_for_model
 from app.bl.planner.fallback_answers import FallbackAnswers
-from app.bl.placement.values import warning_key
+from app.bl.shared import warning_key
 from app.bl.simulate.hypothetical import schedule_rows
 from app.bl.tools import ScheduleTools, TOOL_DESCRIPTIONS
 from app.bl.tools.schedule_tools import _invalid_date_argument
@@ -15,6 +15,15 @@ from app.common.errors import AgentError
 from app.common.time_context import israel_today
 
 _FULL_RESULTS = 2
+_EXTRA_DESCRIPTIONS = {
+    "list_periods": "כל הסידורים השמורים של הצוות ותאריכיהם",
+    "workload_report": "השוואת שעות, מספר משמרות וכוננויות בכל טווח תאריכים",
+    "change_history": "מה השתנה בסידורים ומדוע",
+    "simulate_changes": "בדיקת מה יקרה אם מבצעים כמה שינויים יחד, כולל כיסוי ועומסים; ללא שמירה",
+    "constraints_report": "אילוצים שמורים וקבועים, שעות ועדיפות, בקשות שממתינות לאישור, וכיבוד או התנגשות מול כל הסידורים בטווח",
+    "request_inbox": "בקשות אילוץ והחלפות של הצוות, עם מזהים וסטטוסים אמיתיים להחלטת מנהל",
+    "preference_list": "כל ההעדפות השמורות של הצוות: פעילות, מוצעות ומושבתות, עם מזהים לעריכה",
+}
 
 
 class ManagerChatTools:
@@ -24,6 +33,10 @@ class ManagerChatTools:
         self._context = context
         self._tools = ScheduleTools(repository)
         self._fallback = FallbackAnswers(self._tools)
+
+    @property
+    def descriptions(self):
+        return dict(TOOL_DESCRIPTIONS, **_EXTRA_DESCRIPTIONS)
 
     def replacement_lookup(self, team_id, request, context, schedule, profile):
         """Answer one clear candidate lookup without a model round."""

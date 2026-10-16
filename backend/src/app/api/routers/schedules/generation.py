@@ -16,7 +16,8 @@ def _required(request: GenerateRequest) -> list:
 class GenerationRoutes(RouteGroup):
     def register(self, router: APIRouter) -> None:
         self._register_steps(router)
-        self._register_control(router)
+        self._register_job_control(router)
+        self._register_scoped_generation(router)
 
     def _register_steps(self, router: APIRouter) -> None:
         """Building a period: whole, as a range job, and one step of it."""
@@ -53,8 +54,7 @@ class GenerationRoutes(RouteGroup):
             """Generate and checkpoint one span; retry the failed one first."""
             return service.generate_next(session["team_id"], schedule_id)
 
-    def _register_control(self, router: APIRouter) -> None:
-        """Running, stopping, and narrowing a job; opening a blank period."""
+    def _register_job_control(self, router: APIRouter) -> None:
         service, boss = self.service, self.boss
 
         @router.post("/generate/{schedule_id}/run", response_model=Schedule)
@@ -83,6 +83,9 @@ class GenerationRoutes(RouteGroup):
             The days already built stay, and `POST /run` still resumes it.
             """
             return service.dismiss_generation(session["team_id"], schedule_id)
+
+    def _register_scoped_generation(self, router: APIRouter) -> None:
+        service, boss = self.service, self.boss
 
         @router.post("/generate/{schedule_id}/day/start", response_model=Schedule)
         def start_day_generation(

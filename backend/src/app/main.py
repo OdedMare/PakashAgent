@@ -3,6 +3,7 @@
 import logging
 import os
 import secrets
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -126,10 +127,33 @@ admin_service = AdminService(
     repository, workspace_service, admin_password, store=store,
 )
 
+
+def startup() -> None:
+    """Initialize storage while leaving health checks available on failure."""
+    try:
+        repository.initialize()
+    except Exception as exc:
+        _log.error("database initialization failed: %s", exc)
+
+
+def shutdown() -> None:
+    """Flush traces and return pooled connections before process exit."""
+    tracing.flush()
+    close_pool()
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    startup()
+    yield
+    shutdown()
+
+
 app = FastAPI(
     title="משמרות זהב",
     version="0.1.0",
     description="סוכן שבונה ומתחזק סידורי עבודה בשיחה",
+    lifespan=lifespan,
 )
 
 app.include_router(health.build_router(repository))
@@ -170,34 +194,6 @@ app.include_router(
 # above so `/{request_id}` and `/{swap_id}` cannot shadow each other, and so
 # the `boss` guard stays visible on every route of both.
 app.include_router(employee.build_swap_router(employee_service, guards))
-
-
-@app.on_event("startup")
-def startup() -> None:
-    """Create the schema and tables if they are not there yet.
-
-    A database that is not up yet must not take the process down with it —
-    the health route is the thing that reports it, and it can only answer if
-    the app finished starting.
-    """
-    try:
-        repository.initialize()
-    except Exception as exc:
-        _log.error("database initialization failed: %s", exc)
-
-
-@app.on_event("shutdown")
-def shutdown() -> None:
-    """Return every pooled connection before the process goes away.
-
-    Without this the pool's own worker threads outlive the shutdown and
-    Postgres is left holding connections until it times them out — visible as
-    a server that slowly accumulates idle backends across restarts.
-    Traces still batched for Opik are sent first, or the last calls before
-    a restart never show up.
-    """
-    tracing.flush()
-    close_pool()
 
 
 @app.exception_handler(AppError)

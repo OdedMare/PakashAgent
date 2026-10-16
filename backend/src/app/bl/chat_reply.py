@@ -7,29 +7,16 @@ from dataclasses import dataclass, field
 
 from app.bl.changes.agent import _closures_for_model, _schedule_for_model
 from app.bl.changes.values import json_default
-from app.bl.chat_contract import (
-    NeedsManager, RejectedPlan, normalize_day_turn, normalize_week_turn,
-    plan_for_model,
-)
+from app.bl.chat_contract import NeedsManager, RejectedPlan, normalize_day_turn, normalize_week_turn, plan_for_model
 from app.bl.chat_schema import CHAT_SCHEMA, PROFILE_SECTIONS
 from app.bl.planner.shaping import question
 from app.bl.prompts import load
 from app.bl.scheduler.span_audit import add_usage, usage_of
 from app.bl.shared import iso
-from app.bl.tools import TOOL_DESCRIPTIONS
 from app.common.errors import AgentError, AppError
 from app.common.time_context import agent_time_context, israel_today
 
 _log = logging.getLogger("pakash.chat")
-_EXTRA_TOOLS = {
-    "list_periods": "כל הסידורים השמורים של הצוות ותאריכיהם",
-    "workload_report": "השוואת שעות, מספר משמרות וכוננויות בכל טווח תאריכים",
-    "change_history": "מה השתנה בסידורים ומדוע",
-    "simulate_changes": "בדיקת מה יקרה אם מבצעים כמה שינויים יחד, כולל כיסוי ועומסים; ללא שמירה",
-    "constraints_report": "אילוצים שמורים וקבועים, שעות ועדיפות, בקשות שממתינות לאישור, וכיבוד או התנגשות מול כל הסידורים בטווח",
-    "request_inbox": "בקשות אילוץ והחלפות של הצוות, עם מזהים וסטטוסים אמיתיים להחלטת מנהל",
-    "preference_list": "כל ההעדפות השמורות של הצוות: פעילות, מוצעות ומושבתות, עם מזהים לעריכה",
-}
 _ROUNDS = 7
 _REPAIRS = 2
 _MAX_CALLS = 4
@@ -79,9 +66,9 @@ class ReplyState:
     payload: dict
     steps: list = field(default_factory=list)
     results: list = field(default_factory=list)
-    usage: dict = field(default_factory=lambda: {
-        "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
-    })
+    usage: dict = field(default_factory=lambda: dict(
+        prompt_tokens=0, completion_tokens=0, total_tokens=0,
+    ))
     model_rounds: int = 0
     plan: dict = None
     asked: str = ""
@@ -136,7 +123,7 @@ class ManagerChatReply:
             "preferences": self._context.active_preferences(team_id),
             "history": self._repo.change_log(team_id, limit=12),
             "conversation": conversation,
-            "tools": dict(TOOL_DESCRIPTIONS, **_EXTRA_TOOLS),
+            "tools": self._tools.descriptions,
             "current_request": request,
         }
         return ReplyState(

@@ -17,6 +17,7 @@ from app.bl.profile_service import ProfileService
 from app.bl.schedule_service.context import ScheduleContext
 from app.common.errors import AgentError, ConflictError
 
+
 def _iso_or_blank(value):
     """A focus day the browser sent, or nothing; never a malformed date."""
     try:
@@ -27,7 +28,7 @@ def _iso_or_blank(value):
 
 class ManagerChatService:
     def __init__(self, repository, llm, schedules):
-        self._repo, self._llm, self._schedules = repository, llm, schedules
+        self._repo = repository
         self._context = ScheduleContext(repository)
         profiles = ProfileService(repository)
         self._chat_tools = ManagerChatTools(repository, schedules, self._context)

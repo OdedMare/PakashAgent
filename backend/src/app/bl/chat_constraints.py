@@ -5,7 +5,7 @@ import datetime
 from app.bl.audit import constraint_conflicts
 from app.bl.audit.roster import index_shifts, rows_of
 from app.bl.chat_contract import RejectedPlan, audit_plan
-from app.bl.placement.values import warning_key
+from app.bl.shared import warning_key
 from app.bl.scheduler.availability import effective_availability
 from app.bl.simulate.hypothetical import schedule_rows
 from app.bl.tools.values import iso

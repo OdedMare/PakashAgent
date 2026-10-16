@@ -117,8 +117,7 @@ class PeriodBuilder:
     ) -> dict:
         """Open a persistent range job; each later request generates one span.
 
-        `build_from`/`build_through` narrow what the agent is asked for, not
-        the period: the board reads a week by its Sunday, so the grid opens
+        `build_from`/`build_through` narrow what the agent is asked for. The grid opens
         whole and the job covers the run asked for. The rest stays empty —
         for the manager (D18), or for a later range build.
         """

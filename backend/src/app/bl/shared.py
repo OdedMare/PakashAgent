@@ -4,6 +4,7 @@ import datetime
 from typing import Any, Optional
 
 _MAX_TEXT_CHARS = 4000
+_MAX_PREFERENCES = 40
 
 HEBREW_WEEKDAYS = (
     "יום שני", "יום שלישי", "יום רביעי", "יום חמישי",
@@ -21,6 +22,13 @@ def bounded(value: Any, limit: int = _MAX_TEXT_CHARS) -> str:
 
 def iso(value: Any) -> str:
     return value.isoformat() if hasattr(value, "isoformat") else text(value)
+
+
+def parse_date(value: Any) -> Optional[datetime.date]:
+    try:
+        return datetime.date.fromisoformat(value)
+    except (ValueError, TypeError):
+        return None
 
 
 def number(value: Any, fallback: float) -> float:
@@ -45,6 +53,27 @@ def employees(profile: dict) -> list[dict]:
 
 def shifts(profile: dict) -> list[dict]:
     return dict_items((profile or {}).get("shifts"))
+
+
+def warning_key(warning: dict) -> tuple:
+    return (
+        text(warning.get("code")),
+        text(warning.get("employee")),
+        iso(warning.get("date")),
+        text(warning.get("shift")),
+    )
+
+
+def preferences_for_model(preferences: Any) -> list[dict]:
+    """A bounded projection of confirmed standing preferences."""
+    return [
+        {
+            "kind": bounded(row.get("kind")),
+            "subject": bounded(row.get("subject")),
+            "text": bounded(row.get("text")),
+        }
+        for row in preferences or [] if isinstance(row, dict)
+    ][:_MAX_PREFERENCES]
 
 
 def resume(pending: str, reply: str) -> str:

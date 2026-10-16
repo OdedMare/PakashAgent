@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from app.bl.audit import audit
 from app.bl.placement import values
+from app.bl.shared import warning_key
 from app.bl.scheduler import effective_availability
 
 
@@ -45,8 +46,8 @@ class PlacementContext:
         """
         before = values.rows(self.schedule, drop=self.moving)
         after = before + [{"employee": employee, "shift": shift_name, "date": slot_date}]
-        existing = {values.warning_key(row) for row in self._audit(before)}
-        caused = [row for row in self._audit(after) if values.warning_key(row) not in existing]
+        existing = {warning_key(row) for row in self._audit(before)}
+        caused = [row for row in self._audit(after) if warning_key(row) not in existing]
         # `audit.py` writes Hebrew already; rewording it would be a second
         # voice describing the same fact.
         reasons = [values.text(row.get("message")) for row in caused]

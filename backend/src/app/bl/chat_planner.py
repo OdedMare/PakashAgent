@@ -11,7 +11,7 @@ from app.bl.chat_lifecycle import (
     prepare_blank, prepare_profile, prepare_retirement, prepare_structure,
 )
 from app.bl.chat_management import prepare_management
-from app.bl.placement.values import warning_key
+from app.bl.shared import warning_key
 from app.bl.profile_service import ProfileService
 from app.bl.schedule_service.generation.history import AssignmentHistory
 from app.bl.scheduler import Scheduler
@@ -29,22 +29,13 @@ class ChatPlanBuilder:
         self._history = AssignmentHistory(repository)
         self._tools = ScheduleTools(repository)
 
-    def state(self, team_id, schedule_id):
-        return {
-            "profile": self._context.profile(team_id),
-            "availability": self._repo.availability(team_id),
-            "preferences": self._context.active_preferences(team_id),
-            "schedule": self._repo.get_schedule(schedule_id, team_id) if schedule_id else None,
-            "periods": self._repo.list_schedules(team_id) if not schedule_id else [],
-        }
-
     def prepare(self, team_id, turn, focused_id, request, choices=()):
         kind = turn.get("kind") or "answer"
         self._validate_kind(kind, turn)
         if turn.get("needs_input") or kind == "answer":
             return None
         schedule_id = self._schedule_id(team_id, kind, turn, focused_id)
-        state = self.state(team_id, schedule_id)
+        state = self._context.snapshot(team_id, schedule_id)
         schedule, profile = state["schedule"] or {}, state["profile"]
         if kind == "changes" and whole_day_request(request, profile):
             raise RejectedPlan(

@@ -42,8 +42,12 @@ class IdentityRoutes:
         )
 
     def register(self, router: APIRouter) -> None:
+        self._register_claim(router)
+        self._register_login(router)
+        self._register_logout(router)
+
+    def _register_claim(self, router: APIRouter) -> None:
         service, visitor, sign_in = self._service, self._visitor, self.sign_in
-        throttle = self._throttle
 
         @router.get("/roster")
         def roster(session: dict = Depends(visitor)) -> dict:
@@ -67,6 +71,10 @@ class IdentityRoutes:
             result = service.claim(session["team_id"], request.employee, request.passcode)
             sign_in(response, session["team_id"], result["employee"])
             return result
+
+    def _register_login(self, router: APIRouter) -> None:
+        service, visitor, sign_in = self._service, self._visitor, self.sign_in
+        throttle = self._throttle
 
         @router.post("/login")
         def login(
@@ -102,6 +110,8 @@ class IdentityRoutes:
             self._require_active(request.team_id)
             sign_in(response, request.team_id, result["employee"])
             return result
+
+    def _register_logout(self, router: APIRouter) -> None:
 
         @router.post("/logout")
         def logout(response: Response) -> dict:

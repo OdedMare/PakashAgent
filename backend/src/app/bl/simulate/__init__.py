@@ -60,7 +60,8 @@ from typing import List, Optional
 from app.bl.audit import audit, fairness
 from app.bl.scheduler import effective_availability
 from app.bl.simulate.hypothetical import Hypothetical, iso, schedule_rows
-from app.bl.simulate.impact import coverage, touched, warning_key, workload
+from app.bl.shared import warning_key
+from app.bl.simulate.impact import coverage, touched, workload
 
 # Imported by the staffing edge-case tests, which check the seat count here
 # agrees with the audit's.

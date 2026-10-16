@@ -11,7 +11,7 @@ import time
 from threading import Lock
 
 from fastapi import Cookie, Depends, Response
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Optional
 
 from app.common.errors import AuthError, ForbiddenError
 from app.common.sessions import (
@@ -42,7 +42,7 @@ class Guards:
     ):
         self._secret = secret
         self._team_active = team_active
-        self._status = {}  # type: Dict[str, Tuple[bool, float]]
+        self._status: dict[str, tuple[bool, float]] = {}
         self._lock = Lock()
 
     def is_active(self, team_id: str) -> bool:

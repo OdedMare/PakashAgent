@@ -3,6 +3,7 @@
 from typing import List, Optional
 
 from app.bl.placement import values
+from app.bl.shared import parse_date
 from app.bl.placement.context import PlacementContext, effective_rows
 
 # How many alternatives are worth offering. Past a handful the list stops
@@ -79,13 +80,13 @@ def nearby_slots(
     context: PlacementContext, employee: str, shift_name: str, slot_date: str,
 ) -> List[dict]:
     """Slots near the intended date this same person could fill cleanly."""
-    wanted = values.parse(slot_date)
+    wanted = parse_date(slot_date)
     if wanted is None:
         return []
     options = []
     for slot in context.slots:
         name, date = values.text(slot.get("shift_name")), values.iso(slot.get("slot_date"))
-        day = values.parse(date) if name and date else None
+        day = parse_date(date) if name and date else None
         if day is None or (name == shift_name and date == slot_date):
             continue
         distance = abs((day - wanted).days)
