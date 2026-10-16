@@ -1,4 +1,4 @@
-"""Pooled PostgreSQL connections driven by live runtime settings.
+"""Pooled PostgreSQL connections driven by live settings.
 
 The store is read on every `connect()`, so a database edit saved in the UI
 applies without a restart, exactly as it does for the model settings.

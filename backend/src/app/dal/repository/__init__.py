@@ -1,6 +1,6 @@
 """The only SQL owner in the codebase."""
 
-from app.dal.database.postgres import connect, require_schema
+from app.dal.database import connect, require_schema
 from app.dal.repository.admin import AdminRepository
 from app.dal.repository.identities import IdentityRepository
 from app.dal.repository.copilot import CopilotRepository

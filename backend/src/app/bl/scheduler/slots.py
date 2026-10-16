@@ -7,11 +7,11 @@ generating a calendar. It assigns people into this grid.
 
 from typing import Dict, List
 
-from app.bl.shared.hebrew_calendar import hebrew_weekday, runs_on
+from app.bl.shared import hebrew_weekday, runs_on
 from app.bl.scheduler.values import (
     bounded, dates_between, named, parse_date, role_list,
 )
-from app.common.config.settings import MODE_DAY, MODE_WEEK
+from app.common.config import MODE_DAY, MODE_WEEK
 from app.common.errors import AgentError
 
 # Checkpointed daily generation makes long planning horizons safe to resume.

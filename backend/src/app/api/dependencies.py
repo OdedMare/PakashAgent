@@ -1,4 +1,4 @@
-"""Route guards: who is asking, and may they.
+"""Route authentication and authorization guards.
 
 FastAPI dependencies rather than middleware, so a route's signature states
 its own access requirement -- `session: dict = Depends(deps.boss)` is visible

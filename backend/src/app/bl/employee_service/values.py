@@ -2,6 +2,7 @@
 
 from typing import Any, List, Optional
 
+from app.bl.shared import text
 from app.common.errors import AgentError
 
 # Logged against the change log when a manager rules on a request, so an
@@ -13,10 +14,6 @@ ACTION_REQUEST_REJECTED = "request_rejected"
 # `ACTION_SWAPPED` exactly as a manager-initiated swap does. Two log rows for
 # one swap would make the history read as two moves.
 ACTION_SWAP_REJECTED = "swap_rejected"
-
-
-def text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
 
 
 def iso_date(value: Any) -> str:

@@ -12,8 +12,8 @@ import psycopg
 import pytest
 from psycopg import sql
 
-from app.common.config.settings import Settings
-from app.dal.database import postgres
+from app.common.config import Settings
+from app.dal import database as postgres
 from app.dal.repository import Repository
 
 pytestmark = pytest.mark.skipif(

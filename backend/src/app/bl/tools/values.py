@@ -1,36 +1,9 @@
 """Small projections shared by the tools: names, dates, a period's identity."""
 
-from typing import Any, List, Optional
+from typing import List, Optional
 
+from app.bl.shared import employees, iso, number, shifts, text
 from app.common.time_context import israel_today
-
-
-def text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
-
-
-def iso(value: Any) -> str:
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    return text(value)
-
-
-def number(value: Any, fallback: float) -> float:
-    if isinstance(value, bool):
-        return fallback
-    if isinstance(value, (int, float)):
-        return float(value)
-    return fallback
-
-
-def employees(profile: dict) -> List[dict]:
-    rows = (profile or {}).get("employees")
-    return [row for row in rows or [] if isinstance(row, dict)]
-
-
-def shifts(profile: dict) -> List[dict]:
-    rows = (profile or {}).get("shifts")
-    return [row for row in rows or [] if isinstance(row, dict)]
 
 
 def eligible(person: dict) -> List[str]:

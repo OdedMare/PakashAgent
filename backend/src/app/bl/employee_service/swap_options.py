@@ -19,7 +19,7 @@ from typing import Dict, List, Tuple
 from app.bl.audit import audit
 from app.bl.changes import OP_SWAP
 from app.bl.scheduler import effective_availability
-from app.bl.shared.hebrew_calendar import hebrew_weekday
+from app.bl.shared import hebrew_weekday
 from app.bl.simulate.hypothetical import Hypothetical, schedule_rows
 from app.bl.simulate.impact import warning_key
 from app.bl.employee_service.values import employees, iso_date, shifts, text

@@ -8,22 +8,10 @@ entire reason it is not the model doing this.
 import datetime
 from typing import Any, Optional
 
+from app.bl.shared import number, text
+
 MINUTES_PER_HOUR = 60.0
 MINUTES_PER_DAY = 24 * 60
-
-
-def text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
-
-
-def number(value: Any, fallback: float) -> float:
-    if isinstance(value, bool):
-        return fallback
-    if isinstance(value, (int, float)):
-        return float(value)
-    return fallback
-
-
 def parse_date(value: Any) -> Optional[datetime.date]:
     try:
         return datetime.date.fromisoformat(value)

@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from app.api.dependencies.dependencies import Guards
+from app.api.dependencies import Guards
 from app.api.routers.manager_chat import build_router
 from app.bl.manager_chat import ManagerChatService
 from app.bl.schedule_service import ScheduleService

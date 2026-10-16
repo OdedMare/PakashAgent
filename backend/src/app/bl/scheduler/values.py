@@ -3,18 +3,9 @@
 import datetime
 from typing import Any, List, Optional
 
-MAX_TEXT_CHARS = 4000
 MAX_HISTORY_ROWS = 400
 
-
-def bounded(value: Any, limit: int = MAX_TEXT_CHARS) -> str:
-    return value.strip()[:limit] if isinstance(value, str) else ""
-
-
-def bounded_rows(rows: Any, limit: int = 200) -> List[dict]:
-    if not isinstance(rows, list):
-        return []
-    return [row for row in rows if isinstance(row, dict)][-limit:]
+from app.bl.shared import bounded, dict_rows as bounded_rows
 
 
 def lines(value: Any) -> List[str]:

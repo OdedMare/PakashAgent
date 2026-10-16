@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 
-from app.bl.shared.clarification import resume
+from app.bl.shared import resume
 from app.bl.planner.fallback import DeterministicAnswerer
 from app.bl.planner.model_loop import ModelToolLoop
 from app.bl.planner.shaping import bounded

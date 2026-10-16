@@ -8,23 +8,12 @@ here to hand a repository.
 from typing import Any, Callable, Dict, List, Optional
 
 from app.bl.changes import OP_ASSIGN, OP_REMOVE, OP_SWAP
+from app.bl.shared import iso, text
 
 # The same bound a proposal has: a simulation is a proposal not yet asked
 # for, and letting it be larger would make "simulate" the way to describe a
 # change too big to propose.
 MAX_OPERATIONS = 40
-
-
-def text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
-
-
-def iso(value: Any) -> str:
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    return text(value)
-
-
 def schedule_rows(schedule: dict) -> List[dict]:
     return [
         {
