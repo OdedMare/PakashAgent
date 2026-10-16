@@ -9,6 +9,7 @@ from app.bl.audit import audit
 from app.bl.changes.values import json_default
 from app.bl.placement.values import is_eligible
 from app.bl.scheduler.availability import effective_availability
+from app.bl.simulate.hypothetical import Hypothetical, schedule_rows
 from app.bl.audit.staffing_rules import required_headcount, seat_counts
 from app.bl.tools.values import iso
 from app.bl.intent.dates import date_in, explicit_date, parse
@@ -23,6 +24,34 @@ def fingerprint(value) -> str:
         value, ensure_ascii=False, sort_keys=True, default=json_default,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def plan_for_model(plan, whole):
+    """A stored plan, complete for the latest turn and summarized for older ones."""
+    shown = {
+        key: value for key, value in plan.items()
+        if key not in ("snapshot", "updated_profile", "replacement_slots", "creation_slots")
+    }
+    if shown.get("generated"):
+        shown["generated"] = {
+            key: value for key, value in shown["generated"].items() if key != "slots"
+        }
+    if whole:
+        return shown
+    summary = {
+        key: shown[key]
+        for key in (
+            "kind", "schedule_id", "starts_on", "ends_on", "reason",
+            "agent_reason", "replace_existing",
+        )
+        if key in shown
+    }
+    return dict(
+        summary, summarized=True,
+        operations=len(shown.get("operations") or []),
+        constraints=len(shown.get("constraints") or []),
+        generated_assignments=len((shown.get("generated") or {}).get("assignments") or []),
+    )
 
 
 class RejectedPlan(AgentError):
@@ -211,3 +240,17 @@ def audit_plan(profile, schedule, rows, availability, constraints):
                                  message="%s לא מוגדר/ת למשמרת %s בפרופיל הצוות" %
                                  (row["employee"], row["shift"])))
     return warnings
+
+
+def changed_rows(schedule, operations):
+    if len(operations) > 40:
+        raise RejectedPlan("התוכנית גדולה מדי. יש לפצל את השינוי לתקופות קצרות יותר")
+    imagined = Hypothetical(schedule_rows(schedule), schedule).apply_all(operations)
+    if imagined.skipped:
+        raise RejectedPlan(imagined.skipped[0]["why"])
+    keys = [(row["employee"], row["shift"], row["date"]) for row in imagined.rows]
+    if len(keys) != len(set(keys)):
+        raise RejectedPlan(
+            "התוכנית משבצת את אותו עובד פעמיים באותה משמרת. יש להסיר את השיבוץ הכפול"
+        )
+    return imagined.rows

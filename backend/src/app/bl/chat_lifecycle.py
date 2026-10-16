@@ -4,9 +4,11 @@ import datetime
 import json
 
 from app.bl.chat_contract import NeedsManager, RejectedPlan
+from app.bl.chat_schema import PROFILE_SECTIONS
 from app.bl.scheduler import build_slots
 from app.bl.simulate.hypothetical import schedule_rows
 from app.bl.tools.values import iso
+from app.common.errors import AppError
 
 
 def date_value(value, question):
@@ -19,6 +21,74 @@ def date_value(value, question):
 def future_schedules(repository, team_id, first):
     return [repository.get_schedule(row["id"], team_id)
             for row in repository.list_schedules(team_id) if iso(row["ends_on"]) >= first]
+
+
+def prepare_blank(turn, plan, state, profile):
+    try:
+        first = datetime.date.fromisoformat(turn.get("starts_on") or "")
+        last = datetime.date.fromisoformat(turn.get("ends_on") or "")
+    except (ValueError, TypeError):
+        raise RejectedPlan("יש לציין תאריכים מוחלטים לסידור הריק")
+    if first > last or (last - first).days > 30:
+        raise RejectedPlan("סידור ריק דורש טווח של עד 31 ימים")
+    if any(
+        iso(row["starts_on"]) <= last.isoformat()
+        and first.isoformat() <= iso(row["ends_on"])
+        for row in state["periods"]
+    ):
+        raise RejectedPlan(
+            "כבר קיים סידור בטווח הזה. אין ליצור סידור חופף; "
+            "אפשר לרוקן או לערוך את הקיים"
+        )
+    slots = build_slots(profile, first.isoformat(), last.isoformat())
+    if not slots:
+        raise RejectedPlan("אין משמרות מוגדרות לתאריכים האלה. יש להשלים את הגדרות המשמרות")
+    plan.update(
+        starts_on=first.isoformat(), ends_on=last.isoformat(), creation_slots=slots,
+    )
+    return plan
+
+
+def prepare_profile(profiles, team_id, turn, plan, profile):
+    try:
+        patch = json.loads(turn.get("profile_patch_json") or "{}")
+    except ValueError as exc:
+        raise RejectedPlan("עריכת הפרופיל אינה תקינה. אפשר לנסח שוב") from exc
+    if not isinstance(patch, dict) or not patch or set(patch) - set(PROFILE_SECTIONS):
+        raise RejectedPlan("לא זוהה שינוי תקין בפרטי הצוות")
+    for section in ("employees", "shifts"):
+        if section not in patch:
+            continue
+        if not isinstance(patch[section], list) or any(
+            not isinstance(row, dict) for row in patch[section]
+        ):
+            raise RejectedPlan("פרטי העובדים והמשמרות חייבים להיות רשימת רשומות")
+        existing = {row["name"]: row for row in profile.get(section) or []}
+        if section == "employees":
+            _validate_new_employees(patch[section], existing)
+        patch[section] = [
+            dict(existing.get(row.get("name"), {}), **row) for row in patch[section]
+        ]
+    try:
+        updated = profiles.preview(team_id, **patch)
+    except AppError as exc:
+        raise RejectedPlan(str(exc)) from exc
+    plan["profile_patch"] = patch
+    plan["profile_before"] = {key: profile.get(key) for key in patch}
+    plan["profile_after"] = {key: updated.get(key) for key in patch}
+
+
+def _validate_new_employees(rows, existing):
+    required = {
+        "role", "eligible_shifts", "service_type", "exit_pattern", "rotation_group",
+    }
+    for row in rows:
+        missing = required - set(row)
+        if row.get("name") not in existing and missing:
+            raise RejectedPlan(
+                "לעובד החדש חסרים שדות: %s. יש לשמור את הפרטים שהמנהל נתן ולא לנחש"
+                % ", ".join(sorted(missing))
+            )
 
 
 def prepare_retirement(repository, profiles, team_id, turn, plan, state):
