@@ -17,7 +17,7 @@
 דפדפן (Next.js, frontend/)
    │  HTTP + cookie חתום (common/sessions.py)
    ▼
-API (FastAPI, main.py) ── routers ב-api/routers/ ── guards ב-api/dependencies/
+API (FastAPI, main.py) ── routers ב-api/routers/ ── guards ב-api/dependencies.py
    │                     │
    │  שירותים ב-bl/       │  קריאות LLM סינכרוניות: עוזר עובד, למידה בייבוא
    ▼                     ▼
@@ -39,7 +39,7 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 
 ### 1.1 כניסת מנהל לצוות ⚙️
 1. במסך `Workspace/Login.tsx` נבחר צוות ומוקלדת סיסמה.
-2. `POST /api/workspace/login`, דרך `bl/workspace_service/service.py`.
+2. `POST /api/workspace/login`, דרך `bl/workspace_service.py`.
 3. הסיסמה נבדקת מול hash מסוג scrypt (`dal/repository/teams.py`). ניסיונות כושלים מוגבלים ב-`common/throttle.py`, בזיכרון של התהליך.
 4. נשלח cookie חתום ב-HMAC עם `team_id` ו-`role=boss`. כל קריאה אחר כך מקבלת את `team_id` **מה-cookie בלבד**.
 
@@ -55,7 +55,7 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 
 ### 1.4 קונסולת מפעיל (`/admin`) ⚙️
 - `POST /api/admin/login` עם cookie נפרד.
-- פתיחת צוות, השעיה, איפוס סיסמה, החלפת קישור, שחרור זהות עובד ומחיקה, דרך `bl/admin_service/` ו-`dal/repository/admin.py`. זה המקום היחיד שקורא נתונים חוצי-צוותים.
+- פתיחת צוות, השעיה, איפוס סיסמה, החלפת קישור, שחרור זהות עובד ומחיקה, דרך `bl/admin_service.py` ו-`dal/repository/admin.py`. זה המקום היחיד שקורא נתונים חוצי-צוותים.
 - 💤 `POST /api/workspace` (פתיחת צוות עצמית) חסום, אלא אם `PAKASH_OPEN_SIGNUP` פעיל.
 
 ---
@@ -112,7 +112,7 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 5. המנהל מתקן במסך ומאשר. `POST /api/schedule/import/confirm` הוא **היחיד שכותב**, והוא שומר את מה שחזר מהמסך ולא קורא את הקובץ מחדש.
 
 ### 4.4 ייצוא ⚙️
-`GET /api/schedule/export/{id}` מריץ את `bl/export/export.py` ומחזיר xlsx בפריסת Sample A, שאפשר לייבא בחזרה.
+`GET /api/schedule/export/{id}` מריץ את `bl/export.py` ומחזיר xlsx בפריסת Sample A, שאפשר לייבא בחזרה.
 
 ---
 
@@ -128,16 +128,16 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 2. `ManagerChatService.start_turn()`:
    - אם ההודעה היא אישור תוכנית ("מאשר"), היא מופעלת מיד ואין קריאה למודל.
    - אחרת נשמרת הודעה בסטטוס `working` ונכנס job מסוג `manager_chat` לתור.
-3. ה-worker מריץ את `ManagerChatService.reply()` (`bl/manager_chat.py`):
+3. ה-worker מריץ את `ManagerChatService.reply()`. `bl/manager_chat.py` הוא facade, והעבודה עצמה מתבצעת ב-`bl/chat_reply.py`:
    1. טוען את הסידור, הפרופיל, האילוצים מהשבוע האחרון ואילך, ההעדפות, 12 שינויים אחרונים ועד 32 הודעות שיחה.
-   2. **מסלול מהיר:** `_replacement_lookup` עונה על "מי יכול להחליף" בלי מודל.
-   3. אחרת יש עד **7 סבבים** של `complete_json(manager_chat.md)`. בכל סבב המודל מבקש עד 4 כלים מ-`bl/tools/` (קריאה בלבד), והתוצאות נוספות לסבב הבא.
-   4. כשהמודל מחזיר תוכנית, `_prepare_plan` מאמת ומריץ audit. התוכנית יכולה להיות שינויים, יצירה (שמריצה את ה-scheduler **בתוך** התור, עם קריאות LLM נוספות), שינוי מבנה, ניהול בקשות או אילוצים.
+   2. **מסלול מהיר:** `ChatTools.replacement_lookup` (`bl/chat_tools.py`) עונה על "מי יכול להחליף" בלי מודל.
+   3. אחרת יש עד **7 סבבים** של `complete_json(manager_chat.md)`. בכל סבב המודל מבקש עד 4 כלים (`_MAX_CALLS`) מ-`bl/tools/` ומ-`bl/chat_tools.py` (קריאה בלבד), והתוצאות נוספות לסבב הבא.
+   4. כשהמודל מחזיר תוכנית, `bl/chat_planner.py` (`prepare`) מאמת ומריץ audit. התוכנית יכולה להיות שינויים, יצירה (שמריצה את ה-scheduler **בתוך** התור, עם קריאות LLM נוספות), שינוי מבנה, ניהול בקשות או אילוצים.
    5. אם יש אזהרות, התוכנית חוזרת למודל לבדיקה פעם אחת. אם הקוד דחה אותה, יש עד 2 תיקונים.
    6. בסוף ההודעה נשמרת עם התוכנית בסטטוס `pending`.
 4. הדפדפן דוגם את השיחה (`useManagerChat.ts`) ומציג את השלבים בזמן אמת. עצירה: `/stop`.
 5. המנהל מאשר: `POST /api/agent/chats/{id}/messages/{mid}/apply`.
-   - נעילת שורה (`chat_approval`), ובדיקה שה-fingerprint של המצב לא השתנה מאז ההצעה.
+   - הקוד ב-`bl/chat_apply.py`: נעילת שורה (`chat_approval`), ובדיקה שה-fingerprint של המצב לא השתנה מאז ההצעה.
    - הפעלה דרך `OperationApplier`, `create_blank`, `apply_management` ועדכון הפרופיל, ורישום ביומן.
 6. דחייה: `/dismiss`.
 
@@ -231,7 +231,7 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 
 | זרימה | פעולה ב-UI | role | prompt | קריאות | איפה רץ |
 |---|---|---|---|---|---|
-| צ'אט מנהל | AgentChat | default | `manager_chat.md` (כ-21K תווים) | 1–7 לכל הודעה, ועוד יצירה פנימית | worker |
+| צ'אט מנהל (`bl/chat_reply.py`) | AgentChat | default | `manager_chat.md` (כ-21K תווים) | 1–7 לכל הודעה, ועוד יצירה פנימית | worker |
 | יצירה (ai) | GenerateDialog / צ'אט | advanced | `scheduler.md` | 1–2 לכל יום או שבוע | worker |
 | תרגום הנחיות (auto) | GenerateDialog / צ'אט | advanced | `scheduler_directives.md` | 1 | worker |
 | עוזר עובד | AssistantChat | default | `employee_assistant.md` | 1 | API |
@@ -278,7 +278,7 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 ### מועמדים להסרה (💤 לא נקראים מה-UI)
 | Backend | Frontend (`services/api.ts`) | קוד שאולי מת איתם |
 |---|---|---|
-| `POST /schedule/brief` | `briefManager` | `bl/briefing/`, `prompts/briefing.md` |
+| `POST /schedule/brief` | `briefManager` | `bl/briefing.py`, `prompts/briefing.md` |
 | `POST /schedule/propose` | `proposeChange` | `bl/changes/agent.py`, `prompts/changes.md` (לבדוק מה הצ'אט עדיין מייבא מ-`changes/`) |
 | `POST /schedule/apply` | `applyChange` | החלפות עדיין משתמשות ב-`schedule_service.apply`, אז להסיר רק את ה-route |
 | `POST /schedule/ask` | `askAgent` | `bl/planner/model_loop.py`, `prompts/planner.md` (`fallback_answers` בשימוש הצ'אט) |
@@ -288,7 +288,7 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 | `GET /api/schedule/requests`, `/identities`, `/identities/release`, `GET /api/schedule/swaps` | – | לבדוק אם נחוצים לאינטגרציה חיצונית |
 | `GET /api/employee/swaps/incoming` | – | – |
 
-לפני מחיקה צריך לבדוק שאף טסט ב-`backend/tests/` ואף מודול אחר לא תלוי בהם. למשל `manager_chat.py` מייבא מ-`bl/changes/agent.py` ומ-`bl/planner/`.
+לפני מחיקה צריך לבדוק שאף טסט ב-`backend/tests/` ואף מודול אחר לא תלוי בהם. למשל `bl/chat_reply.py` מייבא מ-`bl/changes/agent.py` ומ-`bl/planner/shaping.py`, `bl/chat_tools.py` מייבא מ-`bl/planner/fallback_answers.py`, ו-`bl/chat_schema.py` מייבא מ-`bl/planner/schema.py`.
 
 ### לבדוק או לפשט
 - **Copilot:** אישור ו-rollback בלי תופעת לוואי. לפשט, או לחבר לצ'אט.
