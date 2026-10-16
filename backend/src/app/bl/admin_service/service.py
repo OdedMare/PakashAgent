@@ -13,7 +13,7 @@ import hmac
 from typing import Any, Dict, List
 
 from app.bl.workspace_service.service import validate_notes
-from app.common.errors.errors import AgentError, AuthError, ForbiddenError
+from app.common.errors import AgentError, AuthError, ForbiddenError
 
 # Read from the runtime settings for the overview. Names only, never a key or
 # a password: the overview is a glance, and the settings tab is where secrets

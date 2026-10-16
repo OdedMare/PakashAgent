@@ -19,7 +19,7 @@ from app.bl.scheduler.quality import no_worse, quality
 from app.bl.scheduler.fairness import load_cost, uneven_load
 from app.bl.scheduler.repair import repair_request, repaired_attempt
 from app.bl.scheduler.values import bounded, lines
-from app.common.errors.errors import AgentError
+from app.common.errors import AgentError
 
 _log = logging.getLogger("pakash.scheduler")
 

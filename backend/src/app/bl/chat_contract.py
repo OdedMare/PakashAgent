@@ -9,8 +9,8 @@ from app.bl.scheduler.availability import effective_availability
 from app.bl.audit.staffing_rules import required_headcount, seat_counts
 from app.bl.tools.values import iso
 from app.bl.intent.dates import date_in, explicit_date, parse
-from app.common.time_context.time_context import israel_today
-from app.common.errors.errors import AgentError
+from app.common.time_context import israel_today
+from app.common.errors import AgentError
 
 GAP_CODES = frozenset({"unfilled", "missing_role", "missing_commander"})
 

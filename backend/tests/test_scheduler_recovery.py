@@ -5,7 +5,7 @@ import json
 import pytest
 
 from app.bl.scheduler import Scheduler
-from app.common.errors.errors import AgentError, ModelOutputError
+from app.common.errors import AgentError, ModelOutputError
 from tests.test_scheduler import MORNING, PROFILE, _reply, _week_profile
 
 

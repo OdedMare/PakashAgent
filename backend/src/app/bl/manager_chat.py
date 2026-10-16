@@ -38,8 +38,8 @@ from app.bl.simulate.hypothetical import Hypothetical, schedule_rows
 from app.bl.tools import ScheduleTools, TOOL_DESCRIPTIONS
 from app.bl.tools.schedule_tools import _invalid_date_argument
 from app.bl.tools.values import iso
-from app.common.errors.errors import AgentError, AppError, ConflictError
-from app.common.time_context.time_context import agent_time_context, israel_today
+from app.common.errors import AgentError, AppError, ConflictError
+from app.common.time_context import agent_time_context, israel_today
 
 _log = logging.getLogger("pakash.chat")
 _EXTRA_TOOLS = {

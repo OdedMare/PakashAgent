@@ -16,8 +16,8 @@ import json
 
 from app.bl.employee_service.assistant import EmployeeAssistant
 from app.bl.employee_service.swap_options import swap_options
-from app.common.errors.errors import AgentError
-from app.common.time_context.time_context import israel_today
+from app.common.errors import AgentError
+from app.common.time_context import israel_today
 
 MORNING = "בוקר"
 EVENING = "ערב"

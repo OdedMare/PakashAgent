@@ -4,7 +4,7 @@ import pytest
 
 from app.bl.audit import load_history
 from app.bl.scheduler import Scheduler
-from app.common.errors.errors import AgentError
+from app.common.errors import AgentError
 from tests.test_scheduler import MORNING, _reply, _week_profile
 from tests.test_scheduler_recovery import Model, assignment, cover
 

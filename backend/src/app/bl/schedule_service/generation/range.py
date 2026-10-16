@@ -8,7 +8,7 @@ from app.bl.schedule_service.generation.builder import generation_engine, genera
 from app.bl.schedule_service.generation.job import GenerationJob
 from app.bl.schedule_service.profile_gate import ProfileGate
 from app.bl.schedule_service.rows import iso
-from app.common.errors.errors import AgentError
+from app.common.errors import AgentError
 
 
 class RangeBuilder:

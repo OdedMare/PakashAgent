@@ -8,17 +8,17 @@ Cross-cutting infrastructure. **Ported from AiSummryIO.**
   values **without a restart**, because `dal/llm/` reads the store on every call.
   Secrets are masked on the way out; a masked value coming back means "unchanged",
   so the stored secret is kept.
-- `sessions/sessions.py` — signed workspace session cookies: `issue()` and `read()`,
+- `sessions.py` — signed workspace session cookies: `issue()` and `read()`,
   HMAC-SHA256 over a compact payload. Not a JWT and not trying to be — no
   algorithm field, no library, a format this file fully controls.
-- `logging_setup/logging_setup.py` — `structlog` configuration.
-- `errors/errors.py` — `AgentError`, the Hebrew-facing error type everything raises.
-- `throttle/throttle.py` — `LoginThrottle`: every password check (boss login,
+- `logging_setup.py` — standard-library logging configuration.
+- `errors.py` — `AgentError`, the Hebrew-facing error type everything raises.
+- `throttle.py` — `LoginThrottle`: every password check (boss login,
   employee login, change password, settings password) runs through
   `attempt()`, which locks an account for 15 minutes after 5 wrong guesses.
   Keyed by account, not IP — behind the Next proxy every request has the same
   IP. In memory, per process.
-- `events/events.py` — `TeamEvents`: an employee route `publish()`es "the
+- `events.py` — `TeamEvents`: an employee route `publish()`es "the
   requests (or swaps) inbox moved" from its worker thread, and the manager's
   SSE stream, waiting on the event loop, wakes up (D29). No payload. In
   memory, per process; the client's 15-second poll is the backstop.

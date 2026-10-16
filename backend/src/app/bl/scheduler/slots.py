@@ -12,7 +12,7 @@ from app.bl.scheduler.values import (
     bounded, dates_between, named, parse_date, role_list,
 )
 from app.common.config.settings import MODE_DAY, MODE_WEEK
-from app.common.errors.errors import AgentError
+from app.common.errors import AgentError
 
 # Checkpointed daily generation makes long planning horizons safe to resume.
 # One leap year is a useful product ceiling; beyond that belongs in a separate

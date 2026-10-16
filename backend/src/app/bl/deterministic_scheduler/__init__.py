@@ -14,7 +14,7 @@ from app.bl.deterministic_scheduler.plan import DayPlan
 from app.bl.deterministic_scheduler.rows import text
 from app.bl.scheduler import build_slots
 from app.bl.scheduler.quality import combine_metrics
-from app.common.errors.errors import AgentError
+from app.common.errors import AgentError
 
 _SUMMARY = "השיבוץ נבנה בקוד לפי זמינות, כשירות, עומס וסבבים מחייבים."
 

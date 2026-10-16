@@ -1,4 +1,4 @@
-"""Console logging configuration.
+"""Application console logging.
 
 Uvicorn configures only its own loggers, so without this every ``logger.info``
 in the codebase writes to a handler that does not exist and is silently

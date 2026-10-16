@@ -33,7 +33,7 @@ import io
 from typing import Any, Dict, List, Optional
 
 from app.bl.shared.hebrew_calendar import hebrew_weekday
-from app.common.errors.errors import AgentError
+from app.common.errors import AgentError
 
 # A slot nobody is on. Said out loud rather than left blank: an empty cell in
 # a group chat reads as "nothing that day", and an unstaffed shift is the one

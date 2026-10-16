@@ -16,8 +16,8 @@ from app.bl.schedule_service.constants import (
 )
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.rows import find_assignment, iso
-from app.common.errors.errors import AgentError, AppError, ConflictError, NotFoundError
-from app.common.time_context.time_context import israel_today
+from app.common.errors import AgentError, AppError, ConflictError, NotFoundError
+from app.common.time_context import israel_today
 from app.dal.repository.schedules import ASSIGNED_BY_MANAGER
 
 

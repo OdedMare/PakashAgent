@@ -25,7 +25,7 @@ from app.bl.scheduler.request import SpanRequest
 from app.bl.scheduler.fairness import load_cost, uneven_load
 from app.bl.scheduler.quality import no_worse
 from app.bl.scheduler.values import bounded, bounded_rows, lines
-from app.common.errors.errors import AgentError, ModelOutputError
+from app.common.errors import AgentError, ModelOutputError
 from app.common.config.settings import ENGINE_AI, ENGINE_AUTO, ENGINE_CODE
 
 

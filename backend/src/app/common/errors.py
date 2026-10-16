@@ -1,4 +1,4 @@
-"""Error types leaving the backend.
+"""Error types returned by the backend.
 
 Messages are Hebrew: they reach a Hebrew-speaking boss directly, so the text
 carried here is user-facing copy, not a developer string.

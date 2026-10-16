@@ -15,7 +15,7 @@ service names them: a `SELECT *` is one added column away from a leak.
 import datetime
 from typing import Any, Dict, List, Optional
 
-from app.common.errors.errors import NotFoundError
+from app.common.errors import NotFoundError
 from app.dal.database.postgres import connect
 from app.dal.repository.base import RepositoryBase
 

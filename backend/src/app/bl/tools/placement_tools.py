@@ -5,7 +5,7 @@ from app.bl.placement import closure_of, suggest_alternatives
 from app.bl.tools.period_tools import Tool
 from app.bl.tools.reads import hours_for
 from app.bl.tools.values import assignment_id, iso, text, window
-from app.common.errors.errors import AgentError
+from app.common.errors import AgentError
 
 # How many candidates a replacement search returns. Past a handful the list
 # stops being an answer and becomes a second grid to read.

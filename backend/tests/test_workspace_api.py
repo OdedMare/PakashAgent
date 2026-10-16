@@ -8,8 +8,8 @@ from fastapi.testclient import TestClient
 from app.api.dependencies.dependencies import Guards
 from app.api.routers import workspace
 from app.bl.workspace_service.service import WorkspaceService
-from app.common.errors.errors import AppError
-from app.common.sessions.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
+from app.common.errors import AppError
+from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 
 from tests.test_workspace import _FakeTeams
 

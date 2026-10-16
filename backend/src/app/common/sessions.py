@@ -1,4 +1,4 @@
-"""Signed workspace session cookies.
+"""Signed workspace and admin session cookies.
 
 The cookie carries the team id and a role, signed with HMAC-SHA256 so the
 browser can hold it without being able to edit it. There is no server-side
@@ -164,10 +164,3 @@ def _sign(secret: str, body: str) -> str:
 
 def generate_secret() -> str:
     return secrets.token_urlsafe(32)
-
-
-__all__ = [
-    "COOKIE_NAME", "ROLE_BOSS", "ROLE_MEMBER", "ROLE_EMPLOYEE",
-    "ADMIN_COOKIE_NAME", "ROLE_ADMIN",
-    "issue", "read", "issue_admin", "read_admin", "generate_secret",
-]

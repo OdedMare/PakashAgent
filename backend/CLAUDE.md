@@ -40,8 +40,8 @@ uvicorn app.main:app --app-dir src --reload
   cross-team queries — the one deliberate exception to team scoping.
 - `api/dependencies/dependencies.py` — the route guards (`visitor`, `boss`,
   `employee`, `admin`). `visitor` also refuses a suspended or deleted team.
-- `common/sessions/sessions.py` — signed session cookies (HMAC-SHA256, no library).
-- `common/events/` — in-process "an inbox moved" signals per team, feeding
+- `common/sessions.py` — signed session cookies (HMAC-SHA256, no library).
+- `common/events.py` — in-process "an inbox moved" signals per team, feeding
   the manager's SSE stream (`api/routers/employee/live.py`, D29). Signals
   carry no data; the screen re-reads through the guarded routes.
 - `bl/interview/` — the intro interview, one `plan-chat` turn at a time

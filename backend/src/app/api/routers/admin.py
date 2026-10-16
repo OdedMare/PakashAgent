@@ -23,8 +23,8 @@ from app.api.contracts import (
     AdminReleaseRequest,
     AdminUpdateTeamRequest,
 )
-from app.common.sessions.sessions import ADMIN_COOKIE_NAME, issue_admin
-from app.common.throttle.throttle import LoginThrottle
+from app.common.sessions import ADMIN_COOKIE_NAME, issue_admin
+from app.common.throttle import LoginThrottle
 
 # One throttle key for the whole console: there is one operator password,
 # so there is one account to guess at.

@@ -20,9 +20,9 @@ from app.api.dependencies.dependencies import Guards
 from app.api.routers import employee as employee_router
 from app.api.routers.employee.live import stream
 from app.bl.employee_service import EmployeeService
-from app.common.errors.errors import AppError
+from app.common.errors import AppError
 from app.common.events import REQUESTS, SWAPS, TeamEvents
-from app.common.sessions.sessions import ROLE_EMPLOYEE, ROLE_MEMBER
+from app.common.sessions import ROLE_EMPLOYEE, ROLE_MEMBER
 from tests.test_employee_api import (
     DANA, OTHER_TEAM, SECRET, TEAM, _as, _FakeIdentities, _FakeSchedules,
 )

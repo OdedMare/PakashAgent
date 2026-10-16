@@ -1,4 +1,4 @@
-"""In-process "something changed" signals, per team, for the manager's screen.
+"""In-process change signals, per team, for the manager's screen.
 
 An employee's submission lands on a request thread; the manager's stream
 waits on the event loop. `publish()` crosses that gap with

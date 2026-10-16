@@ -21,7 +21,7 @@ from typing import List, Optional
 
 from psycopg.types.json import Jsonb
 
-from app.common.errors.errors import AuthError, NotFoundError
+from app.common.errors import AuthError, NotFoundError
 from app.dal.repository.base import RepositoryBase
 
 # scrypt's cost parameters. n=2**14 with r=8 lands around 16MB and a few tens

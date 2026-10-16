@@ -1,6 +1,6 @@
 """Adaptive splitting persists each smaller span and resumes only unfinished dates."""
 
-from app.common.errors.errors import AgentError, ModelOutputError
+from app.common.errors import AgentError, ModelOutputError
 from tests.test_schedule_api import (
     MORNING, _DeferredLauncher, _FakeSettings, _build_app, _client, _generation,
 )

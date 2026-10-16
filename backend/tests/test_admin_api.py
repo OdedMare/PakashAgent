@@ -15,8 +15,8 @@ from app.api.dependencies.dependencies import Guards
 from app.api.routers import admin, settings as settings_router, workspace
 from app.bl.admin_service import AdminService
 from app.bl.workspace_service.service import WorkspaceService
-from app.common.errors.errors import AppError, NotFoundError
-from app.common.sessions.sessions import (
+from app.common.errors import AppError, NotFoundError
+from app.common.sessions import (
     ADMIN_COOKIE_NAME, COOKIE_NAME, ROLE_ADMIN, issue, issue_admin, read,
     read_admin,
 )

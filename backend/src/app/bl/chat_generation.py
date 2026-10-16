@@ -8,7 +8,7 @@ from app.bl.schedule_service.generation.pins import model_assignment
 from app.bl.tools.values import iso
 from app.bl.scheduler import build_slots
 from app.dal.repository.schedules import week_bounds
-from app.common.errors.errors import AgentError
+from app.common.errors import AgentError
 
 def prepare_generation(repository, scheduler, history, team_id, turn, plan, state):
     first, last = turn.get("starts_on") or "", turn.get("ends_on") or ""

@@ -7,7 +7,7 @@ from app.api.contracts import (
     EmployeeLoginRequest,
     EmployeeSignInRequest,
 )
-from app.common.sessions.sessions import COOKIE_NAME, ROLE_EMPLOYEE, issue
+from app.common.sessions import COOKIE_NAME, ROLE_EMPLOYEE, issue
 
 
 class IdentityRoutes:

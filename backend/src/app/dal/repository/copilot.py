@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from psycopg.types.json import Jsonb
 
-from app.common.errors.errors import AgentError
+from app.common.errors import AgentError
 from app.dal.repository.base import RepositoryBase, new_id
 
 MODES = ("observe", "suggest", "auto")

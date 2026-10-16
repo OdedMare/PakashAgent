@@ -20,7 +20,7 @@ from app.api.routers.employee.live import LiveRoutes
 from app.api.routers.employee.manager import RequestDecisionRoutes, SwapDecisionRoutes
 from app.api.routers.employee.personal import EmployeeSwapRoutes, PersonalRoutes
 from app.common.events import TeamEvents
-from app.common.throttle.throttle import LoginThrottle
+from app.common.throttle import LoginThrottle
 
 
 def build_router(

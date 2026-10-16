@@ -4,7 +4,7 @@ import datetime
 from typing import Any, List
 
 from app.bl.profile_service.validation import text, text_list, valid_time
-from app.common.errors.errors import AgentError
+from app.common.errors import AgentError
 from app.bl.shared.hebrew_calendar import weekday_key
 
 _OPTIONAL_EXIT_PATTERNS = ("triplet", "hamshushim", "shushim")

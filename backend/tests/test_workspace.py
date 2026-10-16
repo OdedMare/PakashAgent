@@ -8,8 +8,8 @@ verified would pass every HTTP test in the suite while being worthless.
 import pytest
 
 from app.bl.workspace_service.service import WorkspaceService
-from app.common.errors.errors import AgentError, AuthError, ConflictError
-from app.common.sessions.sessions import (
+from app.common.errors import AgentError, AuthError, ConflictError
+from app.common.sessions import (
     ROLE_BOSS, ROLE_MEMBER, generate_secret, issue, read,
 )
 from app.dal.repository.teams import (

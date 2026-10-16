@@ -10,7 +10,7 @@ from app.bl.profile_service.workplace import workplace
 from app.bl.scheduler import Scheduler, build_slots, effective_availability
 from app.bl.scheduler.bounding import bound_assignments
 from app.bl.scheduler.candidates import candidates_for
-from app.common.errors.errors import AgentError
+from app.common.errors import AgentError
 
 
 def window(pattern="round", group="א", **patch):

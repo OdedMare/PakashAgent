@@ -1,4 +1,4 @@
-"""Locking an account out after repeated wrong passwords.
+"""Account lockout after repeated wrong passwords.
 
 Every credential in this app is short enough to guess by brute force when
 nothing stops the guessing: an employee passcode is a handful of digits, and
@@ -22,7 +22,7 @@ import time
 from threading import Lock
 from typing import Callable, Dict, List, TypeVar
 
-from app.common.errors.errors import AuthError, ForbiddenError, TooManyAttemptsError
+from app.common.errors import AuthError, ForbiddenError, TooManyAttemptsError
 
 T = TypeVar("T")
 
@@ -106,6 +106,3 @@ class LoginThrottle:
         self._locked_until = {
             key: until for key, until in self._locked_until.items() if until > now
         }
-
-
-__all__ = ["LoginThrottle"]

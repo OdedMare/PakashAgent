@@ -17,7 +17,7 @@ from app.bl.briefing.briefing import (
     TRIGGER_PERIODIC,
     TRIGGER_PUBLISHING,
 )
-from app.common.errors.errors import AgentError
+from app.common.errors import AgentError
 
 MORNING = "בוקר"
 EVENING = "צהריים"

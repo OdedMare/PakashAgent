@@ -27,8 +27,8 @@ from app.bl.employee_service.personal import teammates
 from app.bl.employee_service.swap_options import swap_options
 from app.bl.employee_service.values import employees, iso_date, shifts, text, window
 from app.bl.prompts import load
-from app.common.errors.errors import AgentError
-from app.common.time_context.time_context import israel_today
+from app.common.errors import AgentError
+from app.common.time_context import israel_today
 
 _log = logging.getLogger("pakash.employee_assistant")
 _FLOW = "employee_assistant"

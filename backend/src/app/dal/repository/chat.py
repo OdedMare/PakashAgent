@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from psycopg.errors import SerializationFailure
 from psycopg.types.json import Jsonb
 
-from app.common.errors.errors import ConflictError, NotFoundError
+from app.common.errors import ConflictError, NotFoundError
 from app.dal.database.postgres import atomic, connect
 from app.dal.repository.base import RepositoryBase, new_id
 from app.dal.repository.jobs import enqueue

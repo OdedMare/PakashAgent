@@ -932,7 +932,7 @@ The reconnect passes through the guard again, so a team suspended under
 stops listening within minutes rather than holding an authorised stream
 forever.
 
-**⚠️ Per process, like `LoginThrottle`.** `common/events/` is in-memory. A
+**⚠️ Per process, like `LoginThrottle`.** `common/events.py` is in-memory. A
 submission handled by another worker does not reach this worker's streams.
 The 15-second poll stays underneath as the backstop, so a dropped stream or
 a second worker degrades to the old behaviour rather than to silence. If the

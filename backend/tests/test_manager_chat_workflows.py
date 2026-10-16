@@ -9,7 +9,7 @@ import pytest
 from app.bl.audit import shift_stats
 from app.bl.chat_contract import normalize_week_turn
 from app.bl.scheduler import effective_availability
-from app.common.errors.errors import ConflictError
+from app.common.errors import ConflictError
 from tests.test_manager_chat import TEAM, MORNING, converse, setup, sickness, turn
 
 EVENING = "ערב"

@@ -20,9 +20,9 @@ from app.api.contracts import (
     TeamView,
     Workspace,
 )
-from app.common.errors.errors import ForbiddenError
-from app.common.sessions.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
-from app.common.throttle.throttle import LoginThrottle
+from app.common.errors import ForbiddenError
+from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
+from app.common.throttle import LoginThrottle
 
 
 class WorkspaceRoutes:

@@ -13,8 +13,8 @@ from threading import Lock
 from fastapi import Cookie, Depends, Response
 from typing import Callable, Dict, Optional, Tuple
 
-from app.common.errors.errors import AuthError, ForbiddenError
-from app.common.sessions.sessions import (
+from app.common.errors import AuthError, ForbiddenError
+from app.common.sessions import (
     ADMIN_COOKIE_NAME, COOKIE_NAME, ROLE_BOSS, ROLE_EMPLOYEE, issue, read,
     read_admin,
 )

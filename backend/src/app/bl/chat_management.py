@@ -7,7 +7,7 @@ from app.bl.employee_service.swaps import SwapRequests, _swap_operation
 from app.bl.placement.values import warning_key
 from app.bl.simulate.hypothetical import Hypothetical, schedule_rows
 from app.bl.tools.values import iso
-from app.common.errors.errors import AppError
+from app.common.errors import AppError
 from app.dal.repository.schedule_vocabulary import PREFERENCE_KINDS
 
 

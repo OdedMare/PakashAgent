@@ -21,11 +21,11 @@ from app.bl.workspace_service.service import WorkspaceService
 from app.bl.manager_chat import ManagerChatService
 from app.api.routers import manager_chat
 from app.common.config.settings import Settings
-from app.common.errors.errors import AppError, error_payload
+from app.common.errors import AppError, error_payload
 from app.common.events import TeamEvents
-from app.common.logging_setup.logging_setup import configure_logging
-from app.common.sessions.sessions import generate_secret
-from app.common.throttle.throttle import LoginThrottle
+from app.common.logging_setup import configure_logging
+from app.common.sessions import generate_secret
+from app.common.throttle import LoginThrottle
 from app.common.runtime_settings.runtime_settings_store import (
     RuntimeSettingsStore,
 )

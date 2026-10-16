@@ -1,4 +1,4 @@
-"""Israel-local time for agent context and scheduling calendar decisions."""
+"""Israel-local time for agent context and scheduling decisions."""
 
 import datetime
 from typing import Optional
@@ -57,8 +57,3 @@ Time interpretation rules:
         weekday=local.strftime("%A"),
         time=local.strftime("%H:%M"),
     )
-
-
-__all__ = [
-    "ISRAEL_TIMEZONE", "agent_time_context", "israel_datetime", "israel_today",
-]

@@ -30,8 +30,8 @@ from typing import List, Optional
 import httpx
 from openai import OpenAI
 
-from app.common.errors.errors import AgentError, ModelOutputError
-from app.common.time_context.time_context import agent_time_context
+from app.common.errors import AgentError, ModelOutputError
+from app.common.time_context import agent_time_context
 from app.dal.llm import ladder, tracing
 from app.dal.llm.budgets import (  # noqa: F401  (re-exported for tests)
     budget_seconds as _budget_seconds,

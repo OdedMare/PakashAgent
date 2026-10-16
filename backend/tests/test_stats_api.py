@@ -8,7 +8,7 @@ The arithmetic itself is `test_shift_stats.py`'s. These tests are about what
 the route adds to it -- which rows of which periods reach that arithmetic.
 """
 
-from app.common.sessions.sessions import ROLE_MEMBER
+from app.common.sessions import ROLE_MEMBER
 from tests.test_schedule_api import MORNING, _build_app, _client
 
 WEEK_ONE = ("2026-08-16", "2026-08-22")
