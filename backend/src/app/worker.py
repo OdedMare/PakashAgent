@@ -10,12 +10,12 @@ import signal
 import threading
 import time
 
-from app.bl.copilot.copilot import CopilotService
+from app.bl.copilot import CopilotService
 from app.bl.schedule_service import ScheduleService
 from app.bl.manager_chat import ManagerChatService
 from app.common.activity import track_activity
 from app.common.errors import NotFoundError
-from app.common.config.settings import Settings
+from app.common.config import Settings
 from app.common.logging_setup import configure_logging
 from app.common.runtime_settings.runtime_settings_store import RuntimeSettingsStore
 from app.dal.llm import tracing

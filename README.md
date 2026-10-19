@@ -88,7 +88,7 @@ and imported back. A message for the group chat is asked of the agent instead
 Built: the ported `dal/llm` client, settings and runtime settings, structured
 unit setup, the workspace layer (teams, boss login, member share links, route
 guards), `bl/audit.py` and its table-driven tests, `bl/scheduler.py`,
-`bl/changes.py`, `bl/briefing/briefing.py`, `bl/export/export.py`, `bl/placement.py`, the agent's
+`bl/changes.py`, `bl/briefing.py`, `bl/export.py`, `bl/placement.py`, the agent's
 tool layer (`bl/tools.py`, `bl/planner.py`, `bl/intent.py`, `bl/simulate.py`),
 the schedule tables, the management HTTP layer, and the RTL UI for all of it.
 

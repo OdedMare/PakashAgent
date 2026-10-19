@@ -16,7 +16,7 @@ from app.bl.schedule_service.generation.pins import (
 from app.bl.schedule_service.profile_gate import ProfileGate
 from app.bl.schedule_service.rows import iso
 from app.common.errors import AgentError, ModelOutputError
-from app.common.config.settings import ENGINE_AI
+from app.common.config import ENGINE_AI
 
 
 class GenerationStepper:

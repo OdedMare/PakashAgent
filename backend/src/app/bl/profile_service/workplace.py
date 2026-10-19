@@ -5,7 +5,7 @@ from typing import Any, List
 
 from app.bl.profile_service.validation import text, text_list, valid_time
 from app.common.errors import AgentError
-from app.bl.shared.hebrew_calendar import weekday_key
+from app.bl.shared import weekday_key
 
 _OPTIONAL_EXIT_PATTERNS = ("triplet", "hamshushim", "shushim")
 _GROUPS = {"round": ("א", "ב"), "triplet": ("א", "ב", "ג")}

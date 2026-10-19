@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from app.api.dependencies.dependencies import Guards
+from app.api.dependencies import Guards
 from app.api.routers import employee as employee_router
 from app.api.routers.employee.live import stream
 from app.bl.employee_service import EmployeeService

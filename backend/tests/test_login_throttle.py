@@ -11,10 +11,10 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from app.api.dependencies.dependencies import Guards
+from app.api.dependencies import Guards
 from app.api.routers import settings as settings_router
 from app.api.routers import workspace
-from app.bl.workspace_service.service import WorkspaceService
+from app.bl.workspace_service import WorkspaceService
 from app.common.errors import AppError, AuthError
 from app.common.sessions import COOKIE_NAME, ROLE_BOSS, issue
 from app.common.throttle import LoginThrottle

@@ -2,15 +2,7 @@
 
 from typing import Any, List, Optional
 
-
-def text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
-
-
-def date_of(value: Any) -> str:
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    return text(value)
+from app.bl.shared import iso as date_of, text
 
 
 def assignment(raw: Any) -> Optional[dict]:

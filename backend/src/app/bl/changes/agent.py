@@ -8,7 +8,7 @@ from app.bl import rotation
 from app.bl.changes.proposal import build_proposal
 from app.bl.changes.schema import CHANGE_RESPONSE_SCHEMA
 from app.bl.changes.values import bounded, date_of, dict_rows, json_default
-from app.bl.shared.clarification import resume
+from app.bl.shared import profile_for_model as _profile_for_model, resume
 from app.bl.prompts import load
 from app.common.errors import AgentError
 
@@ -68,21 +68,6 @@ class ChangeAgent:
         if not isinstance(answer, dict):
             raise AgentError("המודל החזיר הצעת שינוי לא תקינה")
         return answer
-
-
-def _profile_for_model(profile: dict) -> dict:
-    profile = profile if isinstance(profile, dict) else {}
-    return {
-        "workplace": profile.get("workplace") or {},
-        "employees": profile.get("employees") or [],
-        "shifts": profile.get("shifts") or [],
-        "rules": profile.get("rules") or [],
-        "rest_policy": profile.get("rest_policy") or "",
-        "fairness_policy": profile.get("fairness_policy") or "",
-        "conflict_policy": profile.get("conflict_policy") or "",
-    }
-
-
 def _closures_for_model(profile: dict, schedule: dict) -> List[dict]:
     """The same closure rows the scheduler sends, from the same arithmetic.
 

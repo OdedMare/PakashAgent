@@ -9,7 +9,7 @@ import json
 from dataclasses import asdict, fields, replace
 from pathlib import Path
 
-from app.common.config.settings import (
+from app.common.config import (
     ENGINE_AUTO, GENERATION_ENGINES, GENERATION_MODES, MODE_DAY, Settings,
 )
 from app.common.runtime_settings.normalizers import (

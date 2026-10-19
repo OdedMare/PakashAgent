@@ -3,30 +3,20 @@
 import json
 from typing import List, Optional
 
-from app.bl.audit import load_history
 from app.bl import rotation
 from app.bl.prompts import load
-from app.bl.scheduler.availability import (
-    availability_for_dates, effective_availability,
-)
-from app.bl.scheduler.bounding import (
-    bound_assignments, committed_for_model, merge, required_assignments,
-)
 from app.bl.scheduler.payload import (
-    SCHEDULE_RESPONSE_SCHEMA, closures_for_model, preferences_for_model,
-    profile_for_model, slot_for_model,
+    SCHEDULE_RESPONSE_SCHEMA,
 )
 from app.bl.scheduler.slots import build_slots, chunks
-from app.bl.scheduler.span import MAX_HISTORY_ROWS, SpanGenerator
+from app.bl.scheduler.span import SpanGenerator
 from app.bl.scheduler.directives import (
     DIRECTIVE_RESPONSE_SCHEMA, read_translation, semantic_sources,
 )
-from app.bl.scheduler.request import SpanRequest
-from app.bl.scheduler.fairness import load_cost, uneven_load
-from app.bl.scheduler.quality import no_worse
-from app.bl.scheduler.values import bounded, bounded_rows, lines
+from app.bl.scheduler.planning import ChunkedRun
+from app.bl.scheduler.values import bounded
 from app.common.errors import AgentError, ModelOutputError
-from app.common.config.settings import ENGINE_AI, ENGINE_AUTO, ENGINE_CODE
+from app.common.config import ENGINE_AI, ENGINE_AUTO, ENGINE_CODE
 
 
 class Scheduler:
@@ -67,8 +57,8 @@ class Scheduler:
         slots = build_slots(profile, starts_on, ends_on)
         if not slots:
             raise AgentError("לא ניתן לבנות סידור: לא הוגדרו משמרות לתקופה הזו")
-        run = _ChunkedRun(profile, starts_on, ends_on, slots, availability,
-                          history, required_assignments)
+        run = ChunkedRun(profile, starts_on, ends_on, slots, availability,
+                         history, required_assignments)
         for chunk in chunks(slots):
             answer = self._ask(run.payload(chunk, instructions, preferences))
             run.absorb(answer)
@@ -239,97 +229,3 @@ def _check_rotation(profile):
     errors = rotation.configuration_errors(dict(profile, employees=grouped))
     if errors:
         raise AgentError("יש להשלים את העוגנים והקבוצות בהגדרת היחידה > סבבים ותלתונים: %s" % "; ".join(errors))
-
-
-class _ChunkedRun:
-    """The running state of one legacy chunked generation."""
-
-    def __init__(self, profile, starts_on, ends_on, slots, availability,
-                 history, required):
-        self._profile = profile
-        self._slots = slots
-        self._past = bounded_rows(history, MAX_HISTORY_ROWS)
-        self._availability = effective_availability(
-            profile, availability, starts_on, ends_on
-        )
-        self._required = required_assignments(required, slots, profile, self._availability)
-        self.assignments: List[dict] = list(self._required)
-        self.notes: List[str] = []
-        self.summaries: List[str] = []
-
-    def payload(self, chunk: List[dict], instructions: str, preferences) -> dict:
-        first, last = chunk[0]["slot_date"], chunk[-1]["slot_date"]
-        return {
-            "profile": profile_for_model(self._profile),
-            "preferences": preferences_for_model(preferences),
-            "period": {
-                "starts_on": first,
-                "ends_on": last,
-                "slots": [slot_for_model(slot) for slot in chunk],
-            },
-            "availability": availability_for_dates(
-                self._availability, {slot["slot_date"] for slot in chunk}
-            ),
-            "closures": closures_for_model(self._profile, first, last),
-            # Counted rather than handed over raw (D3): several hundred rows
-            # were roughly 60% of this payload.
-            "fairness": load_history(
-                self._past + self.assignments,
-                (self._profile or {}).get("shifts") or [],
-                (self._profile or {}).get("employees") or [],
-            ),
-            "period_load": load_history(
-                self.assignments, self._profile.get("shifts") or [],
-                self._profile.get("employees") or [], slots=self._slots,
-            ),
-            "already_scheduled": committed_for_model(self.assignments),
-            "required_assignments": committed_for_model(self._required),
-            "instructions": bounded(instructions),
-        }
-
-    def absorb(self, answer: dict) -> None:
-        # Bounded against the whole grid, not just this chunk: a date from
-        # next week names a real slot and is a valid decision for the period.
-        self.assignments = merge(
-            self.assignments,
-            bound_assignments(
-                answer.get("assignments"), self._slots, self._profile,
-                self._availability,
-            ),
-        )
-        self.notes.extend(lines(answer.get("notes")))
-        self.summaries.append(bounded(answer.get("summary")))
-
-    def balance(self, ask, chunk, instructions, preferences) -> None:
-        dates = {slot["slot_date"] for slot in chunk}
-        span = SpanRequest(self._profile, min(dates), max(dates), chunk,
-                           self._availability, self.assignments,
-                           [row for row in self._required if row["date"] in dates])
-        baseline = span.audit(self.assignments)
-        findings = uneven_load(span, self.assignments, baseline, self._past)
-        if not findings:
-            return
-        payload = span.payload(self._past, instructions, preferences)
-        payload["repair"] = {"warnings": [item["message"] for item in findings],
-                             "instruction": "החזר סידור מלא ומאוזן לתקופה בלבד ושמור על שיבוצי החובה."}
-        try:
-            second = span.read(ask(payload, schema=span.schema))
-            if not second.rejected and no_worse(baseline, span.audit(second.roster)) \
-                    and load_cost(span, second.roster, self._past) < load_cost(span, self.assignments, self._past):
-                self.assignments = second.roster
-                self.notes.extend(lines(second.answer.get("notes")))
-                self.summaries[-1] = bounded(second.answer.get("summary"))
-        except AgentError:
-            self.notes.append("בקשת איזון העומס נכשלה; הטיוטה שנבנתה נשמרה.")
-        self.notes.extend(item["message"] for item in
-                          uneven_load(span, self.assignments, span.audit(self.assignments), self._past))
-
-    def result(self) -> dict:
-        return {
-            "slots": self._slots,
-            "assignments": self.assignments,
-            "notes": self.notes,
-            # Several chunks produce several summaries; joining them is
-            # honest, inventing one sentence over them is the model's job.
-            "summary": bounded(" ".join(self.summaries)),
-        }

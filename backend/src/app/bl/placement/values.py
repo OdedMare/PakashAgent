@@ -1,41 +1,14 @@
 """Reading the stored schedule and the roster the way the placement checks do."""
 
-import datetime
-from typing import Any, Dict, List, Optional
+from typing import Dict, List
 
 from app.bl.audit.stats import shift_stats
-
-
-def text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
-
-
-def iso(value: Any) -> str:
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    return text(value)
-
-
-def parse(value: str) -> Optional[datetime.date]:
-    try:
-        return datetime.date.fromisoformat(value)
-    except (ValueError, TypeError):
-        return None
+from app.bl.shared import employees, iso, shifts, text
 
 
 def pretty(hours: float) -> str:
     """A round number without its trailing zero. 8.0 reads as 8."""
     return "%g" % round(hours, 1)
-
-
-def employees(profile: dict) -> List[dict]:
-    rows = (profile or {}).get("employees")
-    return [row for row in rows or [] if isinstance(row, dict)]
-
-
-def shifts(profile: dict) -> List[dict]:
-    rows = (profile or {}).get("shifts")
-    return [row for row in rows or [] if isinstance(row, dict)]
 
 
 def rows(schedule: dict, drop: str = "") -> List[dict]:
@@ -96,18 +69,3 @@ def hours_by_employee(schedule: dict, profile: dict) -> Dict[str, float]:
     stats = shift_stats(schedule.get("assignments") or [], shifts(profile), employees(profile),
                         slots=schedule.get("slots") or [], profile=profile)
     return {row["employee"]: row["hours"] for row in stats["by_employee"]}
-
-
-def warning_key(warning: dict) -> tuple:
-    """What makes two warnings the same warning.
-
-    The message is deliberately out of it: the over-hours check writes the
-    running total into its sentence, so a placement pushing somebody from 46
-    to 54 hours would otherwise read as a brand-new warning.
-    """
-    return (
-        text(warning.get("code")),
-        text(warning.get("employee")),
-        text(warning.get("date")),
-        text(warning.get("shift")),
-    )

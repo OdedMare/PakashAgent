@@ -6,7 +6,7 @@ from app.bl.rotation.closures import closure_days, holds, shift_interval
 from app.bl.rotation.vocabulary import (
     cycle_of_group, exit_pattern, groups_for, minutes, parse_date, text,
 )
-from app.bl.shared.hebrew_calendar import hebrew_weekday, weekday_key
+from app.bl.shared import hebrew_weekday, weekday_key
 
 _DAY = datetime.timedelta(days=1)
 

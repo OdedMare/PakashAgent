@@ -1,4 +1,4 @@
-"""Workspace decisions: who may open a team, and in which role.
+"""Workspace access, lifecycle, and manager authentication.
 
 The repository owns the SQL and `common/sessions.py` owns the signing; this
 owns the rules between them -- what a boss is allowed to do that a member is

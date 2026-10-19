@@ -3,14 +3,12 @@
 import datetime
 from typing import Any, List, Optional
 
+from app.bl.shared import text
+
 # Enough history to see a pattern, bounded because every row is counted
 # several times and the tallies are what reach the model.
 MAX_ROWS = 5000
 MAX_TEXT_CHARS = 2000
-
-
-def text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
 
 
 def bounded(value: Any, limit: int = MAX_TEXT_CHARS) -> str:

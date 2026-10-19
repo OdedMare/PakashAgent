@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from psycopg.types.json import Jsonb
 
 from app.common.errors import NotFoundError
-from app.dal.database.postgres import bind_job_connection, connect
+from app.dal.database import bind_job_connection, connect
 from app.dal.repository.base import RepositoryBase, new_id
 
 

@@ -10,7 +10,8 @@ from app.bl.scheduler import build_slots
 from app.dal.repository.schedules import week_bounds
 from app.common.errors import AgentError
 
-def prepare_generation(repository, scheduler, history, team_id, turn, plan, state):
+
+def _generation_range(turn, plan, state):
     first, last = turn.get("starts_on") or "", turn.get("ends_on") or ""
     try:
         start, end = datetime.date.fromisoformat(first), datetime.date.fromisoformat(last)
@@ -30,8 +31,6 @@ def prepare_generation(repository, scheduler, history, team_id, turn, plan, stat
                     creation_slots=build_slots(state["profile"], period_first, period_last))
     elif not (iso(schedule["starts_on"]) <= first and last <= iso(schedule["ends_on"])):
         raise _Rejected("הטווח חורג מהסידור שנבחר. יש לבחור את התקופה המתאימה")
-    # A range inside an existing period (one day, a few days) rebuilds only
-    # those dates; every other saved assignment stays as it is.
     partial = bool(schedule) and (iso(schedule["starts_on"]) != first or iso(schedule["ends_on"]) != last)
     saved = schedule.get("assignments") or []
     inside = [row for row in saved if first <= iso(row["date"]) <= last]
@@ -42,6 +41,11 @@ def prepare_generation(repository, scheduler, history, team_id, turn, plan, stat
     plan["preserved_assignments"] = list(required)
     required += [row for row in turn.get("required_assignments") or []
                  if first <= (row.get("date") or "") <= last]
+    return first, last, schedule, partial, outside, required
+
+
+def _generate(repository, scheduler, history, team_id, turn, plan, state, values):
+    first, last, schedule, partial, outside, required = values
     if turn.get("copy_from_date"):
         if first != last:
             raise _Rejected("העתקת יום דורשת תאריך יעד יחיד")
@@ -63,6 +67,15 @@ def prepare_generation(repository, scheduler, history, team_id, turn, plan, stat
             preferences=state["preferences"], instructions=turn.get("instructions") or "",
             required_assignments=required,
         )
+    return generated
+
+
+def prepare_generation(repository, scheduler, history, team_id, turn, plan, state):
+    values = _generation_range(turn, plan, state)
+    first, last, schedule, partial, outside, _ = values
+    generated = _generate(
+        repository, scheduler, history, team_id, turn, plan, state, values,
+    )
     pseudo = dict(schedule, starts_on=iso(schedule["starts_on"]) if partial else first,
                   ends_on=iso(schedule["ends_on"]) if partial else last,
                   slots=schedule.get("slots") or generated["slots"])

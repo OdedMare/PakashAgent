@@ -2,7 +2,7 @@
 
 Cross-cutting infrastructure. **Ported from AiSummryIO.**
 
-- `config/settings.py` — env-derived defaults, prefix **`PAKASH_`**, read from
+- `config.py` — env-derived defaults, prefix **`PAKASH_`**, read from
   `.env`. These are *defaults*; the runtime store overrides them.
 - `runtime_settings/` — the live override store. Settings saved in the UI beat env
   values **without a restart**, because `dal/llm/` reads the store on every call.

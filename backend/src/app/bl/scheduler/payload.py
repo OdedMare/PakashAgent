@@ -1,13 +1,11 @@
 """How the workplace and the period are shown to the model."""
 
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from app.bl.scheduler.candidates import slot_id
 from app.bl.audit.roster import is_night, shift_hours
 from app.bl.scheduler.rotation_rows import closures_for_model as _closures
-from app.bl.scheduler.values import bounded, parse_date, role_list
-
-MAX_PREFERENCES = 40
+from app.bl.scheduler.values import parse_date, role_list
 
 _ASSIGNMENT_SCHEMA = {
     "type": "object",
@@ -58,19 +56,6 @@ def profile_beside_candidates(profile: dict) -> dict:
     if not isinstance(profile, dict):
         return {}
     return {key: value for key, value in profile.items() if key != "employees"}
-
-
-def preferences_for_model(preferences: Any) -> List[dict]:
-    """Confirmed standing preferences, kept distinct from hard rules."""
-    shaped = [
-        {
-            "kind": bounded(row.get("kind")),
-            "subject": bounded(row.get("subject")),
-            "text": bounded(row.get("text")),
-        }
-        for row in preferences or [] if isinstance(row, dict)
-    ]
-    return shaped[:MAX_PREFERENCES]
 
 
 def slot_for_model(

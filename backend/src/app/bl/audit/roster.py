@@ -10,8 +10,9 @@ import datetime
 from typing import Any, Dict, List, Optional
 
 from app.bl.audit.values import (
-    MINUTES_PER_HOUR, number, parse_date, parse_time, text,
+    MINUTES_PER_HOUR, number, parse_time, text,
 )
+from app.bl.shared import parse_date
 
 # Defaults used only when the workplace profile does not say otherwise. They
 # exist so a schedule can be audited before the profile is complete, not to

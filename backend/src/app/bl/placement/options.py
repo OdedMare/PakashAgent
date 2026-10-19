@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from app.bl import rotation
 from app.bl.placement import values
+from app.bl.shared import parse_date
 from app.bl.placement.context import PlacementContext, effective_rows
 
 # What "the rotation says nothing about this slot" looks like on the wire. A
@@ -21,7 +22,7 @@ def closure_of(profile: dict, slot_date: str, shift_name: str = "") -> dict:
     off the grid. Empty on an ordinary date, on an unanchored cycle, and past
     the Sunday handover -- all "the rotation has nothing to say here".
     """
-    day = values.parse(values.iso(slot_date))
+    day = parse_date(values.iso(slot_date))
     if day is None:
         return _NO_CLOSURE
     found = rotation.by_date(profile, day, day).get(day.isoformat())
@@ -57,7 +58,7 @@ def employee_options(
         moving_assignment_id,
     )
     load = values.hours_by_employee(schedule, profile)
-    day = values.parse(slot_date)
+    day = parse_date(slot_date)
     options = [
         _option(context, person, shift_name, slot_date, day, load)
         for person in context.employees if values.text(person.get("name"))

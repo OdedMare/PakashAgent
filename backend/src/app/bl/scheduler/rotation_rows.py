@@ -11,7 +11,7 @@ from typing import List
 from app.bl import rotation as rotation_cycle
 from app.bl.rotation.presence import closure_status, presence_status
 from app.bl.audit import constraint_conflicts
-from app.bl.shared.hebrew_calendar import weekday_key
+from app.bl.shared import weekday_key
 from app.bl.scheduler.slots import build_slots
 from app.bl.scheduler.values import bounded
 

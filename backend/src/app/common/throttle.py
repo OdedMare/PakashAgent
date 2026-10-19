@@ -20,7 +20,7 @@ count rather than removing it.
 
 import time
 from threading import Lock
-from typing import Callable, Dict, List, TypeVar
+from typing import Callable, TypeVar
 
 from app.common.errors import AuthError, ForbiddenError, TooManyAttemptsError
 
@@ -51,8 +51,8 @@ class LoginThrottle:
         self._window = window_seconds
         self._lockout = lockout_seconds
         self._clock = clock
-        self._failures = {}  # type: Dict[str, List[float]]
-        self._locked_until = {}  # type: Dict[str, float]
+        self._failures: dict[str, list[float]] = {}
+        self._locked_until: dict[str, float] = {}
         self._lock = Lock()
 
     def attempt(self, key: str, check: Callable[[], T]) -> T:
