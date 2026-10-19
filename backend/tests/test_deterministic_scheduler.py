@@ -181,3 +181,29 @@ def test_previous_period_night_protects_eight_hours_of_rest():
 
     assert result["assignments"] == []
     assert "נשארה בחוסר" in result["notes"][0]
+
+
+def test_a_slot_needing_a_rare_role_is_filled_before_a_broadly_staffed_one():
+    # The evening has fewer legal people overall, but the morning's medic can
+    # come from one person only; filling the evening first spent them there.
+    profile = {
+        "workplace": {"name": "יחידה"},
+        "employees": [
+            {"name": "אבי", "roles": ["חובש"]},
+            {"name": "בני"},
+            {"name": "גדי", "eligible_shifts": ["בוקר"]},
+            {"name": "דני", "eligible_shifts": ["בוקר"]},
+        ],
+        "shifts": [
+            {"name": "בוקר", "start_time": "07:00", "end_time": "15:00", "days": [],
+             "staffing": [{"days": [], "headcount": 1, "required_roles": ["חובש"]}]},
+            {"name": "ערב", "start_time": "15:00", "end_time": "23:00", "days": [],
+             "staffing": [{"days": [], "headcount": 1, "required_roles": []}]},
+        ],
+    }
+
+    result = generate_day(profile, "2026-08-30")
+
+    placed = {row["shift"]: row["employee"] for row in result["assignments"]}
+    assert placed == {"בוקר": "אבי", "ערב": "בני"}
+    assert result["warnings"] == []

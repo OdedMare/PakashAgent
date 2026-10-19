@@ -211,12 +211,16 @@ class DayPlan:
         )
 
     def _legal_count(self, slot: dict) -> int:
-        return sum(
-            eligible(person, slot["shift_name"]) and not self._hard_conflict(
-                {"employee": name, "shift": slot["shift_name"], "date": slot["slot_date"]}, [slot],
-            )
-            for name, person in self.people.items()
-        )
+        """Legal people, or fewer when a needed role or the shift manager has
+        fewer legal holders, so a rare role is not spent on another shift."""
+        legal = [person for name, person in self.people.items()
+                 if eligible(person, slot["shift_name"]) and not self._hard_conflict(
+                     {"employee": name, "shift": slot["shift_name"], "date": slot["slot_date"]}, [slot])]
+        counts = [len(legal)] + [sum(role in roles(person) for person in legal)
+                                 for role in slot.get("required_roles") or []]
+        if slot.get("requires_shift_manager"):
+            counts.append(sum(bool(person.get("is_shift_manager")) for person in legal))
+        return min(counts)
 
     def _note_broken(self, row: dict) -> None:
         slot = next((item for item in self.slots if same_slot(row, item)), {})
