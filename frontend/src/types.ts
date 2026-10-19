@@ -1,4 +1,4 @@
-/** Mirrors `backend/src/app/api/contracts.py`. */
+/** Mirrors `backend/app/api/contracts.py`. */
 
 /** A clickable answer. `label` captions the button; `answer` is the full
  *  sentence sent verbatim as the boss's own message when it is clicked. */
@@ -86,7 +86,7 @@ export interface ProfileCompleteness {
   resolved?: string[];
 }
 
-/** Mirrors `RuntimeSettings` in `backend/src/app/common/runtime_settings/`.
+/** Mirrors `RuntimeSettings` in `backend/app/common/runtime_settings/`.
  *
  *  Secrets arrive masked (`"********"`) when one is stored and `""` when none
  *  is, and sending the mask back means "unchanged" — so the panel treats these

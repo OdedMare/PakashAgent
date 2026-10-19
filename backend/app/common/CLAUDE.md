@@ -1,4 +1,4 @@
-# Common (`src/app/common/`)
+# Common (`app/common/`)
 
 Cross-cutting infrastructure. **Ported from AiSummryIO.**
 

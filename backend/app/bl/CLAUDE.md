@@ -1,4 +1,4 @@
-# Business logic (`src/app/bl/`)
+# Business logic (`app/bl/`)
 
 Where decisions are made. `bl/` decides *what* to schedule and *how* to interpret
 a file; `dal/` only fetches and sends. Nothing here imports `psycopg` or `openai`
