@@ -117,6 +117,8 @@ export interface RuntimeSettings {
   llm_repetition_penalty: number;
   llm_timeout_seconds: number;
   llm_queue_seconds: number;
+  /** False accepts any TLS certificate from the model server. */
+  llm_verify_ssl: boolean;
   llm_base_url: string | null;
   openai_api_key: string;
   schedule_generation_mode: "day" | "week";

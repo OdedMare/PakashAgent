@@ -712,3 +712,46 @@ def test_a_settings_object_without_the_field_still_resolves():
     """
     assert _budget_seconds(object(), "scheduler") is None
     assert _budget_seconds(object(), "changes") is None
+
+
+def test_ssl_verification_is_on_unless_turned_off(monkeypatch):
+    """Off, the SDK is handed an httpx client that accepts any certificate;
+    flipping the switch builds a new client rather than reusing the old."""
+    import app.dal.llm.openai_client as module
+
+    built = []
+    monkeypatch.setattr(module, "OpenAI", lambda **kwargs: built.append(kwargs) or object())
+    settings = _Settings()
+    llm = OpenAIJsonClient(_Store(settings))
+
+    llm._client_for("", "http://local/v1", 0)
+    settings.llm_verify_ssl = False
+    llm._client_for("", "http://local/v1", 0)
+
+    assert "http_client" not in built[0]
+    assert "http_client" in built[1]
+
+
+def test_the_models_probe_honours_the_ssl_switch(monkeypatch):
+    import app.dal.llm.openai_client as module
+
+    seen = []
+
+    class _Reply:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"data": [{"id": "m"}]}
+
+    monkeypatch.setattr(
+        module.httpx, "get",
+        lambda url, **kwargs: seen.append(kwargs["verify"]) or _Reply(),
+    )
+    settings = _Settings(llm_verify_ssl=False)
+    llm = OpenAIJsonClient(_Store(settings))
+
+    llm.list_models()
+    llm.list_models(verify_ssl_override=True)
+
+    assert seen == [False, True]

@@ -196,6 +196,7 @@ export function probeModels(
     llm_base_url?: string;
     openai_api_key?: string;
     role?: string;
+    llm_verify_ssl?: boolean;
   },
   password: string,
 ): Promise<{ models: string[] }> {

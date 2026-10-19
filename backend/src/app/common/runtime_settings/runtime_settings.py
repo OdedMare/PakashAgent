@@ -38,6 +38,9 @@ class RuntimeSettings:
     llm_api_key_default: str = ""
     llm_api_key_advanced: str = ""
     llm_queue_seconds: int = 180
+    # False accepts any TLS certificate from the model server. See
+    # `Settings.llm_verify_ssl` for why this is a last resort.
+    llm_verify_ssl: bool = True
     # How wide one scheduling model call is: "day" or "week". Read by
     # `bl/schedule_service.py` when a period is opened, so a saved change
     # applies to the next build without a restart. See

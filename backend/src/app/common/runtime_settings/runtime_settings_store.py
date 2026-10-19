@@ -81,6 +81,7 @@ class RuntimeSettingsStore:
             llm_api_key_default=env.llm_api_key_default,
             llm_api_key_advanced=env.llm_api_key_advanced,
             llm_queue_seconds=env.llm_queue_seconds,
+            llm_verify_ssl=env.llm_verify_ssl,
             schedule_generation_mode=_safe_generation_mode(
                 env.schedule_generation_mode
             ),
@@ -178,6 +179,8 @@ def _normalized(key: str, value, patch: dict, settings):
         return max(0, int(value))
     if key in _POSITIVE_INTS:
         return max(1, int(value))
+    if key == "llm_verify_ssl":
+        return _flag(value)
     if key == "schedule_generation_mode":
         return _generation_mode(value)
     if key == "schedule_generation_engine":
@@ -204,6 +207,19 @@ def _clamp_penalty(value) -> float:
     repetition rather than penalizing it; unusual, but a legitimate ask, so
     they pass through rather than being floored to neutral."""
     return min(2.0, max(0.0, float(value)))
+
+
+def _flag(value) -> bool:
+    """A boolean as JSON or a form may spell it. `bool("false")` is True, and
+    for the TLS switch that would turn verification off by accident."""
+    if isinstance(value, bool):
+        return value
+    cleaned = str(value).strip().lower()
+    if cleaned in ("true", "1", "yes", "on"):
+        return True
+    if cleaned in ("false", "0", "no", "off"):
+        return False
+    raise ValueError("expected true or false, got %r" % (value,))
 
 
 def _generation_mode(value) -> str:

@@ -23,6 +23,9 @@ class ModelsProbeRequest(BaseModel):
     llm_base_url: Optional[str] = None
     openai_api_key: Optional[str] = None
     role: Optional[str] = None
+    # The TLS switch as the form shows it, so turning verification off can be
+    # tested before it is saved. Omitted means "use the saved value".
+    llm_verify_ssl: Optional[bool] = None
 
     def override(self, name: str) -> Optional[str]:
         value = (getattr(self, name) or "").strip()

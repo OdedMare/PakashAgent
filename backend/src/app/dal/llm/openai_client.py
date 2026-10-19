@@ -177,6 +177,7 @@ class OpenAIJsonClient:
     def list_models(
         self, base_url_override: Optional[str] = None,
         api_key_override: Optional[str] = None, role: str = "",
+        verify_ssl_override: Optional[bool] = None,
     ) -> List[str]:
         """Probe `/models` over raw httpx, so the admin UI can test a candidate
         endpoint before saving it. `role` picks which saved connection the
@@ -190,11 +191,16 @@ class OpenAIJsonClient:
         )
         if not key and not base:
             raise AgentError("לא הוגדר חיבור למודל")
+        verify = (
+            _verify_ssl(settings) if verify_ssl_override is None
+            else verify_ssl_override
+        )
         try:
             response = httpx.get(
                 (base or _DEFAULT_BASE_URL).rstrip("/") + "/models",
                 headers={"Authorization": "Bearer " + (key or _LOCAL_SERVER_KEY_PLACEHOLDER)},
                 timeout=_MODELS_PROBE_TIMEOUT_SECONDS,
+                verify=verify,
             )
             response.raise_for_status()
             return extract_model_ids(response.json())
@@ -209,13 +215,29 @@ class OpenAIJsonClient:
         0 as "time out immediately"), but connecting always keeps a ceiling --
         an unreachable server is not a slow one. See `budgets.httpx_timeout`.
         The key is part of the cache key too: two roles on one provider with
-        different keys must never share a client.
+        different keys must never share a client. So is the TLS switch, read
+        live like the rest, so flipping it applies to the next call.
         """
-        cache_key = (api_key, base_url, timeout)
+        verify = _verify_ssl(self._store.get())
+        cache_key = (api_key, base_url, timeout, verify)
         if cache_key not in self._cached_clients:
+            options = {}
+            if not verify:
+                # The SDK builds its own httpx client; only a client handed
+                # in can carry `verify=False`.
+                options["http_client"] = httpx.Client(
+                    verify=False, timeout=httpx_timeout(timeout),
+                )
             self._cached_clients[cache_key] = tracing.wrap(OpenAI(
                 api_key=api_key or _LOCAL_SERVER_KEY_PLACEHOLDER,
                 base_url=base_url or None,
                 timeout=httpx_timeout(timeout),
+                **options,
             ))
         return self._cached_clients[cache_key]
+
+
+def _verify_ssl(settings) -> bool:
+    """False only when the boss turned verification off. A settings object
+    from before the switch existed still verifies."""
+    return getattr(settings, "llm_verify_ssl", True) is not False

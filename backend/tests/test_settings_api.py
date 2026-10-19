@@ -31,6 +31,7 @@ class FakeLLM:
 
     def list_models(
         self, base_url_override=None, api_key_override=None, role="",
+        verify_ssl_override=None,
     ):
         self.calls.append((base_url_override, api_key_override, role))
         if self.error:
@@ -302,3 +303,34 @@ def test_an_old_settings_file_gains_the_roles_unset(tmp_path, monkeypatch):
     assert body["llm_model"] == "old-model"
     assert body["llm_model_default"] == ""
     assert body["llm_base_url_default"] is None
+
+
+def test_the_probe_carries_the_unsaved_ssl_switch(client, llm, monkeypatch):
+    """The panel tests a self-signed server with verification off before the
+    switch is saved; omitted means the saved value decides."""
+    seen = []
+    monkeypatch.setattr(
+        llm, "list_models",
+        lambda verify_ssl_override=None, **kwargs: seen.append(verify_ssl_override) or [],
+    )
+    client.post("/api/models", json={"llm_verify_ssl": False})
+    client.post("/api/models", json={})
+
+    assert seen == [False, None]
+
+
+def test_the_ssl_switch_defaults_on_and_saves_off(client, store):
+    assert client.get("/api/settings").json()["llm_verify_ssl"] is True
+
+    body = client.put("/api/settings", json={"llm_verify_ssl": False}).json()
+
+    assert body["llm_verify_ssl"] is False
+    assert store.get().llm_verify_ssl is False
+
+
+def test_the_ssl_switch_reads_a_string_false_as_off(store):
+    """`bool("false")` is True; the switch must not flip on a spelling."""
+    assert store.update({"llm_verify_ssl": "false"}).llm_verify_ssl is False
+    assert store.update({"llm_verify_ssl": "true"}).llm_verify_ssl is True
+    with pytest.raises(ValueError):
+        store.update({"llm_verify_ssl": "maybe"})

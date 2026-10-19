@@ -106,6 +106,9 @@ export function useSettings() {
         llm_base_url: String(values[urlKey] ?? ""),
         openai_api_key: String(values[secretKey] ?? ""),
         role,
+        // Unsaved like the URL, so a self-signed server can be tested with
+        // verification off before the switch is committed.
+        llm_verify_ssl: values.llm_verify_ssl !== false,
       }, password);
       setModelsByRole((current) => ({ ...current, [role]: result.models }));
     } catch (reason) {

@@ -100,6 +100,16 @@ class Settings(BaseSettings):
     llm_diet_mode: bool = False
     """Use compact prompts and bounded completion output."""
 
+    llm_verify_ssl: bool = True
+    """Verify the model server's TLS certificate. Applies to every LLM
+    connection — completions and the `/models` probe alike.
+
+    Turning it off is for an internal server whose certificate is self-signed
+    or issued by a CA the process does not trust. It silences the error by
+    accepting *any* certificate, so the API key and every prompt travel over
+    a connection anyone in the path can intercept. Pointing `SSL_CERT_FILE`
+    at the right CA bundle is the fix that keeps verification on."""
+
     llm_timeout_seconds: int = 0
     """Maximum wall time for ONE HTTP completion to the model.
     **0 — the default — means no limit: wait for as long as the server takes.**
