@@ -111,8 +111,8 @@ Overview tab. Invisible automatic briefings are disabled for this surface.
 
 ## Code and verification
 
-`backend/src/app/bl/manager_chat.py` orchestrates the conversation and calls
-the existing tools and services. `backend/src/app/dal/repository/chat.py` owns
+`backend/app/bl/manager_chat.py` orchestrates the conversation and calls
+the existing tools and services. `backend/app/dal/repository/chat.py` owns
 the private transcripts, turn idempotency and approval transaction.
 `frontend/src/components/Management/AgentChat.tsx` renders the conversation;
 `useManagerChat.ts` manages history, polling and explicit approval requests.

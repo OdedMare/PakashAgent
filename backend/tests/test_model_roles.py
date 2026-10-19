@@ -173,7 +173,7 @@ def test_every_flow_the_backend_actually_passes_is_mapped():
     import pathlib
     import re
 
-    bl = pathlib.Path(__file__).resolve().parent.parent / "src" / "app" / "bl"
+    bl = pathlib.Path(__file__).resolve().parent.parent / "app" / "bl"
     used = set()
     for path in bl.rglob("*.py"):
         used.update(re.findall(r'flow="([^"]+)"', path.read_text("utf-8")))

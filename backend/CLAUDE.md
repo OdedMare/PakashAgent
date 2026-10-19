@@ -20,7 +20,7 @@ The code still writes `Optional`, `List`, `Dict`; match the file you are in.
 ```bash
 cd backend
 python -m pytest -q
-uvicorn app.main:app --app-dir src --reload
+uvicorn app.main:app --reload
 ```
 
 ## Architecture
@@ -60,7 +60,7 @@ uvicorn app.main:app --app-dir src --reload
 - `bl/briefing.py` — **the agent speaking first.** Reads the current state and
   says what it noticed, unprompted. Returns exactly `headline`, `items`,
   `quiet` — no operations, so there is no path from a briefing to a write.
-- `bl/copilot.py` + `src/app/worker.py` — the durable observation loop. PostgreSQL
+- `bl/copilot.py` + `app/worker.py` — the durable observation loop. PostgreSQL
   owns jobs, inbox items, per-action permissions and append-only audit events;
   the separate worker survives browser and API restarts.
 - `bl/schedule_service/` — persistence and ordering around those three plus

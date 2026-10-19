@@ -4,7 +4,7 @@ from app.bl.changes.proposal import build_proposal
 from app.bl.chat_constraints import affected_periods, constraint_impact, normalize_constraints
 from app.bl.chat_contract import (
     NeedsManager, RejectedPlan, add_coverage, audit_plan, changed_rows,
-    draft_schedule_ids, fingerprint, whole_day_request,
+    confirmation_question, draft_schedule_ids, fingerprint, whole_day_request,
 )
 from app.bl.chat_generation import prepare_generation
 from app.bl.chat_lifecycle import (
@@ -12,7 +12,6 @@ from app.bl.chat_lifecycle import (
 )
 from app.bl.chat_management import prepare_management
 from app.bl.shared import warning_key
-from app.bl.profile_service import ProfileService
 from app.bl.schedule_service.generation.history import AssignmentHistory
 from app.bl.scheduler import Scheduler
 from app.bl.shared import iso
@@ -21,10 +20,10 @@ from app.bl.tools import ScheduleTools
 
 
 class ChatPlanBuilder:
-    def __init__(self, repository, llm, context, profiles=None):
+    def __init__(self, repository, llm, context, profiles):
         self._repo = repository
         self._context = context
-        self._profiles = profiles or ProfileService(repository)
+        self._profiles = profiles
         self._scheduler = Scheduler(llm)
         self._history = AssignmentHistory(repository)
         self._tools = ScheduleTools(repository)
@@ -82,8 +81,6 @@ class ChatPlanBuilder:
 
     @staticmethod
     def _validate_kind(kind, turn):
-        from app.bl.chat_contract import confirmation_question
-
         if kind == "answer" and confirmation_question(turn):
             raise RejectedPlan(
                 "אין לבקש אישור בלי תוכנית שמורה. לבקשת שינוי יש להכין תוכנית מלאה; "
@@ -219,9 +216,10 @@ class ChatPlanBuilder:
             for row in constraints
         ):
             return
+        operations = turn.get("operations") or []
         selections = "\n".join(list(choices) + [request])
         assignments = [
-            row for row in turn.get("operations") or [] if row.get("action") == "assign"
+            row for row in operations if row.get("action") == "assign"
         ]
         unselected = [
             row for row in assignments
@@ -229,14 +227,14 @@ class ChatPlanBuilder:
         ]
         if not unselected:
             return
+        removed_by_slot = {}
+        for row in operations:
+            if row.get("action") == "remove":
+                slot = row.get("shift"), row.get("date")
+                removed_by_slot.setdefault(slot, row.get("employee", ""))
         candidates = []
         for row in unselected:
-            leaving = next((
-                item.get("employee", "") for item in turn.get("operations") or []
-                if item.get("action") == "remove"
-                and item.get("shift") == row.get("shift")
-                and item.get("date") == row.get("date")
-            ), "")
+            leaving = removed_by_slot.get((row.get("shift"), row.get("date")), "")
             candidates.append(self._tools.run(team_id, "find_replacements", {
                 "schedule_id": schedule_id, "employee": leaving,
                 "shift_name": row.get("shift"), "slot_date": row.get("date"),

@@ -82,7 +82,7 @@ plus `common/config`, `common/runtime_settings`, `bl/prompts/_loader.py`,
 Rename the env prefix to `PAKASH_`.
 
 **2. Schema and repositories.**
-Tables per [`../backend/src/app/dal/CLAUDE.md`](../backend/src/app/dal/CLAUDE.md).
+Tables per [`../backend/app/dal/CLAUDE.md`](../backend/app/dal/CLAUDE.md).
 `change_log` append-only; `assignments` carries the agent's reason.
 
 **3. `bl/audit.py` + its tests.** ← *do this before the agent work*

@@ -15,7 +15,7 @@ members open a read-only view through a share link, with no account at all
 ([D10](docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)).
 
 **Hebrew, right-to-left.** Not just the UI — shift names, weekdays, availability
-markers, and errors are all Hebrew. See [`backend/src/app/bl/CLAUDE.md`](backend/src/app/bl/CLAUDE.md).
+markers, and errors are all Hebrew. See [`backend/app/bl/CLAUDE.md`](backend/app/bl/CLAUDE.md).
 
 ## Status
 
@@ -121,10 +121,10 @@ See [Manager chat](docs/MANAGER_CHAT.md) for supported actions and approval beha
 
 ```
 backend/              FastAPI + Postgres, layered api / bl / dal
-  src/app/api/        HTTP contracts and routers
-  src/app/bl/         Decisions: profiles, scheduling, changes, audit, import
-  src/app/dal/        Data access: Postgres, LLM client
-  src/app/common/     Config, runtime settings, logging, errors
+  app/api/            HTTP contracts and routers
+  app/bl/             Decisions: profiles, scheduling, changes, audit, import
+  app/dal/            Data access: Postgres, LLM client
+  app/common/         Config, runtime settings, logging, errors
 frontend/             Next.js, RTL, chat-first with a schedule grid
 ```
 
@@ -144,7 +144,7 @@ Running the two halves directly instead:
 ```bash
 cd backend
 python -m pytest -q
-uvicorn app.main:app --app-dir src --reload   # :8000
+uvicorn app.main:app --reload                 # :8000
 ```
 
 ```bash
@@ -202,7 +202,7 @@ To compare saved outputs against the same profile, constraints and dates:
 
 ```bash
 cd backend
-PYTHONPATH=src .venv/bin/python -m app.bl.scheduler.compare \
+.venv/bin/python -m app.bl.scheduler.compare \
   ../docs/scheduler-comparison.example.json --output /tmp/scheduler-comparison.json
 ```
 
