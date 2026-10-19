@@ -77,10 +77,18 @@ _EMPLOYEE_SEMANTICS = ("notes", "availability", "workload", "trainers", "is_trai
 
 
 def semantic_sources(profile, availability=None, instructions="", preferences=None) -> List[dict]:
-    """Every semantic input that code would otherwise have to ignore."""
+    """Every semantic input that code would otherwise have to ignore.
+
+    `binding` says whether code may build without a source it could not
+    translate. Only what is soft by its own definition is not binding: a
+    rule the manager tagged soft (D1) and a preference (D21). Everything
+    else, the manager's free instruction included, is treated as binding,
+    because dropping a "must" silently is the one outcome worse than paying
+    for the full scheduler.
+    """
     sources = []
 
-    def add(kind: str, value: Any, context: str = "") -> None:
+    def add(kind: str, value: Any, context: str = "", binding: bool = True) -> None:
         if value in (None, "", [], {}, False):
             return
         rendered = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
@@ -89,14 +97,15 @@ def semantic_sources(profile, availability=None, instructions="", preferences=No
             "kind": kind,
             "context": context,
             "text": rendered,
+            "binding": binding,
         })
 
     add("instructions", instructions)
     for row in preferences or []:
         add("preference", row.get("text") if isinstance(row, dict) else row,
-            bounded(row.get("subject")) if isinstance(row, dict) else "")
+            bounded(row.get("subject")) if isinstance(row, dict) else "", binding=False)
     for row in (profile or {}).get("rules") or []:
-        add("rule", row)
+        add("rule", row, binding=not (isinstance(row, dict) and row.get("priority") == "soft"))
     for key in _TEXT_POLICIES:
         add(key, (profile or {}).get(key))
     workplace = (profile or {}).get("workplace") or {}

@@ -30,7 +30,7 @@ Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
 | `placement/` | **What a placement would cost, and what else the manager could do.** No model |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
 | `shared/` | Small helpers several packages read: `clarification.py`, `hebrew_calendar.py` |
-| `directive_agent/` | **Translating the manager's words for the code scheduler.** A bounded tool loop; code validates the answer, nothing is written |
+| `directive_agent/` | **Translating the manager's words for the code scheduler.** A bounded tool loop; code validates the answer, keeps what translated when only wishes did not, and writes nothing |
 | `schedule_requests.py` | **Structured scheduling requests** (`avoid`, `prefer`, `max_count`, `not_together`) and their one validator |
 
 ## The division that defines this layer
@@ -86,9 +86,20 @@ the single translation call with a bounded tool loop: the model may
 directives and requests. Code keeps the last word — the final answer goes
 through the same `read_translation` — and a refused answer is handed back,
 with the reasons, while turns remain. An answer marking a source
-`unresolved` ends the loop at once: it means "the full scheduler", not "try
+`unresolved` ends the loop at once: it means "code cannot do this", not "try
 again". Bounded at `MAX_TURNS` calls, four tools per call and two dry runs.
 The tools are pure Python with no repository, so the loop cannot write (D19).
+
+**A wish code cannot read does not cost the whole period.** Every source
+carries `binding`: false only for a rule the manager tagged soft (D1) and a
+preference (D21); the free instruction and every policy count as binding.
+When an answer is unresolved, or still refused on the last turn,
+`directive_agent/partial.py` keeps each source whose items all pass and
+leaves out the rest whole — never half a source. If any source left out is
+binding, the full scheduler takes the period exactly as before; if all are
+wishes, code builds without them and the result's `notes` names each one
+("בקשה רכה לא נלקחה בחשבון בשיבוץ"), with `unresolved_sources` in the
+metrics. A wish is reported, never dropped silently.
 
 **Code balances nights and rounds, not just hours.** The deterministic
 filler goes one date at a time, so ranking by hours worked so far was blind

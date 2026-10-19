@@ -37,6 +37,13 @@ manager meant, choose between people, expand a recurring rule into future
 periods, or translate fairness, training, rest, rotation or general policy.
 Put those sources in `unresolved`.
 
+Each source says whether it is `binding`. A non-binding source (a soft rule
+or a preference) you cannot translate faithfully belongs in `unresolved`
+with a short Hebrew reason: the schedule is built without it and the
+manager is told. Do not force a wish into a request it does not mean. A
+binding source in `unresolved` sends the whole period to the full scheduler,
+so translate every binding source you can.
+
 Every source id must appear in at least one directive or request, or exactly
 once in `unresolved`. A source may produce several directives or requests.
 Give each a short Hebrew reason that preserves the source's meaning.

@@ -180,3 +180,73 @@ def test_auto_reports_the_agents_calls_and_steps():
                     if row["date"] == "2026-08-17" and row["shift"] == NIGHT]
     # Without the request, Monday night goes to דניאל.
     assert monday_night and monday_night != ["דניאל"]
+
+
+# -- partial translation -----------------------------------------------------
+
+from app.bl.scheduler.directives import semantic_sources  # noqa: E402
+
+WISH = [{"text": "עדיף לשאול את יוסי לפני רון", "subject": "יוסי"}]
+
+
+def _sources(profile=None, **kwargs):
+    return {row["kind"]: row for row in semantic_sources(profile or _profile(), **kwargs)}
+
+
+def test_only_soft_rules_and_preferences_are_not_binding():
+    profile = dict(_profile(), rules=[{"text": "עדיף בלי רצפים", "priority": "soft"}])
+    soft = _sources(profile, instructions="דנה חולה", preferences=WISH)
+    assert soft["rule"]["binding"] is False
+    assert soft["preference"]["binding"] is False
+    assert soft["instructions"]["binding"] is True
+    hard = _sources(dict(_profile(), rules=[{"text": "אסור רצפים", "priority": "hard"}]))
+    assert hard["rule"]["binding"] is True
+
+
+def _unresolved(source_id, reason="לא ניתן לבטא בבקשה"):
+    return {"source_id": source_id, "reason": reason}
+
+
+def test_an_untranslatable_wish_is_left_out_and_the_rest_kept():
+    # source-1 is the instruction, source-2 the preference.
+    llm = _ScriptedLlm([_turn(requests=[_avoid()], unresolved=[_unresolved("source-2")])])
+
+    translated = _translate(llm, preferences=WISH)
+
+    assert [row["kind"] for row in translated["requests"]] == ["avoid"]
+    assert translated["unresolved"] == [{
+        "source_id": "source-2", "kind": "preference",
+        "text": WISH[0]["text"], "reason": "לא ניתן לבטא בבקשה"}]
+    assert len(llm.payloads) == 1
+
+
+def test_an_untranslated_binding_source_still_goes_to_the_full_scheduler():
+    llm = _ScriptedLlm([_turn(unresolved=[_unresolved("source-1")],
+                              requests=[_avoid(source_id="source-2")])])
+    assert _translate(llm, preferences=WISH) is None
+
+
+def test_on_the_last_turn_a_wish_with_a_bad_item_is_left_out_whole():
+    good_wish = _avoid("יוסי", source_id="source-2")
+    bad_wish = _avoid("נעמה", source_id="source-2")
+    llm = _ScriptedLlm([_turn(requests=[_avoid(), good_wish, bad_wish])])
+
+    translated = DirectiveAgent(llm, max_turns=1).translate(
+        _profile(), SUNDAY, SATURDAY, instructions="עדיף שדנה לא תעבוד בלילות שני",
+        preferences=WISH)
+
+    assert [row["employees"] for row in translated["requests"]] == [["דנה"]]
+    assert translated["unresolved"][0]["source_id"] == "source-2"
+
+
+def test_the_schedule_says_which_wishes_it_was_built_without():
+    llm = _ScriptedLlm([_turn(unresolved=[_unresolved("source-1", "לא משפיע על השיבוץ")])])
+
+    result = Scheduler(llm).generate_span(
+        _profile(), SUNDAY, SATURDAY, preferences=WISH, engine="auto")
+
+    assert result["metrics"]["engine"] == "hybrid"
+    assert result["metrics"]["unresolved_sources"] == 1
+    assert result["notes"][0] == (
+        "בקשה רכה לא נלקחה בחשבון בשיבוץ: «%s» (לא משפיע על השיבוץ)." % WISH[0]["text"])
+    assert len(result["assignments"]) == 14

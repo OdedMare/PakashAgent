@@ -11,8 +11,12 @@ stored.
 Bounded on purpose. `max_turns` model calls at most, `MAX_CALLS_PER_TURN`
 tools per call and `MAX_DRY_RUNS` dry runs in all. A final answer code
 refuses is handed back with the reasons while turns remain; an
-answer that marks a source `unresolved` is final, because it means "this
-needs the full scheduler", not "try again".
+answer that marks a source `unresolved` is final, because it means "code
+cannot do this", not "try again".
+
+What then happens is `read_partial`'s call: if every source left out is
+only a wish, the rest is kept and the wishes are reported; if any is
+binding, the full scheduler takes the period, as it always did.
 """
 
 import json
@@ -21,6 +25,7 @@ from typing import List, Optional
 from app.bl.directive_agent.schema import (
     MAX_CALLS_PER_TURN, MAX_DRY_RUNS, TOOL_DESCRIPTIONS, TOOL_NAMES, TURN_SCHEMA,
 )
+from app.bl.directive_agent.partial import read_partial
 from app.bl.directive_agent.tools import TranslationTools
 from app.bl.prompts import load
 from app.bl.scheduler.directives import read_translation, semantic_sources
@@ -38,9 +43,10 @@ class DirectiveAgent:
     def translate(self, profile: dict, starts_on: str, ends_on: str, availability=None,
                   instructions: str = "", preferences=None, history=None,
                   required_assignments=None, already_scheduled=None) -> Optional[dict]:
-        """Validated directives and requests, or None when the full scheduler
-        should take the request (nothing to translate, unresolved sources,
-        the model unreachable, or no acceptable answer within the bound)."""
+        """Validated directives and requests, with `unresolved` listing the
+        wishes left out, or None when the full scheduler should take the
+        request: nothing to translate, the model unreachable, or a binding
+        source not translated within the bound."""
         sources = semantic_sources(profile, availability, instructions, preferences)
         if not sources:
             return None
@@ -49,19 +55,22 @@ class DirectiveAgent:
         run = _Run(self._max_turns)
         base = _payload(profile, starts_on, ends_on, tools, sources)
         while run.turns < self._max_turns:
-            answer = self._ask(dict(base, results=run.results, final_turn=run.last()))
+            final = run.last()
+            answer = self._ask(dict(base, results=run.results, final_turn=final))
             if answer is None:
                 return None
             run.count(answer)
             calls = _calls(answer)
-            if calls and not run.last():
+            if calls and not final:
                 run.call(tools, calls)
                 continue
-            if answer.get("unresolved"):
-                return None
-            translated = read_translation(answer, sources, profile, starts_on, ends_on)
+            translated = None
+            if not answer.get("unresolved"):
+                translated = read_translation(answer, sources, profile, starts_on, ends_on)
             if translated is not None:
-                return dict(translated, usage=run.usage, model_calls=run.turns, steps=run.steps)
+                return run.done(dict(translated, unresolved=[]))
+            if answer.get("unresolved") or final:
+                return run.done(read_partial(answer, sources, profile, starts_on, ends_on))
             run.refused(tools, answer)
         return None
 
@@ -106,6 +115,11 @@ class _Run:
                 self.dry_runs += 1
             self.steps.append(call["tool"])
             self.results.append(tools.run(call["tool"], call["arguments"]))
+
+    def done(self, translated: Optional[dict]) -> Optional[dict]:
+        if translated is None:
+            return None
+        return dict(translated, usage=self.usage, model_calls=self.turns, steps=self.steps)
 
     def refused(self, tools: TranslationTools, answer: dict) -> None:
         """Hand a refused final answer back with code's reasons."""

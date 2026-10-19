@@ -170,11 +170,17 @@ class Scheduler:
                 "engine": "hybrid",
                 "model_calls": translated["model_calls"],
                 "translation_steps": translated["steps"],
+                "unresolved_sources": len(translated["unresolved"]),
                 "prompt_tokens": int(usage.get("prompt_tokens") or 0),
                 "completion_tokens": int(usage.get("completion_tokens") or 0),
                 "total_tokens": int(usage.get("total_tokens") or 0),
             })
             result["summary"] = "ההנחיות תורגמו ב-AI והשיבוץ נבנה בקוד דטרמיניסטי."
+            # A wish code was built without is said, never dropped silently.
+            result["notes"] = [
+                "בקשה רכה לא נלקחה בחשבון בשיבוץ: «%s» (%s)." % (row["text"], row["reason"])
+                for row in translated["unresolved"]
+            ] + list(result.get("notes") or [])
         return result
 
     def _translate_directives(

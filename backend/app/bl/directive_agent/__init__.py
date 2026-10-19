@@ -9,6 +9,7 @@ always did. Pure Python tools, no repository, nothing written.
 |---|---|
 | `agent.py` | `DirectiveAgent`: the loop and its bounds |
 | `tools.py` | `TranslationTools`: the five read-only tools |
+| `partial.py` | `read_partial`: keep what translated when only wishes did not |
 | `schema.py` | One turn's shape, the tool names and their descriptions |
 """
 
