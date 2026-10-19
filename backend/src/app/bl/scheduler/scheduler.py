@@ -154,6 +154,7 @@ class Scheduler:
         from app.bl.deterministic_scheduler import generate_span, unsupported_reason
 
         reason = unsupported_reason(profile, availability, instructions, preferences)
+        requests = []
         if reason:
             if engine == ENGINE_CODE:
                 raise AgentError(reason + ". בחרו במצב AI או אוטומטי.")
@@ -164,10 +165,11 @@ class Scheduler:
                 return None
             availability = list(availability or []) + translated["availability"]
             required_assignments = list(required_assignments or []) + translated["required_assignments"]
+            requests = translated["requests"]
         result = generate_span(
             profile, starts_on, ends_on, availability=availability,
             history=history, required_assignments=required_assignments,
-            already_scheduled=already_scheduled,
+            already_scheduled=already_scheduled, requests=requests,
         )
         # Auto keeps free code only when it is already as clean as the audited
         # model path. Code mode remains useful for an intentionally partial

@@ -3,6 +3,7 @@
 import json
 from typing import Any, List, Optional
 
+from app.bl.shared.schedule_requests import KINDS, PERIODS, read_requests
 from app.bl.scheduler.slots import build_slots
 from app.bl.scheduler.span_audit import usage_of
 from app.bl.scheduler.values import bounded
@@ -11,7 +12,7 @@ from app.bl.scheduler.values import bounded
 DIRECTIVE_RESPONSE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["directives", "unresolved"],
+    "required": ["directives", "requests", "unresolved"],
     "properties": {
         "directives": {
             "type": "array",
@@ -25,6 +26,30 @@ DIRECTIVE_RESPONSE_SCHEMA = {
                     "employee": {"type": "string"},
                     "date": {"type": "string"},
                     "shift": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+            },
+        },
+        "requests": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "source_id", "kind", "employees", "shifts", "dates", "weekdays",
+                    "count", "per", "is_hard", "weight", "reason",
+                ],
+                "properties": {
+                    "source_id": {"type": "string"},
+                    "kind": {"type": "string", "enum": list(KINDS)},
+                    "employees": {"type": "array", "items": {"type": "string"}},
+                    "shifts": {"type": "array", "items": {"type": "string"}},
+                    "dates": {"type": "array", "items": {"type": "string"}},
+                    "weekdays": {"type": "array", "items": {"type": "string"}},
+                    "count": {"type": ["integer", "null"]},
+                    "per": {"type": "string", "enum": list(PERIODS)},
+                    "is_hard": {"type": "boolean"},
+                    "weight": {"type": "number"},
                     "reason": {"type": "string"},
                 },
             },
@@ -85,12 +110,11 @@ def semantic_sources(profile, availability=None, instructions="", preferences=No
         name = bounded(person.get("name"))
         for key in _EMPLOYEE_SEMANTICS:
             add("employee_" + key, person.get(key), name)
+        # Soft structured constraints are already code's to weigh
+        # (`deterministic_scheduler/honoring.py`); only sentences need reading.
         for row in person.get("recurring_constraints") or []:
-            if isinstance(row, str) or (isinstance(row, dict) and row.get("is_hard", True) is False):
+            if isinstance(row, str):
                 add("recurring_constraint", row, name)
-    for row in availability or []:
-        if isinstance(row, dict) and row.get("is_hard", True) is False:
-            add("soft_availability", row, bounded(row.get("employee")))
     return sources
 
 
@@ -119,6 +143,10 @@ def read_translation(answer: Any, sources: List[dict], profile: dict,
         (row["shift_name"], row["slot_date"])
         for row in build_slots(profile, starts_on, ends_on)
     }
+    requests, errors = read_requests(answer.get("requests") or [], profile)
+    if errors or any(row["source_id"] not in source_ids for row in requests):
+        return None
+    covered.update(row["source_id"] for row in requests)
     translated_availability, required = [], []
     for row in directives:
         if not isinstance(row, dict):
@@ -149,6 +177,7 @@ def read_translation(answer: Any, sources: List[dict], profile: dict,
     return {
         "availability": translated_availability,
         "required_assignments": required,
+        "requests": requests,
         "usage": usage_of(answer),
     }
 

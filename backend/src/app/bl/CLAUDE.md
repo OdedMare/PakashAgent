@@ -29,7 +29,7 @@ Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
 | `rotation/` | **Whose closure a date is.** Pure arithmetic off separate round/triplet anchors; no model |
 | `placement/` | **What a placement would cost, and what else the manager could do.** No model |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
-| `shared/` | Small helpers several packages read: `clarification.py`, `hebrew_calendar.py` |
+| `shared/` | Small helpers several packages read: `clarification.py`, `hebrew_calendar.py`, `schedule_requests.py` |
 
 ## The division that defines this layer
 
@@ -55,10 +55,27 @@ one representation ([D6](../../../docs/DECISIONS.md#d6--the-boss-can-author-or-g
 `ai`, `code`, or `auto` ([D31](../../../docs/DECISIONS.md#d31--structured-schedules-may-be-assigned-by-code-️-amends-d3)).
 Auto uses the deterministic scheduler for structured inputs. For semantic
 inputs it first asks the model for only validated `unavailable` and
-`required_assignment` directives, then lets code assign the roster; ambiguous
+`required_assignment` directives and structured requests (below), then lets
+code assign the roster; ambiguous
 directives and imperfect code drafts go to the full scheduling model. Explicit
 code mode stays zero-token and refuses semantic inputs rather than dropping
 them.
+
+**Code honours structured requests, not only pins and absences.**
+`shared/schedule_requests.py` defines four more shapes — `avoid`, `prefer`,
+`max_count` (per period or per week) and `not_together` — each narrowed by
+shifts, dates and weekdays, and each hard or soft. `read_requests` is the
+single validator: every name must be on the roster and every shift in the
+vocabulary (D9), and the translation step refuses the whole answer when one
+request fails it, exactly as it does for a bad directive.
+`deterministic_scheduler/honoring.py` evaluates them: a hard request removes
+the candidate the way an unavailability does; a soft one adds its weight to
+the candidate's cost, ranked after roles, the shift manager and the closing
+group and before nights and load. Soft structured availability (dated or
+recurring `is_hard: false` rows) is weighed the same way, so it no longer
+sends a request to the model. A soft wish code had to break is written into
+`notes`; a met preference becomes the assignment's reason. A pin outranks a
+request: it is the manager naming one exact placement.
 
 **Code balances nights and rounds, not just hours.** The deterministic
 filler goes one date at a time, so ranking by hours worked so far was blind

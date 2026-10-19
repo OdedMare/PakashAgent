@@ -2,8 +2,15 @@
 
 Wired into the selectable generation engine (D31). Structured requests run
 here with zero model calls; automatic mode may first compile narrow semantic
-instructions into validated availability or required-assignment rows. The
-same inputs always produce the same schedule.
+instructions into validated availability, required-assignment or structured
+request rows. The same inputs always produce the same schedule.
+
+| Module | Owns |
+|---|---|
+| `plan.py` | `DayPlan`: filling one date, greedily and reproducibly |
+| `outlook.py` | The load each person is committed to in the days ahead |
+| `honoring.py` | What a candidate does to structured requests (`shared/schedule_requests.py`) and to soft availability |
+| `rows.py` | Row and roster helpers |
 """
 
 import time
@@ -11,6 +18,7 @@ from typing import List, Optional
 
 from app.bl import rotation
 from app.bl.deterministic_scheduler.plan import DayPlan
+from app.bl.shared.schedule_requests import read_requests
 from app.bl.deterministic_scheduler.rows import text
 from app.bl.scheduler import build_slots
 from app.bl.scheduler.quality import combine_metrics
@@ -27,11 +35,14 @@ def generate_day(
     required_assignments: Optional[List[dict]] = None,
     already_scheduled: Optional[List[dict]] = None,
     shift_names: Optional[List[str]] = None,
+    requests: Optional[List[dict]] = None,
 ) -> dict:
     """Fill one date without a model call.
 
     Required rows are pins. Other rows on this date are rebuilt, while rows
     from previous dates participate in rest, hours and fairness checks.
+    `requests` are structured requests (see `shared/schedule_requests.py`); a pin is the
+    manager naming one exact placement, so it outranks a general request.
     """
     started = time.monotonic()
     errors = rotation.configuration_errors(profile)
@@ -45,7 +56,8 @@ def generate_day(
         slots = [slot for slot in slots if slot["shift_name"] in wanted]
     if not slots:
         return _result(day, started, [], [], [])
-    plan = DayPlan(profile, day, slots, availability, already_scheduled, history)
+    plan = DayPlan(profile, day, slots, availability, already_scheduled, history,
+                   requests=checked_requests(profile, requests))
     plan.pin(required_assignments)
     plan.fill(history)
     return _result(day, started, plan.slots, plan.final(), plan.notes, plan.warnings())
@@ -77,15 +89,19 @@ def unsupported_reason(profile, availability=None, instructions="", preferences=
             "notes", "availability", "workload", "trainers", "is_trainee",
         )):
             return "נתוני העובדים כוללים שיקול טקסטואלי או חניכה שמצריכים AI"
-        recurring = person.get("recurring_constraints") or []
-        if any(isinstance(item, str) or (
-            isinstance(item, dict) and item.get("is_hard", True) is False
-        ) for item in recurring):
-            return "יש אילוץ חוזר טקסטואלי או רך שמצריך AI"
-    if any(isinstance(item, dict) and item.get("is_hard", True) is False
-           for item in availability or []):
-        return "יש אילוץ זמינות רך שמצריך AI"
+        # A soft structured constraint is a cost in code (`honoring.py`);
+        # only one written as a sentence needs the model to read it.
+        if any(isinstance(item, str) for item in person.get("recurring_constraints") or []):
+            return "יש אילוץ חוזר טקסטואלי שמצריך AI"
     return ""
+
+
+def checked_requests(profile: dict, requests: Optional[List[dict]]) -> List[dict]:
+    """`requests` normalised, or an `AgentError` naming each one refused."""
+    result, errors = read_requests(requests, profile)
+    if errors:
+        raise AgentError("לא ניתן לשבץ לפי הבקשות: %s." % "; ".join(errors))
+    return result
 
 
 def generate_span(
@@ -96,8 +112,10 @@ def generate_span(
     history: Optional[List[dict]] = None,
     required_assignments: Optional[List[dict]] = None,
     already_scheduled: Optional[List[dict]] = None,
+    requests: Optional[List[dict]] = None,
 ) -> dict:
     """Build any span as deterministic daily checkpoints with zero model calls."""
+    requests = checked_requests(profile, requests)
     slots = build_slots(profile, starts_on, ends_on)
     dates = sorted({slot["slot_date"] for slot in slots})
     committed = list(already_scheduled or [])
@@ -110,6 +128,7 @@ def generate_span(
         current = generate_day(
             profile, day, availability=availability, history=history,
             required_assignments=pins, already_scheduled=committed,
+            requests=requests,
         )
         committed = [row for row in committed if row.get("date") != day]
         committed.extend(current["assignments"])
@@ -150,4 +169,4 @@ def _result(day, started, slots, assignments, notes, warnings=None) -> dict:
     }
 
 
-__all__ = ["generate_day", "generate_span", "unsupported_reason"]
+__all__ = ["checked_requests", "generate_day", "generate_span", "unsupported_reason"]

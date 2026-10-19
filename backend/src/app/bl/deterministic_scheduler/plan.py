@@ -10,6 +10,7 @@ from app.bl.audit import (
     load_history,
 )
 from app.bl.audit.roster import index_shifts, is_night, shift_hours
+from app.bl.deterministic_scheduler import honoring
 from app.bl.deterministic_scheduler.outlook import outlook
 from app.bl.deterministic_scheduler.rows import (
     assignment, eligible, employees, roles, same_slot, text, unique,
@@ -24,13 +25,16 @@ _BLOCKING_CODES = frozenset({
 
 class DayPlan:
     def __init__(self, profile: dict, day: str, slots: List[dict], availability,
-                 already_scheduled, history=None):
+                 already_scheduled, history=None, requests=None):
         self.profile, self.day, self.slots = profile, day, slots
+        self.requests = list(requests or [])
         self.employees = employees(profile)
         self.people = {text(row.get("name")): row for row in self.employees}
         self.shifts = (profile or {}).get("shifts") or []
         self.raw_availability = availability
         self.availability = effective_availability(profile, availability, day, day)
+        self.soft_availability = [item for item in self.availability
+                                  if isinstance(item, dict) and item.get("is_hard", True) is False]
         self.slot_keys = {(slot["shift_name"], slot["slot_date"]) for slot in slots}
         committed = [row for row in map(assignment, already_scheduled or []) if row]
         target = datetime.date.fromisoformat(day)
@@ -93,7 +97,8 @@ class DayPlan:
                 )
                 return
             _, chosen, person = min(candidates, key=lambda item: item[0])
-            chosen["reason"] = self._reason(person, slot)
+            self._note_broken(chosen)
+            chosen["reason"] = self._reason(person, slot, chosen)
             self.current.append(chosen)
             shift = index_shifts(self.shifts).get(chosen["shift"]) or {}
             load = self.loads.setdefault(chosen["employee"], _empty_load())
@@ -134,15 +139,18 @@ class DayPlan:
             if any(row["employee"] == name and same_slot(row, slot) for row in self.current):
                 continue
             row = {"employee": name, "shift": slot["shift_name"], "date": slot["slot_date"], "reason": ""}
-            if self._hard_conflict(row, self.slots) or self._introduces_blocking(row):
+            if (self._hard_conflict(row, self.slots) or honoring.blocks(self.requests, row, self.current)
+                    or self._introduces_blocking(row)):
                 continue
-            found.append((self._candidate_key(slot, person, self.loads.get(name) or _empty_load()), row, person))
+            key = self._candidate_key(slot, person, self.loads.get(name) or _empty_load(), row)
+            found.append((key, row, person))
         return found
 
-    def _candidate_key(self, slot: dict, person: dict, load: dict) -> tuple:
+    def _candidate_key(self, slot: dict, person: dict, load: dict, row: dict) -> tuple:
         """Unmet mandatory capabilities first, then the closing group, then
-        nights and the lightest load. Among equally loaded legal choices,
-        avoid consecutive days and maximize the distance from nearby work."""
+        soft requests, nights and the lightest load. Among equally loaded
+        legal choices, avoid consecutive days and maximize the distance from
+        nearby work."""
         missing = self._missing_roles(self.current, slot)
         covers_roles = len(missing.intersection(roles(person)))
         manager_missing = bool(slot.get("requires_shift_manager")) and not any(
@@ -157,7 +165,8 @@ class DayPlan:
         night = is_night(index_shifts(self.shifts).get(slot["shift_name"]) or {})
         nights = (load["period_nights"], load["nights"]) if night else (0, 0)
         spacing = self._spacing_key(text(person.get("name")), slot["slot_date"])
-        return (remaining, not covers_manager, -covers_roles, not closing,
+        wishes = honoring.cost(self.requests, self.soft_availability, _timed(row, slot), self.current)
+        return (remaining, not covers_manager, -covers_roles, not closing, wishes,
                 *nights, round(load["hours"], 6), *spacing, text(person.get("name")))
 
     def _spacing_key(self, name: str, day: str) -> tuple:
@@ -209,7 +218,14 @@ class DayPlan:
             for name, person in self.people.items()
         )
 
-    def _reason(self, person: dict, slot: dict) -> str:
+    def _note_broken(self, row: dict) -> None:
+        slot = next((item for item in self.slots if same_slot(row, item)), {})
+        for reason in honoring.broken(self.requests, self.soft_availability,
+                                      _timed(row, slot), self.current):
+            self.notes.append("%s שובץ/ה ב%s בתאריך %s למרות בקשה רכה: %s." % (
+                row["employee"], row["shift"], row["date"], reason))
+
+    def _reason(self, person: dict, slot: dict, row: dict) -> str:
         day = datetime.date.fromisoformat(slot["slot_date"])
         if rotation.holds(self.profile, person, day, slot["shift_name"]):
             group = text(person.get("rotation_group"))
@@ -218,6 +234,9 @@ class DayPlan:
             return "%s סוגר/ת במועד הזה; השיבוץ עומד במחזור המחייב." % (
                 rotation.label(cycle, group) or "קבוצת הסגירה"
             )
+        wished = honoring.preferred(self.requests, row)
+        if wished:
+            return "שובץ/ה לפי בקשה: %s." % wished[0]
         if slot.get("requires_shift_manager") and person.get("is_shift_manager"):
             return "שובץ/ה כמפקד/ת המשמרת, לפי זמינות ואיזון עומס."
         matched = sorted(self._missing_roles([], slot).intersection(roles(person)))
@@ -253,6 +272,10 @@ class DayPlan:
             )
             if row.get("date") in (None, "", self.day)
         ]
+
+
+def _timed(row: dict, slot: dict) -> dict:
+    return dict(row, start_time=slot.get("start_time"), end_time=slot.get("end_time"))
 
 
 def _empty_load() -> dict:
