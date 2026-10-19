@@ -12,7 +12,8 @@ from app.bl.audit.staffing_rules import (
     checked_slots, counted_rows, required_headcount, required_roles,
     requires_shift_manager, seat_counts,
 )
-from app.bl.audit.values import parse_date, text
+from app.bl.audit.values import text
+from app.bl.shared import parse_date
 
 
 class StaffingCheck(AuditCheck):

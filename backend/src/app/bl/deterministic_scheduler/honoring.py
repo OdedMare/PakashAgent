@@ -11,7 +11,7 @@ everywhere.
 from typing import List
 
 from app.bl.audit import constraint_conflicts
-from app.bl.shared.schedule_requests import covers, week_of
+from app.bl.schedule_requests import covers, week_of
 
 
 def blocks(requests: List[dict], row: dict, current: List[dict]) -> bool:

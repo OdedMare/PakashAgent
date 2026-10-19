@@ -30,7 +30,11 @@ class PersonalRoutes:
         self._notify = _notifier(events)
 
     def register(self, router: APIRouter) -> None:
-        service, employee, notify = self._service, self._employee, self._notify
+        self._register_personal(router)
+        self._register_requests(router)
+
+    def _register_personal(self, router: APIRouter) -> None:
+        service, employee = self._service, self._employee
 
         @router.get("/me")
         def me(session: dict = Depends(employee)) -> dict:
@@ -66,6 +70,9 @@ class PersonalRoutes:
         @router.get("/requests")
         def my_requests(session: dict = Depends(employee)) -> list:
             return service.my_requests(session["team_id"], session["employee"])
+
+    def _register_requests(self, router: APIRouter) -> None:
+        service, employee, notify = self._service, self._employee, self._notify
 
         @router.post("/requests")
         def submit(request: ConstraintSubmission, session: dict = Depends(employee)) -> dict:

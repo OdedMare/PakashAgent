@@ -12,7 +12,7 @@ import json
 import time
 from typing import Callable, List, Optional
 
-from app.bl.scheduler.request import MAX_HISTORY_ROWS, SpanAttempt, SpanRequest
+from app.bl.scheduler.request import SpanAttempt, SpanRequest
 from app.bl.scheduler.slots import build_slots
 from app.bl.scheduler.span_audit import add_usage, metrics, usage_of
 from app.bl.scheduler.quality import no_worse, quality

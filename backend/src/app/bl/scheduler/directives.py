@@ -3,7 +3,7 @@
 import json
 from typing import Any, List, Optional
 
-from app.bl.shared.schedule_requests import KINDS, PERIODS, read_requests
+from app.bl.schedule_requests import KINDS, PERIODS, read_requests
 from app.bl.scheduler.slots import build_slots
 from app.bl.scheduler.span_audit import usage_of
 from app.bl.scheduler.values import bounded
@@ -118,6 +118,38 @@ def semantic_sources(profile, availability=None, instructions="", preferences=No
     return sources
 
 
+def _unresolved_ids(rows, source_ids):
+    found = set()
+    for row in rows:
+        if not isinstance(row, dict) or row.get("source_id") not in source_ids \
+                or not bounded(row.get("reason")):
+            return None
+        found.add(row["source_id"])
+    return found
+
+
+def _translated_row(row, source_ids, people, slots):
+    if not isinstance(row, dict):
+        return None
+    source_id = row.get("source_id")
+    action, employee = row.get("action"), bounded(row.get("employee"))
+    date, shift = bounded(row.get("date")), bounded(row.get("shift"))
+    reason = bounded(row.get("reason"))
+    if (source_id not in source_ids or action not in ("unavailable", "required_assignment")
+            or employee not in people or (shift, date) not in slots or not reason):
+        return None
+    allowed = people[employee].get("eligible_shifts")
+    if action == "required_assignment" and isinstance(allowed, list) and allowed and shift not in allowed:
+        return None
+    if action == "unavailable":
+        value = {"employee": employee, "date": date, "shift": shift,
+                 "available": False, "is_hard": True, "reason": reason,
+                 "source": "llm_directive"}
+    else:
+        value = {"employee": employee, "date": date, "shift": shift, "reason": reason}
+    return source_id, action, value
+
+
 def read_translation(answer: Any, sources: List[dict], profile: dict,
                      starts_on: str, ends_on: str) -> Optional[dict]:
     """Validate model output against the real roster and slot grid."""
@@ -127,14 +159,11 @@ def read_translation(answer: Any, sources: List[dict], profile: dict,
     if not isinstance(directives, list) or not isinstance(unresolved, list):
         return None
     source_ids = {row["id"] for row in sources}
-    covered, unresolved_ids = set(), set()
-    for row in unresolved:
-        if not isinstance(row, dict) or row.get("source_id") not in source_ids or not bounded(row.get("reason")):
-            return None
-        unresolved_ids.add(row["source_id"])
+    unresolved_ids = _unresolved_ids(unresolved, source_ids)
+    if unresolved_ids is None:
+        return None
     if unresolved_ids:
         return None
-
     people = {
         bounded(row.get("name")): row for row in (profile or {}).get("employees") or []
         if isinstance(row, dict) and bounded(row.get("name"))
@@ -146,32 +175,18 @@ def read_translation(answer: Any, sources: List[dict], profile: dict,
     requests, errors = read_requests(answer.get("requests") or [], profile)
     if errors or any(row["source_id"] not in source_ids for row in requests):
         return None
-    covered.update(row["source_id"] for row in requests)
     translated_availability, required = [], []
+    covered = {row["source_id"] for row in requests}
     for row in directives:
-        if not isinstance(row, dict):
+        translated = _translated_row(row, source_ids, people, slots)
+        if translated is None:
             return None
-        source_id = row.get("source_id")
-        action, employee = row.get("action"), bounded(row.get("employee"))
-        date, shift, reason = bounded(row.get("date")), bounded(row.get("shift")), bounded(row.get("reason"))
-        if (source_id not in source_ids or action not in ("unavailable", "required_assignment")
-                or employee not in people or (shift, date) not in slots or not reason):
-            return None
-        allowed = people[employee].get("eligible_shifts")
-        if action == "required_assignment" and isinstance(allowed, list) and allowed and shift not in allowed:
-            return None
+        source_id, action, value = translated
         covered.add(source_id)
         if action == "unavailable":
-            translated_availability.append({
-                "employee": employee, "date": date, "shift": shift,
-                "available": False, "is_hard": True, "reason": reason,
-                "source": "llm_directive",
-            })
+            translated_availability.append(value)
         else:
-            required.append({
-                "employee": employee, "date": date, "shift": shift,
-                "reason": reason,
-            })
+            required.append(value)
     if covered != source_ids:
         return None
     return {

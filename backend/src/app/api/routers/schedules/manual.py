@@ -11,6 +11,10 @@ from app.api.routers.schedules.base import RouteGroup
 
 class ManualRoutes(RouteGroup):
     def register(self, router: APIRouter) -> None:
+        self._register_assignments(router)
+        self._register_departures(router)
+
+    def _register_assignments(self, router: APIRouter) -> None:
         service, boss = self.service, self.boss
 
         @router.post("/assign", response_model=Schedule)
@@ -55,6 +59,9 @@ class ManualRoutes(RouteGroup):
                 schedule_id=request.schedule_id,
                 moving_assignment_id=request.moving_assignment_id,
             )
+
+    def _register_departures(self, router: APIRouter) -> None:
+        service, boss = self.service, self.boss
 
         @router.post("/departure/preview", response_model=Departure)
         def departure_preview(request: DepartureRequest, session: dict = Depends(boss)) -> dict:

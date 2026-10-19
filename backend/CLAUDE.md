@@ -27,18 +27,18 @@ uvicorn app.main:app --app-dir src --reload
 
 - `common/` — env defaults (`PAKASH_` prefix) plus the live runtime-settings
   override store. Saved settings override env without restart; secrets masked.
-- `dal/database/postgres.py` — connection; verifies the schema exists.
+- `dal/database.py` — connection; verifies the schema exists.
 - `dal/llm/` — the OpenAI-compatible JSON client and its degradation ladder,
   ported unchanged from AiSummryIO. Model/base URL/API key stay live per call.
   `tracing.py` sends every call to Opik when `OPIK_API_KEY` is set (D30).
 - `dal/repository/` — the only SQL owner. `teams.py` also owns password
   hashing (`scrypt`, stdlib) and the member share token.
-- `bl/workspace_service/service.py` — workspace rules: who may enter a team, in which
+- `bl/workspace_service.py` — workspace rules: who may enter a team, in which
   role, and what a new workspace inherits.
 - `bl/admin_service/` — the צוות משמרות זהב operator console (D28): opening,
   suspending and deleting teams. `dal/repository/admin.py` holds its
   cross-team queries — the one deliberate exception to team scoping.
-- `api/dependencies/dependencies.py` — the route guards (`visitor`, `boss`,
+- `api/dependencies.py` — the route guards (`visitor`, `boss`,
   `employee`, `admin`). `visitor` also refuses a suspended or deleted team.
 - `common/sessions.py` — signed session cookies (HMAC-SHA256, no library).
 - `common/events.py` — in-process "an inbox moved" signals per team, feeding
@@ -57,10 +57,10 @@ uvicorn app.main:app --app-dir src --reload
 - `bl/changes/` — conversational edits; asks for the boss's reason, proposes a
   replacement with justification, applies on confirmation. Proposes only — it is
   handed no repository, so it cannot write.
-- `bl/briefing/briefing.py` — **the agent speaking first.** Reads the current state and
+- `bl/briefing.py` — **the agent speaking first.** Reads the current state and
   says what it noticed, unprompted. Returns exactly `headline`, `items`,
   `quiet` — no operations, so there is no path from a briefing to a write.
-- `bl/copilot/copilot.py` + `src/app/worker.py` — the durable observation loop. PostgreSQL
+- `bl/copilot.py` + `src/app/worker.py` — the durable observation loop. PostgreSQL
   owns jobs, inbox items, per-action permissions and append-only audit events;
   the separate worker survives browser and API restarts.
 - `bl/schedule_service/` — persistence and ordering around those three plus
@@ -88,7 +88,7 @@ uvicorn app.main:app --app-dir src --reload
   of those dates is replaced, every other date is untouched.
 - `bl/schedule_service.create_blank/assign/unassign` — the manual path (D18).
   The only schedule writes with no model call anywhere on them.
-- `bl/export/export.py` — a period out as `.xlsx`. Pure functions, no model, no
+- `bl/export.py` — a period out as `.xlsx`. Pure functions, no model, no
   repository. Laid out shift-major like `FILE_FORMATS.md` Sample A so an
   exported week can be edited and imported back.
 - `bl/importer/` — Excel/Word ingest with layout inference. **No model
@@ -171,7 +171,7 @@ package's `__init__` docstring carries a table of which module owns what.
   Enforced in three places on purpose: `assignments.reason` is `NOT NULL`, the
   repository refuses a blank one, and `scheduler.py` drops an unreasoned row
   rather than storing it.
-- **A briefing observes; it never acts.** `bl/briefing/briefing.py` returns three keys
+- **A briefing observes; it never acts.** `bl/briefing.py` returns three keys
   and none of them is an operation, so nothing it says can be applied
   ([D15](../docs/DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)).
   A `suggestion` is a sentence the manager may send, after which the ordinary
@@ -210,7 +210,7 @@ package's `__init__` docstring carries a table of which module owns what.
   `availability.source` (D13) applied to the other table. Defaults to `agent`
   so rows predating the column keep their meaning, and `move_assignment`
   leaves it alone: dragging a hand-placed shift does not make it the agent's.
-- **The export layout is Sample A, not a design choice.** `bl/export/export.py`
+- **The export layout is Sample A, not a design choice.** `bl/export.py`
   writes the shape `bl/importer/` is being built to read, so a week can
   leave and come back ([D17](../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
   Changing the layout to something prettier produces a file this product
@@ -319,7 +319,7 @@ package's `__init__` docstring carries a table of which module owns what.
   been unclear, and asking would repeat on every retry.
 - **An answer carries no operations.** `POST /api/schedule/ask` returns
   `answer`, `steps`, `needs_confirmation` — and nothing `apply` could read,
-  the same guard `bl/briefing/briefing.py` has (D15). Asking and changing are
+  the same guard `bl/briefing.py` has (D15). Asking and changing are
   separate acts, separate endpoints, and separate cards on the screen.
 - **The agent may not claim a placement is valid unless a tool said so.**
   `find_replacements` re-validates every candidate through `bl/placement/`

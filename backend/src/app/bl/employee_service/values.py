@@ -2,7 +2,13 @@
 
 from typing import Any, List, Optional
 
+from app.bl.shared import employees, shifts, text
 from app.common.errors import AgentError
+
+__all__ = [
+    "employees", "find_assignment", "iso_date", "require_reason", "shifts",
+    "text", "window",
+]
 
 # Logged against the change log when a manager rules on a request, so an
 # approval is traceable in the same place every other change is (D4).
@@ -13,10 +19,6 @@ ACTION_REQUEST_REJECTED = "request_rejected"
 # `ACTION_SWAPPED` exactly as a manager-initiated swap does. Two log rows for
 # one swap would make the history read as two moves.
 ACTION_SWAP_REJECTED = "swap_rejected"
-
-
-def text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
 
 
 def iso_date(value: Any) -> str:
@@ -43,16 +45,6 @@ def roster_names(profile: dict) -> List[str]:
         if isinstance(name, str) and name.strip():
             names.append(name.strip())
     return names
-
-
-def employees(profile: dict) -> List[dict]:
-    rows = (profile or {}).get("employees")
-    return rows if isinstance(rows, list) else []
-
-
-def shifts(profile: dict) -> List[dict]:
-    rows = (profile or {}).get("shifts")
-    return rows if isinstance(rows, list) else []
 
 
 def window(schedule: Optional[dict]) -> tuple:

@@ -9,7 +9,7 @@ request rows. The same inputs always produce the same schedule.
 |---|---|
 | `plan.py` | `DayPlan`: filling one date, greedily and reproducibly |
 | `outlook.py` | The load each person is committed to in the days ahead |
-| `honoring.py` | What a candidate does to structured requests (`shared/schedule_requests.py`) and to soft availability |
+| `honoring.py` | What a candidate does to structured requests (`bl/schedule_requests.py`) and to soft availability |
 | `rows.py` | Row and roster helpers |
 """
 
@@ -18,7 +18,7 @@ from typing import List, Optional
 
 from app.bl import rotation
 from app.bl.deterministic_scheduler.plan import DayPlan
-from app.bl.shared.schedule_requests import read_requests
+from app.bl.schedule_requests import read_requests
 from app.bl.deterministic_scheduler.rows import text
 from app.bl.scheduler import build_slots
 from app.bl.scheduler.quality import combine_metrics
@@ -41,7 +41,7 @@ def generate_day(
 
     Required rows are pins. Other rows on this date are rebuilt, while rows
     from previous dates participate in rest, hours and fairness checks.
-    `requests` are structured requests (see `shared/schedule_requests.py`); a pin is the
+    `requests` are structured requests (see `bl/schedule_requests.py`); a pin is the
     manager naming one exact placement, so it outranks a general request.
     """
     started = time.monotonic()

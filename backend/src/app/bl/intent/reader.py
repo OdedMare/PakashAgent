@@ -1,8 +1,9 @@
 """`read()`: what a sentence is asking for, as far as code can tell."""
 
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from app.bl.intent.dates import date_in
+from app.bl.shared import text as _text
 from app.bl.intent.vocabulary import (
     ABSENCE_WORDS, EMPLOYEE_WORDS, GAP_WORDS, INTENT_ABSENCE, INTENT_EMPLOYEE,
     INTENT_GAPS, INTENT_PERIOD, INTENT_PUBLISH, INTENT_REPLACEMENTS,
@@ -24,10 +25,6 @@ _RULES = (
     (INTENT_TEAM, TEAM_WORDS, False),
     (INTENT_PERIOD, PERIOD_WORDS, False),
 )
-
-
-def _text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
 
 
 def read(

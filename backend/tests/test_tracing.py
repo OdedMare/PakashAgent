@@ -5,7 +5,7 @@ import types
 
 import pytest
 
-from app.common.config.settings import Settings
+from app.common.config import Settings
 from app.dal.llm import tracing
 
 

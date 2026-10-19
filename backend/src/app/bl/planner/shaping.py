@@ -3,25 +3,10 @@
 from typing import Any, List, Optional
 
 from app.bl.planner.schema import MAX_CALLS_PER_TURN, MAX_OPTIONS
+from app.bl.shared import bounded, iso, text
 from app.bl.tools import TOOL_NAMES
 
-MAX_TEXT_CHARS = 4000
 _MAX_OPTION_LABEL_CHARS = 120
-_MAX_PREFERENCES = 40
-
-
-def text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
-
-
-def bounded(value: Any, limit: int = MAX_TEXT_CHARS) -> str:
-    return value.strip()[:limit] if isinstance(value, str) else ""
-
-
-def iso(value: Any) -> str:
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
-    return text(value)
 
 
 def pretty(hours: Any) -> str:
@@ -108,22 +93,6 @@ def period_for_model(period: Optional[dict]) -> dict:
         "ends_on": iso(period.get("ends_on")),
         "status": text(period.get("status")),
     }
-
-
-def preferences_for_model(preferences: Optional[List[dict]]) -> List[dict]:
-    """Active preferences as context, handed over as reported speech.
-
-    A preference is a standing wish, and a standing wish never authorises a
-    write: the confirmation step is unchanged by anything in this list.
-    """
-    return [
-        {
-            "kind": text(row.get("kind")),
-            "subject": text(row.get("subject")),
-            "text": bounded(row.get("text")),
-        }
-        for row in preferences or [] if isinstance(row, dict)
-    ][:_MAX_PREFERENCES]
 
 
 def names(rows: Any) -> List[str]:

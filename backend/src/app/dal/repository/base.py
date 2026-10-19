@@ -8,7 +8,7 @@ import uuid
 from typing import List
 
 from app.common.errors import NotFoundError
-from app.dal.database.postgres import connect
+from app.dal.database import connect
 
 
 def new_id() -> str:
@@ -40,3 +40,9 @@ class RepositoryBase:
         with connect(self._store) as connection:
             connection.execute(query, params)
             connection.commit()
+
+    @staticmethod
+    def _touch_schedule(connection, schedule_id: str) -> None:
+        connection.execute(
+            "UPDATE schedules SET updated_at=NOW() WHERE id=%s", (schedule_id,),
+        )

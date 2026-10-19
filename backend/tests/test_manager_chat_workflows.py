@@ -314,8 +314,9 @@ def test_copy_translates_dates_without_asking_the_scheduler_to_choose_people():
 
 def test_workload_report_keeps_a_requested_subrange_inside_a_week():
     repo, _, service, _, schedule_id = setup([])
-    report = service._workload(TEAM, dict(schedule_id=schedule_id,
-                              starts_on="2026-10-09", ends_on="2026-10-10"), schedule_id)
+    report = service._chat_tools.run(TEAM, "workload_report", dict(
+        schedule_id=schedule_id, starts_on="2026-10-09", ends_on="2026-10-10",
+    ), schedule_id)
     assert report["starts_on"] == "2026-10-09" and report["ends_on"] == "2026-10-10"
     assert report["stats"]["total_hours"] == 0  # Monday is outside the requested weekend.
 

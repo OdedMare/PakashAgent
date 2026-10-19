@@ -21,7 +21,7 @@ and for those the model translated from the manager's sentences: every name
 must be on the roster and every shift in the vocabulary (D9), so a request
 can never introduce a person or shift nobody declared.
 
-Lives in `shared/` because both `scheduler/directives.py` (the translation
+Its own module because both `scheduler/directives.py` (the translation
 schema) and `deterministic_scheduler/` (honouring) read it, and those two
 packages already import each other.
 """
@@ -29,7 +29,7 @@ packages already import each other.
 import datetime
 from typing import Any, List, Tuple
 
-from app.bl.shared.hebrew_calendar import HEBREW_WEEKDAYS, weekday_key
+from app.bl.shared import HEBREW_WEEKDAYS, text, weekday_key
 
 KINDS = ("avoid", "prefer", "max_count", "not_together")
 PERIODS = ("period", "week")
@@ -146,10 +146,6 @@ def _default_reason(request: dict) -> str:
         "max_count": "מגבלת כמות משמרות ל%s",
         "not_together": "בקשה ש%s לא ישובצו יחד",
     }[request["kind"]] % names
-
-
-def text(value: Any) -> str:
-    return value.strip() if isinstance(value, str) else ""
 
 
 def _names(value: Any) -> List[str]:

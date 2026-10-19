@@ -5,7 +5,7 @@ import pytest
 from app.bl.deterministic_scheduler import generate_span, unsupported_reason
 from app.bl.scheduler.directives import read_translation, semantic_sources
 from app.bl.scheduler.scheduler import Scheduler
-from app.bl.shared.schedule_requests import read_requests
+from app.bl.schedule_requests import read_requests
 from app.common.errors import AgentError
 
 

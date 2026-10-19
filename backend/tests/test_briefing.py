@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from app.bl.briefing.briefing import (
+from app.bl.briefing import (
     BriefingAgent,
     TRIGGER_OPENED,
     TRIGGER_PERIODIC,

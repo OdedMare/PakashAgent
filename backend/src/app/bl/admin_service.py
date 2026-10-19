@@ -1,4 +1,4 @@
-"""The operator console's rules: who is the operator, and what they may do.
+"""Operator console rules and workspace administration.
 
 The צוות משמרות זהב console (D28) is the only place a workspace is opened,
 suspended or deleted. How many employees a team has is not here: that is the
@@ -12,7 +12,7 @@ operator password is compared in constant time.
 import hmac
 from typing import Any, Dict, List
 
-from app.bl.workspace_service.service import validate_notes
+from app.bl.workspace_service import validate_notes
 from app.common.errors import AgentError, AuthError, ForbiddenError
 
 # Read from the runtime settings for the overview. Names only, never a key or

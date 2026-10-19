@@ -9,13 +9,12 @@ from app.bl.scheduler.bounding import (
     committed_for_model, merge, replace_span, required_assignments,
 )
 from app.bl.scheduler.candidates import candidates_for, read_span_assignments, span_schema
-from app.bl.scheduler.payload import (
-    closures_for_model, preferences_for_model, profile_beside_candidates, slot_for_model,
-)
+from app.bl.scheduler.payload import closures_for_model, profile_beside_candidates, slot_for_model
 from app.bl.scheduler.slots import build_slots
 from app.bl.scheduler.fairness import period_load
 from app.bl.scheduler.span_audit import span_warnings
 from app.bl.scheduler.values import MAX_HISTORY_ROWS, bounded, bounded_rows, parse_date
+from app.bl.shared import preferences_for_model
 
 
 class SpanAttempt:

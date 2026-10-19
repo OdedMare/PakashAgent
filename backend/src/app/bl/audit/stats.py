@@ -12,8 +12,9 @@ from app.bl.audit.codes import SEVERITY_NOTICE, SEVERITY_WARNING, severity_rank
 from app.bl.audit.constraints import constraint_conflicts
 from app.bl.audit.roster import index_shifts, rows_of
 from app.bl.audit.staffing_rules import checked_slots, required_headcount, seat_counts
-from app.bl.audit.values import parse_date, person_name, slot_date, text
-from app.bl.shared.hebrew_calendar import hebrew_weekday
+from app.bl.audit.values import person_name, slot_date, text
+from app.bl.shared import parse_date
+from app.bl.shared import hebrew_weekday
 
 
 def shift_stats(

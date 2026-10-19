@@ -2,7 +2,7 @@
 
 Fetches and sends. Makes no decisions — those live in `bl/`.
 
-- `database/postgres.py` — **pooled** connections; verifies the schema exists
+- `database.py` — **pooled** connections; verifies the schema exists
   (never creates it).
 - `llm/` — the OpenAI-compatible JSON client. See [llm/CLAUDE.md](llm/CLAUDE.md).
 - `repository/` — the only SQL owner in the codebase.
@@ -51,7 +51,7 @@ and rules remain JSON on the team's profile, which is what
 parent carries `team_id` and signed browser `manager_id`; messages belong to that
 parent. Reads and approvals verify the parent owner before accessing messages.
 
-Chat approval uses `database/postgres.py:atomic()` to compose existing repository
+Chat approval uses `database.py:atomic()` to compose existing repository
 writes in one serializable transaction. Their inner `commit()` calls are deferred
 until the approval's outer transaction succeeds, so a failed later assignment or
 constraint write also rolls back earlier writes and the approval receipt.

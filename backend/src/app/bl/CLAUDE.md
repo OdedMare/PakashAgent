@@ -29,7 +29,8 @@ Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
 | `rotation/` | **Whose closure a date is.** Pure arithmetic off separate round/triplet anchors; no model |
 | `placement/` | **What a placement would cost, and what else the manager could do.** No model |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
-| `shared/` | Small helpers several packages read: `clarification.py`, `hebrew_calendar.py`, `schedule_requests.py` |
+| `shared/` | Small helpers several packages read: `clarification.py`, `hebrew_calendar.py` |
+| `schedule_requests.py` | **Structured scheduling requests** (`avoid`, `prefer`, `max_count`, `not_together`) and their one validator |
 
 ## The division that defines this layer
 
@@ -62,7 +63,7 @@ code mode stays zero-token and refuses semantic inputs rather than dropping
 them.
 
 **Code honours structured requests, not only pins and absences.**
-`shared/schedule_requests.py` defines four more shapes — `avoid`, `prefer`,
+`schedule_requests.py` defines four more shapes — `avoid`, `prefer`,
 `max_count` (per period or per week) and `not_together` — each narrowed by
 shifts, dates and weekdays, and each hard or soft. `read_requests` is the
 single validator: every name must be on the roster and every shift in the

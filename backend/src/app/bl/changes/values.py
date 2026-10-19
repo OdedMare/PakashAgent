@@ -1,13 +1,11 @@
 """Bounding text and dates the way every part of the change path reads them."""
 
 import datetime
-from typing import Any, List
+from typing import Any
 
-MAX_TEXT_CHARS = 4000
+from app.bl.shared import bounded, dict_rows
 
-
-def bounded(value: Any, limit: int = MAX_TEXT_CHARS) -> str:
-    return value.strip()[:limit] if isinstance(value, str) else ""
+__all__ = ["bounded", "date_of", "dict_rows", "json_default"]
 
 
 def date_of(value: Any) -> str:
@@ -19,12 +17,6 @@ def date_of(value: Any) -> str:
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return bounded(value)
-
-
-def dict_rows(rows: Any, limit: int = 200) -> List[dict]:
-    if not isinstance(rows, list):
-        return []
-    return [row for row in rows if isinstance(row, dict)][-limit:]
 
 
 def json_default(value: Any) -> str:

@@ -118,6 +118,7 @@ def build_router(
             base_url_override=request.override("llm_base_url"),
             api_key_override=request.override("openai_api_key"),
             role=(request.role or "").strip(),
+            verify_ssl_override=request.llm_verify_ssl,
         )}
 
     return router

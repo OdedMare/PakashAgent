@@ -154,7 +154,7 @@ def split_names(value: str) -> List[str]:
     manager's own files use commas or slashes. The unfilled marker it writes
     is not a person.
     """
-    from app.bl.export.export import UNFILLED
+    from app.bl.export import UNFILLED
 
     names = []
     for part in re.split(r"[\n,/;]+", value or ""):

@@ -6,6 +6,7 @@ from typing import List, Optional
 from app.bl.planner import shaping
 from app.bl.planner.schema import PLANNER_RESPONSE_SCHEMA
 from app.bl.prompts import load
+from app.bl.shared import preferences_for_model
 from app.bl.tools import TOOL_DESCRIPTIONS, TOOL_NAMES
 from app.common.errors import AgentError
 
@@ -34,7 +35,7 @@ class ModelToolLoop:
         base = {
             "profile": shaping.profile_for_model(profile),
             "period": shaping.period_for_model(period),
-            "preferences": shaping.preferences_for_model(preferences),
+            "preferences": preferences_for_model(preferences),
             "tools": [
                 {"name": name, "purpose": TOOL_DESCRIPTIONS[name]}
                 for name in TOOL_NAMES
