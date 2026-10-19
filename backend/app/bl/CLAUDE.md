@@ -30,6 +30,7 @@ Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
 | `placement/` | **What a placement would cost, and what else the manager could do.** No model |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
 | `shared/` | Small helpers several packages read: `clarification.py`, `hebrew_calendar.py` |
+| `directive_agent/` | **Translating the manager's words for the code scheduler.** A bounded tool loop; code validates the answer, nothing is written |
 | `schedule_requests.py` | **Structured scheduling requests** (`avoid`, `prefer`, `max_count`, `not_together`) and their one validator |
 
 ## The division that defines this layer
@@ -77,6 +78,17 @@ recurring `is_hard: false` rows) is weighed the same way, so it no longer
 sends a request to the model. A soft wish code had to break is written into
 `notes`; a met preference becomes the assignment's reason. A pin outranks a
 request: it is the manager naming one exact placement.
+
+**The translation looks before it answers.** `directive_agent/` replaced
+the single translation call with a bounded tool loop: the model may
+`resolve_employee`, `list_slots`, read `employee_state`, `check` a draft and
+`dry_run` it (the code scheduler, in memory) before giving its final
+directives and requests. Code keeps the last word — the final answer goes
+through the same `read_translation` — and a refused answer is handed back,
+with the reasons, while turns remain. An answer marking a source
+`unresolved` ends the loop at once: it means "the full scheduler", not "try
+again". Bounded at `MAX_TURNS` calls, four tools per call and two dry runs.
+The tools are pure Python with no repository, so the loop cannot write (D19).
 
 **Code balances nights and rounds, not just hours.** The deterministic
 filler goes one date at a time, so ranking by hours worked so far was blind

@@ -128,7 +128,7 @@ def _unresolved_ids(rows, source_ids):
     return found
 
 
-def _translated_row(row, source_ids, people, slots):
+def translated_row(row, source_ids, people, slots):
     if not isinstance(row, dict):
         return None
     source_id = row.get("source_id")
@@ -178,7 +178,7 @@ def read_translation(answer: Any, sources: List[dict], profile: dict,
     translated_availability, required = [], []
     covered = {row["source_id"] for row in requests}
     for row in directives:
-        translated = _translated_row(row, source_ids, people, slots)
+        translated = translated_row(row, source_ids, people, slots)
         if translated is None:
             return None
         source_id, action, value = translated
@@ -197,4 +197,4 @@ def read_translation(answer: Any, sources: List[dict], profile: dict,
     }
 
 
-__all__ = ["DIRECTIVE_RESPONSE_SCHEMA", "read_translation", "semantic_sources"]
+__all__ = ["DIRECTIVE_RESPONSE_SCHEMA", "read_translation", "semantic_sources", "translated_row"]

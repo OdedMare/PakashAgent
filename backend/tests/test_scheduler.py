@@ -218,7 +218,7 @@ def test_auto_translates_an_exact_instruction_then_assigns_in_code():
     assert result["metrics"]["model_calls"] == 1
     assert result["metrics"]["total_tokens"] == 120
     assert len(llm.calls) == 1
-    assert llm.calls[0]["schema"]["required"] == ["directives", "requests", "unresolved"]
+    assert llm.calls[0]["schema"]["required"] == ["calls", "directives", "requests", "unresolved"]
 
 
 # -- assignments -----------------------------------------------------------

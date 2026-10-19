@@ -10,9 +10,6 @@ from app.bl.scheduler.payload import (
 )
 from app.bl.scheduler.slots import build_slots, chunks
 from app.bl.scheduler.span import SpanGenerator
-from app.bl.scheduler.directives import (
-    DIRECTIVE_RESPONSE_SCHEMA, read_translation, semantic_sources,
-)
 from app.bl.scheduler.planning import ChunkedRun
 from app.bl.scheduler.values import bounded
 from app.common.errors import AgentError, ModelOutputError
@@ -150,6 +147,7 @@ class Scheduler:
                 raise AgentError(reason + ". בחרו במצב AI או אוטומטי.")
             translated = self._translate_directives(
                 profile, starts_on, ends_on, availability, instructions, preferences,
+                history, required_assignments, already_scheduled,
             )
             if translated is None:
                 return None
@@ -170,7 +168,8 @@ class Scheduler:
             usage = translated["usage"]
             result["metrics"].update({
                 "engine": "hybrid",
-                "model_calls": 1,
+                "model_calls": translated["model_calls"],
+                "translation_steps": translated["steps"],
                 "prompt_tokens": int(usage.get("prompt_tokens") or 0),
                 "completion_tokens": int(usage.get("completion_tokens") or 0),
                 "total_tokens": int(usage.get("total_tokens") or 0),
@@ -180,36 +179,17 @@ class Scheduler:
 
     def _translate_directives(
         self, profile, starts_on, ends_on, availability, instructions, preferences,
+        history=None, required_assignments=None, already_scheduled=None,
     ):
-        sources = semantic_sources(profile, availability, instructions, preferences)
-        if not sources:
-            return None
-        slots = build_slots(profile, starts_on, ends_on)
-        payload = {
-            "period": {"starts_on": starts_on, "ends_on": ends_on},
-            "employees": [
-                {
-                    "name": row.get("name"),
-                    "eligible_shifts": row.get("eligible_shifts") or [],
-                }
-                for row in profile.get("employees") or [] if isinstance(row, dict)
-            ],
-            "slots": [
-                {"date": row["slot_date"], "shift": row["shift_name"]}
-                for row in slots
-            ],
-            "sources": sources,
-        }
-        try:
-            answer = self._llm.complete_json(
-                load("scheduler_directives"),
-                json.dumps(payload, ensure_ascii=False),
-                schema=DIRECTIVE_RESPONSE_SCHEMA,
-                flow="scheduler",
-            )
-        except AgentError:
-            return None
-        return read_translation(answer, sources, profile, starts_on, ends_on)
+        """The manager's words as directives and requests, or None. A bounded
+        tool loop (`bl/directive_agent/`); code validates its final answer."""
+        from app.bl.directive_agent import DirectiveAgent
+
+        return DirectiveAgent(self._llm).translate(
+            profile, starts_on, ends_on, availability=availability,
+            instructions=instructions, preferences=preferences, history=history,
+            required_assignments=required_assignments, already_scheduled=already_scheduled,
+        )
 
     def _ask(self, payload: dict, schema: Optional[dict] = None) -> dict:
         answer = self._llm.complete_json(

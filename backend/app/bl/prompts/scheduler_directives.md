@@ -41,4 +41,25 @@ Every source id must appear in at least one directive or request, or exactly
 once in `unresolved`. A source may produce several directives or requests.
 Give each a short Hebrew reason that preserves the source's meaning.
 
+## Tools
+
+You may look before you answer. Put tool calls in `calls` and leave
+`directives`, `requests` and `unresolved` empty; the results come back in
+`results` on the next turn. When you answer, `calls` is empty.
+
+- `resolve_employee` when a source names someone loosely ("דני", a nickname).
+  Several matches means you may not choose: put the source in `unresolved`.
+- `list_slots` to turn "every Tuesday night" into the real slots.
+- `employee_state` before a `required_assignment` or a `prefer`, to see the
+  person's eligible shifts and hard unavailability.
+- `check` to validate a draft against the roster and grid.
+- `dry_run` to schedule a draft in memory. If it reports warnings caused by
+  your draft (a hard request leaving a shift short), reconsider whether the
+  source really said "must"; a source that only said "prefer" should be a
+  soft request. Warnings unrelated to the sources are not yours to fix.
+
+Ask only what you need; most sources need no tool at all. When
+`final_turn` is true you must answer now, without calls. If a result says
+your answer was refused, fix exactly what it lists.
+
 Return JSON matching the supplied schema only.
