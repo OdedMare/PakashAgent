@@ -157,6 +157,8 @@ export interface RedisReport {
   };
   app?: {
     keys: number;
+    model_calls: number;
+    model_waiting: number;
     locked_accounts: number;
     event_listeners: number;
   };

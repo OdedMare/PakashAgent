@@ -33,6 +33,7 @@ from app.common.runtime_settings.runtime_settings_store import (
 )
 from app.dal.database import close_pool
 from app.dal.llm import tracing
+from app.dal.llm.budgets import share_slots
 from app.dal.llm.openai_client import OpenAIJsonClient
 from app.dal.llm.team_context import model_team
 from app.dal.repository import Repository
@@ -64,9 +65,10 @@ env = Settings()
 tracing.init(env)
 store = RuntimeSettingsStore(env)
 # Shared state across processes when a Redis URL is saved; inert without one.
-# The throttle and the live signals fall back to memory without it. The model
-# limit is held in PostgreSQL (`PostgresModelSlots`), not here.
+# The throttle and the live signals fall back to memory without it, the
+# model queue to PostgreSQL.
 redis_hub = RedisHub(store)
+share_slots(redis_hub)
 repository = Repository(store)
 llm = OpenAIJsonClient(store)
 workspace_service = WorkspaceService(repository)

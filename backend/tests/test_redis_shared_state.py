@@ -1,9 +1,9 @@
-"""Redis as shared state: the login throttle and the live signals.
+"""Redis as shared state: the throttle, the live signals and the model queue.
 
 What is asserted here is the two halves of the promise in
 `common/redis_hub.py`:
 
-- with Redis, both hold across processes -- simulated by two
+- with Redis, all three hold across processes -- simulated by two
   instances sharing one server, which is all a second process is to them;
 - without it, or when it stops answering, each behaves exactly as it did
   before Redis existed, rather than failing the request.
@@ -29,6 +29,9 @@ from app.common.events import TeamEvents
 from app.common.redis_hub import RedisHub, mask_url, probe
 from app.common.runtime_settings.runtime_settings import RuntimeSettings
 from app.common.throttle import LoginThrottle
+from app.dal.llm.model_slots import BACKGROUND, INTERACTIVE, ModelBusy, ModelSlots
+from app.dal.llm.redis_slots import RedisModelSlots
+from app.dal.llm.team_context import model_team
 
 
 class _Store:
@@ -132,7 +135,7 @@ def test_mask_url_hides_the_password():
 def test_probe_reports_the_server(redis_url):
     report = probe(redis_url, "", "pakash")
     assert report["server"]["version"]
-    assert report["app"]["keys"] == 0
+    assert report["app"]["model_calls"] == 0
 
 
 # --- the throttle ------------------------------------------------------------
@@ -213,3 +216,91 @@ def test_without_redis_delivery_stays_local():
             return await asyncio.wait_for(inbox.get(), timeout=1)
 
     assert asyncio.run(scenario()) == "requests"
+
+
+# --- the model queue ---------------------------------------------------------
+
+def _slots(hub, limit=1, fallback=None, **kwargs):
+    store = hub._store
+    store.settings.llm_max_concurrency = limit
+    fallback = fallback or ModelSlots(limit)
+    return RedisModelSlots(store, hub, lambda: fallback, poll_seconds=0.02, **kwargs)
+
+
+def _in_team(slots, team, priority, order, name, started=None):
+    def run():
+        with model_team(team), slots.reserve(priority):
+            order.append(name)
+            if started is not None:
+                started.wait(5)
+    return threading.Thread(target=run)
+
+
+def test_the_limit_holds_across_processes(hub):
+    first, second = _slots(hub), _slots(hub)
+    with model_team("a"), first.reserve():
+        with model_team("b"):
+            with pytest.raises(ModelBusy):
+                with second.reserve(timeout=0.3):
+                    pass
+    with second.reserve(timeout=1):
+        pass
+
+
+def test_the_limit_is_read_live(hub):
+    slots = _slots(hub, limit=1)
+    with model_team("a"), slots.reserve():
+        hub._store.settings.llm_max_concurrency = 2
+        with model_team("b"), slots.reserve(timeout=1):
+            pass
+
+
+def test_one_call_per_team_does_not_block_other_teams(hub):
+    slots = _slots(hub, limit=2)
+    with model_team("a"), slots.reserve():
+        # Team a's second call waits for its first...
+        with pytest.raises(ModelBusy):
+            with slots.reserve(timeout=0.3):
+                pass
+        # ...but team b, queued behind it, gets the free slot.
+        with model_team("b"), slots.reserve(timeout=1):
+            pass
+
+
+def test_interactive_work_goes_ahead_of_background(hub):
+    slots = _slots(hub)
+    order, release = [], threading.Event()
+    holder = _in_team(slots, "a", INTERACTIVE, order, "first", release)
+    holder.start()
+    time.sleep(0.2)
+    build = _in_team(slots, "b", BACKGROUND, order, "build")
+    build.start()
+    time.sleep(0.2)  # the build is queued first...
+    chat = _in_team(slots, "c", INTERACTIVE, order, "chat")
+    chat.start()
+    time.sleep(0.2)
+    release.set()
+    for thread in (holder, build, chat):
+        thread.join(5)
+    assert order == ["first", "chat", "build"]  # ...and the chat goes first
+
+
+def test_a_dead_holder_frees_its_slot(hub):
+    dead = _slots(hub, lease_seconds=0.5)
+    with model_team("a"):
+        held = dead._acquire(hub.client(), INTERACTIVE, None)
+    held._stop.set()  # the process died: nobody renews the lease
+    started = time.monotonic()
+    with model_team("b"), _slots(hub).reserve(timeout=5):
+        pass
+    assert time.monotonic() - started < 3
+
+
+def test_without_redis_the_fallback_holds_the_line():
+    fallback = ModelSlots(1)
+    hub = RedisHub(_Store())
+    slots = RedisModelSlots(hub._store, hub, lambda: fallback)
+    with slots.reserve():
+        with pytest.raises(ModelBusy):
+            with fallback.reserve(timeout=0.05):
+                pass

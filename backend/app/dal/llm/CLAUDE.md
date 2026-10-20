@@ -18,6 +18,8 @@ three are per role, so different kinds of work can run on different providers.
 | `message_merger.py` | Folds the system prompt into the user turn |
 | `model_id_extractor.py` | Pulls model IDs out of a `/models` response |
 | `model_roles.py` | Flow → role → model id, endpoint and API key, and the fallbacks |
+| `model_slots.py` | `ModelSlots` (one process) and `PostgresModelSlots` (advisory locks) — the concurrency limit without Redis |
+| `redis_slots.py` | `RedisModelSlots` — the same limit as a priority-ordered queue in Redis, used whenever Redis is reachable (D33) |
 | `tracing.py` | Opik tracing — one trace per call, one LLM span per completion; inert without `OPIK_API_KEY` |
 
 Each helper is separate because each handles a different failure of
@@ -197,6 +199,14 @@ A `Retry-After` header is obeyed over the curve: the server knows when it will
 be ready and the backoff is a guess.
 
 ## Concurrency
+
+**With Redis configured, `RedisModelSlots` holds the line** (D33):
+`main.py` and `worker.py` call `budgets.share_slots(hub)`, and every call
+takes a ticket in one Redis queue ordered by priority, then arrival — so a
+manager's chat goes ahead of a waiting build day. Same contract as below:
+the limit is read live and each team has one call in flight. Holders renew
+a 30-second lease, so a killed process frees its slot within a lease. When
+Redis is not configured or stops answering, the call falls back to:
 
 `PostgresModelSlots` bounds in-flight completions across the API and every
 worker with session advisory locks. `llm_max_concurrency` is read on each

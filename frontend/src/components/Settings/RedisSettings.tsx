@@ -8,7 +8,8 @@ import type { SettingsController } from "./useSettings";
 /** The Redis connection, and what this deployment keeps in it.
  *
  *  Redis is optional: with the URL empty, the login throttle and the
- *  manager's live updates stay in each process's memory, as they always did. The card below the fields answers from the server, so a
+ *  manager's live updates stay in each process's memory, and the model queue
+ *  stays in PostgreSQL, as they always did. The card below the fields answers from the server, so a
  *  connection can be tested before it is saved. */
 export function RedisSettings({ settings }: { settings: SettingsController }) {
   return (
@@ -59,9 +60,11 @@ export function RedisSettings({ settings }: { settings: SettingsController }) {
       ) : null}
       <RedisReportCard report={settings.redisReport} />
       <p className="settings-note">
-        עם Redis שני דברים משותפים לכל תהליכי השרת: נעילת חשבון אחרי סיסמאות שגויות, ועדכון
-        מיידי של מסך המנהל כשעובד שולח בקשה — גם כשהבקשה טופלה בתהליך אחר. כש-Redis לא זמין,
-        כל תהליך חוזר לעבוד לבד בזיכרון. שינוי נקלט בכל התהליכים תוך שניות, בלי הפעלה מחדש.
+        עם Redis שלושה דברים משותפים לכל תהליכי השרת: נעילת חשבון אחרי סיסמאות שגויות, עדכון
+        מיידי של מסך המנהל כשעובד שולח בקשה, ותור הפניות למודל — לפי סדר עדיפות, כך ששיחה עם
+        המנהל עוקפת בניית סידור שממתינה, וכל צוות מריץ פנייה אחת בכל רגע. כש-Redis לא זמין,
+        הנעילה והעדכונים חוזרים לזיכרון של כל תהליך, והתור חוזר למסד הנתונים. שינוי נקלט בכל
+        התהליכים תוך שניות, בלי הפעלה מחדש.
       </p>
     </section>
   );
@@ -88,6 +91,8 @@ function RedisReportCard({ report }: { report: RedisReport | null }) {
     ["לקוחות מחוברים", server?.connected_clients ?? 0],
     ["מפתחות במסד", server?.keys ?? 0],
     ["מפתחות של המערכת", app?.keys ?? 0],
+    ["פניות פעילות למודל", app?.model_calls ?? 0],
+    ["ממתינים בתור למודל", app?.model_waiting ?? 0],
     ["חשבונות נעולים", app?.locked_accounts ?? 0],
     ["מאזיני עדכונים חיים", app?.event_listeners ?? 0],
   ];

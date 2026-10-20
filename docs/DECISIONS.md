@@ -1058,21 +1058,24 @@ worker never reached a manager streaming from another.
 throttle counts and locks in Redis keys, and signals go out on a per-team
 pub/sub channel that one listener thread per process relays to its streams.
 
-**The model concurrency limit is not in Redis.** It is already held across
-processes by `PostgresModelSlots` (advisory locks, one call in flight per
-team), which dies with its connection and needs nothing beyond the database
-every deployment has. A second implementation of the same limit would be two
-answers to one question.
+**The model queue moves to Redis too** (`dal/llm/redis_slots.py`), taking
+over from `PostgresModelSlots` whenever Redis is reachable. It keeps that
+contract -- one deployment-wide limit read live from `llm_max_concurrency`,
+one call in flight per team -- and adds the one thing advisory locks polled
+in a loop could not give: order. Tickets are served by priority, then
+arrival, so a manager's chat goes ahead of a queued build day. Holders renew
+a 30-second lease and waiters refresh their ticket, so a killed process
+frees its place within a lease. The PostgreSQL slots stay as the fallback.
 
-**Redis is an accelerator, not a dependency.** URL empty is the default, and
-both fall back to exactly their old in-memory behaviour -- also when a
-configured Redis stops answering. A login must never fail because a cache is
-down.
+**Redis is an accelerator, not a dependency.** URL empty is the default.
+Without Redis, or when it stops answering, the throttle and the signals
+return to memory and the queue to PostgreSQL. A login must never fail
+because a cache is down.
 
 The URL, password and key prefix are runtime settings, editable in the panel
-with a connection test that shows the server and what this app keeps in it.
-A save reaches the other processes because the hub re-reads the settings
-file every few seconds.
+with a connection test that shows the server and what this app keeps in it:
+active model calls, the queue, locked accounts. A save reaches the other
+processes because the hub re-reads the settings file every few seconds.
 
 ---
 

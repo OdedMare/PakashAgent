@@ -4,8 +4,9 @@ Two things used to live in memory, per process -- the login throttle
 (`throttle.py`) and the manager's live signals (`events.py`). With more than
 one process each kept its own copy: the throttle allowed N times the
 guesses, and a signal raised on one worker never reached a manager streaming
-from another. With a Redis URL saved, both hold across processes. (The model
-concurrency limit is held in PostgreSQL instead -- `PostgresModelSlots`.)
+from another. With a Redis URL saved, both hold across processes -- and so
+does the model queue (`dal/llm/redis_slots.py`), in priority order, ahead
+of its PostgreSQL fallback.
 
 **Redis is an accelerator, never a requirement.** `client()` answers `None`
 when no URL is set or the server cannot be reached, and every caller then
@@ -183,8 +184,9 @@ def probe(url: str, password: str = "", prefix: str = "pakash") -> dict:
     """Connect to `url` once and report what is there. Raises on failure.
 
     Used by the panel to test a connection typed into the form before it is
-    saved, and to show what this app keeps in it: its keys, the accounts
-    locked out, and how many processes listen for live signals.
+    saved, and to show what this app keeps in it: who holds the model, who
+    is waiting, the accounts locked out, and how many processes listen for
+    live signals.
     """
     client = connect(url, password)
     try:
@@ -192,6 +194,8 @@ def probe(url: str, password: str = "", prefix: str = "pakash") -> dict:
         client.ping()
         latency = (time.perf_counter() - started) * 1000
         info = client.info()
+        seconds, micros = client.time()
+        now_ms = int(seconds) * 1000 + int(micros) // 1000
         base = prefix or "pakash"
         return {
             "server": {
@@ -205,6 +209,10 @@ def probe(url: str, password: str = "", prefix: str = "pakash") -> dict:
             },
             "app": {
                 "keys": _count(client, base + ":*"),
+                "model_calls": client.zcount(
+                    base + ":llm:holders", "(%d" % now_ms, "+inf"
+                ),
+                "model_waiting": client.zcard(base + ":llm:queue"),
                 "locked_accounts": _count(client, base + ":throttle:lock:*"),
                 "event_listeners": client.pubsub_numpat(),
             },
