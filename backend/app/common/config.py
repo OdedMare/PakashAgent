@@ -232,6 +232,25 @@ class Settings(BaseSettings):
     and refuses semantic rules rather than silently ignoring them.
     """
 
+    redis_url: str = ""
+    """Redis shared by every process of this deployment. Empty -- the
+    default -- means no Redis: the login throttle, the manager's live signals
+    and the model concurrency limit stay in memory, per process, exactly as
+    they always were. Set it once the API runs more than one worker, or next
+    to `python -m app.worker`, so those three hold across processes.
+
+    `redis://host:6379/0`, `rediss://` for TLS, or `unix:///path.sock`. A
+    bare `host:port` is accepted and read as `redis://`. Live-editable in
+    the panel: every process picks up a saved change within seconds."""
+
+    redis_password: str = ""
+    """Redis password (AUTH). Empty = none, or whatever the URL carries.
+    Never returned by the API."""
+
+    redis_key_prefix: str = "pakash"
+    """Prepended to every key and channel this app writes, so one Redis can
+    serve several deployments without them sharing lockouts or slots."""
+
     session_secret: str = ""
     """Key that signs the workspace session cookie.
 

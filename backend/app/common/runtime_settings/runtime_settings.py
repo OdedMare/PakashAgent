@@ -47,3 +47,8 @@ class RuntimeSettings:
     # `Settings.schedule_generation_mode` for the tradeoff.
     schedule_generation_mode: str = "day"
     schedule_generation_engine: str = "auto"
+    # Shared state across processes (`common/redis_hub.py`). Empty URL = off,
+    # and every user of it falls back to its in-memory, per-process self.
+    redis_url: str = ""
+    redis_password: str = ""
+    redis_key_prefix: str = "pakash"

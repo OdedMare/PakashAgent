@@ -994,8 +994,6 @@ translation token usage and carry a reason per assignment; every result remains
 an ordinary draft the manager may inspect and edit. The selected engine is
 stamped when the build opens; changing the setting affects the next build.
 
----
-
 ## D32 — A standing sentence is translated once, and the translation is kept *(amends D31, D21)*
 
 D31's translator ran on every build: the same rule, policy and note were
@@ -1045,6 +1043,36 @@ scheduler.
 **Shown, not edited.** Setup lists what code made of each sentence:
 translated, needs AI (with the reason), a wish code will not weigh,
 translating, or expired. Correcting a reading means rewording the sentence.
+
+---
+
+## D33 — Redis shares process-local state, and is never required
+
+Two things lived in each process's memory: the login throttle and the
+manager's live "an inbox moved" signals (D29). With more than one process --
+several API workers, or the API beside `app.worker` -- each kept its own
+copy: N workers allowed N times the guesses, and a signal raised on one
+worker never reached a manager streaming from another.
+
+**With a Redis URL saved, both are shared** (`common/redis_hub.py`): the
+throttle counts and locks in Redis keys, and signals go out on a per-team
+pub/sub channel that one listener thread per process relays to its streams.
+
+**The model concurrency limit is not in Redis.** It is already held across
+processes by `PostgresModelSlots` (advisory locks, one call in flight per
+team), which dies with its connection and needs nothing beyond the database
+every deployment has. A second implementation of the same limit would be two
+answers to one question.
+
+**Redis is an accelerator, not a dependency.** URL empty is the default, and
+both fall back to exactly their old in-memory behaviour -- also when a
+configured Redis stops answering. A login must never fail because a cache is
+down.
+
+The URL, password and key prefix are runtime settings, editable in the panel
+with a connection test that shows the server and what this app keeps in it.
+A save reaches the other processes because the hub re-reads the settings
+file every few seconds.
 
 ---
 

@@ -18,6 +18,8 @@ from app.common.runtime_settings.normalizers import (
     normalize_database_schema,
     normalize_database_url,
     normalize_llm_base_url,
+    normalize_redis_prefix,
+    normalize_redis_url,
 )
 from app.common.runtime_settings.runtime_settings import RuntimeSettings
 
@@ -27,6 +29,7 @@ _SECRET_FIELDS = {
     "llm_api_key_fast",
     "llm_api_key_default",
     "llm_api_key_advanced",
+    "redis_password",
 }
 
 # Fields where None/empty means "clear the value", not "keep current".
@@ -87,8 +90,13 @@ class RuntimeSettingsStore:
             schedule_generation_engine=_safe_generation_engine(
                 env.schedule_generation_engine
             ),
+            redis_url=_safe_redis_url(env.redis_url),
+            redis_password=env.redis_password,
+            redis_key_prefix=_safe_redis_prefix(env.redis_key_prefix),
         )
+        self._mtime = None
         if self._path.exists():
+            self._mtime = self._path.stat().st_mtime_ns
             self._apply(json.loads(self._path.read_text("utf-8")), False)
 
     def get(self) -> RuntimeSettings:
@@ -120,12 +128,38 @@ class RuntimeSettingsStore:
         self._persist()
         return self._settings
 
+    def reload_if_changed(self) -> bool:
+        """Pick up a save another process wrote to the file. True if it did.
+
+        Each process holds its own store, so a save in one API worker -- or
+        anywhere, as seen from `app.worker` -- otherwise reaches the others
+        only on restart. `RedisHub` calls this (throttled) so a Redis URL
+        saved in the panel reaches every process within seconds. A file
+        caught mid-write fails to parse and is simply read next time.
+        """
+        try:
+            mtime = self._path.stat().st_mtime_ns
+        except OSError:
+            return False
+        if mtime == self._mtime:
+            return False
+        try:
+            patch = json.loads(self._path.read_text("utf-8"))
+        except (OSError, ValueError):
+            return False
+        candidate = replace(self._settings)
+        self._apply(patch, False, candidate)
+        self._settings = candidate
+        self._mtime = mtime
+        return True
+
     def _persist(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_text(
             json.dumps(asdict(self._settings), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        self._mtime = self._path.stat().st_mtime_ns
 
     def _apply(self, patch: dict, strict: bool, target=None) -> None:
         """Fold a patch into `target` (the live settings by default).
@@ -184,6 +218,10 @@ def _normalized(key: str, value, patch: dict, settings):
         return _generation_mode(value)
     if key == "schedule_generation_engine":
         return _generation_engine(value)
+    if key == "redis_url":
+        return normalize_redis_url(value)
+    if key == "redis_key_prefix":
+        return normalize_redis_prefix(value)
     return value
 
 
@@ -261,6 +299,21 @@ def _safe_generation_engine(value) -> str:
         return _generation_engine(value)
     except (TypeError, ValueError):
         return ENGINE_AUTO
+
+
+def _safe_redis_url(value: str) -> str:
+    """The env URL, or no Redis at all rather than a failed start-up."""
+    try:
+        return normalize_redis_url(value)
+    except (TypeError, ValueError):
+        return ""
+
+
+def _safe_redis_prefix(value: str) -> str:
+    try:
+        return normalize_redis_prefix(value)
+    except (TypeError, ValueError):
+        return normalize_redis_prefix("")
 
 
 def _safe_schema(value: str) -> str:

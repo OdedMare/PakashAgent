@@ -91,7 +91,7 @@ function ModalHeader({ onClose }: { onClose: () => void }) {
       </span>
       <div>
         <h2 id="settings-title">הגדרות</h2>
-        <p>מודל הבינה ומסד הנתונים.</p>
+        <p>מודל הבינה, מסד הנתונים ו-Redis.</p>
       </div>
       <button type="button" onClick={onClose} aria-label="סגירת הגדרות">
         <X size={18} />

@@ -25,6 +25,7 @@ from app.common.config import Settings
 from app.common.errors import AppError, error_payload
 from app.common.events import TeamEvents
 from app.common.logging_setup import configure_logging
+from app.common.redis_hub import RedisHub
 from app.common.sessions import COOKIE_NAME, generate_secret, read
 from app.common.throttle import LoginThrottle
 from app.common.runtime_settings.runtime_settings_store import (
@@ -62,6 +63,10 @@ def _worker_count() -> int:
 env = Settings()
 tracing.init(env)
 store = RuntimeSettingsStore(env)
+# Shared state across processes when a Redis URL is saved; inert without one.
+# The throttle and the live signals fall back to memory without it. The model
+# limit is held in PostgreSQL (`PostgresModelSlots`), not here.
+redis_hub = RedisHub(store)
 repository = Repository(store)
 llm = OpenAIJsonClient(store)
 workspace_service = WorkspaceService(repository)
@@ -108,10 +113,10 @@ if not env.session_secret:
 guards = Guards(session_secret, team_active=repository.team_is_active)
 # One throttle for every password check in the process. Keys are namespaced
 # (`boss:`, `employee:`, `settings:`), so sharing it couples nothing.
-login_throttle = LoginThrottle()
+login_throttle = LoginThrottle(redis=redis_hub)
 # Wakes the manager's screen when an employee submits or answers something.
 # Shared by the employee routes that publish and the stream that listens.
-team_events = TeamEvents()
+team_events = TeamEvents(redis=redis_hub)
 if not env.settings_password:
     _log.warning(
         "PAKASH_SETTINGS_PASSWORD is not set; the settings panel is locked."
@@ -126,6 +131,7 @@ if not admin_password:
     )
 admin_service = AdminService(
     repository, workspace_service, admin_password, store=store,
+    redis=redis_hub,
 )
 
 
@@ -183,7 +189,8 @@ app.include_router(profile.build_router(profile_service, guards))
 app.include_router(manager_chat.build_router(manager_chat_service, repository, guards))
 app.include_router(
     settings.build_router(
-        store, llm, guards, env.settings_password, login_throttle
+        store, llm, guards, env.settings_password, login_throttle,
+        redis=redis_hub,
     )
 )
 app.include_router(copilot.build_router(copilot_service, repository, guards))
