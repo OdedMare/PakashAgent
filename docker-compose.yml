@@ -100,6 +100,10 @@ services:
       OPIK_WORKSPACE: ${OPIK_WORKSPACE:-}
       OPIK_PROJECT_NAME: ${OPIK_PROJECT_NAME:-pakash}
       PAKASH_COPILOT_SCAN_SECONDS: ${PAKASH_COPILOT_SCAN_SECONDS:-1800}
+      # One lane stays available for manager chat; the rest checkpoint one
+      # generation span at a time across teams.
+      PAKASH_WORKER_CONCURRENCY: ${PAKASH_WORKER_CONCURRENCY:-4}
+      PAKASH_CHAT_WORKERS: ${PAKASH_CHAT_WORKERS:-1}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
