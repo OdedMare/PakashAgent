@@ -994,6 +994,89 @@ translation token usage and carry a reason per assignment; every result remains
 an ordinary draft the manager may inspect and edit. The selected engine is
 stamped when the build opens; changing the setting affects the next build.
 
+## D32 — A standing sentence is translated once, and the translation is kept *(amends D31, D21)*
+
+D31's translator ran on every build: the same rule, policy and note were
+sent to the model for every week and every span, and a policy code cannot
+represent (`rest_policy`) was sent, failed and fell back to the full
+scheduler every time. Now a **standing** source — a rule, a policy, an
+employee's note, an active preference; everything but the build's own
+instruction — is translated once and kept in `compiled_sources`.
+
+**The sentence stays the source.** A kept translation is a derivative,
+looked up by the words (`source_key`), the roster and shift names
+(`vocab_key`) and the compiler (version + prompt). Editing the sentence,
+changing the roster or the prompt simply stops matching. D2 holds: rules
+stay the manager's sentences, and D21 holds: a preference still authorises
+nothing. What changed is that D31 gave both a structured vocabulary to be
+*read into* for code, and reading one is now done once.
+
+**Setup is translated when it is saved.** The save stays zero-token and
+synchronous; it queues one `compile_sources` job, and the worker translates
+what is missing. No model, or a failed job, costs nothing: the next build
+translates as it did before.
+
+**A negative is kept too.** A binding source the model marked `unresolved`
+sends later builds straight to the full scheduler without a translation
+call. What *code* refused, or the model skipped, is not kept — it is tried
+again.
+
+**Time is anchored to when the sentence was written.** "עודד חולה 3 או 4
+ימים" is read against `source_anchors.anchored_on`, the day the sentence
+was first seen, which does not move when it is compiled again. The model
+gives the certain range (hard), the uncertain day (soft, weight 3) and a
+question for the manager; code checks a relative range lies within 90 days
+of the anchor and an absolute one within the dates the sentence writes, and
+refuses to keep a recurring sentence spread over one period's dates.
+
+**Policies became translatable (step 2).** Four request kinds were added so
+the policies that used to be kept as unresolved can be read into code:
+`min_rest`, `max_consecutive`, `balance` and `requires_with`, the first
+three allowed to name nobody (the whole team). A policy is translated clause
+by clause and left unresolved whole if any clause has no kind — training,
+rotation restated, "use judgement". `COMPILER_VERSION` moved to 2 so every
+kept negative is read again. `balance` is a ranking, not a guarantee: it is
+weighed like any soft wish, and is not reported as broken. Trainees are
+still not placed by code, so a training policy still goes to the full
+scheduler.
+
+**Shown, not edited.** Setup lists what code made of each sentence:
+translated, needs AI (with the reason), a wish code will not weigh,
+translating, or expired. Correcting a reading means rewording the sentence.
+
+---
+
+## D33 — Redis shares process-local state, and is never required
+
+Two things lived in each process's memory: the login throttle and the
+manager's live "an inbox moved" signals (D29). With more than one process --
+several API workers, or the API beside `app.worker` -- each kept its own
+copy: N workers allowed N times the guesses, and a signal raised on one
+worker never reached a manager streaming from another.
+
+**With a Redis URL saved, both are shared** (`common/redis_hub.py`): the
+throttle counts and locks in Redis keys, and signals go out on a per-team
+pub/sub channel that one listener thread per process relays to its streams.
+
+**The model queue moves to Redis too** (`dal/llm/redis_slots.py`), taking
+over from `PostgresModelSlots` whenever Redis is reachable. It keeps that
+contract -- one deployment-wide limit read live from `llm_max_concurrency`,
+one call in flight per team -- and adds the one thing advisory locks polled
+in a loop could not give: order. Tickets are served by priority, then
+arrival, so a manager's chat goes ahead of a queued build day. Holders renew
+a 30-second lease and waiters refresh their ticket, so a killed process
+frees its place within a lease. The PostgreSQL slots stay as the fallback.
+
+**Redis is an accelerator, not a dependency.** URL empty is the default.
+Without Redis, or when it stops answering, the throttle and the signals
+return to memory and the queue to PostgreSQL. A login must never fail
+because a cache is down.
+
+The URL, password and key prefix are runtime settings, editable in the panel
+with a connection test that shows the server and what this app keeps in it:
+active model calls, the queue, locked accounts. A save reaches the other
+processes because the hub re-reads the settings file every few seconds.
+
 ---
 
 ## Open

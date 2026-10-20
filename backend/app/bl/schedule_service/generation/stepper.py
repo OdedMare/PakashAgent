@@ -34,7 +34,8 @@ class GenerationStepper:
         self._history = history
 
     def generate_next(
-        self, team_id: str, schedule_id: str, light: bool = False
+        self, team_id: str, schedule_id: str, light: bool = False,
+        target_date: str = "", target_through: str = "",
     ) -> dict:
         """Generate the next pending/failed span and checkpoint the result.
 
@@ -55,8 +56,16 @@ class GenerationStepper:
         if job.cancel_requested:
             return self._stop(schedule_id, team_id, job, light)
 
-        target = job.next_target()
+        target = (
+            job.target(target_date, target_through)
+            if target_date else job.next_target()
+        )
         if target is None:
+            # A durable item can outlive a split or a checkpoint made by an
+            # earlier worker. It is stale, not permission to take another
+            # span whose own queue item may intentionally be delayed.
+            if target_date and job.first_unfinished() is not None:
+                return self._context.result(schedule, team_id, light)
             job.mark_complete()
             self._repository.set_generation(schedule_id, team_id, job.to_dict())
             return self._context.result(
@@ -179,6 +188,7 @@ class GenerationStepper:
             preferences=self._context.active_preferences(team_id),
             split_on_failure=False,  # The job checkpoints each smaller span separately.
             engine=job.get("engine") or ENGINE_AI,
+            translation_cache=self._context.translation_cache(team_id),
         )
 
     def _write_span(

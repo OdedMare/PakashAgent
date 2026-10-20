@@ -35,6 +35,9 @@ class TranslationTools:
             text(row.get("name")): row for row in (profile or {}).get("employees") or []
             if isinstance(row, dict) and text(row.get("name"))
         }
+        self.standing = {row["id"] for row in sources if row.get("persistent")}
+        self.shifts = {text(row.get("name")) for row in (profile or {}).get("shifts") or []
+                       if isinstance(row, dict)}
 
     def run(self, tool: str, arguments: Dict[str, Any]) -> dict:
         handler = getattr(self, "_" + tool, None) if tool in _TOOLS else None
@@ -126,10 +129,10 @@ class TranslationTools:
         source_ids = {row["id"] for row in self.sources}
         slots = {(slot["shift_name"], slot["slot_date"]) for slot in self.slots}
         for index, row in enumerate(_rows(arguments.get("directives")), start=1):
-            read = translated_row(row, source_ids, self.people, slots)
+            read = translated_row(row, source_ids, self.people, slots, self.standing, self.shifts)
             if read is None:
                 problems.append("directive %d: %s" % (index, _directive_problem(
-                    row, source_ids, self.people, slots)))
+                    row, source_ids, self.people, slots, self.standing)))
             else:
                 directives.append((read[1], dict(read[2], source_id=read[0])))
         requests, errors = read_requests(_rows(arguments.get("requests")), self.profile)
@@ -141,7 +144,8 @@ class TranslationTools:
         return directives, requests, problems
 
 
-def _directive_problem(row: Any, source_ids: set, people: dict, slots: set) -> str:
+def _directive_problem(row: Any, source_ids: set, people: dict, slots: set,
+                       standing: set = frozenset()) -> str:
     if not isinstance(row, dict):
         return "not an object"
     employee, shift, date = text(row.get("employee")), text(row.get("shift")), text(row.get("date"))
@@ -151,6 +155,8 @@ def _directive_problem(row: Any, source_ids: set, people: dict, slots: set) -> s
         return "unknown action"
     if employee not in people:
         return "%s is not on the roster" % (employee or "(empty)")
+    if row.get("source_id") in standing and (shift, date) not in slots:
+        return "no shift %s, or %s is not an ISO date" % (shift or "(empty)", date or "(empty)")
     if (shift, date) not in slots:
         return "no slot %s on %s in this period" % (shift or "(empty)", date or "(empty)")
     if not text(row.get("reason")):

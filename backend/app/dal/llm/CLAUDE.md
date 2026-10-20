@@ -18,6 +18,8 @@ three are per role, so different kinds of work can run on different providers.
 | `message_merger.py` | Folds the system prompt into the user turn |
 | `model_id_extractor.py` | Pulls model IDs out of a `/models` response |
 | `model_roles.py` | Flow → role → model id, endpoint and API key, and the fallbacks |
+| `model_slots.py` | `ModelSlots` (one process) and `PostgresModelSlots` (advisory locks) — the concurrency limit without Redis |
+| `redis_slots.py` | `RedisModelSlots` — the same limit as a priority-ordered queue in Redis, used whenever Redis is reachable (D33) |
 | `tracing.py` | Opik tracing — one trace per call, one LLM span per completion; inert without `OPIK_API_KEY` |
 
 Each helper is separate because each handles a different failure of
@@ -198,11 +200,22 @@ be ready and the backoff is a guess.
 
 ## Concurrency
 
-`_LLM_SLOTS` bounds in-flight completions process-wide, sized from
-`llm_max_concurrency` on first use. It is built once and **cannot be resized**,
-so unlike every other LLM setting this one takes effect at process start
-rather than on save — the alternative is a UI control that silently does
-nothing.
+**With Redis configured, `RedisModelSlots` holds the line** (D33):
+`main.py` and `worker.py` call `budgets.share_slots(hub)`, and every call
+takes a ticket in one Redis queue ordered by priority, then arrival — so a
+manager's chat goes ahead of a waiting build day. Same contract as below:
+the limit is read live and each team has one call in flight. Holders renew
+a 30-second lease, so a killed process frees its slot within a lease. When
+Redis is not configured or stops answering, the call falls back to:
+
+`PostgresModelSlots` bounds in-flight completions across the API and every
+worker with session advisory locks. `llm_max_concurrency` is read on each
+acquisition, so a saved value applies to the next call without a restart.
+Each team also holds one team lock, preventing one workspace from occupying
+all global slots. A dead process loses both locks with its database session.
+
+Callers without database settings (small adapters and unit tests) retain the
+priority-aware process-local `ModelSlots` fallback.
 
 The right value depends entirely on the server, which is why there is no good
 default:
@@ -214,7 +227,8 @@ default:
   high one. 1-2 keeps latency honest.
 
 The shipped default is 1 because the shipped endpoint is Ollama. Deployments
-using a continuously-batching server should raise it explicitly.
+using a continuously-batching server should raise it explicitly; the per-team
+quota remains one concurrent completion.
 
 ## Telemetry
 

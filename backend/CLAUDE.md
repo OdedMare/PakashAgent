@@ -41,7 +41,8 @@ uvicorn app.main:app --reload
 - `api/dependencies.py` — the route guards (`visitor`, `boss`,
   `employee`, `admin`). `visitor` also refuses a suspended or deleted team.
 - `common/sessions.py` — signed session cookies (HMAC-SHA256, no library).
-- `common/events.py` — in-process "an inbox moved" signals per team, feeding
+- `common/events.py` — "an inbox moved" signals per team (across processes
+  over Redis when configured, D33), feeding
   the manager's SSE stream (`api/routers/employee/live.py`, D29). Signals
   carry no data; the screen re-reads through the guarded routes.
 - `bl/interview/` — the intro interview, one `plan-chat` turn at a time
@@ -62,7 +63,9 @@ uvicorn app.main:app --reload
   `quiet` — no operations, so there is no path from a briefing to a write.
 - `bl/copilot.py` + `app/worker.py` — the durable observation loop. PostgreSQL
   owns jobs, inbox items, per-action permissions and append-only audit events;
-  the separate worker survives browser and API restarts.
+  the separate worker survives browser and API restarts. Generation is queued
+  as one job per span. The worker runs several lanes, with at least one lane
+  reserved for manager chat so a long build cannot occupy every worker.
 - `bl/schedule_service/` — persistence and ordering around those three plus
   the audit: propose, confirm, apply, publish, constraints, history.
 - `bl/audit/` — **pure Python, no LLM.** Recomputes countable facts and returns
@@ -166,6 +169,8 @@ package's `__init__` docstring carries a table of which module owns what.
   all (`date_only`) imports with the name **empty**, and the confirm screen
   asks; filling it in with a guess is the bug D9 is about.
 - **No structured rule vocabulary.** Rules are the boss's own sentences ([D2](../docs/DECISIONS.md#d2--rules-stay-natural-language)).
+  What code made of one (`compiled_sources`, D32) is a kept derivative,
+  looked up by the sentence's words; it never replaces or rewrites it.
 - **Every assignment carries the agent's reason**; every change carries the boss's
   reason too. Neither is optional — they serve different purposes ([D8](../docs/DECISIONS.md#d8--two-reasons-both-required)).
   Enforced in three places on purpose: `assignments.reason` is `NOT NULL`, the

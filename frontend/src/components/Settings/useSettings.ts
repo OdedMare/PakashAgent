@@ -2,9 +2,10 @@
 
 import { FormEvent, useState } from "react";
 
-import { getSettings, probeModels, updateSettings } from "@/services/api";
+import { getSettings, probeModels, probeRedis, updateSettings } from "@/services/api";
+import type { RedisReport } from "@/types";
 
-export type SettingsSection = "agent" | "schedule" | "database";
+export type SettingsSection = "agent" | "schedule" | "database" | "redis";
 
 /** What the backend returns in place of a stored secret, and what it accepts
  *  back to mean "unchanged". Must match `MASKED_SECRET` in
@@ -41,6 +42,9 @@ export function useSettings() {
   // is" — and the general refresh button would never show its spinner.
   const [loadingRole, setLoadingRole] = useState<string | null>(null);
   const [errorsByRole, setErrorsByRole] = useState<Record<string, string>>({});
+  const [redisReport, setRedisReport] = useState<RedisReport | null>(null);
+  const [redisTesting, setRedisTesting] = useState(false);
+  const [redisError, setRedisError] = useState("");
 
   /** Load the settings with `candidate` as the password. The load itself is
    *  the check: a wrong password answers 403 and nothing is shown. */
@@ -62,6 +66,8 @@ export function useSettings() {
           ...current, "": result.models,
         })))
         .catch(() => undefined);
+      // The Redis card shows the saved connection as soon as it is opened.
+      void probeRedis({}, candidate).then(setRedisReport).catch(() => undefined);
     } catch (reason) {
       setError(errorMessage(reason, "טעינת ההגדרות נכשלה"));
     } finally {
@@ -121,6 +127,25 @@ export function useSettings() {
     }
   };
 
+  /** Test the Redis connection typed in the form, before it is saved. An
+   *  untouched password is still masked, which the backend reads as "use the
+   *  stored one". */
+  const testRedis = async () => {
+    setRedisTesting(true);
+    setRedisError("");
+    try {
+      setRedisReport(await probeRedis({
+        redis_url: String(values.redis_url ?? ""),
+        redis_password: String(values.redis_password ?? ""),
+        redis_key_prefix: String(values.redis_key_prefix ?? ""),
+      }, password));
+    } catch (reason) {
+      setRedisError(errorMessage(reason, "בדיקת החיבור נכשלה"));
+    } finally {
+      setRedisTesting(false);
+    }
+  };
+
   const set = (key: string, value: unknown) =>
     setValues((current) => ({ ...current, [key]: value }));
   const text = (key: string) => String(values[key] ?? "");
@@ -141,6 +166,7 @@ export function useSettings() {
     unlock,
     modelsFor, modelsErrorFor, loadingRole,
     save, loadModels, set, text, checked, secretSaved,
+    redisReport, redisTesting, redisError, testRedis,
   };
 }
 

@@ -24,6 +24,7 @@ import type {
   PreferenceStatus,
   Proposal,
   RosterName,
+  RedisReport,
   RuntimeSettings,
   Schedule,
   ScheduleProgress,
@@ -208,6 +209,21 @@ export function probeModels(
 }
 
 
+/** Test a Redis connection and report what is in it. A field left out is
+ *  the saved value; an empty URL means "no Redis", and an empty or masked
+ *  password means the stored one. A failed connection still answers 200,
+ *  with `connected: false` and the reason. */
+export function probeRedis(
+  overrides: { redis_url?: string; redis_password?: string; redis_key_prefix?: string },
+  password: string,
+): Promise<RedisReport> {
+  return request<RedisReport>("/api/settings/redis", {
+    method: "POST",
+    body: JSON.stringify(overrides),
+    headers: settingsHeaders(password),
+  });
+}
+
 // --- the צוות משמרות זהב console (D28) --------------------------------------
 // Its own HttpOnly cookie (`pakash_admin`), so it never disturbs a team
 // session in the same browser. Opening a team happens only here.
@@ -324,6 +340,24 @@ export function updateProfile(body: {
     body: JSON.stringify(body),
   });
 }
+
+/** One rule, policy or note as the code scheduler understood it (D32).
+ *  `pending` means not translated yet: the worker does it after a save. */
+export interface CompiledSource {
+  kind: string;
+  context: string;
+  text: string;
+  binding: boolean;
+  status: "compiled" | "unresolved" | "pending";
+  reason: string;
+  question: string;
+  expires_on: string | null;
+  expired: boolean;
+  items: number;
+}
+
+export const compiledSources = () =>
+  request<{ sources: CompiledSource[] }>("/api/profile/compiled").then((body) => body.sources);
 
 /** Build a date range one checkpointed day per HTTP/model request.
  *

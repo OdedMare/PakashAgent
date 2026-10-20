@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, Cpu, Database, HardDrive, Settings2 } from "lucide-react";
+import { Activity, Cpu, Database, HardDrive, Server, Settings2 } from "lucide-react";
 
 import { SystemSettings } from "@/components/Settings";
 
@@ -53,6 +53,20 @@ export function SystemView({ state }: { state: AdminState }) {
               {" · "}
               {MODE_LABEL[model.schedule_generation_mode] ?? (model.schedule_generation_mode || "—")}
             </strong>
+          </span>
+        </div>
+        <div className={`adm-health-card ${overview?.redis?.configured && !overview.redis.connected ? "is-bad" : ""}`}>
+          <Server size={18} aria-hidden="true" />
+          <span>
+            <small>Redis</small>
+            <strong>
+              {!overview?.redis
+                ? "—"
+                : !overview.redis.configured
+                  ? "לא מוגדר"
+                  : overview.redis.connected ? "מחובר" : "לא זמין"}
+            </strong>
+            {overview?.redis?.configured ? <em dir="ltr">{overview.redis.url}</em> : null}
           </span>
         </div>
         <div className="adm-health-card">

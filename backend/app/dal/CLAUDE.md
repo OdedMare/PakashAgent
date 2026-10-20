@@ -78,6 +78,8 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | `change_log` | **Append-only**: what changed, both reasons, when |
 | `employee_identities` | A claimed roster name plus its scrypt passcode hash — one claim per name per team ([D14](../../../docs/DECISIONS.md)). Also holds `acknowledged_at`, the mark behind "what changed for me" ([D16](../../../docs/DECISIONS.md#d16--an-employee-is-told-what-changed-and-acknowledging-is-what-marks-it-read)) |
 | `constraint_requests` | An employee's submission awaiting the manager. **Not** `availability`: pending rows are invisible to `audit.py`, and approval is what promotes one |
+| `compiled_sources` | What code made of a standing sentence (D32), keyed on its words, the roster and the compiler. A derivative of the sentence, never a replacement; `unresolved` rows are kept negatives |
+| `source_anchors` | The day each standing sentence was first seen, which relative time ("3 ימים") counts from |
 
 The workplace profile — the mission, the **shift vocabulary** (names, times,
 on-call flags and weighting), the employees, and the rules — lives as JSON on

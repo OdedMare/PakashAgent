@@ -149,13 +149,13 @@ class Settings(BaseSettings):
     # The shipped endpoint is Ollama, which serves one generation at a time.
     # vLLM/TGI deployments should raise this explicitly for batching.
     llm_max_concurrency: int = 1
-    """How many HTTP completions may be in flight at once, process-wide.
+    """How many HTTP completions may be in flight across API and workers.
 
-    Env-only rather than a live runtime setting: the semaphore is built once
-    at import, so a value saved in the UI could not resize it and would read
-    as a control that does nothing.
+    PostgreSQL advisory locks coordinate every process and read this setting
+    on acquisition, so a saved change applies to the next model call.
 
-    The right number depends entirely on what is serving the model. A server
+    Each team may occupy one of these slots at a time. The right global
+    number depends entirely on what is serving the model. A server
     that batches continuously — vLLM, TGI — does its own scheduling and is
     *starved* by a low limit here, because requests this process is holding
     back are requests it cannot put in a batch; 16 or more suits those. A
@@ -231,6 +231,25 @@ class Settings(BaseSettings):
     the deterministic audit is not clean. Explicit code mode remains zero-token
     and refuses semantic rules rather than silently ignoring them.
     """
+
+    redis_url: str = ""
+    """Redis shared by every process of this deployment. Empty -- the
+    default -- means no Redis: the login throttle, the manager's live signals
+    and the model concurrency limit stay in memory, per process, exactly as
+    they always were. Set it once the API runs more than one worker, or next
+    to `python -m app.worker`, so those three hold across processes.
+
+    `redis://host:6379/0`, `rediss://` for TLS, or `unix:///path.sock`. A
+    bare `host:port` is accepted and read as `redis://`. Live-editable in
+    the panel: every process picks up a saved change within seconds."""
+
+    redis_password: str = ""
+    """Redis password (AUTH). Empty = none, or whatever the URL carries.
+    Never returned by the API."""
+
+    redis_key_prefix: str = "pakash"
+    """Prepended to every key and channel this app writes, so one Redis can
+    serve several deployments without them sharing lockouts or slots."""
 
     session_secret: str = ""
     """Key that signs the workspace session cookie.

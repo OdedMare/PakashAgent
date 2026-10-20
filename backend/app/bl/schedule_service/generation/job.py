@@ -127,6 +127,17 @@ class GenerationJob:
             (day for day in self.days if day.get("status") in _TAKEABLE), None
         )
 
+    def target(self, first: str, through: str = "") -> Optional[dict]:
+        """The takeable span named by one durable queue item."""
+        wanted_first = iso(first)
+        wanted_through = iso(through) or wanted_first
+        return next((
+            day for day in self.days
+            if day.get("status") in _TAKEABLE
+            and iso(day.get("date")) == wanted_first
+            and (iso(day.get("through")) or iso(day.get("date"))) == wanted_through
+        ), None)
+
     def first_failed(self) -> Optional[dict]:
         return next(
             (day for day in self.days

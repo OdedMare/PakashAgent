@@ -143,6 +143,21 @@ def connect(store: RuntimeSettingsStore):
     return _pool_for(store.get()).connection()
 
 
+def standalone_connection(store: RuntimeSettingsStore):
+    """Open an unpooled session for a lock held across a model request.
+
+    Model calls can last minutes. Keeping their advisory locks on the query
+    pool would turn LLM concurrency into database-pool exhaustion.
+    """
+    settings = store.get()
+    return psycopg.connect(
+        settings.database_url,
+        row_factory=dict_row,
+        autocommit=True,
+        **_credentials(settings),
+    )
+
+
 @contextmanager
 def bind_job_connection(store, connection):
     # Writes must use the session owning the job lock. A lost session must

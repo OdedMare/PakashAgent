@@ -38,6 +38,40 @@ def normalize_llm_base_url(url: str) -> str:
     return normalize_http_url(cleaned, "llm_base_url")
 
 
+_REDIS_SCHEMES = ("redis://", "rediss://", "unix://")
+_REDIS_PREFIX_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
+_DEFAULT_REDIS_PREFIX = "pakash"
+
+
+def normalize_redis_url(value: str) -> str:
+    """A Redis URL, or "" for "no Redis". A bare `host:port` -- what people
+    type when they know where Redis runs -- is read as `redis://host:port`."""
+    cleaned = (value or "").strip()
+    if not cleaned:
+        return ""
+    if "://" not in cleaned:
+        cleaned = "redis://" + cleaned
+    if not cleaned.lower().startswith(_REDIS_SCHEMES):
+        raise ValueError(
+            "redis_url must start with redis://, rediss:// or unix://"
+        )
+    return cleaned
+
+
+def normalize_redis_prefix(value: str) -> str:
+    """The key prefix. It names keys rather than reaching a query, but a
+    space or a glob character in it would make the SCAN patterns that count
+    our keys match someone else's, so it is kept to a plain token."""
+    cleaned = (value or "").strip().rstrip(":")
+    if not cleaned:
+        return _DEFAULT_REDIS_PREFIX
+    if not _REDIS_PREFIX_RE.match(cleaned):
+        raise ValueError(
+            "redis_key_prefix may hold letters, digits and _ . : - only"
+        )
+    return cleaned
+
+
 def normalize_database_url(value: str) -> str:
     cleaned = _JDBC_PREFIX.sub("", value.strip())
     if not cleaned.lower().startswith(_PG_SCHEMES):

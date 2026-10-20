@@ -17,11 +17,19 @@ Cross-cutting infrastructure. **Ported from AiSummryIO.**
   employee login, change password, settings password) runs through
   `attempt()`, which locks an account for 15 minutes after 5 wrong guesses.
   Keyed by account, not IP — behind the Next proxy every request has the same
-  IP. In memory, per process.
+  IP. Shared through Redis when configured; otherwise in memory, per process.
 - `events.py` — `TeamEvents`: an employee route `publish()`es "the
   requests (or swaps) inbox moved" from its worker thread, and the manager's
-  SSE stream, waiting on the event loop, wakes up (D29). No payload. In
-  memory, per process; the client's 15-second poll is the backstop.
+  SSE stream, waiting on the event loop, wakes up (D29). No payload. Across
+  processes over Redis pub/sub when configured, otherwise in memory; the
+  client's 15-second poll is the backstop either way.
+- `redis_hub.py` — `RedisHub`, the one Redis client a process shares (D33).
+  Used by the throttle, the live signals and the model queue
+  (`dal/llm/redis_slots.py`). `client()` is `None` when no URL is set or
+  Redis is down, and every user then falls back to what it did without it;
+  `failed()` backs everyone off for a few seconds. Reads the settings live and re-reads the settings file, so a
+  URL saved by another process arrives within seconds. `probe()` is the
+  panel's connection test.
 
 ## Settings that matter here
 
@@ -41,6 +49,7 @@ Cross-cutting infrastructure. **Ported from AiSummryIO.**
 | `PAKASH_SESSION_SECRET` | Signs the workspace session cookie. **Set this in production** — unset, it is generated per process, so sessions die on restart and break across workers. Changing it logs every boss out. |
 | `PAKASH_SETTINGS_PASSWORD` | Unlocks the settings panel on top of the boss login, sent as the `X-Settings-Password` header. Defaults to `010802` (committed); **override it in any real deployment**. Set to empty, the panel stays locked. The settings are shared by every workspace, and anyone can open a workspace and be its boss |
 | `PAKASH_SESSION_DAYS` | How long a boss stays logged in (default 30) |
+| `PAKASH_REDIS_URL` / `PAKASH_REDIS_PASSWORD` / `PAKASH_REDIS_KEY_PREFIX` | Shared state across processes (D33): throttle, live signals, model queue. Empty URL = off, everything as before. Live-editable in the panel, which also tests the connection and shows what is in Redis |
 | `PAKASH_SCHEDULE_GENERATION_MODE` | How wide one scheduling model call is: `day` (default, one date per call — verified and repaired on its own) or `week` (up to seven dates per call — several times faster, coarser repair). Live-editable in the panel; read when a period is opened, so a running build keeps the mode it started with |
 
 ## Rules

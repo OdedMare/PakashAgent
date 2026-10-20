@@ -125,3 +125,19 @@
   .manual-savebar span { display: none; }
   .manual-savebar button { width: 100%; justify-content: center; }
 }
+
+/* What the code scheduler understood (D32). */
+.manual-compiled { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.manual-compiled li { display: grid; grid-template-columns: minmax(0, 8rem) minmax(0, 1fr) auto; gap: 0.35rem 0.75rem; align-items: start; padding: 0.6rem 0.7rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.manual-compiled-kind { color: var(--text-muted); font-size: 0.78rem; }
+.manual-compiled-text { min-width: 0; overflow-wrap: anywhere; font-size: 0.85rem; }
+.manual-compiled-tag { padding: 0.15rem 0.5rem; font-size: 0.75rem; border-radius: 999px; white-space: nowrap; }
+.manual-compiled-tag.ok { color: var(--success); background: var(--success-soft); }
+.manual-compiled-tag.warn { color: var(--warning); background: var(--warning-soft); white-space: normal; }
+.manual-compiled-tag.muted { color: var(--text-muted); background: var(--surface-2); white-space: normal; }
+.manual-compiled-question { grid-column: 2 / -1; color: var(--warning); font-size: 0.78rem; }
+.manual-compiled-empty { margin: 0; color: var(--text-muted); font-size: 0.85rem; }
+@media (max-width: 640px) {
+  .manual-compiled li { grid-template-columns: minmax(0, 1fr); }
+  .manual-compiled-question { grid-column: auto; }
+}

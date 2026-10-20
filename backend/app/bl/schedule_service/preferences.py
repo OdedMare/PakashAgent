@@ -2,6 +2,7 @@
 
 from typing import List, Optional
 
+from app.bl import compiled_sources
 from app.common.errors import AgentError
 from app.dal.repository.schedules import (
     PREFERENCE_ACTIVE,
@@ -39,7 +40,7 @@ class PreferenceService:
         """
         if not (text or "").strip():
             raise AgentError("צריך לכתוב את ההעדפה")
-        return self._repository.create_preference(
+        row = self._repository.create_preference(
             team_id,
             text=text,
             kind=kind,
@@ -48,6 +49,9 @@ class PreferenceService:
             status=PREFERENCE_SUGGESTED if suggested else PREFERENCE_ACTIVE,
             source=source,
         )
+        if not suggested:
+            compiled_sources.queue(self._repository, team_id)
+        return row
 
     def update_preference(
         self,
@@ -61,9 +65,12 @@ class PreferenceService:
         Approving is this call with `status='active'`, which is why approval
         needs no separate method.
         """
-        return self._repository.update_preference(
+        row = self._repository.update_preference(
             row_id, team_id, text=text, status=status
         )
+        # An approved or reworded preference is a standing source (D32).
+        compiled_sources.queue(self._repository, team_id)
+        return row
 
     def delete_preference(self, team_id: str, row_id: str) -> None:
         self._repository.delete_preference(row_id, team_id)
