@@ -166,6 +166,8 @@ package's `__init__` docstring carries a table of which module owns what.
   all (`date_only`) imports with the name **empty**, and the confirm screen
   asks; filling it in with a guess is the bug D9 is about.
 - **No structured rule vocabulary.** Rules are the boss's own sentences ([D2](../docs/DECISIONS.md#d2--rules-stay-natural-language)).
+  What code made of one (`compiled_sources`, D32) is a kept derivative,
+  looked up by the sentence's words; it never replaces or rewrites it.
 - **Every assignment carries the agent's reason**; every change carries the boss's
   reason too. Neither is optional — they serve different purposes ([D8](../docs/DECISIONS.md#d8--two-reasons-both-required)).
   Enforced in three places on purpose: `assignments.reason` is `NOT NULL`, the

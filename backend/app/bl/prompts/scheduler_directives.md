@@ -48,6 +48,48 @@ Every source id must appear in at least one directive or request, or exactly
 once in `unresolved`. A source may produce several directives or requests.
 Give each a short Hebrew reason that preserves the source's meaning.
 
+## Standing sources: `mode: "compile"`
+
+A source with `mode: "compile"` is a standing one (a rule, a policy, an
+employee's note, a preference). Your translation of it is kept and reused for
+later periods, so it must not depend on this period:
+
+- Never spread it over this period's dates. "דנה לא בלילות שלישי" is one
+  `avoid` with `weekdays: ["שלישי"]` and `shifts`, and `dates: []`.
+- Use `dates` (and dated `unavailable` / `required_assignment` directives)
+  only when the source itself names its time. Those dates may fall outside
+  this period; that is expected.
+- A recurring "must work" ("חייבת לעבוד כל שלישי") has no representation:
+  put it in `unresolved` with the reason.
+
+A source with `mode: "period"` is this build's own instruction and is
+translated for this period only, as above.
+
+## Time in a standing source
+
+Give one `timing` row for every `compile` source:
+
+- `kind: "none"` when it names no time. Its items must then be undated.
+- `kind: "absolute"` when a date is written in it ("3-7.11", "ב-12/11").
+- `kind: "relative"` when its time counts from when it was written ("חולה
+  3 או 4 ימים", "מחר", "בשבוע הבא"). Count from its `anchored_on`, never from
+  this period. "N ימים" means N calendar days starting on `anchored_on`
+  itself, unless it says "ימי עבודה".
+
+`phrase` is the time expression as written. `starts_on` / `ends_on` (ISO) is
+the certain range; `maybe_through` is the end of an uncertain one ("או 4"),
+otherwise empty. When the range is uncertain, write a short Hebrew
+`question` for the manager ("לחסום את עודד גם ב-23.10?"); otherwise empty.
+Leave `starts_on`, `ends_on` empty for `kind: "none"`.
+
+An absence (sick, leave, reserve duty) is not a wish: the certain days
+become `avoid` with `is_hard: true` over every shift, dated; the uncertain
+days become `avoid` with `is_hard: false` and `weight: 3`. A time with no
+date to count from ("כשיחזור מהמילואים", "אחרי החגים") cannot be translated:
+put the source in `unresolved` with the reason.
+
+`mode: "period"` sources need no `timing` row.
+
 ## Tools
 
 You may look before you answer. Put tool calls in `calls` and leave

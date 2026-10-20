@@ -179,6 +179,7 @@ class GenerationStepper:
             preferences=self._context.active_preferences(team_id),
             split_on_failure=False,  # The job checkpoints each smaller span separately.
             engine=job.get("engine") or ENGINE_AI,
+            translation_cache=self._context.translation_cache(team_id),
         )
 
     def _write_span(

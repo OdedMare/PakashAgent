@@ -325,6 +325,24 @@ export function updateProfile(body: {
   });
 }
 
+/** One rule, policy or note as the code scheduler understood it (D32).
+ *  `pending` means not translated yet: the worker does it after a save. */
+export interface CompiledSource {
+  kind: string;
+  context: string;
+  text: string;
+  binding: boolean;
+  status: "compiled" | "unresolved" | "pending";
+  reason: string;
+  question: string;
+  expires_on: string | null;
+  expired: boolean;
+  items: number;
+}
+
+export const compiledSources = () =>
+  request<{ sources: CompiledSource[] }>("/api/profile/compiled").then((body) => body.sources);
+
 /** Build a date range one checkpointed day per HTTP/model request.
  *
  *  `build_from`/`build_through` ask the agent for part of the period only.

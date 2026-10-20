@@ -996,6 +996,47 @@ stamped when the build opens; changing the setting affects the next build.
 
 ---
 
+## D32 — A standing sentence is translated once, and the translation is kept *(amends D31, D21)*
+
+D31's translator ran on every build: the same rule, policy and note were
+sent to the model for every week and every span, and a policy code cannot
+represent (`rest_policy`) was sent, failed and fell back to the full
+scheduler every time. Now a **standing** source — a rule, a policy, an
+employee's note, an active preference; everything but the build's own
+instruction — is translated once and kept in `compiled_sources`.
+
+**The sentence stays the source.** A kept translation is a derivative,
+looked up by the words (`source_key`), the roster and shift names
+(`vocab_key`) and the compiler (version + prompt). Editing the sentence,
+changing the roster or the prompt simply stops matching. D2 holds: rules
+stay the manager's sentences, and D21 holds: a preference still authorises
+nothing. What changed is that D31 gave both a structured vocabulary to be
+*read into* for code, and reading one is now done once.
+
+**Setup is translated when it is saved.** The save stays zero-token and
+synchronous; it queues one `compile_sources` job, and the worker translates
+what is missing. No model, or a failed job, costs nothing: the next build
+translates as it did before.
+
+**A negative is kept too.** A binding source the model marked `unresolved`
+sends later builds straight to the full scheduler without a translation
+call. What *code* refused, or the model skipped, is not kept — it is tried
+again.
+
+**Time is anchored to when the sentence was written.** "עודד חולה 3 או 4
+ימים" is read against `source_anchors.anchored_on`, the day the sentence
+was first seen, which does not move when it is compiled again. The model
+gives the certain range (hard), the uncertain day (soft, weight 3) and a
+question for the manager; code checks a relative range lies within 90 days
+of the anchor and an absolute one within the dates the sentence writes, and
+refuses to keep a recurring sentence spread over one period's dates.
+
+**Shown, not edited.** Setup lists what code made of each sentence:
+translated, needs AI (with the reason), a wish code will not weigh,
+translating, or expired. Correcting a reading means rewording the sentence.
+
+---
+
 ## Open
 
 - *(none)* — the Python version is settled at **3.11** (D30).

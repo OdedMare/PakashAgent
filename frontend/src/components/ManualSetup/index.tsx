@@ -3,6 +3,7 @@
 import {
   CalendarClock,
   Clock3,
+  Cpu,
   Plus,
   Repeat2,
   Save,
@@ -17,6 +18,7 @@ import { useMemo, useState } from "react";
 import { updateProfile } from "@/services/api";
 import type { RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
 
+import { CompiledSources } from "./CompiledSources";
 import { CheckboxGrid, Field } from "./fields";
 import { CYCLES, CycleSetup, firstGroupAnchor } from "./RotationSetup";
 import type { Cycle } from "./RotationSetup";
@@ -384,6 +386,10 @@ export function ManualSetup({
             <Field label="מקסימום ימים רצופים"><input type="number" min={1} value={maxConsecutiveDays} onChange={(e) => setMaxConsecutiveDays(Number(e.target.value) || 1)} /></Field>
             <Field label="מינימום מנוחה בין משמרות"><input type="number" min={0} value={minRestHours} onChange={(e) => setMinRestHours(Number(e.target.value) || 0)} /></Field>
           </div>
+        </SetupSection>
+
+        <SetupSection icon={<Cpu />} title="מה הקוד הבין" hint="אחרי שמירה, כל כלל, מדיניות והערה מתורגמים פעם אחת לשפת השיבוץ בקוד, כדי שבניית סידור לא תצטרך לשאול שוב. מה שלא תורגם יישלח לשיבוץ ב-AI.">
+          <CompiledSources />
         </SetupSection>
       </main>
 

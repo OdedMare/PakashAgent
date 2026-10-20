@@ -65,6 +65,15 @@ class ScheduleContext:
             return []
         return self._repository.preferences(team_id, status=PREFERENCE_ACTIVE)
 
+    def translation_cache(self, team_id: str):
+        """The team's kept translations (D32), or a cache keeping nothing for a
+        repository without them."""
+        from app.bl.compiled_sources import NullCache, TranslationCache
+
+        if not hasattr(self._repository, "compiled_sources"):
+            return NullCache()
+        return TranslationCache(self._repository, team_id)
+
     def snapshot(self, team_id: str, schedule_id: str = "") -> dict:
         """Profile and schedule inputs used to validate a prepared plan."""
         return {

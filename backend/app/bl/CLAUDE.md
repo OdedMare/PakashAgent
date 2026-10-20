@@ -31,6 +31,7 @@ Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
 | `shared/` | Small helpers several packages read: `clarification.py`, `hebrew_calendar.py` |
 | `directive_agent/` | **Translating the manager's words for the code scheduler.** A bounded tool loop; code validates the answer, keeps what translated when only wishes did not, and writes nothing |
+| `compiled_sources/` | **Standing sentences translated once and kept** (D32): keys, time anchoring, the cache port, the worker's compiler. No model, no SQL |
 | `schedule_requests.py` | **Structured scheduling requests** (`avoid`, `prefer`, `max_count`, `not_together`) and their one validator |
 
 ## The division that defines this layer
@@ -100,6 +101,20 @@ binding, the full scheduler takes the period exactly as before; if all are
 wishes, code builds without them and the result's `notes` names each one
 ("בקשה רכה לא נלקחה בחשבון בשיבוץ"), with `unresolved_sources` in the
 metrics. A wish is reported, never dropped silently.
+
+**A standing sentence is translated once** ([D32](../../../docs/DECISIONS.md)).
+Every source but the build's own instruction carries `persistent` and a
+content `key`; the agent sends those in `mode: "compile"`, where the
+translation must not depend on the period (weekdays, not this week's
+dates), and keeps the outcome in the `TranslationCache` it is handed,
+keyed on the words, the roster and the compiler. A build loads what is kept
+and translates only the rest; a kept binding `unresolved` sends it to the
+full scheduler with no call at all. Saving setup or a preference queues a
+`compile_sources` job (`compiled_sources.queue`), so the first build is
+already free. Time ("חולה 3 או 4 ימים") is counted from the day the
+sentence was first seen, and `compiled_sources/timing.py` checks the
+model's dates before anything is kept. Metrics report `compiled_hits` and
+`tokens_saved`.
 
 **Code balances nights and rounds, not just hours.** The deterministic
 filler goes one date at a time, so ranking by hours worked so far was blind

@@ -10,6 +10,8 @@ import signal
 import threading
 import time
 
+from app.bl.compiled_sources import SourceCompiler
+from app.bl.compiled_sources.compiler import JOB_KIND as COMPILE_SOURCES
 from app.bl.copilot import CopilotService
 from app.bl.schedule_service import ScheduleService
 from app.bl.manager_chat import ManagerChatService
@@ -29,11 +31,12 @@ _POLL_SECONDS = max(1, int(os.getenv("PAKASH_COPILOT_POLL_SECONDS", "1")))
 
 class CopilotWorker:
     def __init__(self, repository, service, scan_seconds: int = _SCAN_SECONDS,
-                 schedules=None, chat=None):
+                 schedules=None, chat=None, compiler=None):
         self._repository = repository
         self._service = service
         self._scan_seconds = scan_seconds
         self._schedules, self._chat = schedules, chat
+        self._compiler = compiler
 
     def enqueue_due(self, now: float = None) -> int:
         stamp = int(now if now is not None else time.time())
@@ -84,10 +87,16 @@ class CopilotWorker:
                 self._schedules.run_generation(team_id, payload["schedule_id"])
         elif job["kind"] == "scan":
             self._service.scan(team_id, job["id"])
+        elif job["kind"] == COMPILE_SOURCES:
+            # Setup was saved: translate its rules, policies and notes for
+            # the code scheduler now, so the first build need not (D32).
+            self._compiler.compile(team_id)
         else:
             raise ValueError("Unknown job kind: %s" % job["kind"])
 
     def _fail(self, job):
+        if job["kind"] == COMPILE_SOURCES:
+            return  # Nothing is lost: the next build translates what is missing.
         if job["kind"] == "manager_chat":
             payload = job["payload"]
             self._repository.finish_chat_turn(payload["chat_id"], payload["message_id"],
@@ -110,6 +119,7 @@ def _build():
     return repository, CopilotWorker(
         repository, CopilotService(repository, schedules),
         schedules=schedules, chat=ManagerChatService(repository, llm, schedules),
+        compiler=SourceCompiler(repository, llm),
     )
 
 

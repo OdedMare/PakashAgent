@@ -3,6 +3,7 @@
 import copy
 from typing import Any, Callable, Dict, List, Optional
 
+from app.bl import compiled_sources
 from app.bl.profile_service import roster
 from app.bl.profile_service import shifts as shift_rules
 from app.bl.profile_service import workplace as workplace_rules
@@ -39,12 +40,21 @@ class ProfileService:
         updated = _prepare_profile(current, employees, shifts, workplace, rules,
                                    dependencies, sections)
         if not creating:
-            return self._repository.update_team_profile(team_id, updated)
-        roster.validate_first_profile(updated)
-        updated["completeness"] = {
-            "complete": True, "missing_topics": [], "open_points": [],
-        }
-        return self._repository.create_team_profile(team_id, updated)
+            saved = self._repository.update_team_profile(team_id, updated)
+        else:
+            roster.validate_first_profile(updated)
+            updated["completeness"] = {
+                "complete": True, "missing_topics": [], "open_points": [],
+            }
+            saved = self._repository.create_team_profile(team_id, updated)
+        # Still no model call here: the rules, policies and notes just saved
+        # are translated for the code scheduler by the worker (D32).
+        compiled_sources.queue(self._repository, team_id)
+        return saved
+
+    def compiled(self, team_id: str) -> List[dict]:
+        """What code made of each rule, policy and note (D32). A read."""
+        return compiled_sources.report(self._repository, team_id)
 
     def preview(self, team_id: str, **patch) -> dict:
         """Validate a conversational edit with the same rules, without writing."""

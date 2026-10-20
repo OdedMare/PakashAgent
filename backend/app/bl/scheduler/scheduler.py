@@ -34,6 +34,7 @@ class Scheduler:
         required_assignments: Optional[List[dict]] = None,
         preferences: Optional[List[dict]] = None,
         engine: str = ENGINE_AI,
+        translation_cache=None,
     ) -> dict:
         """Slots for the period plus the model's assignments, chunk by chunk.
 
@@ -44,7 +45,7 @@ class Scheduler:
         """
         code = self._code_result(
             engine, profile, starts_on, ends_on, availability, history,
-            instructions, required_assignments, None, preferences,
+            instructions, required_assignments, None, preferences, translation_cache,
         )
         if code is not None:
             if not code["slots"]:
@@ -111,11 +112,16 @@ class Scheduler:
         preferences: Optional[List[dict]] = None,
         split_on_failure: bool = True,
         engine: str = ENGINE_AI,
+        translation_cache=None,
     ) -> dict:
-        """Generate and verify one contiguous stretch of dates. See `span.py`."""
+        """Generate and verify one contiguous stretch of dates. See `span.py`.
+
+        `translation_cache` is the team's kept translations
+        (`bl/compiled_sources/`); without one every source is translated."""
         code = self._code_result(
             engine, profile, starts_on, ends_on, availability, history,
             instructions, required_assignments, already_scheduled, preferences,
+            translation_cache,
         )
         if code is not None:
             return code
@@ -133,7 +139,7 @@ class Scheduler:
 
     def _code_result(
         self, engine, profile, starts_on, ends_on, availability, history,
-        instructions, required_assignments, already_scheduled, preferences,
+        instructions, required_assignments, already_scheduled, preferences, cache=None,
     ):
         """Return a safe code result, or None when AI should take the request."""
         if engine not in (ENGINE_CODE, ENGINE_AUTO):
@@ -147,7 +153,7 @@ class Scheduler:
                 raise AgentError(reason + ". בחרו במצב AI או אוטומטי.")
             translated = self._translate_directives(
                 profile, starts_on, ends_on, availability, instructions, preferences,
-                history, required_assignments, already_scheduled,
+                history, required_assignments, already_scheduled, cache,
             )
             if translated is None:
                 return None
@@ -165,27 +171,12 @@ class Scheduler:
         if engine == ENGINE_AUTO and result.get("warnings"):
             return None
         if reason:
-            usage = translated["usage"]
-            result["metrics"].update({
-                "engine": "hybrid",
-                "model_calls": translated["model_calls"],
-                "translation_steps": translated["steps"],
-                "unresolved_sources": len(translated["unresolved"]),
-                "prompt_tokens": int(usage.get("prompt_tokens") or 0),
-                "completion_tokens": int(usage.get("completion_tokens") or 0),
-                "total_tokens": int(usage.get("total_tokens") or 0),
-            })
-            result["summary"] = "ההנחיות תורגמו ב-AI והשיבוץ נבנה בקוד דטרמיניסטי."
-            # A wish code was built without is said, never dropped silently.
-            result["notes"] = [
-                "בקשה רכה לא נלקחה בחשבון בשיבוץ: «%s» (%s)." % (row["text"], row["reason"])
-                for row in translated["unresolved"]
-            ] + list(result.get("notes") or [])
+            _hybrid(result, translated)
         return result
 
     def _translate_directives(
         self, profile, starts_on, ends_on, availability, instructions, preferences,
-        history=None, required_assignments=None, already_scheduled=None,
+        history=None, required_assignments=None, already_scheduled=None, cache=None,
     ):
         """The manager's words as directives and requests, or None. A bounded
         tool loop (`bl/directive_agent/`); code validates its final answer."""
@@ -195,6 +186,7 @@ class Scheduler:
             profile, starts_on, ends_on, availability=availability,
             instructions=instructions, preferences=preferences, history=history,
             required_assignments=required_assignments, already_scheduled=already_scheduled,
+            cache=cache,
         )
 
     def _ask(self, payload: dict, schema: Optional[dict] = None) -> dict:
@@ -207,6 +199,31 @@ class Scheduler:
         if not isinstance(answer, dict):
             raise ModelOutputError("המודל החזיר סידור לא תקין")
         return answer
+
+
+def _hybrid(result: dict, translated: dict) -> None:
+    """Say what translating cost, what the kept translations saved, and
+    every wish code was built without -- said, never dropped silently."""
+    usage = translated["usage"]
+    result["metrics"].update({
+        "engine": "hybrid",
+        "model_calls": translated["model_calls"],
+        "translation_steps": translated["steps"],
+        "unresolved_sources": len(translated["unresolved"]),
+        "compiled_hits": int(translated.get("cached") or 0),
+        "tokens_saved": int(translated.get("cached_tokens") or 0),
+        "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+        "completion_tokens": int(usage.get("completion_tokens") or 0),
+        "total_tokens": int(usage.get("total_tokens") or 0),
+    })
+    result["summary"] = (
+        "ההנחיות נטענו מתרגום שמור והשיבוץ נבנה בקוד דטרמיניסטי."
+        if not translated["model_calls"] else
+        "ההנחיות תורגמו ב-AI והשיבוץ נבנה בקוד דטרמיניסטי.")
+    result["notes"] = [
+        "בקשה רכה לא נלקחה בחשבון בשיבוץ: «%s» (%s)." % (row["text"], row["reason"])
+        for row in translated["unresolved"]
+    ] + list(result.get("notes") or [])
 
 
 def _check_rotation(profile):

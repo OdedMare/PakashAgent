@@ -1,5 +1,7 @@
 """Translate narrow natural-language requests into deterministic inputs."""
 
+import datetime
+import hashlib
 import json
 from typing import Any, List, Optional
 
@@ -84,7 +86,7 @@ def semantic_sources(profile, availability=None, instructions="", preferences=No
     rule the manager tagged soft (D1) and a preference (D21). Everything
     else, the manager's free instruction included, is treated as binding,
     because dropping a "must" silently is the one outcome worse than paying
-    for the full scheduler.
+    for the full scheduler. Everything but the instruction is `persistent`.
     """
     sources = []
 
@@ -98,6 +100,10 @@ def semantic_sources(profile, availability=None, instructions="", preferences=No
             "context": context,
             "text": rendered,
             "binding": binding,
+            # Kept from build to build (`bl/compiled_sources/`); `key`
+            # is what a source *is*, `id` only its place in one call.
+            "persistent": kind != "instructions",
+            "key": source_key(kind, context, rendered),
         })
 
     add("instructions", instructions)
@@ -127,6 +133,12 @@ def semantic_sources(profile, availability=None, instructions="", preferences=No
     return sources
 
 
+def source_key(kind: str, context: str, rendered: str) -> str:
+    """A source's identity by content: the same words about the same person."""
+    joined = "\x1f".join((kind, context or "", rendered or ""))
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()
+
+
 def _unresolved_ids(rows, source_ids):
     found = set()
     for row in rows:
@@ -137,15 +149,24 @@ def _unresolved_ids(rows, source_ids):
     return found
 
 
-def translated_row(row, source_ids, people, slots):
+def translated_row(row, source_ids, people, slots, standing=(), shifts=()):
+    """One directive as `(source_id, action, value)`, or None.
+
+    A directive translated from a `standing` source (one that stays from
+    build to build) may name a date outside this period: it is kept for
+    later periods, so it is checked against the shift vocabulary and the
+    calendar instead of this period's grid.
+    """
     if not isinstance(row, dict):
         return None
     source_id = row.get("source_id")
     action, employee = row.get("action"), bounded(row.get("employee"))
     date, shift = bounded(row.get("date")), bounded(row.get("shift"))
     reason = bounded(row.get("reason"))
+    placed = (shift, date) in slots or (
+        source_id in standing and shift in shifts and _is_date(date))
     if (source_id not in source_ids or action not in ("unavailable", "required_assignment")
-            or employee not in people or (shift, date) not in slots or not reason):
+            or employee not in people or not placed or not reason):
         return None
     allowed = people[employee].get("eligible_shifts")
     if action == "required_assignment" and isinstance(allowed, list) and allowed and shift not in allowed:
@@ -157,6 +178,14 @@ def translated_row(row, source_ids, people, slots):
     else:
         value = {"employee": employee, "date": date, "shift": shift, "reason": reason}
     return source_id, action, value
+
+
+def _is_date(value: str) -> bool:
+    try:
+        datetime.date.fromisoformat(value)
+    except (TypeError, ValueError):
+        return False
+    return True
 
 
 def read_translation(answer: Any, sources: List[dict], profile: dict,
@@ -206,4 +235,7 @@ def read_translation(answer: Any, sources: List[dict], profile: dict,
     }
 
 
-__all__ = ["DIRECTIVE_RESPONSE_SCHEMA", "read_translation", "semantic_sources", "translated_row"]
+__all__ = [
+    "DIRECTIVE_RESPONSE_SCHEMA", "read_translation", "semantic_sources", "source_key",
+    "translated_row",
+]

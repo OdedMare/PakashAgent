@@ -64,6 +64,7 @@ class PeriodBuilder:
             required_assignments=required_assignments,
             preferences=self._context.active_preferences(team_id),
             engine=self._generation_engine(),
+            translation_cache=self._context.translation_cache(team_id),
         )
         schedule_id = self._store(team_id, starts_on, ends_on, result)
         self._repository.append_change(
