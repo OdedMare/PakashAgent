@@ -52,15 +52,37 @@ _CALL_SCHEMA = {
     },
 }
 
+# When a standing source speaks about, read against its `anchored_on`
+# (`bl/compiled_sources/timing.py` checks it before anything is kept).
+_TIMING_SCHEMA = {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["source_id", "kind", "phrase", "starts_on", "ends_on",
+                     "maybe_through", "question"],
+        "properties": {
+            "source_id": {"type": "string"},
+            "kind": {"type": "string", "enum": ["none", "absolute", "relative"]},
+            "phrase": {"type": "string"},
+            "starts_on": {"type": "string"},
+            "ends_on": {"type": "string"},
+            "maybe_through": {"type": "string"},
+            "question": {"type": "string"},
+        },
+    },
+}
+
 TURN_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["calls", "directives", "requests", "unresolved"],
+    "required": ["calls", "directives", "requests", "unresolved", "timing"],
     "properties": {
         "calls": {"type": "array", "maxItems": MAX_CALLS_PER_TURN, "items": _CALL_SCHEMA},
         "directives": _ITEMS["directives"],
         "requests": _ITEMS["requests"],
         "unresolved": _ITEMS["unresolved"],
+        "timing": _TIMING_SCHEMA,
     },
 }
 

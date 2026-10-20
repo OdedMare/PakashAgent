@@ -5,7 +5,7 @@ import os
 import secrets
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.api.dependencies import Guards
@@ -25,7 +25,7 @@ from app.common.config import Settings
 from app.common.errors import AppError, error_payload
 from app.common.events import TeamEvents
 from app.common.logging_setup import configure_logging
-from app.common.sessions import generate_secret
+from app.common.sessions import COOKIE_NAME, generate_secret, read
 from app.common.throttle import LoginThrottle
 from app.common.runtime_settings.runtime_settings_store import (
     RuntimeSettingsStore,
@@ -33,6 +33,7 @@ from app.common.runtime_settings.runtime_settings_store import (
 from app.dal.database import close_pool
 from app.dal.llm import tracing
 from app.dal.llm.openai_client import OpenAIJsonClient
+from app.dal.llm.team_context import model_team
 from app.dal.repository import Repository
 
 # Before anything else constructs a logger, so no start-up line is lost.
@@ -155,6 +156,14 @@ app = FastAPI(
     description="סוכן שבונה ומתחזק סידורי עבודה בשיחה",
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def bind_model_team(request: Request, call_next):
+    """Carry the signed workspace into the cross-process LLM quota."""
+    session = read(session_secret, request.cookies.get(COOKIE_NAME)) or {}
+    with model_team(session.get("team_id", "")):
+        return await call_next(request)
 
 app.include_router(health.build_router(repository))
 app.include_router(

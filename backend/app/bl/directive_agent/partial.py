@@ -12,6 +12,10 @@ period there too. Here a source is either fully honoured or reported:
 - if any left-out source is binding, there is no partial answer (None);
   otherwise the rest is returned with the left-out sources listed, so the
   schedule can say plainly which wishes it was built without.
+
+`per_source` is the first half on its own, because a translation that is
+kept for later builds (`bl/compiled_sources/`) is stored one source at a
+time; `assemble` turns any set of outcomes back into what code builds with.
 """
 
 from typing import Any, Dict, List, Optional
@@ -29,46 +33,73 @@ _MAX_TEXT = 200
 
 def read_partial(answer: Any, sources: List[dict], profile: dict,
                  starts_on: str, ends_on: str) -> Optional[dict]:
+    outcomes = per_source(answer, sources, profile, starts_on, ends_on)
+    if outcomes is None:
+        return None
+    by_id = {row["id"]: row for row in sources}
+    if any("left" in outcome and by_id[source_id].get("binding", True)
+           for source_id, outcome in outcomes.items()):
+        return None
+    return assemble(outcomes, by_id, usage_of(answer))
+
+
+def per_source(answer: Any, sources: List[dict], profile: dict,
+               starts_on: str, ends_on: str) -> Optional[Dict[str, dict]]:
+    """Every source's fate on its own: `{"items": [(kind, value), ...]}`
+    when all its items pass, else `{"left": reason}` -- with `retry` when
+    code left it out rather than the model's own judgement. None for an
+    answer that is not one at all. `kind` is `unavailable`,
+    `required_assignment` or `request`."""
     if not isinstance(answer, dict):
         return None
     by_id = {row["id"]: row for row in sources}
     reasons = _unresolved(answer.get("unresolved"), by_id)
     kept: Dict[str, list] = {}
     failed = set()
+    for source_id, item in _items(answer, by_id, profile, starts_on, ends_on):
+        if item is None:
+            failed.add(source_id)
+        else:
+            kept.setdefault(source_id, []).append(item)
+    outcomes = {}
+    for source_id in by_id:
+        if source_id in reasons:
+            outcomes[source_id] = {"left": reasons[source_id]}
+        elif source_id in failed or source_id not in kept:
+            outcomes[source_id] = {
+                "left": _FAILED if source_id in failed else _NOT_COVERED, "retry": True}
+        else:
+            outcomes[source_id] = {"items": kept[source_id]}
+    return outcomes
+
+
+def _items(answer: dict, by_id: Dict[str, dict], profile: dict, starts_on: str, ends_on: str):
+    """`(source_id, item)` for every directive and request, item None when
+    code refused it."""
     people = {
         text(row.get("name")): row for row in (profile or {}).get("employees") or []
         if isinstance(row, dict) and text(row.get("name"))
     }
     slots = {(row["shift_name"], row["slot_date"]) for row in build_slots(profile, starts_on, ends_on)}
+    standing = {source_id for source_id, row in by_id.items() if row.get("persistent")}
+    shifts = {text(row.get("name")) for row in (profile or {}).get("shifts") or []
+              if isinstance(row, dict)}
     for row in _rows(answer.get("directives")):
-        read = translated_row(row, set(by_id), people, slots)
-        if read is None:
-            failed.add(row.get("source_id"))
-        else:
-            kept.setdefault(read[0], []).append((read[1], read[2]))
+        read = translated_row(row, set(by_id), people, slots, standing, shifts)
+        yield (row.get("source_id"), None) if read is None else (read[0], (read[1], read[2]))
     for row in _rows(answer.get("requests")):
         valid, errors = read_requests([row], profile)
         if errors or not valid or valid[0]["source_id"] not in by_id:
-            failed.add(row.get("source_id"))
+            yield row.get("source_id"), None
         else:
-            kept.setdefault(valid[0]["source_id"], []).append(("request", valid[0]))
-    left = {
-        source_id: reasons.get(source_id) or (_FAILED if source_id in failed else _NOT_COVERED)
-        for source_id in by_id
-        if source_id in reasons or source_id in failed or source_id not in kept
-    }
-    if any(by_id[source_id].get("binding", True) for source_id in left):
-        return None
-    return _result(kept, left, by_id, answer)
+            yield valid[0]["source_id"], ("request", valid[0])
 
 
-def _result(kept: Dict[str, list], left: Dict[str, str], by_id: Dict[str, dict],
-            answer: dict) -> dict:
+def assemble(outcomes: Dict[str, dict], by_id: Dict[str, dict], usage: dict) -> dict:
+    """What code builds with: the kept items, and every left-out source said."""
     availability, required, requests = [], [], []
-    for source_id, items in kept.items():
-        if source_id in left:
-            continue
-        for kind, value in items:
+    for outcome in outcomes.values():
+        for kind, value in outcome.get("items") or []:
             {"unavailable": availability, "required_assignment": required,
              "request": requests}[kind].append(value)
     return {
@@ -77,10 +108,10 @@ def _result(kept: Dict[str, list], left: Dict[str, str], by_id: Dict[str, dict],
         "requests": requests,
         "unresolved": [
             {"source_id": source_id, "kind": by_id[source_id]["kind"],
-             "text": by_id[source_id]["text"][:_MAX_TEXT], "reason": reason}
-            for source_id, reason in left.items()
+             "text": by_id[source_id]["text"][:_MAX_TEXT], "reason": outcome["left"]}
+            for source_id, outcome in outcomes.items() if "left" in outcome
         ],
-        "usage": usage_of(answer),
+        "usage": usage,
     }
 
 
@@ -95,4 +126,4 @@ def _rows(value: Any) -> List[dict]:
     return [row for row in value if isinstance(row, dict)] if isinstance(value, list) else []
 
 
-__all__ = ["read_partial"]
+__all__ = ["assemble", "per_source", "read_partial"]

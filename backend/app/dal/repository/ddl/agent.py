@@ -1,4 +1,4 @@
-"""Agent preferences (D21) and the durable copilot (D23)."""
+"""Agent preferences (D21), the durable copilot (D23) and kept translations (D32)."""
 
 AGENT_DDL = """-- What this workplace has taught the agent, beyond the one-off decisions.
 --
@@ -145,6 +145,54 @@ COMMIT;
 
 CREATE INDEX IF NOT EXISTS copilot_audit_team_idx
     ON copilot_audit (team_id, created_at DESC);
+
+COMMIT;
+-- What code made of a standing source: a rule, a policy, an employee's note,
+-- a preference (D32). A *derivative* of the manager's sentence, never a
+-- replacement for it -- the sentence stays where it is, and the row is
+-- looked up by what the sentence says, so editing it simply stops matching.
+--
+-- Keyed on the words (`source_key`), the roster and shift names they were
+-- checked against (`vocab_key`) and the compiler that read them, because
+-- each can change what the words mean for code. `status` 'unresolved' is a
+-- kept *negative*: code cannot honour this, so a build need not pay to
+-- learn that again. `translation` holds the availability rows, pins and
+-- structured requests, with dates only when the sentence named its time.
+CREATE TABLE IF NOT EXISTS compiled_sources (
+    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    source_key TEXT NOT NULL,
+    vocab_key TEXT NOT NULL,
+    compiler TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    context TEXT NOT NULL DEFAULT '',
+    text TEXT NOT NULL,
+    binding BOOLEAN NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('compiled','unresolved')),
+    translation JSONB NOT NULL DEFAULT '{}'::jsonb,
+    reason TEXT NOT NULL DEFAULT '',
+    -- The last date a fully dated source speaks about; NULL when recurring.
+    expires_on DATE,
+    -- What the model would ask the manager ("לחסום גם את 23.10?").
+    question TEXT NOT NULL DEFAULT '',
+    -- What compiling it cost, so a build loading it can say what it saved.
+    tokens INTEGER NOT NULL DEFAULT 0,
+    anchored_on DATE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (team_id, source_key, vocab_key, compiler)
+);
+
+COMMIT;
+
+-- The day a standing sentence was first seen. "חולה 3 ימים" counts from
+-- here, and it does not move when the sentence is compiled again for a new
+-- roster or prompt -- only new words get a new day.
+CREATE TABLE IF NOT EXISTS source_anchors (
+    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    source_key TEXT NOT NULL,
+    anchored_on DATE NOT NULL,
+    PRIMARY KEY (team_id, source_key)
+);
 
 COMMIT;
 """

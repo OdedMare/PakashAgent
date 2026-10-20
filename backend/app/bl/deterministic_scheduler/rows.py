@@ -46,6 +46,14 @@ def roles(person: dict) -> set:
     return result
 
 
+def cycle_of(profile: dict, group: str) -> str:
+    """Which cycle a rotation group runs when the person states none."""
+    if group == "ג":
+        return "triplet"
+    mode = text(((profile or {}).get("workplace") or {}).get("rotation_mode"))
+    return mode if mode in ("round", "triplet") else "round"
+
+
 def employees(profile: dict) -> List[dict]:
     return [
         row for row in (profile or {}).get("employees") or []

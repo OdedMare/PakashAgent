@@ -11,9 +11,10 @@ from app.bl.audit import (
 )
 from app.bl.audit.roster import index_shifts, is_night, shift_hours
 from app.bl.deterministic_scheduler import honoring
+from app.bl.deterministic_scheduler.limits import Limits, recent
 from app.bl.deterministic_scheduler.outlook import outlook
 from app.bl.deterministic_scheduler.rows import (
-    assignment, eligible, employees, roles, same_slot, text, unique,
+    assignment, cycle_of, eligible, employees, roles, same_slot, text, unique,
 )
 from app.bl.scheduler import effective_availability
 from app.common.errors import AgentError
@@ -38,8 +39,10 @@ class DayPlan:
         self.slot_keys = {(slot["shift_name"], slot["slot_date"]) for slot in slots}
         committed = [row for row in map(assignment, already_scheduled or []) if row]
         target = datetime.date.fromisoformat(day)
-        self.context = [row for row in map(assignment, history or []) if row and
-                        _near(row["date"], target)]
+        past = [row for row in map(assignment, history or []) if row]
+        self.context = [row for row in past if _near(row["date"], target)]
+        self.limits = Limits(self.shifts, recent(past, target), [
+            text(row.get("name")) for row in self.employees if counts_toward_staffing(row, profile)])
         # A targeted shift rebuild preserves the other shifts on the same date.
         self.current = [row for row in committed if not self._in_plan(row)]
         self.loads = {}
@@ -139,7 +142,8 @@ class DayPlan:
             if any(row["employee"] == name and same_slot(row, slot) for row in self.current):
                 continue
             row = {"employee": name, "shift": slot["shift_name"], "date": slot["slot_date"], "reason": ""}
-            if (self._hard_conflict(row, self.slots) or honoring.blocks(self.requests, row, self.current)
+            if (self._hard_conflict(row, self.slots)
+                    or honoring.blocks(self.requests, _timed(row, slot), self.current, self.limits)
                     or self._introduces_blocking(row)):
                 continue
             key = self._candidate_key(slot, person, self.loads.get(name) or _empty_load(), row)
@@ -165,7 +169,8 @@ class DayPlan:
         night = is_night(index_shifts(self.shifts).get(slot["shift_name"]) or {})
         nights = (load["period_nights"], load["nights"]) if night else (0, 0)
         spacing = self._spacing_key(text(person.get("name")), slot["slot_date"])
-        wishes = honoring.cost(self.requests, self.soft_availability, _timed(row, slot), self.current)
+        wishes = honoring.cost(self.requests, self.soft_availability, _timed(row, slot),
+                               self.current, self.limits)
         return (remaining, not covers_manager, -covers_roles, not closing, wishes,
                 *nights, round(load["hours"], 6), *spacing, text(person.get("name")))
 
@@ -225,7 +230,7 @@ class DayPlan:
     def _note_broken(self, row: dict) -> None:
         slot = next((item for item in self.slots if same_slot(row, item)), {})
         for reason in honoring.broken(self.requests, self.soft_availability,
-                                      _timed(row, slot), self.current):
+                                      _timed(row, slot), self.current, self.limits):
             self.notes.append("%s שובץ/ה ב%s בתאריך %s למרות בקשה רכה: %s." % (
                 row["employee"], row["shift"], row["date"], reason))
 
@@ -234,7 +239,7 @@ class DayPlan:
         if rotation.holds(self.profile, person, day, slot["shift_name"]):
             group = text(person.get("rotation_group"))
             pattern = rotation.exit_pattern(self.profile, person)
-            cycle = pattern if pattern in ("round", "triplet") else _cycle(self.profile, group)
+            cycle = pattern if pattern in ("round", "triplet") else cycle_of(self.profile, group)
             return "%s סוגר/ת במועד הזה; השיבוץ עומד במחזור המחייב." % (
                 rotation.label(cycle, group) or "קבוצת הסגירה"
             )
@@ -284,13 +289,6 @@ def _timed(row: dict, slot: dict) -> dict:
 
 def _empty_load() -> dict:
     return {"hours": 0.0, "period_nights": 0.0, "nights": 0}
-
-
-def _cycle(profile: dict, group: str) -> str:
-    if group == "ג":
-        return "triplet"
-    mode = text(((profile or {}).get("workplace") or {}).get("rotation_mode"))
-    return mode if mode in ("round", "triplet") else "round"
 
 
 def _near(value: str, target: datetime.date) -> bool:

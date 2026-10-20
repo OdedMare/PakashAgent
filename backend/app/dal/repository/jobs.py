@@ -9,6 +9,9 @@ from app.dal.database import bind_job_connection, connect
 from app.dal.repository.base import RepositoryBase, new_id
 
 
+_COMPLETE = "complete"
+
+
 def enqueue(connection, team_id, key, kind, payload):
     return connection.execute("""
         INSERT INTO copilot_jobs (id, team_id, dedupe_key, kind, payload)
@@ -25,7 +28,7 @@ class JobsRepository(RepositoryBase):
         return dict(row) if row else None
 
     def queue_generation_job(self, team_id, schedule_id):
-        """Resume and enqueue together; repeated requests keep one job."""
+        """Resume and enqueue one durable job per unfinished model span."""
         with connect(self._store) as connection:
             row = connection.execute("""
                 SELECT generation FROM schedules WHERE id=%s AND team_id=%s FOR UPDATE
@@ -34,13 +37,24 @@ class JobsRepository(RepositoryBase):
                 raise NotFoundError("הסידור לא נמצא")
             if (row["generation"] or {}).get("status") == "complete":
                 return
-            key = "generation:" + schedule_id
-            enqueue(connection, team_id, key, "generation", {"schedule_id": schedule_id})
-            connection.execute("""
-                UPDATE copilot_jobs SET status='queued', attempts=0,
-                    run_after=NOW(), finished_at=NULL, error=''
-                WHERE team_id=%s AND dedupe_key=%s AND status IN ('complete','failed')
-            """, (team_id, key))
+            generation = row["generation"] or {}
+            for span in generation.get("days") or []:
+                if span.get("status") == _COMPLETE:
+                    continue
+                first = str(span.get("date") or "")
+                through = str(span.get("through") or first)
+                key = "generation:%s:%s:%s" % (schedule_id, first, through)
+                enqueue(connection, team_id, key, "generation", {
+                    "schedule_id": schedule_id,
+                    "date": first,
+                    "through": through,
+                })
+                connection.execute("""
+                    UPDATE copilot_jobs SET status='queued', attempts=0,
+                        run_after=NOW(), finished_at=NULL, error=''
+                    WHERE team_id=%s AND dedupe_key=%s
+                        AND status IN ('complete','failed')
+                """, (team_id, key))
             connection.execute("""
                 UPDATE schedules SET generation=COALESCE(generation,'{}'::jsonb)
                     || '{"status":"running","cancel_requested":false,"dismissed":false}'::jsonb,
@@ -51,19 +65,21 @@ class JobsRepository(RepositoryBase):
                 UPDATE schedules SET generation=jsonb_set(generation, '{activity}',
                     to_jsonb('הבקשה נשמרה וממתינה להתחלת העבודה…'::text), true)
                 WHERE id=%s AND team_id=%s AND EXISTS (
-                    SELECT 1 FROM copilot_jobs WHERE team_id=%s AND dedupe_key=%s AND status='queued')
-            """, (schedule_id, team_id, team_id, key))
+                    SELECT 1 FROM copilot_jobs WHERE team_id=%s
+                        AND kind='generation' AND payload->>'schedule_id'=%s
+                        AND status='queued')
+            """, (schedule_id, team_id, team_id, schedule_id))
             connection.commit()
 
     @contextmanager
-    def claim_copilot_job(self):
+    def claim_copilot_job(self, lane="any"):
         """A session lock outlives commits and releases on worker death.
 
         Running jobs with no owner are immediately eligible again. A slow
         live worker keeps its lock, regardless of how long its model takes.
         """
         with connect(self._store) as connection:
-            job = self._claim_job(connection)
+            job = self._claim_job(connection, lane)
             if job is None:
                 yield None
                 return
@@ -73,20 +89,33 @@ class JobsRepository(RepositoryBase):
             finally:
                 if not connection.closed:
                     connection.rollback()
+                    if job.get("_schedule_lock"):
+                        connection.execute(
+                            "SELECT pg_advisory_unlock(hashtextextended(current_schema() || %s, 0))",
+                            (":schedule:" + job["payload"]["schedule_id"],),
+                        )
                     connection.execute(
                         "SELECT pg_advisory_unlock(hashtextextended(current_schema() || %s, 0))",
                         (":job:" + job["id"],),
                     )
                     connection.commit()
 
-    def _claim_job(self, connection):
+    def _claim_job(self, connection, lane="any"):
+        lane_sql = {
+            "interactive": "AND kind='manager_chat'",
+            "background": "AND kind<>'manager_chat'",
+            "any": "",
+        }.get(lane)
+        if lane_sql is None:
+            raise ValueError("Unknown worker lane: %s" % lane)
         candidates = connection.execute("""
-            SELECT id FROM copilot_jobs
+            SELECT id, kind, payload FROM copilot_jobs
             WHERE status IN ('queued','running') AND run_after <= NOW()
+            %s
             ORDER BY CASE kind WHEN 'manager_chat' THEN 0 WHEN 'generation' THEN 1 ELSE 2 END,
                 run_after, created_at
             FOR UPDATE SKIP LOCKED
-        """).fetchall()
+        """ % lane_sql).fetchall()
         for candidate in candidates:
             locked = connection.execute(
                 "SELECT pg_try_advisory_lock(hashtextextended(current_schema() || %s, 0)) AS locked",
@@ -94,12 +123,43 @@ class JobsRepository(RepositoryBase):
             ).fetchone()["locked"]
             if not locked:
                 continue
-            row = connection.execute("""
-                UPDATE copilot_jobs SET status='running', attempts=attempts+1,
-                    started_at=NOW(), error='' WHERE id=%s RETURNING *
-            """, (candidate["id"],)).fetchone()
-            connection.commit()
-            return dict(row)
+            schedule_locked = False
+            schedule_id = (candidate.get("payload") or {}).get("schedule_id")
+            if candidate["kind"] == "generation" and schedule_id:
+                schedule_locked = connection.execute(
+                    "SELECT pg_try_advisory_lock(hashtextextended(current_schema() || %s, 0)) AS locked",
+                    (":schedule:" + schedule_id,),
+                ).fetchone()["locked"]
+                if not schedule_locked:
+                    connection.execute(
+                        "SELECT pg_advisory_unlock(hashtextextended(current_schema() || %s, 0))",
+                        (":job:" + candidate["id"],),
+                    )
+                    continue
+            try:
+                row = connection.execute("""
+                    UPDATE copilot_jobs SET status='running', attempts=attempts+1,
+                        started_at=NOW(), error='' WHERE id=%s RETURNING *
+                """, (candidate["id"],)).fetchone()
+                connection.commit()
+                claimed = dict(row)
+                claimed["_schedule_lock"] = schedule_locked
+                return claimed
+            except Exception:
+                # Advisory locks are session-scoped, so returning this pooled
+                # connection while either is held would strand the job.
+                connection.rollback()
+                if schedule_locked:
+                    connection.execute(
+                        "SELECT pg_advisory_unlock(hashtextextended(current_schema() || %s, 0))",
+                        (":schedule:" + schedule_id,),
+                    )
+                connection.execute(
+                    "SELECT pg_advisory_unlock(hashtextextended(current_schema() || %s, 0))",
+                    (":job:" + candidate["id"],),
+                )
+                connection.commit()
+                raise
         connection.commit()
         return None
 

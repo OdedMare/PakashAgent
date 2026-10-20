@@ -43,9 +43,8 @@ _NULLABLE = ("database_port", *_LLM_BASE_URL_FIELDS)
 # concurrency qualifies: `llm_timeout_seconds` is handled separately because
 # 0 there means "no timeout" and must survive.
 #
-# `llm_max_concurrency` is clamped here, but unlike every other live setting
-# it only takes effect on the next process start: the semaphore in `dal/llm/`
-# is built once and cannot be resized.
+# `llm_max_concurrency` is read by the shared PostgreSQL limiter on each
+# acquisition, so the positive value saved here applies without a restart.
 _POSITIVE_INTS = ("llm_max_concurrency",)
 
 

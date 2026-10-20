@@ -86,9 +86,21 @@ class GenerationRunner:
             raise
         return self._context.view(schedule, team_id)
 
-    def run_durable(self, team_id: str, schedule_id: str) -> None:
-        """The queue owns the database lock; keep completed checkpoints."""
-        self._run(team_id, schedule_id)
+    def run_durable(
+        self, team_id: str, schedule_id: str, date: str = "", through: str = "",
+    ) -> None:
+        """Run one queued span; the next durable job owns the next span."""
+        stop_beating = self._start_heartbeat(team_id, schedule_id)
+        try:
+            self._stepper.generate_next(
+                team_id, schedule_id, light=True,
+                target_date=date, target_through=through,
+            )
+        except Exception as exc:
+            self._record_crash(team_id, schedule_id, exc)
+            raise
+        finally:
+            stop_beating()
 
     def progress(self, team_id: str, schedule_id: str) -> dict:
         """Just the progress of a job, for the poll that watches it.

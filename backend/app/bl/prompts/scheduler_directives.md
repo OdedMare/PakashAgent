@@ -24,18 +24,39 @@ shift on those dates.
 - `max_count`: one employee works at most `count` matching shifts,
   `per` the whole `period` or each `week` (Sunday to Saturday).
 - `not_together`: two or more employees should not share a matching shift.
+- `min_rest`: at least `count` hours between the end of one shift and the
+  start of the next for the same person. `employees: []` means everyone.
+  `shifts` narrows it to rests touching those shifts ("after a night, 16
+  hours" is `shifts: ["<the night shift>"]`, `count: 16`).
+- `max_consecutive`: at most `count` consecutive calendar days on matching
+  shifts. `employees: []` means everyone; `shifts` narrows it ("no more than
+  two nights in a row" is the night shift with `count: 2`).
+- `balance`: matching shifts spread evenly among `employees`, or among
+  everyone when empty. Always `is_hard: false`. "סופ״שים מתחלקים שווה" is
+  `weekdays: ["שישי", "שבת"]`; "לילות בצורה הוגנת" is the night shift.
+- `requires_with`: one employee works matching shifts only together with at
+  least one of `partners` on the same shift. `partners` are people the
+  source names; "רק עם מישהו ותיק" names nobody and is `unresolved`.
+
+`partners` is empty for every kind but `requires_with`.
 
 `shifts`, `dates` (ISO) and `weekdays` (Hebrew, e.g. "שלישי") narrow which
 slots a request covers; an empty list means any. Use `count: null` unless the
-kind is `max_count`. Set `is_hard: true` only for words such as "must",
-"never", "אסור", "בשום מקרה"; words such as "prefer", "if possible", "עדיף",
-"אם אפשר" are `is_hard: false`. Use `weight: 1` unless the source says one
+kind is `max_count`, `max_consecutive` (whole days) or `min_rest` (hours).
+Set `is_hard: true` only for words such as "must", "never", "אסור", "בשום
+מקרה", or a limit stated as a rule ("מינימום 12 שעות", "לא יותר משני לילות
+ברצף"); words such as "prefer", "if possible", "עדיף", "אם אפשר" are
+`is_hard: false`. Use `weight: 1` unless the source says one
 wish matters more than another, then 2 or 3.
 
-Never extend anything beyond the supplied period, infer which person the
-manager meant, choose between people, expand a recurring rule into future
-periods, or translate fairness, training, rest, rotation or general policy.
-Put those sources in `unresolved`.
+Never infer which person the manager meant or choose between people, and
+never extend a `mode: "period"` source beyond the supplied period. A rest,
+run or fairness policy is translatable when it states a number or an even
+share in the terms above;
+translate each of its clauses, and put the source in `unresolved` if any
+clause has no kind (training, rotation, "use judgement", a general
+principle). Rotation and closures are already enforced by code: a policy
+that only restates them is `unresolved` with that reason.
 
 Each source says whether it is `binding`. A non-binding source (a soft rule
 or a preference) you cannot translate faithfully belongs in `unresolved`
@@ -47,6 +68,48 @@ so translate every binding source you can.
 Every source id must appear in at least one directive or request, or exactly
 once in `unresolved`. A source may produce several directives or requests.
 Give each a short Hebrew reason that preserves the source's meaning.
+
+## Standing sources: `mode: "compile"`
+
+A source with `mode: "compile"` is a standing one (a rule, a policy, an
+employee's note, a preference). Your translation of it is kept and reused for
+later periods, so it must not depend on this period:
+
+- Never spread it over this period's dates. "דנה לא בלילות שלישי" is one
+  `avoid` with `weekdays: ["שלישי"]` and `shifts`, and `dates: []`.
+- Use `dates` (and dated `unavailable` / `required_assignment` directives)
+  only when the source itself names its time. Those dates may fall outside
+  this period; that is expected.
+- A recurring "must work" ("חייבת לעבוד כל שלישי") has no representation:
+  put it in `unresolved` with the reason.
+
+A source with `mode: "period"` is this build's own instruction and is
+translated for this period only, as above.
+
+## Time in a standing source
+
+Give one `timing` row for every `compile` source:
+
+- `kind: "none"` when it names no time. Its items must then be undated.
+- `kind: "absolute"` when a date is written in it ("3-7.11", "ב-12/11").
+- `kind: "relative"` when its time counts from when it was written ("חולה
+  3 או 4 ימים", "מחר", "בשבוע הבא"). Count from its `anchored_on`, never from
+  this period. "N ימים" means N calendar days starting on `anchored_on`
+  itself, unless it says "ימי עבודה".
+
+`phrase` is the time expression as written. `starts_on` / `ends_on` (ISO) is
+the certain range; `maybe_through` is the end of an uncertain one ("או 4"),
+otherwise empty. When the range is uncertain, write a short Hebrew
+`question` for the manager ("לחסום את עודד גם ב-23.10?"); otherwise empty.
+Leave `starts_on`, `ends_on` empty for `kind: "none"`.
+
+An absence (sick, leave, reserve duty) is not a wish: the certain days
+become `avoid` with `is_hard: true` over every shift, dated; the uncertain
+days become `avoid` with `is_hard: false` and `weight: 3`. A time with no
+date to count from ("כשיחזור מהמילואים", "אחרי החגים") cannot be translated:
+put the source in `unresolved` with the reason.
+
+`mode: "period"` sources need no `timing` row.
 
 ## Tools
 

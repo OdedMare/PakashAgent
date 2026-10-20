@@ -14,21 +14,28 @@ refuses is handed back with the reasons while turns remain; an
 answer that marks a source `unresolved` is final, because it means "code
 cannot do this", not "try again".
 
-What then happens is `read_partial`'s call: if every source left out is
-only a wish, the rest is kept and the wishes are reported; if any is
-binding, the full scheduler takes the period, as it always did.
+What then happens is decided per source (`partial.per_source`): if every
+source left out is only a wish, the rest is kept and the wishes are
+reported; if any is binding, the full scheduler takes the period, as it
+always did.
+
+Standing sources -- rules, policies, notes, preferences -- are translated
+in `compile` mode and kept in the `cache` it is handed
+(`bl/compiled_sources/`), so the next build loads them instead of asking.
+`compile` does the same ahead of any build, when setup is saved.
 """
 
 import json
-from typing import List, Optional
+from typing import Dict, List, Optional
 
+from app.bl.compiled_sources import NullCache, settle
 from app.bl.directive_agent.schema import (
     MAX_CALLS_PER_TURN, MAX_DRY_RUNS, TOOL_DESCRIPTIONS, TOOL_NAMES, TURN_SCHEMA,
 )
-from app.bl.directive_agent.partial import read_partial
+from app.bl.directive_agent.partial import assemble, per_source
 from app.bl.directive_agent.tools import TranslationTools
 from app.bl.prompts import load
-from app.bl.scheduler.directives import read_translation, semantic_sources
+from app.bl.scheduler.directives import semantic_sources
 from app.bl.scheduler.span_audit import add_usage, usage_of
 from app.common.errors import AgentError
 
@@ -42,18 +49,62 @@ class DirectiveAgent:
 
     def translate(self, profile: dict, starts_on: str, ends_on: str, availability=None,
                   instructions: str = "", preferences=None, history=None,
-                  required_assignments=None, already_scheduled=None) -> Optional[dict]:
+                  required_assignments=None, already_scheduled=None,
+                  cache=None) -> Optional[dict]:
         """Validated directives and requests, with `unresolved` listing the
         wishes left out, or None when the full scheduler should take the
         request: nothing to translate, the model unreachable, or a binding
-        source not translated within the bound."""
+        source not translated within the bound.
+
+        A standing source `cache` already holds costs no model call, and
+        one it holds as unresolved and binding settles the answer at once."""
         sources = semantic_sources(profile, availability, instructions, preferences)
         if not sources:
             return None
-        tools = TranslationTools(profile, starts_on, ends_on, sources, availability,
-                                 history, required_assignments, already_scheduled)
+        cache = cache or NullCache()
+        by_id = {row["id"]: row for row in sources}
+        outcomes = cache.lookup(profile, sources)
+        if _binding_left(outcomes, by_id):
+            return None
+        hits = dict(outcomes)
         run = _Run(self._max_turns)
-        base = _payload(profile, starts_on, ends_on, tools, sources)
+        misses = [row for row in sources if row["id"] not in hits]
+        if misses:
+            tools = TranslationTools(profile, starts_on, ends_on, misses, availability,
+                                     history, required_assignments, already_scheduled)
+            fresh = self._settle(profile, starts_on, ends_on, misses, tools, cache, run)
+            if fresh is None:
+                return None
+            outcomes.update(fresh)
+        if _binding_left(outcomes, by_id):
+            return None
+        return dict(assemble(outcomes, by_id, run.usage), usage=run.usage,
+                    model_calls=run.turns, steps=run.steps, cached=len(hits),
+                    cached_tokens=sum(row.get("tokens") or 0 for row in hits.values()))
+
+    def compile(self, profile: dict, sources: List[dict], starts_on: str, ends_on: str,
+                cache) -> Optional[Dict[str, dict]]:
+        """Translate standing sources ahead of any build and keep them in
+        `cache`. `starts_on`/`ends_on` is only the week the tools look at;
+        what is kept does not depend on it."""
+        tools = TranslationTools(profile, starts_on, ends_on, sources)
+        return self._settle(profile, starts_on, ends_on, sources, tools, cache,
+                            _Run(self._max_turns))
+
+    def _settle(self, profile, starts_on, ends_on, sources, tools, cache, run):
+        """Each source's outcome, judged for time and kept where it may be."""
+        anchors = cache.anchors(sources)
+        base = _payload(profile, starts_on, ends_on, tools, sources, anchors)
+        answered = self._converse(base, tools, sources, profile, starts_on, ends_on, run)
+        if answered is None:
+            return None
+        answer, outcomes = answered
+        outcomes = settle(answer, sources, outcomes, anchors)
+        cache.store(profile, sources, outcomes, run.usage, anchors)
+        return outcomes
+
+    def _converse(self, base, tools, sources, profile, starts_on, ends_on, run):
+        """The bounded loop: the final answer and its per-source outcomes."""
         while run.turns < self._max_turns:
             final = run.last()
             answer = self._ask(dict(base, results=run.results, final_turn=final))
@@ -64,13 +115,10 @@ class DirectiveAgent:
             if calls and not final:
                 run.call(tools, calls)
                 continue
-            translated = None
-            if not answer.get("unresolved"):
-                translated = read_translation(answer, sources, profile, starts_on, ends_on)
-            if translated is not None:
-                return run.done(dict(translated, unresolved=[]))
-            if answer.get("unresolved") or final:
-                return run.done(read_partial(answer, sources, profile, starts_on, ends_on))
+            outcomes = per_source(answer, sources, profile, starts_on, ends_on)
+            whole = all("items" in outcome for outcome in outcomes.values())
+            if whole or answer.get("unresolved") or final:
+                return answer, outcomes
             run.refused(tools, answer)
         return None
 
@@ -85,6 +133,11 @@ class DirectiveAgent:
         except AgentError:
             return None
         return answer if isinstance(answer, dict) else None
+
+
+def _binding_left(outcomes: Dict[str, dict], by_id: Dict[str, dict]) -> bool:
+    return any("left" in outcome and by_id[source_id].get("binding", True)
+               for source_id, outcome in outcomes.items())
 
 
 class _Run:
@@ -116,11 +169,6 @@ class _Run:
             self.steps.append(call["tool"])
             self.results.append(tools.run(call["tool"], call["arguments"]))
 
-    def done(self, translated: Optional[dict]) -> Optional[dict]:
-        if translated is None:
-            return None
-        return dict(translated, usage=self.usage, model_calls=self.turns, steps=self.steps)
-
     def refused(self, tools: TranslationTools, answer: dict) -> None:
         """Hand a refused final answer back with code's reasons."""
         verdict = tools.run("check", {"directives": answer.get("directives"),
@@ -131,7 +179,7 @@ class _Run:
 
 
 def _payload(profile: dict, starts_on: str, ends_on: str, tools: TranslationTools,
-             sources: List[dict]) -> dict:
+             sources: List[dict], anchors: Dict[str, str]) -> dict:
     return {
         "period": {"starts_on": starts_on, "ends_on": ends_on},
         "employees": [
@@ -141,9 +189,20 @@ def _payload(profile: dict, starts_on: str, ends_on: str, tools: TranslationTool
         "shifts": sorted({slot["shift_name"] for slot in tools.slots}),
         "slots": [{"date": slot["slot_date"], "shift": slot["shift_name"]}
                   for slot in tools.slots],
-        "sources": sources,
+        "sources": [_shown(row, anchors) for row in sources],
         "tools": [{"name": name, "purpose": TOOL_DESCRIPTIONS[name]} for name in TOOL_NAMES],
     }
+
+
+def _shown(source: dict, anchors: Dict[str, str]) -> dict:
+    """A source as the model sees it: `compile` for a standing one, whose
+    translation outlives this period, `period` for this build's instruction."""
+    shown = {key: source[key] for key in ("id", "kind", "context", "text", "binding")}
+    if source.get("persistent"):
+        shown.update(mode="compile", anchored_on=anchors.get(source["id"]) or "")
+    else:
+        shown["mode"] = "period"
+    return shown
 
 
 def _calls(answer: dict) -> List[dict]:
