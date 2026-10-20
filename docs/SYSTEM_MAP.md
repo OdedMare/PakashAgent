@@ -97,12 +97,27 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 4. ה-worker מריץ את `generation/runner.py`, שעובר על **כל התקופה בתוך job אחד**. לכל span:
    - `stepper.generate_next()` קורא ל-`Scheduler.generate_span()`, ומשם לפי `schedule_generation_engine`:
      - `code`: `deterministic_scheduler/`, אפס טוקנים.
-     - `auto` (ברירת מחדל): אם הקלט מובנה, הקוד משבץ. אם יש הנחיות חופשיות, יש קריאת LLM אחת לתרגום ההנחיות (`scheduler_directives.md`) ואז הקוד משבץ. אם התוצאה לא נקייה, עוברים למסלול ה-AI.
+     - `auto` (ברירת מחדל): אם הקלט מובנה, הקוד משבץ. אם יש הנחיות חופשיות, `bl/directive_agent/` מתרגם אותן ואז הקוד משבץ. אם התוצאה לא נקייה, עוברים למסלול ה-AI. פירוט התרגום ב-4.2.1.
      - `ai`: קריאה לכל יום או לכל שבוע (`schedule_generation_mode`) עם `scheduler.md`, ועוד קריאת תיקון אחת לכל היותר.
    - כל שורה עוברת בדיקת גבולות (מי זמין, סבב), ואז audit ו-checkpoint של אותם תאריכים בלבד.
 5. הדפדפן דוגם `GET /api/schedule/{id}/progress` (מונה ימים ו-heartbeat).
 6. עצירה: `/generate/{id}/cancel`, וה-worker עוצר בסוף היום הנוכחי. הסתרת הבאנר: `/dismiss`. יום בודד: `/day/start`. טווח בתוך טיוטה: `/range/start` (שיבוצים ידניים נשמרים כ-pins).
-7. 💤 `/generate` (המסלול הישן, בחלקים) ו-`/generate/{id}/next` לא נקראים מה-UI.
+7. אם span נכשל ועדיין נשארו לו ניסיונות, `runner._requeue_failed_span` מחזיר אותו לתור עם השהיה (עד `_MAX_SPAN_ATTEMPTS`), ולא מפיל את כל התקופה.
+8. 💤 `/generate` (המסלול הישן, בחלקים) ו-`/generate/{id}/next` לא נקראים מה-UI.
+
+#### 4.2.1 תרגום ההנחיות במצב `auto` 🤖 (`bl/directive_agent/`)
+1. `semantic_sources()` (`bl/scheduler/directives.py`) אוסף כל קלט שהקוד לא יודע לקרוא: ההנחיה החופשית, העדפות, כללים ומדיניות טקסטואלית. לכל מקור יש `binding`: רק כלל שסומן soft והעדפה אינם מחייבים. כל השאר, כולל ההנחיה החופשית, מחייב.
+2. `DirectiveAgent.translate()` מריץ לולאת כלים חסומה: עד `MAX_TURNS=4` קריאות למודל עם `scheduler_directives.md`, עד 4 כלים בכל קריאה, ועד 2 הרצות `dry_run` בסך הכול.
+3. הכלים (`directive_agent/tools.py`) הם Python טהור בלי repository: `resolve_employee`, `list_slots`, `employee_state`, `check` ו-`dry_run` (הרצת ה-scheduler הדטרמיניסטי בזיכרון). שום דבר לא נכתב.
+4. התשובה הסופית עוברת את אותו `read_translation` כמו קודם. אם הקוד דחה אותה ונשארו סבבים, היא חוזרת למודל עם הסיבות. מקור שהמודל סימן `unresolved` מסיים את הלולאה מיד.
+5. אם התרגום לא מלא, `directive_agent/partial.py` שומר כל מקור שכל הפריטים שלו עברו, ומשמיט מקור שלם (אף פעם לא חצי מקור):
+   - אם מקור מחייב הושמט, התקופה עוברת ל-scheduler המלא (מסלול ה-AI), כמו קודם.
+   - אם הושמטו רק משאלות רכות, הקוד בונה בלעדיהן, וכל אחת נרשמת ב-`notes` ("בקשה רכה לא נלקחה בחשבון בשיבוץ"). ב-metrics נרשמים `model_calls`, `translation_steps` ו-`unresolved_sources`.
+
+#### 4.2.2 השיבוץ הדטרמיניסטי ⚙️ (`deterministic_scheduler/`)
+- עובר יום אחר יום, ומכבד pins, אי-זמינות ובקשות מובנות (`avoid`, `prefer`, `max_count`, `not_together`, ב-`honoring.py`). בקשה קשיחה מוציאה מועמד, ורכה מוסיפה לו עלות.
+- משמרות שדורשות תפקיד נדיר (או אחמ"ש) ממולאות לפני משמרות שיש להן הרבה מועמדים (`plan.py`, `_legal_count`), כדי שבעל התפקיד הנדיר לא "יבוזבז" על משמרת אחרת.
+- לילות וסגירות מאוזנים לפי מספר הלילות בתקופה ולפי `outlook.py` (חלק צפוי בששת הימים הבאים), ולא רק לפי שעות.
 
 ### 4.3 ייבוא מאקסל ⚙️ + 🤖 אופציונלי
 1. `ImportSchedule.tsx` שולח קבצים ל-`POST /api/schedule/import/preview?learn_rules=true`.
@@ -219,8 +234,9 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 
 ## 10. הגדרות מערכת ⚙️
 - `Settings/` דורש סיסמת הגדרות בכותרת, וקורא ל-`GET` ו-`PUT /api/settings`.
-- ההגדרות נשמרות **בקובץ JSON אחד גלובלי** (`runtime-settings.json`): מודלים לכל role, URL ומפתח, timeout, מנוע ומצב יצירה, diet mode.
-- `GET` ו-`POST /api/models`: בדיקת שרת מודלים ורשימת המודלים שלו.
+- ההגדרות נשמרות **בקובץ JSON אחד גלובלי** (`runtime-settings.json`): מודלים לכל role, URL ומפתח, timeout, אימות SSL (`llm_verify_ssl`), מנוע ומצב יצירה, diet mode.
+- `GET` ו-`POST /api/models`: בדיקת שרת מודלים ורשימת המודלים שלו. הבדיקה מקבלת גם `llm_verify_ssl` שלא נשמר עדיין, כדי לבדוק שרת פנימי עם תעודה בחתימה עצמית לפני השמירה.
+- `llm_verify_ssl` דלוק כברירת מחדל. כיבוי שלו חושף את החיבור, כולל מפתח ה-API, ליירוט, ולכן הוא מיועד רק לשרת פנימי.
 - `llm_max_concurrency` נקבע רק כשהתהליך עולה.
 
 ---
@@ -233,7 +249,7 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 |---|---|---|---|---|---|
 | צ'אט מנהל (`bl/chat_reply.py`) | AgentChat | default | `manager_chat.md` (כ-21K תווים) | 1–7 לכל הודעה, ועוד יצירה פנימית | worker |
 | יצירה (ai) | GenerateDialog / צ'אט | advanced | `scheduler.md` | 1–2 לכל יום או שבוע | worker |
-| תרגום הנחיות (auto) | GenerateDialog / צ'אט | advanced | `scheduler_directives.md` | 1 | worker |
+| תרגום הנחיות (auto, `bl/directive_agent/`) | GenerateDialog / צ'אט | advanced | `scheduler_directives.md` | 1–4 לכל span (לולאת כלים) | worker |
 | עוזר עובד | AssistantChat | default | `employee_assistant.md` | 1 | API |
 | למידה בייבוא | ImportSchedule | default | `learn.md` | 1 לכל preview | API |
 | למידה משינויים | LearnedFromChanges | default | `learn_changes.md` | 1 | API |
@@ -249,7 +265,7 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
    - להרחיב את המסלול המהיר ו-`bl/intent` לפני המודל.
    - למדוד את `model_rounds` ולשקול להוריד את `_ROUNDS`, שעומד כרגע על 7.
    - שאלות קריאה בלבד להריץ על role `fast`.
-3. **יצירה:** לשמור על `auto` או לעבור ל-`code`. לשקול מצב `week`. לקצר את ה-reason לכל שיבוץ (טוקני פלט) או להפעיל `llm_diet_mode`. לשמור במטמון את תרגום ההנחיות.
+3. **יצירה:** לשמור על `auto` או לעבור ל-`code`. לשקול מצב `week`. לקצר את ה-reason לכל שיבוץ (טוקני פלט) או להפעיל `llm_diet_mode`. לשמור במטמון את תרגום ההנחיות: היום הלולאה רצה מחדש בכל span, עד 4 קריאות כל פעם, גם כשההנחיות זהות. למדוד את `translation_steps` ולשקול להוריד את `MAX_TURNS`.
 4. **ייבוא:** להפוך את `learn_rules` ל-opt-in, או לשמור במטמון לפי hash של הקבצים.
 5. **להסיר את ה-endpoints הישנים** שעולים כסף ולא בשימוש.
 
@@ -259,7 +275,7 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 
 | בעיה | איפה | השפעה | כיוון פתרון |
 |---|---|---|---|
-| ה-worker מעבד job אחד בכל פעם, ויצירה רצה כ-job אחד ארוך | `worker.py`, `generation/runner.py:119` | יצירה של חודש חוסמת את הצ'אט של **כל** הצוותים | job לכל span, כמה workers, תורים נפרדים לצ'אט וליצירה |
+| ה-worker מעבד job אחד בכל פעם, ויצירה רצה כ-job אחד ארוך | `worker.py`, `generation/runner.py` (`_loop`) | יצירה של חודש חוסמת את הצ'אט של **כל** הצוותים | job לכל span, כמה workers, תורים נפרדים לצ'אט וליצירה |
 | מקביליות ה-LLM רק בזיכרון התהליך, וברירת המחדל 1 | `dal/llm/budgets.py`, `model_slots.py` | API ו-worker לא מתואמים, ואין הוגנות בין צוותים | limiter משותף ב-Postgres או Redis, מכסה לכל צוות, ושרת שמעבד במקביל (vLLM או API מתארח) |
 | הגדרות גלובליות בקובץ | `common/runtime_settings/` | כל הצוותים על אותו מודל ומנוע, ולא מסתנכרן בין replicas | להעביר ל-DB, עם דריסה לכל צוות או תוכנית |
 | SSE ו-throttle בזיכרון התהליך | `common/events.py`, `common/throttle.py` | נשבר עם יותר מ-replica אחד | `LISTEN/NOTIFY` או Redis |
