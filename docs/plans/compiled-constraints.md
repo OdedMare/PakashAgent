@@ -2,6 +2,7 @@
 
 > מטרה: אילוץ קבוע מתורגם **פעם אחת**, נשמר, ונטען מהמטמון בכל בנייה.
 > בנייה שכל האילוצים שלה כבר קומפלו עולה **אפס קריאות מודל** לתרגום.
+> אילוצי הגדרת היחידה מתורגמים כבר ברגע שהם נשמרים (§6.7), כך שגם הבנייה הראשונה חינמית.
 
 ## 1. המצב היום
 
@@ -167,12 +168,54 @@ Repository חדש, `dal/repository/compiled_sources.py`, ב־mixin של `Reposit
 - `Scheduler` נשאר בלי repository. הוא מקבל port, כמו ש־`PlanningAgent` מקבל tools
   (`schedule_service/service.py`).
 
-### 6.7 קומפילציה מוקדמת (prewarm), אופציונלי בסוף השלב
+### 6.7 קומפילציה בזמן שמירת הגדרת היחידה (חלק מהשלב)
 
-- ה־worker של הקופיילוט (`bl/copilot.py`) מריץ בכל סבב `CompileSources(team)`:
-  מחפש misses ומקמפל אותם ברקע עם תקופה ייחוסית (השבוע הבא) עבור `dry_run`.
-- ככה גם הבנייה הראשונה אחרי שמירת כלל לא משלמת. בלי ה־prewarm, הבנייה הראשונה משלמת
-  פעם אחת, וכל הבנייות שאחריה חינמיות.
+האילוצים שהמנהל כותב בהגדרת היחידה הראשונית מתורגמים **מיד כשהם נשמרים**, ולא בבנייה
+הראשונה. כך הבנייה הראשונה כבר חינמית, והמנהל רואה עוד לפני כל בנייה מה הקוד הבין ומה ידרוש AI.
+
+**מה נכנס.** כל מקור קבוע ש־`semantic_sources` מוצא בפרופיל:
+
+| שדה בהגדרה | `kind` |
+|---|---|
+| `rules` (כללים, `hard`/`soft`) | `rule` |
+| `dependencies`, `rest_policy`, `weekend_policy`, `fairness_policy`, `conflict_policy`, `casual_worker_policy` | שם השדה |
+| `workplace.general_exit_schedule` | `general_exit_schedule` |
+| `training_policy` | `training_policy` |
+| לכל עובד: `notes`, `availability`, `workload`, `trainers`, `is_trainee` | `employee_*` |
+| לכל עובד: `recurring_constraints` שנכתבו כמשפט | `recurring_constraint` |
+
+`recurring_constraints` מובנים (עם `days`/`shifts`/`available`) **לא** נכנסים: הקוד כבר
+מבין אותם בלי מודל (`honoring.py`).
+העדפות (D21) מקומפלות באותו מנגנון כשהן מאושרות (`PreferenceService`).
+
+**הזרימה:**
+
+1. `ProfileService.update` נשאר **סינכרוני ובלי מודל**, כמו שה־README מבטיח: "zero-token setup".
+   אחרי שמירה מוצלחת הוא קורא ל־`compile_hook(team_id)`.
+2. ה־hook מחשב את המקורות ואת המפתחות (§4), ומוציא את אלה שכבר נמצאים במטמון.
+   אם נשאר משהו, הוא מכניס לתור הקיים (`copilot_jobs`) משימה
+   `kind="compile_sources"` עם `dedupe_key = "compile:" + vocab_key`.
+   כמה שמירות רצופות יוצרות משימה אחת בלבד.
+3. `worker.py`: ענף חדש ב־`_execute` לסוג `compile_sources`, שמריץ את `SourceCompiler.compile(team_id)`:
+   - קורא את הפרופיל **העדכני** ולא את זה מרגע השמירה, ומחשב שוב את ה־misses.
+   - מריץ את `DirectiveAgent` במצב compile, ב**קבוצות של עד 12 מקורות** לקריאה.
+     זה שומר על payload קטן ועל ה־bounds הקיימים.
+   - **תקופת ייחוס** ל־`list_slots`/`check`/`dry_run` היא השבוע הקרוב (ראשון עד שבת).
+     הפלט עצמו לא תלוי בתקופה, לפי §3.
+   - שומר כל מקור לחוד: `compiled` או `unresolved`.
+   - כשאין מודל מוגדר, המשימה מסתיימת בלי כלום. אין שגיאה ואין retry, והבנייה תתנהג כמו היום.
+4. כשלון רשת או מודל עובר דרך ה־retry הרגיל של `finish_copilot_job`. מקור שלא קומפל פשוט יקומפל בבנייה (lazy, §6.3).
+
+**מה המנהל רואה (מינימלי בשלב 1).** בהגדרת היחידה, ליד כל כלל, מדיניות או הערת עובד יש תג:
+- "מתורגם לקוד ✓"
+- "ידרוש AI", עם ה־`reason` (מקור מחייב מסוג `unresolved`)
+- "משאלה שלא תילקח בחשבון בקוד", כשמדובר במשאלה מסוג `unresolved`
+- "מתרגם…", כשאין עדיין רשומה במטמון
+
+הנתונים מגיעים מ־endpoint לקריאה בלבד, `GET /profile/compiled`, שמחזיר לכל מקור
+`{kind, context, text, status, reason, requests}`. התצוגה המלאה ("כך הבנתי את הכלל", עריכה ואישור) היא שלב 3.
+
+**ניקוי.** בכל סבב `scan` ה־worker מריץ גם את `prune_compiled_sources`.
 
 ## 7. מסמכים
 
@@ -202,6 +245,12 @@ Repository חדש, `dal/repository/compiled_sources.py`, ב־mixin של `Reposit
 8. **ערבוב:** 2 hits ו־1 miss יוצרים קריאת מודל אחת, שהמקורות ב־payload שלה הם **רק** ה־miss.
 9. **`period_bound` לא נשמר.**
 10. **`per_source`:** `read_partial` נותן אותה תוצאה כמו לפני הפיצול. הטסטים הקיימים ב־`test_directive_agent.py` עוברים בלי שינוי.
+11. **שמירה מכניסה לתור ולא קוראת למודל:** `ProfileService.update` עם כלל חדש לא מבצע
+    קריאת מודל, ומכניס משימת `compile_sources` אחת. שתי שמירות רצופות יוצרות משימה אחת.
+12. **ה־worker מקמפל את ההגדרה הראשונית:** פרופיל עם כלל, `rest_policy` והערת עובד.
+    אחרי `compile_sources` יש 3 רשומות, והבנייה הראשונה רצה עם `compiled_hits == 3` ואפס קריאות תרגום.
+13. **בלי מודל:** המשימה מסתיימת בלי רשומות ובלי retry, והבנייה עובדת כמו היום.
+14. **אילוץ חוזר מובנה לא נשלח לקומפילציה.**
 
 `tests/test_admin_postgres.py`/Postgres: טסט round-trip ל־repository, בתבנית של הטסטים הקיימים מול Postgres.
 
@@ -215,12 +264,13 @@ Repository חדש, `dal/repository/compiled_sources.py`, ב־mixin של `Reposit
 4. `TranslationCache`/`NullCache` + החיבור ב־`DirectiveAgent` (hits, misses, מטמון שלילי).
 5. Compile mode בפרומפט ובאימות.
 6. העברת המטמון דרך `Scheduler` וכל הקוראים, + metrics.
-7. D32 + עדכוני `CLAUDE.md`.
-8. (אופציונלי) prewarm ב־worker + ניקוי.
+7. `SourceCompiler`, ה־hook ב־`ProfileService.update` ובאישור העדפה, וענף `compile_sources` ב־worker.
+8. `GET /profile/compiled` + תגי סטטוס בהגדרת היחידה (frontend).
+9. D32 + עדכוני `CLAUDE.md`.
 
 ## 10. שאלות פתוחות
 
 - **זיהוי `period_bound`:** לסמוך על המודל (שדה ב־schema), או על הכלל המכני של §6.3
   ("dates שלא כתובים בטקסט פירושם לא לשמור")? ההמלצה: **שניהם**. המודל מסמן, והקוד אוכף את הכלל המכני כרשת ביטחון.
 - **`instructions` שחוזרות:** אם מנהל כותב את אותה הנחיה בכל שבוע, האם לשמור גם אותן, לפי hash יחד עם התקופה? לא בשלב 1. נמדוד קודם.
-- **prewarm:** האם להכניס כבר עכשיו, או אחרי שנראה מספרים מהמטמון העצל?
+- ~~**prewarm**~~: הוחלט. אילוצי ההגדרה מקומפלים בשמירה (§6.7).
