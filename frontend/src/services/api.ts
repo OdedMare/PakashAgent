@@ -212,7 +212,14 @@ export function probeModels(
  *  password means the stored one. A failed connection still answers 200,
  *  with `connected: false` and the reason. */
 export function probeRedis(
-  overrides: { redis_url?: string; redis_password?: string; redis_key_prefix?: string },
+  overrides: {
+    redis_url?: string;
+    redis_host?: string;
+    redis_port?: string;
+    redis_username?: string;
+    redis_password?: string;
+    redis_key_prefix?: string;
+  },
   password: string,
 ): Promise<RedisReport> {
   return request<RedisReport>("/api/settings/redis", {

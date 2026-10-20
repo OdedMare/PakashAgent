@@ -18,6 +18,8 @@ from app.common.runtime_settings.normalizers import (
     normalize_database_schema,
     normalize_database_url,
     normalize_llm_base_url,
+    normalize_redis_host,
+    normalize_redis_port,
     normalize_redis_prefix,
     normalize_redis_url,
 )
@@ -40,7 +42,7 @@ _LLM_BASE_URL_FIELDS = (
     "llm_base_url_default",
     "llm_base_url_advanced",
 )
-_NULLABLE = ("database_port", *_LLM_BASE_URL_FIELDS)
+_NULLABLE = ("database_port", "redis_port", *_LLM_BASE_URL_FIELDS)
 
 # Integers where 0 is not a meaningful value and is clamped away. Only
 # concurrency qualifies: `llm_timeout_seconds` is handled separately because
@@ -91,6 +93,9 @@ class RuntimeSettingsStore:
                 env.schedule_generation_engine
             ),
             redis_url=_safe_redis_url(env.redis_url),
+            redis_host=_safe(normalize_redis_host, env.redis_host, ""),
+            redis_port=_safe(normalize_redis_port, env.redis_port, None),
+            redis_username=(env.redis_username or "").strip(),
             redis_password=env.redis_password,
             redis_key_prefix=_safe_redis_prefix(env.redis_key_prefix),
         )
@@ -222,6 +227,12 @@ def _normalized(key: str, value, patch: dict, settings):
         return normalize_redis_url(value)
     if key == "redis_key_prefix":
         return normalize_redis_prefix(value)
+    if key == "redis_host":
+        return normalize_redis_host(value)
+    if key == "redis_port":
+        return normalize_redis_port(value)
+    if key == "redis_username":
+        return str(value).strip()
     return value
 
 
@@ -307,6 +318,15 @@ def _safe_redis_url(value: str) -> str:
         return normalize_redis_url(value)
     except (TypeError, ValueError):
         return ""
+
+
+def _safe(normalize, value, fallback):
+    """An env value through `normalize`, or `fallback` rather than a failed
+    start-up."""
+    try:
+        return normalize(value)
+    except (TypeError, ValueError):
+        return fallback
 
 
 def _safe_redis_prefix(value: str) -> str:

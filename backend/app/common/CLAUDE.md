@@ -50,6 +50,7 @@ Cross-cutting infrastructure. **Ported from AiSummryIO.**
 | `PAKASH_SETTINGS_PASSWORD` | Unlocks the settings panel on top of the boss login, sent as the `X-Settings-Password` header. Defaults to `010802` (committed); **override it in any real deployment**. Set to empty, the panel stays locked. The settings are shared by every workspace, and anyone can open a workspace and be its boss |
 | `PAKASH_SESSION_DAYS` | How long a boss stays logged in (default 30) |
 | `PAKASH_REDIS_URL` / `PAKASH_REDIS_PASSWORD` / `PAKASH_REDIS_KEY_PREFIX` | Shared state across processes (D33): throttle, live signals, model queue. Empty URL = off, everything as before. Live-editable in the panel, which also tests the connection and shows what is in Redis |
+| `PAKASH_REDIS_HOST` / `PAKASH_REDIS_PORT` / `PAKASH_REDIS_USERNAME` | Explicit connection parts, each written over the same part of the URL (`redis_connection_url`), like the `DATABASE_*` overrides. With the URL empty, a host alone turns Redis on (port defaults to 6379). Live-editable in the panel |
 | `PAKASH_SCHEDULE_GENERATION_MODE` | How wide one scheduling model call is: `day` (default, one date per call — verified and repaired on its own) or `week` (up to seven dates per call — several times faster, coarser repair). Live-editable in the panel; read when a period is opened, so a running build keeps the mode it started with |
 
 ## Rules

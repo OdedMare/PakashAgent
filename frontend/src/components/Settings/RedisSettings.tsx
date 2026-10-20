@@ -7,7 +7,7 @@ import type { SettingsController } from "./useSettings";
 
 /** The Redis connection, and what this deployment keeps in it.
  *
- *  Redis is optional: with the URL empty, the login throttle and the
+ *  Redis is optional: with the URL and host empty, the login throttle and the
  *  manager's live updates stay in each process's memory, and the model queue
  *  stays in PostgreSQL, as they always did. The card below the fields answers from the server, so a
  *  connection can be tested before it is saved. */
@@ -19,10 +19,42 @@ export function RedisSettings({ settings }: { settings: SettingsController }) {
         settings={settings}
         name="redis_url"
         label="כתובת Redis"
-        optional="ריק = ללא Redis; host:port מתקבל"
+        optional="ריק עם שרת ריק = ללא Redis; host:port מתקבל"
         placeholder="redis://localhost:6379/0"
       />
       <div className="settings-input-row">
+        <div>
+          <Field
+            settings={settings}
+            name="redis_host"
+            label="שרת"
+            optional="גובר על השרת שבכתובת; לבד מספיק"
+            placeholder="localhost"
+          />
+        </div>
+        <div>
+          <Field
+            settings={settings}
+            name="redis_port"
+            label="פורט"
+            type="number"
+            min="1"
+            max="65535"
+            optional="ריק = 6379"
+            placeholder="6379"
+          />
+        </div>
+      </div>
+      <div className="settings-input-row">
+        <div>
+          <Field
+            settings={settings}
+            name="redis_username"
+            label="שם משתמש"
+            optional="ריק = default"
+            placeholder="default"
+          />
+        </div>
         <div>
           <Field
             settings={settings}
@@ -33,16 +65,14 @@ export function RedisSettings({ settings }: { settings: SettingsController }) {
             placeholder="סיסמה"
           />
         </div>
-        <div>
-          <Field
-            settings={settings}
-            name="redis_key_prefix"
-            label="קידומת מפתחות"
-            optional="להפרדה בין התקנות על אותו Redis"
-            placeholder="pakash"
-          />
-        </div>
       </div>
+      <Field
+        settings={settings}
+        name="redis_key_prefix"
+        label="קידומת מפתחות"
+        optional="להפרדה בין התקנות על אותו Redis"
+        placeholder="pakash"
+      />
       <div className="model-field-header">
         <span className="field-label">מצב החיבור</span>
         <button

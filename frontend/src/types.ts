@@ -126,6 +126,11 @@ export interface RuntimeSettings {
   /** Shared state across processes. Empty URL = off; the password arrives
    *  masked like every other secret. */
   redis_url: string;
+  /** Explicit parts written over the URL's own. Empty = the URL's; with
+   *  the URL empty, a host alone turns Redis on. */
+  redis_host: string;
+  redis_port: number | null;
+  redis_username: string;
   redis_password: string;
   redis_key_prefix: string;
 }

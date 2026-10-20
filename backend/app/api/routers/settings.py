@@ -34,8 +34,11 @@ from app.api.contracts import ModelsProbeRequest, RedisProbeRequest
 from app.common import redis_hub
 from app.common.errors import AppError, ForbiddenError
 from app.common.runtime_settings.normalizers import (
+    normalize_redis_host,
+    normalize_redis_port,
     normalize_redis_prefix,
     normalize_redis_url,
+    redis_connection_url,
 )
 from app.common.sessions import ADMIN_COOKIE_NAME, COOKIE_NAME
 from app.common.throttle import LoginThrottle
@@ -140,8 +143,11 @@ def build_router(
 
 def _redis_report(saved, request: RedisProbeRequest, redis) -> dict:
     try:
-        url = normalize_redis_url(
-            saved.redis_url if request.redis_url is None else request.redis_url
+        url = redis_connection_url(
+            normalize_redis_url(_typed(request.redis_url, saved.redis_url)),
+            normalize_redis_host(_typed(request.redis_host, saved.redis_host)),
+            normalize_redis_port(_typed(request.redis_port, saved.redis_port)),
+            str(_typed(request.redis_username, saved.redis_username)).strip(),
         )
         prefix = normalize_redis_prefix(
             request.redis_key_prefix or saved.redis_key_prefix
@@ -168,3 +174,8 @@ def _redis_report(saved, request: RedisProbeRequest, redis) -> dict:
     except Exception as exc:  # noqa: BLE001 -- shown to the operator as-is
         report["error"] = str(exc) or type(exc).__name__
     return report
+
+
+def _typed(value, saved):
+    """What the form sent, or the saved value when it sent nothing."""
+    return saved if value is None else value

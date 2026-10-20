@@ -14,7 +14,8 @@ does exactly what it did before Redis existed. A caller whose command fails
 reports it with `failed()`, which keeps everyone off Redis for a few seconds
 instead of each request paying a connect timeout.
 
-**The settings stay live.** The URL, password and prefix are read from the
+**The settings stay live.** The URL (with its host, port and username
+overrides), password and prefix are read from the
 runtime store on every call; a change closes the old client and the next
 call builds a new one. `generation` counts those changes, so a long-lived
 user -- the pub/sub listener -- can tell its connection is stale.
@@ -25,6 +26,8 @@ import threading
 import time
 from typing import Callable, Optional
 from urllib.parse import urlsplit, urlunsplit
+
+from app.common.runtime_settings.normalizers import redis_connection_url
 
 _log = logging.getLogger("pakash.redis")
 
@@ -49,6 +52,17 @@ def connect(url: str, password: str = ""):
         socket_connect_timeout=_CONNECT_TIMEOUT_SECONDS,
         socket_timeout=_SOCKET_TIMEOUT_SECONDS,
         health_check_interval=30,
+    )
+
+
+def url_of(settings) -> str:
+    """The URL `settings` connect to: `redis_url` with the explicit host,
+    port and username written over it. "" means no Redis."""
+    return redis_connection_url(
+        settings.redis_url or "",
+        getattr(settings, "redis_host", "") or "",
+        getattr(settings, "redis_port", None),
+        getattr(settings, "redis_username", "") or "",
     )
 
 
@@ -103,7 +117,7 @@ class RedisHub:
     def client(self):
         """The shared client, or `None` -- not configured, or not reachable."""
         settings = self._settings()
-        config = (settings.redis_url or "", settings.redis_password or "")
+        config = (url_of(settings), settings.redis_password or "")
         with self._lock:
             if config != self._config:
                 self._drop()
@@ -141,9 +155,9 @@ class RedisHub:
         with self._lock:
             error = self._error
         return {
-            "configured": bool(settings.redis_url),
+            "configured": bool(url_of(settings)),
             "connected": client is not None,
-            "url": mask_url(settings.redis_url or ""),
+            "url": mask_url(url_of(settings)),
             "prefix": settings.redis_key_prefix or "pakash",
             "error": error,
         }

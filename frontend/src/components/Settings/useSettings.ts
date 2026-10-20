@@ -136,6 +136,9 @@ export function useSettings() {
     try {
       setRedisReport(await probeRedis({
         redis_url: String(values.redis_url ?? ""),
+        redis_host: String(values.redis_host ?? ""),
+        redis_port: String(values.redis_port ?? ""),
+        redis_username: String(values.redis_username ?? ""),
         redis_password: String(values.redis_password ?? ""),
         redis_key_prefix: String(values.redis_key_prefix ?? ""),
       }, password));

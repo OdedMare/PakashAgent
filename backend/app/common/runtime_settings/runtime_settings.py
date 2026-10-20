@@ -50,5 +50,10 @@ class RuntimeSettings:
     # Shared state across processes (`common/redis_hub.py`). Empty URL = off,
     # and every user of it falls back to its in-memory, per-process self.
     redis_url: str = ""
+    # Explicit parts written over the URL's own (`redis_connection_url`);
+    # a host alone, with no URL, is enough to turn Redis on.
+    redis_host: str = ""
+    redis_port: Optional[int] = None
+    redis_username: str = ""
     redis_password: str = ""
     redis_key_prefix: str = "pakash"

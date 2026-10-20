@@ -41,6 +41,11 @@ class RedisProbeRequest(BaseModel):
     """
 
     redis_url: Optional[str] = None
+    # Same rule as the URL: only `None` is "the saved value"; an empty host,
+    # port or username typed in the form means "none", as it would on save.
+    redis_host: Optional[str] = None
+    redis_port: Optional[str] = None
+    redis_username: Optional[str] = None
     redis_password: Optional[str] = None
     redis_key_prefix: Optional[str] = None
 

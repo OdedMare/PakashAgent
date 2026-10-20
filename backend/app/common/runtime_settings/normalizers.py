@@ -1,4 +1,6 @@
 import re
+from typing import Optional
+from urllib.parse import quote, urlsplit, urlunsplit
 
 # What `RuntimeSettingsStore.public()` returns in place of a stored secret,
 # and what the UI sends back for a secret the boss did not retype. Lives here
@@ -56,6 +58,62 @@ def normalize_redis_url(value: str) -> str:
             "redis_url must start with redis://, rediss:// or unix://"
         )
     return cleaned
+
+
+_REDIS_HOST_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,253}$")
+_DEFAULT_REDIS_PORT = 6379
+
+
+def normalize_redis_host(value: str) -> str:
+    """A bare host name or address, or "" for "take it from the URL". An
+    IPv6 address may come with or without its brackets."""
+    cleaned = (value or "").strip().strip("[]")
+    if not cleaned:
+        return ""
+    if not _REDIS_HOST_RE.match(cleaned):
+        raise ValueError("redis_host must be a host name or address only")
+    return cleaned
+
+
+def normalize_redis_port(value) -> Optional[int]:
+    """1-65535, or None for "take it from the URL"."""
+    if value is None or str(value).strip() == "":
+        return None
+    port = int(value)
+    if not 1 <= port <= 65535:
+        raise ValueError("redis_port must be between 1 and 65535")
+    return port
+
+
+def redis_connection_url(
+    url: str, host: str = "", port: Optional[int] = None, username: str = "",
+) -> str:
+    """The URL a client connects to: `url` with the explicit host, port and
+    username written over its own -- the same contract as the database
+    fields. With no URL, a host alone is enough (`redis://host:6379`). ""
+    means no Redis. A `unix://` socket has no host or port to override.
+
+    The password is not folded in: it travels beside the URL as AUTH, so a
+    URL that is shown or logged never carries one it did not already have.
+    """
+    url = (url or "").strip()
+    if not url and not host:
+        return ""
+    if not url:
+        url = "redis://localhost"
+    if url.lower().startswith("unix://") or not (host or port or username):
+        return url
+    parts = urlsplit(url)
+    name = host or parts.hostname or "localhost"
+    if ":" in name:
+        name = "[%s]" % name
+    netloc = "%s:%d" % (name, port or parts.port or _DEFAULT_REDIS_PORT)
+    user = quote(username, safe="") if username else (parts.username or "")
+    if parts.password is not None:
+        user = "%s:%s" % (user, parts.password)
+    if user:
+        netloc = "%s@%s" % (user, netloc)
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, ""))
 
 
 def normalize_redis_prefix(value: str) -> str:

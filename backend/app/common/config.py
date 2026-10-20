@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # How wide one scheduling model call is. Declared here, beside the field that
@@ -242,6 +242,25 @@ class Settings(BaseSettings):
     `redis://host:6379/0`, `rediss://` for TLS, or `unix:///path.sock`. A
     bare `host:port` is accepted and read as `redis://`. Live-editable in
     the panel: every process picks up a saved change within seconds."""
+
+    redis_host: str = ""
+    """Redis host. Overrides the host in `redis_url`; with the URL empty, a
+    host alone turns Redis on (`redis://host:port`)."""
+
+    redis_port: Optional[int] = None
+    """Redis port. Overrides the port in the URL. Empty = the URL's, else
+    6379."""
+
+    redis_username: str = ""
+    """Redis ACL user. Overrides the user in the URL. Empty = the URL's, else
+    the server's `default` user."""
+
+    @field_validator("redis_port", mode="before")
+    @classmethod
+    def _empty_port_is_unset(cls, value):
+        """`PAKASH_REDIS_PORT=` -- what `.env.example` and compose ship --
+        means "not set", not a start-up failure."""
+        return None if isinstance(value, str) and not value.strip() else value
 
     redis_password: str = ""
     """Redis password (AUTH). Empty = none, or whatever the URL carries.
