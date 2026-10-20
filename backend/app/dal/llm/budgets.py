@@ -24,10 +24,11 @@ _CONNECT_TIMEOUT_SECONDS = 30
 _DEFAULT_MAX_CONCURRENCY = 1
 # The model server is a shared finite resource, and a single generation can
 # occupy it for a minute. Bound concurrent HTTP completions process-wide so a
-# burst of requests queues here instead of thrashing the server.
+# burst of requests across API and worker processes queues here instead of
+# thrashing the server.
 #
-# Built on first use rather than at import, from the settings the first call
-# reads. The concurrency limit stays fixed for the life of the process.
+# The in-memory fallback below exists for lightweight adapters and tests with
+# no database configuration. Production uses PostgreSQL advisory locks.
 #
 # The right value depends entirely on the server. One that batches
 # continuously (vLLM, TGI) does its own scheduling and is *starved* by a low
