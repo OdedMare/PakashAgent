@@ -88,7 +88,10 @@ class CopilotWorker:
         elif job["kind"] == "generation":
             with track_activity(lambda activity: self._repository.generation_activity(
                     payload["schedule_id"], team_id, activity)):
-                self._schedules.run_generation(team_id, payload["schedule_id"])
+                self._schedules.run_generation(
+                    team_id, payload["schedule_id"],
+                    payload.get("date", ""), payload.get("through", ""),
+                )
                 # Adaptive splitting can create new spans while this job is
                 # running. Reconcile the durable queue after every checkpoint.
                 self._repository.queue_generation_job(team_id, payload["schedule_id"])
