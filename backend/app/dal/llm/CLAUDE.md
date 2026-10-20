@@ -198,11 +198,14 @@ be ready and the backoff is a guess.
 
 ## Concurrency
 
-`_LLM_SLOTS` bounds in-flight completions process-wide, sized from
-`llm_max_concurrency` on first use. It is built once and **cannot be resized**,
-so unlike every other LLM setting this one takes effect at process start
-rather than on save — the alternative is a UI control that silently does
-nothing.
+`PostgresModelSlots` bounds in-flight completions across the API and every
+worker with session advisory locks. `llm_max_concurrency` is read on each
+acquisition, so a saved value applies to the next call without a restart.
+Each team also holds one team lock, preventing one workspace from occupying
+all global slots. A dead process loses both locks with its database session.
+
+Callers without database settings (small adapters and unit tests) retain the
+priority-aware process-local `ModelSlots` fallback.
 
 The right value depends entirely on the server, which is why there is no good
 default:
@@ -214,7 +217,8 @@ default:
   high one. 1-2 keeps latency honest.
 
 The shipped default is 1 because the shipped endpoint is Ollama. Deployments
-using a continuously-batching server should raise it explicitly.
+using a continuously-batching server should raise it explicitly; the per-team
+quota remains one concurrent completion.
 
 ## Telemetry
 

@@ -221,13 +221,14 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 - `Settings/` דורש סיסמת הגדרות בכותרת, וקורא ל-`GET` ו-`PUT /api/settings`.
 - ההגדרות נשמרות **בקובץ JSON אחד גלובלי** (`runtime-settings.json`): מודלים לכל role, URL ומפתח, timeout, מנוע ומצב יצירה, diet mode.
 - `GET` ו-`POST /api/models`: בדיקת שרת מודלים ורשימת המודלים שלו.
-- `llm_max_concurrency` נקבע רק כשהתהליך עולה.
+- `llm_max_concurrency` נאכף ב-Postgres על ה-API וה-workers יחד, ונקרא מחדש
+  בכל רכישת slot. לכל צוות מותרת קריאת מודל אחת במקביל.
 
 ---
 
 ## 11. מפת ה-LLM המלאה
 
-כל הקריאות עוברות דרך `dal/llm/openai_client.py`: `complete_json`. מעליו יש סולם fallback (schema, json mode, plain, merged system), retry, הגבלת מקביליות (`ModelSlots`, בזיכרון התהליך), לוג טוקנים ו-Opik.
+כל הקריאות עוברות דרך `dal/llm/openai_client.py`: `complete_json`. מעליו יש סולם fallback (schema, json mode, plain, merged system), retry, הגבלת מקביליות משותפת ב-Postgres (`PostgresModelSlots`), לוג טוקנים ו-Opik.
 
 | זרימה | פעולה ב-UI | role | prompt | קריאות | איפה רץ |
 |---|---|---|---|---|---|
@@ -259,14 +260,15 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 
 | בעיה | איפה | השפעה | כיוון פתרון |
 |---|---|---|---|
-| ה-worker מעבד job אחד בכל פעם, ויצירה רצה כ-job אחד ארוך | `worker.py`, `generation/runner.py:119` | יצירה של חודש חוסמת את הצ'אט של **כל** הצוותים | job לכל span, כמה workers, תורים נפרדים לצ'אט וליצירה |
-| מקביליות ה-LLM רק בזיכרון התהליך, וברירת המחדל 1 | `dal/llm/budgets.py`, `model_slots.py` | API ו-worker לא מתואמים, ואין הוגנות בין צוותים | limiter משותף ב-Postgres או Redis, מכסה לכל צוות, ושרת שמעבד במקביל (vLLM או API מתארח) |
 | הגדרות גלובליות בקובץ | `common/runtime_settings/` | כל הצוותים על אותו מודל ומנוע, ולא מסתנכרן בין replicas | להעביר ל-DB, עם דריסה לכל צוות או תוכנית |
 | SSE ו-throttle בזיכרון התהליך | `common/events.py`, `common/throttle.py` | נשבר עם יותר מ-replica אחד | `LISTEN/NOTIFY` או Redis |
 | אין תקציב LLM לכל צוות | – | צוות אחד יכול לצרוך הכול | מונה ומכסה לכל צוות |
 | audit מלא בכל קריאת לוח | `context.view()` | CPU שגדל עם המשתמשים | cache לפי גרסת הסידור |
 | Opik שולח prompts עם נתוני עובדים | `dal/llm/tracing.py` | פרטיות מול כמה לקוחות | החלטה מפורשת או מיסוך |
 | `PAKASH_SESSION_SECRET` ריק כברירת מחדל ב-compose | `docker-compose.yml` | ה-sessions לא תקפים בין תהליכים | חובה להגדיר |
+
+נפתר: יצירה מחולקת ל-job לכל span; ה-worker מפעיל כמה lanes ושומר lane לצ'אט;
+ומכסת המודל משותפת לכל התהליכים דרך advisory locks של Postgres עם quota לצוות.
 
 ---
 

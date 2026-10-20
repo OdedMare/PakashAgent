@@ -136,14 +136,30 @@ class JobsRepository(RepositoryBase):
                         (":job:" + candidate["id"],),
                     )
                     continue
-            row = connection.execute("""
-                UPDATE copilot_jobs SET status='running', attempts=attempts+1,
-                    started_at=NOW(), error='' WHERE id=%s RETURNING *
-            """, (candidate["id"],)).fetchone()
-            connection.commit()
-            claimed = dict(row)
-            claimed["_schedule_lock"] = schedule_locked
-            return claimed
+            try:
+                row = connection.execute("""
+                    UPDATE copilot_jobs SET status='running', attempts=attempts+1,
+                        started_at=NOW(), error='' WHERE id=%s RETURNING *
+                """, (candidate["id"],)).fetchone()
+                connection.commit()
+                claimed = dict(row)
+                claimed["_schedule_lock"] = schedule_locked
+                return claimed
+            except Exception:
+                # Advisory locks are session-scoped, so returning this pooled
+                # connection while either is held would strand the job.
+                connection.rollback()
+                if schedule_locked:
+                    connection.execute(
+                        "SELECT pg_advisory_unlock(hashtextextended(current_schema() || %s, 0))",
+                        (":schedule:" + schedule_id,),
+                    )
+                connection.execute(
+                    "SELECT pg_advisory_unlock(hashtextextended(current_schema() || %s, 0))",
+                    (":job:" + candidate["id"],),
+                )
+                connection.commit()
+                raise
         connection.commit()
         return None
 
