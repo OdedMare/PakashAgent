@@ -1,6 +1,6 @@
 # מפת המערכת: כל פעולה מרכזית, צעד אחר צעד
 
-המסמך מתאר מה קורה בפועל בכל פעולה מרכזית: מה המשתמש עושה, איזה endpoint נקרא, איזה קוד רץ, האם יש קריאה ל-LLM ומה נכתב ל-DB. בסופו יש המלצות מה להשאיר, מה להסיר ומה לבדוק.
+המסמך מתאר מה קורה בפועל בכל פעולה מרכזית: מה המשתמש עושה, איזה endpoint נקרא, איזה קוד רץ, האם יש קריאה ל-LLM ומה נכתב ל-DB. בסופו יש המלצות מה להשאיר, מה להסיר ומה לבדוק, ומדריך צעד אחר צעד להסרת רכיב (סעיף 14).
 
 מקרא:
 - 🤖 יש קריאה ל-LLM
@@ -27,9 +27,13 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
    └────────────── jobs ────────────┘
                                     ▼
                        שרת מודל OpenAI-compatible (dal/llm/)
-                       מכסת מקביליות משותפת ב-Postgres (advisory locks), קריאה אחת לכל צוות
+                       תור מודל משותף: Redis אם מוגדר, אחרת Postgres (advisory locks)
+
+Redis (אופציונלי, common/redis_hub.py) ◄── API ו-worker
+   throttle של כניסות · pub/sub לאירועי SSE · תור המודל
 ```
 
+- **Redis אופציונלי (D33).** אם לא הוגדר URL, או ש-Redis לא זמין, כל רכיב חוזר להתנהגות שהייתה לו בלעדיו: throttle ואירועים בזיכרון התהליך, ותור המודל ב-Postgres. `RedisHub.client()` מחזיר `None` במצב כזה, ו-`failed()` גורם לכולם לחכות כמה שניות לפני ניסיון חוזר.
 - **שלושה תהליכים:** frontend, API ו-worker. ה-worker מושך jobs מ-Postgres (`FOR UPDATE SKIP LOCKED`) ב-`PAKASH_WORKER_CONCURRENCY` threads (ברירת מחדל 4). `PAKASH_CHAT_WORKERS` מהם (ברירת מחדל 1) שמורים ל-lane `interactive`, שמושך רק `manager_chat`, כך שבנייה ארוכה לא תופסת את כל ה-workers.
 - **סוגי jobs:** `manager_chat`, `generation` (job לכל span), `scan` ו-`compile_sources`.
 - **שלוש דרגות מודל** (`dal/llm/model_roles.py`): `advanced` ליצירת סידור, `fast` ל-briefing, ו-`default` לכל השאר.
@@ -42,7 +46,7 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 ### 1.1 כניסת מנהל לצוות ⚙️
 1. במסך `Workspace/Login.tsx` נבחר צוות ומוקלדת סיסמה.
 2. `POST /api/workspace/login`, דרך `bl/workspace_service.py`.
-3. הסיסמה נבדקת מול hash מסוג scrypt (`dal/repository/teams.py`). ניסיונות כושלים מוגבלים ב-`common/throttle.py`, בזיכרון של התהליך.
+3. הסיסמה נבדקת מול hash מסוג scrypt (`dal/repository/teams.py`). ניסיונות כושלים מוגבלים ב-`common/throttle.py`: נעילה ל-15 דקות אחרי 5 טעויות, לפי חשבון ולא לפי IP. עם Redis המונה משותף לכל התהליכים, ובלעדיו הוא בזיכרון של כל תהליך בנפרד.
 4. נשלח cookie חתום ב-HMAC עם `team_id` ו-`role=boss`. כל קריאה אחר כך מקבלת את `team_id` **מה-cookie בלבד**.
 
 ### 1.2 כניסת חבר צוות בקישור שיתוף ⚙️
@@ -170,7 +174,7 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 | `POST /api/schedule/simulate` | `bl/simulate` | ⚙️ |
 | `POST /api/schedule/tool` | הרצת כלי בודד | ⚙️ |
 
-כל אלה הוחלפו בפועל בצ'אט המנהל, וה-UI לא קורא להם. הפונקציות `proposeChange`, `applyChange`, `askAgent`, `briefManager`, `simulateChange` ו-`generateScheduleDay` ב-`frontend/src/services/api.ts` לא בשימוש.
+כל אלה הוחלפו בפועל בצ'אט המנהל, וה-UI לא קורא להם. הפונקציות `proposeChange`, `applyChange`, `askAgent`, `briefManager`, `simulateChange` ו-`generateScheduleDay` ב-`frontend/src/services/api.ts` לא בשימוש. איך מסירים אותם: סעיף 14.
 
 ### 5.4 ניקוי, מחיקה, פרסום ⚙️
 - `POST /{id}/publish` / `unpublish`: מעבר בין draft ל-published ורישום ביומן. חברי צוות רואים רק סידורים מפורסמים.
@@ -203,7 +207,7 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 ### 7.2 בקשת אילוץ: עובד ← מנהל ⚙️
 1. העובד שולח ב-`ConstraintForm.tsx`: `POST /api/employee/requests`.
 2. הבקשה נשמרת ב-`constraint_requests`, **לא** ב-`availability`, ולכן ה-audit לא רואה אותה.
-3. `events.publish(team, "requests")` מעיר את ה-SSE של המנהל (`GET /api/schedule/requests/events`). יש גם polling כל 15 שניות כגיבוי.
+3. `events.publish(team, "requests")` מעיר את ה-SSE של המנהל (`GET /api/schedule/requests/events`). עם Redis האות יוצא בערוץ pub/sub של הצוות, ו-listener אחד בכל תהליך מעביר אותו ל-streams המקומיים, כך שמנהל מחובר לכל worker מקבל אותו. בלי Redis ההעברה בתוך התהליך בלבד. בכל מקרה יש polling כל 15 שניות כגיבוי.
 4. המנהל ב-`RequestInbox.tsx` מאשר (`POST /api/schedule/requests/{id}/approve`), ואז נוצרת שורת `availability` עם `source=employee_reported`. דחייה: `/reject`.
 5. העובד יכול למשוך את הבקשה: `/requests/{id}/withdraw`.
 
@@ -238,17 +242,25 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 
 ## 10. הגדרות מערכת ⚙️
 - `Settings/` דורש סיסמת הגדרות בכותרת, וקורא ל-`GET` ו-`PUT /api/settings`.
-- ההגדרות נשמרות **בקובץ JSON אחד גלובלי** (`runtime-settings.json`): מודלים לכל role, URL ומפתח, timeout, אימות SSL (`llm_verify_ssl`), מנוע ומצב יצירה, diet mode.
+- ההגדרות נשמרות **בקובץ JSON אחד גלובלי** (`runtime-settings.json`): מודלים לכל role, URL ומפתח, timeout, אימות SSL (`llm_verify_ssl`), מנוע ומצב יצירה, diet mode, וחיבור Redis.
 - `GET` ו-`POST /api/models`: בדיקת שרת מודלים ורשימת המודלים שלו. הבדיקה מקבלת גם `llm_verify_ssl` שלא נשמר עדיין, כדי לבדוק שרת פנימי עם תעודה בחתימה עצמית לפני השמירה.
 - `llm_verify_ssl` דלוק כברירת מחדל. כיבוי שלו חושף את החיבור, כולל מפתח ה-API, ליירוט, ולכן הוא מיועד רק לשרת פנימי.
-- `llm_max_concurrency` נאכף ב-Postgres על ה-API וה-workers יחד, ונקרא מחדש
-  בכל רכישת slot. לכל צוות מותרת קריאת מודל אחת במקביל.
+- `llm_max_concurrency` נאכף על ה-API וה-workers יחד, ונקרא מחדש בכל רכישת slot. לכל צוות מותרת קריאת מודל אחת במקביל (פירוט בסעיף 11).
+- **Redis:** בפאנל יש קטע Redis (`Settings/RedisSettings.tsx`) עם URL, סיסמה ו-key prefix. אפשר גם דרך `PAKASH_REDIS_URL`, `PAKASH_REDIS_PASSWORD` ו-`PAKASH_REDIS_KEY_PREFIX`. `POST /api/settings/redis` בודק חיבור (שנשמר, או שהוקלד ועוד לא נשמר) ומחזיר מידע על השרת, המפתחות של האפליקציה, חשבונות נעולים, קריאות מודל פעילות והתור. כשל חיבור מוחזר כתשובה ולא כשגיאה. תהליכים אחרים קולטים URL חדש תוך כמה שניות, כי `RedisHub` קורא מחדש את קובץ ההגדרות.
+- קונסולת המפעיל (`Admin/SystemView.tsx`) מציגה את מצב Redis.
 
 ---
 
 ## 11. מפת ה-LLM המלאה
 
-כל הקריאות עוברות דרך `dal/llm/openai_client.py`: `complete_json`. מעליו יש סולם fallback (schema, json mode, plain, merged system), retry, הגבלת מקביליות משותפת ב-Postgres (`PostgresModelSlots`), לוג טוקנים ו-Opik.
+כל הקריאות עוברות דרך `dal/llm/openai_client.py`: `complete_json`. מעליו יש סולם fallback (schema, json mode, plain, merged system), retry, הגבלת מקביליות משותפת, לוג טוקנים ו-Opik.
+
+**תור המודל** (`dal/llm/budgets.py`, `slots_for`), לפי סדר עדיפות:
+1. `RedisModelSlots` (`dal/llm/redis_slots.py`), כש-Redis רשום (`share_slots`, נקרא ב-`main.py` וב-`worker.py`) וזמין. כרטיסים מוגשים לפי עדיפות ואז לפי סדר הגעה, כך שצ'אט של מנהל עוקף יום בנייה שממתין בתור (`priority_for_flow`: רק `scheduler` הוא background). מי שמחזיק slot מחדש lease של 30 שניות, וממתינים מרעננים את הכרטיס שלהם, כך שתהליך שנהרג משחרר את מקומו תוך lease אחד.
+2. `PostgresModelSlots` (advisory locks), כשאין Redis או שהוא נכשל.
+3. `ModelSlots` בזיכרון, כשאין גם database (בעיקר בטסטים).
+
+שלושתם שומרים על אותו חוזה: גבול אחד לכל ה-deployment מתוך `llm_max_concurrency`, וקריאה אחת במקביל לכל צוות.
 
 | זרימה | פעולה ב-UI | role | prompt | קריאות | איפה רץ |
 |---|---|---|---|---|---|
@@ -271,7 +283,7 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
    - למדוד את `model_rounds` ולשקול להוריד את `_ROUNDS`, שעומד כרגע על 7.
    - שאלות קריאה בלבד להריץ על role `fast`.
 3. **יצירה:** לשמור על `auto` או לעבור ל-`code`. לשקול מצב `week`. לקצר את ה-reason לכל שיבוץ (טוקני פלט) או להפעיל `llm_diet_mode`. מקורות קבועים כבר נשמרים (4.2.3), אבל ההנחיה החופשית של הבנייה עדיין מתורגמת מחדש בכל span, עד 4 קריאות כל פעם. למדוד את `translation_steps`, `compiled_hits` ו-`tokens_saved`, ולשקול להוריד את `MAX_TURNS`.
-4. **להסיר את ה-endpoints הישנים** שעולים כסף ולא בשימוש.
+4. **להסיר את ה-endpoints הישנים** שעולים כסף ולא בשימוש (סעיף 14).
 
 ---
 
@@ -279,15 +291,16 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 
 | בעיה | איפה | השפעה | כיוון פתרון |
 |---|---|---|---|
-| הגדרות גלובליות בקובץ | `common/runtime_settings/` | כל הצוותים על אותו מודל ומנוע, ולא מסתנכרן בין replicas | להעביר ל-DB, עם דריסה לכל צוות או תוכנית |
-| SSE ו-throttle בזיכרון התהליך | `common/events.py`, `common/throttle.py` | נשבר עם יותר מ-replica אחד | `LISTEN/NOTIFY` או Redis |
+| הגדרות גלובליות בקובץ | `common/runtime_settings/` | כל הצוותים על אותו מודל ומנוע. תהליכים אחרים קוראים את הקובץ מחדש, אבל זה עובד רק כשהם חולקים volume | להעביר ל-DB, עם דריסה לכל צוות או תוכנית |
+| Redis לא מוגדר ב-compose | `docker-compose.yml` | אין שירות `redis`, ו-`PAKASH_REDIS_URL` לא מועבר ל-`backend` ול-`copilot`. לכן ברירת המחדל רצה בלי Redis: throttle ו-SSE בזיכרון התהליך | להוסיף שירות `redis` ולהעביר את `PAKASH_REDIS_*` לשני התהליכים, או להגדיר בפאנל |
 | אין תקציב LLM לכל צוות | – | יש הגבלה של קריאה אחת במקביל לצוות, אבל אין מכסת טוקנים, וצוות אחד יכול לצרוך הרבה | מונה ומכסה לכל צוות |
 | audit מלא בכל קריאת לוח | `context.view()` | CPU שגדל עם המשתמשים | cache לפי גרסת הסידור |
 | Opik שולח prompts עם נתוני עובדים | `dal/llm/tracing.py` | פרטיות מול כמה לקוחות | החלטה מפורשת או מיסוך |
 | `PAKASH_SESSION_SECRET` ריק כברירת מחדל ב-compose | `docker-compose.yml` | ה-sessions לא תקפים בין תהליכים | חובה להגדיר |
 
 נפתר: יצירה מחולקת ל-job לכל span; ה-worker מפעיל כמה lanes ושומר lane לצ'אט;
-ומכסת המודל משותפת לכל התהליכים דרך advisory locks של Postgres עם quota לצוות.
+מכסת המודל משותפת לכל התהליכים (Redis, ובלעדיו advisory locks של Postgres) עם quota לצוות;
+ה-throttle והאירועים של SSE משותפים דרך Redis כשהוא מוגדר (D33).
 
 ---
 
@@ -300,18 +313,52 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 | Backend | Frontend (`services/api.ts`) | קוד שאולי מת איתם |
 |---|---|---|
 | `POST /schedule/brief` | `briefManager` | `bl/briefing.py`, `prompts/briefing.md` |
-| `POST /schedule/propose` | `proposeChange` | `bl/changes/agent.py`, `prompts/changes.md` (לבדוק מה הצ'אט עדיין מייבא מ-`changes/`) |
+| `POST /schedule/propose` | `proposeChange` | המחלקה `ChangeAgent`, `prompts/changes.md` (שאר `changes/` בשימוש הצ'אט) |
 | `POST /schedule/apply` | `applyChange` | החלפות עדיין משתמשות ב-`schedule_service.apply`, אז להסיר רק את ה-route |
 | `POST /schedule/ask` | `askAgent` | `bl/planner/model_loop.py`, `prompts/planner.md` (`fallback_answers` בשימוש הצ'אט) |
 | `POST /schedule/simulate`, `POST /schedule/tool` | `simulateChange` | `bl/simulate` עדיין בשימוש הצ'אט, אז להסיר רק את ה-route |
-| `POST /schedule/generate`, `/generate/{id}/next` | `generateScheduleDay` | `Scheduler.generate()` הישן ו-`_ChunkedRun` |
+| `POST /schedule/generate`, `/generate/{id}/next` | `generateScheduleDay` | `Scheduler.generate()` הישן ו-`ChunkedRun` |
 | `GET /constraints/list`, `/history/list`, `/current` | – | – |
 | `GET /api/schedule/requests`, `/identities`, `/identities/release`, `GET /api/schedule/swaps` | – | לבדוק אם נחוצים לאינטגרציה חיצונית |
 | `GET /api/employee/swaps/incoming` | – | – |
 
-לפני מחיקה צריך לבדוק שאף טסט ב-`backend/tests/` ואף מודול אחר לא תלוי בהם. למשל `bl/chat_reply.py` מייבא מ-`bl/changes/agent.py` ומ-`bl/planner/shaping.py`, `bl/chat_tools.py` מייבא מ-`bl/planner/fallback_answers.py`, ו-`bl/chat_schema.py` מייבא מ-`bl/planner/schema.py`.
+הפירוט המלא, כולל מה חייב להישאר ואילו טסטים מושפעים, נמצא בסעיף 14.
 
 ### לבדוק או לפשט
 - **Copilot:** אישור ו-rollback בלי תופעת לוואי. לפשט, או לחבר לצ'אט.
 - **תיעוד:** `backend/CLAUDE.md` מתאר את `bl/interview/` שלא קיים.
-- **ה-worker:** כבר מפוצל ל-lanes ול-job לכל span. נשאר להעביר SSE, throttle והגדרות מהזיכרון ומהקובץ לפני שמוסיפים replicas.
+- **ה-worker:** כבר מפוצל ל-lanes ול-job לכל span, ו-SSE ו-throttle משותפים דרך Redis. לפני שמוסיפים replicas נשאר להפעיל Redis ב-compose ולהעביר את ההגדרות מהקובץ ל-DB.
+
+---
+
+## 14. איך מסירים רכיב לא חשוב
+
+### הסדר הכללי (לכל רכיב)
+1. **לוודא שה-UI לא קורא לו:** לחפש את שם הפונקציה ב-`frontend/src/` (למשל `grep -rn briefManager frontend/src`). אם היא מוגדרת ב-`services/api.ts` ולא מופיעה בשום מקום אחר, היא מתה.
+2. **להסיר מה-frontend:** את הפונקציה מ-`services/api.ts`, ואת ה-types שרק היא השתמשה בהם מ-`types.ts`.
+3. **להסיר את ה-route** מ-`api/routers/...`, ואת ה-contract מ-`api/contracts/...` אם אף route אחר לא משתמש בו.
+4. **להסיר את המתודה מה-facade:** `bl/schedule_service/service.py` מעביר כל route למחלקה קטנה (`changing.py`, `answering.py`, `speaking.py`). מסירים את המתודה, ואת המחלקה עצמה אם היא נשארת ריקה.
+5. **לחפש מי עוד מייבא את המודול** לפני שמוחקים קובץ: `grep -rn "from app.bl.<module>" backend/`. הטבלה למטה מסכמת מה נמצא היום.
+6. **טסטים:** למחוק טסטים שבודקים רק את הרכיב שהוסר. טסט שבודק התנהגות שהצ'אט עדיין משתמש בה מעבירים לנתיב החדש ולא מוחקים.
+7. **prompts:** למחוק את קובץ ה-`.md` מ-`bl/prompts/` ואת הטסט שלו ב-`tests/test_prompts.py`.
+8. **להריץ בדיקות:** `cd backend && python -m pytest -q`, ובצד הלקוח `cd frontend && npx tsc --noEmit && npm run lint && npm test`.
+9. **תיעוד:** לעדכן את `backend/CLAUDE.md`, את `backend/app/bl/CLAUDE.md` ואת המסמך הזה.
+10. **commit אחד לכל רכיב**, כדי שיהיה קל לבטל אם משהו נשבר.
+
+### מה מוחקים ומה חייב להישאר, לכל מועמד
+| רכיב | מה מוחקים | מה **חייב להישאר** (ומי משתמש בו) | טסטים שמושפעים |
+|---|---|---|---|
+| **Briefing** (`/schedule/brief`) | ה-route ב-`routers/schedules/agent.py`, `briefManager`, `bl/briefing.py`, `prompts/briefing.md`, `BriefingService` ב-`speaking.py` | `WorkbookExporter` באותו קובץ (`speaking.py`) משמש לייצוא. ב-`contracts/briefing.py` יש גם את `CopilotPermissionUpdate`, אז מוחקים רק את `Briefing`, `BriefingItem` ו-`BriefingRequest` | `test_briefing.py`, הטסט של briefing ב-`test_prompts.py` |
+| **Ask** (`/schedule/ask`) | ה-route, `askAgent`, `bl/planner/agent.py`, `model_loop.py`, `fallback.py`, `prompts/planner.md`, `QuestionService.ask` | `planner/schema.py` (`chat_schema.py`), `planner/shaping.py` (`chat_reply.py`), `planner/fallback_answers.py` ו-`trace.py` (`chat_tools.py`). `bl/intent/dates.py` משמש את `chat_contract.py` | `test_planner.py`, החלקים של `PlanningAgent` ב-`test_clarification.py`, ו-`test_intent.py` אם מוחקים גם את `intent/reader.py` |
+| **Propose / apply** (`/schedule/propose`, `/schedule/apply`) | שני ה-routes, `proposeChange`, `applyChange`, `ChangeService.propose`, `prompts/changes.md` והמחלקה `ChangeAgent` | `changes/proposal.py`, `schema.py`, `values.py`, `targets.py`, `questions.py`, `profile_ops.py` והקבועים `OP_*` (הצ'אט, ההחלפות, `simulate`). `chat_reply.py` מייבא את `_closures_for_model` ו-`_schedule_for_model` מ-`changes/agent.py`, אז קודם מעבירים אותן ל-`changes/values.py`, ורק אחר כך מוחקים את `agent.py`. `ChangeService.apply` נשאר, כי אישור החלפה משתמש בו | `test_change_operations.py`, `test_clarification.py`, וחלק מ-`test_scheduler.py` (בערך שורות 780–900 משתמשות ב-`ChangeAgent`) |
+| **Simulate / tool** (`/schedule/simulate`, `/schedule/tool`) | שני ה-routes, `simulateChange`, `QuestionService.simulate` ו-`run_tool`. אם גם Ask הוסר, אפשר למחוק את כל `answering.py` | כל `bl/simulate/`: `hypothetical.py` משמש את הצ'אט, ההחלפות ו-`swap_options.py`. כל `bl/tools/` (הצ'אט) | `test_simulate.py` נשאר, כי הוא בודק את המודול ולא את ה-route |
+| **Generate הישן** (`/generate`, `/generate/{id}/next`) | שני ה-routes ו-`generateScheduleDay` | `Scheduler.generate()` ו-`ChunkedRun`: **לא למחוק בשלב הראשון.** עשרות טסטים ב-`test_scheduler.py` עוברים דרך `generate()`. קודם מעבירים אותם ל-`generate_span()`, ורק אז מוחקים את `generate()`, את `scheduler/planning.py` ואת `builder.generate` | `test_scheduler.py` |
+| **Reads לא בשימוש** (`/constraints/list`, `/history/list`, `/current`, `/requests`, `/identities`, `/swaps`, `/employee/swaps/incoming`) | רק ה-routes | מתודות ה-repository, אם routes אחרים קוראים להן | לבדוק את `test_schedule_api.py`, `test_employee_api.py` ו-`test_swap_api.py` |
+| **Copilot** (אם מצמצמים לתצפיות) | `approve`, `rollback`, `PATCH /permissions/{type}` ו-`CopilotPermissionUpdate` | `scan`, הפריטים בתיבה ו-`dismiss` | `test_copilot.py` |
+
+### סדר מומלץ
+1. **Briefing**, ו-**Generate הישן (רק ה-routes):** אין להם תלויות, ולכן הם הכי בטוחים.
+2. **Simulate / tool:** מסירים רק routes.
+3. **Ask:** מוחקים את הלולאה ומשאירים את הקבצים שהצ'אט משתמש בהם.
+4. **Propose:** קודם מעבירים את שתי הפונקציות מ-`changes/agent.py`, ואז מוחקים.
+5. **`Scheduler.generate`:** רק אחרי שהטסטים עברו ל-`generate_span()`.
