@@ -80,6 +80,10 @@ agent must be able to reason about a schedule it did not author.
 
 ## D7 — Import infers layout, boss confirms
 
+> **Removed.** Importing schedules from Excel was taken out of the product:
+> the importer, the preview/confirm endpoints and the import screen no longer
+> exist. Kept here as the record of what was decided at the time.
+
 No fixed template. The agent reads whatever it's given, infers the structure, and
 shows its interpretation for confirmation before committing anything.
 

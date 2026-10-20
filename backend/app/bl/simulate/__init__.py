@@ -4,7 +4,7 @@
 stored schedule and a list of operations and returns what the period would
 look like if they landed — the new warnings, the ones that would clear, the
 coverage that would move, and who would be affected. It writes nothing
-because it *can* write nothing: like `bl/changes.py` and `bl/importer.py`, it
+because it *can* write nothing: like `bl/changes.py`, it
 is given no repository at all, so "the simulation did not persist" is a
 property of the wiring rather than a rule somebody has to remember.
 

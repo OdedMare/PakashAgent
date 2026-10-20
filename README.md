@@ -92,23 +92,18 @@ guards), `bl/audit.py` and its table-driven tests, `bl/scheduler.py`,
 tool layer (`bl/tools.py`, `bl/planner.py`, `bl/intent.py`, `bl/simulate.py`),
 the schedule tables, the management HTTP layer, and the RTL UI for all of it.
 
-Not built yet: `bl/importer.py` and the import-confirmation screens — see
-[`docs/BUILD_ORDER.md`](docs/BUILD_ORDER.md) step 6.
-
 Every architectural decision was settled in a design interview and is recorded —
 with its reasoning — in [`docs/DECISIONS.md`](docs/DECISIONS.md). Read that before
 writing code; several decisions are counterintuitive and one is a deliberate,
 accepted tradeoff.
 
-## The four steps the product exists to serve
+## The three steps the product exists to serve
 
 1. **Unit setup** — the boss defines employees, the workplace's own shift
    vocabulary, rotations, dependencies and rules in a structured form.
 2. **The boss loads shifts** — or asks the agent to generate them. Both are
    supported and land in the same representation.
-3. **Import from Excel/docs** — real files vary structurally. The agent infers
-   the layout and shows its reading for confirmation before committing.
-4. **Conversational changes** — "Dana's sick Thursday." The agent asks why if the
+3. **Conversational changes** — "Dana's sick Thursday." The agent asks why if the
    boss didn't say, proposes a replacement with its reasoning, and applies it on
    confirmation.
 

@@ -13,7 +13,6 @@ import {
   MousePointer2,
   ShieldCheck,
   Sparkles,
-  Upload,
   UserRound,
   Users,
 } from "lucide-react";
@@ -75,7 +74,7 @@ export default function TutorialPage() {
         <div className="tutorial-first-steps">
           <article><span>1</span><h3>פותחים צוות</h3><p>שם וסיסמה יוצרים סביבת עבודה נפרדת. שום לוח או כלל לא עוברים בין צוותים.</p></article>
           <article><span>2</span><h3>מגדירים את היחידה</h3><p>טופס ההגדרה מרכז עובדים, שמות משמרות, סבבים, צרכים וכללים — ללא שימוש במודל.</p></article>
-          <article><span>3</span><h3>בוחרים איך להתחיל</h3><p>בונים סידור עם הסוכן, פותחים שבוע ריק לשיבוץ ידני, או מייבאים קובץ קיים.</p></article>
+          <article><span>3</span><h3>בוחרים איך להתחיל</h3><p>בונים סידור עם הסוכן או פותחים שבוע ריק לשיבוץ ידני.</p></article>
         </div>
       </section>
 
@@ -140,9 +139,8 @@ export default function TutorialPage() {
           />
         </TutorialChapter>
 
-        <TutorialChapter number="04" title="לשתף, לייבא ולהוציא קובץ" icon={<FileDown size={19} />}>
+        <TutorialChapter number="04" title="לשתף ולהוציא קובץ" icon={<FileDown size={19} />}>
           <div className="tutorial-action-list">
-            <div><Upload size={18} /><strong>ייבוא</strong><p>העלו Excel או מסמך. המערכת מציגה תחילה איך היא קראה אותו; רק ‘אישור הייבוא’ שומר. כללים מוצעים מתחילים לא מסומנים.</p></div>
             <div><FileDown size={18} /><strong>Excel</strong><p>כפתור ‘אקסל’ מוריד את התקופה הנוכחית כקובץ, בלי לשנות את הלוח.</p></div>
             <div><Users size={18} /><strong>קישור לצוות</strong><p>אייקון השיתוף מציג קישור צפייה. החלפת הקישור מבטלת את הקודם.</p></div>
             <div><HelpCircle size={18} /><strong>הגדרות והגדרת יחידה</strong><p>גלגל השיניים מנהל חיבור מודל וסיסמה; אייקון הכוונון פותח את פרטי היחידה, העובדים והמשמרות.</p></div>

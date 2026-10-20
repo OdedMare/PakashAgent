@@ -8,10 +8,9 @@ be read inside its own tab is one step removed from how the work circulates.
 
 **One format, and it is not a preference.** The sheet is laid out shift-major
 with dates across the top — the shape of Sample A in
-[`FILE_FORMATS.md`](../../../docs/FILE_FORMATS.md). Exporting in the layout
-the importer is being built to read means a week can leave, be edited in
-Excel, and come back. A prettier bespoke layout would be a file this product
-cannot read.
+[`FILE_FORMATS.md`](../../../docs/FILE_FORMATS.md). It is the layout
+the workplace already keeps, so an exported week reads like the sheets the
+manager is used to.
 
 **A message for the team is not here.** Posting the week to a group chat is a
 thing the manager asks the *agent* for, in the conversation they are already
@@ -45,9 +44,7 @@ def as_workbook(schedule: dict, title: str = "") -> bytes:
     """The week as `.xlsx`, shift-major with dates across the top.
 
     Deliberately the shape of Sample A in `FILE_FORMATS.md` rather than a
-    layout of our own: the importer is being built to read that shape, so a
-    week exported here can be edited in Excel and brought back. A prettier
-    bespoke layout would be a file this product cannot read.
+    layout of our own: it is the shape the workplace already keeps.
 
     Right-to-left is set on the sheet itself. Hebrew in a left-to-right sheet
     renders with the first column on the wrong side, which is not cosmetic

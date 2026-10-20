@@ -19,7 +19,6 @@ Two shapes are load-bearing here:
 | `reader.py` | Current period, overview, placement check |
 | `statistics.py` | The stats panel's numbers for a span of dates or one person |
 | `generation/` | Opening a period, stepping and running a range job |
-| `importing.py` | Import preview and commit (D7) |
 | `manual.py` | The manual path (D18) |
 | `changing.py`, `operations.py` | Propose / apply / move (D8/D12) |
 | `constraints.py`, `preferences.py` | Constraints, history, preferences |
@@ -43,7 +42,6 @@ from app.bl.schedule_service.constants import (  # noqa: F401
     GENERATION_FAILED,
     GENERATION_HEARTBEAT_SECONDS,
     GENERATION_RUNNING,
-    IMPORTED_REASON,
     MANUAL_REASON,
 )
 from app.bl.schedule_service.service import ScheduleService

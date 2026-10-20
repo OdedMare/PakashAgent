@@ -136,8 +136,8 @@ hold the card's last line; it is still written on every path and still
 one hover away — but a justification is read once, when the placement is made,
 and the grid is read every day.
 
-Built so far: the workspace gate, the interview, the management area, and the
-import screen. All surfaces exist.
+Built so far: the workspace gate, the interview and the management area. All
+surfaces exist.
 
 | Surface | Purpose |
 |---|---|
@@ -151,36 +151,10 @@ import screen. All surfaces exist.
 | Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `Board/ConfirmDrop.tsx` |
 | Copilot inbox | Durable observations, proposals, failures, permissions and audit — `Management/CopilotInbox.tsx` |
 | Preferences | What the agent remembers, all of it visible — `Management/Preferences.tsx` |
-| Import confirm | Inferred interpretation, confirmed before anything is stored — `Management/ImportSchedule.tsx` |
 | Employee view | **Read-only** schedule — `MemberArea` renders the same `Calendar` with `readOnly` |
 | Personal area | One employee's own shifts, constraint requests and swaps — `src/components/Employee/` |
 | Employee assistant | Swap and "better week" questions; suggests checked swaps, never writes (D27) — `Employee/AssistantChat.tsx` |
 | Request inbox | The manager ruling on submissions — `Management/RequestInbox.tsx`; a new one pops up live (`RequestToast.tsx`, pushed via `useLiveInbox.ts`, D29) |
-
-## Importing a schedule the workplace already had
-
-`Management/ImportSchedule.tsx`, opened from the toolbar. Two screens, and the
-split is the decision
-([D7](../docs/DECISIONS.md#d7--import-infers-layout-boss-confirms)): reading
-files calls `previewImport`, which **writes nothing**, and the confirm button
-is the only thing that persists. The screen says so outright, because a filled
-interpretation otherwise looks like a completed result.
-
-**There is no template, and the screen says that before the first click.** A
-manager who has been asked for one by other software will go looking for it
-here. The importer infers axis semantics, so shifts-in-rows, people-in-rows,
-and a bare list of dates and names are all readable.
-
-**Where the file named no shift, the screen asks.** A `date_only` sheet
-imports with an empty shift name and the confirm button stays disabled until
-one is chosen — filling it in with a guess is exactly the hardcoding
-[D9](../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace) forbids, and
-a disabled button is how the question stays visible.
-
-**Learned rules arrive unticked.** Each candidate shows the count behind it,
-so the manager approves a claim they can check rather than one they must
-trust. Nothing is ticked by default: a candidate becomes a rule by being
-chosen, never by having been proposed.
 
 ## The management area
 
@@ -440,8 +414,7 @@ with warnings is a valid schedule the boss may knowingly accept
   manager's stats; the personal area has the assistant instead. A suggested
   swap's button sends the ordinary `proposeSwap`, and its card says the
   colleague and the manager still have to agree.
-- Import and change are two-step: interpretation/proposal, then confirmation.
-  Never auto-confirm either.
+- A change is two-step: proposal, then confirmation. Never auto-confirm it.
 - The agent's reasoning is shown before the boss confirms — it is the point, not a
   detail to hide behind a disclosure triangle ([D8](../docs/DECISIONS.md#d8--two-reasons-both-required)).
 - Shift names come from the API. No hardcoded Hebrew shift labels.

@@ -47,26 +47,13 @@ class RuleLearner(object):
     def __init__(self, llm):
         self._llm = llm
 
-    def propose(
-        self, observations: dict, profile: Optional[dict] = None,
-        instructions: str = "",
-    ) -> dict:
-        """Candidate rules from patterns counted in files. Nothing is applied."""
-        if not (observations or {}).get("people"):
-            return {"rules": [], "notes": []}
-        return self._ask("learn", {
-            "observations": observations,
-            "profile": _profile_for_model(profile),
-            "instructions": bounded(instructions),
-        })
-
     def propose_from_corrections(
         self, corrections: dict, profile: Optional[dict] = None,
     ) -> dict:
         """Candidate rules from what the manager kept overriding.
 
-        Same contract as `propose()`. Returns early on too little history: a
-        round trip to be told there is nothing yet is computable here.
+        Nothing is applied. Returns early on too little history: a round
+        trip to be told there is nothing yet is computable here.
         """
         if not (corrections or {}).get("repeated"):
             return {"rules": [], "notes": []}
@@ -88,8 +75,7 @@ class RuleLearner(object):
 def candidates(answer: Any) -> dict:
     """Validate and normalise what the model returned.
 
-    Shared by both paths so they cannot drift: a candidate without evidence is
-    dropped (approving an uncheckable rule would make the confirm step
+    A candidate without evidence is dropped (approving an uncheckable rule would make the confirm step
     theatre), anything but an explicit `hard` is soft (an invented hard rule
     nags the manager, D1), and `approved` is always false (D7).
     """

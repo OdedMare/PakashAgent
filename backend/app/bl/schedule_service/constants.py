@@ -102,13 +102,6 @@ HISTORY_CACHE_ENTRIES = 64
 # `moved_from` applies to a dragged shift.
 MANUAL_REASON = "שובץ ידנית על ידי המנהל"
 
-# What an imported row says for itself. The agent made no judgment about it
-# -- it is a record of what the workplace already did -- so claiming a reason
-# here would be inventing one. `assignments.reason` stays NOT NULL and D8 is
-# answered the same way the manual path answers it: by a different voice
-# saying plainly where the row came from.
-IMPORTED_REASON = "יובא מקובץ סידור קיים"
-
 # Stored on a pinned row when a build opens with required assignments.
 PINNED_REASON = "שיבוץ חובה שנבחר על ידי המנהל בעת בניית הסידור"
 

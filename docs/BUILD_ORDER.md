@@ -37,7 +37,7 @@ order below. **`export.py` is worth reading before step 6:** it already
 writes the Sample A layout the importer must parse, so the two are the same
 shape seen from opposite ends.
 
-**Step 6, the importer, is now built** — `bl/importer.py` (layout inference)
+**Step 6, the importer, was built and later removed** (the text below is history) — `bl/importer.py` (layout inference)
 and `bl/learn.py` (what a stack of past files says about the workplace), with
 both `FILE_FORMATS.md` samples as fixtures under `tests/fixtures/build.py`.
 One inference reads both, which is the regression the two samples exist for.
@@ -98,7 +98,7 @@ including on-call weighting — the importer and the audit both depend on it.
 **5. Schedule generation.**
 Assignments carry reasons. Same representation as imported schedules.
 
-**6. Importer.** *(done)*
+**6. Importer.** *(removed — importing from Excel was later taken out of the product)*
 Both fixtures from [`FILE_FORMATS.md`](FILE_FORMATS.md) are built in
 `tests/fixtures/build.py` and one inference passes both — they are
 structurally different on purpose, and that is the whole test.

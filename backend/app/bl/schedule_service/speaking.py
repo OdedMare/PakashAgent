@@ -91,7 +91,7 @@ class BriefingService:
 
 
 class WorkbookExporter:
-    """One period as `.xlsx`, in the layout the importer reads back (D17).
+    """One period as `.xlsx`, in Sample A's layout (D17).
 
     The unaudited stored schedule is passed deliberately: an export is a
     picture of what was decided, and warnings are advice about it, not part

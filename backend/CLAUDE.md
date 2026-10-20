@@ -8,8 +8,8 @@ Real Excel layouts: [`../docs/FILE_FORMATS.md`](../docs/FILE_FORMATS.md).
 ## Purpose
 
 Turn a conversation with the boss into a maintained shift schedule. The agent
-learns the workplace once (intro interview), then generates schedules, imports
-ones the boss already has, and rearranges them on request — explaining every
+learns the workplace once (intro interview), then generates schedules and
+rearranges them on request — explaining every
 decision and recording every reason.
 
 ## Runtime and commands
@@ -92,22 +92,11 @@ uvicorn app.main:app --reload
 - `bl/schedule_service.create_blank/assign/unassign` — the manual path (D18).
   The only schedule writes with no model call anywhere on them.
 - `bl/export.py` — a period out as `.xlsx`. Pure functions, no model, no
-  repository. Laid out shift-major like `FILE_FORMATS.md` Sample A so an
-  exported week can be edited and imported back.
-- `bl/importer/` — Excel/Word ingest with layout inference. **No model
-  call**: which axis is time and whether shift is nested under date is grid
-  arithmetic, and code that counts cannot hallucinate a person into a shift.
-  Three layouts, scored against each other: `shift_major` (Sample A),
-  `person_major` (Sample B), and `date_only` — dates and people with no shift
-  axis at all, tried last and only when no row carries a lane label, so a real
-  shift axis is never flattened into it. Column headers written as hours
-  (`07:00-15:00`) fold into the declared shift running those hours rather than
-  becoming a second shift with the same meaning. Returns an `Interpretation`;
-  handed no repository, so it cannot write.
-- `bl/learn/` — what a stack of past files says about the workplace.
-  `observe()` counts patterns across every uploaded file (no model);
-  `RuleLearner` turns those counts into candidate rules in the manager's own
-  words (D2) with the evidence attached. Proposes only — nothing is approved
+  repository. Laid out shift-major like `FILE_FORMATS.md` Sample A.
+- `bl/learn/` — what the manager's own corrections say about the workplace.
+  `observe_corrections()` counts repeated corrections in the change log (no
+  model); `RuleLearner` turns those counts into candidate rules in the
+  manager's own words (D2) with the evidence attached. Proposes only — nothing is approved
   by having been proposed.
 - `bl/tools/` — **the named questions the agent may ask, answered in pure
   Python.** Seven read-only operations (`read_period`, `employee_state`,
@@ -150,7 +139,7 @@ package's `__init__` docstring carries a table of which module owns what.
   loud warning when broken. This is a deliberate, accepted tradeoff — see D1/D3.
 - **How full a slot is has exactly one answer, and `bl/audit/` owns it.**
   `required_headcount()` says how many people it asks for — reading the stored
-  grid first, since that is what the week was generated or imported into — and
+  grid first, since that is what the week was generated into — and
   `counts_toward_staffing()` says whether the person standing on it fills one
   of those seats. `audit`, `shift_stats`, `tools.coverage_gaps`,
   `simulate._coverage` and the board all go through the pair. A second count
@@ -161,13 +150,6 @@ package's `__init__` docstring carries a table of which module owns what.
   and leaves the slot needing everybody it asked for.
 - **Shift names are never hardcoded.** They come from the interview. Any literal
   `"בוקר"` outside a test fixture or a Hebrew vocabulary table is a bug ([D9](../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)).
-  On import this means *matched against* the declared vocabulary, not
-  *restricted to* it: a header that matches none is taken from the sheet's own
-  wording, because the file records something the workplace really ran and
-  dropping it would silently lose history. Nothing is invented — a name is
-  either the workplace's or the manager's file's. A sheet naming no shift at
-  all (`date_only`) imports with the name **empty**, and the confirm screen
-  asks; filling it in with a guess is the bug D9 is about.
 - **No structured rule vocabulary.** Rules are the boss's own sentences ([D2](../docs/DECISIONS.md#d2--rules-stay-natural-language)).
   What code made of one (`compiled_sources`, D32) is a kept derivative,
   looked up by the sentence's words; it never replaces or rewrites it.
@@ -216,30 +198,15 @@ package's `__init__` docstring carries a table of which module owns what.
   so rows predating the column keep their meaning, and `move_assignment`
   leaves it alone: dragging a hand-placed shift does not make it the agent's.
 - **The export layout is Sample A, not a design choice.** `bl/export.py`
-  writes the shape `bl/importer/` is being built to read, so a week can
-  leave and come back ([D17](../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
-  Changing the layout to something prettier produces a file this product
-  cannot read.
+  writes the shape the workplace already keeps ([D17](../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
 - **A message for the team is written by the agent, not templated in code.**
   Posting the week to a group chat is writing, and the manager asks for it in
   the conversation — the change agent answers with `reply` and no operations.
   Nothing is sent anywhere; the product has no channel to the team beyond the
   share link and holds no employee contact details.
-- **An import is never committed before confirmation.** Inference produces an
-  interpretation the boss approves; only then does anything persist ([D7](../docs/DECISIONS.md#d7--import-infers-layout-boss-confirms)).
-  Split across two endpoints so the confirmation is structural rather than a
-  dialog in front of a write that already happened: `/import/preview` reads
-  and returns, `/import/confirm` is the only one that writes. `confirm` takes
-  the rows back from the caller rather than re-reading the file, so a name the
-  manager corrected on the screen is what gets stored.
-- **An imported schedule keeps the shifts it actually ran.** `commit_import`
-  builds the slot grid from the file's own rows, not from `build_slots` —
-  regenerating it from today's vocabulary would quietly reshape history to
-  match a profile that may have changed since ([D9](../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)).
 - **A learned pattern is not a rule.** `bl/learn/` returns *candidates*
-  carrying their evidence, and the leap from "has not happened" to "must not
-  happen" is the manager's to make: a file showing nobody on Saturday may mean
-  Saturday is closed, or that the sheet only covered weekdays. Anything but an
+  carrying their evidence, and the leap from a repeated correction to a rule
+  is the manager's to make. Anything but an
   explicit `hard` is stored soft — an invented hard rule nags the manager
   about a rule they never stated ([D1](../docs/DECISIONS.md#d1--rules-are-hard-or-soft)).
 - **No endpoint lets an employee mutate a schedule.** Enforced by
@@ -334,7 +301,7 @@ package's `__init__` docstring carries a table of which module owns what.
   publish (D3).
 - **A simulation persists nothing, structurally.** `bl/simulate/` is
   handed no repository at all ([D20](../docs/DECISIONS.md#d20--a-simulation-is-not-a-proposal)),
-  like `changes.py` and `importer.py`. Approving one is an ordinary
+  like `changes.py`. Approving one is an ordinary
   `apply()` with the manager's reason — there is no dedicated endpoint for
   it, because a second write path is how a confirmation step gets routed
   around.

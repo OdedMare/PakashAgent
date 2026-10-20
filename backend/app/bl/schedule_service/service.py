@@ -27,7 +27,6 @@ from app.bl.schedule_service.generation.history import AssignmentHistory
 from app.bl.schedule_service.generation.range import RangeBuilder
 from app.bl.schedule_service.generation.runner import GenerationRunner
 from app.bl.schedule_service.generation.stepper import GenerationStepper
-from app.bl.schedule_service.importing import ImportCommitter, ImportPreview
 from app.bl.schedule_service.learning import CorrectionLearning
 from app.bl.schedule_service.manual import ManualEditor
 from app.bl.schedule_service.preferences import PreferenceService
@@ -57,8 +56,6 @@ class ScheduleService:
         self._range = RangeBuilder(context, gate, settings)
         self._stepper = stepper
         self._runner = GenerationRunner(context, stepper, launch, sleep)
-        self._import_preview = ImportPreview(RuleLearner(llm))
-        self._import_commit = ImportCommitter(context)
         profiles = ProfileService(repository)
         self._manual = ManualEditor(context, profiles)
         self._changes = ChangeService(context, ChangeAgent(llm), profiles)
@@ -136,16 +133,6 @@ class ScheduleService:
 
     def run_generation(self, *args, **kwargs):
         return self._runner.run_durable(*args, **kwargs)
-
-    # -- import (D7) ---------------------------------------------------------
-
-    def preview_import(self, team_id, files, learn_rules=True):
-        return self._import_preview.preview(
-            self._context.profile(team_id), files, learn_rules
-        )
-
-    def commit_import(self, *args, **kwargs):
-        return self._import_commit.commit(*args, **kwargs)
 
     # -- the manual path (D18) -----------------------------------------------
 

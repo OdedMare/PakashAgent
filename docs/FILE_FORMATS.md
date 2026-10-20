@@ -1,5 +1,8 @@
 # Real schedule file formats
 
+> Importing schedules from files was removed from the product. These samples
+> still define the layout `bl/export.py` writes (Sample A).
+
 Derived from two schedule files supplied by the boss. They are the evidence
 behind [D7](DECISIONS.md#d7--import-infers-layout-boss-confirms) and
 [D9](DECISIONS.md#d9--shift-vocabulary-is-per-workplace), and they should become

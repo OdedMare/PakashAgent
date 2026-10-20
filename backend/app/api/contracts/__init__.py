@@ -93,20 +93,10 @@ from app.api.contracts.employee import (  # noqa: F401
     ConstraintSubmission,
     EmployeeLoginRequest,
     EmployeeSignInRequest,
-    ReadAssignment,
     ReleaseRequest,
     RequestDecision,
     SwapAnswer,
     SwapProposal,
-)
-from app.api.contracts.imports import (  # noqa: F401
-    CandidateRule,
-    ImportConfirmRequest,
-    ImportFailure,
-    ImportPreview,
-    ImportedAssignment,
-    ImportedConstraint,
-    ImportedPeriod,
 )
 from app.api.contracts.agent import (  # noqa: F401
     AgentAnswer,

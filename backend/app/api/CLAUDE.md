@@ -6,7 +6,7 @@ the result.
 ## Routers
 
 Built so far: `workspace.py`, `profile.py`, `schedules.py`, `health.py`.
-`imports.py` arrives with `bl/importer/`; `changes.py` and `employees.py` were
+`changes.py` and `employees.py` were
 folded into `schedules.py` rather than split, since they share the schedule and
 the team scoping.
 
@@ -16,17 +16,14 @@ the team scoping.
 | `admin.py` | The צוות משמרות זהב console (D28): operator sign-in, every team with its counts, open (name + password)/rename/suspend/delete a team, reset its manager password, rotate its link |
 | `profile.py` | Boss-only structured unit setup and profile updates |
 | `schedules/` | The management area: read/generate a period — whole, from one day to another (`build_from`/`build_through`), or a run of days inside an existing draft (`/generate/{id}/range/start`) — read every period across a span of dates for the board's two-week and month views (`/between`, capped at 62 days), the stats panel's numbers for a span of dates or one person (`/stats`, boss-only, same cap), open one blank and fill it by hand (D18), take somebody off the roster (`/departure`, with a writing-nothing `/departure/preview` first: end date set, later shifts vacated, name kept), propose and apply changes, constraints, history, plus asking (`/ask`, `/tool`), simulating (`/simulate`) and preferences (D19–D21) |
-| `imports.py` | Upload a file, return the inferred interpretation, commit on confirm |
 | `employees.py` | Roster management |
 | `health.py` | Liveness |
 | `employee/` | The employee's own area: claim an identity, read your own shifts, submit a constraint request or swap, ask the assistant (`/assistant`, read-only, D27) — plus the boss-guarded router that rules on them and `GET /api/schedule/requests/events`, the manager's SSE stream that says an inbox moved (D29) |
 
 ## The two-step contracts
 
-Two flows are deliberately **two calls**, not one:
+A change is deliberately **two calls**, not one:
 
-- **Import** — `POST` the file returns an *interpretation*, persisting nothing.
-  A second call commits it. Never collapse these ([D7](../../../docs/DECISIONS.md#d7--import-infers-layout-boss-confirms)).
 - **Change** — proposing returns the agent's reasoning and the resulting warnings.
   A second call applies it. The boss confirms in between ([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)).
   **A drag on the calendar is the same contract**: the gesture writes nothing,

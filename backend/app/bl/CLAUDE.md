@@ -7,7 +7,7 @@ with.
 
 Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
 `scheduler.py`, `changes.py`, `briefing.py`, `export.py`,
-`schedule_service.py`, `prompts/`. Only `importer.py` remains.
+`schedule_service.py`, `prompts/`. Importing schedules from files was removed.
 
 | File | Owns |
 |---|---|
@@ -21,7 +21,6 @@ Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
 | `schedule_service/` | Persistence and orchestration around all three: propose, confirm, apply |
 | `audit/` | **Pure-Python advisory checks. No LLM.** Also the fairness arithmetic the scheduler and the employee area read |
 | `export/` | **A period out as `.xlsx`.** Pure functions, no model, no repository |
-| `importer/` | Excel/doc ingest with layout inference |
 | `tools/` | **The named questions the agent may ask. Pure Python, no LLM, no write** — including `profile_gaps`, what setup still lacks |
 | `planner/` | The tool loop, with a deterministic fallback when no model is reachable |
 | `intent/` | **Reading a Hebrew sentence with no model.** Seven shapes; never guesses |
@@ -419,7 +418,7 @@ touched — including the person a change takes a shift *away* from
 ([D20](../../../docs/DECISIONS.md#d20--a-simulation-is-not-a-proposal)).
 
 Handed **no repository**, so persisting nothing is structural rather than a
-rule to remember — the same shape `changes.py` and `importer.py` have. The
+rule to remember — the same shape `changes.py` has. The
 warning diff keys on code/person/date/shift rather than on the message,
 because `_over_hours` writes its running total into the sentence and a
 warning that merely got worse would otherwise read as a new one.
@@ -523,8 +522,7 @@ before accepting it rather than after.
 
 A period out as `.xlsx`, shift-major with dates across the top — the shape of
 Sample A in [`../../../docs/FILE_FORMATS.md`](../../../docs/FILE_FORMATS.md).
-That layout is the point, not a style: it is what `importer.py` is being
-built to read, so an exported week can be edited in Excel and brought back
+It is the layout the workplace already keeps
 ([D17](../../../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
 
 The grid is built from the **slot grid** and then filled from the
@@ -536,25 +534,6 @@ does not exist.
 
 **A message for the team is not here.** That is the agent's job, answered in
 `changes.py` as `reply` with no operations.
-
-## `importer.py`
-
-Excel/doc ingest. Full format evidence: [`../../../docs/FILE_FORMATS.md`](../../../docs/FILE_FORMATS.md).
-
-`openpyxl`/`pandas` read the raw grid including merged header cells. The model then
-infers **axis semantics** — which axis is time, whether shift is nested under date,
-whether the other lanes are shifts or people. The two real samples differ on every
-one of those, so none may be assumed.
-
-Each cell is classified: name → assignment, `לא זמין`/`לא זמינה` → unavailability,
-empty → nothing. **Availability and assignments share one grid.**
-
-Shift headers match against the profile vocabulary ([D9](../../../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)).
-Hebrew weekdays and both date formats (`d/M/yy`, `d.M`) parse via a shared
-vocabulary module.
-
-Emits an interpretation for the boss to confirm. **Nothing persists before
-confirmation** ([D7](../../../docs/DECISIONS.md#d7--import-infers-layout-boss-confirms)).
 
 ## Rules
 
@@ -569,6 +548,5 @@ confirmation** ([D7](../../../docs/DECISIONS.md#d7--import-infers-layout-boss-co
 - Rules stay natural language.
 - Every assignment carries the agent's reason; every change also carries the
   boss's.
-- Imports are confirmed before they persist.
 - Business logic stays here; SQL stays in `dal/repository/`; model calls go
   through `dal/llm/`.

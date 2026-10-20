@@ -19,7 +19,7 @@
    ▼
 API (FastAPI, main.py) ── routers ב-api/routers/ ── guards ב-api/dependencies.py
    │                     │
-   │  שירותים ב-bl/       │  קריאות LLM סינכרוניות: עוזר עובד, למידה בייבוא
+   │  שירותים ב-bl/       │  קריאות LLM סינכרוניות: עוזר עובד, למידה משינויים
    ▼                     ▼
 PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפרד)
    ▲                                │  כמה lanes: interactive (צ'אט מנהל)
@@ -131,7 +131,7 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 - `shape.py` בודק כל שורה שמורה מחדש מול הרוסטר של היום. התרגום הוא נגזרת שנשמרת, והוא אף פעם לא מחליף את המשפט של המנהל (D2).
 
 ### 4.3 ייצוא ⚙️
-`GET /api/schedule/export/{id}` מריץ את `bl/export.py` ומחזיר xlsx בפריסת Sample A, שאפשר לייבא בחזרה.
+`GET /api/schedule/export/{id}` מריץ את `bl/export.py` ומחזיר xlsx בפריסת Sample A.
 
 ---
 
@@ -257,7 +257,6 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 | תרגום הנחיות (auto, `bl/directive_agent/`) | GenerateDialog / צ'אט | advanced | `scheduler_directives.md` | 1–4 לכל span (לולאת כלים), רק למקורות שלא ב-cache | worker |
 | תרגום קבוע (`bl/compiled_sources/`) | שמירת פרופיל או העדפה | advanced | `scheduler_directives.md` (`mode: compile`) | 1–4 לכל שמירה | worker |
 | עוזר עובד | AssistantChat | default | `employee_assistant.md` | 1 | API |
-| למידה בייבוא | ImportSchedule | default | `learn.md` | 1 לכל preview | API |
 | למידה משינויים | LearnedFromChanges | default | `learn_changes.md` | 1 | API |
 | 💤 propose | – | default | `changes.md` | 1 | API |
 | 💤 ask | – | default | `planner.md` | עד 3 | API |
@@ -272,8 +271,7 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
    - למדוד את `model_rounds` ולשקול להוריד את `_ROUNDS`, שעומד כרגע על 7.
    - שאלות קריאה בלבד להריץ על role `fast`.
 3. **יצירה:** לשמור על `auto` או לעבור ל-`code`. לשקול מצב `week`. לקצר את ה-reason לכל שיבוץ (טוקני פלט) או להפעיל `llm_diet_mode`. מקורות קבועים כבר נשמרים (4.2.3), אבל ההנחיה החופשית של הבנייה עדיין מתורגמת מחדש בכל span, עד 4 קריאות כל פעם. למדוד את `translation_steps`, `compiled_hits` ו-`tokens_saved`, ולשקול להוריד את `MAX_TURNS`.
-4. **ייבוא:** להפוך את `learn_rules` ל-opt-in, או לשמור במטמון לפי hash של הקבצים.
-5. **להסיר את ה-endpoints הישנים** שעולים כסף ולא בשימוש.
+4. **להסיר את ה-endpoints הישנים** שעולים כסף ולא בשימוש.
 
 ---
 
@@ -296,7 +294,7 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 ## 13. סיכום: להשאיר, להסיר, לבדוק
 
 ### להשאיר (הליבה, בשימוש)
-כניסה והרשאות · פרופיל · לוח ושיבוץ ידני · יצירה (start, run, progress, cancel, range) · צ'אט מנהל · גרירה עם סיבה · פרסום, ניקוי ומחיקה · ייבוא וייצוא · עזיבת עובד · אילוצים והעדפות · אזור עובד (me, בקשות, החלפות) · סטטיסטיקות · הגדרות · קונסולת מפעיל.
+כניסה והרשאות · פרופיל · לוח ושיבוץ ידני · יצירה (start, run, progress, cancel, range) · צ'אט מנהל · גרירה עם סיבה · פרסום, ניקוי ומחיקה · ייצוא · עזיבת עובד · אילוצים והעדפות · אזור עובד (me, בקשות, החלפות) · סטטיסטיקות · הגדרות · קונסולת מפעיל.
 
 ### מועמדים להסרה (💤 לא נקראים מה-UI)
 | Backend | Frontend (`services/api.ts`) | קוד שאולי מת איתם |
@@ -315,6 +313,5 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 
 ### לבדוק או לפשט
 - **Copilot:** אישור ו-rollback בלי תופעת לוואי. לפשט, או לחבר לצ'אט.
-- **למידה בייבוא:** מופעלת כברירת מחדל ועולה קריאת LLM בכל preview.
 - **תיעוד:** `backend/CLAUDE.md` מתאר את `bl/interview/` שלא קיים.
 - **ה-worker:** כבר מפוצל ל-lanes ול-job לכל span. נשאר להעביר SSE, throttle והגדרות מהזיכרון ומהקובץ לפני שמוסיפים replicas.

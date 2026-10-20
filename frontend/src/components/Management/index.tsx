@@ -37,7 +37,6 @@ import { ProfileGapsNotice } from "./ProfileGapsNotice";
 import { CopilotInbox } from "./CopilotInbox";
 import { History } from "./History";
 import { LearnedFromChanges } from "./LearnedFromChanges";
-import { ImportSchedule } from "./ImportSchedule";
 import { Preferences } from "./Preferences";
 import { RequestInbox } from "./RequestInbox";
 import { RequestToast } from "./RequestToast";
@@ -143,9 +142,6 @@ export function Management({
   }, [dismissArrivals]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  // The import flow. Opening it writes nothing; the screen's own confirm
-  // button is what persists (D7).
-  const [importOpen, setImportOpen] = useState(false);
   const [autoGenerating, setAutoGenerating] = useState(false);
   const autoGenerationStarted = useRef(false);
   // A sentence the briefing offered, on its way to the composer. Held as a
@@ -235,7 +231,7 @@ export function Management({
           id: "week",
           label: "לפתוח סידור לשבוע",
           done: periods.length > 0 || Boolean(schedule),
-          detail: "עם הסוכן, ידנית, או בייבוא מקובץ",
+          detail: "עם הסוכן או ידנית",
           actionLabel: "ללוח",
           onAction: showBoard,
         },
@@ -646,7 +642,6 @@ export function Management({
             navigateToWeek={chatWeek}
             onRefreshReady={registerBoardRefresh}
             onOpenAgent={() => openAgent()}
-            onImport={() => setImportOpen(true)}
             // What the agent is currently saying, so the board can show
             // *where* on the week it applies. The same state the cards in the
             // control room render — one source, so the two screens can never
@@ -754,7 +749,6 @@ export function Management({
             draftKey={suggested.n}
             onPreview={setChatPreview}
             onOpenReceipt={(date) => setChatWeek((previous) => ({ date, n: (previous?.n ?? 0) + 1 }))}
-            onImport={() => setImportOpen(true)}
           />
 
           <div hidden={section !== "overview"}>
@@ -821,21 +815,6 @@ export function Management({
           onDismiss={dismissArrivals}
         />
       </main>
-
-      {/* Reading the files writes nothing; this screen's own confirm button
-          is the only thing that persists (D7). */}
-      {importOpen ? (
-        <ImportSchedule
-          shiftNames={(overview?.shifts ?? [])
-            .map((shift) => String((shift as { name?: unknown }).name ?? ""))
-            .filter(Boolean)}
-          onClose={() => setImportOpen(false)}
-          onImported={() => {
-            setImportOpen(false);
-            void state.refresh();
-          }}
-        />
-      ) : null}
 
       {settingsOpen ? (
         <SettingsPanel onClose={() => setSettingsOpen(false)} />
