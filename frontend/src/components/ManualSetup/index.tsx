@@ -259,7 +259,6 @@ export function ManualSetup({
             <textarea value={generalExitSchedule} onChange={(event) => setGeneralExitSchedule(event.target.value)} rows={3} placeholder="לדוגמה: השבוע צוות א סוגר; חמשושים יוצאים בחמישי ב־10:00 וחוזרים בראשון ב־08:00" />
           </Field>
           <CheckboxGrid label="ימי פעילות" values={DAYS} selected={operatingDays} onChange={setOperatingDays} />
-          <PatternOptions selected={enabledExitPatterns} locked={usedExitPatterns} onChange={setEnabledExitPatterns} />
         </SetupSection>
 
         <SetupSection icon={<Repeat2 />} title="סבבים ותלתונים" hint="מגדירים עוגן ושעות סגירה לקבוצה א׳ בלבד, בסבב ובתלתון; הקבוצות האחרות נגזרות ממנה. ההגדרות חלות על השיבוץ הבא — סידור קיים לא נבנה מחדש.">
