@@ -147,7 +147,7 @@ class OpenAIJsonClient:
             content, current, rung = ladder.complete(
                 call.client, call.model, messages, max_tokens, schema,
                 settings.llm_repetition_penalty,
-                slots_for(settings).reserve(
+                slots_for(self._store).reserve(
                     priority_for_flow(flow), queue_seconds(settings, flow)
                 ),
                 _budget_seconds(settings, flow),

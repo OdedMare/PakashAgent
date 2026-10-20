@@ -9,7 +9,9 @@ import threading
 
 import httpx
 
-from app.dal.llm.model_slots import INTERACTIVE, ModelSlots, priority_for_flow
+from app.dal.llm.model_slots import (
+    INTERACTIVE, ModelSlots, PostgresModelSlots, priority_for_flow,
+)
 
 # How long to wait for the TCP/TLS handshake to a model server, in every
 # configuration including "no timeout". Reaching a server that is up is a
@@ -36,8 +38,11 @@ _LLM_SLOTS = None
 _LLM_SLOTS_LOCK = threading.Lock()
 
 
-def slots_for(settings):
+def slots_for(store):
     global _LLM_SLOTS
+    settings = store.get()
+    if getattr(settings, "database_url", ""):
+        return PostgresModelSlots(store)
     if _LLM_SLOTS is None:
         with _LLM_SLOTS_LOCK:
             if _LLM_SLOTS is None:
