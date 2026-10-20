@@ -1031,6 +1031,17 @@ question for the manager; code checks a relative range lies within 90 days
 of the anchor and an absolute one within the dates the sentence writes, and
 refuses to keep a recurring sentence spread over one period's dates.
 
+**Policies became translatable (step 2).** Four request kinds were added so
+the policies that used to be kept as unresolved can be read into code:
+`min_rest`, `max_consecutive`, `balance` and `requires_with`, the first
+three allowed to name nobody (the whole team). A policy is translated clause
+by clause and left unresolved whole if any clause has no kind — training,
+rotation restated, "use judgement". `COMPILER_VERSION` moved to 2 so every
+kept negative is read again. `balance` is a ranking, not a guarantee: it is
+weighed like any soft wish, and is not reported as broken. Trainees are
+still not placed by code, so a training policy still goes to the full
+scheduler.
+
 **Shown, not edited.** Setup lists what code made of each sentence:
 translated, needs AI (with the reason), a wish code will not weigh,
 translating, or expired. Correcting a reading means rewording the sentence.

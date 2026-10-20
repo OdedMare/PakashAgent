@@ -65,9 +65,16 @@ code mode stays zero-token and refuses semantic inputs rather than dropping
 them.
 
 **Code honours structured requests, not only pins and absences.**
-`schedule_requests.py` defines four more shapes — `avoid`, `prefer`,
-`max_count` (per period or per week) and `not_together` — each narrowed by
-shifts, dates and weekdays, and each hard or soft. `read_requests` is the
+`schedule_requests.py` defines eight more shapes — `avoid`, `prefer`,
+`max_count` (per period or per week), `not_together`, and since D32's
+second step `min_rest` (hours between shifts), `max_consecutive` (days in a
+row), `balance` (an even share, soft only) and `requires_with` (only beside
+one of `partners`) — each narrowed by shifts, dates and weekdays, and each
+hard or soft. The first three of the new four may name nobody, meaning the
+whole team, which is what lets a rest or fairness *policy* be translated
+rather than sent to the full scheduler. `deterministic_scheduler/limits.py`
+evaluates them with shift times and up to 14 days of history, since a run
+or a short rest does not start where the period does. `read_requests` is the
 single validator: every name must be on the roster and every shift in the
 vocabulary (D9), and the translation step refuses the whole answer when one
 request fails it, exactly as it does for a bad directive.

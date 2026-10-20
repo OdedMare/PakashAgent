@@ -24,18 +24,39 @@ shift on those dates.
 - `max_count`: one employee works at most `count` matching shifts,
   `per` the whole `period` or each `week` (Sunday to Saturday).
 - `not_together`: two or more employees should not share a matching shift.
+- `min_rest`: at least `count` hours between the end of one shift and the
+  start of the next for the same person. `employees: []` means everyone.
+  `shifts` narrows it to rests touching those shifts ("after a night, 16
+  hours" is `shifts: ["<the night shift>"]`, `count: 16`).
+- `max_consecutive`: at most `count` consecutive calendar days on matching
+  shifts. `employees: []` means everyone; `shifts` narrows it ("no more than
+  two nights in a row" is the night shift with `count: 2`).
+- `balance`: matching shifts spread evenly among `employees`, or among
+  everyone when empty. Always `is_hard: false`. "סופ״שים מתחלקים שווה" is
+  `weekdays: ["שישי", "שבת"]`; "לילות בצורה הוגנת" is the night shift.
+- `requires_with`: one employee works matching shifts only together with at
+  least one of `partners` on the same shift. `partners` are people the
+  source names; "רק עם מישהו ותיק" names nobody and is `unresolved`.
+
+`partners` is empty for every kind but `requires_with`.
 
 `shifts`, `dates` (ISO) and `weekdays` (Hebrew, e.g. "שלישי") narrow which
 slots a request covers; an empty list means any. Use `count: null` unless the
-kind is `max_count`. Set `is_hard: true` only for words such as "must",
-"never", "אסור", "בשום מקרה"; words such as "prefer", "if possible", "עדיף",
-"אם אפשר" are `is_hard: false`. Use `weight: 1` unless the source says one
+kind is `max_count`, `max_consecutive` (whole days) or `min_rest` (hours).
+Set `is_hard: true` only for words such as "must", "never", "אסור", "בשום
+מקרה", or a limit stated as a rule ("מינימום 12 שעות", "לא יותר משני לילות
+ברצף"); words such as "prefer", "if possible", "עדיף", "אם אפשר" are
+`is_hard: false`. Use `weight: 1` unless the source says one
 wish matters more than another, then 2 or 3.
 
-Never extend anything beyond the supplied period, infer which person the
-manager meant, choose between people, expand a recurring rule into future
-periods, or translate fairness, training, rest, rotation or general policy.
-Put those sources in `unresolved`.
+Never infer which person the manager meant or choose between people, and
+never extend a `mode: "period"` source beyond the supplied period. A rest,
+run or fairness policy is translatable when it states a number or an even
+share in the terms above;
+translate each of its clauses, and put the source in `unresolved` if any
+clause has no kind (training, rotation, "use judgement", a general
+principle). Rotation and closures are already enforced by code: a policy
+that only restates them is `unresolved` with that reason.
 
 Each source says whether it is `binding`. A non-binding source (a soft rule
 or a preference) you cannot translate faithfully belongs in `unresolved`

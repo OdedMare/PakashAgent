@@ -15,7 +15,9 @@ from app.bl.shared import text
 
 # Raise to throw away every kept translation, for a change in how code
 # reads an answer that the prompt's own text does not show.
-COMPILER_VERSION = "1"
+# 2: rest, runs, even shares and company became translatable (step 2 of
+# D32), so a policy kept as unresolved under 1 is worth reading again.
+COMPILER_VERSION = "2"
 
 
 def vocab_key(profile: dict) -> str:
