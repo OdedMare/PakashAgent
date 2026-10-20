@@ -104,14 +104,7 @@ PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפ�
 6. עצירה: `/generate/{id}/cancel`, וה-worker עוצר בסוף היום הנוכחי. הסתרת הבאנר: `/dismiss`. יום בודד: `/day/start`. טווח בתוך טיוטה: `/range/start` (שיבוצים ידניים נשמרים כ-pins).
 7. 💤 `/generate` (המסלול הישן, בחלקים) ו-`/generate/{id}/next` לא נקראים מה-UI.
 
-### 4.3 ייבוא מאקסל ⚙️ + 🤖 אופציונלי
-1. `ImportSchedule.tsx` שולח קבצים ל-`POST /api/schedule/import/preview?learn_rules=true`.
-2. `bl/importer/` קורא את הגריד ומזהה את הפריסה (shift_major, person_major או date_only) **בלי מודל**.
-3. `bl/learn/observe()` סופר דפוסים בין הקבצים, בלי מודל.
-4. 🤖 אם `learn_rules=true` (ברירת המחדל), `RuleLearner` מנסח כללים מוצעים: קריאת LLM אחת.
-5. המנהל מתקן במסך ומאשר. `POST /api/schedule/import/confirm` הוא **היחיד שכותב**, והוא שומר את מה שחזר מהמסך ולא קורא את הקובץ מחדש.
-
-### 4.4 ייצוא ⚙️
+### 4.3 ייצוא ⚙️
 `GET /api/schedule/export/{id}` מריץ את `bl/export.py` ומחזיר xlsx בפריסת Sample A, שאפשר לייבא בחזרה.
 
 ---
