@@ -62,7 +62,9 @@ uvicorn app.main:app --reload
   `quiet` — no operations, so there is no path from a briefing to a write.
 - `bl/copilot.py` + `app/worker.py` — the durable observation loop. PostgreSQL
   owns jobs, inbox items, per-action permissions and append-only audit events;
-  the separate worker survives browser and API restarts.
+  the separate worker survives browser and API restarts. Generation is queued
+  as one job per span. The worker runs several lanes, with at least one lane
+  reserved for manager chat so a long build cannot occupy every worker.
 - `bl/schedule_service/` — persistence and ordering around those three plus
   the audit: propose, confirm, apply, publish, constraints, history.
 - `bl/audit/` — **pure Python, no LLM.** Recomputes countable facts and returns
