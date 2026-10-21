@@ -1,30 +1,14 @@
-"""Answering a manager's question by running tools, with or without a model.
+"""What the manager chat's question path shares with the no-model reader.
 
-`ChangeAgent` handles the one-shot case by putting the whole period in front
-of the model. That does not work for *"מי יכול להחליף את יוסי בסופ״ש"*, which
-needs four countable things worked out in order. So this runs a **loop**: the
-model picks tools, `bl/tools` answers with arithmetic, and the results go back
-until the model can speak. It never contributes a number, a name, or a
-verdict (D3).
-
-**It answers; it does not act.** Every tool is read-only, this package holds
-no repository, and the response schema has no operation in it — the same
-shape `briefing.py` has (D15).
-
-**Without a model it still works.** The fallback reads the sentence with
-keyword matching (`bl/intent.py`), runs the *same tools*, and renders Hebrew
-templates. The answer's content is identical either way, because the content
-was never the model's to begin with.
+The model-driven question loop (`/ask`) was replaced by the manager chat;
+what is left here is what the chat still reads: the question and tool-call
+shapes it answers in, and the deterministic answers it gives without a
+model (`fallback_answers.py`, over `bl/tools` and `bl/intent`). Nothing here
+writes, and no answer carries an operation (D19).
 
 | Module | Owns |
 |---|---|
-| `agent.py` | `PlanningAgent`: model first, fallback on failure |
-| `model_loop.py` | The bounded tool loop |
-| `fallback.py`, `fallback_answers.py` | The no-model path |
-| `schema.py`, `shaping.py` | The response schema; bounding and payloads |
+| `fallback_answers.py` | Replacement answers with no model |
+| `schema.py`, `shaping.py` | The question and tool-call schema; shaping a question |
+| `trace.py` | The steps an answer reports |
 """
-
-from app.bl.planner.agent import PlanningAgent
-from app.bl.planner.schema import PLANNER_RESPONSE_SCHEMA
-
-__all__ = ["PlanningAgent", "PLANNER_RESPONSE_SCHEMA"]

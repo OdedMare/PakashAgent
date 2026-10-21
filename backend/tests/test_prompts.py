@@ -13,11 +13,10 @@ def _fresh_cache():
     prompts.clear_cache()
 
 
-def test_the_briefing_prompt_resolves_every_include():
-    text = prompts.load("briefing")
+def test_the_manager_chat_prompt_resolves_every_include():
+    text = prompts.load("manager_chat")
 
     assert "<!-- include:" not in text
-    assert "## Untrusted input" in text
     assert "## Language" in text
 
 
@@ -47,9 +46,3 @@ def test_directives_expand_absence_ranges():
     assert "every supplied\nshift" in directives
 
 
-def test_briefing_prioritizes_the_closing_group_before_fairness():
-    text = prompts.load("briefing", reload=True)
-
-    assert "schedule.closures" in text
-    assert "cross_rotation" in text
-    assert "closure continuity comes first" in text

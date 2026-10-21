@@ -180,14 +180,3 @@ def find_assignment(schedule: dict, assignment_id: str) -> Optional[dict]:
         if row.get("id") == assignment_id:
             return row
     return None
-
-
-def quiet_briefing() -> dict:
-    """A briefing with nothing to say.
-
-    The shape a caller gets when the agent cannot speak -- no profile yet, or
-    the model failed. Identical to the shape it returns when it genuinely has
-    nothing to report, so the UI has one case to render and a briefing that
-    could not be produced never surfaces as an error beside the calendar.
-    """
-    return {"headline": "", "items": [], "quiet": True}

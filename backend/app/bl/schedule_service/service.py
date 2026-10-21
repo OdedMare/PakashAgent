@@ -11,14 +11,12 @@ remember and in what order -- which is why they, and not those, own the
 repository. Every method takes the team from the caller's signed session.
 """
 
-from app.bl.briefing import BriefingAgent
 from app.bl.changes import ChangeAgent
 from app.bl.learn import RuleLearner
-from app.bl.planner import PlanningAgent
 from app.bl.profile_service import ProfileService
 from app.bl.scheduler import Scheduler
 from app.bl.tools import ScheduleTools
-from app.bl.schedule_service.answering import QuestionService
+from app.bl.schedule_service.answering import Simulator
 from app.bl.schedule_service.changing import ChangeService
 from app.bl.schedule_service.constraints import ConstraintService
 from app.bl.schedule_service.context import ScheduleContext
@@ -32,7 +30,7 @@ from app.bl.schedule_service.manual import ManualEditor
 from app.bl.schedule_service.preferences import PreferenceService
 from app.bl.schedule_service.profile_gate import ProfileGate
 from app.bl.schedule_service.reader import ScheduleReader
-from app.bl.schedule_service.speaking import BriefingService, WorkbookExporter
+from app.bl.schedule_service.speaking import WorkbookExporter
 from app.bl.schedule_service.statistics import StatsReader
 
 
@@ -42,9 +40,7 @@ class ScheduleService:
     ):
         context = ScheduleContext(repository)
         scheduler = Scheduler(llm, settings)
-        # Read-only tools, and the loop that runs them. `PlanningAgent` is
-        # handed the tools rather than the repository, so the answering path
-        # has no route to a write even by accident.
+        # Read-only tools: the profile gate asks them what setup still lacks.
         tools = ScheduleTools(repository)
         gate = ProfileGate(repository, tools)
         history = AssignmentHistory(repository)
@@ -61,16 +57,9 @@ class ScheduleService:
         self._changes = ChangeService(context, ChangeAgent(llm), profiles)
         self._constraints = ConstraintService(repository)
         self._learning = CorrectionLearning(repository, RuleLearner(llm))
-        self._questions = QuestionService(
-            context, PlanningAgent(llm, tools), tools
-        )
+        self._simulator = Simulator(context)
         self._preferences = PreferenceService(repository)
         self._exporter = WorkbookExporter(context)
-        self._briefing = BriefingService(
-            context, BriefingAgent(llm), tools,
-            current=self._reader.current,
-            observe_quietly=self._learning.observe_quietly,
-        )
         self._context = context
 
     # -- reading -------------------------------------------------------------
@@ -195,14 +184,8 @@ class ScheduleService:
 
     # -- answering and simulating (D19/D20) ----------------------------------
 
-    def ask(self, *args, **kwargs):
-        return self._questions.ask(*args, **kwargs)
-
-    def run_tool(self, *args, **kwargs):
-        return self._questions.run_tool(*args, **kwargs)
-
     def simulate(self, *args, **kwargs):
-        return self._questions.simulate(*args, **kwargs)
+        return self._simulator.simulate(*args, **kwargs)
 
     # -- preferences (D21) ---------------------------------------------------
 
@@ -218,10 +201,7 @@ class ScheduleService:
     def delete_preference(self, *args, **kwargs):
         return self._preferences.delete_preference(*args, **kwargs)
 
-    # -- leaving the app, and speaking first ---------------------------------
+    # -- leaving the app -----------------------------------------------------
 
     def workbook(self, *args, **kwargs):
         return self._exporter.workbook(*args, **kwargs)
-
-    def brief(self, *args, **kwargs):
-        return self._briefing.brief(*args, **kwargs)
