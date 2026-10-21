@@ -137,17 +137,12 @@ def _build():
     )
 
 
-def main() -> None:
-    configure_logging()
-    repository, worker = _build()
-    repository.initialize()
-    stopped = threading.Event()
+def start(worker, stopped: threading.Event) -> list:
+    """The lane threads, started; each runs jobs until `stopped` is set.
 
-    def stop(*_args) -> None:
-        stopped.set()
-
-    signal.signal(signal.SIGTERM, stop)
-    signal.signal(signal.SIGINT, stop)
+    Shared by `main()` and by the API when it runs the worker in its own
+    process (`PAKASH_EMBEDDED_WORKER`).
+    """
     count = _WORKER_CONCURRENCY
     chat_count = min(_CHAT_WORKERS, count - 1) if count > 1 else 0
 
@@ -163,16 +158,37 @@ def main() -> None:
     if count == 1:
         lanes = ["any"]
     threads = [
-        threading.Thread(target=work, args=(lane,), daemon=True)
+        threading.Thread(target=work, args=(lane,), name="copilot-%s" % lane,
+                         daemon=True)
         for lane in lanes
     ]
     for thread in threads:
         thread.start()
     _log.info("copilot worker started threads=%d chat_threads=%d", count, chat_count)
-    while not stopped.wait(_POLL_SECONDS):
-        pass
+    return threads
+
+
+def stop(threads: list, stopped: threading.Event) -> None:
+    stopped.set()
     for thread in threads:
         thread.join(timeout=_POLL_SECONDS * 2)
+
+
+def main() -> None:
+    configure_logging()
+    repository, worker = _build()
+    repository.initialize()
+    stopped = threading.Event()
+
+    def on_signal(*_args) -> None:
+        stopped.set()
+
+    signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGINT, on_signal)
+    threads = start(worker, stopped)
+    while not stopped.wait(_POLL_SECONDS):
+        pass
+    stop(threads, stopped)
     tracing.flush()
     _log.info("copilot worker stopped")
 

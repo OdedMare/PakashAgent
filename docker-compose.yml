@@ -22,6 +22,9 @@ services:
       PAKASH_DATABASE_SCHEMA: ${PAKASH_DATABASE_SCHEMA:-pakash}
       PAKASH_DATABASE_HOST: db
       PAKASH_RUNTIME_SETTINGS_FILE: /data/runtime-settings.json
+      # The API runs the job worker in-process by default; here the
+      # `copilot` service below is the worker, so the API leaves it to it.
+      PAKASH_EMBEDDED_WORKER: ${PAKASH_EMBEDDED_WORKER:-false}
       # Signs the workspace session cookie. Unset, the backend generates one
       # per process — fine for a single-container dev run, but sessions then
       # die on every restart. Set it in .env for anything long-lived.
