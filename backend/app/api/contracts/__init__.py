@@ -14,7 +14,6 @@ from app.api.contracts.admin import (  # noqa: F401
 )
 from app.api.contracts.settings import (  # noqa: F401
     ModelsProbeRequest,
-    RedisProbeRequest,
 )
 from app.api.contracts.workspace import (  # noqa: F401
     CreateTeamRequest,

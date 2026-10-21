@@ -12,7 +12,6 @@ import httpx
 from app.dal.llm.model_slots import (
     INTERACTIVE, ModelSlots, PostgresModelSlots, priority_for_flow,
 )
-from app.dal.llm.redis_slots import RedisModelSlots
 
 # How long to wait for the TCP/TLS handshake to a model server, in every
 # configuration including "no timeout". Reaching a server that is up is a
@@ -28,10 +27,9 @@ _DEFAULT_MAX_CONCURRENCY = 1
 # burst of requests across API and worker processes queues here instead of
 # thrashing the server.
 #
-# With Redis registered (`share_slots`) the line is held there, in priority
-# order (`redis_slots.py`). Without Redis, or while it is unreachable,
-# PostgreSQL advisory locks hold it; the in-memory fallback below exists for
-# lightweight adapters and tests with no database configuration.
+# PostgreSQL advisory locks hold the line across every process; the
+# in-memory fallback below exists for lightweight adapters and tests with no
+# database configuration.
 #
 # The right value depends entirely on the server. One that batches
 # continuously (vLLM, TGI) does its own scheduling and is *starved* by a low
@@ -40,23 +38,9 @@ _DEFAULT_MAX_CONCURRENCY = 1
 # thrashed by a high one.
 _LLM_SLOTS = None
 _LLM_SLOTS_LOCK = threading.Lock()
-_REDIS = None
-
-
-def share_slots(redis) -> None:
-    """Hold the line in Redis whenever it is reachable. Called by each
-    composition root (`main.py`, `worker.py`) with its `RedisHub`."""
-    global _REDIS
-    _REDIS = redis
 
 
 def slots_for(store):
-    if _REDIS is not None:
-        return RedisModelSlots(store, _REDIS, lambda: _without_redis(store))
-    return _without_redis(store)
-
-
-def _without_redis(store):
     global _LLM_SLOTS
     settings = store.get()
     if getattr(settings, "database_url", ""):
@@ -114,7 +98,7 @@ _SCHEDULER_BUDGET_MULTIPLIER = 1.5
 # The scheduler's read ceiling. Not a guess at the answer time -- one day
 # answers in minutes -- but the point past which the server is not slow, it
 # is gone. Without it, one call the server never answers held its model slot
-# (and, in Redis, kept renewing the lease) forever: with the default limit of
+# forever: with the default limit of
 # one, every chat timed out and every build queued behind it, and the worker
 # threads waiting in that queue left none free for the code-built ones.
 _SCHEDULER_READ_CEILING_SECONDS = 900

@@ -13,11 +13,11 @@ attacker chooses. The cost of an account key is that someone can lock a
 real user out for `lockout_seconds` by guessing badly on purpose -- an
 annoyance, where the alternative is a guessable passcode.
 
-In memory and per process unless Redis is configured (`redis_hub.py`).
-Then the counts and the lockouts are shared by every worker and survive a
-restart; without it, each worker keeps its own -- which multiplies the
-allowance by the worker count rather than removing it. A Redis that stops
-answering mid-way drops the check back to memory rather than refusing logins.
+Shared through PostgreSQL when handed the repository
+(`dal/repository/throttle.py`): the counts and the lockouts then hold for
+every process and survive a restart. Without one -- tests, small adapters --
+each process keeps its own in memory. A database that stops answering
+mid-way drops the check back to memory rather than refusing logins.
 
 The shared window is fixed rather than sliding: it opens with the first
 wrong guess and closes `window_seconds` later. Five guesses inside it lock
@@ -25,7 +25,6 @@ the account either way.
 """
 
 import logging
-import math
 import time
 from threading import Lock
 from typing import Callable, Optional, TypeVar
@@ -56,9 +55,11 @@ class LoginThrottle:
         window_seconds: float = DEFAULT_WINDOW_SECONDS,
         lockout_seconds: float = DEFAULT_LOCKOUT_SECONDS,
         clock: Callable[[], float] = time.monotonic,
-        redis=None,
+        shared=None,
     ):
-        self._redis = redis
+        # The repository (`throttle_locked_for`, `throttle_fail`,
+        # `throttle_clear`), or None for memory only.
+        self._store = shared
         self._limit = limit
         self._window = window_seconds
         self._lockout = lockout_seconds
@@ -81,13 +82,11 @@ class LoginThrottle:
             raise
         with self._lock:
             self._failures.pop(key, None)
-        self._shared(lambda client: client.delete(self._key("fail", key)))
+        self._shared(lambda store: store.throttle_clear(key))
         return result
 
     def _refuse_if_locked(self, key: str) -> None:
-        remaining = self._shared(
-            lambda client: client.pttl(self._key("lock", key)) / 1000.0
-        )
+        remaining = self._shared(lambda store: store.throttle_locked_for(key))
         if remaining is None:
             remaining = self._local_remaining(key)
         if remaining <= 0:
@@ -106,7 +105,8 @@ class LoginThrottle:
             return remaining
 
     def _record_failure(self, key: str) -> None:
-        if self._shared(lambda client: self._record_shared(client, key)):
+        if self._shared(lambda store: store.throttle_fail(
+                key, self._limit, self._window, self._lockout) or True):
             return
         with self._lock:
             now = self._clock()
@@ -131,40 +131,13 @@ class LoginThrottle:
             key: until for key, until in self._locked_until.items() if until > now
         }
 
-    def _record_shared(self, client, key: str) -> bool:
-        failures, lock = self._key("fail", key), self._key("lock", key)
-        pipe = client.pipeline()
-        pipe.set(failures, 0, ex=_whole(self._window), nx=True)
-        pipe.incr(failures)
-        count = pipe.execute()[1]
-        if count >= self._limit:
-            pipe = client.pipeline()
-            pipe.set(lock, 1, ex=_whole(self._lockout))
-            pipe.delete(failures)
-            pipe.execute()
-        return True
-
-    def _key(self, kind: str, key: str) -> str:
-        # The account in braces is a hash tag: on a sharded server its
-        # failure count and its lock share a slot, so the pipeline above
-        # (a MULTI) does not fail with CROSSSLOT.
-        return self._redis.key("throttle", kind, "{%s}" % key)
-
     def _shared(self, command) -> Optional[object]:
-        """Run `command` on the shared Redis. `None` means "use memory": no
-        Redis configured, or it failed just now."""
-        client = self._redis.client() if self._redis is not None else None
-        if client is None:
+        """Run `command` on the shared store. `None` means "use memory": no
+        store, or it failed just now."""
+        if self._store is None:
             return None
         try:
-            return command(client)
+            return command(self._store)
         except Exception as exc:  # noqa: BLE001 -- memory is the fallback
             _log.warning("throttle falling back to memory: %s", exc)
-            self._redis.failed(exc)
             return None
-
-
-def _whole(seconds: float) -> int:
-    """Redis expiries are whole seconds; round up so a lockout is never
-    shorter than asked."""
-    return max(1, int(math.ceil(seconds)))

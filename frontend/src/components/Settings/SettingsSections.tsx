@@ -1,6 +1,5 @@
-import { Bot, CalendarRange, Database, RefreshCw, Server } from "lucide-react";
+import { Bot, CalendarRange, Database, RefreshCw } from "lucide-react";
 
-import { RedisSettings } from "./RedisSettings";
 import {
   SettingsField as Field,
   SettingsToggle as Toggle,
@@ -19,7 +18,7 @@ const SECTIONS = [
   {
     id: "schedule" as const,
     label: "בניית סידור",
-    description: "כמה ימים הסוכן בונה בכל פנייה",
+    description: "זמן ומעבדים לפותר האילוצים",
     icon: CalendarRange,
   },
   {
@@ -27,12 +26,6 @@ const SECTIONS = [
     label: "מסד הנתונים",
     description: "חיבור PostgreSQL וסכמה",
     icon: Database,
-  },
-  {
-    id: "redis" as const,
-    label: "Redis",
-    description: "מצב משותף בין תהליכים",
-    icon: Server,
   },
 ];
 
@@ -70,7 +63,6 @@ export function SettingsContent({ settings }: { settings: SettingsController }) 
     agent: <AgentSettings settings={settings} />,
     schedule: <ScheduleSettings settings={settings} />,
     database: <DatabaseSettings settings={settings} />,
-    redis: <RedisSettings settings={settings} />,
   };
   return <div className="settings-content">{sections[settings.activeSection]}</div>;
 }

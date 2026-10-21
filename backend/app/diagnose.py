@@ -3,7 +3,7 @@
     python -m app.diagnose
 
 Prints, without changing anything: the model settings and proxy variables
-this process sees, the job queue in PostgreSQL, the model queue in Redis,
+this process sees, the job queue and the model slots in PostgreSQL,
 whether the model server answers (with its certificate checked, as the
 model client does), and one real completion. Short to type on purpose -- it is
 meant for a terminal on a closed network, where nothing can be pasted in.
@@ -11,18 +11,17 @@ meant for a terminal on a closed network, where nothing can be pasted in.
 
 import os
 import time
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
 from app.common.config import Settings
-from app.common.redis_hub import RedisHub, mask_url, url_of
 from app.common.runtime_settings.runtime_settings_store import RuntimeSettingsStore
 from app.dal.database import connect
 from app.dal.llm.model_roles import (
     ADVANCED, DEFAULT, FAST, resolve_base_url, resolve_model,
 )
 from app.dal.llm.openai_client import OpenAIJsonClient
-from app.dal.llm.redis_slots import slot_keys
 
 _PROXY_VARS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY")
 
@@ -38,21 +37,21 @@ def _settings(settings) -> None:
             role, resolve_model(settings, role) or "-",
             resolve_base_url(settings, role) or "(openai default)",
         ))
-    print("timeout=%ss max_concurrency=%s queue=%ss engine=%s" % (
+    print("timeout=%ss max_concurrency=%s queue=%ss solver=%ss/%s workers" % (
         getattr(settings, "llm_timeout_seconds", "?"),
         getattr(settings, "llm_max_concurrency", "?"),
         getattr(settings, "llm_queue_seconds", "?"),
-        getattr(settings, "schedule_generation_engine", "?"),
+        getattr(settings, "solver_time_limit_seconds", "?"),
+        getattr(settings, "solver_workers", "?"),
     ))
     print("embedded_worker=%s" % (os.getenv("PAKASH_EMBEDDED_WORKER") or "default(on)"))
-    print("redis=%s" % (mask_url(url_of(settings)) or "off"))
     _section("proxy variables (the model client follows these)")
     found = False
     for name in _PROXY_VARS:
         for spelled in (name, name.lower()):
             if os.getenv(spelled):
                 found = True
-                print("%s=%s" % (spelled, mask_url(os.getenv(spelled))))
+                print("%s=%s" % (spelled, _mask_url(os.getenv(spelled))))
     if not found:
         print("none")
 
@@ -95,19 +94,32 @@ def _jobs(store) -> None:
 
 
 def _model_queue(store) -> None:
-    _section("model queue (Redis)")
-    hub = RedisHub(store)
-    client = hub.client()
-    if client is None:
-        print("not used (%s)" % (hub.status().get("error") or "not configured"))
-        return
+    """Model calls in flight: the advisory locks `PostgresModelSlots` holds."""
+    _section("model slots (PostgreSQL advisory locks)")
     try:
-        queue, _alive, holders, _teams = slot_keys(hub)
-        now_ms = int(time.time() * 1000)
-        print("holding=%s waiting=%s" % (
-            client.zcount(holders, "(%d" % now_ms, "+inf"), client.zcard(queue)))
-    except Exception as exc:  # noqa: BLE001
+        with connect(store) as connection:
+            held = connection.execute(
+                "SELECT COUNT(*) AS held FROM pg_locks "
+                "WHERE locktype = 'advisory' AND granted").fetchone()["held"]
+            connection.rollback()
+        print("advisory locks held=%s (one per call in flight, one per team calling)" % held)
+    except Exception as exc:  # noqa: BLE001 -- report and go on
         print("FAILED: %s" % exc)
+
+
+def _mask_url(url: str) -> str:
+    """The URL with any password in it replaced, fit to print."""
+    try:
+        parts = urlsplit(url or "")
+    except ValueError:
+        return "…"
+    if parts.password is None:
+        return url or ""
+    host = parts.hostname or ""
+    if parts.port:
+        host = "%s:%s" % (host, parts.port)
+    netloc = "%s:********@%s" % (parts.username or "", host)
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
 
 
 def _model_server(settings) -> None:

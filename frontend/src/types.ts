@@ -124,50 +124,6 @@ export interface RuntimeSettings {
   /** The constraint solver: seconds per solve and parallel workers. */
   solver_time_limit_seconds: number;
   solver_workers: number;
-  /** Shared state across processes. Empty URL = off; the password arrives
-   *  masked like every other secret. */
-  redis_url: string;
-  /** Explicit parts written over the URL's own. Empty = the URL's; with
-   *  the URL empty, a host alone turns Redis on. */
-  redis_host: string;
-  redis_port: number | null;
-  redis_username: string;
-  redis_password: string;
-  redis_key_prefix: string;
-}
-
-/** What one process is using right now (`RedisHub.status()`). */
-export interface RedisLiveStatus {
-  configured: boolean;
-  connected: boolean;
-  url: string;
-  prefix: string;
-  error: string;
-}
-
-/** `POST /api/settings/redis`: a connection tested, and what is in it. */
-export interface RedisReport {
-  configured: boolean;
-  connected: boolean;
-  error: string;
-  url: string;
-  live: RedisLiveStatus | null;
-  server?: {
-    version: string;
-    mode: string;
-    uptime_seconds: number;
-    used_memory: string;
-    connected_clients: number;
-    keys: number;
-    latency_ms: number;
-  };
-  app?: {
-    keys: number;
-    model_calls: number;
-    model_waiting: number;
-    locked_accounts: number;
-    event_listeners: number;
-  };
 }
 
 /** Who the current visitor is inside a workspace.
@@ -260,7 +216,6 @@ export interface AdminOverview {
   };
   database: "ok" | "error";
   model: Record<string, string>;
-  redis?: RedisLiveStatus | null;
 }
 
 /** The signed-in workspace.

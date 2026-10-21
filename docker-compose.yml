@@ -58,15 +58,6 @@ services:
       PAKASH_SOLVER_TIME_LIMIT_SECONDS: ${PAKASH_SOLVER_TIME_LIMIT_SECONDS:-10}
       PAKASH_SOLVER_WORKERS: ${PAKASH_SOLVER_WORKERS:-8}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      # Redis shared by the API and the worker (common/redis_hub.py). All
-      # empty = off. Host/port/username override the same parts of the URL;
-      # a host alone is enough. Also editable in the settings panel.
-      PAKASH_REDIS_URL: ${PAKASH_REDIS_URL:-}
-      PAKASH_REDIS_HOST: ${PAKASH_REDIS_HOST:-}
-      PAKASH_REDIS_PORT: ${PAKASH_REDIS_PORT:-}
-      PAKASH_REDIS_USERNAME: ${PAKASH_REDIS_USERNAME:-}
-      PAKASH_REDIS_PASSWORD: ${PAKASH_REDIS_PASSWORD:-}
-      PAKASH_REDIS_KEY_PREFIX: ${PAKASH_REDIS_KEY_PREFIX:-pakash}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -98,12 +89,6 @@ services:
       PAKASH_SOLVER_TIME_LIMIT_SECONDS: ${PAKASH_SOLVER_TIME_LIMIT_SECONDS:-10}
       PAKASH_SOLVER_WORKERS: ${PAKASH_SOLVER_WORKERS:-8}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      PAKASH_REDIS_URL: ${PAKASH_REDIS_URL:-}
-      PAKASH_REDIS_HOST: ${PAKASH_REDIS_HOST:-}
-      PAKASH_REDIS_PORT: ${PAKASH_REDIS_PORT:-}
-      PAKASH_REDIS_USERNAME: ${PAKASH_REDIS_USERNAME:-}
-      PAKASH_REDIS_PASSWORD: ${PAKASH_REDIS_PASSWORD:-}
-      PAKASH_REDIS_KEY_PREFIX: ${PAKASH_REDIS_KEY_PREFIX:-pakash}
       PAKASH_COPILOT_SCAN_SECONDS: ${PAKASH_COPILOT_SCAN_SECONDS:-1800}
       # One lane stays available for manager chat; the rest checkpoint one
       # generation span at a time across teams.

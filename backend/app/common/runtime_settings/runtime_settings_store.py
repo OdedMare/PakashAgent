@@ -6,6 +6,7 @@ a masked value coming back means "unchanged", so the stored secret is kept.
 """
 
 import json
+import time
 from dataclasses import asdict, fields, replace
 from pathlib import Path
 
@@ -18,10 +19,6 @@ from app.common.runtime_settings.normalizers import (
     normalize_database_schema,
     normalize_database_url,
     normalize_llm_base_url,
-    normalize_redis_host,
-    normalize_redis_port,
-    normalize_redis_prefix,
-    normalize_redis_url,
 )
 from app.common.runtime_settings.runtime_settings import RuntimeSettings
 
@@ -31,7 +28,6 @@ _SECRET_FIELDS = {
     "llm_api_key_fast",
     "llm_api_key_default",
     "llm_api_key_advanced",
-    "redis_password",
 }
 
 # Fields where None/empty means "clear the value", not "keep current".
@@ -42,7 +38,7 @@ _LLM_BASE_URL_FIELDS = (
     "llm_base_url_default",
     "llm_base_url_advanced",
 )
-_NULLABLE = ("database_port", "redis_port", *_LLM_BASE_URL_FIELDS)
+_NULLABLE = ("database_port", *_LLM_BASE_URL_FIELDS)
 
 # Integers where 0 is not a meaningful value and is clamped away. Only
 # concurrency qualifies: `llm_timeout_seconds` is handled separately because
@@ -50,6 +46,8 @@ _NULLABLE = ("database_port", "redis_port", *_LLM_BASE_URL_FIELDS)
 #
 # `llm_max_concurrency` is read by the shared PostgreSQL limiter on each
 # acquisition, so the positive value saved here applies without a restart.
+# How often `get()` checks the file for a save made by another process.
+_RELOAD_SECONDS = 3.0
 _POSITIVE_INTS = ("llm_max_concurrency", "solver_workers")
 
 
@@ -88,19 +86,21 @@ class RuntimeSettingsStore:
             llm_verify_ssl=env.llm_verify_ssl,
             solver_time_limit_seconds=_seconds(env.solver_time_limit_seconds),
             solver_workers=max(1, int(env.solver_workers)),
-            redis_url=_safe_redis_url(env.redis_url),
-            redis_host=_safe(normalize_redis_host, env.redis_host, ""),
-            redis_port=_safe(normalize_redis_port, env.redis_port, None),
-            redis_username=(env.redis_username or "").strip(),
-            redis_password=env.redis_password,
-            redis_key_prefix=_safe_redis_prefix(env.redis_key_prefix),
         )
         self._mtime = None
+        self._checked = time.monotonic()
         if self._path.exists():
             self._mtime = self._path.stat().st_mtime_ns
             self._apply(json.loads(self._path.read_text("utf-8")), False)
 
     def get(self) -> RuntimeSettings:
+        """The live settings. At most every `_RELOAD_SECONDS` this looks at
+        the file first, so a save made by another process (an API worker,
+        `app.worker`) arrives here within seconds without a restart."""
+        now = time.monotonic()
+        if now - self._checked >= _RELOAD_SECONDS:
+            self._checked = now
+            self.reload_if_changed()
         return self._settings
 
     def public(self) -> dict:
@@ -134,8 +134,8 @@ class RuntimeSettingsStore:
 
         Each process holds its own store, so a save in one API worker -- or
         anywhere, as seen from `app.worker` -- otherwise reaches the others
-        only on restart. `RedisHub` calls this (throttled) so a Redis URL
-        saved in the panel reaches every process within seconds. A file
+        only on restart. `get()` calls this (throttled), so a save in the
+        panel reaches every process within seconds. A file
         caught mid-write fails to parse and is simply read next time.
         """
         try:
@@ -217,16 +217,6 @@ def _normalized(key: str, value, patch: dict, settings):
         return _flag(value)
     if key == "solver_time_limit_seconds":
         return _seconds(value)
-    if key == "redis_url":
-        return normalize_redis_url(value)
-    if key == "redis_key_prefix":
-        return normalize_redis_prefix(value)
-    if key == "redis_host":
-        return normalize_redis_host(value)
-    if key == "redis_port":
-        return normalize_redis_port(value)
-    if key == "redis_username":
-        return str(value).strip()
     return value
 
 
@@ -267,30 +257,6 @@ def _flag(value) -> bool:
 def _seconds(value) -> float:
     """A solver time limit: positive, and never beyond ten minutes."""
     return min(600.0, max(0.5, float(value)))
-
-
-def _safe_redis_url(value: str) -> str:
-    """The env URL, or no Redis at all rather than a failed start-up."""
-    try:
-        return normalize_redis_url(value)
-    except (TypeError, ValueError):
-        return ""
-
-
-def _safe(normalize, value, fallback):
-    """An env value through `normalize`, or `fallback` rather than a failed
-    start-up."""
-    try:
-        return normalize(value)
-    except (TypeError, ValueError):
-        return fallback
-
-
-def _safe_redis_prefix(value: str) -> str:
-    try:
-        return normalize_redis_prefix(value)
-    except (TypeError, ValueError):
-        return normalize_redis_prefix("")
 
 
 def _safe_schema(value: str) -> str:

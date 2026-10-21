@@ -442,30 +442,3 @@ select.settings-input {
     gap: 0;
   }
 }
-
-/* What the Redis probe found: a compact two-column grid of label and value. */
-.redis-report dl {
-  display: grid;
-  gap: 6px 14px;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  margin: 0 0 12px;
-}
-
-.redis-report dl > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 10px;
-  background: var(--surface-2, var(--surface));
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-}
-
-.redis-report dt {
-  color: var(--text-soft);
-}
-
-.redis-report dd {
-  margin: 0;
-  font-weight: 600;
-}

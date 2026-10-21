@@ -45,13 +45,3 @@ class RuntimeSettings:
     # parallel workers. Read per build, so a saved change applies next time.
     solver_time_limit_seconds: float = 10.0
     solver_workers: int = 8
-    # Shared state across processes (`common/redis_hub.py`). Empty URL = off,
-    # and every user of it falls back to its in-memory, per-process self.
-    redis_url: str = ""
-    # Explicit parts written over the URL's own (`redis_connection_url`);
-    # a host alone, with no URL, is enough to turn Redis on.
-    redis_host: str = ""
-    redis_port: Optional[int] = None
-    redis_username: str = ""
-    redis_password: str = ""
-    redis_key_prefix: str = "pakash"

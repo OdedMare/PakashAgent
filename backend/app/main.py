@@ -28,14 +28,13 @@ from app.common.config import Settings
 from app.common.errors import AppError, error_payload
 from app.common.events import TeamEvents
 from app.common.logging_setup import configure_logging
-from app.common.redis_hub import RedisHub
 from app.common.sessions import COOKIE_NAME, generate_secret, read
 from app.common.throttle import LoginThrottle
+from app.dal.notify import PostgresSignals
 from app.common.runtime_settings.runtime_settings_store import (
     RuntimeSettingsStore,
 )
 from app.dal.database import close_pool
-from app.dal.llm.budgets import share_slots
 from app.dal.llm.openai_client import OpenAIJsonClient
 from app.dal.llm.team_context import model_team
 from app.dal.repository import Repository
@@ -65,11 +64,8 @@ def _worker_count() -> int:
 
 env = Settings()
 store = RuntimeSettingsStore(env)
-# Shared state across processes when a Redis URL is saved; inert without one.
-# The throttle and the live signals fall back to memory without it, the
-# model queue to PostgreSQL.
-redis_hub = RedisHub(store)
-share_slots(redis_hub)
+# PostgreSQL is the one shared state: the throttle and the live signals go
+# through it, and the model queue holds its line with advisory locks.
 repository = Repository(store)
 llm = OpenAIJsonClient(store)
 workspace_service = WorkspaceService(repository)
@@ -116,10 +112,10 @@ if not env.session_secret:
 guards = Guards(session_secret, team_active=repository.team_is_active)
 # One throttle for every password check in the process. Keys are namespaced
 # (`boss:`, `employee:`, `settings:`), so sharing it couples nothing.
-login_throttle = LoginThrottle(redis=redis_hub)
+login_throttle = LoginThrottle(shared=repository)
 # Wakes the manager's screen when an employee submits or answers something.
 # Shared by the employee routes that publish and the stream that listens.
-team_events = TeamEvents(redis=redis_hub)
+team_events = TeamEvents(bus=PostgresSignals(store))
 if not env.settings_password:
     _log.warning(
         "PAKASH_SETTINGS_PASSWORD is not set; the settings panel is locked."
@@ -132,10 +128,7 @@ if not admin_password:
         "Neither PAKASH_ADMIN_PASSWORD nor PAKASH_SETTINGS_PASSWORD is set; "
         "the operator console is locked."
     )
-admin_service = AdminService(
-    repository, workspace_service, admin_password, store=store,
-    redis=redis_hub,
-)
+admin_service = AdminService(repository, workspace_service, admin_password, store=store)
 
 
 def startup() -> None:
@@ -216,7 +209,6 @@ app.include_router(manager_chat.build_router(manager_chat_service, repository, g
 app.include_router(
     settings.build_router(
         store, llm, guards, env.settings_password, login_throttle,
-        redis=redis_hub,
     )
 )
 app.include_router(copilot.build_router(copilot_service, repository, guards))

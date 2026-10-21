@@ -26,13 +26,12 @@ _MODEL_FIELDS = (
 
 class AdminService:
     def __init__(
-        self, repository, workspace, password: str, store=None, redis=None,
+        self, repository, workspace, password: str, store=None,
     ):
         self._repository = repository
         self._workspace = workspace
         self._password = password or ""
         self._store = store
-        self._redis = redis
 
     def login(self, given: str) -> None:
         """Verify the operator password. An unset one keeps the door shut."""
@@ -55,7 +54,6 @@ class AdminService:
             "totals": totals,
             "database": database,
             "model": {key: str(settings.get(key) or "") for key in _MODEL_FIELDS},
-            "redis": self._redis.status() if self._redis is not None else None,
         }
 
     def teams(self) -> List[dict]:

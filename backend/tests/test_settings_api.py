@@ -11,7 +11,7 @@ from app.api.routers import settings as settings_router
 from app.common.config import Settings
 from app.common.errors import AgentError, AppError
 from app.common.runtime_settings.normalizers import (
-    MASKED_SECRET, redis_connection_url,
+    MASKED_SECRET,
 )
 from app.common.runtime_settings.runtime_settings_store import (
     RuntimeSettingsStore,
@@ -338,113 +338,12 @@ def test_the_ssl_switch_reads_a_string_false_as_off(store):
         store.update({"llm_verify_ssl": "maybe"})
 
 
-# --- Redis -------------------------------------------------------------------
-
-def test_redis_is_off_by_default_and_its_password_is_masked(client, store):
-    body = client.get("/api/settings").json()
-    assert body["redis_url"] == "" and body["redis_key_prefix"] == "pakash"
-
-    store.update({"redis_password": "r3dis"})
-    body = client.get("/api/settings").json()
-    assert body["redis_password"] == MASKED_SECRET
-    assert "r3dis" not in str(body)
-
-
-def test_a_bare_redis_host_is_read_as_a_url(client, store):
-    client.put("/api/settings", json={"redis_url": "cache.local:6380"})
-    assert store.get().redis_url == "redis://cache.local:6380"
-
-
-def test_a_redis_url_can_be_cleared(client, store):
-    store.update({"redis_url": "redis://cache.local:6379/0"})
-    client.put("/api/settings", json={"redis_url": ""})
-    assert store.get().redis_url == ""
-
-
-def test_a_bad_redis_url_or_prefix_is_a_400(client):
-    assert client.put(
-        "/api/settings", json={"redis_url": "http://cache.local"}
-    ).status_code == 400
-    assert client.put(
-        "/api/settings", json={"redis_key_prefix": "a b*"}
-    ).status_code == 400
-
-
-def test_the_redis_probe_without_a_url_reports_off(client):
-    body = client.post("/api/settings/redis", json={}).json()
-    assert body["configured"] is False and body["connected"] is False
-
-
-def test_an_unreachable_redis_is_an_answer_not_an_error(client):
-    response = client.post(
-        "/api/settings/redis", json={"redis_url": "redis://127.0.0.1:1/0"}
-    )
-    assert response.status_code == 200
-    body = response.json()
-    assert body["configured"] is True and body["connected"] is False
-    assert body["error"]
-
-
-def test_the_redis_probe_never_echoes_a_password(client):
-    body = client.post(
-        "/api/settings/redis",
-        json={"redis_url": "redis://:pw-in-url@127.0.0.1:1/0"},
-    ).json()
-    assert "pw-in-url" not in str(body)
-
-
-def test_redis_host_port_and_username_are_saved_and_cleared(client, store):
-    client.put("/api/settings", json={
-        "redis_host": " cache.local ", "redis_port": "6380",
-        "redis_username": "app",
-    })
-    saved = store.get()
-    assert (saved.redis_host, saved.redis_port, saved.redis_username) == (
-        "cache.local", 6380, "app"
-    )
-    client.put("/api/settings", json={
-        "redis_host": "", "redis_port": "", "redis_username": "",
-    })
-    saved = store.get()
-    assert (saved.redis_host, saved.redis_port, saved.redis_username) == (
-        "", None, ""
-    )
-
-
-def test_a_bad_redis_host_or_port_is_a_400(client):
-    for patch in (
-        {"redis_host": "cache.local/0"}, {"redis_port": "70000"},
-        {"redis_port": "abc"},
-    ):
-        assert client.put("/api/settings", json=patch).status_code == 400
-
-
-def test_the_explicit_redis_parts_override_the_url():
-    url = redis_connection_url(
-        "redis://old:pw@cache.local:6379/2", "new.local", 6380, "app"
-    )
-    assert url == "redis://app:pw@new.local:6380/2"
-    assert redis_connection_url("", "cache.local") == "redis://cache.local:6379"
-    assert redis_connection_url("", "", 6380) == ""
-    assert redis_connection_url("unix:///r.sock", "x", 1) == "unix:///r.sock"
-    assert redis_connection_url("", "::1") == "redis://[::1]:6379"
-
-
-def test_the_redis_probe_reads_a_typed_host_and_port(client):
-    body = client.post(
-        "/api/settings/redis",
-        json={"redis_url": "", "redis_host": "127.0.0.1", "redis_port": "1"},
-    ).json()
-    assert body["configured"] is True and body["connected"] is False
-    assert body["url"] == "redis://127.0.0.1:1"
-
-
 def test_another_process_s_save_is_picked_up(store, tmp_path):
     other = RuntimeSettingsStore(Settings(
         _env_file=None,
         runtime_settings_file=str(tmp_path / "runtime-settings.json"),
     ))
     assert other.reload_if_changed() is False
-    store.update({"redis_url": "redis://cache.local:6379/0"})
+    store.update({"solver_time_limit_seconds": 20})
     assert other.reload_if_changed() is True
-    assert other.get().redis_url == "redis://cache.local:6379/0"
+    assert other.get().solver_time_limit_seconds == 20

@@ -19,9 +19,7 @@ from app.common.activity import track_activity
 from app.common.errors import NotFoundError
 from app.common.config import Settings
 from app.common.logging_setup import configure_logging
-from app.common.redis_hub import RedisHub
 from app.common.runtime_settings.runtime_settings_store import RuntimeSettingsStore
-from app.dal.llm.budgets import share_slots
 from app.dal.llm.openai_client import OpenAIJsonClient
 from app.dal.llm.team_context import model_team
 from app.dal.repository import Repository
@@ -128,8 +126,6 @@ class CopilotWorker:
 def _build():
     env = Settings()
     store = RuntimeSettingsStore(env)
-    # Waits in the same model queue as the API when Redis is configured.
-    share_slots(RedisHub(store))
     repository = Repository(store)
     llm = OpenAIJsonClient(store)
     schedules = ScheduleService(repository, llm, settings=store)
