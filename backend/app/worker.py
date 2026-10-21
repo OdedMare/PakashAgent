@@ -21,7 +21,6 @@ from app.common.config import Settings
 from app.common.logging_setup import configure_logging
 from app.common.redis_hub import RedisHub
 from app.common.runtime_settings.runtime_settings_store import RuntimeSettingsStore
-from app.dal.llm import tracing
 from app.dal.llm.budgets import share_slots
 from app.dal.llm.openai_client import OpenAIJsonClient
 from app.dal.llm.team_context import model_team
@@ -123,7 +122,6 @@ class CopilotWorker:
 
 def _build():
     env = Settings()
-    tracing.init(env)
     store = RuntimeSettingsStore(env)
     # Waits in the same model queue as the API when Redis is configured.
     share_slots(RedisHub(store))
@@ -189,7 +187,6 @@ def main() -> None:
     while not stopped.wait(_POLL_SECONDS):
         pass
     stop(threads, stopped)
-    tracing.flush()
     _log.info("copilot worker stopped")
 
 

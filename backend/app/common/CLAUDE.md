@@ -46,7 +46,6 @@ Cross-cutting infrastructure. **Ported from AiSummryIO.**
 | `PAKASH_LLM_DIET_MODE` | Compact prompts and bounded completions |
 | `PAKASH_LLM_TIMEOUT_SECONDS` | Wall time for one logical call, retries included |
 | `OPENAI_API_KEY` | Read unprefixed, as the SDK expects |
-| `OPIK_API_KEY` | Turns on Opik tracing of every model call, prompts included (D30). Unprefixed, as Opik names it. Env-only and read at start-up — deliberately not in the panel, so a team manager cannot redirect every team's prompts |
 | `OPIK_WORKSPACE` / `OPIK_PROJECT_NAME` / `OPIK_URL_OVERRIDE` | Where traces land: workspace (empty = the key's default), project (default `pakash`), and a self-hosted API URL (empty = Comet) |
 | `PAKASH_DATABASE_*` | URL plus optional explicit overrides |
 | `PAKASH_SESSION_SECRET` | Signs the workspace session cookie. **Set this in production** — unset, it is generated per process, so sessions die on restart and break across workers. Changing it logs every boss out. |

@@ -61,12 +61,6 @@ services:
       PAKASH_SCHEDULE_GENERATION_MODE: ${PAKASH_SCHEDULE_GENERATION_MODE:-day}
       PAKASH_SCHEDULE_GENERATION_ENGINE: ${PAKASH_SCHEDULE_GENERATION_ENGINE:-auto}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      # Opik tracing of every model call, prompts and replies included
-      # (dal/llm/tracing.py). Empty key = off. The worker gets the same
-      # values so a build it runs is traced like one the API runs.
-      OPIK_API_KEY: ${OPIK_API_KEY:-}
-      OPIK_WORKSPACE: ${OPIK_WORKSPACE:-}
-      OPIK_PROJECT_NAME: ${OPIK_PROJECT_NAME:-pakash}
       # Redis shared by the API and the worker (common/redis_hub.py). All
       # empty = off. Host/port/username override the same parts of the URL;
       # a host alone is enough. Also editable in the settings panel.
@@ -107,9 +101,6 @@ services:
       PAKASH_SCHEDULE_GENERATION_MODE: ${PAKASH_SCHEDULE_GENERATION_MODE:-day}
       PAKASH_SCHEDULE_GENERATION_ENGINE: ${PAKASH_SCHEDULE_GENERATION_ENGINE:-auto}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPIK_API_KEY: ${OPIK_API_KEY:-}
-      OPIK_WORKSPACE: ${OPIK_WORKSPACE:-}
-      OPIK_PROJECT_NAME: ${OPIK_PROJECT_NAME:-pakash}
       PAKASH_REDIS_URL: ${PAKASH_REDIS_URL:-}
       PAKASH_REDIS_HOST: ${PAKASH_REDIS_HOST:-}
       PAKASH_REDIS_PORT: ${PAKASH_REDIS_PORT:-}

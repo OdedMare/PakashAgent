@@ -30,7 +30,6 @@ uvicorn app.main:app --reload
 - `dal/database.py` — connection; verifies the schema exists.
 - `dal/llm/` — the OpenAI-compatible JSON client and its degradation ladder,
   ported unchanged from AiSummryIO. Model/base URL/API key stay live per call.
-  `tracing.py` sends every call to Opik when `OPIK_API_KEY` is set (D30).
 - `dal/repository/` — the only SQL owner. `teams.py` also owns password
   hashing (`scrypt`, stdlib) and the member share token.
 - `bl/workspace_service.py` — workspace rules: who may enter a team, in which
@@ -319,6 +318,5 @@ package's `__init__` docstring carries a table of which module owns what.
   lives only in the log ([D4](../docs/DECISIONS.md#d4--living-schedule-not-versioned)).
 - Errors leaving the backend are `AgentError` in Hebrew.
 - Never log API keys or full prompts containing employee personal details.
-  The one exception is Opik tracing, which is opt-in by `OPIK_API_KEY` and
-  lives in `dal/llm/tracing.py` only ([D30](../docs/DECISIONS.md#d30--model-calls-are-traced-to-opik-prompts-and-replies-included)).
+  Prompts never leave this process except to the model server.
 - Keep the design simple: add a module only when it owns a distinct boundary.

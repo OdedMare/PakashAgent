@@ -20,7 +20,6 @@ three are per role, so different kinds of work can run on different providers.
 | `model_roles.py` | Flow → role → model id, endpoint and API key, and the fallbacks |
 | `model_slots.py` | `ModelSlots` (one process) and `PostgresModelSlots` (advisory locks) — the concurrency limit without Redis |
 | `redis_slots.py` | `RedisModelSlots` — the same limit as a priority-ordered queue in Redis, used whenever Redis is reachable (D33) |
-| `tracing.py` | Opik tracing — one trace per call, one LLM span per completion; inert without `OPIK_API_KEY` |
 
 Each helper is separate because each handles a different failure of
 "OpenAI-compatible" servers that are only approximately compatible.
@@ -266,22 +265,6 @@ then failed is exactly the one worth seeing. `retries` is broken out because a
 call that silently took two attempts costs double and is identical to a clean
 one in every other metric.
 
-## Opik tracing
-
-`tracing.py` is the one place the prompt and reply leave this process
-([D30](../../../../docs/DECISIONS.md#d30--model-calls-are-traced-to-opik-prompts-and-replies-included)).
-`init(settings)` runs once in `main.py` and `worker.py`; with no
-`OPIK_API_KEY` it does nothing and every other function is a pass-through.
-
-- `call(flow, role, model)` wraps `_until_json` in one trace named by the
-  flow, tagged with the flow and role. An exception closes it with the error.
-- `wrap(client)` is applied in `_client_for`, so the cached client records
-  every `chat.completions.create` as an LLM span under that trace — the
-  ladder's rungs and both kinds of retry each appear on their own.
-- `flush()` runs on API shutdown and when the worker stops; Opik batches.
-
-Tests replace `_client_for` with a fake, so they never touch Opik.
-
 ## Connection reuse
 
 `_client_for(api_key, base_url, timeout)` caches `OpenAI` clients keyed by
@@ -312,8 +295,6 @@ first one's client, silently billing and authenticating as the wrong account.
 
 - Errors leaving this package are `AgentError` in Hebrew.
 - Never log API keys, or full prompts containing employee personal details.
-  Opik tracing is the one exception, and only `tracing.py` may do it (D30).
-- **Tracing never fails a call.** Every Opik error is caught and logged.
 - Adding a rung to the ladder means adding it to `_attempts` — do not scatter
   fallback logic through `_complete`.
 - Routing is `model_roles.py` and nowhere else. A flow gets a model by being
