@@ -101,10 +101,17 @@ return redis.call('ZADD', KEYS[1], 'XX', 'CH', now + tonumber(ARGV[2]), ARGV[1])
 """
 
 
+# A Redis hash tag: a sharded server (Redis Cluster, Redis Enterprise) puts
+# keys by the text between the braces, so every key the scripts touch lands
+# in one slot. Without it a script over four keys fails with CROSSSLOT.
+SLOT_TAG = "{llm}"
+
+
 def slot_keys(redis) -> tuple:
     """queue, alive, holders, teams -- also read by the panel's probe."""
     return tuple(
-        redis.key("llm", name) for name in ("queue", "alive", "holders", "teams")
+        redis.key(SLOT_TAG, name)
+        for name in ("queue", "alive", "holders", "teams")
     )
 
 
@@ -193,7 +200,7 @@ class RedisModelSlots:
         ticket = uuid.uuid4().hex
         team = current_team() or _UNSCOPED
         score = priority * _PRIORITY_STRIDE + client.incr(
-            self._redis.key("llm", "seq")
+            self._redis.key(SLOT_TAG, "seq")
         )
         try:
             while True:
@@ -231,4 +238,4 @@ def _leave(client, keys, ticket) -> None:
         pass
 
 
-__all__ = ["RedisModelSlots", "slot_keys"]
+__all__ = ["RedisModelSlots", "SLOT_TAG", "slot_keys"]

@@ -145,7 +145,10 @@ class LoginThrottle:
         return True
 
     def _key(self, kind: str, key: str) -> str:
-        return self._redis.key("throttle", kind, key)
+        # The account in braces is a hash tag: on a sharded server its
+        # failure count and its lock share a slot, so the pipeline above
+        # (a MULTI) does not fail with CROSSSLOT.
+        return self._redis.key("throttle", kind, "{%s}" % key)
 
     def _shared(self, command) -> Optional[object]:
         """Run `command` on the shared Redis. `None` means "use memory": no

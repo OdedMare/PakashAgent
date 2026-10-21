@@ -29,7 +29,10 @@ Cross-cutting infrastructure. **Ported from AiSummryIO.**
   Redis is down, and every user then falls back to what it did without it;
   `failed()` backs everyone off for a few seconds. Reads the settings live and re-reads the settings file, so a
   URL saved by another process arrives within seconds. `probe()` is the
-  panel's connection test.
+  panel's connection test. **Sharded servers** (Redis Cluster, Redis
+  Enterprise) reject a script or MULTI over keys in different slots with
+  CROSSSLOT, so keys used together share a hash tag: `{llm}` for the model
+  queue, `{<account>}` for the throttle's count and lock.
 
 ## Settings that matter here
 
