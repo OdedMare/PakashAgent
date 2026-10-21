@@ -7,9 +7,6 @@ import { SystemSettings } from "@/components/Settings";
 import { formatBytes } from "./format";
 import type { AdminState } from "./useAdmin";
 
-const MODE_LABEL: Record<string, string> = { day: "יום בכל קריאה", week: "שבוע בכל קריאה" };
-const ENGINE_LABEL: Record<string, string> = { auto: "אוטומטי", ai: "AI", code: "קוד" };
-
 /** The server as a whole: is it healthy, what model is it running, and the
  *  settings every workspace shares. The settings used to be reachable only
  *  from inside some team's management area, with a second password; here
@@ -49,9 +46,8 @@ export function SystemView({ state }: { state: AdminState }) {
           <span>
             <small>בניית סידור</small>
             <strong>
-              {ENGINE_LABEL[model.schedule_generation_engine] ?? (model.schedule_generation_engine || "—")}
-              {" · "}
-              {MODE_LABEL[model.schedule_generation_mode] ?? (model.schedule_generation_mode || "—")}
+              פותר אילוצים
+              {model.solver_time_limit_seconds ? ` · עד ${model.solver_time_limit_seconds} שניות` : ""}
             </strong>
           </span>
         </div>

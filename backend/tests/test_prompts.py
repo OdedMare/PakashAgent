@@ -13,8 +13,8 @@ def _fresh_cache():
     prompts.clear_cache()
 
 
-def test_the_scheduler_prompt_resolves_every_include():
-    text = prompts.load("scheduler")
+def test_the_briefing_prompt_resolves_every_include():
+    text = prompts.load("briefing")
 
     assert "<!-- include:" not in text
     assert "## Untrusted input" in text
@@ -32,38 +32,17 @@ def test_a_name_cannot_climb_out_of_the_prompts_directory():
 
 
 def test_the_prompt_is_cached_and_reload_re_reads():
-    first = prompts.load("scheduler")
-    second = prompts.load("scheduler")
+    first = prompts.load("scheduler_directives")
+    second = prompts.load("scheduler_directives")
 
     # Same object, so the second call did not touch the disk.
     assert first is second
-    assert prompts.load("scheduler", reload=True) == first
+    assert prompts.load("scheduler_directives", reload=True) == first
 
 
-def test_scheduler_distinguishes_closures_from_shift_count_fairness():
-    text = prompts.load("scheduler")
-
-    assert "סגירה" in text
-    assert "מחזור היציאות" in text
-    assert "אל תעביר סגירה" in text
-    assert "first_closure_group" in text
-    assert "round_first_closure" in text
-    assert "triplet_first_closure" in text
-
-
-def test_scheduler_asks_for_rest_spacing_without_overriding_rotations_or_nights():
-    text = prompts.load("scheduler")
-
-    assert "consecutive calendar days" in text
-    assert "maximize the gap" in text
-    assert "Do not create an extra night" in text
-
-
-def test_scheduler_enforces_eight_hours_and_directives_expand_absence_ranges():
-    scheduler = prompts.load("scheduler")
+def test_directives_expand_absence_ranges():
     directives = prompts.load("scheduler_directives")
 
-    assert "minimum is\n  eight hours" in scheduler
     assert "בין שני לחמישי" in directives
     assert "every supplied\nshift" in directives
 

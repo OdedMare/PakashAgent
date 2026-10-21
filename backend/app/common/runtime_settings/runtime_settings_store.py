@@ -10,7 +10,7 @@ from dataclasses import asdict, fields, replace
 from pathlib import Path
 
 from app.common.config import (
-    ENGINE_AUTO, GENERATION_ENGINES, GENERATION_MODES, MODE_DAY, Settings,
+    Settings,
 )
 from app.common.runtime_settings.normalizers import (
     MASKED_SECRET,
@@ -50,7 +50,7 @@ _NULLABLE = ("database_port", "redis_port", *_LLM_BASE_URL_FIELDS)
 #
 # `llm_max_concurrency` is read by the shared PostgreSQL limiter on each
 # acquisition, so the positive value saved here applies without a restart.
-_POSITIVE_INTS = ("llm_max_concurrency",)
+_POSITIVE_INTS = ("llm_max_concurrency", "solver_workers")
 
 
 class RuntimeSettingsStore:
@@ -86,12 +86,8 @@ class RuntimeSettingsStore:
             llm_api_key_advanced=env.llm_api_key_advanced,
             llm_queue_seconds=env.llm_queue_seconds,
             llm_verify_ssl=env.llm_verify_ssl,
-            schedule_generation_mode=_safe_generation_mode(
-                env.schedule_generation_mode
-            ),
-            schedule_generation_engine=_safe_generation_engine(
-                env.schedule_generation_engine
-            ),
+            solver_time_limit_seconds=_seconds(env.solver_time_limit_seconds),
+            solver_workers=max(1, int(env.solver_workers)),
             redis_url=_safe_redis_url(env.redis_url),
             redis_host=_safe(normalize_redis_host, env.redis_host, ""),
             redis_port=_safe(normalize_redis_port, env.redis_port, None),
@@ -219,10 +215,8 @@ def _normalized(key: str, value, patch: dict, settings):
         return max(1, int(value))
     if key == "llm_verify_ssl":
         return _flag(value)
-    if key == "schedule_generation_mode":
-        return _generation_mode(value)
-    if key == "schedule_generation_engine":
-        return _generation_engine(value)
+    if key == "solver_time_limit_seconds":
+        return _seconds(value)
     if key == "redis_url":
         return normalize_redis_url(value)
     if key == "redis_key_prefix":
@@ -270,46 +264,9 @@ def _flag(value) -> bool:
     raise ValueError("expected true or false, got %r" % (value,))
 
 
-def _generation_mode(value) -> str:
-    """One of the two schedule-generation widths, or a rejection.
-
-    Rejected rather than silently folded to the default: the panel offers
-    exactly two choices, so anything else is a typo in an API call, and a
-    build quietly running at a width nobody asked for is the one outcome the
-    setting exists to prevent.
-    """
-    cleaned = str(value or "").strip().lower()
-    if cleaned not in GENERATION_MODES:
-        raise ValueError(
-            "schedule_generation_mode must be one of: %s"
-            % ", ".join(GENERATION_MODES)
-        )
-    return cleaned
-
-
-def _safe_generation_mode(value) -> str:
-    """The env value, never failing startup on a bad one."""
-    try:
-        return _generation_mode(value)
-    except (TypeError, ValueError):
-        return MODE_DAY
-
-
-def _generation_engine(value) -> str:
-    cleaned = str(value or "").strip().lower()
-    if cleaned not in GENERATION_ENGINES:
-        raise ValueError(
-            "schedule_generation_engine must be one of: %s"
-            % ", ".join(GENERATION_ENGINES)
-        )
-    return cleaned
-
-
-def _safe_generation_engine(value) -> str:
-    try:
-        return _generation_engine(value)
-    except (TypeError, ValueError):
-        return ENGINE_AUTO
+def _seconds(value) -> float:
+    """A solver time limit: positive, and never beyond ten minutes."""
+    return min(600.0, max(0.5, float(value)))
 
 
 def _safe_redis_url(value: str) -> str:

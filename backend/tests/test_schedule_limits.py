@@ -7,7 +7,6 @@ from app.bl.solver import generate_span
 from app.bl.directive_agent import DirectiveAgent
 from app.bl.schedule_requests import read_requests
 from app.bl.scheduler.scheduler import Scheduler
-from app.common.config import ENGINE_AUTO
 
 MORNING, NIGHT = "בוקר", "לילה"
 SUNDAY, SATURDAY = "2026-08-16", "2026-08-22"
@@ -213,7 +212,7 @@ def test_a_rest_policy_now_translates_and_code_builds_the_week():
     run = dict(_request("max_consecutive", count=2, shifts=[NIGHT]), source_id="source-1")
     llm = _Llm(_answer([rest, run]))
 
-    result = Scheduler(llm).generate_span(profile, SUNDAY, SATURDAY, engine=ENGINE_AUTO)
+    result = Scheduler(llm).generate_span(profile, SUNDAY, SATURDAY)
 
     assert result["metrics"]["engine"] == "hybrid"
     assert min(_rests(result["assignments"])) >= 16

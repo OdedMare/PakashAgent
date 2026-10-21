@@ -13,7 +13,6 @@ Three things here are the point of the feature and are asserted directly:
 from types import SimpleNamespace
 import json
 import threading
-import time
 
 import pytest
 from fastapi import FastAPI
@@ -336,24 +335,22 @@ def _generation(assignments, notes=None):
             "summary": "סידור השבוע"}
 
 
-def _build_app(answers=None, launch=None, settings=None):
+def _build_app(answers=None, launch=None, settings=None, failures=0):
     repository = _FakeScheduleRepo()
     llm = _ScriptedLlm(answers)
     repository.model_calls = llm.calls
     guards = Guards(SECRET)
     app = FastAPI()
-    app.include_router(
-        schedules.build_router(
-            ScheduleService(
-                repository, llm, launch=launch, settings=settings,
-                # The retry backoff is real seconds in production and nothing
-                # here: these tests describe *that* a span is re-asked, which
-                # is not the same claim as how long the pause is.
-                sleep=lambda _seconds: None,
-            ),
-            guards,
-        )
+    service = ScheduleService(
+        repository, llm, launch=launch, settings=settings,
+        # The retry backoff is real seconds in production and nothing
+        # here: these tests describe *that* a span is re-asked, which
+        # is not the same claim as how long the pause is.
+        sleep=lambda _seconds: None,
     )
+    if failures:
+        _flaky(service, failures)
+    app.include_router(schedules.build_router(service, guards))
 
     # The real handler's body builder, not a copy of it. A second shaping of
     # the same response is how a field the API actually returns goes missing
@@ -366,6 +363,22 @@ def _build_app(answers=None, launch=None, settings=None):
         )
 
     return app, repository
+
+
+def _flaky(service, failures):
+    """The span solver fails `failures` times, then works: a stand-in for
+    any transient error between a job and its checkpoint."""
+    scheduler = service._stepper._scheduler
+    solve = scheduler.generate_span
+    left = [failures]
+
+    def generate_span(*args, **kwargs):
+        if left[0]:
+            left[0] -= 1
+            raise AgentError("תקלה זמנית")
+        return solve(*args, **kwargs)
+
+    scheduler.generate_span = generate_span
 
 
 def _client(app, role=ROLE_BOSS, team=TEAM):
@@ -389,24 +402,22 @@ class _DeferredLauncher:
 # -- generating ------------------------------------------------------------
 
 def test_generating_stores_a_draft_with_reasons():
-    app, repo = _build_app([_generation([
-        {"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-         "reason": "דנה מוסמכת לבוקר"},
-    ])])
+    app, repo = _build_app()
     response = _client(app).post("/api/schedule/generate", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-18",
     })
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "draft"
-    assert body["assignments"][0]["reason"] == "דנה מוסמכת לבוקר"
+    assert len(body["assignments"]) == 2
+    assert all(row["reason"] for row in body["assignments"])
+    # Nothing here needed translating, so the model was never asked.
+    assert repo.model_calls == []
 
 
 def test_generation_reads_only_active_standing_preferences():
-    app, repo = _build_app([_generation([{
-        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-        "reason": "דנה מוסמכת לבוקר",
-    }])])
+    app, repo = _build_app([{"calls": [], "directives": [], "requests": [],
+                             "unresolved": [{"source_id": "source-1", "reason": "כבר מכוסה"}]}])
     repo.preference_rows = [
         {
             "team_id": TEAM, "status": "active", "kind": "employee",
@@ -424,9 +435,7 @@ def test_generation_reads_only_active_standing_preferences():
 
     assert response.status_code == 200
     payload = json.loads(repo.model_calls[0]["user"])
-    assert [row["text"] for row in payload["preferences"]] == [
-        "דנה מעדיפה בקרים"
-    ]
+    assert [row["text"] for row in payload["sources"]] == ["דנה מעדיפה בקרים"]
 
 
 def test_generating_enforces_the_managers_required_assignment():
@@ -445,10 +454,7 @@ def test_generating_enforces_the_managers_required_assignment():
 
 
 def test_progressive_generation_supports_one_specific_date():
-    app, _ = _build_app([_generation([{
-        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-        "reason": "דנה מוסמכת לבוקר",
-    }])])
+    app, _ = _build_app()
     client = _client(app)
 
     started = client.post("/api/schedule/generate/start", json={
@@ -462,15 +468,12 @@ def test_progressive_generation_supports_one_specific_date():
     ).json()
     assert finished["generation"]["status"] == "complete"
     assert finished["generation"]["completed_days"] == 1
-    assert finished["assignments"][0]["employee"] == "דנה"
+    assert len(finished["assignments"]) == 1
 
 
-def test_generation_run_returns_before_the_model_and_is_polled_with_get():
+def test_generation_run_returns_before_the_solve_and_is_polled_with_get():
     launcher = _DeferredLauncher()
-    app, repo = _build_app([_generation([{
-        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-        "reason": "דנה מוסמכת לבוקר",
-    }])], launch=launcher)
+    app, repo = _build_app(launch=launcher)
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-17",
@@ -481,28 +484,22 @@ def test_generation_run_returns_before_the_model_and_is_polled_with_get():
     ).json()
 
     assert queued["generation"]["status"] == "running"
-    assert repo.model_calls == []
+    assert queued["assignments"] == []
     launcher.run_next()
     completed = client.get("/api/schedule/%s" % started["id"]).json()
     assert completed["generation"]["status"] == "complete"
-    assert completed["assignments"][0]["employee"] == "דנה"
+    assert len(completed["assignments"]) == 1
 
 
 def test_a_transient_failure_is_retried_without_stopping_the_job():
-    """One bad answer costs a retry, not the rest of the period.
+    """One failure costs a retry, not the rest of the period.
 
     The worker owns this, not the browser: nobody is watching a background
     build, so a job that parks itself on the first blip is a job that waits
     for a person who may not come back for an hour.
     """
     launcher = _DeferredLauncher()
-    app, _ = _build_app([
-        AgentError("תקלה זמנית"),
-        _generation([{
-            "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-            "reason": "הניסיון החוזר הצליח",
-        }]),
-    ], launch=launcher)
+    app, _ = _build_app(launch=launcher, failures=1)
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-17",
@@ -521,17 +518,9 @@ def test_a_transient_failure_is_retried_without_stopping_the_job():
 def test_failed_background_generation_requeues_as_running_for_polling():
     """Once the retries are spent the job parks, and `/run` resumes it."""
     launcher = _DeferredLauncher()
-    app, _ = _build_app(
-        # One more failure than the worker will absorb, so the job reaches
-        # `failed` rather than recovering on its own.
-        [AgentError("תקלה זמנית")] * 3 + [
-            _generation([{
-                "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-                "reason": "הניסיון החוזר הצליח",
-            }]),
-        ],
-        launch=launcher,
-    )
+    # One more failure than the worker will absorb, so the job reaches
+    # `failed` rather than recovering on its own.
+    app, _ = _build_app(launch=launcher, failures=3)
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-17",
@@ -553,11 +542,11 @@ def test_failed_background_generation_requeues_as_running_for_polling():
 
 
 def test_one_existing_day_can_be_rebuilt_with_board_instructions():
+    avoid = {"kind": "avoid", "employees": ["דנה"], "is_hard": True,
+             "reason": "יום הסגירה של קבוצה א", "source_id": "source-1"}
     launcher = _DeferredLauncher()
-    app, repo = _build_app([_generation([{
-        "employee": "יוסי", "shift": MORNING, "date": "2026-08-17",
-        "reason": "יוסי בקבוצת הסגירה של שבת",
-    }])], launch=launcher)
+    app, repo = _build_app([{"calls": [], "directives": [], "requests": [avoid],
+                             "unresolved": []}], launch=launcher)
     client = _client(app)
     opened = client.post("/api/schedule/blank", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-17",
@@ -567,7 +556,7 @@ def test_one_existing_day_can_be_rebuilt_with_board_instructions():
         "/api/schedule/generate/%s/day/start" % opened["id"],
         json={
             "date": "2026-08-17",
-            "instructions": "זה יום הסגירה של קבוצה א; לשמור על הסבב",
+            "instructions": "זה יום הסגירה של קבוצה א; דנה לא נכנסת",
         },
     ).json()
     client.post("/api/schedule/generate/%s/run" % opened["id"])
@@ -576,32 +565,19 @@ def test_one_existing_day_can_be_rebuilt_with_board_instructions():
     assert repo.model_calls == []
     launcher.run_next()
     payload = json.loads(repo.model_calls[0]["user"])
-    assert "יום הסגירה" in payload["instructions"]
+    assert "יום הסגירה" in payload["sources"][0]["text"]
     completed = client.get("/api/schedule/%s" % opened["id"]).json()
-    assert completed["assignments"][0]["employee"] == "יוסי"
+    assert [row["employee"] for row in completed["assignments"]] == ["יוסי"]
 
 
 def test_a_run_of_days_is_built_inside_an_existing_draft():
     """"From this day until Saturday" on a week that already has a period.
 
-    The job is planned for the run and nothing else: no model call is spent
-    on the days before it, what the manager placed inside it survives as a
+    The job is planned for the run and nothing else: no solve is spent on
+    the days before it, what the manager placed inside it survives as a
     pin (D18), and what sits outside it is not rewritten.
     """
-    app, repo = _build_app([
-        _generation([{
-            "employee": "דנה", "shift": MORNING, "date": "2026-08-20",
-            "reason": "כיסוי יום חמישי",
-        }]),
-        _generation([{
-            "employee": "דנה", "shift": MORNING, "date": "2026-08-21",
-            "reason": "כיסוי יום שישי",
-        }]),
-        _generation([{
-            "employee": "דנה", "shift": MORNING, "date": "2026-08-22",
-            "reason": "כיסוי שבת",
-        }]),
-    ])
+    app, repo = _build_app()
     client = _client(app)
     opened = client.post("/api/schedule/blank", json={
         "starts_on": "2026-08-16", "ends_on": "2026-08-22",
@@ -618,25 +594,18 @@ def test_a_run_of_days_is_built_inside_an_existing_draft():
     }).json()
 
     assert prepared["generation"]["total_days"] == 3
-    assert [day["date"] for day in prepared["generation"]["days"]] == [
-        "2026-08-20", "2026-08-21", "2026-08-22",
+    assert [day["dates"] for day in prepared["generation"]["days"]] == [
+        ["2026-08-20", "2026-08-21", "2026-08-22"],
     ]
-    assert repo.model_calls == []
-    for _ in range(3):
-        built = client.post(path + "/next").json()
+    built = client.post(path + "/next").json()
     assert built["generation"]["status"] == "complete"
-    assert len(repo.model_calls) == 3
-    placed = {
-        (row["date"], row["employee"], row["source"])
-        for row in built["assignments"]
-    }
+    placed = {(row["date"], row["source"]) for row in built["assignments"]}
     assert placed == {
-        ("2026-08-17", "יוסי", "manager"),
-        ("2026-08-20", "דנה", "agent"),
-        ("2026-08-21", "יוסי", "manager"),
-        ("2026-08-21", "דנה", "agent"),
-        ("2026-08-22", "דנה", "agent"),
+        ("2026-08-17", "manager"), ("2026-08-20", "agent"),
+        ("2026-08-21", "manager"), ("2026-08-22", "agent"),
     }
+    assert {row["employee"] for row in built["assignments"]
+            if row["date"] == "2026-08-21"} == {"יוסי"}
 
 
 def test_a_run_of_days_is_refused_on_a_published_period_and_off_its_dates():
@@ -669,10 +638,7 @@ def test_a_new_period_can_be_built_from_a_day_inside_its_week():
     A period beginning on the Thursday would not contain the Sunday the
     board reads that week by, and would be invisible on it.
     """
-    app, repo = _build_app([_generation([{
-        "employee": "דנה", "shift": MORNING, "date": "2026-08-20",
-        "reason": "כיסוי יום חמישי",
-    }])])
+    app, repo = _build_app()
     client = _client(app)
 
     started = client.post("/api/schedule/generate/start", json={
@@ -685,15 +651,13 @@ def test_a_new_period_can_be_built_from_a_day_inside_its_week():
     )
     assert len({slot["slot_date"] for slot in started["slots"]}) == 7
     assert started["generation"]["total_days"] == 3
-    assert [day["date"] for day in started["generation"]["days"]] == [
-        "2026-08-20", "2026-08-21", "2026-08-22",
-    ]
     first = client.post(
         "/api/schedule/generate/%s/next" % started["id"]
     ).json()
-    assert first["generation"]["completed_days"] == 1
-    assert len(repo.model_calls) == 1
-    assert [row["date"] for row in first["assignments"]] == ["2026-08-20"]
+    assert first["generation"]["completed_days"] == 3
+    assert sorted(row["date"] for row in first["assignments"]) == [
+        "2026-08-20", "2026-08-21", "2026-08-22",
+    ]
 
 
 def test_a_build_range_outside_its_period_is_refused():
@@ -708,47 +672,27 @@ def test_a_build_range_outside_its_period_is_refused():
     assert refused.status_code == 502
 
 
-def test_progressive_long_range_is_one_persisted_request_per_day():
-    app, _ = _build_app([
-        _generation([{
-            "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-            "reason": "כיסוי יום ראשון",
-        }]),
-        _generation([{
-            "employee": "יוסי", "shift": MORNING, "date": "2026-08-18",
-            "reason": "כיסוי יום שני",
-        }]),
-    ])
+def test_a_long_range_is_solved_in_four_week_spans():
+    app, _ = _build_app()
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
-        "instructions": "לשמור על חלוקה הוגנת",
+        "starts_on": "2026-08-01", "ends_on": "2026-09-30",
     }).json()
+    assert [len(day["dates"]) for day in started["generation"]["days"]] == [28, 28, 5]
 
     first = client.post(
         "/api/schedule/generate/%s/next" % started["id"]
     ).json()
-    assert first["generation"]["completed_days"] == 1
+    assert first["generation"]["completed_days"] == 28
     assert first["generation"]["status"] == "running"
-
-    second = client.post(
-        "/api/schedule/generate/%s/next" % started["id"]
-    ).json()
-    assert second["generation"]["status"] == "complete"
-    assert second["generation"]["completed_days"] == 2
-    assert {row["date"] for row in second["assignments"]} == {
-        "2026-08-17", "2026-08-18",
-    }
+    for _ in range(2):
+        last = client.post("/api/schedule/generate/%s/next" % started["id"]).json()
+    assert last["generation"]["status"] == "complete"
+    assert len(last["assignments"]) == 61
 
 
 def test_a_failed_day_is_checkpointed_and_the_same_day_can_resume():
-    app, repo = _build_app([
-        AgentError("תקלה זמנית"),
-        _generation([{
-            "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-            "reason": "ניסיון חוזר הצליח",
-        }]),
-    ])
+    app, repo = _build_app(failures=1)
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-17",
@@ -822,21 +766,12 @@ def test_a_running_job_says_when_a_worker_last_touched_it():
 def test_a_manager_can_stop_a_build_and_keep_the_finished_days():
     """Giving up is the manager's decision, and it costs them nothing.
 
-    The days already paid for stay, the period is an ordinary draft
-    immediately, and resuming picks up the first day that is not complete."""
-    app, repo = _build_app([
-        _generation([{
-            "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-            "reason": "כיסוי יום ראשון",
-        }]),
-        _generation([{
-            "employee": "יוסי", "shift": MORNING, "date": "2026-08-18",
-            "reason": "כיסוי יום שני",
-        }]),
-    ])
+    The spans already solved stay, the period is an ordinary draft
+    immediately, and resuming picks up the first span that is not complete."""
+    app, repo = _build_app()
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+        "starts_on": "2026-08-01", "ends_on": "2026-09-05",
     }).json()
     client.post("/api/schedule/generate/%s/next" % started["id"])
 
@@ -845,8 +780,8 @@ def test_a_manager_can_stop_a_build_and_keep_the_finished_days():
     ).json()
 
     assert stopped["generation"]["status"] == "cancelled"
-    assert stopped["generation"]["completed_days"] == 1
-    assert [row["date"] for row in stopped["assignments"]] == ["2026-08-17"]
+    assert stopped["generation"]["completed_days"] == 28
+    assert max(row["date"] for row in stopped["assignments"]) == "2026-08-28"
     assert stopped["status"] == "draft"
 
 
@@ -948,15 +883,11 @@ def test_polling_the_same_job_twice_does_not_start_a_second_worker():
 
 def test_a_hand_placed_shift_survives_the_day_being_generated():
     """The board stays writable while a period is built (D18), so a cell
-    filled in mid-build must not be undone by the day that follows it.
+    filled in mid-build must not be undone by the span that follows it.
 
-    It goes to the model as a pin, and it is kept whether or not the model
-    repeats it -- with the manager's own source, so the history still says a
-    person put it there."""
-    app, repo = _build_app([_generation([{
-        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-        "reason": "בחירת הסוכן",
-    }])])
+    It goes to the solver as a pin, with the manager's own source, so the
+    history still says a person put it there."""
+    app, repo = _build_app()
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-17",
@@ -971,12 +902,7 @@ def test_a_hand_placed_shift_survives_the_day_being_generated():
     ).json()
 
     placed = {row["employee"]: row["source"] for row in built["assignments"]}
-    assert placed["יוסי"] == "manager"
-    payload = json.loads(repo.model_calls[0]["user"])
-    assert any(
-        row["employee"] == "יוסי"
-        for row in payload.get("required_assignments") or []
-    )
+    assert placed == {"יוסי": "manager"}
 
 
 class _BlockingLlm:
@@ -1004,17 +930,14 @@ class _BlockingLlm:
 def test_a_build_held_open_by_the_model_leaves_the_board_usable():
     """The failure this whole path exists to prevent.
 
-    A model that never answers used to leave the manager with a period stuck
-    at "building day one" and no way forward: the browser polled a `running`
-    job forever and the area was disabled for as long as it did. Three things
-    have to hold instead — the poll must stay cheap and answerable, a shift
-    must still be placeable by hand, and stopping must actually stop.
+    A model that never answers (here, while translating an instruction)
+    must not leave the manager with a period stuck at "building" and no way
+    forward. Three things have to hold — the poll must stay cheap and
+    answerable, a shift must still be placeable by hand, and stopping must
+    actually stop.
     """
     repository = _FakeScheduleRepo()
-    llm = _BlockingLlm(_generation([{
-        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-        "reason": "דנה מוסמכת לבוקר",
-    }]))
+    llm = _BlockingLlm({"calls": [], "directives": [], "requests": [], "unresolved": []})
     repository.model_calls = llm.calls
     guards = Guards(SECRET)
     app = FastAPI()
@@ -1031,6 +954,7 @@ def test_a_build_held_open_by_the_model_leaves_the_board_usable():
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+        "instructions": "לשמור על חלוקה הוגנת",
     }).json()
     client.post("/api/schedule/generate/%s/run" % started["id"])
     assert llm.entered.wait(10), "the worker never reached the model"
@@ -1045,7 +969,7 @@ def test_a_build_held_open_by_the_model_leaves_the_board_usable():
         assert progress["generation"]["heartbeat"]
 
         # The board is not locked: a manager can place a shift by hand on a
-        # date the agent has not reached yet.
+        # date the solver has not reached yet.
         placed = client.post("/api/schedule/assign", json={
             "shift_name": MORNING, "slot_date": "2026-08-18",
             "employee": "יוסי", "schedule_id": started["id"],
@@ -1058,23 +982,6 @@ def test_a_build_held_open_by_the_model_leaves_the_board_usable():
         assert stopped["generation"]["status"] == "cancelled"
     finally:
         llm.release.set()
-
-    # The day in flight is allowed to finish -- it is paid for -- and the
-    # worker takes no further day.
-    deadline = time.time() + 10
-    while time.time() < deadline:
-        state = client.get("/api/schedule/%s/progress" % started["id"]).json()
-        if state["generation"]["status"] == "cancelled":
-            break
-        time.sleep(0.05)
-    assert state["generation"]["status"] == "cancelled"
-    assert len(llm.calls) == 1
-    # And what the manager placed by hand is still there.
-    kept = client.get("/api/schedule/%s" % started["id"]).json()
-    assert any(
-        row["employee"] == "יוסי" and row["source"] == "manager"
-        for row in kept["assignments"]
-    )
 
 
 def _two_periods(client):
@@ -1194,28 +1101,20 @@ def _days(first, last):
 
 
 def test_a_generated_schedule_carries_its_warnings_and_still_returns_200():
-    """D3: warnings are advisory. A schedule that breaks a rule still renders.
-
-    Eight days is past `_CHUNK_DAYS`, so this also covers the case the warning
-    needs most: a run of consecutive shifts that crosses a chunk boundary and
-    is only visible once the chunks are merged. The audit sees the period, not
-    the calls it took to build it.
-    """
-    app, _ = _build_app([
-        # The model leaves the draft unchanged on each fairness repair;
-        # the advisory warnings must still render instead of blocking saving.
-        _generation(_days(17, 23)), _generation(_days(17, 23)),
-        _generation(_days(24, 24)), _generation(_days(24, 24)),
-    ])
+    """D3 still holds for the audit: warnings are advisory. A seat nobody can
+    legally take is reported, and the schedule still renders."""
+    app, repo = _build_app()
+    repo.profiles[TEAM] = dict(PROFILE, shifts=[dict(PROFILE["shifts"][0], staffing=[
+        {"days": [], "headcount": 3, "required_roles": []}])])
     response = _client(app).post("/api/schedule/generate", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-24",
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
     })
     assert response.status_code == 200
     codes = {warning["code"] for warning in response.json()["warnings"]}
-    assert "consecutive" in codes
-    assert any("פער עומס" in note for note in response.json()["notes"])
+    assert "unfilled" in codes
+    assert any("נשארה בחוסר" in note for note in response.json()["notes"])
     # The schedule is still there in full, not withheld.
-    assert len(response.json()["assignments"]) == 8
+    assert len(response.json()["assignments"]) == 4
 
 
 # -- the management overview ----------------------------------------------
@@ -1242,13 +1141,11 @@ def test_the_overview_carries_the_periods_numbers():
     what the browser actually receives -- a field added to `shift_stats` but
     missing from `ShiftStats` would be silently dropped here.
     """
-    app, _ = _build_app([_generation([
-        {"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-         "reason": "מוסמכת"},
-    ])])
+    app, _ = _build_app()
     client = _client(app)
     client.post("/api/schedule/generate", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+        "required_assignments": [{"employee": "דנה", "shift": MORNING, "date": "2026-08-17"}],
     })
 
     stats = client.get("/api/schedule/overview").json()["stats"]
@@ -1705,8 +1602,6 @@ def test_constraints_are_scoped_to_the_workspace():
 
 def test_a_change_without_a_reason_is_answered_by_asking():
     app, _ = _build_app([
-        _generation([{"employee": "דנה", "shift": MORNING,
-                      "date": "2026-08-17", "reason": "מוסמכת"}]),
         {"reply": "למה דנה לא מגיעה?", "needs_reason": True,
          "agent_reason": "", "operations": [], "constraints": []},
     ])
@@ -1747,13 +1642,11 @@ def test_proposing_persists_nothing():
 
 def test_applying_a_confirmed_change_records_both_reasons():
     """D8: the manager's reason and the agent's both land in the log."""
-    app, repo = _build_app([
-        _generation([{"employee": "דנה", "shift": MORNING,
-                      "date": "2026-08-17", "reason": "מוסמכת"}]),
-    ])
+    app, repo = _build_app()
     client = _client(app)
     created = client.post("/api/schedule/generate", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+        "required_assignments": [{"employee": "דנה", "shift": MORNING, "date": "2026-08-17"}],
     }).json()
 
     response = client.post("/api/schedule/apply", json={
@@ -1901,18 +1794,17 @@ def test_an_invalid_constraint_time_is_rejected():
 
 def test_a_recorded_constraint_shows_up_as_a_warning_when_contradicted():
     """The audit reads a constraint with no shift as covering the whole day."""
-    app, _ = _build_app([_generation([
-        {"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-         "reason": "כיסוי"},
-    ])])
+    app, _ = _build_app()
     client = _client(app)
+    body = client.post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+        "required_assignments": [{"employee": "דנה", "shift": MORNING, "date": "2026-08-17"}],
+    }).json()
     client.post("/api/schedule/constraints", json={
         "employee": "דנה", "constraint_date": "2026-08-17",
         "reason": "מילואים",
     })
-    body = client.post("/api/schedule/generate", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
-    }).json()
+    body = client.get("/api/schedule/%s" % body["id"]).json()
     codes = {warning["code"] for warning in body["warnings"]}
     assert "unavailable" in codes
 
@@ -1958,7 +1850,6 @@ def test_the_change_log_is_readable_as_history():
 def test_the_agent_briefs_the_manager_unprompted():
     """The one route the manager did not initiate (D15)."""
     app, _ = _build_app([
-        _generation([]),
         {"headline": "יש חור בשלישי", "quiet": False, "items": [
             {"text": "משמרת בוקר של שלישי ריקה", "kind": "gap",
              "suggestion": "מי יכול לכסות את בוקר שלישי?"},
@@ -2374,36 +2265,18 @@ class _FakeSettings:
         )
 
 
-def test_week_mode_builds_a_week_in_one_model_call():
+def test_a_week_is_one_span_counted_in_seven_days():
     launcher = _DeferredLauncher()
-    # A complete, legal week in one answer: every slot staffed, and the two
-    # of them alternating so neither runs past the consecutive-days ceiling.
-    # Nothing left for a repair call to chase, which is what makes "one model
-    # call" the claim this test is actually making.
-    week = [
-        {
-            "employee": "דנה" if day % 2 else "יוסי",
-            "shift": MORNING,
-            "date": "2026-08-%d" % day,
-            "reason": "מאזן את הבקרים בין דנה ליוסי",
-        }
-        for day in range(17, 24)
-    ]
-    app, _ = _build_app(
-        [_generation(week)],
-        launch=launcher,
-        settings=_FakeSettings("week"),
-    )
+    app, repo = _build_app(launch=launcher)
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-23",
     }).json()
 
     # One span covering the week, but still seven days of progress: the bar
-    # measures the period, not the number of calls.
+    # measures the period, not the number of solves.
     assert len(started["generation"]["days"]) == 1
     assert started["generation"]["total_days"] == 7
-    assert started["generation"]["mode"] == "week"
 
     client.post("/api/schedule/generate/%s/run" % started["id"])
     launcher.run_next()
@@ -2412,54 +2285,9 @@ def test_week_mode_builds_a_week_in_one_model_call():
     assert body["generation"]["status"] == "complete"
     assert body["generation"]["completed_days"] == 7
     assert len({row["date"] for row in body["assignments"]}) == 7
-
-
-def test_day_mode_is_the_default_and_asks_once_per_date():
-    launcher = _DeferredLauncher()
-    app, _ = _build_app(
-        [
-            _generation([{
-                "employee": "דנה", "shift": MORNING,
-                "date": "2026-08-%d" % day, "reason": "דנה זמינה",
-            }])
-            for day in (17, 18)
-        ],
-        launch=launcher,
-    )
-    client = _client(app)
-    started = client.post("/api/schedule/generate/start", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
-    }).json()
-
-    assert started["generation"]["mode"] == "day"
-    assert len(started["generation"]["days"]) == 2
-
-    client.post("/api/schedule/generate/%s/run" % started["id"])
-    launcher.run_next()
-    assert client.get("/api/schedule/%s" % started["id"]).json()[
-        "generation"
-    ]["status"] == "complete"
-
-
-def test_code_engine_builds_the_period_without_a_model_reply():
-    launcher = _DeferredLauncher()
-    app, _ = _build_app(
-        [], launch=launcher, settings=_FakeSettings("week", "code")
-    )
-    client = _client(app)
-    started = client.post("/api/schedule/generate/start", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
-    }).json()
-
-    assert started["generation"]["engine"] == "code"
-    client.post("/api/schedule/generate/%s/run" % started["id"])
-    launcher.run_next()
-
-    body = client.get("/api/schedule/%s" % started["id"]).json()
-    assert body["generation"]["status"] == "complete"
-    assert len(body["assignments"]) == 2
-    assert body["generation"]["days"][0]["metrics"]["engine"] == "code"
-    assert body["generation"]["days"][0]["metrics"]["total_tokens"] == 0
+    metrics = body["generation"]["days"][0]["metrics"]
+    assert metrics["engine"] == "solver" and metrics["total_tokens"] == 0
+    assert repo.model_calls == []
 
 
 def test_a_checkpoint_leaves_earlier_days_rows_alone():

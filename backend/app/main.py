@@ -72,9 +72,9 @@ share_slots(redis_hub)
 repository = Repository(store)
 llm = OpenAIJsonClient(store)
 workspace_service = WorkspaceService(repository)
-# Handed the settings store, not just the repository: `schedule_generation_mode`
-# is read when a period is opened, so a mode saved in the panel applies to the
-# next build with no restart — the same property the model settings have.
+# Handed the settings store, not just the repository: the solver's time limit
+# is read per build, so a value saved in the panel applies to the next build
+# with no restart — the same property the model settings have.
 schedule_service = ScheduleService(repository, llm, settings=store)
 profile_service = ProfileService(repository)
 manager_chat_service = ManagerChatService(repository, llm, schedule_service)

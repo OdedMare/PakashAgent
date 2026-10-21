@@ -50,13 +50,10 @@ services:
       # Shared across API and worker processes through PostgreSQL advisory
       # locks. 1 suits Ollama; raise it for a batching server (vLLM, TGI).
       PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-1}
-      # How wide one scheduling model call is: `day` or `week`. `day` is the
-      # accurate default -- each date is verified and repaired on its own.
-      # `week` builds up to seven days per call, which is several times
-      # faster on a slow local model, at the cost of re-answering the whole
-      # span when one row is wrong. Also editable live in the settings panel.
-      PAKASH_SCHEDULE_GENERATION_MODE: ${PAKASH_SCHEDULE_GENERATION_MODE:-day}
-      PAKASH_SCHEDULE_GENERATION_ENGINE: ${PAKASH_SCHEDULE_GENERATION_ENGINE:-auto}
+      # The constraint solver that assigns every schedule (bl/solver/):
+      # seconds per solve and parallel workers. Also editable in the panel.
+      PAKASH_SOLVER_TIME_LIMIT_SECONDS: ${PAKASH_SOLVER_TIME_LIMIT_SECONDS:-10}
+      PAKASH_SOLVER_WORKERS: ${PAKASH_SOLVER_WORKERS:-8}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # Opik tracing of every model call, prompts and replies included
       # (dal/llm/tracing.py). Empty key = off. The worker gets the same
@@ -101,8 +98,8 @@ services:
       PAKASH_LLM_TIMEOUT_SECONDS: ${PAKASH_LLM_TIMEOUT_SECONDS:-0}
       PAKASH_LLM_QUEUE_SECONDS: ${PAKASH_LLM_QUEUE_SECONDS:-0}
       PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-1}
-      PAKASH_SCHEDULE_GENERATION_MODE: ${PAKASH_SCHEDULE_GENERATION_MODE:-day}
-      PAKASH_SCHEDULE_GENERATION_ENGINE: ${PAKASH_SCHEDULE_GENERATION_ENGINE:-auto}
+      PAKASH_SOLVER_TIME_LIMIT_SECONDS: ${PAKASH_SOLVER_TIME_LIMIT_SECONDS:-10}
+      PAKASH_SOLVER_WORKERS: ${PAKASH_SOLVER_WORKERS:-8}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPIK_API_KEY: ${OPIK_API_KEY:-}
       OPIK_WORKSPACE: ${OPIK_WORKSPACE:-}

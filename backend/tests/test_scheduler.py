@@ -1,10 +1,9 @@
 """The scheduler and the change agent, against a fake model.
 
 Both are stateless by design, so their whole contract is testable with no
-database: hand them a profile and a scripted model reply, assert what comes
-back. What these pin down is the part that is *not* the model's judgment —
-the slot grid, which is arithmetic, and the two reason gates, which are
-decisions the product cannot afford to leave to a prompt.
+database. The scheduler's model only translates sentences (D34); the slot
+grid and the assignment are code, and so are the change agent's two
+reason gates.
 """
 
 import datetime
@@ -123,264 +122,79 @@ def test_an_inverted_or_oversized_period_is_refused():
         build_slots(PROFILE, "2026-01-01", "2027-12-31")
 
 
-def test_generating_without_any_shift_is_an_error_not_an_empty_schedule():
-    """A profile with no vocabulary cannot produce a grid, and saying so
-    beats returning an empty schedule that looks like a success."""
-    scheduler = Scheduler(_ScriptedLlm([]))
-    with pytest.raises(AgentError):
-        scheduler.generate({"shifts": []}, "2026-08-17", "2026-08-18")
-    with pytest.raises(AgentError):
-        scheduler.generate(
-            {"shifts": []}, "2026-08-17", "2026-08-18", engine="code"
-        )
-
-
-def test_auto_uses_zero_token_code_for_a_clean_structured_request():
-    profile = {
-        "employees": [{"name": "דנה", "eligible_shifts": [MORNING]}],
-        "shifts": [{
-            "name": MORNING, "start_time": "07:00", "end_time": "15:00",
-            "days": [], "staffing": [{"days": [], "headcount": 1}],
-        }],
-    }
-    llm = _ScriptedLlm([])
-
-    result = Scheduler(llm).generate_span(
-        profile, "2026-08-17", "2026-08-17", engine="auto",
-    )
-
-    assert result["metrics"]["engine"] == "code"
-    assert result["metrics"]["total_tokens"] == 0
-    assert llm.calls == []
-
-
-def test_code_refuses_rules_that_only_the_model_can_interpret():
-    with pytest.raises(AgentError, match="AI"):
-        Scheduler(_ScriptedLlm([])).generate_span(
-            PROFILE, "2026-08-17", "2026-08-17", engine="code",
-        )
-
-
-def test_auto_uses_ai_when_the_profile_contains_semantic_rules():
-    llm = _ScriptedLlm([{
-        "directives": [],
-        "unresolved": [{
-            "source_id": "source-1",
-            "reason": "הכלל מתאר מנוחה כללית ולא פעולה לתאריך ומשמרת מדויקים",
-        }],
-    }, _reply([{
-        "employee_id": "employee-1", "slot_id": "slot-1",
-        "reason": "דנה מתאימה לפי הכלל והזמינות",
-    }])])
-
-    result = Scheduler(llm).generate_span(
-        PROFILE, "2026-08-17", "2026-08-17", engine="auto",
-    )
-
-    assert result["metrics"]["engine"] == "ai"
-    assert len(llm.calls) == 2
-
-
-def test_auto_translates_an_exact_instruction_then_assigns_in_code():
-    profile = {
-        "employees": [
-            {"name": "דנה", "eligible_shifts": [MORNING]},
-            {"name": "יוסי", "eligible_shifts": [MORNING]},
-        ],
-        "shifts": [{
-            "name": MORNING, "start_time": "07:00", "end_time": "15:00",
-            "days": [], "staffing": [{"days": [], "headcount": 1}],
-        }],
-    }
-    llm = _ScriptedLlm([{
-        "directives": [{
-            "source_id": "source-1",
-            "action": "unavailable",
-            "employee": "דנה",
-            "date": "2026-08-17",
-            "shift": MORNING,
-            "reason": "המנהל ביקש שדנה לא תעבוד במשמרת הזו",
-        }],
-        "unresolved": [],
-        "_usage": {
-            "prompt_tokens": 90, "completion_tokens": 30, "total_tokens": 120,
-        },
-    }])
-
-    result = Scheduler(llm).generate_span(
-        profile, "2026-08-17", "2026-08-17",
-        instructions="דנה לא תעבוד בבוקר ב-17 באוגוסט 2026",
-        engine="auto",
-    )
-
-    assert [row["employee"] for row in result["assignments"]] == ["יוסי"]
-    assert result["metrics"]["engine"] == "hybrid"
-    assert result["metrics"]["model_calls"] == 1
-    assert result["metrics"]["total_tokens"] == 120
-    assert len(llm.calls) == 1
-    assert llm.calls[0]["schema"]["required"] == ["calls", "directives", "requests", "unresolved", "timing"]
-
-
 # -- assignments -----------------------------------------------------------
 
-def _reply(assignments, notes=None, summary="סידור לשבוע"):
-    return {
-        "assignments": assignments,
-        "notes": notes or [],
-        "summary": summary,
-    }
+
+PLAIN = dict(PROFILE, rules=[])
 
 
-def test_assignments_come_back_with_their_reasons():
-    llm = _ScriptedLlm([_reply([
-        {"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-         "reason": "דנה מוסמכת לבוקר ובשעות הנמוכות בצוות"},
-    ])])
-    result = Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
-    assert len(result["assignments"]) == 1
-    assert result["assignments"][0]["reason"].startswith("דנה מוסמכת")
+def _translation(requests=(), unresolved=()):
+    return {"calls": [], "directives": [], "requests": list(requests),
+            "unresolved": list(unresolved),
+            "timing": [{"source_id": "source-1", "kind": "none", "phrase": "", "starts_on": "",
+                        "ends_on": "", "maybe_through": "", "question": ""}]}
 
 
-def test_daily_generation_uses_ids_and_filters_unavailable_candidates():
-    llm = _ScriptedLlm([_reply([{
-        "employee_id": "employee-2",
-        "slot_id": "slot-1",
-        "reason": "יוסי זמין ומוסמך לבוקר",
-    }])])
-    result = Scheduler(llm).generate_day(
-        PROFILE,
-        "2026-08-17",
-        availability=[{
-            "employee": "דנה", "date": "2026-08-17", "shift": MORNING,
-            "available": False,
-        }],
-        instructions="להתחשב בכללים הקשיחים",
-    )
+def test_structured_input_is_solved_with_no_model_call():
+    llm = _ScriptedLlm([])
 
-    assert result["assignments"][0]["employee"] == "יוסי"
-    payload = json.loads(llm.calls[0]["user"])
-    assert payload["period"]["starts_on"] == payload["period"]["ends_on"]
-    assert payload["period"]["slots"][0]["candidate_employee_ids"] == [
-        "employee-2"
-    ]
-    assert payload["instructions"] == "להתחשב בכללים הקשיחים"
-    assert payload["profile"]["rules"] == PROFILE["rules"]
-    assert payload["candidate_employees"][0]["role"] == ""
+    result = Scheduler(llm).generate_span(PLAIN, "2026-08-30", "2026-09-05")
+
+    assert llm.calls == []
+    assert result["metrics"]["engine"] == "solver"
+    assert result["metrics"]["total_tokens"] == 0
+    assert len(result["assignments"]) == 8
+    assert all(row["reason"] for row in result["assignments"])
 
 
-def test_daily_generation_sends_the_employee_role():
-    profile = dict(PROFILE, employees=[{
-        "name": "דנה", "role": "אחראית משמרת",
-        "eligible_shifts": [MORNING],
-    }])
-    llm = _ScriptedLlm([_reply([{
-        "employee_id": "employee-1", "slot_id": "slot-1",
-        "reason": "דנה ממלאת את תפקיד אחראית המשמרת",
-    }])])
+def test_an_instruction_is_translated_and_the_solver_honours_it():
+    avoid = {"kind": "avoid", "employees": ["יוסי"], "shifts": [MORNING], "is_hard": True,
+             "reason": "יוסי לא בבקרים השבוע", "source_id": "source-1"}
+    llm = _ScriptedLlm([_translation([avoid])])
 
-    Scheduler(llm).generate_day(profile, "2026-08-17")
+    result = Scheduler(llm).generate_span(PLAIN, "2026-08-30", "2026-09-05",
+                                          instructions="יוסי לא בבקרים השבוע")
 
-    payload = json.loads(llm.calls[0]["user"])
-    assert payload["candidate_employees"][0]["role"] == "אחראית משמרת"
+    assert len(llm.calls) == 1
+    assert result["metrics"]["engine"] == "hybrid"
+    assert not [row for row in result["assignments"]
+                if row["employee"] == "יוסי" and row["shift"] == MORNING]
 
 
-def test_daily_generation_receives_the_full_profile_and_active_preferences():
-    profile = dict(
-        PROFILE,
-        casual_worker_policy="מזדמנים רק כשאין כיסוי מהצוות הקבוע",
-        audit_policy={
-            "max_weekly_hours": 40,
-            "max_consecutive_days": 6,
-            "min_rest_hours": 10,
-        },
-    )
-    llm = _ScriptedLlm([_reply([]), _reply([])])
+def test_a_binding_sentence_that_did_not_translate_is_reported_not_dropped():
+    left = {"source_id": "source-1", "reason": "לא ברור על מי מדובר"}
+    llm = _ScriptedLlm([_translation(unresolved=[left])])
 
-    Scheduler(llm).generate_day(
-        profile,
-        "2026-08-17",
-        preferences=[{
-            "kind": "employee", "subject": "דנה",
-            "text": "דנה מעדיפה משמרות בוקר",
-        }],
-    )
+    result = Scheduler(llm).generate_span(PLAIN, "2026-08-30", "2026-08-30",
+                                          instructions="שהחדש לא יהיה לבד")
 
-    payload = json.loads(llm.calls[0]["user"])
-    assert payload["profile"]["casual_worker_policy"].startswith("מזדמנים")
-    assert payload["profile"]["audit_policy"]["min_rest_hours"] == 10
-    assert payload["preferences"] == [{
-        "kind": "employee", "subject": "דנה",
-        "text": "דנה מעדיפה משמרות בוקר",
-    }]
+    assert result["assignments"]
+    assert "לא נאכפה" in result["notes"][0] and "שהחדש לא יהיה לבד" in result["notes"][0]
 
 
-def test_structured_recurring_constraint_filters_daily_candidates():
-    employees = [dict(PROFILE["employees"][0], recurring_constraints=[{
-        "days": ["שני"], "shifts": [MORNING], "available": False,
-        "is_hard": True, "start_time": "", "end_time": "",
-        "reason": "דנה לא עובדת בימי שני",
-    }])] + PROFILE["employees"][1:]
-    profile = dict(PROFILE, employees=employees)
-    llm = _ScriptedLlm([_reply([{
-        "employee_id": "employee-2", "slot_id": "slot-1",
-        "reason": "יוסי זמין לבוקר ביום שני",
-    }])])
+def test_an_unreachable_model_still_builds_and_names_what_it_skipped():
+    class _Down:
+        def complete_json(self, *args, **kwargs):
+            raise AgentError("אין חיבור")
 
-    Scheduler(llm).generate_day(profile, "2026-08-17")
+    result = Scheduler(_Down()).generate_span(PROFILE, "2026-08-30", "2026-08-30")
 
-    payload = json.loads(llm.calls[0]["user"])
-    assert payload["period"]["slots"][0]["candidate_employee_ids"] == [
-        "employee-2"
-    ]
-    assert payload["availability"][0]["source"] == "setup"
+    assert result["assignments"]
+    assert "אסור שתי משמרות ברצף" in result["notes"][0]
 
 
-def test_range_generation_receives_a_recurring_hard_rule_as_dated_context():
-    employees = [dict(PROFILE["employees"][0], recurring_constraints=[{
-        "days": ["שני"], "shifts": [MORNING], "available": False,
-        "is_hard": True, "start_time": "", "end_time": "",
-        "reason": "דנה לא עובדת בימי שני",
-    }])] + PROFILE["employees"][1:]
-    profile = dict(PROFILE, employees=employees)
-    llm = _ScriptedLlm([_reply([{
-        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-        "reason": "המודל ניסה לשבץ למרות האילוץ",
-    }])])
+def test_rows_to_keep_are_kept_where_they_still_fit():
+    keep = [{"employee": "יוסי", "shift": MORNING, "date": "2026-08-31"}]
 
-    result = Scheduler(llm).generate(
-        profile, "2026-08-17", "2026-08-17"
-    )
+    result = Scheduler(None).generate_span(PLAIN, "2026-08-31", "2026-08-31", keep=keep)
 
-    assert result["assignments"][0]["employee"] == "דנה"
-    payload = json.loads(llm.calls[0]["user"])
-    assert payload["availability"] == [{
-        "employee": "דנה", "date": "2026-08-17", "shift": MORNING,
-        "available": False, "start_time": "", "end_time": "",
-        "is_hard": True, "reason": "דנה לא עובדת בימי שני",
-        "source": "setup",
-    }]
+    assert [row["employee"] for row in result["assignments"]] == ["יוסי"]
 
 
-def test_dated_constraint_overrides_the_same_recurring_occurrence():
-    employees = [dict(PROFILE["employees"][0], recurring_constraints=[{
-        "days": ["שני"], "shifts": [MORNING], "available": False,
-        "is_hard": True, "start_time": "", "end_time": "", "reason": "קבוע",
-    }])] + PROFILE["employees"][1:]
-    profile = dict(PROFILE, employees=employees)
-    llm = _ScriptedLlm([_reply([{
-        "employee_id": "employee-1", "slot_id": "slot-1",
-        "reason": "דנה אישרה חריג ליום הזה",
-    }])])
+def test_a_period_with_no_shift_is_an_error_not_an_empty_schedule():
+    with pytest.raises(AgentError):
+        Scheduler(None).generate_verified(dict(PLAIN, shifts=[]), "2026-08-30", "2026-09-05")
 
-    Scheduler(llm).generate_day(profile, "2026-08-17", availability=[{
-        "employee": "דנה", "constraint_date": datetime.date(2026, 8, 17),
-        "shift_name": MORNING, "available": True, "is_hard": True,
-    }])
-
-    payload = json.loads(llm.calls[0]["user"])
-    assert payload["period"]["slots"][0]["candidate_employee_ids"] == [
-        "employee-1", "employee-2"
-    ]
 
 
 def test_rotation_b_is_the_slot_complement_of_rotation_a():
@@ -409,339 +223,6 @@ def test_rotation_b_is_the_slot_complement_of_rotation_a():
         ("יוסי", "2026-08-18", MORNING),
     ]
     assert all(row["source"] == "rotation" and row["is_hard"] for row in rows)
-
-
-def test_daily_scheduler_excludes_the_unavailable_rotation():
-    profile = dict(
-        PROFILE,
-        workplace={
-            "name": "מוקד", "rotation_mode": "round",
-            "rotation_a_unavailability": [{
-                "days": ["שני"], "shifts": [MORNING],
-                "start_time": "", "end_time": "", "reason": "יציאה",
-            }],
-        },
-        employees=[
-            dict(PROFILE["employees"][0], exit_pattern="round", rotation_group="א"),
-            dict(PROFILE["employees"][1], exit_pattern="round", rotation_group="ב"),
-        ],
-    )
-    llm = _ScriptedLlm([_reply([{
-        "employee_id": "employee-2", "slot_id": "slot-1",
-        "reason": "סבב ב זמין",
-    }])])
-
-    result = Scheduler(llm).generate_day(profile, "2026-08-17")
-    payload = json.loads(llm.calls[0]["user"])
-
-    assert [row["employee"] for row in result["assignments"]] == ["יוסי"]
-    assert payload["period"]["slots"][0]["candidate_employee_ids"] == [
-        "employee-2"
-    ]
-    assert payload["availability"][0]["derived_from"] == "rotation_a_unavailability"
-
-
-def test_legacy_range_generation_drops_a_rotation_violation():
-    profile = dict(
-        PROFILE,
-        workplace={
-            "name": "מוקד", "rotation_mode": "round",
-            "rotation_a_unavailability": [{
-                "days": ["שני"], "shifts": [MORNING],
-                "start_time": "", "end_time": "", "reason": "יציאה",
-            }],
-        },
-        employees=[
-            dict(PROFILE["employees"][0], exit_pattern="round", rotation_group="א"),
-        ],
-    )
-    llm = _ScriptedLlm([_reply([{
-        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-        "reason": "המודל ניסה לשבץ את הסבב החסר",
-    }])])
-
-    result = Scheduler(llm).generate(
-        profile, "2026-08-17", "2026-08-17"
-    )
-
-    assert result["assignments"] == []
-
-
-def test_required_roles_and_non_counting_trainees_reach_the_daily_contract():
-    profile = dict(
-        PROFILE,
-        employees=[
-            {"name": "דנה", "role": "אחראית", "eligible_shifts": [MORNING]},
-            {
-                "name": "מתלמד", "role": "מתלמד", "eligible_shifts": [MORNING],
-                "is_trainee": True, "counts_toward_staffing": False,
-            },
-        ],
-        shifts=[dict(PROFILE["shifts"][0], staffing=[{
-            "days": [], "headcount": 1, "required_roles": ["אחראית"],
-        }])],
-    )
-    llm = _ScriptedLlm([_reply([{
-        "employee_id": "employee-1", "slot_id": "slot-1",
-        "reason": "דנה היא האחראית הנדרשת",
-    }, {
-        "employee_id": "employee-2", "slot_id": "slot-1",
-        "reason": "המתלמד מצטרף ואינו נספר בתקן",
-    }])])
-
-    Scheduler(llm).generate_day(profile, "2026-08-17")
-
-    call = llm.calls[0]
-    payload = json.loads(call["user"])
-    assert payload["period"]["slots"][0]["required_roles"] == ["אחראית"]
-    assert payload["candidate_employees"][1]["counts_toward_staffing"] is False
-    assert call["schema"]["properties"]["assignments"]["maxItems"] == 2
-
-
-def test_round_and_triplet_commanders_can_staff_the_same_shift():
-    """Command qualification is independent of each person's exit cycle."""
-    profile = dict(
-        PROFILE,
-        workplace={
-            "name": "מוקד",
-            "round_first_closure_date": "2026-08-22",
-            "round_first_closure_group": "א",
-            "triplet_first_closure_date": "2026-08-22",
-            "triplet_first_closure_group": "ג",
-        },
-        employees=[
-            {
-                "name": "מפקדת סבב", "exit_pattern": "round",
-                "rotation_group": "א", "is_shift_manager": True,
-                "eligible_shifts": [MORNING],
-            },
-            {
-                "name": "מפקד תלתון", "exit_pattern": "triplet",
-                "rotation_group": "ג", "is_shift_manager": True,
-                "eligible_shifts": [MORNING],
-            },
-        ],
-        shifts=[dict(PROFILE["shifts"][0], staffing=[{
-            "days": [], "headcount": 2, "required_roles": [],
-        }], requires_shift_manager=True)],
-    )
-    llm = _ScriptedLlm([_reply([
-        {"employee_id": "employee-1", "slot_id": "slot-1", "reason": "מפקדת הסבב סוגרת"},
-        {"employee_id": "employee-2", "slot_id": "slot-1", "reason": "מפקד התלתון סוגר"},
-    ])])
-
-    result = Scheduler(llm).generate_day(profile, "2026-08-22")
-    payload = json.loads(llm.calls[0]["user"])
-
-    assert payload["period"]["slots"][0]["candidate_employee_ids"] == [
-        "employee-1", "employee-2",
-    ]
-    assert [row["employee"] for row in result["assignments"]] == [
-        "מפקדת סבב", "מפקד תלתון",
-    ]
-
-
-def test_daily_generation_filters_a_hard_time_window_but_keeps_a_soft_one():
-    hard_llm = _ScriptedLlm([_reply([{
-        "employee_id": "employee-2", "slot_id": "slot-1",
-        "reason": "יוסי יכול להתחיל בבוקר",
-    }])])
-    Scheduler(hard_llm).generate_day(
-        PROFILE, "2026-08-17", availability=[{
-            "employee": "דנה", "date": "2026-08-17", "available": True,
-            "start_time": "16:00", "is_hard": True,
-        }],
-    )
-    hard_slot = json.loads(hard_llm.calls[0]["user"])["period"]["slots"][0]
-    assert hard_slot["candidate_employee_ids"] == ["employee-2"]
-
-    soft_llm = _ScriptedLlm([_reply([{
-        "employee_id": "employee-1", "slot_id": "slot-1",
-        "reason": "נדרש לכיסוי למרות ההעדפה",
-    }])])
-    result = Scheduler(soft_llm).generate_day(
-        PROFILE, "2026-08-17", availability=[{
-            "employee": "דנה", "date": "2026-08-17", "available": True,
-            "start_time": "16:00", "is_hard": False,
-        }],
-    )
-    soft_slot = json.loads(soft_llm.calls[0]["user"])["period"]["slots"][0]
-    assert soft_slot["candidate_employee_ids"] == ["employee-1", "employee-2"]
-    assert result["warnings"][0]["severity"] == "notice"
-    assert len(soft_llm.calls) == 1
-
-
-def test_daily_generation_repairs_a_rejected_model_row_once():
-    llm = _ScriptedLlm([
-        _reply([{
-            "employee": "שם שלא קיים", "shift": MORNING,
-            "date": "2026-08-17", "reason": "טעות",
-        }]),
-        _reply([{
-            "employee_id": "employee-1", "slot_id": "slot-1",
-            "reason": "דנה מוסמכת וזמינה לבוקר",
-        }]),
-    ])
-
-    result = Scheduler(llm).generate_day(PROFILE, "2026-08-17")
-
-    assert len(llm.calls) == 2
-    assert result["assignments"][0]["employee"] == "דנה"
-    assert result["metrics"]["repaired"] is True
-    assert result["metrics"]["rejected"] == 1
-    repair = json.loads(llm.calls[1]["user"])["repair"]
-    assert repair["rejected_rows"]
-
-
-def test_a_worse_repair_does_not_replace_the_first_answer():
-    profile = dict(PROFILE)
-    profile["shifts"] = [dict(PROFILE["shifts"][0], staffing=[{
-        "days": [], "headcount": 2, "required_roles": [],
-    }])]
-    llm = _ScriptedLlm([
-        _reply([{
-            "employee_id": "employee-1", "slot_id": "slot-1",
-            "reason": "דנה זמינה ומוסמכת לבוקר",
-        }]),
-        _reply([{
-            "employee_id": "employee-99", "slot_id": "slot-1",
-            "reason": "מזהה לא קיים",
-        }]),
-    ])
-
-    result = Scheduler(llm).generate_day(profile, "2026-08-17")
-
-    assert [row["employee"] for row in result["assignments"]] == ["דנה"]
-    assert result["metrics"]["repaired"] is True
-
-
-def test_next_daily_call_sees_yesterday_and_cumulative_fairness():
-    yesterday = [{
-        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-        "reason": "כיסוי",
-    }]
-    llm = _ScriptedLlm([_reply([{
-        "employee_id": "employee-2", "slot_id": "slot-1",
-        "reason": "יוסי מאזן את העומס",
-    }])])
-
-    Scheduler(llm).generate_day(
-        PROFILE, "2026-08-18", already_scheduled=yesterday
-    )
-
-    payload = json.loads(llm.calls[0]["user"])
-    assert payload["already_scheduled"][0]["employee"] == "דנה"
-    fairness = {row["employee"]: row for row in payload["fairness"]}
-    assert fairness["דנה"]["shifts"] == 1
-
-
-def test_manager_required_assignment_is_kept_when_model_omits_it():
-    llm = _ScriptedLlm([_reply([])])
-    result = Scheduler(llm).generate(
-        PROFILE,
-        "2026-08-17",
-        "2026-08-18",
-        required_assignments=[{
-            "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-        }],
-    )
-
-    assert result["assignments"] == [{
-        "employee": "דנה",
-        "shift": MORNING,
-        "date": "2026-08-17",
-        "reason": "שיבוץ חובה שנבחר על ידי המנהל בעת בניית הסידור",
-    }]
-    payload = json.loads(llm.calls[0]["user"])
-    assert payload["required_assignments"] == [{
-        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-    }]
-
-
-def test_required_assignment_must_name_a_real_slot_and_employee():
-    with pytest.raises(AgentError):
-        Scheduler(_ScriptedLlm([])).generate(
-            PROFILE,
-            "2026-08-17",
-            "2026-08-18",
-            required_assignments=[{
-                "employee": "לא קיים", "shift": MORNING,
-                "date": "2026-08-17",
-            }],
-        )
-
-
-def test_an_assignment_without_a_reason_is_dropped():
-    """D8 enforced in code, not left to the prompt.
-
-    An assignment nobody can account for is dropped rather than stored --
-    storing it is how the decision gets quietly lost, at exactly the moment
-    the manager would have caught a bad call cheaply.
-    """
-    llm = _ScriptedLlm([_reply([
-        {"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-         "reason": ""},
-        {"employee": "יוסי", "shift": MORNING, "date": "2026-08-18",
-         "reason": "יוסי זמין"},
-    ])])
-    result = Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
-    assert [row["employee"] for row in result["assignments"]] == ["יוסי"]
-
-
-def test_an_assignment_to_a_slot_outside_the_period_is_dropped():
-    llm = _ScriptedLlm([_reply([
-        {"employee": "דנה", "shift": MORNING, "date": "2026-09-01",
-         "reason": "מחוץ לתקופה"},
-    ])])
-    result = Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
-    assert result["assignments"] == []
-
-
-def test_an_unknown_employee_is_dropped():
-    """A name nobody declared cannot be rostered onto a real shift."""
-    llm = _ScriptedLlm([_reply([
-        {"employee": "מישהו אחר", "shift": MORNING, "date": "2026-08-17",
-         "reason": "המצאה"},
-    ])])
-    result = Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
-    assert result["assignments"] == []
-
-
-def test_a_questionable_but_valid_assignment_is_kept():
-    """The scheduler is not a second audit.
-
-    Assigning someone outside `eligible_shifts` is a bad call the audit will
-    comment on. Dropping it here would make this code the authority D3 says
-    it is not -- the agent decides, and code reports.
-    """
-    llm = _ScriptedLlm([_reply([
-        {"employee": "רון", "shift": MORNING, "date": "2026-08-17",
-         "reason": "אין אף אחד אחר זמין"},
-    ])])
-    result = Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
-    assert len(result["assignments"]) == 1
-
-
-def test_duplicate_assignments_are_collapsed():
-    row = {"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-           "reason": "זמינה"}
-    llm = _ScriptedLlm([_reply([row, dict(row)])])
-    result = Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
-    assert len(result["assignments"]) == 1
-
-
-def test_notes_survive_to_the_caller():
-    """`notes` is where a slot left short gets said out loud."""
-    llm = _ScriptedLlm([_reply([], notes=["לא היה מי לאייש את בוקר שישי"])])
-    result = Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
-    assert result["notes"] == ["לא היה מי לאייש את בוקר שישי"]
-
-
-def test_the_model_is_handed_the_rules_as_written():
-    """Rules travel as the manager's sentences, unparsed (D2)."""
-    llm = _ScriptedLlm([_reply([])])
-    Scheduler(llm).generate(PROFILE, "2026-08-17", "2026-08-18")
-    assert "אסור שתי משמרות ברצף" in llm.calls[0]["user"]
 
 
 # -- the change agent ------------------------------------------------------
@@ -911,292 +392,3 @@ def test_change_context_serializes_database_dates_and_timestamps():
     assert payload["availability"][0]["constraint_date"] == "2026-08-20"
     assert payload["availability"][0]["created_at"] == "2026-08-18T09:30:00"
     assert payload["history"][0]["created_at"] == "2026-08-18T10:00:00+00:00"
-
-
-# -- chunking: model output stays small enough to cover the whole period ---
-
-def _week_profile():
-    """A one-shift workplace, so the slot count tracks the day count."""
-    return {
-        "workplace": {"name": "מוקד"},
-        "employees": [{"name": "דנה"}, {"name": "יוסי"}, {"name": "רון"}],
-        "shifts": [{
-            "name": MORNING, "start_time": "07:00", "end_time": "15:00",
-            "days": [], "is_on_call": False,
-            "staffing": [{"days": [], "headcount": 1}],
-        }],
-        "rules": [],
-    }
-
-
-def _covering(first, last, employee=None):
-    return _reply([
-        {"employee": employee or ("דנה", "יוסי", "רון")[(day - first) % 3], "shift": MORNING,
-         "date": "2026-08-%02d" % day, "reason": "כיסוי"}
-        for day in range(first, last + 1)
-    ])
-
-
-def test_a_short_period_is_still_one_call():
-    """A balanced week needs only one model call."""
-    llm = _ScriptedLlm([_covering(17, 23)])
-    Scheduler(llm).generate(_week_profile(), "2026-08-17", "2026-08-23")
-    assert len(llm.calls) == 1
-
-
-def test_a_busy_week_is_split_by_staffing_volume_not_just_days():
-    profile = _week_profile()
-    profile["shifts"] = [
-        dict(
-            profile["shifts"][0],
-            name=name,
-            staffing=[{"days": [], "headcount": 2}],
-        )
-        for name in (MORNING, EVENING, "לילה")
-    ]
-    required = [
-        {"employee": "דנה", "shift": shift, "date": date}
-        for date, shift in (
-            ("2026-08-17", MORNING),
-            ("2026-08-19", EVENING),
-            ("2026-08-23", "לילה"),
-        )
-    ]
-    llm = _ScriptedLlm([_reply([]) for _ in range(4)])
-
-    result = Scheduler(llm).generate(
-        profile,
-        "2026-08-17",
-        "2026-08-23",
-        required_assignments=required,
-    )
-
-    assert len(llm.calls) == 4
-    assert [
-        {key: row[key] for key in ("employee", "shift", "date")}
-        for row in result["assignments"]
-    ] == required
-    for call in llm.calls:
-        payload = json.loads(call["user"])
-        assert sum(
-            slot["headcount"] for slot in payload["period"]["slots"]
-        ) <= 14
-
-
-def test_a_long_period_is_split_into_weeks():
-    llm = _ScriptedLlm([_covering(17, 23), _covering(24, 30)])
-    result = Scheduler(llm).generate(
-        _week_profile(), "2026-08-17", "2026-08-30"
-    )
-    assert len(llm.calls) == 2
-    assert len(result["assignments"]) == 14
-
-
-def test_a_chunk_never_splits_a_day_across_two_calls():
-    """Half a Tuesday in one request and half in another is how one person
-    ends up on two shifts at once, with neither call able to notice."""
-    profile = _week_profile()
-    profile["shifts"].append({
-        "name": EVENING, "start_time": "15:00", "end_time": "23:00",
-        "days": [], "is_on_call": False,
-        "staffing": [{"days": [], "headcount": 1}],
-    })
-    llm = _ScriptedLlm([_reply([]), _reply([])])
-    Scheduler(llm).generate(profile, "2026-08-17", "2026-08-30")
-    for call in llm.calls:
-        payload = json.loads(call["user"])
-        dates = [slot["date"] for slot in payload["period"]["slots"]]
-        # Every date present appears once per shift, never split.
-        assert all(dates.count(date) == 2 for date in set(dates))
-
-
-def test_a_later_chunk_is_told_what_the_earlier_one_decided():
-    """A scheduler that cannot see week one gives week two to the same
-    people -- turning the fairness feature into the unfairness it prevents."""
-    llm = _ScriptedLlm([_covering(17, 23), _covering(24, 30)])
-    Scheduler(llm).generate(_week_profile(), "2026-08-17", "2026-08-30")
-    second = json.loads(llm.calls[1]["user"])
-    assert len(second["already_scheduled"]) == 7
-    assert second["already_scheduled"][0]["employee"] == "דנה"
-    # Without the reasons: the next chunk needs to know a slot is taken, not
-    # to re-read a paragraph of justification per row.
-    assert "reason" not in second["already_scheduled"][0]
-
-
-def test_the_fairness_tally_grows_with_what_this_run_has_placed():
-    """Week two must see week one's shifts as shifts already worked."""
-    llm = _ScriptedLlm([_covering(17, 23), _covering(24, 30)])
-    Scheduler(llm).generate(_week_profile(), "2026-08-17", "2026-08-30")
-    first = json.loads(llm.calls[0]["user"])
-    second = json.loads(llm.calls[1]["user"])
-    before = {row["employee"]: row for row in first["fairness"]}
-    after = {row["employee"]: row for row in second["fairness"]}
-    assert before["דנה"]["shifts"] == 0
-    assert after["דנה"]["shifts"] == 3
-
-
-def test_an_assignment_repeated_by_a_later_chunk_is_not_duplicated():
-    """The later call is the one working from incomplete information, so the
-    earlier decision stands."""
-    llm = _ScriptedLlm([_covering(17, 23), _covering(17, 23)])
-    result = Scheduler(llm).generate(
-        _week_profile(), "2026-08-17", "2026-08-30"
-    )
-    assert len(result["assignments"]) == 7
-
-
-def test_notes_from_every_chunk_survive():
-    """A slot left short in week one is not the manager's problem only until
-    week two is built."""
-    llm = _ScriptedLlm([
-        _reply([], notes=["חסר אדם ביום שני"]),
-        _reply([], notes=["חסר אדם ביום שלישי"]),
-    ])
-    result = Scheduler(llm).generate(
-        _week_profile(), "2026-08-17", "2026-08-30"
-    )
-    assert result["notes"] == ["חסר אדם ביום שני", "חסר אדם ביום שלישי"]
-
-
-def test_the_slot_grid_is_the_whole_period_not_the_last_chunk():
-    llm = _ScriptedLlm([_reply([]), _reply([])])
-    result = Scheduler(llm).generate(
-        _week_profile(), "2026-08-17", "2026-08-30"
-    )
-    assert len(result["slots"]) == 14
-
-
-# -- what one call costs, and how wide it is -------------------------------
-
-
-def test_a_weekly_total_does_not_buy_a_repair_call_on_every_later_day():
-    """`over_hours` carries no date, so it used to match every day forever.
-
-    One person crossing their weekly ceiling on a Wednesday made the audit
-    report the same finding against Thursday, Friday and every day after —
-    each one triggering a repair call that was told not to touch earlier
-    dates, which is where the hours actually came from. Two model calls per
-    day, for the rest of the week, answering a question the repair could not
-    reach.
-    """
-    profile = dict(PROFILE)
-    profile["employees"] = [
-        dict(PROFILE["employees"][0], max_weekly_hours=1),
-    ]
-    profile["shifts"] = [PROFILE["shifts"][0]]
-    # Monday through Wednesday already worked: eight hours a day against a
-    # one-hour ceiling, so `over_hours` is standing before this day begins.
-    earlier = [
-        {"employee": "דנה", "shift": MORNING, "date": date, "reason": "כיסוי"}
-        for date in ("2026-08-17", "2026-08-18", "2026-08-19")
-    ]
-    llm = _ScriptedLlm([_reply([{
-        "employee_id": "employee-1", "slot_id": "slot-1",
-        "reason": "דנה היחידה שמוסמכת לבוקר",
-    }])])
-
-    result = Scheduler(llm).generate_day(
-        profile, "2026-08-20", already_scheduled=earlier
-    )
-
-    # One call, not two: the finding is real and still reported, but it is
-    # not this day's to fix.
-    assert len(llm.calls) == 1
-    assert result["metrics"]["repaired"] is False
-    assert any(
-        item["code"] == "over_hours" for item in result["warnings"]
-    )
-
-
-def test_the_roster_is_not_sent_twice_in_one_call():
-    """`candidate_employees` is the roster; `profile.employees` repeated it."""
-    llm = _ScriptedLlm([_reply([{
-        "employee_id": "employee-1", "slot_id": "slot-1",
-        "reason": "דנה מוסמכת וזמינה",
-    }])])
-
-    Scheduler(llm).generate_day(PROFILE, "2026-08-17")
-
-    payload = json.loads(llm.calls[0]["user"])
-    assert "employees" not in payload["profile"]
-    # Everything else the interview collected still travels — the field list
-    # is a blacklist of one, not a whitelist that new facts fall out of.
-    assert payload["profile"]["workplace"]["name"] == "מוקד"
-    assert payload["profile"]["rules"]
-    assert {
-        person["name"] for person in payload["candidate_employees"]
-    } == {"דנה", "יוסי", "רון"}
-
-
-def test_a_span_generates_several_dates_in_one_call():
-    llm = _ScriptedLlm([_reply([
-        {"employee_id": "employee-1", "slot_id": "slot-1",
-         "reason": "דנה בבוקר של שני"},
-        {"employee_id": "employee-2", "slot_id": "slot-2",
-         "reason": "יוסי בבוקר של שלישי"},
-    ])])
-
-    result = Scheduler(llm).generate_span(
-        PROFILE, "2026-08-17", "2026-08-18"
-    )
-
-    assert len(llm.calls) == 1
-    assert {row["date"] for row in result["assignments"]} == {
-        "2026-08-17", "2026-08-18",
-    }
-    assert result["metrics"]["date"] == "2026-08-17"
-    assert result["metrics"]["through"] == "2026-08-18"
-
-
-def test_a_span_still_refuses_a_row_outside_its_candidates():
-    """Widening the call does not widen what is accepted back."""
-    llm = _ScriptedLlm([
-        _reply([{
-            "employee_id": "employee-3", "slot_id": "slot-1",
-            "reason": "רון אינו מוסמך לבוקר",
-        }]),
-        _reply([{
-            "employee_id": "employee-1", "slot_id": "slot-1",
-            "reason": "דנה מוסמכת לבוקר",
-        }]),
-    ])
-
-    result = Scheduler(llm).generate_span(
-        PROFILE, "2026-08-17", "2026-08-18"
-    )
-
-    assert [row["employee"] for row in result["assignments"]] == ["דנה"]
-    assert result["metrics"]["rejected"] >= 1
-
-
-def test_day_mode_plans_one_span_per_date_and_week_mode_groups_them():
-    from app.bl.scheduler import MODE_DAY, MODE_WEEK, plan_spans
-
-    daily = plan_spans(PROFILE, "2026-08-17", "2026-08-23", MODE_DAY)
-    assert len(daily) == 7
-    assert all(span["date"] == span["through"] for span in daily)
-
-    weekly = plan_spans(PROFILE, "2026-08-17", "2026-08-23", MODE_WEEK)
-    assert len(weekly) == 1
-    assert weekly[0]["date"] == "2026-08-17"
-    assert weekly[0]["through"] == "2026-08-23"
-    # However wide the call, the dates are still enumerated — progress is
-    # counted in days, not in model calls.
-    assert len(weekly[0]["dates"]) == 7
-
-
-def test_week_mode_splits_a_week_too_big_for_one_answer():
-    """A week is a ceiling, not a promise. Staffing volume splits it."""
-    from app.bl.scheduler import MODE_WEEK, plan_spans
-
-    profile = dict(PROFILE)
-    profile["shifts"] = [dict(PROFILE["shifts"][0], staffing=[{
-        "days": [], "headcount": 40, "required_roles": [],
-    }])]
-
-    spans = plan_spans(profile, "2026-08-17", "2026-08-23", MODE_WEEK)
-
-    assert len(spans) > 1
-    assert [date for span in spans for date in span["dates"]] == [
-        "2026-08-%d" % day for day in range(17, 24)
-    ]

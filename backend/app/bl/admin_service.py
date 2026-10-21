@@ -20,8 +20,7 @@ from app.common.errors import AgentError, AuthError, ForbiddenError
 # are handled behind their mask.
 _MODEL_FIELDS = (
     "llm_model", "llm_base_url", "llm_model_fast", "llm_model_default",
-    "llm_model_advanced", "schedule_generation_mode",
-    "schedule_generation_engine",
+    "llm_model_advanced", "solver_time_limit_seconds",
 )
 
 
@@ -55,7 +54,7 @@ class AdminService:
         return {
             "totals": totals,
             "database": database,
-            "model": {key: settings.get(key) or "" for key in _MODEL_FIELDS},
+            "model": {key: str(settings.get(key) or "") for key in _MODEL_FIELDS},
             "redis": self._redis.status() if self._redis is not None else None,
         }
 

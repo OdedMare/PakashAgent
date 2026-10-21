@@ -17,6 +17,8 @@ from app.bl.shared import text, weekday_key
 from app.common.errors import AgentError
 
 _MAX_SLOTS = 120
+# A dry run is a look, not the build: a short solve is enough to see what breaks.
+_DRY_RUN_SECONDS = 2.0
 _MAX_FINDINGS = 15
 
 
@@ -101,7 +103,7 @@ class TranslationTools:
                 "sources_not_covered": missing}
 
     def _dry_run(self, arguments: dict) -> dict:
-        from app.bl.deterministic_scheduler import generate_span
+        from app.bl.solver import generate_span
 
         directives, requests, problems = self._read_drafts(arguments)
         absent = [row for kind, row in directives if kind == "unavailable"]
@@ -111,6 +113,7 @@ class TranslationTools:
             availability=self.availability + absent, history=self.history,
             required_assignments=self.required_assignments + pins,
             already_scheduled=self.already_scheduled, requests=requests,
+            time_limit=_DRY_RUN_SECONDS,
         )
         warnings = [row.get("message") for row in result["warnings"]
                     if row.get("severity") == "warning"]

@@ -1,103 +1,37 @@
-"""`Scheduler`: the model call that assigns people into the grid."""
+"""`Scheduler`: the manager's words translated, then the constraint solver.
 
-import json
+Two steps, and only the first may call a model (D34). Everything code
+cannot read on its own — the build's free instruction, rules, policies,
+notes and preferences (`directives.semantic_sources`) — goes to the
+`DirectiveAgent`, which answers with validated absences, pins and structured
+requests. The solver (`bl/solver/`) then assigns every slot of the span in
+one solve. A sentence that could not be translated is never sent anywhere
+else: the schedule is built without it and its `notes` say so, binding or
+not, so the manager can restate it.
+"""
+
 from typing import List, Optional
 
-from app.bl import rotation
-from app.bl.prompts import load
-from app.bl.scheduler.payload import (
-    SCHEDULE_RESPONSE_SCHEMA,
-)
-from app.bl.scheduler.slots import build_slots, chunks
-from app.bl.scheduler.span import SpanGenerator
-from app.bl.scheduler.planning import ChunkedRun
-from app.bl.scheduler.values import bounded
-from app.common.errors import AgentError, ModelOutputError
-from app.common.config import ENGINE_AI, ENGINE_AUTO, ENGINE_CODE
+from app.bl import solver
+from app.bl.scheduler.directives import semantic_sources
+from app.bl.scheduler.slots import plan_spans
+from app.bl.scheduler.quality import combine_metrics, quality
+from app.bl.shared import text
+from app.common.errors import AgentError
+
+_UNREACHABLE = "לא ניתן היה לתרגם את ההנחיות (המודל לא זמין)"
+_LEFT_BINDING = "הנחיה מחייבת לא נאכפה בשיבוץ: «%s» (%s). נסחו אותה מחדש או הגדירו אותה כאילוץ."
+_LEFT_WISH = "בקשה רכה לא נלקחה בחשבון בשיבוץ: «%s» (%s)."
 
 
 class Scheduler:
-    """Build one period's assignments from the workplace profile."""
+    """Build any span of a period from the workplace profile."""
 
-    def __init__(self, llm):
+    def __init__(self, llm, settings=None):
         self._llm = llm
-        self._spans = SpanGenerator(self._ask)
-
-    def generate(
-        self,
-        profile: dict,
-        starts_on: str,
-        ends_on: str,
-        availability: Optional[List[dict]] = None,
-        history: Optional[List[dict]] = None,
-        instructions: str = "",
-        required_assignments: Optional[List[dict]] = None,
-        preferences: Optional[List[dict]] = None,
-        engine: str = ENGINE_AI,
-        translation_cache=None,
-    ) -> dict:
-        """Slots for the period plus the model's assignments, chunk by chunk.
-
-        The legacy one-shot path, kept for API consumers. Chunks are NOT
-        independent: each sees what earlier ones decided, and its fairness
-        tally is recomputed over the real history *plus* this run, so week two
-        sees week one's nights as nights. Nothing is persisted here.
-        """
-        code = self._code_result(
-            engine, profile, starts_on, ends_on, availability, history,
-            instructions, required_assignments, None, preferences, translation_cache,
-        )
-        if code is not None:
-            if not code["slots"]:
-                raise AgentError("לא ניתן לבנות סידור: לא הוגדרו משמרות לתקופה הזו")
-            return code
-        _check_rotation(profile)
-        slots = build_slots(profile, starts_on, ends_on)
-        if not slots:
-            raise AgentError("לא ניתן לבנות סידור: לא הוגדרו משמרות לתקופה הזו")
-        run = ChunkedRun(profile, starts_on, ends_on, slots, availability,
-                         history, required_assignments)
-        for chunk in chunks(slots):
-            answer = self._ask(run.payload(chunk, instructions, preferences))
-            run.absorb(answer)
-            run.balance(self._ask, chunk, instructions, preferences)
-        return run.result()
-
-    def generate_day(self, profile: dict, day: str, **kwargs) -> dict:
-        """Generate and verify exactly one date."""
-        return self.generate_span(profile, day, day, **kwargs)
-
-    def generate_verified(self, profile, starts_on, ends_on, availability=None,
-                          history=None, instructions="", required_assignments=None,
-                          preferences=None, already_scheduled=None):
-        """The verified span path for chat periods, bounded to one week per call."""
-        from app.bl.scheduler.slots import plan_spans, MODE_WEEK
-        slots = build_slots(profile, starts_on, ends_on)
-        if not slots:
-            raise AgentError("לא הוגדרו משמרות לתאריכים שנבחרו")
-        committed = list(already_scheduled or [])
-        result = dict(slots=slots, assignments=[], warnings=[], notes=[], summary="", metrics=[])
-        for span in plan_spans(profile, starts_on, ends_on, MODE_WEEK, availability):
-            pins = [row for row in required_assignments or [] if row["date"] in span["dates"]]
-            generated = self.generate_span(profile, span["date"], span["through"],
-                availability=availability, history=history, instructions=instructions,
-                required_assignments=pins, preferences=preferences, already_scheduled=committed)
-            result["assignments"].extend(generated["assignments"])
-            committed = [row for row in committed if row.get("date") not in span["dates"]]
-            committed.extend(generated["assignments"])
-            result["warnings"].extend(generated.get("warnings") or [])
-            result["notes"].extend(generated.get("notes") or [])
-            result["metrics"].append(generated.get("metrics") or {})
-        from app.bl.scheduler.request import SpanRequest
-        from app.bl.scheduler.quality import combine_metrics, quality
-        request = SpanRequest(profile, starts_on, ends_on, slots, availability,
-                              already_scheduled, required_assignments)
-        result["warnings"] = request.audit(committed)
-        result["quality"] = quality(committed, request.audit_slots, profile, result["warnings"])
-        result["performance"] = {}
-        for measured in result["metrics"]:
-            result["performance"] = combine_metrics(result["performance"], measured)
-        return result
+        # The live settings store, or None for the defaults; read per build
+        # so a limit saved in the panel applies to the next one.
+        self._settings = settings
 
     def generate_span(
         self,
@@ -110,101 +44,112 @@ class Scheduler:
         required_assignments: Optional[List[dict]] = None,
         already_scheduled: Optional[List[dict]] = None,
         preferences: Optional[List[dict]] = None,
-        split_on_failure: bool = True,
-        engine: str = ENGINE_AI,
         translation_cache=None,
+        keep: Optional[List[dict]] = None,
     ) -> dict:
-        """Generate and verify one contiguous stretch of dates. See `span.py`.
+        """Assign every slot from `starts_on` through `ends_on`.
 
+        `keep` are rows to hold where they still fit — a rebuild after the
+        shift vocabulary changed should move as few people as it can.
         `translation_cache` is the team's kept translations
         (`bl/compiled_sources/`); without one every source is translated."""
-        code = self._code_result(
-            engine, profile, starts_on, ends_on, availability, history,
-            instructions, required_assignments, already_scheduled, preferences,
-            translation_cache,
+        translated = self._translate(
+            profile, starts_on, ends_on, availability, instructions, preferences,
+            history, required_assignments, already_scheduled, translation_cache,
         )
-        if code is not None:
-            return code
-        _check_rotation(profile)
-        options = dict(availability=availability, history=history, instructions=instructions,
-                       required_assignments=required_assignments,
-                       already_scheduled=already_scheduled, preferences=preferences)
-        try:
-            return self._spans.generate(profile, starts_on, ends_on, **options)
-        except ModelOutputError as exc:
-            if not split_on_failure:
-                raise
-            from app.bl.scheduler.recovery import generate_split
-            return generate_split(self, profile, starts_on, ends_on, options, exc)
-
-    def _code_result(
-        self, engine, profile, starts_on, ends_on, availability, history,
-        instructions, required_assignments, already_scheduled, preferences, cache=None,
-    ):
-        """Return a safe code result, or None when AI should take the request."""
-        if engine not in (ENGINE_CODE, ENGINE_AUTO):
-            return None
-        from app.bl.deterministic_scheduler import generate_span, unsupported_reason
-
-        reason = unsupported_reason(profile, availability, instructions, preferences)
-        requests = []
-        if reason:
-            if engine == ENGINE_CODE:
-                raise AgentError(reason + ". בחרו במצב AI או אוטומטי.")
-            translated = self._translate_directives(
-                profile, starts_on, ends_on, availability, instructions, preferences,
-                history, required_assignments, already_scheduled, cache,
-            )
-            if translated is None:
-                return None
-            availability = list(availability or []) + translated["availability"]
-            required_assignments = list(required_assignments or []) + translated["required_assignments"]
-            requests = translated["requests"]
-        result = generate_span(
-            profile, starts_on, ends_on, availability=availability,
-            history=history, required_assignments=required_assignments,
-            already_scheduled=already_scheduled, requests=requests,
+        result = solver.generate_span(
+            profile, starts_on, ends_on,
+            availability=list(availability or []) + translated["availability"],
+            history=history,
+            required_assignments=list(required_assignments or []) + translated["required_assignments"],
+            already_scheduled=already_scheduled,
+            requests=translated["requests"] + _kept(profile, keep),
+            **self._limits(),
         )
-        # Auto keeps free code only when it is already as clean as the audited
-        # model path. Code mode remains useful for an intentionally partial
-        # draft and exposes the same warnings to the manager.
-        if engine == ENGINE_AUTO and result.get("warnings"):
-            return None
-        if reason:
-            _hybrid(result, translated)
+        if translated["sources"]:
+            _report(result, translated)
         return result
 
-    def _translate_directives(
-        self, profile, starts_on, ends_on, availability, instructions, preferences,
-        history=None, required_assignments=None, already_scheduled=None, cache=None,
-    ):
-        """The manager's words as directives and requests, or None. A bounded
-        tool loop (`bl/directive_agent/`); code validates its final answer."""
+    def generate_day(self, profile: dict, day: str, **kwargs) -> dict:
+        """Generate exactly one date."""
+        return self.generate_span(profile, day, day, **kwargs)
+
+    def generate_verified(self, profile, starts_on, ends_on, availability=None,
+                          history=None, instructions="", required_assignments=None,
+                          preferences=None, already_scheduled=None, keep=None):
+        """A period for the manager's chat: spans in order, each seeing the
+        last, then audited and measured as one."""
+        committed = list(already_scheduled or [])
+        result = dict(slots=[], assignments=[], warnings=[], notes=[], summary="", metrics=[])
+        for span in plan_spans(profile, starts_on, ends_on):
+            pins = [row for row in required_assignments or [] if row.get("date") in span["dates"]]
+            generated = self.generate_span(
+                profile, span["date"], span["through"], availability=availability,
+                history=history, instructions=instructions, required_assignments=pins,
+                preferences=preferences, already_scheduled=committed, keep=keep)
+            committed = [row for row in committed if row.get("date") not in span["dates"]]
+            committed.extend(generated["assignments"])
+            for key in ("slots", "assignments", "warnings", "notes"):
+                result[key].extend(generated.get(key) or [])
+            result["metrics"].append(generated.get("metrics") or {})
+            result["summary"] = generated.get("summary") or result["summary"]
+        if not result["slots"]:
+            raise AgentError("לא הוגדרו משמרות לתאריכים שנבחרו")
+        result["quality"] = quality(committed, result["slots"], profile, result["warnings"])
+        result["performance"] = {}
+        for measured in result["metrics"]:
+            result["performance"] = combine_metrics(result["performance"], measured)
+        return result
+
+    def _limits(self) -> dict:
+        current = self._settings.get() if self._settings is not None else None
+        return {
+            "time_limit": float(getattr(current, "solver_time_limit_seconds", 10.0) or 10.0),
+            "workers": int(getattr(current, "solver_workers", 8) or 8),
+        }
+
+    def _translate(self, profile, starts_on, ends_on, availability, instructions,
+                   preferences, history, required_assignments, already_scheduled, cache) -> dict:
+        """The manager's sentences as solver input. Never None: a source
+        that did not translate is listed in `unresolved` instead."""
+        sources = semantic_sources(profile, availability, instructions, preferences)
+        empty = {"availability": [], "required_assignments": [], "requests": [],
+                 "unresolved": [], "sources": sources, "usage": {}, "model_calls": 0,
+                 "steps": [], "cached": 0, "cached_tokens": 0}
+        if not sources:
+            return empty
         from app.bl.directive_agent import DirectiveAgent
 
-        return DirectiveAgent(self._llm).translate(
+        translated = DirectiveAgent(self._llm).translate(
             profile, starts_on, ends_on, availability=availability,
             instructions=instructions, preferences=preferences, history=history,
             required_assignments=required_assignments, already_scheduled=already_scheduled,
-            cache=cache,
+            cache=cache, sources=sources,
         )
-
-    def _ask(self, payload: dict, schema: Optional[dict] = None) -> dict:
-        answer = self._llm.complete_json(
-            load("scheduler"),
-            json.dumps(payload, ensure_ascii=False),
-            schema=schema or SCHEDULE_RESPONSE_SCHEMA,
-            flow="scheduler",
-        )
-        if not isinstance(answer, dict):
-            raise ModelOutputError("המודל החזיר סידור לא תקין")
-        return answer
+        if translated is None:
+            empty["unresolved"] = [dict(row, reason=_UNREACHABLE) for row in sources]
+            return empty
+        return dict(empty, **translated)
 
 
-def _hybrid(result: dict, translated: dict) -> None:
-    """Say what translating cost, what the kept translations saved, and
-    every wish code was built without -- said, never dropped silently."""
-    usage = translated["usage"]
+def _kept(profile: dict, rows: Optional[List[dict]]) -> List[dict]:
+    """Each row to keep as a `prefer` the solver weighs; rows naming a person
+    or a shift the profile no longer has are dropped, not refused."""
+    people = {text(row.get("name")) for row in profile.get("employees") or [] if isinstance(row, dict)}
+    shifts = {text(row.get("name")) for row in profile.get("shifts") or [] if isinstance(row, dict)}
+    return [
+        {"kind": "prefer", "employees": [row["employee"]], "shifts": [row["shift"]],
+         "dates": [row["date"]], "weight": 0.5, "reason": "שמירה על השיבוץ הקודם"}
+        for row in rows or []
+        if isinstance(row, dict) and row.get("employee") in people and row.get("shift") in shifts
+        and row.get("date")
+    ]
+
+
+def _report(result: dict, translated: dict) -> None:
+    """Say what translating cost, what kept translations saved, and every
+    sentence the schedule was built without -- said, never dropped."""
+    usage = translated.get("usage") or {}
     result["metrics"].update({
         "engine": "hybrid",
         "model_calls": translated["model_calls"],
@@ -217,20 +162,12 @@ def _hybrid(result: dict, translated: dict) -> None:
         "total_tokens": int(usage.get("total_tokens") or 0),
     })
     result["summary"] = (
-        "ההנחיות נטענו מתרגום שמור והשיבוץ נבנה בקוד דטרמיניסטי."
+        "ההנחיות נטענו מתרגום שמור והשיבוץ נבנה בפותר אילוצים."
         if not translated["model_calls"] else
-        "ההנחיות תורגמו ב-AI והשיבוץ נבנה בקוד דטרמיניסטי.")
+        "ההנחיות תורגמו ב-AI והשיבוץ נבנה בפותר אילוצים.")
+    binding = {row["id"]: row.get("binding", True) for row in translated["sources"]}
     result["notes"] = [
-        "בקשה רכה לא נלקחה בחשבון בשיבוץ: «%s» (%s)." % (row["text"], row["reason"])
+        (_LEFT_BINDING if binding.get(row.get("source_id") or row.get("id"), True) else _LEFT_WISH)
+        % (row["text"], row["reason"])
         for row in translated["unresolved"]
     ] + list(result.get("notes") or [])
-
-
-def _check_rotation(profile):
-    # Profile normalization also supplies a default pattern to civilian
-    # rosters. A lettered group is what puts a person on an actual cycle.
-    grouped = [person for person in profile.get("employees") or []
-               if isinstance(person, dict) and bounded(person.get("rotation_group"))]
-    errors = rotation.configuration_errors(dict(profile, employees=grouped))
-    if errors:
-        raise AgentError("יש להשלים את העוגנים והקבוצות בהגדרת היחידה > סבבים ותלתונים: %s" % "; ".join(errors))

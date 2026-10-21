@@ -114,3 +114,16 @@ def profile_for_model(profile: dict) -> dict:
         "fairness_policy": profile.get("fairness_policy") or "",
         "conflict_policy": profile.get("conflict_policy") or "",
     }
+
+
+def usage_of(answer: Any) -> dict:
+    """The token usage the LLM client attached to an answer, or `{}`."""
+    usage = answer.get("_usage") if isinstance(answer, dict) else None
+    return usage if isinstance(usage, dict) else {}
+
+
+def add_usage(first: dict, second: dict) -> dict:
+    return {
+        key: first.get(key, 0) + second.get(key, 0)
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+    }

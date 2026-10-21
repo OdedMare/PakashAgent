@@ -5,22 +5,6 @@ from typing import Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# How wide one scheduling model call is. Declared here, beside the field that
-# carries the value, because three layers need the vocabulary and only one may
-# own it: `bl/scheduler.py` plans the spans, the runtime-settings store
-# validates a save, and the panel offers the choice. `common` is the layer all
-# three already depend on, so the alternative — the store importing `bl` — is
-# the dependency arrow pointing the wrong way for a two-item tuple.
-MODE_DAY = "day"
-MODE_WEEK = "week"
-GENERATION_MODES = (MODE_DAY, MODE_WEEK)
-
-ENGINE_AI = "ai"
-ENGINE_CODE = "code"
-ENGINE_AUTO = "auto"
-GENERATION_ENGINES = (ENGINE_AUTO, ENGINE_AI, ENGINE_CODE)
-
-
 class Settings(BaseSettings):
     """Env-derived DEFAULTS. Values the boss can edit in the UI live in
     common.runtime_settings (this feeds its initial values)."""
@@ -196,41 +180,6 @@ class Settings(BaseSettings):
 
     opik_url: str = Field(default="", validation_alias="OPIK_URL_OVERRIDE")
     """A self-hosted Opik's API. Empty = Comet's hosted Opik."""
-
-    schedule_generation_mode: str = MODE_DAY
-    """How wide one model call is when a period is built: `day` or `week`.
-
-    **`day` (the default) asks for one date at a time.** Every answer is
-    checked against that date's own candidate lists, a bad one is repaired in
-    isolation, and a date that fails is retried without disturbing its
-    neighbours. It is the accurate setting and the slow one: a fortnight is
-    fourteen calls, each paying for the scheduler prompt again.
-
-    **`week` asks for up to seven dates in one call.** The identical pipeline
-    runs — same candidate lists, same response schema, same rejection rules,
-    same audit — so nothing is trusted that `day` would not trust; what
-    changes is that seven days share one prompt, which is most of the cost.
-    The tradeoff is granularity: a repair re-answers the whole span rather
-    than one date, and a span that fails takes its whole week with it. On a
-    small local model that trades a slow build for a coarser one.
-
-    A week is a ceiling, not a promise. A span never crosses seven days and
-    never carries more staffing demand than one answer can hold, so a busy
-    week is split rather than truncated (`scheduler.plan_spans`).
-
-    Live-editable in the settings panel: it is read when a period is opened,
-    so the mode a build runs under is the one saved at the moment the manager
-    pressed the button, and a job already under way keeps the mode it started
-    with."""
-
-    schedule_generation_engine: str = ENGINE_AUTO
-    """Assign with the model, deterministic code, or a safe automatic mix.
-
-    Auto compiles narrow semantic instructions into validated directives,
-    runs them in code, and falls back to full AI when translation is unsafe or
-    the deterministic audit is not clean. Explicit code mode remains zero-token
-    and refuses semantic rules rather than silently ignoring them.
-    """
 
     solver_time_limit_seconds: float = 10.0
     """Wall time one solve may take (`bl/solver/`). The solver returns the

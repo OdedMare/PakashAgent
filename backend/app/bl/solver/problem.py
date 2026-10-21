@@ -16,7 +16,8 @@ from app.bl.audit.roster import index_shifts, policy, row as timed_row, rows_of
 from app.bl.solver.rows import assignment, eligible, employees, text, unique
 from app.bl.rotation.presence import closure_status, presence_status
 from app.bl.schedule_requests import covers, read_requests
-from app.bl.scheduler import build_slots, effective_availability
+from app.bl.scheduler.availability import effective_availability
+from app.bl.scheduler.slots import build_slots
 from app.common.errors import AgentError
 
 # How far back history still matters: a run of days or a short rest does not
@@ -69,7 +70,7 @@ class Problem:
         if not eligible(self.people[row["employee"]], row["shift"]):
             raise AgentError("%s אינו/ה כשיר/ה למשמרת %s" % (row["employee"], row["shift"]))
         if self._blocked(row["employee"], self.keys[(row["shift"], row["date"])]):
-            raise AgentError("שיבוץ החובה של %s ב-%s סותר אילוץ קשיח, סבב או תלתון"
+            raise AgentError("שיבוץ החובה של %s ב-%s סותר אילוץ קשיח, נוכחות קבוצה, סבב או תלתון"
                              % (row["employee"], row["date"]))
 
     def _fixed(self, already_scheduled, history) -> List[dict]:
@@ -146,7 +147,11 @@ def checked_requests(profile: dict, requests: Optional[List[dict]]) -> List[dict
 
 
 def slots_for(profile: dict, starts_on: str, ends_on: str, shift_names=None) -> List[dict]:
-    errors = rotation.configuration_errors(profile)
+    # Profile normalisation gives every roster a default exit pattern; only a
+    # lettered group puts a person on an actual cycle that needs an anchor.
+    grouped = [person for person in (profile or {}).get("employees") or []
+               if isinstance(person, dict) and text(person.get("rotation_group"))]
+    errors = rotation.configuration_errors(dict(profile or {}, employees=grouped))
     if errors:
         raise AgentError(
             "לא ניתן לשבץ לפני השלמת הגדרת הסבבים והתלתונים: %s." % "; ".join(errors))

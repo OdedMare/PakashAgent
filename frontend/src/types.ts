@@ -121,8 +121,9 @@ export interface RuntimeSettings {
   llm_verify_ssl: boolean;
   llm_base_url: string | null;
   openai_api_key: string;
-  schedule_generation_mode: "day" | "week";
-  schedule_generation_engine: "auto" | "ai" | "code";
+  /** The constraint solver: seconds per solve and parallel workers. */
+  solver_time_limit_seconds: number;
+  solver_workers: number;
   /** Shared state across processes. Empty URL = off; the password arrives
    *  masked like every other secret. */
   redis_url: string;

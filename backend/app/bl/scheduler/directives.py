@@ -7,7 +7,7 @@ from typing import Any, List, Optional
 
 from app.bl.schedule_requests import KINDS, PERIODS, read_requests
 from app.bl.scheduler.slots import build_slots
-from app.bl.scheduler.span_audit import usage_of
+from app.bl.shared import usage_of
 from app.bl.scheduler.values import bounded
 
 
@@ -82,12 +82,12 @@ _EMPLOYEE_SEMANTICS = ("notes", "availability", "workload", "trainers", "is_trai
 def semantic_sources(profile, availability=None, instructions="", preferences=None) -> List[dict]:
     """Every semantic input that code would otherwise have to ignore.
 
-    `binding` says whether code may build without a source it could not
-    translate. Only what is soft by its own definition is not binding: a
+    `binding` says how loudly a source the solver was built without is
+    reported. Only what is soft by its own definition is not binding: a
     rule the manager tagged soft (D1) and a preference (D21). Everything
     else, the manager's free instruction included, is treated as binding,
-    because dropping a "must" silently is the one outcome worse than paying
-    for the full scheduler. Everything but the instruction is `persistent`.
+    and an untranslated "must" is never dropped silently (D34). Everything
+    but the instruction is `persistent`.
     """
     sources = []
 
@@ -127,7 +127,7 @@ def semantic_sources(profile, availability=None, instructions="", preferences=No
         for key in _EMPLOYEE_SEMANTICS:
             add("employee_" + key, person.get(key), name)
         # Soft structured constraints are already code's to weigh
-        # (`deterministic_scheduler/honoring.py`); only sentences need reading.
+        # (`bl/solver/requests.py`); only sentences need reading.
         for row in person.get("recurring_constraints") or []:
             if isinstance(row, str):
                 add("recurring_constraint", row, name)

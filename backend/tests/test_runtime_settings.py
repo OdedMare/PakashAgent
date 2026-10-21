@@ -275,39 +275,17 @@ def test_saving_a_role_model_leaves_the_stored_api_key_alone(store):
     assert store.get().llm_model_advanced == "big-model"
 
 
-# -- how wide a schedule build's model calls are ---------------------------
+# -- the constraint solver's limits ---------------------------------------
 
 
-def test_generation_mode_defaults_to_one_day_per_call(store):
-    assert store.get().schedule_generation_mode == "day"
+def test_the_solver_defaults_to_ten_seconds_and_eight_workers(store):
+    assert store.get().solver_time_limit_seconds == 10.0
+    assert store.get().solver_workers == 8
 
 
-def test_generation_mode_can_be_switched_to_weekly(store):
-    store.update({"schedule_generation_mode": "week"})
-    assert store.get().schedule_generation_mode == "week"
-
-
-def test_an_unknown_generation_mode_is_refused_rather_than_defaulted(store):
-    """A width nobody chose is the one outcome this setting exists to stop.
-
-    Quietly folding an unrecognised value to the default would leave a
-    deployment that asked for something else running builds at a width its
-    settings file does not describe.
-    """
-    store.update({"schedule_generation_mode": "week"})
-    with pytest.raises(ValueError):
-        store.update({"schedule_generation_mode": "month"})
-    assert store.get().schedule_generation_mode == "week"
-
-
-def test_generation_engine_defaults_to_safe_automatic_selection(store):
-    assert store.get().schedule_generation_engine == "auto"
-
-
-def test_generation_engine_can_be_forced_and_rejects_unknown_values(store):
-    store.update({"schedule_generation_engine": "code"})
-    assert store.get().schedule_generation_engine == "code"
-
-    with pytest.raises(ValueError):
-        store.update({"schedule_generation_engine": "hybrid"})
-    assert store.get().schedule_generation_engine == "code"
+def test_a_solver_limit_is_clamped_to_something_that_can_run(store):
+    store.update({"solver_time_limit_seconds": 0, "solver_workers": 0})
+    assert store.get().solver_time_limit_seconds == 0.5
+    assert store.get().solver_workers == 1
+    store.update({"solver_time_limit_seconds": 9999})
+    assert store.get().solver_time_limit_seconds == 600.0

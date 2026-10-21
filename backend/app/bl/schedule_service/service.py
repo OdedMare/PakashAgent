@@ -41,7 +41,7 @@ class ScheduleService:
         self, repository, llm, launch=None, settings=None, sleep=None,
     ):
         context = ScheduleContext(repository)
-        scheduler = Scheduler(llm)
+        scheduler = Scheduler(llm, settings)
         # Read-only tools, and the loop that runs them. `PlanningAgent` is
         # handed the tools rather than the repository, so the answering path
         # has no route to a write even by accident.
@@ -52,8 +52,8 @@ class ScheduleService:
 
         self._reader = ScheduleReader(context)
         self._stats = StatsReader(context, self._reader.periods_between)
-        self._builder = PeriodBuilder(context, scheduler, gate, history, settings)
-        self._range = RangeBuilder(context, gate, settings)
+        self._builder = PeriodBuilder(context, scheduler, gate, history)
+        self._range = RangeBuilder(context, gate)
         self._stepper = stepper
         self._runner = GenerationRunner(context, stepper, launch, sleep)
         profiles = ProfileService(repository)

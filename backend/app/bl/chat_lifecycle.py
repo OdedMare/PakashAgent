@@ -151,10 +151,12 @@ def prepare_structure(profiles, scheduler, team_id, turn, plan, state, history, 
         raise RejectedPlan("טווח שינוי המשמרות חייב להיות בתוך הטיוטה שנבחרה")
     outside = [row for row in schedule_rows(schedule) if not first <= row["date"] <= last]
     existing = [row for row in schedule_rows(schedule) if first <= row["date"] <= last]
-    instructions = (turn.get("instructions") or "") + "\nנסה לשמר את העובדים הקיימים היכן שהם מתאימים; בדוק מחדש שעות ומנוחה. השיבוץ הקודם: " + json.dumps(existing, ensure_ascii=False)
+    # The solver keeps each existing row where it still fits (`keep`), so a
+    # changed vocabulary moves as few people as it can.
     generated = scheduler.generate_verified(updated, first, last, availability=state["availability"],
-        history=history, preferences=state["preferences"], instructions=instructions,
-        required_assignments=turn.get("required_assignments") or [], already_scheduled=outside)
+        history=history, preferences=state["preferences"], instructions=turn.get("instructions") or "",
+        required_assignments=turn.get("required_assignments") or [], already_scheduled=outside,
+        keep=existing)
     new_slots = [dict(row) for row in schedule["slots"] if not first <= iso(row["slot_date"]) <= last]
     new_slots += generated["slots"]
     imagined = dict(schedule, slots=new_slots)

@@ -1,40 +1,27 @@
-"""Opening a period: generated whole, opened blank, or opened as a range job."""
+"""Opening a period: solved at once, blank, or as a range job the worker solves."""
 
 from typing import List, Optional
 
-from app.bl.scheduler import MODE_DAY, MODE_WEEK, build_slots, plan_spans
+from app.bl.scheduler import build_slots, plan_spans
 from app.bl.schedule_service.constants import ACTION_GENERATED, ACTION_OPENED
 from app.bl.schedule_service.context import ScheduleContext
-from app.bl.schedule_service.generation.history import AssignmentHistory
 from app.bl.schedule_service.generation.job import GenerationJob
 from app.bl.schedule_service.generation.pins import required_rows
 from app.bl.schedule_service.profile_gate import ProfileGate
+from app.bl.schedule_service.generation.history import AssignmentHistory
 from app.bl.schedule_service.rows import iso, slot_index
 from app.common.errors import AgentError
-from app.common.config import (
-    ENGINE_AI, ENGINE_AUTO, GENERATION_ENGINES,
-)
 from app.dal.repository.schedules import ASSIGNED_BY_MANAGER, week_bounds
 
 
 class PeriodBuilder:
-    def __init__(
-        self,
-        context: ScheduleContext,
-        scheduler,
-        gate: ProfileGate,
-        history: AssignmentHistory,
-        settings=None,
-    ):
+    def __init__(self, context: ScheduleContext, scheduler, gate: ProfileGate,
+                 history: AssignmentHistory):
         self._context = context
         self._repository = context.repository
         self._scheduler = scheduler
         self._gate = gate
         self._history = history
-        # The live runtime-settings store, or `None`. Optional because every
-        # test double would otherwise have to supply one; its absence reads
-        # as the default rather than as an error.
-        self._settings = settings
 
     def generate(
         self,
@@ -44,27 +31,22 @@ class PeriodBuilder:
         instructions: str = "",
         required_assignments: Optional[List[dict]] = None,
     ) -> dict:
-        """Build a period in one call and store it as a draft.
+        """Solve a period in this request and store it as a draft.
 
-        Unit setup must have produced a profile first: without the shift
-        vocabulary there is nothing to build a grid out of, and guessing one
-        would be exactly the hardcoding D9 forbids.
+        The solver answers in seconds, so a caller that wants the schedule
+        back rather than a job to poll can have it. Unit setup must have
+        produced a profile first: without the shift vocabulary there is
+        nothing to build a grid out of (D9).
         """
         profile = self._gate.buildable_profile(team_id)
         starts_on, ends_on = _bounds(starts_on, ends_on)
-        result = self._scheduler.generate(
-            profile,
-            starts_on,
-            ends_on,
-            availability=self._repository.availability(
-                team_id, starts_on, ends_on
-            ),
+        result = self._scheduler.generate_verified(
+            profile, starts_on, ends_on,
+            availability=self._repository.availability(team_id, starts_on, ends_on),
             history=self._history.before(team_id, starts_on),
             instructions=instructions,
             required_assignments=required_assignments,
             preferences=self._context.active_preferences(team_id),
-            engine=self._generation_engine(),
-            translation_cache=self._context.translation_cache(team_id),
         )
         schedule_id = self._store(team_id, starts_on, ends_on, result)
         self._repository.append_change(
@@ -135,22 +117,14 @@ class PeriodBuilder:
         pinned = required_rows(required_assignments or [], stored, profile)
         if pinned:
             self._repository.replace_assignments(schedule["id"], team_id, pinned)
-        # The mode is read once, here, and stored on the job. A manager who
-        # changes the setting while a build is running is choosing how the
-        # *next* one runs.
-        mode = self._generation_mode()
-        engine = self._generation_engine()
         job = GenerationJob.open(
-            plan_spans(profile, first, last, mode,
-                       self._repository.availability(team_id, starts_on, ends_on)),
+            plan_spans(profile, first, last),
             total_days=len({
                 iso(slot.get("slot_date")) for slot in stored
                 if first <= iso(slot.get("slot_date")) <= last
             }),
-            mode=mode,
             instructions=instructions,
             required=required_assignments or [],
-            engine=engine,
         )
         schedule = self._repository.set_generation(
             schedule["id"], team_id, job.to_dict()
@@ -164,8 +138,7 @@ class PeriodBuilder:
 
         Manager-placed rows on that date are pins, not suggestions: the agent
         fills around them. Generated/imported rows are replaced for that day,
-        while every other date stays untouched. One date whatever the mode: a
-        manager rebuilding Tuesday asked for Tuesday.
+        while every other date stays untouched.
         """
         schedule = self._repository.get_schedule(schedule_id, team_id)
         if schedule.get("status") != "draft":
@@ -179,64 +152,24 @@ class PeriodBuilder:
         job = GenerationJob.open(
             [{"date": target, "through": target, "dates": [target]}],
             total_days=1,
-            mode=MODE_DAY,
             instructions=instructions,
             required=_manager_pins_on(schedule, target),
-            engine=self._generation_engine(),
         )
         return self._context.view(
             self._repository.set_generation(schedule_id, team_id, job.to_dict()),
             team_id,
         )
 
-    def _store(
-        self, team_id: str, starts_on: str, ends_on: str, result: dict
-    ) -> str:
+    def _store(self, team_id: str, starts_on: str, ends_on: str, result: dict) -> str:
         schedule = self._repository.create_schedule(team_id, starts_on, ends_on)
-        slots = self._repository.replace_slots(
-            schedule["id"], team_id, result["slots"]
-        )
-        index = slot_index(slots)
+        index = slot_index(self._repository.replace_slots(schedule["id"], team_id, result["slots"]))
         rows = [
-            {
-                "slot_id": index[(item["shift"], item["date"])],
-                "employee": item["employee"],
-                "reason": item["reason"],
-            }
-            for item in result["assignments"]
-            if (item["shift"], item["date"]) in index
+            {"slot_id": index[(item["shift"], item["date"])], "employee": item["employee"],
+             "reason": item["reason"]}
+            for item in result["assignments"] if (item["shift"], item["date"]) in index
         ]
         self._repository.replace_assignments(schedule["id"], team_id, rows)
         return schedule["id"]
-
-    def _generation_mode(self) -> str:
-        return generation_mode(self._settings)
-
-    def _generation_engine(self) -> str:
-        return generation_engine(self._settings)
-
-
-def generation_mode(store) -> str:
-    """How wide one model call is for the next build the manager opens.
-
-    Read live from the settings store, so a mode saved in the panel applies
-    to the next period without a restart. No store reads as the default: a
-    missing setting is not a reason to run at a width nobody chose.
-    """
-    settings = getattr(store, "get", None)
-    if settings is None:
-        return MODE_DAY
-    mode = getattr(settings(), "schedule_generation_mode", MODE_DAY)
-    return mode if mode in (MODE_DAY, MODE_WEEK) else MODE_DAY
-
-
-def generation_engine(store) -> str:
-    """The engine stamped on the next job; old test stores preserve AI."""
-    settings = getattr(store, "get", None)
-    if settings is None:
-        return ENGINE_AI
-    engine = getattr(settings(), "schedule_generation_engine", ENGINE_AI)
-    return engine if engine in GENERATION_ENGINES else ENGINE_AUTO
 
 
 def _bounds(starts_on: Optional[str], ends_on: Optional[str]) -> tuple:
