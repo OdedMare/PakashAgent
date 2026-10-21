@@ -7,6 +7,7 @@ and becomes an `AgentError` immediately. Adding a rung means adding it to
 `attempts` -- do not scatter fallback logic through `complete`.
 """
 
+import logging
 import time
 from typing import List
 
@@ -16,6 +17,8 @@ from app.common.errors import AgentError, ModelOutputError
 from app.dal.llm.completion_retry import create_with_retry
 from app.dal.llm.message_merger import merge_system_into_user
 from app.dal.llm.model_slots import ModelBusy
+
+_log = logging.getLogger("pakash.llm")
 
 # 0 means "send no repetition_penalty at all", keeping the request byte-for-byte
 # what it was for OpenAI and any other server without the extension.
@@ -86,7 +89,8 @@ def complete(
                 except APITimeoutError:
                     raise AgentError(_TIMED_OUT)
                 except Exception as exc:
-                    raise AgentError("שגיאת מודל: " + str(exc))
+                    _log.warning("model call failed: %s", _with_cause(exc))
+                    raise AgentError("שגיאת מודל: " + _with_cause(exc))
                 content, usage = response_data(response)
                 return content, usage, rung
     except ModelBusy:
@@ -139,3 +143,17 @@ def response_data(response):
         "completion_tokens": usage.completion_tokens if usage else 0,
         "total_tokens": usage.total_tokens if usage else 0,
     }
+
+
+def _with_cause(exc: BaseException) -> str:
+    """The error with what caused it. The SDK's "Connection error." hides
+    the reason -- an untrusted certificate, a refused port, a name that
+    does not resolve -- in `__cause__`, which is the part worth reading."""
+    text = str(exc) or type(exc).__name__
+    cause = exc.__cause__ or exc.__context__
+    seen = 0
+    while cause is not None and seen < 3:
+        text += " <- %s: %s" % (type(cause).__name__, str(cause)[:300])
+        cause = cause.__cause__ or cause.__context__
+        seen += 1
+    return text

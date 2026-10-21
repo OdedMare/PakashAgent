@@ -4,7 +4,8 @@
 
 Prints, without changing anything: the model settings and proxy variables
 this process sees, the job queue in PostgreSQL, the model queue in Redis,
-and whether the model server answers. Short to type on purpose -- it is
+whether the model server answers (with its certificate checked, as the
+model client does), and one real completion. Short to type on purpose -- it is
 meant for a terminal on a closed network, where nothing can be pasted in.
 """
 
@@ -20,6 +21,7 @@ from app.dal.database import connect
 from app.dal.llm.model_roles import (
     ADVANCED, DEFAULT, FAST, resolve_base_url, resolve_model,
 )
+from app.dal.llm.openai_client import OpenAIJsonClient
 from app.dal.llm.redis_slots import slot_keys
 
 _PROXY_VARS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY")
@@ -110,6 +112,9 @@ def _model_queue(store) -> None:
 
 def _model_server(settings) -> None:
     _section("model server")
+    print("SSL_CERT_FILE=%s verify_ssl=%s" % (
+        os.getenv("SSL_CERT_FILE") or "-",
+        getattr(settings, "llm_verify_ssl", True)))
     seen = set()
     for role in (FAST, DEFAULT, ADVANCED):
         url = resolve_base_url(settings, role)
@@ -117,20 +122,32 @@ def _model_server(settings) -> None:
             continue
         seen.add(url)
         target = url.rstrip("/") + "/models"
-        for trust_env in (True, False):
-            label = "with proxy vars" if trust_env else "direct"
+        # Certificate checked first: the model client checks it, and a
+        # probe that skips it reports a server it cannot actually use.
+        for label, verify in (("cert checked", True), ("cert NOT checked", False)):
             started = time.monotonic()
             try:
-                response = httpx.get(
-                    target, timeout=10, verify=False, trust_env=trust_env,
-                )
+                response = httpx.get(target, timeout=10, verify=verify)
                 print("%s %s -> HTTP %s in %.1fs" % (
                     target, label, response.status_code,
                     time.monotonic() - started))
             except Exception as exc:  # noqa: BLE001
                 print("%s %s -> FAILED after %.1fs: %s" % (
                     target, label, time.monotonic() - started,
-                    type(exc).__name__ + ": " + str(exc)[:150]))
+                    type(exc).__name__ + ": " + str(exc)[:200]))
+
+
+def _completion(store) -> None:
+    """One real call through the app's own client and settings."""
+    _section("one real completion (fast role)")
+    started = time.monotonic()
+    try:
+        reply = OpenAIJsonClient(store).complete_json(
+            'Answer with JSON only.', 'Reply with {"ok": true}', flow="briefing",
+        )
+        print("OK in %.1fs: %s" % (time.monotonic() - started, str(reply)[:200]))
+    except Exception as exc:  # noqa: BLE001
+        print("FAILED after %.1fs: %s" % (time.monotonic() - started, exc))
 
 
 def main() -> None:
@@ -140,6 +157,7 @@ def main() -> None:
     _jobs(store)
     _model_queue(store)
     _model_server(settings)
+    _completion(store)
 
 
 if __name__ == "__main__":
