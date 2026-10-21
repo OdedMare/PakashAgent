@@ -64,10 +64,15 @@ class CopilotWorker:
             processed += 1
 
     def _process(self, job):
+        started = time.monotonic()
+        _log.info("job started id=%s kind=%s team=%s attempt=%s",
+                  job["id"], job["kind"], job["team_id"], job.get("attempts"))
         try:
             with model_team(job["team_id"]):
                 self._execute(job)
             self._repository.finish_copilot_job(job["id"])
+            _log.info("job finished id=%s kind=%s seconds=%.1f",
+                      job["id"], job["kind"], time.monotonic() - started)
         except NotFoundError:
             # A manager may delete a conversation or period while it waits.
             self._repository.finish_copilot_job(job["id"])

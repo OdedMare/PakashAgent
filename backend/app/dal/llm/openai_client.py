@@ -25,6 +25,7 @@ hallucinated (D3).
 import json
 import logging
 import time
+from contextlib import contextmanager
 from typing import List, Optional
 
 import httpx
@@ -146,8 +147,9 @@ class OpenAIJsonClient:
             content, current, rung = ladder.complete(
                 call.client, call.model, messages, max_tokens, schema,
                 settings.llm_repetition_penalty,
-                slots_for(self._store).reserve(
-                    priority_for_flow(flow), queue_seconds(settings, flow)
+                _logged_slot(
+                    slots_for(self._store), flow, call,
+                    priority_for_flow(flow), queue_seconds(settings, flow),
                 ),
                 _budget_seconds(settings, flow),
                 self._first_rungs.get(rung_key, 0),
@@ -234,6 +236,32 @@ class OpenAIJsonClient:
                 **options,
             )
         return self._cached_clients[cache_key]
+
+
+@contextmanager
+def _logged_slot(slots, flow: str, call, priority, timeout):
+    """The model slot, with a line on each side of the wait and the call.
+
+    Telemetry logs a call once it returns; a call that never does left no
+    trace at all. These say where one stopped: still in the queue, or sent
+    to the server and not answered.
+    """
+    flow = flow or "unknown"
+    asked = time.monotonic()
+    _log.info("llm waiting for slot flow=%s model=%s", flow, call.model)
+    with slots.reserve(priority, timeout):
+        sent = time.monotonic()
+        _log.info(
+            "llm sending flow=%s model=%s url=%s waited=%.1fs",
+            flow, call.model, call.base_url or "default", sent - asked,
+        )
+        try:
+            yield
+        finally:
+            _log.info(
+                "llm slot released flow=%s held=%.1fs",
+                flow, time.monotonic() - sent,
+            )
 
 
 def _verify_ssl(settings) -> bool:
