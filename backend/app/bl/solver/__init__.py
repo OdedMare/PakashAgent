@@ -6,8 +6,9 @@ constraints, and one objective pricing unfilled seats, missing roles,
 soft wishes and an uneven share. It replaces the day-by-day greedy filler
 and the model-driven scheduler: the language model now only translates
 the manager's words into structured requests (`bl/directive_agent/`), and
-the arithmetic of who goes where is never generated. The same inputs give
-the same schedule.
+the arithmetic of who goes where is never generated. Every answer is as
+good as the solver could prove in its time limit; among equally good
+schedules the pick may differ from one build to the next.
 
 | Module | Owns |
 |---|---|

@@ -165,30 +165,15 @@ class Settings(BaseSettings):
     """Read unprefixed, as the SDK expects. Empty is fine when a local
     `llm_base_url` is set — those servers ignore auth."""
 
-    opik_api_key: str = Field(default="", validation_alias="OPIK_API_KEY")
-    """Turns on Opik tracing of every model call (`dal/llm/tracing.py`).
-    Empty = off. Read unprefixed, as Opik's own SDK names it. Env-only: the
-    client is set up once at start-up, so a change needs a restart."""
-
-    opik_workspace: str = Field(default="", validation_alias="OPIK_WORKSPACE")
-    """The Opik workspace. Empty = the key's default workspace."""
-
-    opik_project_name: str = Field(
-        default="pakash", validation_alias="OPIK_PROJECT_NAME"
-    )
-    """The Opik project traces land in."""
-
-    opik_url: str = Field(default="", validation_alias="OPIK_URL_OVERRIDE")
-    """A self-hosted Opik's API. Empty = Comet's hosted Opik."""
-
     solver_time_limit_seconds: float = 10.0
     """Wall time one solve may take (`bl/solver/`). The solver returns the
-    best schedule found when the limit is reached; most teams are proven
+    best schedule found when the limit is reached; small teams are proven
     optimal well before it."""
 
     solver_workers: int = 8
-    """Parallel search workers for one solve. Results stay reproducible
-    (interleaved search), so this trades only CPU for speed."""
+    """Parallel search workers for one solve: more finds a better schedule
+    in the same time. Among equally good schedules the pick may differ
+    from one build to the next."""
 
     redis_url: str = ""
     """Redis shared by every process of this deployment. Empty -- the

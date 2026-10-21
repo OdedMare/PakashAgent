@@ -2,7 +2,7 @@
 
 Every number here is read from the settings on each call, so a value saved in
 the panel applies to the next call. See `llm/CLAUDE.md` for why the
-scheduler has no read timeout and no budget at all.
+scheduler has its own, much longer read ceiling.
 """
 
 import threading
@@ -111,13 +111,20 @@ _MIN_TOTAL_BUDGET_SECONDS = 300
 # *tighter* multiple — but still a multiple, never a flat constant that a
 # slow model would breach on its first attempt.
 _SCHEDULER_BUDGET_MULTIPLIER = 1.5
+# The scheduler's read ceiling. Not a guess at the answer time -- one day
+# answers in minutes -- but the point past which the server is not slow, it
+# is gone. Without it, one call the server never answers held its model slot
+# (and, in Redis, kept renewing the lease) forever: with the default limit of
+# one, every chat timed out and every build queued behind it, and the worker
+# threads waiting in that queue left none free for the code-built ones.
+_SCHEDULER_READ_CEILING_SECONDS = 900
 
 
 def read_timeout_for(settings, flow: str) -> int:
-    """The per-call read ceiling, which the scheduler does not have.
+    """The per-call read ceiling. The scheduler's is its own, far above it.
 
-    **Building a schedule is the one flow with no read timeout at all**, and
-    that is deliberate rather than an oversight.
+    **Building a schedule does not honour `llm_timeout_seconds`**, and that
+    is deliberate rather than an oversight.
 
     `llm_timeout_seconds` is one number for every call this product makes,
     and the calls are not comparable. A briefing is a short prompt to the
@@ -136,11 +143,16 @@ def read_timeout_for(settings, flow: str) -> int:
     and the manager has a stop button. So the protection is obsolete for this
     flow and only its cost remains.
 
+    It is still bounded, by `_SCHEDULER_READ_CEILING_SECONDS` (or the
+    setting, if larger): a call that never ends holds the model slot that
+    every other call in the deployment waits for.
+
     Connecting stays bounded for every flow — see `httpx_timeout`. An
     unreachable server is not a slow one.
     """
     if flow == "scheduler":
-        return 0
+        configured = getattr(settings, "llm_timeout_seconds", 0) or 0
+        return max(_SCHEDULER_READ_CEILING_SECONDS, configured)
     return getattr(settings, "llm_timeout_seconds", 0) or 0
 
 
@@ -156,9 +168,8 @@ def budget_seconds(settings, flow: str):
     the budget above it goes away with it: a deadline over an unbounded call
     could only ever fire mid-generation, throwing away an answer the server
     was still producing, which is the failure the whole setting exists to
-    avoid. That is why the scheduler, whose read is never bounded, has no
-    budget either — a deadline there would reintroduce the timeout under a
-    different name.
+    avoid. The scheduler's read is always bounded by its own ceiling, so it
+    always has a budget, sized to let that one attempt finish.
     """
     timeout = read_timeout_for(settings, flow)
     if timeout <= 0:

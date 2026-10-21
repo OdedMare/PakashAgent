@@ -20,7 +20,6 @@ three are per role, so different kinds of work can run on different providers.
 | `model_roles.py` | Flow → role → model id, endpoint and API key, and the fallbacks |
 | `model_slots.py` | `ModelSlots` (one process) and `PostgresModelSlots` (advisory locks) — the concurrency limit without Redis |
 | `redis_slots.py` | `RedisModelSlots` — the same limit as a priority-ordered queue in Redis, used whenever Redis is reachable (D33) |
-| `tracing.py` | Opik tracing — one trace per call, one LLM span per completion; inert without `OPIK_API_KEY` |
 
 Each helper is separate because each handles a different failure of
 "OpenAI-compatible" servers that are only approximately compatible.
@@ -96,9 +95,11 @@ out, one request could hold a worker for the better part of an hour. The
 deadline is passed into `create_with_retry`, which starts no attempt (and
 takes no sleep) that would cross it.
 
-**The `scheduler` flow has no read timeout and no budget at all.**
-`read_timeout_for()` returns 0 for it whatever `llm_timeout_seconds` says, and
-`_budget_seconds()` returns `None` above that.
+**The `scheduler` flow does not honour `llm_timeout_seconds`.**
+`read_timeout_for()` gives it its own ceiling instead —
+`_SCHEDULER_READ_CEILING_SECONDS` (15 minutes), or the setting if that is
+larger — and `_budget_seconds()` sizes its budget to let that one attempt
+finish.
 
 This is the one place a configured setting is deliberately not honoured, so
 the reason matters. `llm_timeout_seconds` is a single number covering calls
@@ -112,10 +113,13 @@ production was exactly that: briefings kept working while every build died on
 `httpcore.ReadTimeout` with the model server still generating an answer
 nobody was listening for.
 
-A read ceiling existed to stop one request holding a browser connection open.
-Generation no longer holds one — it is a background job that checkpoints every
-date, the browser polls short reads, and the manager has a stop button — so
-the protection is obsolete for this flow and only its cost remained.
+**It used to have no ceiling at all, and that failed worse.** A call the
+server never answered held its model slot forever (in Redis the holder keeps
+renewing its lease while the call runs). With the default limit of one, every
+chat timed out on the queue and every build waited behind it; the worker
+threads waiting in that queue left none free, so even builds that code
+assigns stopped. The manager's stop button does not interrupt an HTTP read.
+Fifteen minutes is far above any day's answer time and still ends the hang.
 
 Connecting stays bounded for *every* flow (`_CONNECT_TIMEOUT_SECONDS`): a
 handshake that never completes is an unreachable server, not a slow one, and
@@ -261,22 +265,6 @@ then failed is exactly the one worth seeing. `retries` is broken out because a
 call that silently took two attempts costs double and is identical to a clean
 one in every other metric.
 
-## Opik tracing
-
-`tracing.py` is the one place the prompt and reply leave this process
-([D30](../../../../docs/DECISIONS.md#d30--model-calls-are-traced-to-opik-prompts-and-replies-included)).
-`init(settings)` runs once in `main.py` and `worker.py`; with no
-`OPIK_API_KEY` it does nothing and every other function is a pass-through.
-
-- `call(flow, role, model)` wraps `_until_json` in one trace named by the
-  flow, tagged with the flow and role. An exception closes it with the error.
-- `wrap(client)` is applied in `_client_for`, so the cached client records
-  every `chat.completions.create` as an LLM span under that trace — the
-  ladder's rungs and both kinds of retry each appear on their own.
-- `flush()` runs on API shutdown and when the worker stops; Opik batches.
-
-Tests replace `_client_for` with a fake, so they never touch Opik.
-
 ## Connection reuse
 
 `_client_for(api_key, base_url, timeout)` caches `OpenAI` clients keyed by
@@ -307,8 +295,6 @@ first one's client, silently billing and authenticating as the wrong account.
 
 - Errors leaving this package are `AgentError` in Hebrew.
 - Never log API keys, or full prompts containing employee personal details.
-  Opik tracing is the one exception, and only `tracing.py` may do it (D30).
-- **Tracing never fails a call.** Every Opik error is caught and logged.
 - Adding a rung to the ladder means adding it to `_attempts` — do not scatter
   fallback logic through `_complete`.
 - Routing is `model_roles.py` and nowhere else. A flow gets a model by being

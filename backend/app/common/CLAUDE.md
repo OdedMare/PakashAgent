@@ -29,7 +29,10 @@ Cross-cutting infrastructure. **Ported from AiSummryIO.**
   Redis is down, and every user then falls back to what it did without it;
   `failed()` backs everyone off for a few seconds. Reads the settings live and re-reads the settings file, so a
   URL saved by another process arrives within seconds. `probe()` is the
-  panel's connection test.
+  panel's connection test. **Sharded servers** (Redis Cluster, Redis
+  Enterprise) reject a script or MULTI over keys in different slots with
+  CROSSSLOT, so keys used together share a hash tag: `{llm}` for the model
+  queue, `{<account>}` for the throttle's count and lock.
 
 ## Settings that matter here
 
@@ -43,7 +46,6 @@ Cross-cutting infrastructure. **Ported from AiSummryIO.**
 | `PAKASH_LLM_DIET_MODE` | Compact prompts and bounded completions |
 | `PAKASH_LLM_TIMEOUT_SECONDS` | Wall time for one logical call, retries included |
 | `OPENAI_API_KEY` | Read unprefixed, as the SDK expects |
-| `OPIK_API_KEY` | Turns on Opik tracing of every model call, prompts included (D30). Unprefixed, as Opik names it. Env-only and read at start-up — deliberately not in the panel, so a team manager cannot redirect every team's prompts |
 | `OPIK_WORKSPACE` / `OPIK_PROJECT_NAME` / `OPIK_URL_OVERRIDE` | Where traces land: workspace (empty = the key's default), project (default `pakash`), and a self-hosted API URL (empty = Comet) |
 | `PAKASH_DATABASE_*` | URL plus optional explicit overrides |
 | `PAKASH_SESSION_SECRET` | Signs the workspace session cookie. **Set this in production** — unset, it is generated per process, so sessions die on restart and break across workers. Changing it logs every boss out. |

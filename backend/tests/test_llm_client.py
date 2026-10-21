@@ -628,7 +628,7 @@ def test_no_timeout_means_no_budget_either():
     turning the timeout off is meant to avoid."""
     for timeout in (0, -30):
         settings = _Settings(llm_timeout_seconds=timeout)
-        for flow in ("scheduler", "changes", ""):
+        for flow in ("changes", ""):
             assert _budget_seconds(settings, flow) is None, (timeout, flow)
 
 
@@ -667,22 +667,29 @@ def test_building_a_schedule_is_never_cut_off_by_the_timeout():
     large prompt to the heavy model. A value that keeps the settings panel
     responsive is, for the scheduler, a ceiling below the real answer time --
     so the briefing kept working while every build died on `ReadTimeout` with
-    the model server still generating.
-
-    A read ceiling existed to stop one request holding a browser connection
-    open. Generation holds none: it checkpoints per day, the browser polls,
-    and the manager can stop it. So the scheduler gets no ceiling, at any
-    configured value, and no deadline above one either.
+    the model server still generating. So the scheduler's ceiling is its own,
+    far above any answer time, and its budget leaves room for that attempt.
     """
     for timeout in (30, 120, 600, 900):
         settings = _Settings(llm_timeout_seconds=timeout)
-        assert read_timeout_for(settings, "scheduler") == 0, timeout
-        assert _budget_seconds(settings, "scheduler") is None, timeout
+        ceiling = read_timeout_for(settings, "scheduler")
+        assert ceiling >= 900 and ceiling >= timeout, timeout
+        assert _budget_seconds(settings, "scheduler") > ceiling, timeout
         # Every other flow still honours the manager's setting exactly.
         assert read_timeout_for(settings, "changes") == timeout, timeout
 
 
-def test_the_scheduler_client_is_built_with_no_read_ceiling():
+def test_a_build_the_server_never_answers_still_ends():
+    """One unanswered call used to hold the model slot forever: with the
+    default limit of one, every chat and every build queued behind it. The
+    scheduler's read is bounded even when the setting says "no timeout"."""
+    for timeout in (0, -30):
+        settings = _Settings(llm_timeout_seconds=timeout)
+        assert read_timeout_for(settings, "scheduler") > 0, timeout
+        assert _budget_seconds(settings, "scheduler") is not None, timeout
+
+
+def test_the_scheduler_client_is_built_with_its_own_ceiling():
     """The wiring, not the arithmetic: `complete_json` must hand the flow's
     own ceiling to the client, or the decision above never reaches httpx."""
     built = []
@@ -699,7 +706,7 @@ def test_the_scheduler_client_is_built_with_no_read_ceiling():
     llm.complete_json("sys", "usr", flow="scheduler")
     llm.complete_json("sys", "usr", flow="briefing")
 
-    assert built == [0, 120]
+    assert built == [read_timeout_for(settings, "scheduler"), 120]
 
 
 def test_a_settings_object_without_the_field_still_resolves():
@@ -710,7 +717,6 @@ def test_a_settings_object_without_the_field_still_resolves():
     limit, and inventing one for it would time out calls on the strength of
     a missing attribute.
     """
-    assert _budget_seconds(object(), "scheduler") is None
     assert _budget_seconds(object(), "changes") is None
 
 

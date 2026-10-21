@@ -3,6 +3,7 @@
 import logging
 import os
 import secrets
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -13,7 +14,9 @@ from app.api.routers import (
     admin, copilot, employee, health, profile, schedules, settings,
     workspace,
 )
+from app import worker as copilot_worker
 from app.bl.admin_service import AdminService
+from app.bl.compiled_sources import SourceCompiler
 from app.bl.copilot import CopilotService
 from app.bl.employee_service import EmployeeService
 from app.bl.profile_service import ProfileService
@@ -32,7 +35,6 @@ from app.common.runtime_settings.runtime_settings_store import (
     RuntimeSettingsStore,
 )
 from app.dal.database import close_pool
-from app.dal.llm import tracing
 from app.dal.llm.budgets import share_slots
 from app.dal.llm.openai_client import OpenAIJsonClient
 from app.dal.llm.team_context import model_team
@@ -62,7 +64,6 @@ def _worker_count() -> int:
 
 
 env = Settings()
-tracing.init(env)
 store = RuntimeSettingsStore(env)
 # Shared state across processes when a Redis URL is saved; inert without one.
 # The throttle and the live signals fall back to memory without it, the
@@ -147,14 +148,37 @@ def startup() -> None:
 
 def shutdown() -> None:
     """Flush traces and return pooled connections before process exit."""
-    tracing.flush()
     close_pool()
+
+
+def _embedded_worker() -> bool:
+    """Run the job worker inside this process -- on unless
+    `PAKASH_EMBEDDED_WORKER` turns it off.
+
+    Builds and chat turns are queued in PostgreSQL and executed by the
+    worker; a deployment with no worker of its own left every one of them
+    waiting forever. PostgreSQL claims each job once, so this is safe next
+    to a separate `python -m app.worker` and across several API replicas.
+    Without a database there is no queue to work.
+    """
+    if os.getenv("PAKASH_EMBEDDED_WORKER", "").strip().lower() in (
+        "0", "false", "no", "off",
+    ):
+        return False
+    return bool(getattr(store.get(), "database_url", ""))
 
 
 @asynccontextmanager
 async def lifespan(_app):
     startup()
+    threads, stopped = [], threading.Event()
+    if _embedded_worker():
+        threads = copilot_worker.start(copilot_worker.CopilotWorker(
+            repository, copilot_service, schedules=schedule_service,
+            chat=manager_chat_service, compiler=SourceCompiler(repository, llm),
+        ), stopped)
     yield
+    copilot_worker.stop(threads, stopped)
     shutdown()
 
 
