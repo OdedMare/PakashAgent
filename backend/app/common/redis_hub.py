@@ -224,9 +224,9 @@ def probe(url: str, password: str = "", prefix: str = "pakash") -> dict:
             "app": {
                 "keys": _count(client, base + ":*"),
                 "model_calls": client.zcount(
-                    base + ":llm:holders", "(%d" % now_ms, "+inf"
+                    base + ":{llm}:holders", "(%d" % now_ms, "+inf"
                 ),
-                "model_waiting": client.zcard(base + ":llm:queue"),
+                "model_waiting": client.zcard(base + ":{llm}:queue"),
                 "locked_accounts": _count(client, base + ":throttle:lock:*"),
                 "event_listeners": client.pubsub_numpat(),
             },
