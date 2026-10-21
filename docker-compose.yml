@@ -51,8 +51,8 @@ services:
       # calls should deliberately give up while the model slot is occupied.
       PAKASH_LLM_QUEUE_SECONDS: ${PAKASH_LLM_QUEUE_SECONDS:-0}
       # Shared across API and worker processes through PostgreSQL advisory
-      # locks. 1 suits Ollama; raise it for a batching server (vLLM, TGI).
-      PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-1}
+      # locks. 4 suits a hosted API; lower it to 1 for a local Ollama.
+      PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-4}
       # The constraint solver that assigns every schedule (bl/solver/):
       # seconds per solve and parallel workers. Also editable in the panel.
       PAKASH_SOLVER_TIME_LIMIT_SECONDS: ${PAKASH_SOLVER_TIME_LIMIT_SECONDS:-10}
@@ -94,7 +94,7 @@ services:
       # picked it up.
       PAKASH_LLM_TIMEOUT_SECONDS: ${PAKASH_LLM_TIMEOUT_SECONDS:-0}
       PAKASH_LLM_QUEUE_SECONDS: ${PAKASH_LLM_QUEUE_SECONDS:-0}
-      PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-1}
+      PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-4}
       PAKASH_SOLVER_TIME_LIMIT_SECONDS: ${PAKASH_SOLVER_TIME_LIMIT_SECONDS:-10}
       PAKASH_SOLVER_WORKERS: ${PAKASH_SOLVER_WORKERS:-8}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}

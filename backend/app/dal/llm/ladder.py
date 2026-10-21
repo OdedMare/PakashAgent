@@ -1,7 +1,9 @@
 """The degradation ladder for OpenAI-compatible servers.
 
-schema → JSON mode → plain → plain with the system prompt merged into the
-user turn (some local deployments reject a system role). Only a
+strict schema → schema → JSON mode → plain → plain with the system prompt
+merged into the user turn (some local deployments reject a system role).
+The strict rung exists only when the caller's schema has a strict form
+(`strict_schema.py`). Only a
 `BadRequestError` advances the ladder; any other exception is a real failure
 and becomes an `AgentError` immediately. Adding a rung means adding it to
 `attempts` -- do not scatter fallback logic through `complete`.
@@ -17,6 +19,7 @@ from app.common.errors import AgentError, ModelOutputError
 from app.dal.llm.completion_retry import create_with_retry
 from app.dal.llm.message_merger import merge_system_into_user
 from app.dal.llm.model_slots import ModelBusy
+from app.dal.llm.strict_schema import to_strict
 
 _log = logging.getLogger("pakash.llm")
 
@@ -101,6 +104,15 @@ def complete(
 def attempts(messages, max_tokens, schema, penalty=NEUTRAL_PENALTY) -> List[dict]:
     """The ladder, in order."""
     rungs = []
+    strict = to_strict(schema)
+    if strict is not None:
+        rungs.append({
+            "messages": messages,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "pakash_response", "schema": strict, "strict": True},
+            },
+        })
     if schema is not None:
         rungs.append({
             "messages": messages,

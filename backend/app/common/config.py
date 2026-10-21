@@ -130,9 +130,9 @@ class Settings(BaseSettings):
     timeout above. Set a positive value only when interactive work should
     deliberately give up while another generation owns the model slot."""
 
-    # The shipped endpoint is Ollama, which serves one generation at a time.
-    # vLLM/TGI deployments should raise this explicitly for batching.
-    llm_max_concurrency: int = 1
+    # A hosted API or a batching server (vLLM, TGI) takes several at once;
+    # a one-at-a-time local Ollama should lower this to 1.
+    llm_max_concurrency: int = 4
     """How many HTTP completions may be in flight across API and workers.
 
     PostgreSQL advisory locks coordinate every process and read this setting

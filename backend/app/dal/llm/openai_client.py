@@ -10,7 +10,8 @@ vLLM, Groq...); the default target is a local model through Ollama.
 
 Robustness policy:
 - no API key required when a custom base_url is set (local servers)
-- the degradation ladder (`ladder.py`): schema → JSON mode → plain → merged,
+- the degradation ladder (`ladder.py`): strict schema → schema → JSON mode →
+  plain → merged,
   starting from the rung that last answered for the same endpoint, model and
   schema
 - strips markdown fences from the reply
@@ -47,6 +48,7 @@ from app.dal.llm.model_roles import (
     resolve_api_key, resolve_base_url, resolve_model, role_for_flow,
 )
 from app.dal.llm.model_slots import priority_for_flow
+from app.dal.llm.strict_schema import drop_nulls, to_strict
 from app.dal.llm.telemetry import log_call
 
 # One initial attempt + one retry with the parse error appended.
@@ -160,6 +162,8 @@ class OpenAIJsonClient:
                 usage[key] += current.get(key, 0)
             try:
                 result = extract_json(content)
+                if rung == 0 and to_strict(schema) is not None:
+                    result = drop_nulls(result, schema)
             except json.JSONDecodeError as exc:
                 last_error = str(exc) if content else "empty reply"
                 messages = messages + [
