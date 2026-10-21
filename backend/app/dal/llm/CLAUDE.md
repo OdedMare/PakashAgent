@@ -96,9 +96,11 @@ out, one request could hold a worker for the better part of an hour. The
 deadline is passed into `create_with_retry`, which starts no attempt (and
 takes no sleep) that would cross it.
 
-**The `scheduler` flow has no read timeout and no budget at all.**
-`read_timeout_for()` returns 0 for it whatever `llm_timeout_seconds` says, and
-`_budget_seconds()` returns `None` above that.
+**The `scheduler` flow does not honour `llm_timeout_seconds`.**
+`read_timeout_for()` gives it its own ceiling instead —
+`_SCHEDULER_READ_CEILING_SECONDS` (15 minutes), or the setting if that is
+larger — and `_budget_seconds()` sizes its budget to let that one attempt
+finish.
 
 This is the one place a configured setting is deliberately not honoured, so
 the reason matters. `llm_timeout_seconds` is a single number covering calls
@@ -112,10 +114,13 @@ production was exactly that: briefings kept working while every build died on
 `httpcore.ReadTimeout` with the model server still generating an answer
 nobody was listening for.
 
-A read ceiling existed to stop one request holding a browser connection open.
-Generation no longer holds one — it is a background job that checkpoints every
-date, the browser polls short reads, and the manager has a stop button — so
-the protection is obsolete for this flow and only its cost remained.
+**It used to have no ceiling at all, and that failed worse.** A call the
+server never answered held its model slot forever (in Redis the holder keeps
+renewing its lease while the call runs). With the default limit of one, every
+chat timed out on the queue and every build waited behind it; the worker
+threads waiting in that queue left none free, so even builds that code
+assigns stopped. The manager's stop button does not interrupt an HTTP read.
+Fifteen minutes is far above any day's answer time and still ends the hang.
 
 Connecting stays bounded for *every* flow (`_CONNECT_TIMEOUT_SECONDS`): a
 handshake that never completes is an unreachable server, not a slow one, and
