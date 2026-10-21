@@ -1,11 +1,8 @@
-"""The outage fallback: fast, repeatable and rotation-safe.
-
-The model assigns (D3); this engine runs only when it cannot be reached.
-"""
+"""The constraint solver: fast, repeatable and rotation-safe (D34)."""
 
 import pytest
 
-from app.bl.deterministic_scheduler import generate_day, generate_span, unsupported_reason
+from app.bl.solver import generate_day, generate_span
 from app.common.errors import AgentError
 
 
@@ -60,7 +57,7 @@ def test_saturday_uses_the_round_and_triplet_groups_that_close_it():
     assert [row["employee"] for row in result["assignments"]] == [
         "סבב א", "תלתון ג",
     ]
-    assert result["metrics"]["engine"] == "deterministic"
+    assert result["metrics"]["engine"] == "solver"
     assert result["metrics"]["total_tokens"] == 0
     assert result["warnings"] == []
 
@@ -79,14 +76,8 @@ def test_span_builds_each_day_in_code_without_tokens():
     assert {row["date"] for row in result["assignments"]} == {
         "2026-08-29", "2026-08-30",
     }
-    assert result["metrics"]["engine"] == "code"
+    assert result["metrics"]["engine"] == "solver"
     assert result["metrics"]["total_tokens"] == 0
-
-
-def test_semantic_inputs_are_not_silently_sent_to_code():
-    profile = dict(_profile(), rules=[{"text": "תעדף את דנה", "priority": "soft"}])
-
-    assert "AI" in unsupported_reason(profile)
 
 
 def _counts(assignments, shift=None):
@@ -207,3 +198,74 @@ def test_a_slot_needing_a_rare_role_is_filled_before_a_broadly_staffed_one():
     placed = {row["shift"]: row["employee"] for row in result["assignments"]}
     assert placed == {"בוקר": "אבי", "ערב": "בני"}
     assert result["warnings"] == []
+
+
+def _plain(people, headcount=1, **extra):
+    profile = {
+        "workplace": {"name": "יחידה"},
+        "employees": people,
+        "shifts": [{
+            "name": SHIFT, "start_time": "07:00", "end_time": "15:00", "days": [],
+            "staffing": [{"days": [], "headcount": headcount, "required_roles": []}],
+        }],
+    }
+    profile.update(extra)
+    return profile
+
+
+def test_the_whole_span_is_solved_at_once_where_a_day_by_day_fill_runs_dry():
+    """אבי alone may work the second day; one day at a time would spend him
+    on the first, then find nobody for the second."""
+    profile = _plain([{"name": "אבי"}, {"name": "בני"}],
+                     audit_policy={"max_consecutive_days": 1})
+    absent = [{"employee": "בני", "date": "2026-09-01", "available": False}]
+
+    result = generate_span(profile, "2026-08-31", "2026-09-01", availability=absent)
+
+    placed = {row["date"]: row["employee"] for row in result["assignments"]}
+    assert placed == {"2026-08-31": "בני", "2026-09-01": "אבי"}
+    assert result["warnings"] == []
+
+
+def test_weekly_hours_are_a_ceiling_not_a_suggestion():
+    profile = _plain([{"name": "אבי", "max_weekly_hours": 16}, {"name": "בני"}])
+
+    result = generate_span(profile, "2026-08-31", "2026-09-04")
+
+    worked = [row for row in result["assignments"] if row["employee"] == "אבי"]
+    assert len(worked) <= 2
+    assert len(result["assignments"]) == 5
+
+
+def test_an_impossible_seat_is_reported_not_refused():
+    profile = _plain([{"name": "אבי"}], headcount=2)
+
+    result = generate_span(profile, "2026-08-31", "2026-08-31")
+
+    assert [row["employee"] for row in result["assignments"]] == ["אבי"]
+    assert any("נשארה בחוסר" in note for note in result["notes"])
+    assert [item["code"] for item in result["warnings"]] == ["unfilled"]
+
+
+def test_a_pin_stands_and_every_row_carries_a_reason():
+    profile = _plain([{"name": "אבי"}, {"name": "בני"}])
+    pin = {"employee": "בני", "shift": SHIFT, "date": "2026-08-31", "reason": "ביקש המנהל"}
+
+    result = generate_span(profile, "2026-08-31", "2026-09-01", required_assignments=[pin])
+
+    first = [row for row in result["assignments"] if row["date"] == "2026-08-31"]
+    assert first == [dict(pin)]
+    assert all(row["reason"] for row in result["assignments"])
+
+
+def test_rows_outside_the_rebuilt_shifts_stay_and_count():
+    profile = _plain([{"name": "אבי"}, {"name": "בני"}])
+    profile["shifts"].append({
+        "name": "לילה", "start_time": "23:00", "end_time": "07:00", "days": [],
+        "staffing": [{"days": [], "headcount": 1, "required_roles": []}],
+    })
+    night = {"employee": "אבי", "shift": "לילה", "date": "2026-08-30", "reason": "קיים"}
+
+    result = generate_day(profile, "2026-08-31", shift_names=[SHIFT], already_scheduled=[night])
+
+    assert [row["employee"] for row in result["assignments"]] == ["בני"]

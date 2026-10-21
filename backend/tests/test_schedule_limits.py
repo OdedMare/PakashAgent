@@ -3,7 +3,7 @@
 import datetime
 import json
 
-from app.bl.deterministic_scheduler import generate_span
+from app.bl.solver import generate_span
 from app.bl.directive_agent import DirectiveAgent
 from app.bl.schedule_requests import read_requests
 from app.bl.scheduler.scheduler import Scheduler

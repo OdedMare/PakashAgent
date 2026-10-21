@@ -4,7 +4,7 @@ import json
 
 from app.bl.compiled_sources import NullCache, SourceCompiler, TranslationCache, report
 from app.bl.compiled_sources.timing import UNREAD_TIME, mentioned_dates
-from app.bl.deterministic_scheduler import generate_span
+from app.bl.solver import generate_span
 from app.bl.directive_agent import DirectiveAgent
 from app.bl.profile_service import ProfileService
 from app.bl.scheduler.scheduler import Scheduler

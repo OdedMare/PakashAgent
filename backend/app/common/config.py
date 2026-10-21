@@ -232,6 +232,15 @@ class Settings(BaseSettings):
     and refuses semantic rules rather than silently ignoring them.
     """
 
+    solver_time_limit_seconds: float = 10.0
+    """Wall time one solve may take (`bl/solver/`). The solver returns the
+    best schedule found when the limit is reached; most teams are proven
+    optimal well before it."""
+
+    solver_workers: int = 8
+    """Parallel search workers for one solve. Results stay reproducible
+    (interleaved search), so this trades only CPU for speed."""
+
     redis_url: str = ""
     """Redis shared by every process of this deployment. Empty -- the
     default -- means no Redis: the login throttle, the manager's live signals
