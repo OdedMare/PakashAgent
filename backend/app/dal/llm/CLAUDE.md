@@ -18,8 +18,8 @@ three are per role, so different kinds of work can run on different providers.
 | `message_merger.py` | Folds the system prompt into the user turn |
 | `model_id_extractor.py` | Pulls model IDs out of a `/models` response |
 | `model_roles.py` | Flow → role → model id, endpoint and API key, and the fallbacks |
-| `model_slots.py` | `ModelSlots` (one process) and `PostgresModelSlots` (advisory locks) — the concurrency limit without Redis |
-| `redis_slots.py` | `RedisModelSlots` — the same limit as a priority-ordered queue in Redis, used whenever Redis is reachable (D33) |
+| `model_slots.py` | `ModelSlots` (one process) and `PostgresModelSlots` (advisory locks) — the concurrency limit across every process (D35) |
+| `strict_schema.py` | A caller's schema in strict-mode form, and the reply read back in the caller's shape |
 
 Each helper is separate because each handles a different failure of
 "OpenAI-compatible" servers that are only approximately compatible.
@@ -34,10 +34,15 @@ Two robustness layers stack:
 **1. The degradation ladder** (`_attempts`) — tried in order, dropping to the next
 on `BadRequestError`:
 
-1. `response_format: json_schema` with the caller's schema
-2. `response_format: json_object` (plain JSON mode)
-3. no `response_format` at all
-4. same, but with the system prompt merged into the user turn — some local
+1. `response_format: json_schema` with `strict: true`, when the schema has a
+   strict form (`strict_schema.py`): every property required, the optional
+   ones nullable, no extra keys. The server decodes against it; the nulls
+   are dropped from the reply so callers see the shape they always did. A
+   schema with a free-form object has no strict form and skips this rung.
+2. `response_format: json_schema` with the caller's schema
+3. `response_format: json_object` (plain JSON mode)
+4. no `response_format` at all
+5. same, but with the system prompt merged into the user turn — some local
    deployments reject a `system` role outright
 
 Only a `BadRequestError` advances the ladder; any other exception becomes an
@@ -114,8 +119,7 @@ production was exactly that: briefings kept working while every build died on
 nobody was listening for.
 
 **It used to have no ceiling at all, and that failed worse.** A call the
-server never answered held its model slot forever (in Redis the holder keeps
-renewing its lease while the call runs). With the default limit of one, every
+server never answered held its model slot forever. With the default limit of one, every
 chat timed out on the queue and every build waited behind it; the worker
 threads waiting in that queue left none free, so even builds that code
 assigns stopped. The manager's stop button does not interrupt an HTTP read.
@@ -140,9 +144,9 @@ never share a client or one would authenticate as the other.
 
 | Role | Model setting | URL setting | Key setting | Flows |
 |---|---|---|---|---|
-| `advanced` | `llm_model_advanced` | `llm_base_url_advanced` | `llm_api_key_advanced` | `scheduler` |
+| `advanced` | `llm_model_advanced` | `llm_base_url_advanced` | `llm_api_key_advanced` | `scheduler` (translating a build's sentences) |
 | `default` | `llm_model_default` | `llm_base_url_default` | `llm_api_key_default` | `changes`, `planner`, `learn`, and anything unmapped |
-| `fast` | `llm_model_fast` | `llm_base_url_fast` | `llm_api_key_fast` | `briefing` |
+| `fast` | `llm_model_fast` | `llm_base_url_fast` | `llm_api_key_fast` | (no active flow) |
 
 **A key travels with the URL it authenticates, not with the process.** One
 shared key stops being right the moment two roles sit on two providers: it is
@@ -160,9 +164,9 @@ what picks the role, so a caller names itself once. A second argument would be
 a second thing to keep in step with the first. `role=` and `model=` override
 it for a one-off; nothing in `bl/` needs either.
 
-`scheduler` is the one advanced flow — it reasons over a whole period of
-slots, people and rules at once, and it is the call the product is judged on.
-`briefing` is a few sentences over facts `audit.py` already computed.
+`scheduler` is the one advanced flow: the `DirectiveAgent` translating a
+build's rules, policies and instructions into requests the solver honours
+(D34). It no longer assigns anybody.
 
 **An unset role falls back to `llm_model`.** That single `or` is the whole
 backward-compatibility story: a deployment that never opens the new settings
@@ -204,35 +208,18 @@ be ready and the backoff is a guess.
 
 ## Concurrency
 
-**With Redis configured, `RedisModelSlots` holds the line** (D33):
-`main.py` and `worker.py` call `budgets.share_slots(hub)`, and every call
-takes a ticket in one Redis queue ordered by priority, then arrival — so a
-manager's chat goes ahead of a waiting build day. Same contract as below:
-the limit is read live and each team has one call in flight. Holders renew
-a 30-second lease, so a killed process frees its slot within a lease. When
-Redis is not configured or stops answering, the call falls back to:
-
 `PostgresModelSlots` bounds in-flight completions across the API and every
-worker with session advisory locks. `llm_max_concurrency` is read on each
-acquisition, so a saved value applies to the next call without a restart.
-Each team also holds one team lock, preventing one workspace from occupying
-all global slots. A dead process loses both locks with its database session.
+worker with session advisory locks (D35). `llm_max_concurrency` is read on
+each acquisition, so a saved value applies to the next call without a
+restart. Each team also holds one team lock, preventing one workspace from
+occupying all global slots. A dead process loses both locks with its
+database session. Callers without database settings (small adapters and
+unit tests) retain the priority-aware process-local `ModelSlots`.
 
-Callers without database settings (small adapters and unit tests) retain the
-priority-aware process-local `ModelSlots` fallback.
-
-The right value depends entirely on the server, which is why there is no good
-default:
-
-- **A continuously-batching server (vLLM, TGI)** does its own scheduling and is
-  *starved* by a low limit — a request held back here is a request it cannot
-  put in a batch. 16+ suits those.
-- **A one-request-at-a-time server (Ollama's default)** is only thrashed by a
-  high one. 1-2 keeps latency honest.
-
-The shipped default is 1 because the shipped endpoint is Ollama. Deployments
-using a continuously-batching server should raise it explicitly; the per-team
-quota remains one concurrent completion.
+The default is 4: a hosted API or a continuously-batching server (vLLM,
+TGI) takes several calls at once and is *starved* by a low limit. A
+one-request-at-a-time local server (Ollama's default) is only thrashed by a
+high one and should be set to 1. The per-team quota remains one call.
 
 ## Telemetry
 
@@ -246,7 +233,7 @@ tell a misrouted flow from a misconfigured role, which is the question these
 lines get asked once more than one model is in play.
 
 `flow` is what the `flow=` argument on `complete_json` exists for —
-`scheduler`, `changes`, `briefing`. Without it every measurement
+`scheduler`, `changes`, `learn`. Without it every measurement
 reads "some model call", and the first question anyone asks of the numbers is
 which feature is the expensive one.
 

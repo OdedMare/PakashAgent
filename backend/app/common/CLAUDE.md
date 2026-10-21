@@ -17,22 +17,15 @@ Cross-cutting infrastructure. **Ported from AiSummryIO.**
   employee login, change password, settings password) runs through
   `attempt()`, which locks an account for 15 minutes after 5 wrong guesses.
   Keyed by account, not IP — behind the Next proxy every request has the same
-  IP. Shared through Redis when configured; otherwise in memory, per process.
+  IP. Shared through the `login_attempts` table when handed the repository
+  (D35); otherwise in memory, per process.
 - `events.py` — `TeamEvents`: an employee route `publish()`es "the
   requests (or swaps) inbox moved" from its worker thread, and the manager's
   SSE stream, waiting on the event loop, wakes up (D29). No payload. Across
-  processes over Redis pub/sub when configured, otherwise in memory; the
-  client's 15-second poll is the backstop either way.
-- `redis_hub.py` — `RedisHub`, the one Redis client a process shares (D33).
-  Used by the throttle, the live signals and the model queue
-  (`dal/llm/redis_slots.py`). `client()` is `None` when no URL is set or
-  Redis is down, and every user then falls back to what it did without it;
-  `failed()` backs everyone off for a few seconds. Reads the settings live and re-reads the settings file, so a
-  URL saved by another process arrives within seconds. `probe()` is the
-  panel's connection test. **Sharded servers** (Redis Cluster, Redis
-  Enterprise) reject a script or MULTI over keys in different slots with
-  CROSSSLOT, so keys used together share a hash tag: `{llm}` for the model
-  queue, `{<account>}` for the throttle's count and lock.
+  processes over PostgreSQL LISTEN/NOTIFY (`dal/notify.py`), otherwise in
+  memory; the client's 15-second poll is the backstop either way.
+- `runtime_settings/` re-reads its file from `get()` at most every few
+  seconds, so a save made by another process arrives without a restart.
 
 ## Settings that matter here
 
@@ -46,14 +39,12 @@ Cross-cutting infrastructure. **Ported from AiSummryIO.**
 | `PAKASH_LLM_DIET_MODE` | Compact prompts and bounded completions |
 | `PAKASH_LLM_TIMEOUT_SECONDS` | Wall time for one logical call, retries included |
 | `OPENAI_API_KEY` | Read unprefixed, as the SDK expects |
-| `OPIK_WORKSPACE` / `OPIK_PROJECT_NAME` / `OPIK_URL_OVERRIDE` | Where traces land: workspace (empty = the key's default), project (default `pakash`), and a self-hosted API URL (empty = Comet) |
 | `PAKASH_DATABASE_*` | URL plus optional explicit overrides |
 | `PAKASH_SESSION_SECRET` | Signs the workspace session cookie. **Set this in production** — unset, it is generated per process, so sessions die on restart and break across workers. Changing it logs every boss out. |
 | `PAKASH_SETTINGS_PASSWORD` | Unlocks the settings panel on top of the boss login, sent as the `X-Settings-Password` header. Defaults to `010802` (committed); **override it in any real deployment**. Set to empty, the panel stays locked. The settings are shared by every workspace, and anyone can open a workspace and be its boss |
 | `PAKASH_SESSION_DAYS` | How long a boss stays logged in (default 30) |
-| `PAKASH_REDIS_URL` / `PAKASH_REDIS_PASSWORD` / `PAKASH_REDIS_KEY_PREFIX` | Shared state across processes (D33): throttle, live signals, model queue. Empty URL = off, everything as before. Live-editable in the panel, which also tests the connection and shows what is in Redis |
-| `PAKASH_REDIS_HOST` / `PAKASH_REDIS_PORT` / `PAKASH_REDIS_USERNAME` | Explicit connection parts, each written over the same part of the URL (`redis_connection_url`), like the `DATABASE_*` overrides. With the URL empty, a host alone turns Redis on (port defaults to 6379). Live-editable in the panel |
-| `PAKASH_SCHEDULE_GENERATION_MODE` | How wide one scheduling model call is: `day` (default, one date per call — verified and repaired on its own) or `week` (up to seven dates per call — several times faster, coarser repair). Live-editable in the panel; read when a period is opened, so a running build keeps the mode it started with |
+| `PAKASH_SOLVER_TIME_LIMIT_SECONDS` / `PAKASH_SOLVER_WORKERS` | The constraint solver's wall time per solve (default 10s) and parallel workers (default 8). Live-editable in the panel |
+| `PAKASH_LLM_MAX_CONCURRENCY` | Model calls in flight across every process (default 4; 1 for a local Ollama). One per team regardless |
 
 ## Rules
 

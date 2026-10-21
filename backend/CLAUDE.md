@@ -41,7 +41,7 @@ uvicorn app.main:app --reload
   `employee`, `admin`). `visitor` also refuses a suspended or deleted team.
 - `common/sessions.py` — signed session cookies (HMAC-SHA256, no library).
 - `common/events.py` — "an inbox moved" signals per team (across processes
-  over Redis when configured, D33), feeding
+  over PostgreSQL LISTEN/NOTIFY, `dal/notify.py`, D35), feeding
   the manager's SSE stream (`api/routers/employee/live.py`, D29). Signals
   carry no data; the screen re-reads through the guarded routes.
 - `bl/interview/` — the intro interview, one `plan-chat` turn at a time
@@ -51,15 +51,16 @@ uvicorn app.main:app --reload
   The manager may also **end it early** (`interview_service.end`), which
   writes the partial draft with a `completeness` record of what it still owes
   ([D22](../docs/DECISIONS.md#d22--the-interview-can-be-ended-early-and-the-profile-says-what-it-owes-️-amends-d18)).
-- `bl/scheduler/` — generates a schedule; every assignment carries a reason.
-  Builds the slot grid in code (which dates fall in a period is arithmetic) and
-  asks the model only to assign people into it.
+- `bl/scheduler/` — builds a span: the slot grid (arithmetic), the
+  manager's sentences translated by `bl/directive_agent/`, then the solver.
+- `bl/solver/` — **the OR-Tools CP-SAT constraint solver that assigns every
+  schedule** ([D34](../docs/DECISIONS.md)). One boolean per legal (person,
+  slot); the audit's blocking checks and every hard request are
+  constraints; coverage is solved first, then wishes and fairness. Every
+  row carries a reason. No model call.
 - `bl/changes/` — conversational edits; asks for the boss's reason, proposes a
   replacement with justification, applies on confirmation. Proposes only — it is
   handed no repository, so it cannot write.
-- `bl/briefing.py` — **the agent speaking first.** Reads the current state and
-  says what it noticed, unprompted. Returns exactly `headline`, `items`,
-  `quiet` — no operations, so there is no path from a briefing to a write.
 - `bl/copilot.py` + `app/worker.py` — the durable observation loop. PostgreSQL
   owns jobs, inbox items, per-action permissions and append-only audit events;
   the separate worker survives browser and API restarts. Generation is queued
@@ -102,10 +103,10 @@ uvicorn app.main:app --reload
   `coverage_gaps`, `validate_placement`, `find_replacements`,
   `publish_readiness`, `profile_gaps`). No LLM call anywhere in the file, and
   no write: it holds a repository and uses it for reads only (D19).
-- `bl/planner/` — the loop that runs them. The model picks tools, the
-  tools answer with arithmetic, the results go back. Falls back to
-  `bl/intent/` when no model is reachable, so the same questions are
-  answered with nothing configured.
+- `bl/planner/` — what the manager chat shares with the no-model reader:
+  the question and tool-call schema, and deterministic answers over
+  `bl/tools/` and `bl/intent/`. The model loop that answered `/ask` is gone;
+  the manager chat asks instead.
 - `bl/intent/` — **reading a Hebrew sentence with no model.** Keyword
   matching against the workspace's own roster and shift vocabulary, six
   question shapes, and `unknown` for anything else. It never guesses.
@@ -134,8 +135,11 @@ package's `__init__` docstring carries a table of which module owns what.
   — the whole product shape depends on the agent keeping the judgment.
 - **The audit contains no LLM call.** Its entire value is being arithmetic that
   cannot be hallucinated. Pure functions over a roster; trivially unit-testable.
-- **Hard rules are not gates.** They are strong instructions to the model plus a
-  loud warning when broken. This is a deliberate, accepted tradeoff — see D1/D3.
+- **Generation honours hard rules; the audit still only warns.** The solver
+  will not place a row that breaks a hard rule it can represent (D34). A
+  rule it cannot represent is reported in the build's notes, never sent to
+  a model to assign around. On a hand-made schedule hard rules remain a
+  loud warning, not a gate (D1/D3).
 - **How full a slot is has exactly one answer, and `bl/audit/` owns it.**
   `required_headcount()` says how many people it asks for — reading the stored
   grid first, since that is what the week was generated into — and
@@ -155,19 +159,8 @@ package's `__init__` docstring carries a table of which module owns what.
 - **Every assignment carries the agent's reason**; every change carries the boss's
   reason too. Neither is optional — they serve different purposes ([D8](../docs/DECISIONS.md#d8--two-reasons-both-required)).
   Enforced in three places on purpose: `assignments.reason` is `NOT NULL`, the
-  repository refuses a blank one, and `scheduler.py` drops an unreasoned row
-  rather than storing it.
-- **A briefing observes; it never acts.** `bl/briefing.py` returns three keys
-  and none of them is an operation, so nothing it says can be applied
-  ([D15](../docs/DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)).
-  A `suggestion` is a sentence the manager may send, after which the ordinary
-  propose-then-confirm path runs unchanged. Giving a briefing operations that
-  `apply` could read would reverse D3, D8 and D12 at once.
-- **A briefing never counts.** `warnings` and `fairness` are computed by
-  `audit.py` and handed to the model as facts. Speaking first does not move
-  the D3 line about which side does arithmetic.
-- **`schedule_service.brief()` never raises.** It returns quiet on any failure:
-  it decorates a screen that must render regardless of what the model is doing.
+  repository refuses a blank one, and the solver writes one on every row it
+  places (`bl/solver/solve.py`).
 - **A dragged shift is a proposal, not an edit.** `POST /api/schedule/move`
   requires the manager's reason exactly as a spoken change does ([D12](../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
 - **Clearing keeps the grid; deleting does not.** `POST /{id}/clear` empties
@@ -288,10 +281,9 @@ package's `__init__` docstring carries a table of which module owns what.
   answers. The deterministic fallback answers the question rather than asking
   what the manager meant — an unreachable model is not the manager having
   been unclear, and asking would repeat on every retry.
-- **An answer carries no operations.** `POST /api/schedule/ask` returns
-  `answer`, `steps`, `needs_confirmation` — and nothing `apply` could read,
-  the same guard `bl/briefing.py` has (D15). Asking and changing are
-  separate acts, separate endpoints, and separate cards on the screen.
+- **An answer carries no operations.** A manager-chat answer is a reply;
+  only a pending plan, applied through its own endpoint, writes. Asking and
+  changing stay separate acts.
 - **The agent may not claim a placement is valid unless a tool said so.**
   `find_replacements` re-validates every candidate through `bl/placement/`
   and keeps only the clean ones. This is *not* the audit becoming a gate:

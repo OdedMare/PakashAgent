@@ -22,7 +22,7 @@ import asyncio
 import logging
 import threading
 from contextlib import contextmanager
-from typing import Dict, Iterator, Optional, Set, Tuple
+from typing import Dict, Iterator, Set, Tuple
 
 REQUESTS = "requests"
 SWAPS = "swaps"
@@ -39,7 +39,7 @@ class TeamEvents:
         self._subscribers: Dict[str, Set[_Subscriber]] = {}
         # `dal.notify.PostgresSignals`, or None for this process only.
         self._bus = bus
-        self._listener = None  # type: Optional[threading.Thread]
+        self._listener = None
 
     def publish(self, team_id: str, kind: str) -> None:
         """Wake every stream open on this team, in every process. Safe from
