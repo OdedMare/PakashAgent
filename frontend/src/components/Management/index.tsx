@@ -345,16 +345,24 @@ export function Management({
           </button>
           <button
             type="button"
-            className={`management-nav-item${view === "analytics" ? " is-active" : ""}`}
+            className={`management-nav-item${view === "overview" ? " is-active" : ""}`}
             onClick={() => {
-              setView("analytics");
+              setView("overview");
               setDrawerOpen(false);
               window.scrollTo({ top: 0 });
             }}
-            aria-current={view === "analytics" ? "page" : undefined}
+            aria-current={view === "overview" ? "page" : undefined}
           >
             <BarChart3 size={15} />
-            נתונים
+            <span>סקירה</span>
+            {copilotPending ? (
+              <span
+                className="management-nav-badge"
+                aria-label={`${copilotPending} פריטים דורשים מבט`}
+              >
+                {copilotPending > 9 ? "9+" : copilotPending}
+              </span>
+            ) : null}
           </button>
 
         </nav>
@@ -568,9 +576,17 @@ export function Management({
         className={`management-workspace${drawerOpen ? " has-drawer" : ""}${view !== "board" ? " is-page" : ""}${resizing ? " is-resizing" : ""}`}
         style={{ "--chat-share": `${(chatShare * 100).toFixed(2)}%` } as CSSProperties}
       >
-        {view === "analytics" ? (
-          <ManagerAnalytics overview={overview} />
-        ) : view === "team" ? (
+        <ManagerOverview
+          hidden={view !== "overview"}
+          overview={overview}
+          onOpenSetup={onOpenManualSetup}
+          onPendingChange={setCopilotPending}
+          onAct={(text) => {
+            setSuggested((previous) => ({ text, n: previous.n + 1 }));
+            openAgent();
+          }}
+        />
+        {view === "overview" ? null : view === "team" ? (
           <section className="manager-analytics" aria-labelledby="manager-team-title">
             <header className="manager-analytics-head">
               <div>
@@ -697,13 +713,6 @@ export function Management({
               label="צוות"
               onClick={() => setSection("team")}
             />
-            <ManagerTab
-              active={section === "overview"}
-              icon={<BarChart3 size={15} />}
-              label="סקירה"
-              count={copilotPending}
-              onClick={() => setSection("overview")}
-            />
             {/* Desktop hides the drawer head, so the way out lives here.
                 Closing hands the whole width back to the board. */}
             <button
@@ -740,17 +749,6 @@ export function Management({
             onPreview={setChatPreview}
             onOpenReceipt={(date) => setChatWeek((previous) => ({ date, n: (previous?.n ?? 0) + 1 }))}
           />
-
-          <div hidden={section !== "overview"}>
-          <CopilotInbox
-            onOpenSetup={onOpenManualSetup}
-            onPendingChange={setCopilotPending}
-            onAct={(text) => {
-              setSuggested((previous) => ({ text, n: previous.n + 1 }));
-              setSection("agent");
-            }}
-          />
-          </div>
 
           {section === "replace" ? <>
           {schedule?.status === "published" ? (
@@ -811,13 +809,6 @@ export function Management({
           />
           </> : null}
 
-          {section === "overview" ? <>
-            {schedule?.notes?.length ? <ul className="schedule-notes">{schedule.notes.map((note, index) => <li key={index}>{note}</li>)}</ul> : null}
-            {schedule ? <Warnings warnings={schedule.warnings} /> : null}
-            {overview ? <Stats overview={overview} /> : null}
-            <History entries={overview?.changes ?? []} />
-            <LearnedFromChanges />
-          </> : null}
           </div>
         </aside>
         <RequestToast
@@ -834,7 +825,7 @@ export function Management({
   );
 }
 
-type ManagerView = "board" | "team" | "analytics";
+type ManagerView = "board" | "team" | "overview";
 
 /** Whether `date` falls in the seven days starting `weekStart`. An unknown
  *  week keeps the day: nothing on screen contradicts it yet. */
@@ -843,7 +834,7 @@ function inWeek(date: string, weekStart: string): boolean {
   const offset = (new Date(`${date}T00:00:00`).getTime() - new Date(`${weekStart}T00:00:00`).getTime()) / 86_400_000;
   return offset >= 0 && offset < 7;
 }
-type ManagerSection = "agent" | "replace" | "requests" | "team" | "overview";
+type ManagerSection = "agent" | "replace" | "requests" | "team";
 
 /** Roster names still on the active roster on `today`. */
 function activeEmployees(employees: Record<string, unknown>[], today: string): string[] {
@@ -853,23 +844,35 @@ function activeEmployees(employees: Record<string, unknown>[], today: string): s
     .filter(Boolean);
 }
 
-function ManagerAnalytics({
+function ManagerOverview({
+  hidden,
   overview,
+  onOpenSetup,
+  onPendingChange,
+  onAct,
 }: {
+  hidden: boolean;
   overview: ManagementOverview | undefined;
+  onOpenSetup?: () => void;
+  onPendingChange: (count: number) => void;
+  onAct: (suggestion: string) => void;
 }) {
   const schedule = overview?.schedule;
 
   return (
-    <section className="manager-analytics" aria-labelledby="manager-analytics-title">
+    <section
+      className="manager-analytics manager-overview"
+      aria-labelledby="manager-overview-title"
+      hidden={hidden}
+    >
       <header className="manager-analytics-head">
         <div>
-          <span className="manager-analytics-eyebrow">חדר הנתונים</span>
-          <h1 id="manager-analytics-title">תמונת מצב של הצוות</h1>
+          <span className="manager-analytics-eyebrow">סקירה</span>
+          <h1 id="manager-overview-title">כל מה שדורש מבט, במקום אחד</h1>
           <p>
             {schedule
-              ? `${displayDate(schedule.starts_on)}–${displayDate(schedule.ends_on)} · ${schedule.status === "published" ? "סידור מפורסם" : "טיוטה בעבודה"}`
-              : "כשתיפתח תקופת שיבוץ, הנתונים שלה יופיעו כאן."}
+              ? `${displayDate(schedule.starts_on)}–${displayDate(schedule.ends_on)} · נתוני הסידור, פעילות הסוכן והשינויים האחרונים`
+              : "כשתיפתח תקופת שיבוץ, הנתונים והפעילות שלה יופיעו כאן."}
           </p>
         </div>
         {schedule ? (
@@ -879,24 +882,42 @@ function ManagerAnalytics({
         ) : null}
       </header>
 
-      {overview ? <Stats overview={overview} expanded /> : (
-        <div className="manager-analytics-loading" aria-busy="true">
-          טוען את נתוני התקופה…
-        </div>
-      )}
-
-      {schedule?.warnings.length ? (
-        <section className="manager-analytics-warnings">
-          <div className="manager-analytics-section-head">
-            <div>
-              <span>מה דורש מבט</span>
-              <h2>התראות התקופה</h2>
-            </div>
-            <strong>{schedule.warnings.length}</strong>
+      <div className="manager-overview-flow">
+        {overview ? <Stats overview={overview} expanded /> : (
+          <div className="manager-analytics-loading" aria-busy="true">
+            טוען את נתוני התקופה…
           </div>
-          <Warnings warnings={schedule.warnings} />
-        </section>
-      ) : null}
+        )}
+
+        <CopilotInbox
+          onOpenSetup={onOpenSetup}
+          onPendingChange={onPendingChange}
+          onAct={onAct}
+        />
+
+        {schedule?.notes?.length || schedule?.warnings.length ? (
+          <section className="manager-analytics-warnings">
+            <div className="manager-analytics-section-head">
+              <div>
+                <span>לפני שממשיכים</span>
+                <h2>דברים שכדאי לבדוק</h2>
+              </div>
+              {schedule.warnings.length ? <strong>{schedule.warnings.length}</strong> : null}
+            </div>
+            {schedule.notes?.length ? (
+              <ul className="schedule-notes">
+                {schedule.notes.map((note, index) => <li key={index}>{note}</li>)}
+              </ul>
+            ) : null}
+            {schedule.warnings.length ? <Warnings warnings={schedule.warnings} /> : null}
+          </section>
+        ) : null}
+
+        <div className="manager-overview-records">
+          <History entries={overview?.changes ?? []} />
+          <LearnedFromChanges />
+        </div>
+      </div>
     </section>
   );
 }

@@ -1560,6 +1560,20 @@
   box-shadow: var(--shadow-soft), inset 0 -2px 0 var(--tint, var(--primary));
 }
 
+.management-nav-badge {
+  display: grid;
+  place-items: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  margin-inline-start: auto;
+  padding-inline: 0.3rem;
+  color: var(--on-primary);
+  background: var(--hue-violet);
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .management-nav-item:focus-visible {
   outline: none;
   box-shadow: var(--focus);
@@ -1588,6 +1602,61 @@
   width: min(100%, 1360px);
   margin-inline: auto;
   padding: clamp(1rem, 2.5vw, 2rem);
+}
+
+.manager-overview {
+  width: min(100%, 1180px);
+  padding-block: clamp(1.5rem, 4vw, 3rem);
+}
+
+.manager-overview .manager-analytics-head {
+  position: relative;
+  align-items: center;
+  margin-bottom: clamp(1.4rem, 3vw, 2.2rem);
+  padding: 0 1.1rem 1.4rem 0;
+  border-inline-start: 4px solid var(--hue-violet);
+}
+
+.manager-overview .manager-analytics-head h1 {
+  max-width: 24ch;
+}
+
+.manager-overview-flow {
+  display: grid;
+  gap: clamp(1.1rem, 2.5vw, 1.8rem);
+}
+
+.manager-overview .stats-page,
+.manager-overview .manager-analytics-warnings {
+  box-shadow: none;
+}
+
+.manager-overview .copilot-console {
+  padding: clamp(1rem, 2vw, 1.35rem);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.manager-overview .copilot-console-head {
+  background: var(--hue-violet);
+  box-shadow: none;
+}
+
+.manager-overview .copilot-console-head .primary-button {
+  color: var(--hue-violet);
+  background: #ffffff;
+}
+
+.manager-overview-records {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 1rem;
+}
+
+.manager-overview-records:empty {
+  display: none;
 }
 
 .manager-analytics-head {
@@ -2345,6 +2414,14 @@
 
   .manager-analytics-head {
     align-items: flex-start;
+  }
+
+  .manager-overview-records {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .manager-overview .manager-analytics-head {
+    padding-inline-start: 0.85rem;
   }
 }
 
