@@ -20,7 +20,7 @@ from app.bl.profile_service import ProfileService
 from app.bl.schedule_service import ScheduleService
 from app.bl.workspace_service import WorkspaceService
 from app.bl.manager_chat import ManagerChatService
-from app.api.routers import manager_chat
+from app.api.routers import manager_chat, replacements
 from app.common.config import Settings
 from app.common.errors import AppError, error_payload
 from app.common.events import TeamEvents
@@ -189,6 +189,7 @@ app.include_router(
 app.include_router(schedules.build_router(schedule_service, guards))
 app.include_router(profile.build_router(profile_service, guards))
 app.include_router(manager_chat.build_router(manager_chat_service, repository, guards))
+app.include_router(replacements.build_router(manager_chat_service, guards))
 app.include_router(
     settings.build_router(
         store, llm, guards, env.settings_password, login_throttle,

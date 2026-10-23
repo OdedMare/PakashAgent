@@ -24,6 +24,7 @@ Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
 | `tools/` | **The named questions the agent may ask. Pure Python, no LLM, no write** — including `profile_gaps`, what setup still lacks |
 | `planner/` | The tool loop, with a deterministic fallback when no model is reachable |
 | `intent/` | **Reading a Hebrew sentence with no model.** Seven shapes; never guesses |
+| `absence/` | **An absence read and planned in code** (D34): dates, one question when needed, the fairest cover per shift; no model, no write |
 | `simulate/` | **What a change would do.** No model, no repository, persists nothing |
 | `rotation/` | **Whose closure a date is.** Pure arithmetic off separate round/triplet anchors; no model |
 | `placement/` | **What a placement would cost, and what else the manager could do.** No model |

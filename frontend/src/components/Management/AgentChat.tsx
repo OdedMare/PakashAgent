@@ -136,8 +136,8 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
           message.role === "assistant" ? <Markdown text={message.content} /> : <div className="conversation-text">{message.content}</div>}
         {message.payload.plan ? <ChatPlanCard message={message} employees={employees} disabled={disabled || boardBusy}
           onApply={(exceptions) => void agent.apply(message.id, exceptions)} onDismiss={() => void agent.dismiss(message.id)} onAdjust={(value) => void send(value)} /> : null}
-        {message.role === "assistant" && message.status === "complete" && message.payload.results ?
-          <ChatCandidates results={message.payload.results} disabled={disabled || message.id !== last?.id} onChoose={(value) => void send(value)} /> : null}
+        {message.role === "assistant" && (message.status === "complete" || message.status === "pending") && message.payload.results ?
+          <ChatCandidates results={message.payload.results} plan={message.payload.plan} disabled={disabled || message.id !== last?.id} onChoose={(value) => void send(value)} /> : null}
         {message.payload.question?.options.length ? <div className="conversation-options">{message.payload.question.options.map((option, index) =>
           <button type="button" key={option.label} disabled={disabled || message.id !== last?.id || message.status === "applied"}
             onClick={() => void send(option.answer)}>{index === 0 ? <Sparkles size={12} /> : null}{option.label}</button>)}</div> : null}

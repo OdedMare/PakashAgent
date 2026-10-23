@@ -110,6 +110,13 @@ uvicorn app.main:app --reload
 - `bl/intent/` — **reading a Hebrew sentence with no model.** Keyword
   matching against the workspace's own roster and shift vocabulary, six
   question shapes, and `unknown` for anything else. It never guesses.
+- `bl/absence/` — **an absence, from sentence to plan, with no model** (D34).
+  Reads one person and every date ("בשני ושלישי", "מ-1.11 עד 5.11"), asks once
+  when dates or scope are missing, ranks clean covers so the load spreads
+  evenly, and hands `ChatPlanBuilder.prepare` a model-shaped turn — so the plan
+  meets every check a model plan does. Run inline by `start_turn` before the
+  model loop (`bl/chat_fast.py`); anything it cannot read goes to the model.
+  Also behind the read-only replacement tab, `GET /api/agent/replacements`.
 - `bl/simulate/` — what a change *would* do, computed in memory. Handed no
   repository, so persisting nothing is a property of the wiring (D20).
 - `bl/prompts/` — prompt text as markdown, loaded by `prompts.load(name)`.

@@ -1239,6 +1239,8 @@ export interface ManagerChatMessage {
     plan?: ChatPlan;
     results?: { tool: string; ok?: boolean; date?: string; shift?: string; replacing?: string;
       candidates?: { employee: string; hours?: number; why?: string; requires_exception?: boolean }[] }[];
+    /** Set when code answered the turn without a model round. */
+    fast_path?: string;
     question?: { question: string; recommendation: string; why: string; options: { label: string; answer: string }[] } | null;
     steps?: { tool: string; ok: boolean }[];
     receipt?: { schedule_id: string; starts_on?: string; message: string };
@@ -1256,4 +1258,29 @@ export interface ManagerChatSummary {
   id: string;
   title: string;
   updated_at: string;
+}
+
+/** One shift an absent person holds, with who could cover it. */
+export interface ReplacementSlot {
+  date: string;
+  shift: string;
+  start_time: string;
+  end_time: string;
+  replacing: string;
+  /** Fairest first: lowest hours, then shifts, then nights in the period,
+   *  counting the other covers in the same absence. */
+  candidates: { employee: string; hours: number; shifts: number; nights: number; why: string }[];
+  pick: string;
+  picked_by: "fairness" | "manager" | "";
+  why: string;
+}
+
+export interface ReplacementOptions {
+  employee: string;
+  dates: string[];
+  schedule_id: string;
+  slots: ReplacementSlot[];
+  /** Days in the range with no shift: only an absence is recorded for them. */
+  free_dates: string[];
+  error: string;
 }

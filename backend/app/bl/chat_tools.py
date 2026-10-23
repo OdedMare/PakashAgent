@@ -1,11 +1,14 @@
 """Read-only tools and conversation context for manager chat."""
 
+import json
+
 from app.bl import intent as intent_reader
 from app.bl.audit import shift_stats
 from app.bl.changes.proposal import build_proposal
 from app.bl.chat_constraints import constraints_report, normalize_constraints
 from app.bl.chat_contract import RejectedPlan, audit_plan, changed_rows, plan_for_model
 from app.bl.planner.fallback_answers import FallbackAnswers
+from app.bl.prompts import load
 from app.bl.shared import warning_key
 from app.bl.simulate.hypothetical import schedule_rows
 from app.bl.tools import ScheduleTools, TOOL_DESCRIPTIONS
@@ -37,6 +40,14 @@ class ManagerChatTools:
     @property
     def descriptions(self):
         return dict(TOOL_DESCRIPTIONS, **_EXTRA_DESCRIPTIONS)
+
+    @property
+    def system_prompt(self):
+        """The chat prompt with the tool menu: static, so it rides in the
+        cacheable system prefix rather than being re-sent in every payload."""
+        menu = json.dumps(self.descriptions, ensure_ascii=False, sort_keys=True)
+        return load("manager_chat").rstrip() + "\n\n## Tool menu\n\n" \
+            "The read-only checks `tool_calls` may name:\n" + menu
 
     def replacement_lookup(self, team_id, request, context, schedule, profile):
         """Answer one clear candidate lookup without a model round."""

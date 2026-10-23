@@ -460,25 +460,20 @@ def test_recurring_constraint_profile_plan_preserves_roster_and_employee_details
     repo, llm, service, chat_id, schedule_id = setup([])
     profile = repo.profiles[TEAM]
     profile["employees"][0].update(can_train=True, rotation_group="א", notes="פרט קיים")
-    employees = copy.deepcopy(profile["employees"])
-    employees[0]["recurring_constraints"] = [dict(days=["שלישי"], shifts=[], available=False,
-                                                reason="אילוץ קבוע")]
-    proposal = turn("profile")
-    proposal.update(stated_reason="", profile_patch_json=json.dumps(dict(employees=employees)))
-    llm._answers.append(proposal)
     message = converse(service, repo, chat_id, schedule_id, "דנה לא זמינה בכל יום שלישי")
-    assert message["status"] == "pending"
+    assert message["status"] == "pending" and not llm.calls
     assert "recurring_constraints" not in profile["employees"][0]
     service.apply(TEAM, "manager-a", chat_id, message["id"])
     updated = repo.profiles[TEAM]["employees"]
-    assert updated[0]["recurring_constraints"] == employees[0]["recurring_constraints"]
+    assert [(rule["days"], rule["shifts"], rule["available"])
+            for rule in updated[0]["recurring_constraints"]] == [(["שלישי"], [], False)]
     assert updated[0]["can_train"] and updated[0]["rotation_group"] == "א"
     assert updated[0]["notes"] == "פרט קיים" and len(updated) == 2
     assert not repo.availability_rows
     from app.bl.scheduler.availability import effective_availability
     recurring = [row for row in effective_availability(repo.profiles[TEAM], [], "2026-10-04", "2026-10-10")
                  if row["source"] == "setup"]
-    assert [(row["date"], row["shift"]) for row in recurring] == [("2026-10-06", MORNING)]
+    assert [row["date"] for row in recurring] == ["2026-10-06"]
 
 
 def test_malformed_recurring_scope_is_repaired_instead_of_blocking_entire_week():
@@ -717,3 +712,10 @@ def test_retry_request_id_does_not_duplicate_messages():
     converse(service, repo, chat_id, schedule_id)
     assert len(repo.get_chat(TEAM, "manager-a", chat_id)["messages"]) == 2
     assert len(llm.calls) == 1
+
+
+def test_the_static_tool_menu_rides_in_the_system_prompt_not_every_payload():
+    repo, llm, service, chat_id, schedule_id = setup([turn()])
+    converse(service, repo, chat_id, schedule_id, "אילו סידורים שמורים?", "menu")
+    assert "## Tool menu" in llm.calls[0]["system"] and "find_replacements" in llm.calls[0]["system"]
+    assert "tools" not in json.loads(llm.calls[0]["user"])

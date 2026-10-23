@@ -34,6 +34,7 @@ import type {
   Workspace,
   ManagerChatSummary,
   ManagerConversation,
+  ReplacementOptions,
 } from "@/types";
 
 export const listManagerChats = () => request<ManagerChatSummary[]>("/api/agent/chats");
@@ -50,6 +51,10 @@ export const applyManagerPlan = (id: string, messageId: string, acceptExceptions
   });
 export const dismissManagerPlan = (id: string, messageId: string) =>
   request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/dismiss`, { method: "POST" });
+// Who could cover one person's absence, fairest first. Reads only: the picks
+// become a plan by being sent to the conversation.
+export const getReplacementOptions = (employee: string, startsOn: string, endsOn: string) =>
+  request<ReplacementOptions>(`/api/agent/replacements?${new URLSearchParams({ employee, starts_on: startsOn, ends_on: endsOn })}`);
 export const stopManagerReply = (id: string) =>
   request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/stop`, { method: "POST" });
 

@@ -64,9 +64,11 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
       } catch (reason) {
         if (!cancelled) setError(reason instanceof Error ? reason.message : "החיבור נותק; מנסה שוב…");
       }
-      if (!cancelled) timer = setTimeout(() => void poll(), 2000);
+      if (!cancelled) timer = setTimeout(() => void poll(), 1200);
     };
-    timer = setTimeout(() => void poll(), 1200);
+    // Code-answered turns arrive finished in the send response and never
+    // poll; what remains is model work, so the first look can come sooner.
+    timer = setTimeout(() => void poll(), 700);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [chatId, workingId]);
 

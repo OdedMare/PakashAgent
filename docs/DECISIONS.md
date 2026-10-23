@@ -1081,6 +1081,42 @@ with a connection test that shows the server and what this app keeps in it:
 active model calls, the queue, locked accounts. A save reaches the other
 processes because the hub re-reads the settings file every few seconds.
 
+## D34 — An absence is read and planned in code, and the fairest cover is proposed *(amends the chat's "the manager chooses" rule)*
+
+"עודד חולה בשני ושלישי", "עודד טס לחו״ל", "ירין לא יכולה לעבוד בשישי" are the
+commonest things a manager types, and each cost three or four full model
+rounds -- the whole prompt, profile, period and transcript re-sent each time
+-- to reach what is a lookup and arithmetic: who, which dates, their shifts,
+who is free (D3).
+
+**`bl/absence/` answers these with no model.** It reads one roster name, an
+absence phrase and every date the sentence names (lists, ranges, weekdays in
+the week on screen, "השבוע"). What it cannot place with certainty -- two
+names, a named shift, a hypothetical, a pairing wish -- goes to the model
+unchanged. A missing date is one question ("באילו תאריכים?"); a bare weekday
+on a "can't work" sentence is one question with two buttons (this Friday, or
+every Friday as a standing constraint).
+
+**The plan carries the fairest cover rather than waiting for a pick.** Each
+affected shift's candidates come from `find_replacements` (clean only), are
+ranked by hours, then shifts, then nights in the period, and the load is
+recounted after every pick so one person does not absorb the whole absence;
+each pick is re-audited beside the earlier ones. This reverses the chat
+prompt's "wait for the manager to choose" for this path only, and is safe
+for the same reason any plan is: nothing is written until the manager
+approves, the alternatives are shown under the plan, and choosing one
+rebuilds it in code. A manager's own pick wins over the fair one.
+
+**Not a second write path.** The plan is built by handing
+`ChatPlanBuilder.prepare` the turn the model would have returned, so it
+passes every check and audit a model plan does. The replacement tab reads
+only (`GET /api/agent/replacements`); its picks become a plan by being sent
+to the conversation, where approval is the one write (D12/D19).
+
+**Answered in the request.** `start_turn` runs the code paths inline, so a
+code-answered turn comes back finished in the send response with no worker
+pickup and no poll. The queued job still runs and finds the turn finished.
+
 ---
 
 ## Open

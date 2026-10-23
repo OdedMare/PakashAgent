@@ -7,10 +7,10 @@ from dataclasses import dataclass, field
 
 from app.bl.changes.agent import _closures_for_model, _schedule_for_model
 from app.bl.changes.values import json_default
+from app.bl.chat_fast import ChatFastAnswers
 from app.bl.chat_contract import NeedsManager, RejectedPlan, normalize_day_turn, normalize_week_turn, plan_for_model
 from app.bl.chat_schema import CHAT_SCHEMA, PROFILE_SECTIONS
 from app.bl.planner.shaping import question
-from app.bl.prompts import load
 from app.bl.scheduler.span_audit import add_usage, usage_of
 from app.bl.shared import iso
 from app.common.errors import AgentError, AppError
@@ -85,6 +85,7 @@ class ManagerChatReply:
         self._context = context
         self._tools = tools
         self._planner = planner
+        self._fast = ChatFastAnswers(repository, context, tools, planner)
 
     def run(self, team_id, manager_id, chat_id, message_id):
         state = None
@@ -94,12 +95,24 @@ class ManagerChatReply:
             if message["status"] != "working":
                 return
             state = self._state(team_id, chat_id, message_id, chat, message)
-            if self._finish_fast(state):
+            if self._fast.handle(state):
                 return
             self._rounds(state)
             self._finish(state)
         except Exception as exc:
             self._error(chat_id, message_id, state, exc)
+
+    def try_fast(self, team_id, manager_id, chat_id, message_id):
+        """Answer inside the request when code alone can; the queued job then
+        finds the turn finished (or, winning the race, takes this same path)."""
+        try:
+            chat = self._repo.get_chat(team_id, manager_id, chat_id)
+            message = next(row for row in chat["messages"] if row["id"] == message_id)
+            return message["status"] == "working" and self._fast.handle(
+                self._state(team_id, chat_id, message_id, chat, message))
+        except Exception:
+            _log.exception("inline chat answer failed; the worker will answer")
+            return False
 
     def _state(self, team_id, chat_id, message_id, chat, message):
         context = message["payload"]
@@ -123,7 +136,6 @@ class ManagerChatReply:
             "preferences": self._context.active_preferences(team_id),
             "history": self._repo.change_log(team_id, limit=12),
             "conversation": conversation,
-            "tools": self._tools.descriptions,
             "current_request": request,
         }
         return ReplyState(
@@ -131,27 +143,12 @@ class ManagerChatReply:
             clock, request, payload,
         )
 
-    def _finish_fast(self, state):
-        found = self._tools.replacement_lookup(
-            state.team_id, state.request, state.context,
-            state.payload["schedule"] or None, state.profile,
-        )
-        if not found:
-            return False
-        reply, output = found
-        output["_usage"] = _turn_usage(state.usage, 0)
-        self._repo.finish_chat_turn(
-            state.chat_id, state.message_id, reply, "complete", output,
-        )
-        _log.info("chat usage rounds=0 prompt=0 completion=0 total=0")
-        return True
-
     def _rounds(self, state):
         for round_ in range(_ROUNDS):
             final = round_ == _ROUNDS - 1
             state.model_rounds += 1
             state.turn = self._llm.complete_json(
-                load("manager_chat"), _model_input(state.payload, state.results, final),
+                self._tools.system_prompt, _model_input(state.payload, state.results, final),
                 schema=CHAT_SCHEMA, flow="planner", time_context=state.clock,
             )
             if not isinstance(state.turn, dict):

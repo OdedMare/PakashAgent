@@ -2,6 +2,7 @@
 
 import {
   AlertCircle,
+  ArrowLeftRight,
   BarChart3,
   CalendarDays,
   Inbox,
@@ -39,6 +40,7 @@ import { History } from "./History";
 import { LearnedFromChanges } from "./LearnedFromChanges";
 import { Preferences } from "./Preferences";
 import { RequestInbox } from "./RequestInbox";
+import { ReplacementPanel } from "./ReplacementPanel";
 import { RequestToast } from "./RequestToast";
 import { SwapInbox } from "./SwapInbox";
 import { Stats } from "./Stats";
@@ -695,6 +697,12 @@ export function Management({
               onClick={() => setSection("agent")}
             />
             <ManagerTab
+              active={section === "replace"}
+              icon={<ArrowLeftRight size={15} />}
+              label="החלפה"
+              onClick={() => setSection("replace")}
+            />
+            <ManagerTab
               active={section === "requests"}
               icon={<Inbox size={15} />}
               label="בקשות"
@@ -761,6 +769,27 @@ export function Management({
             }}
           />
           </div>
+
+          {section === "replace" ? <>
+          {schedule?.status === "published" ? (
+            <PublishedNotice
+              onUnlock={() => state.publish(schedule.id, false)}
+              busy={state.busy}
+            />
+          ) : null}
+          <ReplacementPanel
+            employees={activeEmployees(overview?.employees ?? [], overview?.today ?? "")}
+            today={overview?.today ?? ""}
+            disabled={agent.busy || agent.working}
+            onPrepare={(message) => {
+              // The picks become a plan in the conversation, where approving
+              // it is the one write path (D12); the server reads this wording
+              // back in code, so the plan arrives without a model round.
+              setSection("agent");
+              void agent.send(message);
+            }}
+          />
+          </> : null}
 
           {section === "requests" ? <>
           {schedule?.status === "published" ? (
@@ -832,7 +861,15 @@ function inWeek(date: string, weekStart: string): boolean {
   const offset = (new Date(`${date}T00:00:00`).getTime() - new Date(`${weekStart}T00:00:00`).getTime()) / 86_400_000;
   return offset >= 0 && offset < 7;
 }
-type ManagerSection = "agent" | "requests" | "team" | "overview";
+type ManagerSection = "agent" | "replace" | "requests" | "team" | "overview";
+
+/** Roster names still on the active roster on `today`. */
+function activeEmployees(employees: Record<string, unknown>[], today: string): string[] {
+  return employees
+    .filter((person) => !person.inactive_from || !today || String(person.inactive_from) > today)
+    .map((person) => String(person.name ?? ""))
+    .filter(Boolean);
+}
 
 function ManagerAnalytics({
   overview,

@@ -220,31 +220,36 @@ def test_text_approval_preserves_exception_and_stale_state_guards():
         service.apply(TEAM, "manager-a", chat_id, message["id"], True)
 
 
-def test_sickness_requires_manager_candidate_selection_before_a_plan():
-    repo, llm, service, chat_id, schedule_id = setup([sickness()])
+def test_sickness_offers_the_fairest_cover_as_a_plan_without_a_model_round():
+    repo, llm, service, chat_id, schedule_id = setup([])
     message = converse(service, repo, chat_id, schedule_id, "דנה חולה ביום שני, תמצא מחליף")
-    assert message["status"] == "complete" and "plan" not in message["payload"]
+    assert message["status"] == "pending"
+    operations = message["payload"]["plan"]["operations"]
+    assert [(row["action"], row["employee"]) for row in operations] == [("remove", "דנה"), ("assign", "יוסי")]
     assert message["payload"]["results"][-1]["candidates"][0]["employee"] == "יוסי"
-    assert message["payload"]["task"]["constraints"][0]["employee"] == "דנה"
+    assert message["payload"]["task"]["employee"] == "דנה"
     assert message["payload"]["_usage"] == {
         "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "model_rounds": 0,
     }
     assert not llm.calls
-    assert not repo.changes
+    assert not repo.changes and not repo.availability_rows
 
 
-def test_candidate_selection_reuses_fast_lookup_context_and_returns_to_model_plan():
-    repo, llm, service, chat_id, schedule_id = setup([sickness()])
-    converse(service, repo, chat_id, schedule_id, "דנה חולה ביום שני, תמצא מחליף")
+def test_choosing_another_candidate_rebuilds_the_plan_in_code():
+    repo, llm, service, chat_id, schedule_id = setup([])
+    repo.profiles[TEAM]["employees"].append({"name": "רון", "eligible_shifts": [MORNING]})
+    first = converse(service, repo, chat_id, schedule_id, "דנה חולה ביום שני, תמצא מחליף")
+    assert first["payload"]["plan"]["operations"][1]["employee"] == "יוסי"
+    assert {row["employee"] for row in first["payload"]["results"][-1]["candidates"]} == {"יוסי", "רון"}
     message = converse(service, repo, chat_id, schedule_id,
-                       "יוסי יחליף את דנה ביום שני", "selected-yossi")
-    conversation = json.loads(llm.calls[0]["user"])["conversation"]
-    task = next(row["context"]["task"] for row in conversation
-                if row["context"].get("task"))
-    assert task["constraints"][0]["employee"] == "דנה"
+                       "אני בוחר את רון למשמרת %s בתאריך 2026-10-05 במקום דנה. "
+                       "שמור את טווח ההיעדרות." % MORNING, "selected-ron")
     assert message["status"] == "pending"
-    assert message["payload"]["plan"]["operations"][1]["employee"] == "יוסי"
-    assert len(llm.calls) == 1
+    assert message["payload"]["plan"]["operations"][1]["employee"] == "רון"
+    assert message["payload"]["plan"]["constraints"][0]["employee"] == "דנה"
+    assert not llm.calls
+    service.apply(TEAM, "manager-a", chat_id, message["id"], True)
+    assert [row["employee"] for row in repo.assignments(schedule_id, TEAM)] == ["רון"]
 
 
 def test_retirement_removes_future_work_across_periods_and_keeps_history():

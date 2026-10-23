@@ -50,12 +50,20 @@ check that fails, such as an incomplete date range, comes back to the model as
 a fact. It does not end the turn. The seventh round may not ask for checks. It
 answers from what was found instead of failing.
 
-A clear request to find a replacement for one named employee on a resolved date
-uses the same deterministic availability, qualification and workload tools
-directly, without a model round. It only presents candidates and never writes.
-Selecting a candidate returns to the ordinary model-backed proposal, audit and
-approval flow. Ambiguous requests, explicit swaps and missing dates stay in that
-flow. Every saved assistant turn also records aggregate prompt, completion and
+A plain absence report for one named employee ("עודד חולה בשני ושלישי",
+"עודד טס לחו״ל", "ירין לא יכולה לעבוד בשישי") is read and planned in code by
+`bl/absence/`, with no model round and inside the send request itself
+([D34](DECISIONS.md)). It resolves every date the sentence names, asks once
+when dates are missing or when a bare weekday could mean "every week", and
+prepares one plan: the person off every affected shift, the fairest clean
+cover on each (hours, then shifts, then nights, recounted after every pick)
+and an absence constraint for every date. The alternatives are shown under the
+plan; choosing one rebuilds it in code. The plan goes through the same
+`ChatPlanBuilder.prepare` checks and the same approval. The replacement tab
+(`GET /api/agent/replacements`, read-only) shows the same ranking and sends
+its picks to the conversation. A plain "who could replace X on Y" question
+still answers with candidates only. Ambiguous requests, explicit swaps and
+hypotheticals stay in the model flow. Every saved assistant turn also records aggregate prompt, completion and
 total tokens plus the number of model rounds in `payload._usage`.
 
 A plan the server refuses, such as an unknown slot, a period that is already
@@ -153,7 +161,8 @@ state and invalidate proposals whose underlying facts changed.
   when unambiguous or clarified when their mapping is unknown.
 - **The manager chooses replacements.** Present checked eligible candidates
   with short explanations, then prepare the complete plan after the manager
-  selects. An explicitly named replacement goes directly to validation and
+  selects. (A plain absence handled in code by `bl/absence/` instead proposes
+  the fairest cover in the plan, with the alternatives beside it — D34.) An explicitly named replacement goes directly to validation and
   proposal. Candidate selection and answers to clarification questions are
   distinct from approval of a prepared plan.
 - **No unsolicited rule exceptions.** If nobody fits, explain the uncovered
