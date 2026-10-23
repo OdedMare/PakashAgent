@@ -21,7 +21,7 @@ API (FastAPI, main.py) ── routers ב-api/routers/ ── guards ב-api/depen
    │                     │
    │  שירותים ב-bl/       │  קריאות LLM סינכרוניות: עוזר עובד, למידה משינויים
    ▼                     ▼
-PostgreSQL (dal/repository/) ◄──── Worker (worker.py, תהליך נפרד)
+PostgreSQL (dal/repository/) ◄──── Worker (worker.py, בתוך תהליך ה-API או בנפרד)
    ▲                                │  כמה lanes: interactive (צ'אט מנהל)
    │                                │  ו-background (span של יצירה, scan, compile_sources)
    └────────────── jobs ────────────┘
@@ -35,7 +35,7 @@ PostgreSQL הוא המצב המשותף היחיד (D35):
 ```
 
 - **אין Redis (D35).** ה-throttle, האירועים ותור המודל עוברים דרך Postgres. אם מסד הנתונים לא עונה, ה-throttle והאירועים חוזרים לזיכרון התהליך.
-- **שלושה תהליכים:** frontend, API ו-worker. ה-worker מושך jobs מ-Postgres (`FOR UPDATE SKIP LOCKED`) ב-`PAKASH_WORKER_CONCURRENCY` threads (ברירת מחדל 4). `PAKASH_CHAT_WORKERS` מהם (ברירת מחדל 1) שמורים ל-lane `interactive`, שמושך רק `manager_chat`, כך שבנייה ארוכה לא תופסת את כל ה-workers.
+- **תהליכים:** frontend ו-API. ה-worker רץ **בתוך תהליך ה-API כברירת מחדל** (`PAKASH_EMBEDDED_WORKER=0` מכבה), ואפשר להריץ אותו גם בנפרד כ-`python -m app.worker`; ב-`docker-compose.yml` הוא רץ בנפרד. ה-worker מושך jobs מ-Postgres (`FOR UPDATE SKIP LOCKED`) ב-`PAKASH_WORKER_CONCURRENCY` threads (ברירת מחדל 4). `PAKASH_CHAT_WORKERS` מהם (ברירת מחדל 1) שמורים ל-lane `interactive`, שמושך רק `manager_chat`, כך שבנייה ארוכה לא תופסת את כל ה-workers.
 - **סוגי jobs:** `manager_chat`, `generation` (job לכל span), `scan` ו-`compile_sources`.
 - **שלוש דרגות מודל** (`dal/llm/model_roles.py`): `advanced` לתרגום ההנחיות של הבנייה (flow `scheduler`), `fast` (לא בשימוש פעיל), ו-`default` לכל השאר.
 - **העיקרון המוביל (D34):** פותר האילוצים משבץ, המודל רק מתרגם שפה חופשית לבקשות מובנות ומנהל את השיחה. ה-audit עדיין לא חוסם אף פעולה.
@@ -76,7 +76,7 @@ PostgreSQL הוא המצב המשותף היחיד (D35):
 5. `ManualSetup/CompiledSources.tsx` קורא ל-`GET /api/profile/compiled` ומציג מה הקוד עשה מכל משפט: `compiled`, `unresolved` או `pending`.
 6. `ProfileGapsNotice.tsx` מציג מה עוד חסר, לפי `tools.profile_gaps` ו-`completeness`.
 
-> ה-CLAUDE.md מזכיר ריאיון פתיחה (`bl/interview/`), **אבל התיקייה לא קיימת בקוד.** הפרופיל נבנה רק בטופס הידני, וכדאי לעדכן את התיעוד.
+> אין ריאיון פתיחה. הפרופיל נבנה רק בטופס הזה, בלי שום קריאה למודל, ושמירה שלו חלה על הבנייה הבאה בלבד.
 
 ---
 
@@ -117,7 +117,7 @@ PostgreSQL הוא המצב המשותף היחיד (D35):
 2. מקורות קבועים שכבר תורגמו נטענים מה-cache (4.2.3), ורק השאר נשלחים למודל. מקור שנשמר כ-`unresolved` מדווח בלי שום קריאה.
 3. `DirectiveAgent.translate()` מריץ לולאת כלים חסומה: עד `MAX_TURNS=4` קריאות למודל עם `scheduler_directives.md`, עד 4 כלים בכל קריאה, ועד 2 הרצות `dry_run` בסך הכול.
 4. הכלים (`directive_agent/tools.py`) הם Python טהור בלי repository: `resolve_employee`, `list_slots`, `employee_state`, `check` ו-`dry_run` (פתרון קצר של פותר האילוצים בזיכרון). שום דבר לא נכתב.
-5. התשובה הסופית עוברת את אותו `read_translation` כמו קודם. אם הקוד דחה אותה ונשארו סבבים, היא חוזרת למודל עם הסיבות. מקור שהמודל סימן `unresolved` מסיים את הלולאה מיד.
+5. כל פריט בתשובה הסופית נבדק בקוד (`directive_agent/partial.py`: `per_source`, מול הרוסטר, המשמרות והרשת). אם הקוד דחה אותה ונשארו סבבים, היא חוזרת למודל עם הסיבות. מקור שהמודל סימן `unresolved` מסיים את הלולאה מיד.
 6. אם התרגום לא מלא, `directive_agent/partial.py` שומר כל מקור שכל הפריטים שלו עברו, ומשמיט מקור שלם (אף פעם לא חצי מקור):
    - הפותר בונה בלי המקורות שהושמטו, וכל אחד נרשם ב-`notes`: הנחיה מחייבת כ"הנחיה מחייבת לא נאכפה בשיבוץ", ומשאלה רכה כ"בקשה רכה לא נלקחה בחשבון בשיבוץ". אין מסלול AI מלא (D34).
    - גם מודל שלא עונה לא מפיל את הבנייה: כל המקורות שלא תורגמו מדווחים באותה צורה.
@@ -157,7 +157,7 @@ PostgreSQL הוא המצב המשותף היחיד (D35):
    1. טוען את הסידור, הפרופיל, האילוצים מהשבוע האחרון ואילך, ההעדפות, 12 שינויים אחרונים ועד 32 הודעות שיחה.
    2. **מסלול מהיר:** `ChatTools.replacement_lookup` (`bl/chat_tools.py`) עונה על "מי יכול להחליף" בלי מודל.
    3. אחרת יש עד **7 סבבים** של `complete_json(manager_chat.md)`. בכל סבב המודל מבקש עד 4 כלים (`_MAX_CALLS`) מ-`bl/tools/` ומ-`bl/chat_tools.py` (קריאה בלבד), והתוצאות נוספות לסבב הבא.
-   4. כשהמודל מחזיר תוכנית, `bl/chat_planner.py` (`prepare`) מאמת ומריץ audit. התוכנית יכולה להיות שינויים, יצירה (שמריצה את ה-scheduler **בתוך** התור, עם קריאות LLM נוספות), שינוי מבנה, ניהול בקשות או אילוצים.
+   4. כשהמודל מחזיר תוכנית, `bl/chat_planner.py` (`prepare`) מאמת ומריץ audit. התוכנית יכולה להיות שינויים, יצירה (`chat_generation.py`: פותר האילוצים רץ **בתוך** התור. אם יש משפטים חופשיים, הם מתורגמים קודם; **בנתיב הזה אין cache של תרגומים (4.2.3) ואין הגדרות הפותר מהפאנל**, כי `chat_planner.py` בונה `Scheduler(llm)` בלעדיהם), שינוי מבנה משמרות (`chat_lifecycle.py`: הפותר בונה מחדש ושומר כל שיבוץ קיים שעדיין מתאים), ניהול בקשות או אילוצים.
    5. אם יש אזהרות, התוכנית חוזרת למודל לבדיקה פעם אחת. אם הקוד דחה אותה, יש עד 2 תיקונים.
    6. בסוף ההודעה נשמרת עם התוכנית בסטטוס `pending`.
 4. הדפדפן דוגם את השיחה (`useManagerChat.ts`) ומציג את השלבים בזמן אמת. עצירה: `/stop`.
@@ -238,12 +238,14 @@ PostgreSQL הוא המצב המשותף היחיד (D35):
 
 ---
 
-## 10. הגדרות מערכת ⚙️
+## 10. הגדרות מערכת ואבחון ⚙️
 - `Settings/` דורש סיסמת הגדרות בכותרת, וקורא ל-`GET` ו-`PUT /api/settings`.
 - ההגדרות נשמרות **בקובץ JSON אחד גלובלי** (`runtime-settings.json`): מודלים לכל role, URL ומפתח, timeout, אימות SSL (`llm_verify_ssl`), מגבלות פותר האילוצים, ו-diet mode. כל תהליך קולט שמירה של תהליך אחר תוך כמה שניות.
 - `GET` ו-`POST /api/models`: בדיקת שרת מודלים ורשימת המודלים שלו. הבדיקה מקבלת גם `llm_verify_ssl` שלא נשמר עדיין, כדי לבדוק שרת פנימי עם תעודה בחתימה עצמית לפני השמירה.
 - `llm_verify_ssl` דלוק כברירת מחדל. כיבוי שלו חושף את החיבור, כולל מפתח ה-API, ליירוט, ולכן הוא מיועד רק לשרת פנימי.
 - `llm_max_concurrency` נאכף על ה-API וה-workers יחד, ונקרא מחדש בכל רכישת slot. לכל צוות מותרת קריאת מודל אחת במקביל (פירוט בסעיף 11).
+- `solver_time_limit_seconds` (ברירת מחדל 10) ו-`solver_workers` (ברירת מחדל 8) נקראים בכל בנייה. הפותר מחזיר את הפתרון הטוב ביותר שמצא עד הגבול; ב-metrics של כל span נרשם `solver_status` (`optimal` או `feasible`).
+- `python -m app.diagnose` מדפיס את ההגדרות שהתהליך רואה, את תור ה-jobs, את ה-advisory locks של תור המודל, בדיקת חיבור לשרת המודל וקריאה אמיתית אחת.
 
 ---
 
@@ -283,7 +285,7 @@ PostgreSQL הוא המצב המשותף היחיד (D35):
 
 | בעיה | איפה | השפעה | כיוון פתרון |
 |---|---|---|---|
-| הגדרות גלובליות בקובץ | `common/runtime_settings/` | כל הצוותים על אותו מודל ומנוע. תהליכים אחרים קוראים את הקובץ מחדש, אבל זה עובד רק כשהם חולקים volume | להעביר ל-DB, עם דריסה לכל צוות או תוכנית |
+| הגדרות גלובליות בקובץ | `common/runtime_settings/` | כל הצוותים על אותו מודל ואותן מגבלות פותר. תהליכים אחרים קוראים את הקובץ מחדש כל כמה שניות, אבל זה עובד רק כשהם חולקים volume | להעביר את הגדרות המודל והפותר ל-DB (פרטי החיבור למסד עצמו חייבים להישאר מחוצה לו) |
 | אין תקציב LLM לכל צוות | – | יש הגבלה של קריאה אחת במקביל לצוות, אבל אין מכסת טוקנים, וצוות אחד יכול לצרוך הרבה | מונה ומכסה לכל צוות |
 | audit מלא בכל קריאת לוח | `context.view()` | CPU שגדל עם המשתמשים | cache לפי גרסת הסידור |
 | `PAKASH_SESSION_SECRET` ריק כברירת מחדל ב-compose | `docker-compose.yml` | ה-sessions לא תקפים בין תהליכים | חובה להגדיר |
@@ -313,7 +315,6 @@ Briefing, Ask, Simulate ו-Tool כבר הוסרו, וגם `Scheduler.generate()`
 
 ### לבדוק או לפשט
 - **Copilot:** אישור ו-rollback בלי תופעת לוואי. לפשט, או לחבר לצ'אט.
-- **תיעוד:** `backend/CLAUDE.md` מתאר את `bl/interview/` שלא קיים.
 - **ה-worker:** כבר מפוצל ל-lanes ול-job לכל span, ו-SSE ו-throttle משותפים דרך Postgres. ההגדרות עדיין בקובץ, ותהליך שלא חולק את ה-volume לא יראה שמירה מהפאנל.
 
 ---
@@ -321,10 +322,10 @@ Briefing, Ask, Simulate ו-Tool כבר הוסרו, וגם `Scheduler.generate()`
 ## 14. איך מסירים רכיב לא חשוב
 
 ### הסדר הכללי (לכל רכיב)
-1. **לוודא שה-UI לא קורא לו:** לחפש את שם הפונקציה ב-`frontend/src/` (למשל `grep -rn briefManager frontend/src`). אם היא מוגדרת ב-`services/api.ts` ולא מופיעה בשום מקום אחר, היא מתה.
+1. **לוודא שה-UI לא קורא לו:** לחפש את שם הפונקציה ב-`frontend/src/` (למשל `grep -rn proposeChange frontend/src`). אם היא מוגדרת ב-`services/api.ts` ולא מופיעה בשום מקום אחר, היא מתה.
 2. **להסיר מה-frontend:** את הפונקציה מ-`services/api.ts`, ואת ה-types שרק היא השתמשה בהם מ-`types.ts`.
 3. **להסיר את ה-route** מ-`api/routers/...`, ואת ה-contract מ-`api/contracts/...` אם אף route אחר לא משתמש בו.
-4. **להסיר את המתודה מה-facade:** `bl/schedule_service/service.py` מעביר כל route למחלקה קטנה (`changing.py`, `answering.py`, `speaking.py`). מסירים את המתודה, ואת המחלקה עצמה אם היא נשארת ריקה.
+4. **להסיר את המתודה מה-facade:** `bl/schedule_service/service.py` מעביר כל route למחלקה קטנה (`changing.py`, `answering.py` שמחזיק היום רק את `Simulator`, `speaking.py` שמחזיק רק את הייצוא). מסירים את המתודה, ואת המחלקה עצמה אם היא נשארת ריקה.
 5. **לחפש מי עוד מייבא את המודול** לפני שמוחקים קובץ: `grep -rn "from app.bl.<module>" backend/`. הטבלה למטה מסכמת מה נמצא היום.
 6. **טסטים:** למחוק טסטים שבודקים רק את הרכיב שהוסר. טסט שבודק התנהגות שהצ'אט עדיין משתמש בה מעבירים לנתיב החדש ולא מוחקים.
 7. **prompts:** למחוק את קובץ ה-`.md` מ-`bl/prompts/` ואת הטסט שלו ב-`tests/test_prompts.py`.
@@ -335,7 +336,7 @@ Briefing, Ask, Simulate ו-Tool כבר הוסרו, וגם `Scheduler.generate()`
 ### מה מוחקים ומה חייב להישאר, לכל מועמד
 | רכיב | מה מוחקים | מה **חייב להישאר** (ומי משתמש בו) | טסטים שמושפעים |
 |---|---|---|---|
-| **Propose / apply** (`/schedule/propose`, `/schedule/apply`) | שני ה-routes, `proposeChange`, `applyChange`, `ChangeService.propose`, `prompts/changes.md` והמחלקה `ChangeAgent` | `changes/proposal.py`, `schema.py`, `values.py`, `targets.py`, `questions.py`, `profile_ops.py` והקבועים `OP_*` (הצ'אט, ההחלפות, `simulate`). `chat_reply.py` מייבא את `_closures_for_model` ו-`_schedule_for_model` מ-`changes/agent.py`, אז קודם מעבירים אותן ל-`changes/values.py`, ורק אחר כך מוחקים את `agent.py`. `ChangeService.apply` נשאר, כי אישור החלפה משתמש בו | `test_change_operations.py`, `test_clarification.py`, וחלק מ-`test_scheduler.py` (בערך שורות 780–900 משתמשות ב-`ChangeAgent`) |
+| **Propose / apply** (`/schedule/propose`, `/schedule/apply`) | שני ה-routes, `proposeChange`, `applyChange`, `ChangeService.propose`, `prompts/changes.md` והמחלקה `ChangeAgent` | `changes/proposal.py`, `schema.py`, `values.py`, `targets.py`, `questions.py`, `profile_ops.py` והקבועים `OP_*` (הצ'אט, ההחלפות, `simulate`). `chat_reply.py` מייבא את `_closures_for_model` ו-`_schedule_for_model` מ-`changes/agent.py`, אז קודם מעבירים אותן ל-`changes/values.py`, ורק אחר כך מוחקים את `agent.py`. `ChangeService.apply` נשאר, כי אישור החלפה משתמש בו | `test_change_operations.py`, `test_clarification.py`, ומבחני ה-change agent ב-`test_scheduler.py` (החלק "the change agent") |
 | **Reads לא בשימוש** (`/constraints/list`, `/history/list`, `/current`, `/requests`, `/identities`, `/swaps`, `/employee/swaps/incoming`) | רק ה-routes | מתודות ה-repository, אם routes אחרים קוראים להן | לבדוק את `test_schedule_api.py`, `test_employee_api.py` ו-`test_swap_api.py` |
 | **Copilot** (אם מצמצמים לתצפיות) | `approve`, `rollback`, `PATCH /permissions/{type}` ו-`CopilotPermissionUpdate` | `scan`, הפריטים בתיבה ו-`dismiss` | `test_copilot.py` |
 

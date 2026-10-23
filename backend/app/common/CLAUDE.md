@@ -1,6 +1,7 @@
 # Common (`app/common/`)
 
-Cross-cutting infrastructure. **Ported from AiSummryIO.**
+Cross-cutting infrastructure. Config, settings and logging were ported from
+AiSummryIO.
 
 - `config.py` — env-derived defaults, prefix **`PAKASH_`**, read from
   `.env`. These are *defaults*; the runtime store overrides them.
@@ -26,6 +27,13 @@ Cross-cutting infrastructure. **Ported from AiSummryIO.**
   memory; the client's 15-second poll is the backstop either way.
 - `runtime_settings/` re-reads its file from `get()` at most every few
   seconds, so a save made by another process arrives without a restart.
+  It holds the model connections, timeouts, the solver's limits
+  (`solver_time_limit_seconds`, `solver_workers`) and the database
+  credentials — which is why it stays a file rather than a table.
+- `time_context.py` — Israel-local time, and the minute-precision clock line
+  appended to every system prompt.
+- `activity.py` — the progress line a running job reports, without model
+  code knowing about storage.
 
 ## Settings that matter here
 
@@ -37,12 +45,18 @@ Cross-cutting infrastructure. **Ported from AiSummryIO.**
 | `PAKASH_LLM_BASE_URL_<ROLE>` | Optional endpoint for that role; falls back to the general URL |
 | `PAKASH_LLM_API_KEY_<ROLE>` | Optional API key for that role's endpoint; falls back to `OPENAI_API_KEY`. A role on another provider is authenticated by another credential |
 | `PAKASH_LLM_DIET_MODE` | Compact prompts and bounded completions |
-| `PAKASH_LLM_TIMEOUT_SECONDS` | Wall time for one logical call, retries included |
+| `PAKASH_LLM_TIMEOUT_SECONDS` | Wall time for one HTTP completion; 0 = no limit |
+| `PAKASH_LLM_QUEUE_SECONDS` | How long interactive work may wait for a model slot; 0 = no limit |
+| `PAKASH_LLM_VERIFY_SSL` | Verify the model server's certificate (default on) |
 | `OPENAI_API_KEY` | Read unprefixed, as the SDK expects |
 | `PAKASH_DATABASE_*` | URL plus optional explicit overrides |
 | `PAKASH_SESSION_SECRET` | Signs the workspace session cookie. **Set this in production** — unset, it is generated per process, so sessions die on restart and break across workers. Changing it logs every boss out. |
 | `PAKASH_SETTINGS_PASSWORD` | Unlocks the settings panel on top of the boss login, sent as the `X-Settings-Password` header. Defaults to `010802` (committed); **override it in any real deployment**. Set to empty, the panel stays locked. The settings are shared by every workspace, and anyone can open a workspace and be its boss |
 | `PAKASH_SESSION_DAYS` | How long a boss stays logged in (default 30) |
+| `PAKASH_ADMIN_PASSWORD` | The operator console's password; empty = the settings password (D28) |
+| `PAKASH_OPEN_SIGNUP` | Self-service team creation from the login page (default off) |
+| `PAKASH_EMBEDDED_WORKER` | Run the job worker inside the API process (default on; compose turns it off because it runs `app.worker` separately) |
+| `PAKASH_WORKER_CONCURRENCY` / `PAKASH_CHAT_WORKERS` | Worker threads (default 4) and how many of them only take manager-chat turns (default 1) |
 | `PAKASH_SOLVER_TIME_LIMIT_SECONDS` / `PAKASH_SOLVER_WORKERS` | The constraint solver's wall time per solve (default 10s) and parallel workers (default 8). Live-editable in the panel |
 | `PAKASH_LLM_MAX_CONCURRENCY` | Model calls in flight across every process (default 4; 1 for a local Ollama). One per team regardless |
 

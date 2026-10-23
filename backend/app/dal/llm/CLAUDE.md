@@ -1,8 +1,11 @@
 # LLM client (`app/dal/llm/`)
 
-**Ported from AiSummryIO essentially unchanged.** An OpenAI-compatible JSON-mode
-client. Default target is a local model through Ollama, but the same code works
-against OpenAI itself, vLLM, Groq, and other compatible gateways.
+Ported from AiSummryIO and extended. An OpenAI-compatible JSON-mode client.
+The default target is a local model through Ollama, but the same code works
+against OpenAI itself, vLLM, Groq, and other compatible gateways. It is used
+for language only — translating a build's sentences, the manager chat, the
+employee assistant, learning from corrections. **No schedule is assigned
+through it** (D34).
 
 Model, API key, and base URL are read from the runtime settings store on **every
 call**, so a change saved in the UI applies immediately without a restart. All
@@ -31,7 +34,7 @@ with token counts when the server reports them.
 
 Two robustness layers stack:
 
-**1. The degradation ladder** (`_attempts`) — tried in order, dropping to the next
+**1. The degradation ladder** (`ladder.attempts`) — tried in order, dropping to the next
 on `BadRequestError`:
 
 1. `response_format: json_schema` with `strict: true`, when the schema has a
@@ -106,24 +109,15 @@ takes no sleep) that would cross it.
 larger — and `_budget_seconds()` sizes its budget to let that one attempt
 finish.
 
-This is the one place a configured setting is deliberately not honoured, so
-the reason matters. `llm_timeout_seconds` is a single number covering calls
-that are not comparable: a briefing is a short prompt to the *fast* model and
-answers in seconds, while one day of scheduling is a large prompt to the
-*advanced* model and can take minutes on the hardware these deployments run
-on. A value chosen so the settings panel feels responsive is, for the
-scheduler, a ceiling below the real answer time — and such a ceiling is not a
-safety net, it is a guarantee of failure. The observed shape of it in
-production was exactly that: briefings kept working while every build died on
-`httpcore.ReadTimeout` with the model server still generating an answer
-nobody was listening for.
-
-**It used to have no ceiling at all, and that failed worse.** A call the
-server never answered held its model slot forever. With the default limit of one, every
-chat timed out on the queue and every build waited behind it; the worker
-threads waiting in that queue left none free, so even builds that code
-assigns stopped. The manager's stop button does not interrupt an HTTP read.
-Fifteen minutes is far above any day's answer time and still ends the hang.
+This is the one place a configured setting is deliberately not honoured.
+`scheduler` is now the build's translation step (the `DirectiveAgent`), a
+large prompt to the *advanced* model, while most other calls are short; a
+timeout chosen so the chat feels responsive would cut translations off
+mid-answer. It is bounded rather than unlimited because a call the server
+never answers would otherwise hold its model slot forever, and the
+manager's stop button does not interrupt an HTTP read. A translation that
+times out does not fail the build: the solver builds without it and the
+notes say so.
 
 Connecting stays bounded for *every* flow (`_CONNECT_TIMEOUT_SECONDS`): a
 handshake that never completes is an unreachable server, not a slow one, and
@@ -172,7 +166,7 @@ build's rules, policies and instructions into requests the solver honours
 backward-compatibility story: a deployment that never opens the new settings
 sends exactly what it sent before, and a `runtime-settings.json` written
 before these fields existed loads unchanged. Roles ship empty for the same
-reason `_attempts` sends no `repetition_penalty` at 0 — a default here would
+reason `ladder.attempts` sends no `repetition_penalty` at 0 — a default here would
 be a hardcoded model name, and which models exist is the server's business.
 
 **The model is resolved per call**, immediately before the request, so a
@@ -282,7 +276,7 @@ first one's client, silently billing and authenticating as the wrong account.
 
 - Errors leaving this package are `AgentError` in Hebrew.
 - Never log API keys, or full prompts containing employee personal details.
-- Adding a rung to the ladder means adding it to `_attempts` — do not scatter
+- Adding a rung to the ladder means adding it to `ladder.attempts` — do not scatter
   fallback logic through `_complete`.
 - Routing is `model_roles.py` and nowhere else. A flow gets a model by being
   in the table, not by a branch at the call site.

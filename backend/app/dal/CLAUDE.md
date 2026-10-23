@@ -6,6 +6,14 @@ Fetches and sends. Makes no decisions — those live in `bl/`.
   (never creates it).
 - `llm/` — the OpenAI-compatible JSON client. See [llm/CLAUDE.md](llm/CLAUDE.md).
 - `repository/` — the only SQL owner in the codebase.
+- `notify.py` — `PostgresSignals`: `pg_notify` out, one unpooled `LISTEN`
+  connection per process in, on a channel named after the schema (D35).
+  The manager's live inbox (`common/events.py`) rides on it.
+
+**PostgreSQL is the only shared state** (D35): data, the job queue
+(`jobs.py`, `FOR UPDATE SKIP LOCKED`), the login throttle
+(`throttle.py`), live signals (`notify.py`) and the model-call limit
+(advisory locks, `llm/model_slots.py`). There is no Redis.
 
 ## Connection pooling
 
@@ -43,9 +51,8 @@ should — that is what the repository does, and it stays correct either way.
 
 ## Tables
 
-Built so far: `teams`, `team_profiles`, `schedules`,
-`shift_slots`, `assignments`, `availability`, `change_log`, `manager_chats` and
-`manager_chat_messages` (composed in `schema.py`). The workplace, employee roster
+Every table is composed in `schema.py` (DDL in `repository/ddl/`, plus
+`chat.py` and `throttle.py`). The workplace, employee roster
 and rules remain JSON on the team's profile, which is what
 `team_profile()` reads. Manager conversations are separate durable rows: the
 parent carries `team_id` and signed browser `manager_id`; messages belong to that
@@ -80,6 +87,12 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | `constraint_requests` | An employee's submission awaiting the manager. **Not** `availability`: pending rows are invisible to `audit.py`, and approval is what promotes one |
 | `compiled_sources` | What code made of a standing sentence (D32), keyed on its words, the roster and the compiler. A derivative of the sentence, never a replacement; `unresolved` rows are kept negatives |
 | `source_anchors` | The day each standing sentence was first seen, which relative time ("3 ימים") counts from |
+| `swap_requests` | An employee's proposed swap, the colleague's answer, and the manager's ruling |
+| `agent_preferences` | What the agent remembers (D21): `suggested`, `active` or `archived`, all visible and editable |
+| `manager_chats`, `manager_chat_messages` | One manager's conversations and their turns, with the plan a turn prepared and the receipt of its approval |
+| `copilot_jobs` | The durable job queue: chat turns, generation spans, scans, `compile_sources` — claimed once, retried with backoff |
+| `copilot_items`, `copilot_permissions`, `copilot_audit` | The copilot inbox, per-action permissions, and its append-only audit trail (D23) |
+| `login_attempts` | Wrong guesses and lockouts per account (D35). The one table without `team_id`: the account key already names the team, and the operator and settings accounts belong to none |
 
 The workplace profile — the mission, the **shift vocabulary** (names, times,
 on-call flags and weighting), the employees, and the rules — lives as JSON on
