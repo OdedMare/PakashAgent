@@ -41,19 +41,7 @@ class RuntimeSettings:
     # False accepts any TLS certificate from the model server. See
     # `Settings.llm_verify_ssl` for why this is a last resort.
     llm_verify_ssl: bool = True
-    # How wide one scheduling model call is: "day" or "week". Read by
-    # `bl/schedule_service.py` when a period is opened, so a saved change
-    # applies to the next build without a restart. See
-    # `Settings.schedule_generation_mode` for the tradeoff.
-    schedule_generation_mode: str = "day"
-    schedule_generation_engine: str = "auto"
-    # Shared state across processes (`common/redis_hub.py`). Empty URL = off,
-    # and every user of it falls back to its in-memory, per-process self.
-    redis_url: str = ""
-    # Explicit parts written over the URL's own (`redis_connection_url`);
-    # a host alone, with no URL, is enough to turn Redis on.
-    redis_host: str = ""
-    redis_port: Optional[int] = None
-    redis_username: str = ""
-    redis_password: str = ""
-    redis_key_prefix: str = "pakash"
+    # The constraint solver (`bl/solver/`): wall time per solve and its
+    # parallel workers. Read per build, so a saved change applies next time.
+    solver_time_limit_seconds: float = 10.0
+    solver_workers: int = 8

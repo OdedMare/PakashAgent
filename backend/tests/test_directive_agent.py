@@ -89,7 +89,8 @@ def test_a_refused_answer_comes_back_with_the_reasons_and_can_be_fixed():
 def test_an_unresolved_source_ends_the_translation_at_once():
     llm = _ScriptedLlm([_turn(unresolved=[{"source_id": "source-1", "reason": "כללי מדי"}])])
 
-    assert _translate(llm) is None
+    left = _translate(llm)
+    assert left["unresolved"][0]["reason"] == "כללי מדי"
     assert len(llm.payloads) == 1
 
 
@@ -97,7 +98,7 @@ def test_the_loop_is_bounded_and_the_last_turn_says_so():
     looking = _turn(calls=[{"tool": "list_slots", "arguments": {}}])
     llm = _ScriptedLlm([looking] * MAX_TURNS)
 
-    assert _translate(llm) is None
+    assert _translate(llm)["unresolved"]
     assert len(llm.payloads) == MAX_TURNS
     assert [payload["final_turn"] for payload in llm.payloads] == [False] * (MAX_TURNS - 1) + [True]
 
@@ -113,8 +114,9 @@ def test_dry_runs_are_limited():
     assert sum(1 for row in outcomes if "assignments" in row) == 2
 
 
-def test_an_unreachable_model_means_no_translation():
-    assert _translate(_ScriptedLlm([AgentError("המודל לא זמין")])) is None
+def test_an_unreachable_model_leaves_every_source_out_and_says_why():
+    left = _translate(_ScriptedLlm([AgentError("המודל לא זמין")]))
+    assert left["requests"] == [] and left["unresolved"][0]["reason"] == "המודל לא החזיר תרגום"
 
 
 def test_nothing_to_translate_costs_no_call():
@@ -171,7 +173,7 @@ def test_auto_reports_the_agents_calls_and_steps():
     ])
     profile = _profile()
     result = Scheduler(llm).generate_span(
-        profile, SUNDAY, SATURDAY, instructions="עדיף שדניאל לא יעבוד בלילות שני", engine="auto",
+        profile, SUNDAY, SATURDAY, instructions="עדיף שדניאל לא יעבוד בלילות שני",
     )
     assert result["metrics"]["engine"] == "hybrid"
     assert result["metrics"]["model_calls"] == 2
@@ -220,10 +222,12 @@ def test_an_untranslatable_wish_is_left_out_and_the_rest_kept():
     assert len(llm.payloads) == 1
 
 
-def test_an_untranslated_binding_source_still_goes_to_the_full_scheduler():
+def test_an_untranslated_binding_source_is_reported_and_the_rest_is_kept():
     llm = _ScriptedLlm([_turn(unresolved=[_unresolved("source-1")],
                               requests=[_avoid(source_id="source-2")])])
-    assert _translate(llm, preferences=WISH) is None
+    translated = _translate(llm, preferences=WISH)
+    assert [row["source_id"] for row in translated["unresolved"]] == ["source-1"]
+    assert translated["requests"][0]["source_id"] == "source-2"
 
 
 def test_on_the_last_turn_a_wish_with_a_bad_item_is_left_out_whole():
@@ -243,7 +247,7 @@ def test_the_schedule_says_which_wishes_it_was_built_without():
     llm = _ScriptedLlm([_turn(unresolved=[_unresolved("source-1", "לא משפיע על השיבוץ")])])
 
     result = Scheduler(llm).generate_span(
-        _profile(), SUNDAY, SATURDAY, preferences=WISH, engine="auto")
+        _profile(), SUNDAY, SATURDAY, preferences=WISH)
 
     assert result["metrics"]["engine"] == "hybrid"
     assert result["metrics"]["unresolved_sources"] == 1

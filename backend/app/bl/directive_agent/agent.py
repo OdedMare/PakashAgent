@@ -14,10 +14,10 @@ refuses is handed back with the reasons while turns remain; an
 answer that marks a source `unresolved` is final, because it means "code
 cannot do this", not "try again".
 
-What then happens is decided per source (`partial.per_source`): if every
-source left out is only a wish, the rest is kept and the wishes are
-reported; if any is binding, the full scheduler takes the period, as it
-always did.
+What then happens is decided per source (`partial.per_source`): a source
+whose items all pass is kept, and one left out is reported whole -- never
+half a source. The solver builds with what was kept, and the schedule's
+notes name every sentence it was built without (D34).
 
 Standing sources -- rules, policies, notes, preferences -- are translated
 in `compile` mode and kept in the `cache` it is handed
@@ -36,10 +36,11 @@ from app.bl.directive_agent.partial import assemble, per_source
 from app.bl.directive_agent.tools import TranslationTools
 from app.bl.prompts import load
 from app.bl.scheduler.directives import semantic_sources
-from app.bl.scheduler.span_audit import add_usage, usage_of
+from app.bl.shared import add_usage, usage_of
 from app.common.errors import AgentError
 
 MAX_TURNS = 4
+_NO_ANSWER = "המודל לא החזיר תרגום"
 
 
 class DirectiveAgent:
@@ -50,22 +51,22 @@ class DirectiveAgent:
     def translate(self, profile: dict, starts_on: str, ends_on: str, availability=None,
                   instructions: str = "", preferences=None, history=None,
                   required_assignments=None, already_scheduled=None,
-                  cache=None) -> Optional[dict]:
-        """Validated directives and requests, with `unresolved` listing the
-        wishes left out, or None when the full scheduler should take the
-        request: nothing to translate, the model unreachable, or a binding
-        source not translated within the bound.
+                  cache=None, sources=None) -> Optional[dict]:
+        """Validated directives and requests, with `unresolved` listing every
+        source left out -- binding or not -- or None when there is nothing
+        to translate.
 
-        A standing source `cache` already holds costs no model call, and
-        one it holds as unresolved and binding settles the answer at once."""
-        sources = semantic_sources(profile, availability, instructions, preferences)
+        A standing source `cache` already holds costs no model call. A source
+        the model could not be asked about (unreachable, or no final answer
+        within the bound) is left out with that reason; what did translate,
+        from the cache or the model, is still used."""
+        if sources is None:
+            sources = semantic_sources(profile, availability, instructions, preferences)
         if not sources:
             return None
         cache = cache or NullCache()
         by_id = {row["id"]: row for row in sources}
         outcomes = cache.lookup(profile, sources)
-        if _binding_left(outcomes, by_id):
-            return None
         hits = dict(outcomes)
         run = _Run(self._max_turns)
         misses = [row for row in sources if row["id"] not in hits]
@@ -73,11 +74,8 @@ class DirectiveAgent:
             tools = TranslationTools(profile, starts_on, ends_on, misses, availability,
                                      history, required_assignments, already_scheduled)
             fresh = self._settle(profile, starts_on, ends_on, misses, tools, cache, run)
-            if fresh is None:
-                return None
-            outcomes.update(fresh)
-        if _binding_left(outcomes, by_id):
-            return None
+            outcomes.update(fresh if fresh is not None else
+                            {row["id"]: {"left": _NO_ANSWER} for row in misses})
         return dict(assemble(outcomes, by_id, run.usage), usage=run.usage,
                     model_calls=run.turns, steps=run.steps, cached=len(hits),
                     cached_tokens=sum(row.get("tokens") or 0 for row in hits.values()))
@@ -133,11 +131,6 @@ class DirectiveAgent:
         except AgentError:
             return None
         return answer if isinstance(answer, dict) else None
-
-
-def _binding_left(outcomes: Dict[str, dict], by_id: Dict[str, dict]) -> bool:
-    return any("left" in outcome and by_id[source_id].get("binding", True)
-               for source_id, outcome in outcomes.items())
 
 
 class _Run:

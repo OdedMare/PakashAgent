@@ -1,37 +1,25 @@
-"""The slot grid, and how it is divided into model calls.
+"""The slot grid, and the spans a period is solved in.
 
-Built in code rather than asked of the model: which dates fall in a period and
-which weekday each one is is arithmetic, and the model has no business
-generating a calendar. It assigns people into this grid.
+Built in code: which dates fall in a period and which weekday each one is
+is arithmetic. The solver assigns people into this grid.
 """
 
-from typing import Dict, List
+from typing import List
 
 from app.bl.shared import hebrew_weekday, runs_on
 from app.bl.scheduler.values import (
     bounded, dates_between, named, parse_date, role_list,
 )
-from app.common.config import MODE_DAY, MODE_WEEK
 from app.common.errors import AgentError
 
-# Checkpointed daily generation makes long planning horizons safe to resume.
-# One leap year is a useful product ceiling; beyond that belongs in a separate
-# forecast rather than one living operational schedule.
+# One leap year is a useful product ceiling; beyond that belongs in a
+# separate forecast rather than one living operational schedule.
 MAX_PERIOD_DAYS = 366
 
-# A period is built in bounded chunks. Seven days is the calendar ceiling,
-# while staffing volume is the output ceiling: a busy week can require far
-# more JSON rows than a quiet fortnight, and small models otherwise tend to
-# answer only the first day while still returning valid JSON.
-CHUNK_DAYS = 7
-MAX_ASSIGNMENTS_PER_CHUNK = 14
-
-# The staffing demand one span may carry in week mode. Far above the chunk
-# limit because the span path's response schema pins every row to an
-# enumerated slot and an enumerated candidate -- the ceiling is about how much
-# one answer can hold, not about how much can be trusted. A week that needs
-# more is split, which is why week mode is a ceiling rather than a promise.
-MAX_ASSIGNMENTS_PER_SPAN = 70
+# How many dates one solve covers. Four weeks is a whole roster month in
+# one model, where fairness and runs of days are seen at once; a longer
+# period is solved in such blocks, each seeing the ones before it.
+SPAN_DAYS = 28
 
 
 def build_slots(profile: dict, starts_on: str, ends_on: str) -> List[dict]:
@@ -101,57 +89,11 @@ def staffing_requirements(shift: dict, weekday: str) -> tuple:
     return fallback
 
 
-def chunks(
-    slots: List[dict], demand_limit: int = MAX_ASSIGNMENTS_PER_CHUNK
-) -> List[List[dict]]:
-    """Split the grid without dividing a day or overloading one model call.
-
-    Split on dates rather than on slot count, so a day is never divided across
-    two calls: half a Tuesday in one request and half in another is how the
-    same person ends up on two shifts at once. Staffing headcount, not slot
-    count, estimates the rows the model must return.
-    """
-    by_date: Dict[str, List[dict]] = {}
-    for slot in slots:
-        by_date.setdefault(slot["slot_date"], []).append(slot)
-    result: List[List[dict]] = []
-    chunk: List[dict] = []
-    demand = days = 0
-    for date in sorted(by_date):
-        day_slots = by_date[date]
-        day_demand = sum(max(1, slot.get("headcount", 1)) for slot in day_slots)
-        if chunk and (days >= CHUNK_DAYS or demand + day_demand > demand_limit):
-            result.append(chunk)
-            chunk, demand, days = [], 0, 0
-        chunk.extend(day_slots)
-        demand += day_demand
-        days += 1
-    if chunk:
-        result.append(chunk)
-    return result
-
-
-def plan_spans(
-    profile: dict, starts_on: str, ends_on: str, mode: str = MODE_DAY,
-    availability=None,
-) -> List[dict]:
-    """The date ranges a range job will ask the model for, one call each.
-
-    Returned as `{"date", "through", "dates"}` because the caller counts
-    progress in *dates* however wide a call is. In day mode every span is one
-    date; in week mode `chunks` bounds it, so a span never crosses seven days
-    and a week whose demand would not fit one answer is split.
-    """
-    slots = build_slots(profile, starts_on, ends_on)
-    if mode != MODE_WEEK:
-        return [
-            {"date": date, "through": date, "dates": [date]}
-            for date in sorted({slot["slot_date"] for slot in slots})
-        ]
-    spans = []
-    # Imported here because planning uses SpanRequest, which builds this grid.
-    from app.bl.scheduler.planning import sized_chunks
-    for chunk in sized_chunks(profile, chunks(slots, MAX_ASSIGNMENTS_PER_SPAN), availability):
-        dates = sorted({slot["slot_date"] for slot in chunk})
-        spans.append({"date": dates[0], "through": dates[-1], "dates": dates})
-    return spans
+def plan_spans(profile: dict, starts_on: str, ends_on: str) -> List[dict]:
+    """The date ranges a build is solved in, as `{"date", "through",
+    "dates"}`, because progress is counted in dates."""
+    dates = sorted({slot["slot_date"] for slot in build_slots(profile, starts_on, ends_on)})
+    return [
+        {"date": block[0], "through": block[-1], "dates": block}
+        for block in (dates[index:index + SPAN_DAYS] for index in range(0, len(dates), SPAN_DAYS))
+    ]

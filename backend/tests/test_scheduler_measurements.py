@@ -4,48 +4,31 @@ import json
 
 import pytest
 
-from app.bl.scheduler import MODE_WEEK, build_slots, plan_spans
-from app.bl.scheduler import planning
+from app.bl.scheduler import build_slots, plan_spans
 from app.bl.scheduler.compare import compare, main
 from app.bl.scheduler.quality import no_worse, quality
 from app.bl.audit import audit
-from tests.test_scheduler import _week_profile
-from tests.test_scheduler_recovery import assignment
+
+MORNING = "בוקר"
 
 
-def test_candidate_pressure_splits_below_the_staffing_limit_without_dividing_a_day(monkeypatch):
-    profile = _week_profile()
-    profile["employees"] = [{"name": "אדם %d" % index, "notes": "מידע חשוב " * 20}
-                            for index in range(60)]
-    slots = build_slots(profile, "2026-10-05", "2026-10-11")
-    one = planning.input_chars(profile, slots[:1], [])
-    full = planning.input_chars(profile, slots, [])
-    monkeypatch.setattr(planning, "MAX_SPAN_INPUT_CHARS", one + (full - one) // 3)
-    spans = plan_spans(profile, "2026-10-05", "2026-10-11", MODE_WEEK)
-    assert len(spans) > 1
-    assert [day for span in spans for day in span["dates"]] == [slot["slot_date"] for slot in slots]
-    for span in spans:
-        scoped = [slot for slot in slots if slot["slot_date"] in span["dates"]]
-        assert planning.input_chars(profile, scoped, []) <= planning.MAX_SPAN_INPUT_CHARS
+def _week_profile():
+    return {
+        "workplace": {"name": "מוקד"},
+        "employees": [{"name": "דנה"}, {"name": "יוסי"}, {"name": "רון"}],
+        "shifts": [{"name": MORNING, "start_time": "07:00", "end_time": "15:00", "days": [],
+                    "staffing": [{"days": [], "headcount": 1, "required_roles": []}]}],
+    }
 
 
-def test_recorded_constraint_pressure_changes_planning_without_dropping_rules(monkeypatch):
-    profile = _week_profile()
-    profile["rules"] = [{"text": "הנחיה שהמנהל ניסח", "priority": "hard"}]
-    slots = build_slots(profile, "2026-10-05", "2026-10-11")
-    monkeypatch.setattr(planning, "MAX_SPAN_INPUT_CHARS", planning.input_chars(profile, slots, []) + 100)
-    assert len(plan_spans(profile, "2026-10-05", "2026-10-11", MODE_WEEK)) == 1
-    rows = [dict(employee="דנה", date=slot["slot_date"], available=False,
-                 is_hard=False, reason="העדפה שהמנהל ניסח " * 60) for slot in slots]
-    constrained = plan_spans(profile, "2026-10-05", "2026-10-11", MODE_WEEK, rows)
-    assert len(constrained) > 1
-    assert sum(len(span["dates"]) for span in constrained) == 7
+def assignment(day, employee="דנה", shift=MORNING):
+    return dict(employee=employee, date=day, shift=shift, reason="זמין ומוסמך למשמרת")
 
 
-def test_an_oversized_single_day_is_not_truncated_or_split(monkeypatch):
-    monkeypatch.setattr(planning, "MAX_SPAN_INPUT_CHARS", 1)
-    spans = plan_spans(_week_profile(), "2026-10-05", "2026-10-06", MODE_WEEK)
-    assert [span["dates"] for span in spans] == [["2026-10-05"], ["2026-10-06"]]
+def test_a_long_period_is_solved_in_four_week_blocks_without_dividing_a_day():
+    spans = plan_spans(_week_profile(), "2026-10-01", "2026-11-30")
+    assert [len(span["dates"]) for span in spans] == [28, 28, 5]
+    assert spans[1]["date"] == "2026-10-29"
 
 
 def test_quality_uses_existing_coverage_and_counts_shadow_trainees_correctly():

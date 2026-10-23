@@ -3,7 +3,6 @@
 import datetime
 from typing import List, Optional
 
-from app.bl.scheduler.planning import split_dates
 from app.bl.scheduler.quality import combine_metrics
 
 from app.bl.schedule_service.constants import (
@@ -17,7 +16,6 @@ from app.bl.schedule_service.constants import (
     SUMMARY_LIMIT,
 )
 from app.bl.schedule_service.rows import iso, now_stamp, text
-from app.common.config import ENGINE_AI
 
 # A span the worker may still take: never started, interrupted, or failed.
 _TAKEABLE = (GENERATION_FAILED, GENERATION_RUNNING, GENERATION_PENDING)
@@ -74,10 +72,8 @@ class GenerationJob:
         cls,
         spans: List[dict],
         total_days: int,
-        mode: str,
         instructions: str,
         required: List[dict],
-        engine: str = ENGINE_AI,
     ) -> "GenerationJob":
         """A fresh job, running, with every span pending.
 
@@ -93,8 +89,6 @@ class GenerationJob:
             "total_days": total_days,
             "completed_days": 0,
             "failed_days": 0,
-            "mode": mode,
-            "engine": engine,
             "instructions": text(instructions)[:INSTRUCTIONS_LIMIT],
             "required_assignments": required or [],
             "notes": [],
@@ -209,21 +203,6 @@ class GenerationJob:
             "current_date": iso(target.get("date")),
         })
         self.recount()
-
-    def split(self, target: dict) -> bool:
-        """Checkpoint smaller pending requests; never re-ask completed neighbours."""
-        halves = split_dates(span_dates(target))
-        if self.cancel_requested or not halves:
-            return False
-        children = [span_entry(dates[0], dates[-1], dates) for dates in halves]
-        # Keep the failed parent call's cost exactly once, on its first child.
-        children[0]["metrics"] = combine_metrics(target.get("metrics") or {}, {"split_count": 1})
-        index = self.days.index(target)
-        self.days[index:index + 1] = children
-        self._document["status"] = GENERATION_RUNNING
-        self._document["current_date"] = children[0]["date"]
-        self.recount()
-        return True
 
     def advance(self) -> bool:
         """Point at the next unfinished span. True once nothing is left."""

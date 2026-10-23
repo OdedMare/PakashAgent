@@ -1,9 +1,7 @@
-import { Bot, CalendarRange, Database, RefreshCw, Server } from "lucide-react";
+import { Bot, CalendarRange, Database, RefreshCw } from "lucide-react";
 
-import { RedisSettings } from "./RedisSettings";
 import {
   SettingsField as Field,
-  SettingsSelect as Select,
   SettingsToggle as Toggle,
 } from "./SettingsField";
 import type { SettingsController, SettingsSection } from "./useSettings";
@@ -20,7 +18,7 @@ const SECTIONS = [
   {
     id: "schedule" as const,
     label: "בניית סידור",
-    description: "כמה ימים הסוכן בונה בכל פנייה",
+    description: "זמן ומעבדים לפותר האילוצים",
     icon: CalendarRange,
   },
   {
@@ -28,12 +26,6 @@ const SECTIONS = [
     label: "מסד הנתונים",
     description: "חיבור PostgreSQL וסכמה",
     icon: Database,
-  },
-  {
-    id: "redis" as const,
-    label: "Redis",
-    description: "מצב משותף בין תהליכים",
-    icon: Server,
   },
 ];
 
@@ -71,7 +63,6 @@ export function SettingsContent({ settings }: { settings: SettingsController }) 
     agent: <AgentSettings settings={settings} />,
     schedule: <ScheduleSettings settings={settings} />,
     database: <DatabaseSettings settings={settings} />,
-    redis: <RedisSettings settings={settings} />,
   };
   return <div className="settings-content">{sections[settings.activeSection]}</div>;
 }
@@ -142,60 +133,35 @@ function AgentSettings({ settings }: { settings: SettingsController }) {
   );
 }
 
-/** How wide one scheduling model call is.
- *
- *  The values are the backend's own (`GENERATION_MODES` in
- *  `backend/app/common/config/settings.py`); a third choice added there needs
- *  a line here, and nothing else — the backend rejects anything it does not
- *  recognise rather than quietly running at a width nobody chose. */
-const GENERATION_MODES = [
-  { value: "day", label: "יום אחד בכל פנייה — מדויק יותר" },
-  { value: "week", label: "עד שבוע בכל פנייה — מהיר יותר" },
-];
-
-const GENERATION_ENGINES = [
-  { value: "auto", label: "אוטומטי — קוד כשאפשר, AI כשצריך" },
-  { value: "ai", label: "AI — שיקול דעת מלא" },
-  { value: "code", label: "קוד — ללא טוקנים" },
-];
-
+/** The constraint solver that assigns every schedule. The model only
+ *  translates the manager's sentences; who goes where is solved in code. */
 function ScheduleSettings({ settings }: { settings: SettingsController }) {
-  const weekly = settings.text("schedule_generation_mode") === "week";
-  const engine = settings.text("schedule_generation_engine") || "auto";
   return (
     <section className="settings-section">
-      <h3>מנוע בניית הסידור</h3>
-      <Select
+      <h3>פותר האילוצים</h3>
+      <Field
         settings={settings}
-        name="schedule_generation_engine"
-        label="מי משבץ"
-        options={GENERATION_ENGINES}
-        hint={
-          engine === "code"
-            ? "הקוד משבץ בלי טוקנים. אם יש כלל טקסטואלי, העדפה או אילוץ רך הוא יעצור ויבקש לבחור AI או אוטומטי — לעולם לא יתעלם מהם."
-            : engine === "ai"
-            ? "המודל יבנה כל סידור, גם כשנדרש לפרש כללים והעדפות בשפה חופשית."
-            : "הקוד משבץ קלט מובנה. הוראות מפורשות מתורגמות בקצרה ב-AI ואז מבוצעות בקוד; הוראה עמומה או תוצאה עם אזהרות עוברות ל-AI מלא."
-        }
+        name="solver_time_limit_seconds"
+        label="זמן מרבי לפתרון"
+        type="number"
+        min="0.5"
+        max="600"
+        step="0.5"
+        optional="שניות לכל בלוק של עד 4 שבועות"
+        placeholder="10"
       />
-      <h3>רוחב פנייה ל־AI</h3>
-      <Select
+      <Field
         settings={settings}
-        name="schedule_generation_mode"
-        label="בניית הסידור"
-        options={GENERATION_MODES}
-        hint={
-          weekly
-            ? "הסוכן יבנה עד שבוע שלם בפנייה אחת. מהיר בהרבה — שבוע עולה פנייה אחת במקום שבע — אבל תיקון חוזר בונה מחדש את כל השבוע, ותקלה מפילה את כולו יחד."
-            : "הסוכן יבנה יום אחד בכל פנייה. איטי יותר, ומדויק יותר: כל יום נבדק ומתוקן בנפרד, ויום שנכשל חוזר בלי לפגוע בשכניו."
-        }
+        name="solver_workers"
+        label="מעבדים במקביל"
+        type="number"
+        min="1"
+        optional="יותר מעבדים — פתרון טוב יותר באותו זמן"
+        placeholder="8"
       />
       <p className="settings-note">
-        {weekly
-          ? "בכל מקרה שבוע הוא תקרה ולא הבטחה: שבוע עמוס מדי לתשובה אחת מפוצל לכמה פניות."
-          : "אפשר לעבור למצב שבועי אם בניית סידור לוקחת יותר מדי זמן."}
-        {" "}
-        המנוע והרוחב נקבעים כשלוחצים על בניית סידור — שינוי כאן לא משפיע על בנייה שכבר רצה.
+        הסידור נבנה בפותר אילוצים: כל משמרת, כלל, אילוץ ובקשה נשקלים יחד על פני כל התקופה.
+        המודל רק מתרגם הנחיות בשפה חופשית לבקשות מובנות, ומה שלא תורגם מוצג בהערות הבנייה.
       </p>
     </section>
   );

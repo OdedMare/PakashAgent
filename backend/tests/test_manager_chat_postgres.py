@@ -53,6 +53,7 @@ def seed(repo, published=False):
     chat = repo.create_chat(team["id"], "manager-a")
     llm = _ScriptedLlm([sickness()])
     service = ManagerChatService(repo, llm, ScheduleService(repo, llm))
+    service.llm = llm
     message_id = service.start_turn(team["id"], "manager-a", chat["id"], {
         "content": "דנה חולה היום, תציע את יוסי להחלפה", "request_id": "request-1", "schedule_id": period["id"],
     })
@@ -113,10 +114,8 @@ def test_real_shift_migration_is_atomic_and_preserves_unaffected_ids(real_repo, 
     import json
     proposal.update(profile_patch_json=json.dumps(dict(shifts=shifts, employees=employees)),
                     starts_on="2026-10-06", ends_on="2026-10-06")
-    service._llm._answers += [proposal, dict(assignments=[
-        dict(employee="דנה", shift="יום", date="2026-10-06", reason="זמינה ומוסמכת"),
-        dict(employee="יוסי", shift="לילה", date="2026-10-06", reason="זמין ומוסמך"),
-    ], notes=[], summary="סידור חדש")]
+    # The vocabulary rebuild is solved; the model only proposes it.
+    service.llm._answers += [proposal]
     message = service.start_turn(team, "manager-a", chat, dict(content="שנה את המשמרות ביום שלישי",
                                  request_id="migrate", schedule_id=period))
     service.reply(team, "manager-a", chat, message)

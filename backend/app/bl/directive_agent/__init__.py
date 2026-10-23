@@ -1,4 +1,4 @@
-"""Translate the manager's words into what the code scheduler can honour.
+"""Translate the manager's words into what the solver can honour.
 
 A bounded tool loop: the model may resolve names, list slots, read a
 person's eligibility, check a draft and dry-run it before answering, and
@@ -9,7 +9,7 @@ always did. Pure Python tools, no repository, nothing written.
 |---|---|
 | `agent.py` | `DirectiveAgent`: the loop and its bounds |
 | `tools.py` | `TranslationTools`: the five read-only tools |
-| `partial.py` | `read_partial`: keep what translated when only wishes did not |
+| `partial.py` | Per-source outcomes: kept whole or left out whole, and reported |
 | `schema.py` | One turn's shape, the tool names and their descriptions |
 """
 

@@ -6,7 +6,7 @@ directly — it goes through the repository and the LLM client it was constructe
 with.
 
 Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
-`scheduler.py`, `changes.py`, `briefing.py`, `export.py`,
+`scheduler.py`, `solver/`, `changes.py`, `export.py`,
 `schedule_service.py`, `prompts/`. Importing schedules from files was removed.
 
 | File | Owns |
@@ -14,246 +14,111 @@ Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
 | `profile_service/` | Structured workplace profile validation and updates |
 | `workspace_service/` | Workspace rules: entering a team, roles, the share link |
 | `admin_service/` | **The צוות משמרות זהב console** (D28): operator sign-in, opening, re-capping, suspending and deleting teams |
-| `scheduler/` | Checkpointed range generation, one date or one week per call; every assignment carries a reason |
+| `scheduler/` | Building a span: the grid, translating the manager's words, then the solver |
+| `solver/` | **The OR-Tools CP-SAT constraint solver that assigns every schedule** (D34). No model |
 | `changes/` | Conversational edits and the change log |
-| `briefing/` | **The agent speaking first.** Observes; proposes nothing that lands |
 | `copilot/` | The durable observation loop the worker drives |
 | `schedule_service/` | Persistence and orchestration around all three: propose, confirm, apply |
 | `audit/` | **Pure-Python advisory checks. No LLM.** Also the fairness arithmetic the scheduler and the employee area read |
 | `export/` | **A period out as `.xlsx`.** Pure functions, no model, no repository |
 | `tools/` | **The named questions the agent may ask. Pure Python, no LLM, no write** — including `profile_gaps`, what setup still lacks |
-| `planner/` | The tool loop, with a deterministic fallback when no model is reachable |
+| `planner/` | The chat's question/tool-call schema and the deterministic no-model answers |
 | `intent/` | **Reading a Hebrew sentence with no model.** Seven shapes; never guesses |
 | `simulate/` | **What a change would do.** No model, no repository, persists nothing |
 | `rotation/` | **Whose closure a date is.** Pure arithmetic off separate round/triplet anchors; no model |
 | `placement/` | **What a placement would cost, and what else the manager could do.** No model |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
 | `shared/` | Small helpers several packages read: `clarification.py`, `hebrew_calendar.py` |
-| `directive_agent/` | **Translating the manager's words for the code scheduler.** A bounded tool loop; code validates the answer, keeps what translated when only wishes did not, and writes nothing |
+| `directive_agent/` | **Translating the manager's words for the solver.** A bounded tool loop; code validates the answer, keeps every source that translated whole, reports the rest, and writes nothing |
 | `compiled_sources/` | **Standing sentences translated once and kept** (D32): keys, time anchoring, the cache port, the worker's compiler. No model, no SQL |
-| `schedule_requests.py` | **Structured scheduling requests** (`avoid`, `prefer`, `max_count`, `not_together`) and their one validator |
+| `schedule_requests.py` | **Structured scheduling requests** (`avoid`, `prefer`, `max_count`, `not_together`, `min_rest`, `max_consecutive`, `balance`, `requires_with`) and their one validator |
 
 ## The division that defines this layer
 
-The agent decides. Code audits. ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-))
+The solver assigns; the model talks; code audits. ([D34](../../../docs/DECISIONS.md),
+amending [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-))
 
-Everything except `audit.py` is model-driven and returns natural language the boss
-reads. `audit.py` is the opposite: no model, no prose, just arithmetic over a
-roster returning a list of warnings. That split is deliberate and load-bearing —
-an LLM asked "has anyone exceeded 5 shifts?" is doing arithmetic by generation,
-and a wrong answer looks identical to a right one.
+Who works which shift is solved by `solver/`, an optimisation over the
+roster, never generated. The model translates the manager's sentences into
+structured requests, holds the conversation, and proposes changes the
+manager confirms. `audit.py` stays what it was: no model, no prose, just
+arithmetic over a roster returning a list of warnings. That split is
+load-bearing — an LLM asked "has anyone exceeded 5 shifts?" is doing
+arithmetic by generation, and a wrong answer looks identical to a right one.
 
-## `scheduler.py`
+## `scheduler.py` and `solver/` — building a span (D34)
 
-Feeds the profile, rules, availability, and the **fairness tally** to
-`complete_json`; gets back assignments **each with its own `reason`**. The reason is not optional
-decoration — it is shown to the boss at confirmation time and is the mechanism by
-which a bad call gets caught while it's still cheap ([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)).
+**Two steps, and only the first may call a model.** `Scheduler.generate_span`
+collects every sentence code cannot read on its own (`directives.
+semantic_sources`: the build's instruction, rules, policies, employee notes,
+preferences) and hands them to the `DirectiveAgent`, which answers with
+validated absences, pins and structured requests. The solver then assigns
+every slot of the span in one solve. Structured input costs no model call.
 
-Handles both generation and schedules the boss authored or imported — they share
-one representation ([D6](../../../docs/DECISIONS.md#d6--the-boss-can-author-or-generate)).
+**A sentence that did not translate is reported, never routed around.**
+There is no AI scheduler to fall back to. A binding source left out becomes
+a note — "הנחיה מחייבת לא נאכפה בשיבוץ" — and a wish "בקשה רכה לא נלקחה
+בחשבון בשיבוץ"; an unreachable model leaves every source out the same way,
+and the build still completes.
 
-**The assignment engine is selectable.** `schedule_generation_engine` is
-`ai`, `code`, or `auto` ([D31](../../../docs/DECISIONS.md#d31--structured-schedules-may-be-assigned-by-code-️-amends-d3)).
-Auto uses the deterministic scheduler for structured inputs. For semantic
-inputs it first asks the model for only validated `unavailable` and
-`required_assignment` directives and structured requests (below), then lets
-code assign the roster; ambiguous
-directives and imperfect code drafts go to the full scheduling model. Explicit
-code mode stays zero-token and refuses semantic inputs rather than dropping
-them.
+**The solver (`bl/solver/`)** is OR-Tools CP-SAT:
 
-**Code honours structured requests, not only pins and absences.**
-`schedule_requests.py` defines eight more shapes — `avoid`, `prefer`,
-`max_count` (per period or per week), `not_together`, and since D32's
-second step `min_rest` (hours between shifts), `max_consecutive` (days in a
-row), `balance` (an even share, soft only) and `requires_with` (only beside
-one of `partners`) — each narrowed by shifts, dates and weekdays, and each
-hard or soft. The first three of the new four may name nobody, meaning the
-whole team, which is what lets a rest or fairness *policy* be translated
-rather than sent to the full scheduler. `deterministic_scheduler/limits.py`
-evaluates them with shift times and up to 14 days of history, since a run
-or a short rest does not start where the period does. `read_requests` is the
-single validator: every name must be on the roster and every shift in the
-vocabulary (D9), and the translation step refuses the whole answer when one
-request fails it, exactly as it does for a bad directive.
-`deterministic_scheduler/honoring.py` evaluates them: a hard request removes
-the candidate the way an unavailability does; a soft one adds its weight to
-the candidate's cost, ranked after roles, the shift manager and the closing
-group and before nights and load. Soft structured availability (dated or
-recurring `is_hard: false` rows) is weighed the same way, so it no longer
-sends a request to the model. A soft wish code had to break is written into
-`notes`; a met preference becomes the assignment's reason. A pin outranks a
-request: it is the manager naming one exact placement.
+- `problem.py` decides legality before any variable exists: eligibility,
+  hard availability (dated, recurring, inactive), rotation presence and
+  closure, a hard `avoid`. Pins are checked and refused with a Hebrew error
+  when they break one of those. Fixed rows — pins, the draft outside the
+  span, the last 14 days — take part in every count.
+- `rules.py` states the audit's blocking checks as constraints, from the
+  same `policy()` thresholds: seats (never over headcount), rest between
+  shifts, runs of consecutive days, weekly hours. A right-hand side made
+  negative by fixed rows is clamped at zero, so placing nobody is always
+  feasible and the solver never answers "no schedule".
+- `requests.py` turns each structured request into a constraint (hard) or
+  a priced term (soft), and prices soft availability.
+- `fairness.py` rewards closers on their own closure, spreads hours and
+  nights towards an even share of the demand (a constant computed before
+  solving — a target that moved with the answer made optimality unprovable),
+  and charges back-to-back days.
+- `solve.py` solves in two phases: coverage (unfilled seats, missing roles,
+  the shift manager) first; then, with coverage fixed as a ceiling and the
+  first answer as a hint, everything else. It writes a reason on every row,
+  turns every priced term the answer still pays for into a note, and audits
+  the result.
 
-**The translation looks before it answers.** `directive_agent/` replaced
-the single translation call with a bounded tool loop: the model may
-`resolve_employee`, `list_slots`, read `employee_state`, `check` a draft and
-`dry_run` it (the code scheduler, in memory) before giving its final
-directives and requests. Code keeps the last word — the final answer goes
-through the same `read_translation` — and a refused answer is handed back,
-with the reasons, while turns remain. An answer marking a source
-`unresolved` ends the loop at once: it means "code cannot do this", not "try
-again". Bounded at `MAX_TURNS` calls, four tools per call and two dry runs.
-The tools are pure Python with no repository, so the loop cannot write (D19).
+**Spans are up to four weeks** (`slots.plan_spans`). A longer period is
+solved in such blocks, each seeing the rows of the ones before it as fixed.
+Progress is still counted in dates.
 
-**A wish code cannot read does not cost the whole period.** Every source
-carries `binding`: false only for a rule the manager tagged soft (D1) and a
-preference (D21); the free instruction and every policy count as binding.
-When an answer is unresolved, or still refused on the last turn,
-`directive_agent/partial.py` keeps each source whose items all pass and
-leaves out the rest whole — never half a source. If any source left out is
-binding, the full scheduler takes the period exactly as before; if all are
-wishes, code builds without them and the result's `notes` names each one
-("בקשה רכה לא נלקחה בחשבון בשיבוץ"), with `unresolved_sources` in the
-metrics. A wish is reported, never dropped silently.
+**A rebuild can keep what it had.** `keep=` turns existing rows into soft
+`prefer` requests, so a change of shift vocabulary moves as few people as it
+can.
 
-**A standing sentence is translated once** ([D32](../../../docs/DECISIONS.md)).
-Every source but the build's own instruction carries `persistent` and a
-content `key`; the agent sends those in `mode: "compile"`, where the
-translation must not depend on the period (weekdays, not this week's
-dates), and keeps the outcome in the `TranslationCache` it is handed,
-keyed on the words, the roster and the compiler. A build loads what is kept
-and translates only the rest; a kept binding `unresolved` sends it to the
-full scheduler with no call at all. Saving setup or a preference queues a
-`compile_sources` job (`compiled_sources.queue`), so the first build is
-already free. Time ("חולה 3 או 4 ימים") is counted from the day the
-sentence was first seen, and `compiled_sources/timing.py` checks the
-model's dates before anything is kept. Metrics report `compiled_hits` and
-`tokens_saved`.
+**Interactive generation is a durable job.** `start_generation` stores the
+grid and the spans; the worker solves one span per job, checkpoints it, and
+retries a failed span a bounded number of times. `cancel` stops at the next
+span boundary and keeps every finished one; a hand-placed row on a date not
+yet solved is a pin. `POST /generate` solves a whole period inside the
+request for callers that want the schedule back rather than a job.
 
-**Code balances nights and rounds, not just hours.** The deterministic
-filler goes one date at a time, so ranking by hours worked so far was blind
-twice: nights landed on whoever was lightest in hours (one person took five
-of seven), and the open days were split evenly although one group would
-carry the coming closure on top. A night now goes to the fewest nights this
-period (history breaks ties, as in the model path), and every load compared
-includes `deterministic_scheduler/outlook.py` — each person's expected share
-of the seats still open over the next six days. That share is equal on an
-open day and falls on the closers alone on a closing one, so the open days
-before a closure lean towards the other group.
+## `manager_chat.py` and `chat_*.py` — the agent
 
-**Past assignments are counted, not sent.** The scheduler used to hand the
-model several hundred raw history rows and let it work out who had been taking
-the nights. That was wrong twice: on a two-week period those rows were roughly
-60% of the entire prompt — crowding out the period actually being built, on
-models whose context is the binding constraint — and counting them is code's
-job under [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-).
-`audit.load_history()` now does the arithmetic and the model receives the
-tally: ~9,100 tokens of rows become ~470 of counts.
+The one place the manager talks to the agent; see
+[`docs/MANAGER_CHAT.md`](../../../docs/MANAGER_CHAT.md). A turn runs as a
+`manager_chat` job: `chat_reply.py` first tries the zero-model fast path
+(`chat_tools.replacement_lookup`, over `intent/` and `tools/`), then up to
+seven model rounds that may call read-only tools, then `chat_planner.py`
+validates and audits the plan the model proposes — changes, a generation
+preview (the solver, through `chat_generation.py`), a vocabulary rebuild
+(`chat_lifecycle.py`, keeping existing rows where they fit), profile or
+constraint edits, management actions. Nothing is written until the manager
+approves; `chat_apply.py` then applies the stored plan in one transaction,
+after checking the state it was prepared against has not moved.
 
-This is the same move `briefing.py` already makes with `warnings` and
-`fairness`. Reducing the prompt is the side benefit; the reason it belongs on
-this side of the line is that a model asked "who worked the most nights" is
-doing arithmetic by generation, and a wrong answer looks exactly like a right
-one.
+## `changes/`
 
-**How wide one call is, is a setting.** `schedule_generation_mode` chooses
-between `day` — one date per model call, the default — and `week`, which asks
-for up to seven in one. Both run the *same* pipeline (`generate_span`): the
-same candidate lists, the same response schema, the same rejection rules, the
-same audit. Nothing is trusted in `week` that `day` would not trust. What
-changes is the granularity of the repair (a bad row re-answers the whole span)
-and the cost of a failure. `plan_spans` divides the period, and a week is a
-ceiling rather than a promise — a span never crosses seven days nor carries
-more staffing demand than one answer can hold.
-
-**A repair call is only ever asked for what a repair could fix.** The audit
-finding that carries no date — `over_hours`, a weekly total — is reported
-beside the schedule but excluded from `_span_warnings`, because the repair
-instruction forbids touching earlier dates and the hours came from there.
-Before that distinction, one person crossing their ceiling on a Wednesday
-bought a second model call on every remaining day of the week, none of which
-could clear it.
-
-**The roster is sent once per call, not twice.** `candidate_employees` is the
-authoritative list — filtered to who is legally available, keyed by the ids
-the schema accepts — so `_profile_beside_candidates` drops `employees` from
-the profile beside it. A blacklist of one key, never a whitelist: a field list
-here is how newly saved profile facts silently stop travelling.
-
-**Interactive generation is one checkpoint per request.**
-`ScheduleService.start_generation()` stores the whole slot grid, plans the
-spans for the configured mode, and writes a JSON checkpoint on the draft;
-`/generate/{id}/next` calls `generate_span()` once. The browser repeats that
-request for a single date or an arbitrary range. A failed span is marked
-`failed` and the same endpoint retries it, so completed neighbours survive a
-timeout or refresh.
-
-Progress is counted in **dates**, never in checkpoints: `total_days` and
-`completed_days` measure the period, so a week-wide build fills the manager's
-bar day by day rather than jumping by seven.
-
-**A transient failure costs a pause, not the period.** `generate_next` still
-checkpoints a failed span and raises — one step is one step, and `/next`
-answers its caller with the error. The *durable loop* is what decides to try
-again: `_requeue_failed_span` puts a span with attempts left back in the queue
-and backs off, up to `_MAX_SPAN_ATTEMPTS`. Nobody is watching a background
-build, so a job that parked itself on the first blip waited for a person who
-might not return for an hour. Bounded, because the failures that are not
-transient repeat identically.
-
-**A checkpoint writes only its own dates.** `replace_span_assignments` deletes
-by date rather than rebuilding the period, which was quadratic (a thirty-day
-build re-inserted every earlier day thirty times) and lossy: each rewrite
-minted fresh ids, so an `assignment_id` the browser was holding pointed at
-nothing by the time it was used.
-
-**A running job says so, and can be stopped.** `/generate/{id}/run` launches
-a worker and returns; `GET /{id}/progress` is what the browser polls, and it
-carries the counter alone rather than the period and a fresh audit over it.
-Two fields make that poll terminate:
-
-- `heartbeat`, stamped every `GENERATION_HEARTBEAT_SECONDS` by the worker and
-  at every checkpoint. `llm_timeout_seconds` defaults to no limit, so a model
-  that is slow to answer and one that has hung look identical from outside —
-  both are `running` forever. A beat that stops is the difference, and it
-  means the job has lost its worker (a restarted process, a killed thread).
-  `POST /run` adopts such a job and resumes it from the first unfinished day.
-- `cancel_requested`, set by `/generate/{id}/cancel`. Cooperative rather than
-  forceful: a model call in flight cannot be interrupted, so the worker stops
-  at the next day boundary and every finished day is kept. The period is an
-  ordinary draft immediately, and `/run` resumes it later.
-
-**The board stays writable while a job runs**, which is what makes the two
-above matter rather than being merely tidy. A shift the manager places by
-hand on a date that has not been generated yet becomes a pin: it goes into
-the day's `required_assignments`, and `_persisted_generation_rows` keeps it
-with the manager's own source whether or not the model repeats it.
-
-Each daily payload carries legal candidate ids, the previous day's concrete
-assignments, and a fairness tally over the earlier range. Code audits the
-answer and may make one focused repair call. It never loops indefinitely; an
-unresolved problem remains an ordinary schedule warning.
-
-The original `generate()` chunked-period method remains for backward-compatible
-API consumers. The management UI uses only the checkpointed daily flow.
-
-Three properties make the split safe, and each has a test:
-
-- **A day is never divided across two calls.** `_chunks` splits on dates, not
-  on slot count. Half a Tuesday in one request and half in another is how one
-  person ends up on two shifts at once, with neither call able to notice.
-- **Later chunks see earlier ones.** Each is passed `already_scheduled`, and
-  its `fairness` tally is recomputed over the real history *plus* what this
-  run has already placed. A scheduler blind to week one hands week two to the
-  same people — turning the fairness feature into the unfairness it exists to
-  prevent.
-- **A date is exactly one primary call.** It gets at most one additional call
-  when deterministic validation supplies a concrete repair request.
-
-Assignments are bounded against the whole grid rather than the current chunk,
-so a model naming a date from next week is not penalised for answering early.
-On a duplicate the earlier chunk wins: the later call is the one working from
-incomplete information, and it was told what was already scheduled.
-
-The audit still sees the merged period, never the chunks — a run of
-consecutive shifts crossing a boundary is caught exactly as one inside a week
-is.
-
-## `changes.py`
-
-The step-4 loop: *"Dana's sick Thursday."*
+The step-4 loop: *"Dana's sick Thursday."* `changes/proposal.py` is what
+the manager chat builds every change plan with; `ChangeAgent` (`/propose`)
+is the older one-shot caller of the same gates.
 
 1. Parse the request.
 2. **If the boss gave no reason, ask for one.** Required ([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)).
@@ -334,50 +199,18 @@ hour. `rotation_presence` is deliberately **not** derived: "ב is out on
 Tuesdays" says nothing about א.
 
 Read by four callers, which is the point of it being one module:
-`scheduler.py` turns it into hard availability rows and refuses assignments
-that contradict them, `audit.py` warns about a schedule that already drifted
-(`cross_rotation`), `placement.py` tells the board whose closure a slot is
-before the manager clicks, and `changes.py` hands the same schedule to the
-model so a spoken change sees the rotation too.
+`scheduler/` turns it into hard availability rows and the solver never
+places a row that contradicts them, `audit.py` warns about a schedule that
+already drifted (`cross_rotation`), `placement.py` tells the board whose
+closure a slot is before the manager clicks, and the chat hands the same
+closures to the model so a spoken change sees the rotation too.
 
-## `briefing.py` — the agent speaking first
+## `tools/`, `planner/`, `intent/` — answering a question
 
-The only model call in this package that answers nothing the manager said. It
-reads the current state and says what it noticed
-([D15](../../../docs/DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)).
-
-Four triggers, each changing what is worth saying: `opened`, `changed`,
-`publishing`, `periodic`.
-
-**It returns exactly three keys — `headline`, `items`, `quiet`.** That is the
-guard, not a coincidence: there is no field a confirmation could read, so
-there is no path from a briefing to `apply`. An item's `suggestion` is a
-sentence the manager may *send*; the ordinary propose-then-confirm loop then
-runs unchanged. An agent that acted on its own conclusion would reverse D3,
-D8 and D12 together — being proactive here means *initiating the
-conversation*, never skipping it.
-
-**The model is never asked to count.** `warnings` and `fairness` arrive
-already computed by `audit.py` and are handed over as facts to reason about.
-Speaking first does not move the D3 line about which side does arithmetic.
-
-`quiet` is decided in code from whether there are items, not taken from the
-model's own label — the two disagreeing would render an all-clear above a
-list of problems. Silence is the common case by design: an agent that finds
-something urgent every time gets tuned out, which is the only way this
-feature actually fails.
-
-`schedule_service.brief()` swallows failures and returns quiet. This sits
-beside a calendar that must render regardless of what the model is doing.
-
-## `tools.py`, `planner.py`, `intent.py` — answering a question
-
-The multi-step half of the agent
+How the chat answers
 ([D19](../../../docs/DECISIONS.md#d19--the-agent-answers-with-tools-asking-and-changing-stay-separate)).
-`ChangeAgent` puts the whole period in front of the model and asks for
-operations, which works for one absence and stops working for *"מי יכול
-להחליף את יוסי בסופ״ש"* — four countable things resolved in order, which is
-what D3 already assigns to code.
+*"מי יכול להחליף את יוסי בסופ״ש"* is four countable things resolved in
+order, which is code's job, not the model's.
 
 So the questions are **named**, and each is answered by arithmetic:
 `team_overview`, `read_period`, `employee_state`, `coverage_gaps`, `validate_placement`,
@@ -386,9 +219,8 @@ which to call and writes the Hebrew around the result; it never supplies a numbe
 verdict.
 
 **Nothing in this path writes.** `tools.py` holds a repository and reads from
-it. `planner.py` holds the *tools*, not the repository. The response schema
-has no operation in it, so there is nothing `apply` could consume — the same
-guard `briefing.py` has.
+it. The chat's answers carry no operation; only a pending plan, applied
+through its own endpoint, writes.
 
 **The agent may not claim a placement is valid unless a tool said so.**
 `find_replacements` re-validates every candidate through `placement.py` and
@@ -396,16 +228,17 @@ keeps only the clean ones. That is a constraint on *assertion*, not a veto:
 `validate_placement` still returns `blocking: False`, and the manager may
 still place somebody it warns about (D3).
 
-`intent.py` is the floor. With no model configured — the deployment default
-here — it reads the sentence by matching against the workspace's own roster
-and shift vocabulary, runs the same tools, and renders Hebrew templates.
-Anything it cannot place comes back `unknown` with a list of what it *can*
-answer. **It never guesses**: an agent acting on a misread sentence with no
+`intent/` is the floor. It reads the sentence by matching against the
+workspace's own roster and shift vocabulary; the chat's fast path runs it
+before any model round and, for a replacement question it recognises,
+answers from the same tools with `planner/fallback_answers.py` and spends
+no tokens. Anything it cannot place comes back `unknown` and goes to the
+model. **It never guesses**: an agent acting on a misread sentence with no
 model to blame is worse than one that asks.
 
 **Reading may interpret where writing may not.** A question answered against
 a reasonable reading of a loose sentence costs a re-ask and moves nothing, so
-the planner asks only when a guess would change *what it reports*. The bar is
+the chat asks only when a guess would change *what it reports*. The bar is
 not "is a field missing" but "would guessing change the answer". A failed
 tool is never a clarification: `found: false` is a complete answer, an error
 is an error, and only *several matches* is a question for the manager.
@@ -423,10 +256,11 @@ warning diff keys on code/person/date/shift rather than on the message,
 because `_over_hours` writes its running total into the sentence and a
 warning that merely got worse would otherwise read as a new one.
 
-Deliberately not `propose()`: a proposal is an answer with a confirm button,
-and a manager thinking out loud has not asked for one. Approving a simulation
-is an ordinary `apply()` with their reason — there is no dedicated endpoint,
-because a second write path is how a confirmation step gets routed around.
+The chat's `simulate_changes` tool reads it through
+`ScheduleService.simulate`. Deliberately not a plan: a manager thinking out
+loud has not asked for a confirm button. Acting on a simulation is an
+ordinary plan the manager approves — there is no dedicated write path,
+because a second one is how a confirmation step gets routed around.
 
 ## `audit.py` — the advisory checker
 
@@ -441,9 +275,11 @@ Recomputes the countable facts and returns warnings:
 - unfilled slots
 
 Returns a list of warnings. It does **not** mutate a schedule, reject one, or
-override the agent. If you find yourself giving it veto power, re-read
-[D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-) — the
-boss chose this shape knowingly, including its tradeoff with D1.
+override the manager. The solver is built from the same thresholds
+(`roster.policy()`), so a solved schedule is clean by this measure; a
+hand-edited one may not be, and that is the manager's call. If you find
+yourself giving the audit veto power, re-read
+[D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-) and D34.
 
 On-call shifts may weight differently — read the weighting from the profile's
 shift vocabulary rather than assuming.
@@ -451,18 +287,16 @@ shift vocabulary rather than assuming.
 `fairness()` and `load_history()` answer two different questions from the same
 arithmetic. `fairness()` compares hours inside the period on screen;
 `load_history()` looks *backwards* across past periods at who has carried the
-nights and the weekends, and is what `scheduler.py` reasons from when deciding
-whose turn the next one is. Both keep people with nothing on the roster — a
+nights and the weekends. (The solver does its own counting over the fixed
+rows it is handed, the last two weeks included.) Both keep people with nothing on the roster — a
 zero is the most useful row in either table, and an absent row reads as missing
 data. Neither decides anything.
 
 **Night counts use `audit.roster.is_night`.** Declared nights/overnight/on-call
 shifts count, as do shifts crossing midnight or starting from 22:00 through
 05:59. Effective slot hours take precedence over vocabulary hours. Names are
-never matched: the editor records times without requiring a night flag.
-Scheduling requests one repair for an avoidable night gap, including safe
-day/night exchanges. Current-period nights take priority, history breaks ties,
-and current hours follow; the model still chooses the assignments.
+never matched: the editor records times without requiring a night flag. The
+solver spreads nights with the same `is_night`, priced above hours.
 
 **Pass `slots` when you have them.** `audit()` takes the schedule's slot grid as
 well as the assignments. A slot with nobody on it leaves no row among the
@@ -494,10 +328,12 @@ imported rather than restated:
 This file is the easiest thing here to get exactly right and the easiest to test.
 Build it early and table-drive its tests.
 
-## `schedule_service.py`
+## `schedule_service/`
 
-Owns what `scheduler.py`, `changes.py` and `audit.py` deliberately do not: the
-repository, and the order things happen in.
+Owns what `scheduler/`, `solver/`, `changes/` and `audit/` deliberately do
+not: the repository, and the order things happen in — opening periods,
+generation jobs, the manual path, propose/apply, publish, constraints,
+preferences, statistics and the export.
 
 Two shapes are load-bearing:
 
@@ -533,15 +369,16 @@ means it runs and nobody is on it. Conflating them would report a gap that
 does not exist.
 
 **A message for the team is not here.** That is the agent's job, answered in
-`changes.py` as `reply` with no operations.
+the manager chat as a reply with no operations.
 
 ## Rules
 
 - `audit.py` warns; it never blocks, rewrites, or vetoes.
 - `audit.py` contains no LLM call, ever.
 - `tools.py`, `intent.py` and `simulate.py` contain no LLM call, ever.
-- Nothing on the answering or simulating path writes. `tools.py` reads;
-  `planner.py` and `simulate.py` are handed no repository to write with.
+- Nothing on the answering or simulating path writes. `tools/` reads;
+  `planner/` and `simulate/` are handed no repository to write with.
+- `solver/` contains no LLM call, and the model never assigns anybody (D34).
 - An answer carries no operations, and a simulation is approved through the
   ordinary `apply()` with the manager's reason — never through a shortcut.
 - Shift names come from unit setup — never hardcoded.

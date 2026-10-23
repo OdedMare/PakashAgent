@@ -1,58 +1,17 @@
-"""Answering and imagining: read-only tools, and simulations (D19/D20)."""
+"""Imagining: what a set of changes would do (D20)."""
 
 from typing import List, Optional
 
 from app.bl.simulate import simulate as simulate_operations
 from app.bl.schedule_service.context import ScheduleContext
-from app.bl.schedule_service.rows import text
-from app.dal.repository.schedules import PREFERENCE_ACTIVE
 
 
-class QuestionService:
-    """Questions about the schedule, answered without a path to a write.
+class Simulator:
+    """What a set of changes would do, computed in memory. The manager
+    chat's `simulate_changes` tool reads it; nothing here writes."""
 
-    The planner holds the tools, not the repository, and its response schema
-    contains no operation -- there is nothing an `apply()` could read out of
-    an answer. It works with no model configured: the planner falls back to
-    `bl/intent.py` over the same tools.
-    """
-
-    def __init__(self, context: ScheduleContext, planner, tools):
+    def __init__(self, context: ScheduleContext):
         self._context = context
-        self._repository = context.repository
-        self._planner = planner
-        self._tools = tools
-
-    def ask(
-        self,
-        team_id: str,
-        request: str,
-        schedule_id: Optional[str] = None,
-        pending_request: str = "",
-    ) -> dict:
-        schedule = self._context.schedule_or_current(team_id, schedule_id)
-        answer = self._planner.answer(
-            team_id,
-            request,
-            profile=self._context.profile(team_id),
-            period=schedule,
-            preferences=self._repository.preferences(
-                team_id, status=PREFERENCE_ACTIVE
-            ) if hasattr(self._repository, "preferences") else [],
-            pending_request=pending_request,
-        )
-        answer["schedule_id"] = text((schedule or {}).get("id"))
-        return answer
-
-    def run_tool(
-        self, team_id: str, name: str, arguments: Optional[dict] = None
-    ) -> dict:
-        """One named tool, run directly. Reads only.
-
-        Routing the board's buttons through the same tool the agent uses is
-        what keeps the button and the agent from giving different answers.
-        """
-        return self._tools.run(team_id, name, arguments)
 
     def simulate(
         self,

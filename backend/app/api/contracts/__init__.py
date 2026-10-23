@@ -14,7 +14,6 @@ from app.api.contracts.admin import (  # noqa: F401
 )
 from app.api.contracts.settings import (  # noqa: F401
     ModelsProbeRequest,
-    RedisProbeRequest,
 )
 from app.api.contracts.workspace import (  # noqa: F401
     CreateTeamRequest,
@@ -51,9 +50,6 @@ from app.api.contracts.profile import (  # noqa: F401
     ProfileUpdate,
 )
 from app.api.contracts.briefing import (  # noqa: F401
-    Briefing,
-    BriefingItem,
-    BriefingRequest,
     CopilotPermissionUpdate,
 )
 from app.api.contracts.generation import (  # noqa: F401
@@ -96,19 +92,6 @@ from app.api.contracts.employee import (  # noqa: F401
     RequestDecision,
     SwapAnswer,
     SwapProposal,
-)
-from app.api.contracts.agent import (  # noqa: F401
-    AgentAnswer,
-    AgentStep,
-    AskRequest,
-    CoverageImpact,
-    SimulateRequest,
-    Simulation,
-    SkippedOperation,
-    ToolRequest,
-    WorkloadImpact,
-    Option,
-    Question,
 )
 from app.api.contracts.preferences import (  # noqa: F401
     Preference,

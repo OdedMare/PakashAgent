@@ -1,4 +1,4 @@
-"""Row and roster helpers for the deterministic day filler."""
+"""Row and roster helpers for the solver."""
 
 from typing import Any, List, Optional
 

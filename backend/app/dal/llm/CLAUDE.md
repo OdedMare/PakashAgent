@@ -1,8 +1,11 @@
 # LLM client (`app/dal/llm/`)
 
-**Ported from AiSummryIO essentially unchanged.** An OpenAI-compatible JSON-mode
-client. Default target is a local model through Ollama, but the same code works
-against OpenAI itself, vLLM, Groq, and other compatible gateways.
+Ported from AiSummryIO and extended. An OpenAI-compatible JSON-mode client.
+The default target is a local model through Ollama, but the same code works
+against OpenAI itself, vLLM, Groq, and other compatible gateways. It is used
+for language only — translating a build's sentences, the manager chat, the
+employee assistant, learning from corrections. **No schedule is assigned
+through it** (D34).
 
 Model, API key, and base URL are read from the runtime settings store on **every
 call**, so a change saved in the UI applies immediately without a restart. All
@@ -18,9 +21,8 @@ three are per role, so different kinds of work can run on different providers.
 | `message_merger.py` | Folds the system prompt into the user turn |
 | `model_id_extractor.py` | Pulls model IDs out of a `/models` response |
 | `model_roles.py` | Flow → role → model id, endpoint and API key, and the fallbacks |
-| `model_slots.py` | `ModelSlots` (one process) and `PostgresModelSlots` (advisory locks) — the concurrency limit without Redis |
-| `redis_slots.py` | `RedisModelSlots` — the same limit as a priority-ordered queue in Redis, used whenever Redis is reachable (D33) |
-| `tracing.py` | Opik tracing — one trace per call, one LLM span per completion; inert without `OPIK_API_KEY` |
+| `model_slots.py` | `ModelSlots` (one process) and `PostgresModelSlots` (advisory locks) — the concurrency limit across every process (D35) |
+| `strict_schema.py` | A caller's schema in strict-mode form, and the reply read back in the caller's shape |
 
 Each helper is separate because each handles a different failure of
 "OpenAI-compatible" servers that are only approximately compatible.
@@ -32,13 +34,18 @@ with token counts when the server reports them.
 
 Two robustness layers stack:
 
-**1. The degradation ladder** (`_attempts`) — tried in order, dropping to the next
+**1. The degradation ladder** (`ladder.attempts`) — tried in order, dropping to the next
 on `BadRequestError`:
 
-1. `response_format: json_schema` with the caller's schema
-2. `response_format: json_object` (plain JSON mode)
-3. no `response_format` at all
-4. same, but with the system prompt merged into the user turn — some local
+1. `response_format: json_schema` with `strict: true`, when the schema has a
+   strict form (`strict_schema.py`): every property required, the optional
+   ones nullable, no extra keys. The server decodes against it; the nulls
+   are dropped from the reply so callers see the shape they always did. A
+   schema with a free-form object has no strict form and skips this rung.
+2. `response_format: json_schema` with the caller's schema
+3. `response_format: json_object` (plain JSON mode)
+4. no `response_format` at all
+5. same, but with the system prompt merged into the user turn — some local
    deployments reject a `system` role outright
 
 Only a `BadRequestError` advances the ladder; any other exception becomes an
@@ -96,26 +103,21 @@ out, one request could hold a worker for the better part of an hour. The
 deadline is passed into `create_with_retry`, which starts no attempt (and
 takes no sleep) that would cross it.
 
-**The `scheduler` flow has no read timeout and no budget at all.**
-`read_timeout_for()` returns 0 for it whatever `llm_timeout_seconds` says, and
-`_budget_seconds()` returns `None` above that.
+**The `scheduler` flow does not honour `llm_timeout_seconds`.**
+`read_timeout_for()` gives it its own ceiling instead —
+`_SCHEDULER_READ_CEILING_SECONDS` (15 minutes), or the setting if that is
+larger — and `_budget_seconds()` sizes its budget to let that one attempt
+finish.
 
-This is the one place a configured setting is deliberately not honoured, so
-the reason matters. `llm_timeout_seconds` is a single number covering calls
-that are not comparable: a briefing is a short prompt to the *fast* model and
-answers in seconds, while one day of scheduling is a large prompt to the
-*advanced* model and can take minutes on the hardware these deployments run
-on. A value chosen so the settings panel feels responsive is, for the
-scheduler, a ceiling below the real answer time — and such a ceiling is not a
-safety net, it is a guarantee of failure. The observed shape of it in
-production was exactly that: briefings kept working while every build died on
-`httpcore.ReadTimeout` with the model server still generating an answer
-nobody was listening for.
-
-A read ceiling existed to stop one request holding a browser connection open.
-Generation no longer holds one — it is a background job that checkpoints every
-date, the browser polls short reads, and the manager has a stop button — so
-the protection is obsolete for this flow and only its cost remained.
+This is the one place a configured setting is deliberately not honoured.
+`scheduler` is now the build's translation step (the `DirectiveAgent`), a
+large prompt to the *advanced* model, while most other calls are short; a
+timeout chosen so the chat feels responsive would cut translations off
+mid-answer. It is bounded rather than unlimited because a call the server
+never answers would otherwise hold its model slot forever, and the
+manager's stop button does not interrupt an HTTP read. A translation that
+times out does not fail the build: the solver builds without it and the
+notes say so.
 
 Connecting stays bounded for *every* flow (`_CONNECT_TIMEOUT_SECONDS`): a
 handshake that never completes is an unreachable server, not a slow one, and
@@ -136,9 +138,9 @@ never share a client or one would authenticate as the other.
 
 | Role | Model setting | URL setting | Key setting | Flows |
 |---|---|---|---|---|
-| `advanced` | `llm_model_advanced` | `llm_base_url_advanced` | `llm_api_key_advanced` | `scheduler` |
+| `advanced` | `llm_model_advanced` | `llm_base_url_advanced` | `llm_api_key_advanced` | `scheduler` (translating a build's sentences) |
 | `default` | `llm_model_default` | `llm_base_url_default` | `llm_api_key_default` | `changes`, `planner`, `learn`, and anything unmapped |
-| `fast` | `llm_model_fast` | `llm_base_url_fast` | `llm_api_key_fast` | `briefing` |
+| `fast` | `llm_model_fast` | `llm_base_url_fast` | `llm_api_key_fast` | (no active flow) |
 
 **A key travels with the URL it authenticates, not with the process.** One
 shared key stops being right the moment two roles sit on two providers: it is
@@ -156,15 +158,15 @@ what picks the role, so a caller names itself once. A second argument would be
 a second thing to keep in step with the first. `role=` and `model=` override
 it for a one-off; nothing in `bl/` needs either.
 
-`scheduler` is the one advanced flow — it reasons over a whole period of
-slots, people and rules at once, and it is the call the product is judged on.
-`briefing` is a few sentences over facts `audit.py` already computed.
+`scheduler` is the one advanced flow: the `DirectiveAgent` translating a
+build's rules, policies and instructions into requests the solver honours
+(D34). It no longer assigns anybody.
 
 **An unset role falls back to `llm_model`.** That single `or` is the whole
 backward-compatibility story: a deployment that never opens the new settings
 sends exactly what it sent before, and a `runtime-settings.json` written
 before these fields existed loads unchanged. Roles ship empty for the same
-reason `_attempts` sends no `repetition_penalty` at 0 — a default here would
+reason `ladder.attempts` sends no `repetition_penalty` at 0 — a default here would
 be a hardcoded model name, and which models exist is the server's business.
 
 **The model is resolved per call**, immediately before the request, so a
@@ -200,35 +202,18 @@ be ready and the backoff is a guess.
 
 ## Concurrency
 
-**With Redis configured, `RedisModelSlots` holds the line** (D33):
-`main.py` and `worker.py` call `budgets.share_slots(hub)`, and every call
-takes a ticket in one Redis queue ordered by priority, then arrival — so a
-manager's chat goes ahead of a waiting build day. Same contract as below:
-the limit is read live and each team has one call in flight. Holders renew
-a 30-second lease, so a killed process frees its slot within a lease. When
-Redis is not configured or stops answering, the call falls back to:
-
 `PostgresModelSlots` bounds in-flight completions across the API and every
-worker with session advisory locks. `llm_max_concurrency` is read on each
-acquisition, so a saved value applies to the next call without a restart.
-Each team also holds one team lock, preventing one workspace from occupying
-all global slots. A dead process loses both locks with its database session.
+worker with session advisory locks (D35). `llm_max_concurrency` is read on
+each acquisition, so a saved value applies to the next call without a
+restart. Each team also holds one team lock, preventing one workspace from
+occupying all global slots. A dead process loses both locks with its
+database session. Callers without database settings (small adapters and
+unit tests) retain the priority-aware process-local `ModelSlots`.
 
-Callers without database settings (small adapters and unit tests) retain the
-priority-aware process-local `ModelSlots` fallback.
-
-The right value depends entirely on the server, which is why there is no good
-default:
-
-- **A continuously-batching server (vLLM, TGI)** does its own scheduling and is
-  *starved* by a low limit — a request held back here is a request it cannot
-  put in a batch. 16+ suits those.
-- **A one-request-at-a-time server (Ollama's default)** is only thrashed by a
-  high one. 1-2 keeps latency honest.
-
-The shipped default is 1 because the shipped endpoint is Ollama. Deployments
-using a continuously-batching server should raise it explicitly; the per-team
-quota remains one concurrent completion.
+The default is 4: a hosted API or a continuously-batching server (vLLM,
+TGI) takes several calls at once and is *starved* by a low limit. A
+one-request-at-a-time local server (Ollama's default) is only thrashed by a
+high one and should be set to 1. The per-team quota remains one call.
 
 ## Telemetry
 
@@ -242,7 +227,7 @@ tell a misrouted flow from a misconfigured role, which is the question these
 lines get asked once more than one model is in play.
 
 `flow` is what the `flow=` argument on `complete_json` exists for —
-`scheduler`, `changes`, `briefing`. Without it every measurement
+`scheduler`, `changes`, `learn`. Without it every measurement
 reads "some model call", and the first question anyone asks of the numbers is
 which feature is the expensive one.
 
@@ -260,22 +245,6 @@ The failed path is logged too, marked `FAILED`: a call that spent tokens and
 then failed is exactly the one worth seeing. `retries` is broken out because a
 call that silently took two attempts costs double and is identical to a clean
 one in every other metric.
-
-## Opik tracing
-
-`tracing.py` is the one place the prompt and reply leave this process
-([D30](../../../../docs/DECISIONS.md#d30--model-calls-are-traced-to-opik-prompts-and-replies-included)).
-`init(settings)` runs once in `main.py` and `worker.py`; with no
-`OPIK_API_KEY` it does nothing and every other function is a pass-through.
-
-- `call(flow, role, model)` wraps `_until_json` in one trace named by the
-  flow, tagged with the flow and role. An exception closes it with the error.
-- `wrap(client)` is applied in `_client_for`, so the cached client records
-  every `chat.completions.create` as an LLM span under that trace — the
-  ladder's rungs and both kinds of retry each appear on their own.
-- `flush()` runs on API shutdown and when the worker stops; Opik batches.
-
-Tests replace `_client_for` with a fake, so they never touch Opik.
 
 ## Connection reuse
 
@@ -307,9 +276,7 @@ first one's client, silently billing and authenticating as the wrong account.
 
 - Errors leaving this package are `AgentError` in Hebrew.
 - Never log API keys, or full prompts containing employee personal details.
-  Opik tracing is the one exception, and only `tracing.py` may do it (D30).
-- **Tracing never fails a call.** Every Opik error is caught and logged.
-- Adding a rung to the ladder means adding it to `_attempts` — do not scatter
+- Adding a rung to the ladder means adding it to `ladder.attempts` — do not scatter
   fallback logic through `_complete`.
 - Routing is `model_roles.py` and nowhere else. A flow gets a model by being
   in the table, not by a branch at the call site.

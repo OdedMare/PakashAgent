@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.bl.deterministic_scheduler import generate_span, unsupported_reason
+from app.bl.solver import generate_span
 from app.bl.scheduler.directives import read_translation, semantic_sources
 from app.bl.scheduler.scheduler import Scheduler
 from app.bl.schedule_requests import read_requests
@@ -89,11 +89,10 @@ def test_hard_not_together_never_shares_a_shift():
     assert len(result["assignments"]) == 14
 
 
-def test_soft_availability_is_weighed_in_code_instead_of_sent_to_ai():
+def test_soft_availability_is_weighed_by_the_solver_not_translated():
     availability = [{"employee": "דנה", "date": SUNDAY, "shift": MORNING,
                      "available": False, "is_hard": False}]
 
-    assert unsupported_reason(_profile(), availability) == ""
     assert semantic_sources(_profile(), availability) == []
     result = generate_span(_profile(people=("דנה", "יוסי")), SUNDAY, SUNDAY,
                            availability=availability)
@@ -159,7 +158,7 @@ def test_auto_translates_a_soft_wish_and_code_honours_it():
 
     result = Scheduler(llm).generate_span(
         _profile(people=("דנה", "יוסי")), SUNDAY, SUNDAY,
-        instructions="עדיף שדנה לא תעבוד בבוקר", engine="auto",
+        instructions="עדיף שדנה לא תעבוד בבוקר",
     )
 
     assert _who(result) == ["יוסי"]

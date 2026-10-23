@@ -1,21 +1,16 @@
-"""`read_partial`: keep what translated, when what did not is only a wish.
-
-`read_translation` is all or nothing, and it is right to be for anything
-binding: a "must" code cannot honour has to reach the full scheduler. But
-one vague wish ("עדיף לשאול את יוסי לפני רון") used to send the whole
-period there too. Here a source is either fully honoured or reported:
+"""Each source's fate on its own: fully honoured, or left out whole.
 
 - every directive and request is validated on its own, and a source whose
   items all pass is kept;
 - a source the model left `unresolved`, did not cover, or covered with an
-  item that failed is *left out*, and none of its items are used;
-- if any left-out source is binding, there is no partial answer (None);
-  otherwise the rest is returned with the left-out sources listed, so the
-  schedule can say plainly which wishes it was built without.
+  item that failed is *left out*, and none of its items are used.
 
-`per_source` is the first half on its own, because a translation that is
-kept for later builds (`bl/compiled_sources/`) is stored one source at a
-time; `assemble` turns any set of outcomes back into what code builds with.
+The solver builds with what was kept, and every left-out source is listed
+so the schedule can say plainly which sentences it was built without
+(D34). `per_source` is the first half on its own, because a translation
+that is kept for later builds (`bl/compiled_sources/`) is stored one source
+at a time; `assemble` turns any set of outcomes back into what code builds
+with.
 """
 
 from typing import Any, Dict, List, Optional
@@ -23,24 +18,11 @@ from typing import Any, Dict, List, Optional
 from app.bl.schedule_requests import read_requests
 from app.bl.scheduler.directives import translated_row
 from app.bl.scheduler.slots import build_slots
-from app.bl.scheduler.span_audit import usage_of
 from app.bl.shared import text
 
 _NOT_COVERED = "לא תורגם"
 _FAILED = "התרגום לא עבר את הבדיקה בקוד"
 _MAX_TEXT = 200
-
-
-def read_partial(answer: Any, sources: List[dict], profile: dict,
-                 starts_on: str, ends_on: str) -> Optional[dict]:
-    outcomes = per_source(answer, sources, profile, starts_on, ends_on)
-    if outcomes is None:
-        return None
-    by_id = {row["id"]: row for row in sources}
-    if any("left" in outcome and by_id[source_id].get("binding", True)
-           for source_id, outcome in outcomes.items()):
-        return None
-    return assemble(outcomes, by_id, usage_of(answer))
 
 
 def per_source(answer: Any, sources: List[dict], profile: dict,
@@ -126,4 +108,4 @@ def _rows(value: Any) -> List[dict]:
     return [row for row in value if isinstance(row, dict)] if isinstance(value, list) else []
 
 
-__all__ = ["assemble", "per_source", "read_partial"]
+__all__ = ["assemble", "per_source"]

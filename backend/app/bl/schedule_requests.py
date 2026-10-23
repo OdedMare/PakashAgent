@@ -31,8 +31,7 @@ must be on the roster and every shift in the vocabulary (D9), so a request
 can never introduce a person or shift nobody declared.
 
 Its own module because both `scheduler/directives.py` (the translation
-schema) and `deterministic_scheduler/` (honouring) read it, and those two
-packages already import each other.
+schema) and `solver/` (honouring) read it.
 """
 
 import datetime

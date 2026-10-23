@@ -121,52 +121,9 @@ export interface RuntimeSettings {
   llm_verify_ssl: boolean;
   llm_base_url: string | null;
   openai_api_key: string;
-  schedule_generation_mode: "day" | "week";
-  schedule_generation_engine: "auto" | "ai" | "code";
-  /** Shared state across processes. Empty URL = off; the password arrives
-   *  masked like every other secret. */
-  redis_url: string;
-  /** Explicit parts written over the URL's own. Empty = the URL's; with
-   *  the URL empty, a host alone turns Redis on. */
-  redis_host: string;
-  redis_port: number | null;
-  redis_username: string;
-  redis_password: string;
-  redis_key_prefix: string;
-}
-
-/** What one process is using right now (`RedisHub.status()`). */
-export interface RedisLiveStatus {
-  configured: boolean;
-  connected: boolean;
-  url: string;
-  prefix: string;
-  error: string;
-}
-
-/** `POST /api/settings/redis`: a connection tested, and what is in it. */
-export interface RedisReport {
-  configured: boolean;
-  connected: boolean;
-  error: string;
-  url: string;
-  live: RedisLiveStatus | null;
-  server?: {
-    version: string;
-    mode: string;
-    uptime_seconds: number;
-    used_memory: string;
-    connected_clients: number;
-    keys: number;
-    latency_ms: number;
-  };
-  app?: {
-    keys: number;
-    model_calls: number;
-    model_waiting: number;
-    locked_accounts: number;
-    event_listeners: number;
-  };
+  /** The constraint solver: seconds per solve and parallel workers. */
+  solver_time_limit_seconds: number;
+  solver_workers: number;
 }
 
 /** Who the current visitor is inside a workspace.
@@ -259,7 +216,6 @@ export interface AdminOverview {
   };
   database: "ok" | "error";
   model: Record<string, string>;
-  redis?: RedisLiveStatus | null;
 }
 
 /** The signed-in workspace.
@@ -372,16 +328,15 @@ export interface RequiredAssignment {
 /** How an assignment got into the schedule (D18). */
 export type AssignmentSource = "agent" | "manager" | "imported";
 
-/** One checkpoint of a build: a single date, or — in week mode — a span of up
- *  to seven. `date` is its first date whatever the width, so everything that
- *  already read this field keeps working. */
+/** One checkpoint of a build: a span of up to four weeks the solver builds
+ *  in one solve (D34). `date` is its first date. */
 export interface GenerationDay {
   date: string;
   /** The span's last date. Equal to `date` on a single-day checkpoint, and
    *  absent on a job opened before spans existed. */
   through?: string;
   /** Every date this checkpoint covers. Progress is counted in these rather
-   *  than in checkpoints, so a week-wide build still fills the bar by days. */
+   *  than in checkpoints, so the bar still fills by days. */
   dates?: string[];
   status: "pending" | "running" | "complete" | "failed";
   attempts: number;
@@ -398,20 +353,16 @@ export interface GenerationDay {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
-    /** Engine that actually produced this checkpoint. */
-    engine?: "ai" | "code" | "hybrid";
-    /** Logical model requests, including failed attempts. */
+    /** `solver`, or `hybrid` when sentences were translated by the model
+     *  first. Older checkpoints may still say `ai` or `code`. */
+    engine?: string;
+    /** The solver's verdict: `optimal`, or `feasible` at the time limit. */
+    solver_status?: string;
+    /** Model requests spent translating the manager's sentences. */
     model_calls?: number;
-    failed_calls?: number;
-    prompt_chars?: number;
-    schema_chars?: number;
-    reply_chars?: number;
-    split_count?: number;
-    repair_dates?: string[];
-    repair_error?: string;
-    repair_improved?: boolean;
+    unresolved_sources?: number;
+    compiled_hits?: number;
     quality?: GenerationQuality;
-    quality_before?: GenerationQuality;
   };
 }
 
@@ -434,13 +385,6 @@ export interface GenerationProgress {
   completed_days: number;
   failed_days: number;
   days: GenerationDay[];
-  /** How wide one model call is on this job: `"day"` or `"week"`, chosen in
-   *  the settings panel and stamped when the period was opened. Empty on a
-   *  job opened before the setting existed, which reads as `"day"`. */
-  mode?: "" | "day" | "week";
-  /** Requested engine. In automatic mode each completed day's metrics names
-   *  whether code or AI actually produced it. */
-  engine?: "" | "auto" | "ai" | "code";
   /** When a worker last said it was still on this job, UTC ISO-8601.
    *
    *  What separates a slow model from a hung one: with no LLM timeout
