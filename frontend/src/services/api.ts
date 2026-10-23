@@ -2,7 +2,6 @@ import type {
   AdminOverview,
   AdminTeam,
   AdminTeamDetail,
-  AssistantReply,
   AgentAnswer,
   Briefing,
   BriefingTrigger,
@@ -1039,23 +1038,6 @@ export function withdrawConstraintRequest(
  *  model call, so this is cheap to ask on a screen that shows it. */
 export function learnFromChanges(): Promise<ChangeLearning> {
   return request<ChangeLearning>("/api/schedule/history/learn");
-}
-
-/* -- the employee's assistant (D27) ---------------------------------------- */
-
-/** Ask about swaps or one's own week. **Writes nothing.**
- *
- *  The conversation lives in the browser and the last few lines travel with
- *  each question; nothing is stored server-side. Each suggestion was checked
- *  clean by the audit, and offering one goes through `proposeSwap`. */
-export function askAssistant(body: {
-  question: string;
-  history: { role: "employee" | "assistant"; text: string }[];
-}): Promise<AssistantReply> {
-  return request<AssistantReply>("/api/employee/assistant", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
 }
 
 /* -- swaps, employee side --------------------------------------------------- */

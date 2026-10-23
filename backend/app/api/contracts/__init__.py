@@ -87,8 +87,6 @@ from app.api.contracts.placement import (  # noqa: F401
     UnassignRequest,
 )
 from app.api.contracts.employee import (  # noqa: F401
-    AssistantQuestion,
-    AssistantTurn,
     ClaimRequest,
     ConstraintSubmission,
     EmployeeLoginRequest,

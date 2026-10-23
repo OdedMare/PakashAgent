@@ -216,13 +216,6 @@ Redis (אופציונלי, common/redis_hub.py) ◄── API ו-worker
 2. העמית עונה: `POST /api/employee/swaps/{id}/answer`.
 3. המנהל ב-`SwapInbox.tsx` מאשר עם סיבה (`/api/schedule/swaps/{id}/approve`), וזה מפעיל את `schedule_service.apply` עם `OP_SWAP` ונרשם ביומן.
 
-### 7.4 עוזר העובד 🤖
-1. `AssistantChat.tsx` שולח `POST /api/employee/assistant`.
-2. `swap_options.py` מחשב בקוד אילו החלפות נקיות, על ידי audit מחדש לכל החלפה.
-3. קריאת LLM אחת (`employee_assistant.md`), והמודל רק בוחר מזהים מתוך הרשימה. בלי מודל יש fallback.
-4. לא נכתב כלום, ואילוצים של עמיתים לא מגיעים למודל.
-5. **הקריאה רצה בתוך תהליך ה-API ולא ב-worker.**
-
 ---
 
 ## 8. סטטיסטיקות ⚙️
@@ -268,7 +261,6 @@ Redis (אופציונלי, common/redis_hub.py) ◄── API ו-worker
 | יצירה (ai) | GenerateDialog / צ'אט | advanced | `scheduler.md` | 1–2 לכל יום או שבוע | worker |
 | תרגום הנחיות (auto, `bl/directive_agent/`) | GenerateDialog / צ'אט | advanced | `scheduler_directives.md` | 1–4 לכל span (לולאת כלים), רק למקורות שלא ב-cache | worker |
 | תרגום קבוע (`bl/compiled_sources/`) | שמירת פרופיל או העדפה | advanced | `scheduler_directives.md` (`mode: compile`) | 1–4 לכל שמירה | worker |
-| עוזר עובד | AssistantChat | default | `employee_assistant.md` | 1 | API |
 | למידה משינויים | LearnedFromChanges | default | `learn_changes.md` | 1 | API |
 | 💤 propose | – | default | `changes.md` | 1 | API |
 | 💤 ask | – | default | `planner.md` | עד 3 | API |
@@ -351,7 +343,7 @@ Redis (אופציונלי, common/redis_hub.py) ◄── API ו-worker
 | **Briefing** (`/schedule/brief`) | ה-route ב-`routers/schedules/agent.py`, `briefManager`, `bl/briefing.py`, `prompts/briefing.md`, `BriefingService` ב-`speaking.py` | `WorkbookExporter` באותו קובץ (`speaking.py`) משמש לייצוא. ב-`contracts/briefing.py` יש גם את `CopilotPermissionUpdate`, אז מוחקים רק את `Briefing`, `BriefingItem` ו-`BriefingRequest` | `test_briefing.py`, הטסט של briefing ב-`test_prompts.py` |
 | **Ask** (`/schedule/ask`) | ה-route, `askAgent`, `bl/planner/agent.py`, `model_loop.py`, `fallback.py`, `prompts/planner.md`, `QuestionService.ask` | `planner/schema.py` (`chat_schema.py`), `planner/shaping.py` (`chat_reply.py`), `planner/fallback_answers.py` ו-`trace.py` (`chat_tools.py`). `bl/intent/dates.py` משמש את `chat_contract.py` | `test_planner.py`, החלקים של `PlanningAgent` ב-`test_clarification.py`, ו-`test_intent.py` אם מוחקים גם את `intent/reader.py` |
 | **Propose / apply** (`/schedule/propose`, `/schedule/apply`) | שני ה-routes, `proposeChange`, `applyChange`, `ChangeService.propose`, `prompts/changes.md` והמחלקה `ChangeAgent` | `changes/proposal.py`, `schema.py`, `values.py`, `targets.py`, `questions.py`, `profile_ops.py` והקבועים `OP_*` (הצ'אט, ההחלפות, `simulate`). `chat_reply.py` מייבא את `_closures_for_model` ו-`_schedule_for_model` מ-`changes/agent.py`, אז קודם מעבירים אותן ל-`changes/values.py`, ורק אחר כך מוחקים את `agent.py`. `ChangeService.apply` נשאר, כי אישור החלפה משתמש בו | `test_change_operations.py`, `test_clarification.py`, וחלק מ-`test_scheduler.py` (בערך שורות 780–900 משתמשות ב-`ChangeAgent`) |
-| **Simulate / tool** (`/schedule/simulate`, `/schedule/tool`) | שני ה-routes, `simulateChange`, `QuestionService.simulate` ו-`run_tool`. אם גם Ask הוסר, אפשר למחוק את כל `answering.py` | כל `bl/simulate/`: `hypothetical.py` משמש את הצ'אט, ההחלפות ו-`swap_options.py`. כל `bl/tools/` (הצ'אט) | `test_simulate.py` נשאר, כי הוא בודק את המודול ולא את ה-route |
+| **Simulate / tool** (`/schedule/simulate`, `/schedule/tool`) | שני ה-routes, `simulateChange`, `QuestionService.simulate` ו-`run_tool`. אם גם Ask הוסר, אפשר למחוק את כל `answering.py` | כל `bl/simulate/`: `hypothetical.py` משמש את הצ'אט וההחלפות. כל `bl/tools/` (הצ'אט) | `test_simulate.py` נשאר, כי הוא בודק את המודול ולא את ה-route |
 | **Generate הישן** (`/generate`, `/generate/{id}/next`) | שני ה-routes ו-`generateScheduleDay` | `Scheduler.generate()` ו-`ChunkedRun`: **לא למחוק בשלב הראשון.** עשרות טסטים ב-`test_scheduler.py` עוברים דרך `generate()`. קודם מעבירים אותם ל-`generate_span()`, ורק אז מוחקים את `generate()`, את `scheduler/planning.py` ואת `builder.generate` | `test_scheduler.py` |
 | **Reads לא בשימוש** (`/constraints/list`, `/history/list`, `/current`, `/requests`, `/identities`, `/swaps`, `/employee/swaps/incoming`) | רק ה-routes | מתודות ה-repository, אם routes אחרים קוראים להן | לבדוק את `test_schedule_api.py`, `test_employee_api.py` ו-`test_swap_api.py` |
 | **Copilot** (אם מצמצמים לתצפיות) | `approve`, `rollback`, `PATCH /permissions/{type}` ו-`CopilotPermissionUpdate` | `scan`, הפריטים בתיבה ו-`dismiss` | `test_copilot.py` |

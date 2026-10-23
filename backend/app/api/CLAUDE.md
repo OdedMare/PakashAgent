@@ -18,7 +18,7 @@ the team scoping.
 | `schedules/` | The management area: read/generate a period — whole, from one day to another (`build_from`/`build_through`), or a run of days inside an existing draft (`/generate/{id}/range/start`) — read every period across a span of dates for the board's two-week and month views (`/between`, capped at 62 days), the stats panel's numbers for a span of dates or one person (`/stats`, boss-only, same cap), open one blank and fill it by hand (D18), take somebody off the roster (`/departure`, with a writing-nothing `/departure/preview` first: end date set, later shifts vacated, name kept), propose and apply changes, constraints, history, plus asking (`/ask`, `/tool`), simulating (`/simulate`) and preferences (D19–D21) |
 | `employees.py` | Roster management |
 | `health.py` | Liveness |
-| `employee/` | The employee's own area: claim an identity, read your own shifts, submit a constraint request or swap, ask the assistant (`/assistant`, read-only, D27) — plus the boss-guarded router that rules on them and `GET /api/schedule/requests/events`, the manager's SSE stream that says an inbox moved (D29) |
+| `employee/` | The employee's own area: claim an identity, read your own shifts, submit a constraint request or swap — plus the boss-guarded router that rules on them and `GET /api/schedule/requests/events`, the manager's SSE stream that says an inbox moved (D29) |
 
 ## The two-step contracts
 

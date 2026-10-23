@@ -79,10 +79,6 @@ uvicorn app.main:app --reload
 - `bl/employee_service/` — identity claims, the personal view, constraint
   requests, and the unread-change mark. Approval is the only thing that writes
   a constraint (D14).
-  `assistant.py` answers an employee's swap questions (D27): which swaps are
-  clean is computed in `swap_options.py` by re-auditing each trade, and the
-  model may only pick from that list by id. It writes nothing, and
-  colleagues' constraints never reach the model.
 - `bl/schedule_service/generation/` — opening a period and running its
   checkpointed job. A job may cover less than its period: `start_generation`
   takes `build_from`/`build_through` (the grid opens whole, the agent is

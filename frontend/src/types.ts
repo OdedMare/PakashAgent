@@ -940,32 +940,6 @@ export interface EmployeeView {
   shifts: Record<string, unknown>[];
 }
 
-/** One shift on either side of a suggested swap. */
-export interface AssistantShift {
-  assignment_id: string;
-  date: string;
-  weekday: string;
-  shift: string;
-}
-
-/** A swap the assistant suggests (D27). **Checked clean in code** — the
- *  model only picks from these by id. Offering it is the ordinary swap
- *  request: the colleague answers, then the manager decides. */
-export interface AssistantSuggestion {
-  id: string;
-  mine: AssistantShift;
-  colleague: string;
-  theirs: AssistantShift;
-  /** The employee's own problems this swap would clear, in plain Hebrew. */
-  fixes: string[];
-}
-
-export interface AssistantReply {
-  answer: string;
-  suggestions: AssistantSuggestion[];
-  used_model: boolean;
-}
-
 /** A change-log entry as the employee sees it — the manager's row plus
  *  whether it has been read yet.
  *

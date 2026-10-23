@@ -804,6 +804,11 @@ writes to the schedule.
 
 ## D27 — Employees ask about swaps; the charts are the manager's *(amends D14)*
 
+> **Update:** the employee chat ("שאלו על החלפות", `POST /api/employee/assistant`)
+> has since been removed. Employees offer swaps only through the swap form
+> under "בקשות והחלפות". The rest of this decision — charts are the
+> manager's, `fairness` stays off `/api/employee/me` — still holds.
+
 The personal area's "הנתונים שלי" tab — hours, shift mix and a comparison
 against every colleague — is gone. Hours per person is the manager's view
 (the stats panel on the board), and `/api/employee/me` no longer carries
