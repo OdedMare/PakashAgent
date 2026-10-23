@@ -18,8 +18,6 @@ Three things joined here that were each built and left unconnected:
 
 import json
 
-import pytest
-
 from app.bl.schedule_service import ScheduleService
 from app.common.errors import AgentError
 from app.dal.repository.schedules import (

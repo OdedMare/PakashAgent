@@ -7,12 +7,11 @@ declared, or a day the rotation already says is not theirs -- never because
 code disagreed with the choice.
 """
 
-import datetime
 from typing import Any, List, Optional
 
 from app.bl.audit import constraint_conflicts
 from app.bl.scheduler.rotation_rows import ROTATION_SOURCES
-from app.bl.scheduler.values import bounded, parse_date
+from app.bl.scheduler.values import bounded
 from app.common.errors import AgentError
 
 PINNED_REASON = "שיבוץ חובה שנבחר על ידי המנהל בעת בניית הסידור"
@@ -168,13 +167,3 @@ def committed_for_model(assignments: List[dict]) -> List[dict]:
         {"employee": row["employee"], "shift": row["shift"], "date": row["date"]}
         for row in assignments
     ]
-
-
-def previous_day(assignments: List[dict], day: str) -> List[dict]:
-    parsed = parse_date(day)
-    if parsed is None:
-        return []
-    yesterday = (parsed - datetime.timedelta(days=1)).isoformat()
-    return committed_for_model(
-        [row for row in assignments if row.get("date") == yesterday]
-    )

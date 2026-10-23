@@ -20,7 +20,6 @@ from app.api.contracts.workspace import (  # noqa: F401
     CreateTeamRequest,
     LoginRequest,
     PasswordChangeRequest,
-    TeamSummary,
     TeamView,
     Workspace,
 )

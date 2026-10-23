@@ -24,7 +24,7 @@ user -- the pub/sub listener -- can tell its connection is stale.
 import logging
 import threading
 import time
-from typing import Callable, Optional
+from typing import Callable
 from urllib.parse import urlsplit, urlunsplit
 
 from app.common.runtime_settings.normalizers import redis_connection_url

@@ -82,16 +82,6 @@ class TooManyAttemptsError(AppError):
     status_code = 429
 
 
-class UnavailableError(AppError):
-    """The process is alive but cannot accept work.
-
-    503 rather than 500: nothing raised, and the service still answers — it
-    has simply run out of the capacity to take on more.
-    """
-
-    status_code = 503
-
-
 def error_payload(exc: AppError) -> dict:
     """The JSON body an `AppError` leaves as.
 

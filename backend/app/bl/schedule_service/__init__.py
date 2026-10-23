@@ -31,7 +31,6 @@ from app.bl.schedule_service.constants import (  # noqa: F401
     ACTION_ASSIGNED,
     ACTION_CONSTRAINT,
     ACTION_GENERATED,
-    ACTION_IMPORTED,
     ACTION_MOVED,
     ACTION_OPENED,
     ACTION_PUBLISHED,
