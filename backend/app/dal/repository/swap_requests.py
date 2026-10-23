@@ -174,19 +174,6 @@ class SwapRepository(RepositoryBase):
         """, (STATUS_WITHDRAWN, swap_id, team_id))
         return self.get_swap(swap_id, team_id)
 
-    def pending_swap_count(self, team_id: str) -> int:
-        """Swaps waiting on the manager, for the inbox badge.
-
-        Counts `pending` only. One still awaiting its counterparty is not
-        the manager's to act on and would inflate a badge that is supposed
-        to mean "there is something for you to do".
-        """
-        rows = self._all("""
-            SELECT count(*) AS n FROM swap_requests
-            WHERE team_id=%s AND status=%s
-        """, (team_id, STATUS_PENDING))
-        return int(rows[0]["n"]) if rows else 0
-
 
 def _parties(requester, counterparty, requester_date, counterparty_date) -> tuple:
     """Both names trimmed, after checking a swap between them is possible."""

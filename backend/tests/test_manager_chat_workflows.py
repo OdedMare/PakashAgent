@@ -10,7 +10,7 @@ from app.bl.audit import shift_stats
 from app.bl.chat_contract import normalize_week_turn
 from app.bl.scheduler import effective_availability
 from app.common.errors import ConflictError
-from tests.test_manager_chat import TEAM, MORNING, converse, setup, sickness, turn
+from tests.test_manager_chat import TEAM, MORNING, converse, setup, sickness, translation, turn
 
 EVENING = "ערב"
 
@@ -107,14 +107,11 @@ def test_generation_returns_published_period_to_draft_only_when_assignments_chan
 @pytest.mark.parametrize("asks_approval", [False, True])
 def test_build_week_from_an_answer_previews_all_seven_days_and_applies_to_that_week(asks_approval):
     dates = [(datetime.date(2026, 10, 11) + datetime.timedelta(days=i)).isoformat() for i in range(7)]
-    response = dict(assignments=[dict(employee="דנה" if i % 2 else "יוסי", shift=MORNING,
-                                     date=date, reason="זמין ומוסמך") for i, date in enumerate(dates)],
-                    notes=[], summary="שבוע מלא")
     proposal = turn()
     if asks_approval:
         proposal.update(needs_input=True, question=dict(question="מאשר לבנות את השבוע?", options=[],
                                                        recommendation="", why=""))
-    repo, llm, service, chat_id, schedule_id = setup([proposal, response])
+    repo, llm, service, chat_id, schedule_id = setup([proposal, translation()])
     message_id = service.start_turn(TEAM, "manager-a", chat_id, dict(
         content="תבנה לי סידור לשבוע הזה", request_id="week", schedule_id=schedule_id,
         visible_week=dates[0], focus_date=dates[2]))
@@ -129,7 +126,7 @@ def test_build_week_from_an_answer_previews_all_seven_days_and_applies_to_that_w
     created = next(row for row in repo.schedules.values() if row["id"] != schedule_id)
     assert {row["date"] for row in repo.assignments(created["id"], TEAM)} == set(dates)
     assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "דנה"
-    assert len(llm.calls) == 2
+    assert len(llm.calls) == 2  # The proposal and translating its instruction; the week is solved.
 
 
 @pytest.mark.parametrize("content", ["תשבץ את שני בשבוע הבא", "תשבץ את דנה השבוע", "תבנה סידור לשבועיים"])
@@ -150,32 +147,26 @@ def two_shifts(repo):
         required_roles=[], id=repo._id("slot"), team_id=TEAM) for row in profile["shifts"]]
 
 
-def generated(rows):
-    return dict(assignments=[dict(employee=name, shift=shift, date="2026-10-06", reason="זמין ומוסמך")
-                             for name, shift in rows], notes=[], summary="כל היום שובץ")
-
-
-def test_whole_day_repairs_a_morning_only_answer_and_checks_evening():
+def test_a_whole_day_is_solved_with_every_shift_covered():
     proposal = turn("generate")
     proposal.update(starts_on="2026-10-06", ends_on="2026-10-06")
-    repo, llm, service, chat_id, _ = setup([proposal, generated([("דנה", MORNING)]),
-                                         generated([("דנה", MORNING), ("יוסי", EVENING)])])
+    repo, llm, service, chat_id, _ = setup([proposal, translation()])
     two_shifts(repo)
     message = converse(service, repo, chat_id, "", "תשבץ את יום שלישי")
     assert message["status"] == "pending", message["content"]
     coverage = message["payload"]["plan"]["coverage"]
     assert coverage["complete"]
     assert {row["shift"] for row in coverage["slots"]} == {MORNING, EVENING}
-    assert len(llm.calls) == 3
+    assert len(llm.calls) <= 2
     assert len(repo.schedules) == 1  # Preview writes no period.
 
 
 def test_unrepaired_day_is_visible_as_partial_and_gap_is_not_an_exception():
     proposal = turn("generate")
     proposal.update(starts_on="2026-10-06", ends_on="2026-10-06")
-    response = generated([("דנה", MORNING)])
-    repo, _, service, chat_id, _ = setup([proposal, response, response])
+    repo, _, service, chat_id, _ = setup([proposal, translation()])
     two_shifts(repo)
+    repo.profiles[TEAM]["employees"][1]["eligible_shifts"].remove(EVENING)  # Nobody left for the evening.
     message = converse(service, repo, chat_id, "", "תשבץ את היום")
     assert "תוכנית חלקית" in message["content"] and EVENING in message["content"]
     assert not message["payload"]["plan"]["coverage"]["complete"]
@@ -284,7 +275,7 @@ def test_structure_migrates_profile_and_grid_atomically_preserving_other_assignm
     repo, llm, service, chat_id, schedule_id = setup([])
     before = copy.deepcopy(repo.profiles[TEAM])
     original = repo.assignments(schedule_id, TEAM)[0]
-    llm._answers += [structure_proposal(repo), generated([("דנה", "יום"), ("יוסי", "לילה")])]
+    llm._answers += [structure_proposal(repo), translation()]
     message = converse(service, repo, chat_id, schedule_id, "תשנה את המשמרות ל12–00 ו00–12 ביום שלישי")
     assert message["status"] == "pending", message["content"]
     assert repo.profiles[TEAM] == before

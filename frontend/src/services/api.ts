@@ -2,10 +2,6 @@ import type {
   AdminOverview,
   AdminTeam,
   AdminTeamDetail,
-  AssistantReply,
-  AgentAnswer,
-  Briefing,
-  BriefingTrigger,
   ChangeLearning,
   Constraint,
   ConstraintRequestRow,
@@ -15,19 +11,15 @@ import type {
   CopilotMode,
   EmployeeView,
   ManagementOverview,
-  Operation,
   PlacementCheck,
   Preference,
   PreferenceKind,
   PreferenceStatus,
-  Proposal,
   RosterName,
-  RedisReport,
   RuntimeSettings,
   Schedule,
   ScheduleProgress,
   ShiftStats,
-  Simulation,
   SwapRow,
   TeamSummary,
   TeamView,
@@ -211,28 +203,6 @@ export function probeModels(
   });
 }
 
-
-/** Test a Redis connection and report what is in it. A field left out is
- *  the saved value; an empty URL means "no Redis", and an empty or masked
- *  password means the stored one. A failed connection still answers 200,
- *  with `connected: false` and the reason. */
-export function probeRedis(
-  overrides: {
-    redis_url?: string;
-    redis_host?: string;
-    redis_port?: string;
-    redis_username?: string;
-    redis_password?: string;
-    redis_key_prefix?: string;
-  },
-  password: string,
-): Promise<RedisReport> {
-  return request<RedisReport>("/api/settings/redis", {
-    method: "POST",
-    body: JSON.stringify(overrides),
-    headers: settingsHeaders(password),
-  });
-}
 
 // --- the צוות משמרות זהב console (D28) --------------------------------------
 // Its own HttpOnly cookie (`pakash_admin`), so it never disturbs a team
@@ -538,30 +508,6 @@ export function dismissScheduleGeneration(
   });
 }
 
-/** Rebuild one date in an existing draft, preserving manager-pinned rows. */
-export async function generateScheduleDay(
-  body: {
-    schedule_id: string;
-    date: string;
-    instructions?: string;
-  },
-  onProgress?: (schedule: Schedule) => void,
-  options?: { signal?: AbortSignal },
-): Promise<Schedule> {
-  const schedule = await request<Schedule>(
-    `/api/schedule/generate/${body.schedule_id}/day/start`,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        date: body.date,
-        instructions: body.instructions ?? "",
-      }),
-    },
-  );
-  onProgress?.(schedule);
-  return resumeScheduleGeneration(body.schedule_id, onProgress, options);
-}
-
 /** Build a run of dates in an existing draft — "from this day until
  *  Saturday". What the agent built there is replaced; what the manager
  *  placed there is kept, and every other date is left alone. */
@@ -809,25 +755,6 @@ function getSchedule(scheduleId: string): Promise<Schedule> {
 /** Ask the agent what it would do. **Persists nothing** — the manager
  *  confirms before anything lands, and that gap is where the agent's
  *  reasoning gets read (D8). */
-/** What the agent has to say without being asked (D15).
- *
- *  Called when the management area opens, after the state changes, and
- *  before publishing. It writes nothing and it never fails loudly: a
- *  briefing that could not be produced comes back `quiet`, because this sits
- *  beside a calendar that has to render regardless.
- *
- *  `lastSaid` is the headlines already shown this sitting, sent back so the
- *  agent does not repeat an opening the manager has read. */
-export function briefManager(
-  trigger: BriefingTrigger,
-  lastSaid: string[] = [],
-): Promise<Briefing> {
-  return request<Briefing>("/api/schedule/brief", {
-    method: "POST",
-    body: JSON.stringify({ trigger, last_said: lastSaid.slice(-8) }),
-  });
-}
-
 /** Download one period as `.xlsx` (D17).
  *
  *  Deliberately not routed through `request()`: that helper parses every
@@ -857,37 +784,6 @@ export async function downloadSchedule(scheduleId: string): Promise<void> {
   // Revoked on the next tick: revoking synchronously can race the click on
   // some browsers and produce an empty file.
   setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
-export function proposeChange(
-  body: {
-    request: string;
-    schedule_id?: string;
-    reason?: string;
-    /** The request a previous turn held rather than guess at, sent back with
-     *  the manager's clarification so it resumes instead of being retyped. */
-    pending_request?: string;
-  },
-): Promise<Proposal> {
-  return request<Proposal>("/api/schedule/propose", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
-
-/** Apply a proposal the manager confirmed. The manager's reason is required
- *  by now — they have already been asked for it. */
-export function applyChange(body: {
-  schedule_id: string;
-  operations: Operation[];
-  profile_operations?: import("@/types").ProfileOperation[];
-  reason: string;
-  agent_reason?: string;
-}): Promise<unknown> {
-  return request("/api/schedule/apply", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
 }
 
 /** A drag the manager confirmed. The gesture itself changed nothing — this
@@ -1046,23 +942,6 @@ export function learnFromChanges(): Promise<ChangeLearning> {
   return request<ChangeLearning>("/api/schedule/history/learn");
 }
 
-/* -- the employee's assistant (D27) ---------------------------------------- */
-
-/** Ask about swaps or one's own week. **Writes nothing.**
- *
- *  The conversation lives in the browser and the last few lines travel with
- *  each question; nothing is stored server-side. Each suggestion was checked
- *  clean by the audit, and offering one goes through `proposeSwap`. */
-export function askAssistant(body: {
-  question: string;
-  history: { role: "employee" | "assistant"; text: string }[];
-}): Promise<AssistantReply> {
-  return request<AssistantReply>("/api/employee/assistant", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
-
 /* -- swaps, employee side --------------------------------------------------- */
 
 /** Offer a colleague a trade of shifts.
@@ -1177,44 +1056,6 @@ export function rejectRequest(
   return request(`/api/schedule/requests/${requestId}/reject`, {
     method: "POST",
     body: JSON.stringify({ reason }),
-  });
-}
-
-/** Ask the agent a question about the team or schedule. **Writes nothing.**
- *
- *  The multi-step half of the agent: the planner picks read-only tools, the
- *  backend answers each with arithmetic, and the reply is assembled from
- *  what they returned. There is no operation in the response, so nothing an
- *  answer says can be applied — a question that wants a change comes back
- *  with `needs_confirmation` and still goes through propose-then-confirm.
- *
- *  It answers with no model configured, via the deterministic reader, and
- *  says so in `used_model`. */
-export function askAgent(body: {
-  request: string;
-  schedule_id?: string;
-  /** The question the agent left open, so a one-word reply continues it. */
-  pending_request?: string;
-}): Promise<AgentAnswer> {
-  return request<AgentAnswer>("/api/schedule/ask", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
-
-/** What a set of operations would do. **Persists nothing.**
- *
- *  Deliberately not `proposeChange`: a proposal is an answer with a confirm
- *  button attached, and a manager asking "what happens if" has not asked for
- *  one. Approving a simulation is an ordinary `applyChange` with their
- *  reason (D8). */
-export function simulateChange(body: {
-  operations: Operation[];
-  schedule_id?: string;
-}): Promise<Simulation> {
-  return request<Simulation>("/api/schedule/simulate", {
-    method: "POST",
-    body: JSON.stringify(body),
   });
 }
 

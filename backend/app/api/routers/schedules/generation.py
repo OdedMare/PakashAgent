@@ -1,4 +1,4 @@
-"""Building a period: generated whole, as a resumable range job, or blank."""
+"""Building a period: solved at once, as a resumable range job, or blank."""
 
 from fastapi import APIRouter, Depends
 
@@ -20,12 +20,12 @@ class GenerationRoutes(RouteGroup):
         self._register_scoped_generation(router)
 
     def _register_steps(self, router: APIRouter) -> None:
-        """Building a period: whole, as a range job, and one step of it."""
+        """Building a period: at once, as a range job, and one step of it."""
         service, boss = self.service, self.boss
 
         @router.post("/generate", response_model=Schedule)
         def generate(request: GenerateRequest, session: dict = Depends(boss)) -> dict:
-            """Build a period. Stored as a draft — publishing is separate."""
+            """Solve a period now. Stored as a draft — publishing is separate."""
             return service.generate(
                 session["team_id"],
                 starts_on=request.starts_on,
@@ -38,7 +38,7 @@ class GenerationRoutes(RouteGroup):
         def start_generation(
             request: GenerateRequest, session: dict = Depends(boss)
         ) -> dict:
-            """Create a resumable range job. No model is called yet."""
+            """Create a resumable range job. Nothing is solved yet."""
             return service.start_generation(
                 session["team_id"],
                 starts_on=request.starts_on,

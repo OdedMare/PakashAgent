@@ -442,7 +442,7 @@ export function Management({
       {/* What a build is doing, and the way out of one.
           The banner is the *only* thing a build occupies: the board below it
           stays writable throughout (D18), so a manager can keep placing
-          shifts by hand while the agent works — and can stop it. Stopping
+          shifts by hand while the solver works — and can stop it. Stopping
           keeps every day already built; the period is an ordinary draft the
           moment it returns, and "המשך" picks the rest up from the first day
           that is not finished. */}
@@ -456,24 +456,6 @@ export function Management({
                 ? `היצירה הופסקה — ${state.generation?.completed_days ?? 0} מתוך ${state.generation?.total_days ?? 7} ימים נשמרו`
                 : `${state.generation?.activity || "בונים את הסידור"} — ${state.generation?.completed_days ?? 0} מתוך ${state.generation?.total_days ?? 7} ימים נשמרו`}
             </strong>
-            {/* Which width this build is running at. Worth saying on the
-                banner and not only in the settings panel: it is the single
-                biggest factor in how long the manager is about to wait, and
-                the setting that governs it lives two screens away. */}
-            {state.generation?.mode === "week" ? (
-              <span className="schedule-generation-mode">
-                בנייה שבועית — עד שבוע בכל פנייה למודל
-              </span>
-            ) : null}
-            {state.generation?.engine ? (
-              <span className="schedule-generation-mode">
-                {state.generation.engine === "code"
-                  ? "מנוע קוד — ללא שימוש בטוקנים"
-                  : state.generation.engine === "auto"
-                  ? "מנוע אוטומטי — קוד כשאפשר, AI כשצריך"
-                  : "מנוע AI"}
-              </span>
-            ) : null}
             {buildState === "failed" && buildError ? (
               <span className="schedule-generation-why">{buildError}</span>
             ) : null}

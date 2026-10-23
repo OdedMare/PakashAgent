@@ -57,7 +57,6 @@ _FLOW_ROLES = {
     "scheduler": ADVANCED,
     "changes": DEFAULT,
     "planner": DEFAULT,
-    "employee_assistant": DEFAULT,
     "learn": DEFAULT,
     "briefing": FAST,
 }

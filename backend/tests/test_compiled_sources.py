@@ -4,11 +4,10 @@ import json
 
 from app.bl.compiled_sources import NullCache, SourceCompiler, TranslationCache, report
 from app.bl.compiled_sources.timing import UNREAD_TIME, mentioned_dates
-from app.bl.deterministic_scheduler import generate_span
+from app.bl.solver import generate_span
 from app.bl.directive_agent import DirectiveAgent
 from app.bl.profile_service import ProfileService
 from app.bl.scheduler.scheduler import Scheduler
-from app.common.config import ENGINE_AUTO
 from app.common.errors import AgentError
 
 import datetime
@@ -148,8 +147,9 @@ def test_a_binding_policy_code_cannot_honour_is_kept_as_such():
     repository = _Repository(_profile(rest_policy="מנוחה של 12 שעות בין משמרות"))
     llm = _Llm(_answer(unresolved=[{"source_id": "source-1", "reason": "מדיניות מנוחה"}]))
 
-    assert _translate(llm, repository) is None
-    assert _translate(llm, repository, week=NEXT_WEEK) is None
+    for week in (WEEK, NEXT_WEEK):
+        left = _translate(llm, repository, week=week)
+        assert left["requests"] == [] and left["unresolved"][0]["reason"] == "מדיניות מנוחה"
     assert len(llm.payloads) == 1
     assert report(repository, TEAM)[0]["status"] == "unresolved"
 
@@ -250,7 +250,7 @@ def test_a_relative_date_before_it_was_written_is_not_believed():
     llm = _Llm(_answer([early], timing=[_timing(kind="relative", starts="2026-10-01",
                                                  ends="2026-10-01")]))
 
-    assert _translate(llm, repository) is None  # A binding note left out.
+    assert _translate(llm, repository)["requests"] == []  # A binding note left out.
     row = next(iter(repository.rows.values()))
     assert row["status"] == "unresolved" and row["reason"] == UNREAD_TIME
 
@@ -275,7 +275,8 @@ def test_an_absolute_date_must_be_written_in_the_sentence():
     assert kept["requests"][0]["dates"] == ["2026-11-04"]
 
     repository.rows.clear()
-    assert _translate(_Llm(_answer([outside], timing=[_timing(kind="absolute")])), repository) is None
+    left = _translate(_Llm(_answer([outside], timing=[_timing(kind="absolute")])), repository)
+    assert left["requests"] == [] and left["unresolved"]
 
 
 def test_dates_written_in_a_sentence_are_read():
@@ -322,7 +323,8 @@ def test_the_worker_translates_setup_so_the_first_build_asks_nothing():
 
     assert kept == 3
     assert {line["status"] for line in report(repository, TEAM)} == {"compiled", "unresolved"}
-    assert _translate(_Llm(), repository) is None  # The binding policy: straight to AI.
+    built = _translate(_Llm(), repository)  # No model call: everything is kept.
+    assert [row["source_id"] for row in built["unresolved"]] == ["source-3"]
 
 
 def test_the_worker_with_no_model_keeps_nothing_and_does_not_fail():
@@ -339,7 +341,7 @@ def test_a_build_from_kept_translations_says_so_and_spends_nothing():
                    today=WRITTEN).compile(TEAM)
 
     result = Scheduler(_Llm()).generate_span(
-        repository.profile, *WEEK, engine=ENGINE_AUTO, translation_cache=_cache(repository))
+        repository.profile, *WEEK, translation_cache=_cache(repository))
 
     assert result["metrics"]["engine"] == "hybrid"
     assert result["metrics"]["model_calls"] == 0

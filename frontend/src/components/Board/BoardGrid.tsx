@@ -26,8 +26,6 @@ import type {
   Closure,
   Constraint,
   Schedule,
-  ScheduleWarning,
-  Slot,
 } from "@/types";
 import { displayDate, shortDate } from "@/components/DateInput";
 

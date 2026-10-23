@@ -53,7 +53,7 @@ answers from what was found instead of failing.
 A plain absence report for one named employee ("עודד חולה בשני ושלישי",
 "עודד טס לחו״ל", "ירין לא יכולה לעבוד בשישי") is read and planned in code by
 `bl/absence/`, with no model round and inside the send request itself
-([D34](DECISIONS.md)). It resolves every date the sentence names, asks once
+([D36](DECISIONS.md)). It resolves every date the sentence names, asks once
 when dates are missing or when a bare weekday could mean "every week", and
 prepares one plan: the person off every affected shift, the fairest clean
 cover on each (hours, then shifts, then nights, recounted after every pick)
@@ -162,8 +162,8 @@ state and invalidate proposals whose underlying facts changed.
 - **The manager chooses replacements.** Present checked eligible candidates
   with short explanations, then prepare the complete plan after the manager
   selects. (A plain absence handled in code by `bl/absence/` instead proposes
-  the fairest cover in the plan, with the alternatives beside it — D34.) An explicitly named replacement goes directly to validation and
-  proposal. Candidate selection and answers to clarification questions are
+  the fairest cover in the plan, with the alternatives beside it — D36.) An
+  explicitly named replacement goes directly to validation and proposal. Candidate selection and answers to clarification questions are
   distinct from approval of a prepared plan.
 - **No unsolicited rule exceptions.** If nobody fits, explain the uncovered
   shift and offer compliant alternatives or ask for guidance. Do not propose

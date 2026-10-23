@@ -11,6 +11,7 @@ from psycopg import sql
 
 from app.bl.manager_chat import ManagerChatService
 from app.bl.schedule_service import ScheduleService
+from app.bl.schedule_service.generation.job import GenerationJob
 from app.common.config import Settings
 from app.dal import database as postgres
 from app.dal.repository import Repository
@@ -53,6 +54,7 @@ def seed(repo, published=False):
     chat = repo.create_chat(team["id"], "manager-a")
     llm = _ScriptedLlm([sickness()])
     service = ManagerChatService(repo, llm, ScheduleService(repo, llm))
+    service.llm = llm
     message_id = service.start_turn(team["id"], "manager-a", chat["id"], {
         "content": "דנה חולה היום, תציע את יוסי להחלפה", "request_id": "request-1", "schedule_id": period["id"],
     })
@@ -60,6 +62,36 @@ def seed(repo, published=False):
     saved = repo.get_chat(team["id"], "manager-a", chat["id"])
     assert saved["messages"][-1]["status"] == "pending"
     return team["id"], period["id"], chat["id"], message_id, service
+
+
+def test_real_generation_queue_has_one_claimable_job_per_span(real_repo):
+    team = real_repo.create_team("בדיקת תור", "test-password-only")
+    period = real_repo.create_schedule(
+        team["id"], "2026-10-20", "2026-10-21"
+    )
+    job = GenerationJob.open([
+        {"date": day, "through": day, "dates": [day]}
+        for day in ("2026-10-20", "2026-10-21")
+    ], 2, "day", "", [])
+    real_repo.set_generation(period["id"], team["id"], job.to_dict())
+
+    real_repo.queue_generation_job(team["id"], period["id"])
+    queued = real_repo._all(
+        "SELECT payload FROM copilot_jobs WHERE team_id=%s ORDER BY created_at",
+        (team["id"],),
+    )
+    assert [row["payload"]["date"] for row in queued] == [
+        "2026-10-20", "2026-10-21",
+    ]
+
+    with real_repo.claim_copilot_job("interactive") as claimed:
+        assert claimed is None
+    with real_repo.claim_copilot_job("background") as claimed:
+        assert claimed["payload"]["date"] == "2026-10-20"
+        real_repo.finish_copilot_job(claimed["id"])
+    with real_repo.claim_copilot_job("background") as claimed:
+        assert claimed["payload"]["date"] == "2026-10-21"
+        real_repo.finish_copilot_job(claimed["id"])
 
 
 @pytest.mark.parametrize("published", [False, True])
@@ -113,10 +145,8 @@ def test_real_shift_migration_is_atomic_and_preserves_unaffected_ids(real_repo, 
     import json
     proposal.update(profile_patch_json=json.dumps(dict(shifts=shifts, employees=employees)),
                     starts_on="2026-10-06", ends_on="2026-10-06")
-    service._llm._answers += [proposal, dict(assignments=[
-        dict(employee="דנה", shift="יום", date="2026-10-06", reason="זמינה ומוסמכת"),
-        dict(employee="יוסי", shift="לילה", date="2026-10-06", reason="זמין ומוסמך"),
-    ], notes=[], summary="סידור חדש")]
+    # The vocabulary rebuild is solved; the model only proposes it.
+    service.llm._answers += [proposal]
     message = service.start_turn(team, "manager-a", chat, dict(content="שנה את המשמרות ביום שלישי",
                                  request_id="migrate", schedule_id=period))
     service.reply(team, "manager-a", chat, message)

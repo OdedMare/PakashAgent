@@ -10,7 +10,8 @@ vLLM, Groq...); the default target is a local model through Ollama.
 
 Robustness policy:
 - no API key required when a custom base_url is set (local servers)
-- the degradation ladder (`ladder.py`): schema → JSON mode → plain → merged,
+- the degradation ladder (`ladder.py`): strict schema → schema → JSON mode →
+  plain → merged,
   starting from the rung that last answered for the same endpoint, model and
   schema
 - strips markdown fences from the reply
@@ -25,6 +26,7 @@ hallucinated (D3).
 import json
 import logging
 import time
+from contextlib import contextmanager
 from typing import List, Optional
 
 import httpx
@@ -32,7 +34,7 @@ from openai import OpenAI
 
 from app.common.errors import AgentError, ModelOutputError
 from app.common.time_context import agent_time_context
-from app.dal.llm import ladder, tracing
+from app.dal.llm import ladder
 from app.dal.llm.budgets import (  # noqa: F401  (re-exported for tests)
     budget_seconds as _budget_seconds,
     httpx_timeout,
@@ -46,6 +48,7 @@ from app.dal.llm.model_roles import (
     resolve_api_key, resolve_base_url, resolve_model, role_for_flow,
 )
 from app.dal.llm.model_slots import priority_for_flow
+from app.dal.llm.strict_schema import drop_nulls, to_strict
 from app.dal.llm.telemetry import log_call
 
 # One initial attempt + one retry with the parse error appended.
@@ -117,8 +120,7 @@ class OpenAIJsonClient:
              "content": system.rstrip() + "\n\n" + (time_context or agent_time_context())},
             {"role": "user", "content": user},
         ]
-        with tracing.call(flow, call.role, call.model):
-            return self._until_json(call, messages, schema, flow, started)
+        return self._until_json(call, messages, schema, flow, started)
 
     def _connect(self, flow: str, role: str, model: str) -> _Call:
         try:
@@ -147,8 +149,9 @@ class OpenAIJsonClient:
             content, current, rung = ladder.complete(
                 call.client, call.model, messages, max_tokens, schema,
                 settings.llm_repetition_penalty,
-                slots_for(self._store).reserve(
-                    priority_for_flow(flow), queue_seconds(settings, flow)
+                _logged_slot(
+                    slots_for(self._store), flow, call,
+                    priority_for_flow(flow), queue_seconds(settings, flow),
                 ),
                 _budget_seconds(settings, flow),
                 self._first_rungs.get(rung_key, 0),
@@ -159,6 +162,8 @@ class OpenAIJsonClient:
                 usage[key] += current.get(key, 0)
             try:
                 result = extract_json(content)
+                if rung == 0 and to_strict(schema) is not None:
+                    result = drop_nulls(result, schema)
             except json.JSONDecodeError as exc:
                 last_error = str(exc) if content else "empty reply"
                 messages = messages + [
@@ -228,13 +233,39 @@ class OpenAIJsonClient:
                 options["http_client"] = httpx.Client(
                     verify=False, timeout=httpx_timeout(timeout),
                 )
-            self._cached_clients[cache_key] = tracing.wrap(OpenAI(
+            self._cached_clients[cache_key] = OpenAI(
                 api_key=api_key or _LOCAL_SERVER_KEY_PLACEHOLDER,
                 base_url=base_url or None,
                 timeout=httpx_timeout(timeout),
                 **options,
-            ))
+            )
         return self._cached_clients[cache_key]
+
+
+@contextmanager
+def _logged_slot(slots, flow: str, call, priority, timeout):
+    """The model slot, with a line on each side of the wait and the call.
+
+    Telemetry logs a call once it returns; a call that never does left no
+    trace at all. These say where one stopped: still in the queue, or sent
+    to the server and not answered.
+    """
+    flow = flow or "unknown"
+    asked = time.monotonic()
+    _log.info("llm waiting for slot flow=%s model=%s", flow, call.model)
+    with slots.reserve(priority, timeout):
+        sent = time.monotonic()
+        _log.info(
+            "llm sending flow=%s model=%s url=%s waited=%.1fs",
+            flow, call.model, call.base_url or "default", sent - asked,
+        )
+        try:
+            yield
+        finally:
+            _log.info(
+                "llm slot released flow=%s held=%.1fs",
+                flow, time.monotonic() - sent,
+            )
 
 
 def _verify_ssl(settings) -> bool:

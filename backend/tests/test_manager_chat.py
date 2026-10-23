@@ -113,6 +113,14 @@ def turn(kind="answer", **kwargs):
                 instructions="", replace_existing=False, question=None, tool_calls=[], **kwargs)
 
 
+def translation(requests=(), translated=()):
+    """A translation turn: `requests` as given, every source but the ids in
+    `translated` left out, so the solver builds without them."""
+    left = [{"source_id": "source-%d" % index, "reason": "לא נדרש בבדיקה"}
+            for index in range(1, 10) if "source-%d" % index not in translated]
+    return {"calls": [], "directives": [], "requests": list(requests), "unresolved": left}
+
+
 def setup(answers):
     repo, llm = ChatRepo(), _ScriptedLlm(answers)
     schedule = repo.create_schedule(TEAM, "2026-10-04", "2026-10-10")
@@ -264,14 +272,13 @@ def test_generate_upcoming_week_previews_real_assignments_without_touching_curre
     first, last = week_bounds(this_week + datetime.timedelta(days=7))
     proposal = turn("generate")
     proposal.update(starts_on=first, ends_on=last)
-    generation = {"assignments": [dict(employee="דנה", shift=MORNING, date=first, reason="מתאימה")],
-                  "notes": [], "summary": "סידור מוצע"}
-    repo, _, service, chat_id, schedule_id = setup([proposal, generation, generation])
+    repo, _, service, chat_id, schedule_id = setup([proposal, translation()])
     proposal["schedule_id"] = schedule_id  # A stale model id cannot redirect the requested week.
     message = converse(service, repo, chat_id, schedule_id, "תשבץ את השבוע הבא")
-    assert message["status"] == "pending"
+    assert message["status"] == "pending", message["content"]
     assert len(repo.schedules) == 1
-    assert message["payload"]["plan"]["generated"]["assignments"][0]["date"] == first
+    generated = message["payload"]["plan"]["generated"]["assignments"]
+    assert generated and all(first <= row["date"] <= last for row in generated)
     service.apply(TEAM, "manager-a", chat_id, message["id"], True)
     assert len(repo.schedules) == 2
     assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "דנה"
@@ -281,9 +288,9 @@ def test_day_opened_from_board_rebuilds_only_that_day_and_keeps_the_rest():
     proposal = turn("generate", required_assignments=[])
     proposal.update(starts_on="2026-10-06", ends_on="2026-10-06", replace_existing=True,
                     instructions="לתת עדיפות ליוסי")
-    span = {"assignments": [dict(employee="יוסי", shift=MORNING, date="2026-10-06", reason="לפי ההנחיה")],
-            "notes": [], "summary": "יום שלישי שובץ"}
-    repo, llm, service, chat_id, schedule_id = setup([proposal, span])
+    prefer = {"kind": "prefer", "employees": ["יוסי"], "weight": 5, "reason": "לפי ההנחיה",
+              "source_id": "source-1"}
+    repo, llm, service, chat_id, schedule_id = setup([proposal, translation([prefer], ["source-1"])])
     repo.assignment_rows[schedule_id] = []
     repo.replace_slots(schedule_id, TEAM, [
         {"shift_name": MORNING, "slot_date": "2026-10-05", "headcount": 1},
@@ -642,21 +649,12 @@ def test_adjusting_generated_preview_preserves_other_choices_and_remains_read_on
                         dict(employee="יוסי", shift=MORNING, date="2026-10-11"),
                         dict(employee="דנה", shift=MORNING, date="2026-10-12"),
                     ])
-    repo, llm, service, chat_id, schedule_id = setup([proposal, {
-        "assignments": [], "notes": [], "summary": "הבחירות נשמרו",
-    }, {
-        "assignments": [], "notes": [], "summary": "הבחירות נשמרו, נותרו חוסרים",
-    }])
+    repo, llm, service, chat_id, schedule_id = setup([proposal, translation()])
     message = converse(service, repo, chat_id, schedule_id, "במקום דנה ביום ראשון תציע את יוסי")
-    assert message["status"] == "pending"
+    assert message["status"] == "pending", message["content"]
     assignments = message["payload"]["plan"]["generated"]["assignments"]
-    assert [(row["employee"], row["date"]) for row in assignments] == [
-        ("יוסי", "2026-10-11"), ("דנה", "2026-10-12"),
-    ]
-    # The initial preview sees both pins; the repair only receives unfilled days.
-    assert len(json.loads(llm.calls[-2]["user"])["required_assignments"]) == 2
-    repaired_dates = {slot["date"] for slot in json.loads(llm.calls[-1]["user"])["period"]["slots"]}
-    assert not repaired_dates & {"2026-10-11", "2026-10-12"}
+    placed = {row["date"]: row["employee"] for row in assignments}
+    assert (placed["2026-10-11"], placed["2026-10-12"]) == ("יוסי", "דנה")
     assert len(repo.schedules) == 1
 
 

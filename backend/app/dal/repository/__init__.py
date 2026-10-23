@@ -10,12 +10,13 @@ from app.dal.repository.jobs import JobsRepository
 from app.dal.repository.schedules import ScheduleRepository
 from app.dal.repository.schema import SCHEMA
 from app.dal.repository.teams import TeamRepository
+from app.dal.repository.throttle import ThrottleRepository
 
 
 class Repository(
     TeamRepository, ScheduleRepository, IdentityRepository,
     CopilotRepository, ChatRepository, AdminRepository, JobsRepository,
-    CompiledSourcesRepository,
+    CompiledSourcesRepository, ThrottleRepository,
 ):
     """One repository object composed of the per-concern mixins.
 

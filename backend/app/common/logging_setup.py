@@ -14,7 +14,6 @@ import logging
 import os
 import sys
 import threading
-import time
 
 _CONFIGURED = False
 _LOCK = threading.Lock()
@@ -52,45 +51,3 @@ def configure_logging() -> None:
 def trace(name: str) -> logging.Logger:
     """A logger under the shared ``pakash`` prefix."""
     return logging.getLogger("pakash." + name)
-
-
-class Timed:
-    """Log how long a block took, and whether it raised.
-
-    Used around external calls, because the symptom worth catching is a call
-    that never returns: a start line with no matching end line is what
-    identifies the hung stage.
-    """
-
-    def __init__(self, logger: logging.Logger, label: str, **context):
-        self._logger = logger
-        self._label = label
-        self._context = context
-        self._started = 0.0
-
-    def __enter__(self):
-        self._started = time.time()
-        self._logger.info("START %s%s", self._label, _suffix(self._context))
-        return self
-
-    def __exit__(self, exc_type, exc, _traceback):
-        elapsed = time.time() - self._started
-        if exc_type is None:
-            self._logger.info(
-                "OK    %s (%.2fs)%s", self._label, elapsed,
-                _suffix(self._context),
-            )
-            return False
-        self._logger.error(
-            "FAIL  %s (%.2fs) %s: %s%s", self._label, elapsed,
-            exc_type.__name__, exc, _suffix(self._context),
-        )
-        return False
-
-
-def _suffix(context: dict) -> str:
-    if not context:
-        return ""
-    return " " + " ".join(
-        "%s=%s" % (key, value) for key, value in sorted(context.items())
-    )

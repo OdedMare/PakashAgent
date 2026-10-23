@@ -11,7 +11,7 @@ from app.bl.chat_fast import ChatFastAnswers
 from app.bl.chat_contract import NeedsManager, RejectedPlan, normalize_day_turn, normalize_week_turn, plan_for_model
 from app.bl.chat_schema import CHAT_SCHEMA, PROFILE_SECTIONS
 from app.bl.planner.shaping import question
-from app.bl.scheduler.span_audit import add_usage, usage_of
+from app.bl.shared import add_usage, usage_of
 from app.bl.shared import iso
 from app.common.errors import AgentError, AppError
 from app.common.time_context import agent_time_context, israel_today

@@ -19,10 +19,7 @@ from app.common.activity import track_activity
 from app.common.errors import NotFoundError
 from app.common.config import Settings
 from app.common.logging_setup import configure_logging
-from app.common.redis_hub import RedisHub
 from app.common.runtime_settings.runtime_settings_store import RuntimeSettingsStore
-from app.dal.llm import tracing
-from app.dal.llm.budgets import share_slots
 from app.dal.llm.openai_client import OpenAIJsonClient
 from app.dal.llm.team_context import model_team
 from app.dal.repository import Repository
@@ -65,10 +62,15 @@ class CopilotWorker:
             processed += 1
 
     def _process(self, job):
+        started = time.monotonic()
+        _log.info("job started id=%s kind=%s team=%s attempt=%s",
+                  job["id"], job["kind"], job["team_id"], job.get("attempts"))
         try:
             with model_team(job["team_id"]):
                 self._execute(job)
             self._repository.finish_copilot_job(job["id"])
+            _log.info("job finished id=%s kind=%s seconds=%.1f",
+                      job["id"], job["kind"], time.monotonic() - started)
         except NotFoundError:
             # A manager may delete a conversation or period while it waits.
             self._repository.finish_copilot_job(job["id"])
@@ -123,10 +125,7 @@ class CopilotWorker:
 
 def _build():
     env = Settings()
-    tracing.init(env)
     store = RuntimeSettingsStore(env)
-    # Waits in the same model queue as the API when Redis is configured.
-    share_slots(RedisHub(store))
     repository = Repository(store)
     llm = OpenAIJsonClient(store)
     schedules = ScheduleService(repository, llm, settings=store)
@@ -137,17 +136,12 @@ def _build():
     )
 
 
-def main() -> None:
-    configure_logging()
-    repository, worker = _build()
-    repository.initialize()
-    stopped = threading.Event()
+def start(worker, stopped: threading.Event) -> list:
+    """The lane threads, started; each runs jobs until `stopped` is set.
 
-    def stop(*_args) -> None:
-        stopped.set()
-
-    signal.signal(signal.SIGTERM, stop)
-    signal.signal(signal.SIGINT, stop)
+    Shared by `main()` and by the API when it runs the worker in its own
+    process (`PAKASH_EMBEDDED_WORKER`).
+    """
     count = _WORKER_CONCURRENCY
     chat_count = min(_CHAT_WORKERS, count - 1) if count > 1 else 0
 
@@ -163,17 +157,37 @@ def main() -> None:
     if count == 1:
         lanes = ["any"]
     threads = [
-        threading.Thread(target=work, args=(lane,), daemon=True)
+        threading.Thread(target=work, args=(lane,), name="copilot-%s" % lane,
+                         daemon=True)
         for lane in lanes
     ]
     for thread in threads:
         thread.start()
     _log.info("copilot worker started threads=%d chat_threads=%d", count, chat_count)
-    while not stopped.wait(_POLL_SECONDS):
-        pass
+    return threads
+
+
+def stop(threads: list, stopped: threading.Event) -> None:
+    stopped.set()
     for thread in threads:
         thread.join(timeout=_POLL_SECONDS * 2)
-    tracing.flush()
+
+
+def main() -> None:
+    configure_logging()
+    repository, worker = _build()
+    repository.initialize()
+    stopped = threading.Event()
+
+    def on_signal(*_args) -> None:
+        stopped.set()
+
+    signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGINT, on_signal)
+    threads = start(worker, stopped)
+    while not stopped.wait(_POLL_SECONDS):
+        pass
+    stop(threads, stopped)
     _log.info("copilot worker stopped")
 
 

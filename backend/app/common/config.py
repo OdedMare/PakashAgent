@@ -2,24 +2,8 @@
 
 from typing import Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-# How wide one scheduling model call is. Declared here, beside the field that
-# carries the value, because three layers need the vocabulary and only one may
-# own it: `bl/scheduler.py` plans the spans, the runtime-settings store
-# validates a save, and the panel offers the choice. `common` is the layer all
-# three already depend on, so the alternative — the store importing `bl` — is
-# the dependency arrow pointing the wrong way for a two-item tuple.
-MODE_DAY = "day"
-MODE_WEEK = "week"
-GENERATION_MODES = (MODE_DAY, MODE_WEEK)
-
-ENGINE_AI = "ai"
-ENGINE_CODE = "code"
-ENGINE_AUTO = "auto"
-GENERATION_ENGINES = (ENGINE_AUTO, ENGINE_AI, ENGINE_CODE)
-
 
 class Settings(BaseSettings):
     """Env-derived DEFAULTS. Values the boss can edit in the UI live in
@@ -146,9 +130,9 @@ class Settings(BaseSettings):
     timeout above. Set a positive value only when interactive work should
     deliberately give up while another generation owns the model slot."""
 
-    # The shipped endpoint is Ollama, which serves one generation at a time.
-    # vLLM/TGI deployments should raise this explicitly for batching.
-    llm_max_concurrency: int = 1
+    # A hosted API or a batching server (vLLM, TGI) takes several at once;
+    # a one-at-a-time local Ollama should lower this to 1.
+    llm_max_concurrency: int = 4
     """How many HTTP completions may be in flight across API and workers.
 
     PostgreSQL advisory locks coordinate every process and read this setting
@@ -181,94 +165,15 @@ class Settings(BaseSettings):
     """Read unprefixed, as the SDK expects. Empty is fine when a local
     `llm_base_url` is set — those servers ignore auth."""
 
-    opik_api_key: str = Field(default="", validation_alias="OPIK_API_KEY")
-    """Turns on Opik tracing of every model call (`dal/llm/tracing.py`).
-    Empty = off. Read unprefixed, as Opik's own SDK names it. Env-only: the
-    client is set up once at start-up, so a change needs a restart."""
+    solver_time_limit_seconds: float = 10.0
+    """Wall time one solve may take (`bl/solver/`). The solver returns the
+    best schedule found when the limit is reached; small teams are proven
+    optimal well before it."""
 
-    opik_workspace: str = Field(default="", validation_alias="OPIK_WORKSPACE")
-    """The Opik workspace. Empty = the key's default workspace."""
-
-    opik_project_name: str = Field(
-        default="pakash", validation_alias="OPIK_PROJECT_NAME"
-    )
-    """The Opik project traces land in."""
-
-    opik_url: str = Field(default="", validation_alias="OPIK_URL_OVERRIDE")
-    """A self-hosted Opik's API. Empty = Comet's hosted Opik."""
-
-    schedule_generation_mode: str = MODE_DAY
-    """How wide one model call is when a period is built: `day` or `week`.
-
-    **`day` (the default) asks for one date at a time.** Every answer is
-    checked against that date's own candidate lists, a bad one is repaired in
-    isolation, and a date that fails is retried without disturbing its
-    neighbours. It is the accurate setting and the slow one: a fortnight is
-    fourteen calls, each paying for the scheduler prompt again.
-
-    **`week` asks for up to seven dates in one call.** The identical pipeline
-    runs — same candidate lists, same response schema, same rejection rules,
-    same audit — so nothing is trusted that `day` would not trust; what
-    changes is that seven days share one prompt, which is most of the cost.
-    The tradeoff is granularity: a repair re-answers the whole span rather
-    than one date, and a span that fails takes its whole week with it. On a
-    small local model that trades a slow build for a coarser one.
-
-    A week is a ceiling, not a promise. A span never crosses seven days and
-    never carries more staffing demand than one answer can hold, so a busy
-    week is split rather than truncated (`scheduler.plan_spans`).
-
-    Live-editable in the settings panel: it is read when a period is opened,
-    so the mode a build runs under is the one saved at the moment the manager
-    pressed the button, and a job already under way keeps the mode it started
-    with."""
-
-    schedule_generation_engine: str = ENGINE_AUTO
-    """Assign with the model, deterministic code, or a safe automatic mix.
-
-    Auto compiles narrow semantic instructions into validated directives,
-    runs them in code, and falls back to full AI when translation is unsafe or
-    the deterministic audit is not clean. Explicit code mode remains zero-token
-    and refuses semantic rules rather than silently ignoring them.
-    """
-
-    redis_url: str = ""
-    """Redis shared by every process of this deployment. Empty -- the
-    default -- means no Redis: the login throttle, the manager's live signals
-    and the model concurrency limit stay in memory, per process, exactly as
-    they always were. Set it once the API runs more than one worker, or next
-    to `python -m app.worker`, so those three hold across processes.
-
-    `redis://host:6379/0`, `rediss://` for TLS, or `unix:///path.sock`. A
-    bare `host:port` is accepted and read as `redis://`. Live-editable in
-    the panel: every process picks up a saved change within seconds."""
-
-    redis_host: str = ""
-    """Redis host. Overrides the host in `redis_url`; with the URL empty, a
-    host alone turns Redis on (`redis://host:port`)."""
-
-    redis_port: Optional[int] = None
-    """Redis port. Overrides the port in the URL. Empty = the URL's, else
-    6379."""
-
-    redis_username: str = ""
-    """Redis ACL user. Overrides the user in the URL. Empty = the URL's, else
-    the server's `default` user."""
-
-    @field_validator("redis_port", mode="before")
-    @classmethod
-    def _empty_port_is_unset(cls, value):
-        """`PAKASH_REDIS_PORT=` -- what `.env.example` and compose ship --
-        means "not set", not a start-up failure."""
-        return None if isinstance(value, str) and not value.strip() else value
-
-    redis_password: str = ""
-    """Redis password (AUTH). Empty = none, or whatever the URL carries.
-    Never returned by the API."""
-
-    redis_key_prefix: str = "pakash"
-    """Prepended to every key and channel this app writes, so one Redis can
-    serve several deployments without them sharing lockouts or slots."""
+    solver_workers: int = 8
+    """Parallel search workers for one solve: more finds a better schedule
+    in the same time. Among equally good schedules the pick may differ
+    from one build to the next."""
 
     session_secret: str = ""
     """Key that signs the workspace session cookie.

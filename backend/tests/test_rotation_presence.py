@@ -7,9 +7,8 @@ import pytest
 from app.bl import rotation
 from app.bl.audit import CROSS_ROTATION, audit
 from app.bl.profile_service.workplace import workplace
-from app.bl.scheduler import Scheduler, build_slots, effective_availability
-from app.bl.scheduler.bounding import bound_assignments
-from app.bl.scheduler.candidates import candidates_for
+from app.bl.scheduler import Scheduler, effective_availability
+from app.bl.solver import generate_span
 from app.common.errors import AgentError
 
 
@@ -101,12 +100,9 @@ def test_absence_survives_employee_availability_and_model_balancing():
     p = profile()
     p["workplace"]["rotation_presence"] = [rule()]
     date = "2026-08-31"
-    availability = effective_availability(p, [dict(employee="ב", date=date, available=True)], date, date)
-    slots = build_slots(p, date, date)
-    candidates = candidates_for(p, slots, availability)
-    assert candidates["id_by_name"]["ב"] not in candidates["by_slot"]["slot-1"]
-    assert bound_assignments([dict(employee="ב", date=date, shift="בוקר", reason="איזון עומסים")],
-                             slots, p, availability) == []
+    stated = [dict(employee="ב", date=date, available=True)]
+    result = generate_span(p, date, date, availability=stated)
+    assert "ב" not in {row["employee"] for row in result["assignments"]}
     findings = audit([dict(employee="ב", date=date, shift="בוקר")], p["shifts"], p["employees"], profile=p)
     assert any(item["code"] == CROSS_ROTATION for item in findings)
 
@@ -153,15 +149,15 @@ def test_missing_shift_clocks_cannot_bypass_a_configured_closure():
     assert {("א", "ללא שעות"), ("ב", "ללא שעות")} <= blocked(p, "2026-08-29")
 
 
-@pytest.mark.parametrize("method", ["generate", "generate_span", "generate_verified"])
-def test_all_model_generation_paths_require_an_anchor(method):
+@pytest.mark.parametrize("method", ["generate_span", "generate_verified"])
+def test_every_generation_path_requires_an_anchor(method):
     p = profile()
     p["workplace"]["triplet_first_closure_date"] = ""
     with pytest.raises(AgentError, match="תלתון"):
         getattr(Scheduler(None), method)(p, "2026-08-29", "2026-08-29")
 
 
-@pytest.mark.parametrize("method", ["generate", "generate_span", "generate_verified"])
+@pytest.mark.parametrize("method", ["generate_span", "generate_verified"])
 def test_pinned_assignments_cannot_override_group_absence(method):
     p = profile()
     with pytest.raises(AgentError, match="נוכחות"):

@@ -96,7 +96,7 @@ that morning and out for the rest of the day.
 
 **A cycle is typed once, in the team setup screen** (`ManualSetup/`, the
 sliders icon — not the settings modal, which holds only the server-wide
-model and database settings). `ManualSetup/RotationSetup.tsx` asks, per
+model, solver and database settings). `ManualSetup/RotationSetup.tsx` asks, per
 cycle, for the weekend group א closes and for group א's closure hours; the
 other groups' turns and hours are derived by the server. The dates shown
 beside the anchor are a preview of that one typed fact, and an anchor stored
@@ -136,36 +136,36 @@ hold the card's last line; it is still written on every path and still
 one hover away — but a justification is read once, when the placement is made,
 and the grid is read every day.
 
-Built so far: the workspace gate, the interview and the management area. All
-surfaces exist.
+Built: the workspace gate, unit setup, the management area, the operator
+console and the employee areas. There is no intro interview any more; the
+profile comes from the setup form.
 
 | Surface | Purpose |
 |---|---|
 | Workspace gate | Pick the team, then the manager or worker door — `src/components/Workspace/`. No team creation here (D28) |
 | Operator console | `/admin` — צוות משמרות זהב: every team with its counts, open (name + password)/rename/suspend/delete, the system settings — `src/components/Admin/` |
 | Member area | The employee's read-only surface — `MemberArea.tsx` |
-| Interview | The intro conversation, one question per turn — `src/components/Interview/` |
+| Unit setup | The structured profile form — roster, shift vocabulary, staffing, rotations, rules — and what code made of each sentence (`CompiledSources.tsx`, D32) — `src/components/ManualSetup/` |
+| Guide | The first-run tour and the help panel — `src/components/Guide/` |
 | Management | The manager's control room — `src/components/Management/` |
 | Schedule | The living grid for a period, RTL — `Management/Calendar.tsx` |
 | Manager chat | **The** agent: every instruction, question and plan, optionally focused on one day — `Management/AgentChat.tsx` |
 | Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `Board/ConfirmDrop.tsx` |
-| Replacement tab | Who is out and when → covers ranked so the load spreads evenly; the picks go to the chat as a plan (D34) — `Management/ReplacementPanel.tsx`. Reads only; the wording it sends is shared with the chat cards in `lib/replacement.ts` and read back by the server |
+| Replacement tab | Who is out and when → covers ranked so the load spreads evenly; the picks go to the chat as a plan (D36) — `Management/ReplacementPanel.tsx`. Reads only; the wording it sends is shared with the chat cards in `lib/replacement.ts` and read back by the server |
 | Copilot inbox | Durable observations, proposals, failures, permissions and audit — `Management/CopilotInbox.tsx` |
 | Preferences | What the agent remembers, all of it visible — `Management/Preferences.tsx` |
 | Employee view | **Read-only** schedule — `MemberArea` renders the same `Calendar` with `readOnly` |
 | Personal area | One employee's own shifts, constraint requests and swaps — `src/components/Employee/` |
-| Employee assistant | Swap and "better week" questions; suggests checked swaps, never writes (D27) — `Employee/AssistantChat.tsx` |
 | Request inbox | The manager ruling on submissions — `Management/RequestInbox.tsx`; a new one pops up live (`RequestToast.tsx`, pushed via `useLiveInbox.ts`, D29) |
 
 ## The management area
 
-`Management/index.tsx` is where the manager lands once the interview has produced
-a profile — `workspace.profile` is the switch, since it is the interview's
-durable result and exactly the thing the area needs to run on. That profile
-may be **partial** (D22), and the area says so rather than hiding it: a badge
-on the interview button counts the open topics, and the empty-week card
-explains that the agent is working from what it managed to learn. The manager
-can ask the agent directly — `profile_gaps` is a tool like any other, so
+`Management/index.tsx` is where the manager lands once unit setup has saved
+a profile — `workspace.profile` is the switch, since it is exactly the thing
+the area needs to run on. A profile may still owe something (an older
+partial one, D22), and the area says so rather than hiding it:
+`ProfileGapsNotice` lists the gaps and points back to setup. The manager can
+ask the agent directly — `profile_gaps` is a tool like any other, so
 *"מה עוד חסר לך"* is answered from the record rather than the model's
 impression.
 
@@ -178,15 +178,12 @@ impression.
   changes nothing itself. `ConfirmDrop` collects the manager's reason and its
   confirm button stays disabled until there is one, so the requirement is
   visible rather than enforced by a server error afterwards.
-- **The manual writes are deliberately quiet.** `assign` and `unassign` pass
-  `{ quiet: true }` to `run()`, which skips the briefing a write normally
-  triggers. A manager placing twenty people into an empty week would otherwise
-  fire twenty model calls, on a deployment whose model is small and
-  rate-limited — and the agent would be remarking on a grid it is watching
-  being typed. The audit still runs on every one of those writes, because it
-  is pure arithmetic and costs nothing, so the warnings under the calendar
-  stay live throughout. Opening a blank period is *not* quiet: it happens once
-  and is worth a remark.
+- **The manual writes call no model.** `assign` and `unassign` write one
+  cell each and re-read the overview; `{ quiet: true }` still marks them, a
+  leftover from the automatic briefings that are gone (the agent speaks only
+  in the manager chat). The audit runs on every one of those writes, because
+  it is pure arithmetic and costs nothing, so the warnings under the calendar
+  stay live throughout.
 - **One saved conversation, followed by a separate approval.** `AgentChat`
   and `useManagerChat` use `/api/agent/chats` for questions, changes, profile edits
   and actual generated previews. Follow-up questions and chosen replacements
@@ -208,20 +205,19 @@ impression.
   the shift-row order; nothing is written to the server. The X at the end
   of the drawer's tab row closes the agent outright, and the board takes the
   full width back — full-size cards, roles and the week rail return.
-  The autonomous copilot console lives under Overview, and the old invisible
-  automatic briefings are disabled for the conversation surface.
+  The autonomous copilot console lives under Overview.
 - **Export downloads; it does not navigate.** `downloadSchedule` fetches the
   binary with the session cookie and triggers the browser's own download from
   an object URL, so a failure surfaces as a Hebrew error rather than a blank
   tab ([D17](../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
   It is the one management action that does *not* go through `run()` — a
-  download changes nothing for a refetch or a briefing to react to.
+  download changes nothing for a refetch to react to.
 - **A build can start on any day and end on any day.** "בנייה מכאן" on a
   day's column head, and "בנייה מיום … עד שבת" on the card of an unbuilt
   week, open the one build dialog (`Board/GenerateDialog.tsx`) on that day
   through Saturday; both ends stay editable and "עד שבת" is a shortcut, not
   a limit. Inside a draft that exists it is `generateScheduleRange`: only
-  those days are asked for, what the agent built on them is replaced, and
+  those days are solved, what was generated on them is replaced, and
   what the manager placed is kept and filled around (D18) — the dialog counts
   both before the click, and takes no list of required shifts because the
   board behind it already is one. The run is bounded by the period: a build
@@ -232,19 +228,20 @@ impression.
   days outside the run open empty instead.
 - **Building a period does not lock the area.** `generate` and its two
   siblings report through `state.generating`, never through `state.busy`:
-  a build runs for minutes, and routing it through the helper the board's own
-  controls wait on left the manager unable to place a single shift — or to
-  reach the button that stops it — until it finished, which for a hung model
-  meant forever. While a build runs the board is fully writable (D18), and a
-  cell filled in by hand becomes a pin the agent fills around.
+  a build is a background job — seconds per four-week span for the solver
+  (D34), longer when its sentences are translated by a slow model — and
+  routing it through the helper the board's own controls wait on left the
+  manager unable to place a shift, or reach the stop button, until it
+  finished. While a build runs the board is fully writable (D18), and a cell
+  filled in by hand becomes a pin the solver fills around.
 - **The poll ends, and says why.** `resumeScheduleGeneration` reads
-  `/{id}/progress` rather than the whole period, backs off while one day is
-  in flight, and re-fetches the grid only when a day lands. It watches the
+  `/{id}/progress` rather than the whole period, backs off while a span is
+  in flight, and re-fetches the grid only when one lands. It watches the
   job's `heartbeat`: one that stops means the job lost its worker, and the
   poller re-POSTs `/run` to adopt it. Everything else is the manager's call —
-  "עצירת היצירה" stops the wait *and* the job, keeping every finished day,
-  because with no model timeout configured the browser is the only
-  participant that knows whether anyone is still waiting.
+  "עצירת היצירה" stops the wait *and* the job, keeping every finished span:
+  the browser is the only participant that knows whether anyone is still
+  waiting.
 - **Every hand-write names the period it happened on.** `assign`, `unassign`
   and `move` all send `schedule_id`, taken from the week the board is
   actually rendering. Without it the server resolves "the period covering
@@ -253,15 +250,15 @@ impression.
   the id, had just told them the cell was fine. `focusPeriod` reports the
   same period upward so the agent's proposals, answers and simulations are
   about the week on screen rather than about today's.
-- **The banner says how wide the build is.** `generation.mode` is stamped by
-  the server when the period is opened, and a `week` build says so under the
-  counter. It is the single biggest factor in how long the manager is about
-  to wait, and the setting that governs it (הגדרות ← בניית סידור) lives two
-  screens away — so the board states it rather than leaving them to infer it
-  from the pace.
-- **A failed build says why.** The per-day `error` is rendered in the banner.
-  It is usually the one thing the manager can act on — a model timeout is
-  fixed by a setting, not by pressing retry again.
+- **The banner counts days and says what the build is doing.** The counter
+  is in dates however many spans the job has, and `generation.activity` is
+  the worker's current step. What a build could not honour — a seat nobody
+  could legally fill, a sentence that did not translate — arrives in its
+  notes, not as an error (D34).
+- **A failed build says why.** The span's `error` is rendered in the banner.
+  It is usually the one thing the manager can act on — a pin that breaks a
+  hard constraint, or the database being unreachable — not something retry
+  fixes.
 - **Everything re-reads after a write.** `useManagement` refetches the overview
   rather than patching locally: the schedule, its warnings, the constraints and
   the log all move together, and a locally patched grid beside a stale audit is
@@ -274,7 +271,8 @@ impression.
 - **Questions and actions share one composer.** Message requests prepare answers
   or plans and never perform domain writes. Only the separate Apply endpoint
   commits the stored plan, with snapshot checks and an atomic transaction.
-  The legacy `/ask` and `/changes/propose` routes remain available to other callers.
+  The legacy `POST /api/schedule/propose` and `/apply` remain for other
+  callers; `/ask`, `/simulate`, `/tool` and `/brief` are gone.
 - **Deleting an employee is a departure, not an erasure.** The roster card's
   "הוצאה מהסגל" opens `ConfirmDeparture`, which counts first
   (`/api/schedule/departure/preview`, writes nothing): how many shifts from
@@ -314,11 +312,11 @@ impression.
 
 `src/components/Workspace/index.tsx` picks the surface from the role the
 server reported: no session → the login gate, `member` → `MemberArea` (with a
-door into the personal area), `employee` → the personal area, `boss` → the
-interview until the workplace has been taught, then the management area.
-`workspace.profile` is what switches those last two, and reopening the interview
-over an existing profile is a deliberate choice the manager makes — re-running it
-replaces the profile everything downstream reads.
+door into the personal area), `employee` → the personal area, `boss` → unit
+setup (`ManualSetup`) until the workplace has a profile, then the management
+area. `workspace.profile` is what switches those last two; the sliders icon
+reopens setup over an existing profile, and a save there applies to the next
+build — an existing schedule is not rebuilt.
 
 - **The session is an HttpOnly cookie**, so this code cannot read it. "Am I
   logged in?" is answered by `GET /api/workspace/me`, never by local state
@@ -355,35 +353,6 @@ replaces the profile everything downstream reads.
 files. Hebrew is also *data* — shift names, weekdays, and availability markers all
 arrive in Hebrew from the backend ([FILE_FORMATS.md](../docs/FILE_FORMATS.md)).
 Never assume a Latin-script fallback.
-
-## The interview surface
-
-One question per turn, rendered as a Claude-style conversation column: the
-agent's question, its recommendation in a marked-off card, and 2–5 selectable
-answers beneath it.
-
-- **The interview can always be left.** The door icon ends it early, behind a
-  confirmation that states what is being left unfinished and never disables
-  its own button ([D22](../docs/DECISIONS.md#d22--the-interview-can-be-ended-early-and-the-profile-says-what-it-owes-️-amends-d18)).
-  This is supplied on a *first* interview too — it used to be withheld so
-  nobody reached the board with nothing to schedule against, which made the
-  first interview a room with no door. Ending awaits the write and then
-  refreshes the workspace, because the profile it writes is what the router
-  switches on; navigating first would race it.
-
-- **Answers send the option's label, not a number.** A bare number is
-  ambiguous — choice or headcount — and the prompt makes the model ask rather
-  than guess. Numbering the buttons would teach the boss to answer "2".
-- **Free text is a separate field, never an "אחר" option.** An option called
-  "other" makes writing your own answer look like a last resort; the prompt
-  forbids it for that reason.
-- **A recommendation is the agent's opinion, not a workplace fact.** It is
-  styled as its own card so it never reads as something the boss already said.
-- **Only the newest question is answerable.** Past turns keep rendering their
-  options, disabled, so the thread stays readable without letting a question
-  be answered twice.
-- **The session id is the only client state**, held in `localStorage`. A
-  refresh resumes server-side and costs no model call.
 
 ## Audit warnings
 

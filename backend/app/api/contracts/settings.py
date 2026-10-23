@@ -30,25 +30,3 @@ class ModelsProbeRequest(BaseModel):
     def override(self, name: str) -> Optional[str]:
         value = (getattr(self, name) or "").strip()
         return None if not value or value == MASKED_SECRET else value
-
-
-class RedisProbeRequest(BaseModel):
-    """A Redis connection typed into the form, tested before it is saved.
-
-    Omitted means "the saved value". For the URL an empty string is a real
-    answer -- "no Redis" -- so only `None` falls back; for the password
-    empty or masked means the stored one, as with every other secret.
-    """
-
-    redis_url: Optional[str] = None
-    # Same rule as the URL: only `None` is "the saved value"; an empty host,
-    # port or username typed in the form means "none", as it would on save.
-    redis_host: Optional[str] = None
-    redis_port: Optional[str] = None
-    redis_username: Optional[str] = None
-    redis_password: Optional[str] = None
-    redis_key_prefix: Optional[str] = None
-
-    def password(self) -> Optional[str]:
-        value = self.redis_password or ""
-        return None if not value or value == MASKED_SECRET else value

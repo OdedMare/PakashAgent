@@ -15,8 +15,7 @@ from app.bl.schedule_service.generation.pins import (
 )
 from app.bl.schedule_service.profile_gate import ProfileGate
 from app.bl.schedule_service.rows import iso
-from app.common.errors import AgentError, ModelOutputError
-from app.common.config import ENGINE_AI
+from app.common.errors import AgentError
 
 
 class GenerationStepper:
@@ -131,7 +130,7 @@ class GenerationStepper:
         job: GenerationJob,
         target: dict,
     ) -> None:
-        """Ask the model for one span and checkpoint either outcome.
+        """Solve one span and checkpoint either outcome.
 
         A failure is checkpointed as failed and re-raised: the caller of
         `/next` asked for a date and deserves the error. Deciding to *try
@@ -140,7 +139,7 @@ class GenerationStepper:
         schedule_id = schedule["id"]
         dates = span_dates(target)
         try:
-            result = self._ask_model(
+            result = self._solve(
                 team_id, schedule, profile, job, target, dates
             )
             fresh = self._repository.get_schedule(schedule_id, team_id)
@@ -151,13 +150,10 @@ class GenerationStepper:
             job.fail_span(target, exc)
             if self._cancel_requested(schedule_id, team_id):
                 job.stop()
-            if isinstance(exc, ModelOutputError) and job.split(target):
-                self._repository.set_generation(schedule_id, team_id, job.to_dict())
-                return
             self._repository.set_generation(schedule_id, team_id, job.to_dict())
             raise
 
-    def _ask_model(
+    def _solve(
         self,
         team_id: str,
         schedule: dict,
@@ -186,8 +182,6 @@ class GenerationStepper:
                 model_assignment(row) for row in schedule.get("assignments") or []
             ],
             preferences=self._context.active_preferences(team_id),
-            split_on_failure=False,  # The job checkpoints each smaller span separately.
-            engine=job.get("engine") or ENGINE_AI,
             translation_cache=self._context.translation_cache(team_id),
         )
 

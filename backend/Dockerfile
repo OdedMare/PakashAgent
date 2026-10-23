@@ -9,5 +9,12 @@ COPY app ./app
 
 RUN pip install --no-cache-dir .
 
+# One container runs both the API and the job worker: schedule builds (code
+# and model alike), chat turns and setup compiles are queued in PostgreSQL
+# and executed by worker threads inside this same process (app/main.py).
+# Set PAKASH_EMBEDDED_WORKER=false only when a separate
+# `python -m app.worker` container runs them instead.
+ENV PAKASH_EMBEDDED_WORKER=true
+
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
