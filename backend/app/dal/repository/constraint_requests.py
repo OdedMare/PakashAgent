@@ -130,11 +130,3 @@ class ConstraintRequestRepository(RepositoryBase):
             UPDATE constraint_requests SET status=%s WHERE id=%s AND team_id=%s
         """, (STATUS_WITHDRAWN, request_id, team_id))
         return self.get_request(request_id, team_id)
-
-    def pending_count(self, team_id: str) -> int:
-        """How many requests are waiting, for the manager's badge."""
-        rows = self._all("""
-            SELECT count(*) AS n FROM constraint_requests
-            WHERE team_id=%s AND status=%s
-        """, (team_id, STATUS_PENDING))
-        return int(rows[0]["n"]) if rows else 0

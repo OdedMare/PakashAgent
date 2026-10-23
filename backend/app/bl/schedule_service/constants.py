@@ -14,11 +14,6 @@ ACTION_CONSTRAINT = "constraint"
 # in D6 happened, and both producing a schedule is exactly what makes them
 # worth telling apart later.
 ACTION_OPENED = "opened"
-# A period read out of a file the workplace already had (D7). Distinct from
-# both `generated` and `opened` for the same reason those are distinct from
-# each other: the history should say where a schedule came from, and
-# "imported from the manager's own spreadsheet" is a third origin.
-ACTION_IMPORTED = "imported"
 
 # How far back `learn_from_changes` reads. Generous, because a rule the
 # manager keeps applying by hand shows up as a handful of corrections spread

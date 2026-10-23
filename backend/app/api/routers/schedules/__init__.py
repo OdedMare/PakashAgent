@@ -14,7 +14,7 @@ team id from the caller.
 
 from fastapi import APIRouter
 
-from app.api.routers.schedules.agent import AskingRoutes, ChangeRoutes
+from app.api.routers.schedules.agent import ChangeRoutes
 from app.api.routers.schedules.generation import GenerationRoutes
 from app.api.routers.schedules.manual import ManualRoutes
 from app.api.routers.schedules.periods import PeriodRoutes
@@ -33,7 +33,6 @@ _GROUPS = (
     ChangeRoutes,
     TransferRoutes,
     ConstraintRoutes,
-    AskingRoutes,
     PreferenceRoutes,
     PeriodRoutes,
 )

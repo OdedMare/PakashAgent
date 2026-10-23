@@ -22,13 +22,6 @@ class PasswordChangeRequest(BaseModel):
     replacement: str = Field(min_length=6, max_length=200)
 
 
-class TeamSummary(BaseModel):
-    """A team as the unauthenticated login picker sees it."""
-
-    id: str
-    name: str
-
-
 class Workspace(BaseModel):
     """The signed-in workspace.
 

@@ -1,14 +1,11 @@
 "use client";
 
-import { Activity, Cpu, Database, HardDrive, Server, Settings2 } from "lucide-react";
+import { Activity, Cpu, Database, HardDrive, Settings2 } from "lucide-react";
 
 import { SystemSettings } from "@/components/Settings";
 
 import { formatBytes } from "./format";
 import type { AdminState } from "./useAdmin";
-
-const MODE_LABEL: Record<string, string> = { day: "יום בכל קריאה", week: "שבוע בכל קריאה" };
-const ENGINE_LABEL: Record<string, string> = { auto: "אוטומטי", ai: "AI", code: "קוד" };
 
 /** The server as a whole: is it healthy, what model is it running, and the
  *  settings every workspace shares. The settings used to be reachable only
@@ -49,24 +46,9 @@ export function SystemView({ state }: { state: AdminState }) {
           <span>
             <small>בניית סידור</small>
             <strong>
-              {ENGINE_LABEL[model.schedule_generation_engine] ?? (model.schedule_generation_engine || "—")}
-              {" · "}
-              {MODE_LABEL[model.schedule_generation_mode] ?? (model.schedule_generation_mode || "—")}
+              פותר אילוצים
+              {model.solver_time_limit_seconds ? ` · עד ${model.solver_time_limit_seconds} שניות` : ""}
             </strong>
-          </span>
-        </div>
-        <div className={`adm-health-card ${overview?.redis?.configured && !overview.redis.connected ? "is-bad" : ""}`}>
-          <Server size={18} aria-hidden="true" />
-          <span>
-            <small>Redis</small>
-            <strong>
-              {!overview?.redis
-                ? "—"
-                : !overview.redis.configured
-                  ? "לא מוגדר"
-                  : overview.redis.connected ? "מחובר" : "לא זמין"}
-            </strong>
-            {overview?.redis?.configured ? <em dir="ltr">{overview.redis.url}</em> : null}
           </span>
         </div>
         <div className="adm-health-card">

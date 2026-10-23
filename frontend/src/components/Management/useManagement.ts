@@ -369,10 +369,6 @@ export function useManagement(): ManagementState {
         completed_days: 0,
         failed_days: 0,
         days: [],
-        // Left empty deliberately: the mode is the server's to stamp when it
-        // opens the job, and guessing it here would render "בנייה שבועית" for
-        // the second before the first response, on a build that may not be.
-        mode: "",
       });
       const { schedule_id: scheduleId, ...period } = input;
       if (scheduleId && period.starts_on && period.ends_on) {

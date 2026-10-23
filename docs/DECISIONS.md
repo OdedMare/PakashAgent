@@ -23,7 +23,7 @@ UI. The boss's own sentences are kept and passed to the model as context.
 if code isn't enforcing rules, code doesn't need to represent them. Follows from
 D3; don't reintroduce structured rules without revisiting that.
 
-## D3 — The agent decides; code only audits ⚠️ *(amended by D31)*
+## D3 — The agent decides; code only audits ⚠️ *(amended by D31; assignment superseded by D34)*
 
 **The most important decision here.**
 
@@ -979,7 +979,7 @@ The exception is narrow:
 ago, and the 3.8.10 pin was already the costliest line in the build (EOL
 Debian, compiling `backports.zoneinfo`). See BUILD_ORDER.md.
 
-## D31 — Structured schedules may be assigned by code ⚠️ *(amends D3)*
+## D31 — Structured schedules may be assigned by code ⚠️ *(amends D3; superseded by D34)*
 
 The manager can choose `AI`, deterministic `code`, or `auto` for schedule
 generation. Code uses the existing availability, qualification, staffing,
@@ -1055,7 +1055,7 @@ translating, or expired. Correcting a reading means rewording the sentence.
 
 ---
 
-## D33 — Redis shares process-local state, and is never required
+## D33 — Redis shares process-local state, and is never required *(superseded by D35)*
 
 Two things lived in each process's memory: the login throttle and the
 manager's live "an inbox moved" signals (D29). With more than one process --
@@ -1085,6 +1085,68 @@ The URL, password and key prefix are runtime settings, editable in the panel
 with a connection test that shows the server and what this app keeps in it:
 active model calls, the queue, locked accounts. A save reaches the other
 processes because the hub re-reads the settings file every few seconds.
+
+---
+
+## D34 — A constraint solver assigns every schedule; the model only translates ⚠️ *(supersedes D31, replaces D3 for assignment)*
+
+The manager asked to rebuild the engine around what the field has settled
+on for rostering: a language model for language, a solver for the
+arithmetic. Who works which shift is a combinatorial optimisation, and a
+model filling it day by day was the slowest and least reliable part of the
+product — a prompt per day or week, repair calls, capacity splitting, and a
+greedy fallback that could spend a person on Monday whom Tuesday needed.
+
+**OR-Tools CP-SAT assigns a whole span in one solve** (`bl/solver/`): one
+boolean per legal (person, slot) pair. A placement that breaks a hard
+availability, the rotation or closure cycle, eligibility or a hard `avoid`
+is never a variable. The audit's blocking checks — rest, runs of days,
+weekly hours — and every hard structured request are constraints. The
+objective is solved in two phases: coverage first (unfilled seats, missing
+roles, the shift manager), then, without giving any of that back, soft
+wishes and soft availability, closers on their own closure, an even share of
+hours and nights, and a day off between shifts. Spans are up to four weeks;
+a longer period is solved in such blocks, each seeing the ones before it.
+
+**The model's only job in a build is translation.** The `DirectiveAgent`
+(D32) turns instructions, rules, policies, notes and preferences into
+validated absences, pins and structured requests. A sentence that does not
+translate — binding or not — is never sent to a full AI scheduler; there is
+none. The schedule is built without it and its `notes` name it, so the
+manager can restate it or record it as a constraint. Structured input needs
+no model call at all.
+
+**What stays from D3.** The audit is still arithmetic, still advisory, and
+still the one definition of every countable fact; the solver is built from
+the same thresholds so a solved schedule is clean by the same measure that
+grades it. The manager still decides: every result is an ordinary draft
+with a reason per row (D8), every hand placement is a pin, and a seat
+nobody can legally fill is reported rather than refused. The chat, the
+change agent and the reason gates are unchanged.
+
+**What changes.** "Hard" now means hard for generation: the solver will not
+place a row that breaks a hard rule it can represent. Engines and call
+widths (`ai`/`code`/`auto`, `day`/`week`) are gone; the panel holds the
+solver's time limit and worker count instead. Among equally good schedules
+the pick may differ between builds.
+
+## D35 — PostgreSQL holds every piece of shared state *(supersedes D33)*
+
+Redis held three things (D33). Each fits in the database every process
+already shares, so the deployment has one stateful service, not two:
+
+- **The login throttle** is a `login_attempts` table: a fixed window per
+  account, a lock after the limit, swept as accounts recover.
+- **Live inbox signals** are `LISTEN`/`NOTIFY` on a channel named after the
+  schema, one listener connection per process (`dal/notify.py`).
+- **The model queue** is the advisory-lock `PostgresModelSlots` that was
+  already Redis's fallback: one deployment-wide limit, one call per team.
+
+A database that stops answering drops the throttle and the signals back to
+memory, as Redis being down did. A settings save made by another process is
+picked up by the store itself within seconds, which the Redis hub used to
+trigger. `llm_max_concurrency` now defaults to 4: the endpoints this runs
+against are hosted or batching servers; a local Ollama should lower it to 1.
 
 ---
 

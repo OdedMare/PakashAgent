@@ -5,20 +5,17 @@ the result.
 
 ## Routers
 
-Built so far: `workspace.py`, `profile.py`, `schedules.py`, `health.py`.
-`changes.py` and `employees.py` were
-folded into `schedules.py` rather than split, since they share the schedule and
-the team scoping.
-
 | Router | Serves |
 |---|---|
 | `workspace.py` | Enter a workspace, the member share link, logout. Creating one is refused unless `allow_signup` (D28) |
 | `admin.py` | The צוות משמרות זהב console (D28): operator sign-in, every team with its counts, open (name + password)/rename/suspend/delete a team, reset its manager password, rotate its link |
-| `profile.py` | Boss-only structured unit setup and profile updates |
-| `schedules/` | The management area: read/generate a period — whole, from one day to another (`build_from`/`build_through`), or a run of days inside an existing draft (`/generate/{id}/range/start`) — read every period across a span of dates for the board's two-week and month views (`/between`, capped at 62 days), the stats panel's numbers for a span of dates or one person (`/stats`, boss-only, same cap), open one blank and fill it by hand (D18), take somebody off the roster (`/departure`, with a writing-nothing `/departure/preview` first: end date set, later shifts vacated, name kept), propose and apply changes, constraints, history, plus asking (`/ask`, `/tool`), simulating (`/simulate`) and preferences (D19–D21) |
-| `employees.py` | Roster management |
-| `health.py` | Liveness |
-| `employee/` | The employee's own area: claim an identity, read your own shifts, submit a constraint request or swap — plus the boss-guarded router that rules on them and `GET /api/schedule/requests/events`, the manager's SSE stream that says an inbox moved (D29) |
+| `profile.py` | Boss-only structured unit setup, profile updates, and `/compiled` — what code made of each rule and note (D32) |
+| `manager_chat.py` | `/api/agent/chats` — the manager's conversations: send a message (queued as a job), poll, stop, apply or dismiss a pending plan |
+| `schedules/` | `/api/schedule` — the management area. `reading.py`: the overview, one period, a span (`/between`, capped at 62 days), stats, audit. `generation.py`: solve a period now (`/generate`), or open a resumable job (`/generate/start`, `build_from`/`build_through`), run, poll `progress`, cancel, dismiss, one day (`/day/start`) or a run of days in a draft (`/range/start`). `manual.py`: blank period, assign, unassign, check, departure (D18). `periods.py`: publish, unpublish, clear, delete, export. `agent.py`: propose, apply, move (D8/D12). Constraints, history, learning and preferences (D21) |
+| `copilot.py` | `/api/copilot` — the copilot inbox, its permissions, and a manual scan |
+| `settings.py` | `/api/settings` and `/api/models` — the process-wide settings and the model-list probe |
+| `health.py` | Liveness and database reachability |
+| `employee/` | The employee's own area: claim an identity, read your own shifts, submit a constraint request or swap — plus the boss-guarded routers that rule on them and `GET /api/schedule/requests/events`, the manager's SSE stream that says an inbox moved (D29, across processes over LISTEN/NOTIFY, D35) |
 
 ## The two-step contracts
 
@@ -60,12 +57,12 @@ and a new route added under the wrong prefix silently inherits the wrong guard.
 
 **The manual routes are one call, not two** ([D18](../../../docs/DECISIONS.md#d18--the-boss-can-place-a-shift-without-the-agent-️-completes-d6)).
 `/blank`, `/assign` and `/unassign` write on the first call and involve no
-model. That is not a collapse of the two-step contracts above: those exist so
+model and no solver. That is not a collapse of the two-step contracts above: those exist so
 a *change* is explained before it lands, and placing somebody in an empty
 cell changes nothing for anybody. All three are `guards.boss()` like every
 other schedule write.
 
-**Route order matters in `schedules.py`.** A path parameter at the root of a
+**Route order matters in `schedules/`.** A path parameter at the root of a
 prefix matches any single segment, so `/{schedule_id}` is declared *after* every
 literal path under it — otherwise `/constraints` and `/history` are read as
 schedule ids. FastAPI resolves in declaration order.
@@ -82,28 +79,12 @@ model key — and admits the operator on its own session, or a boss who also
 sends the settings password. See [D10](../../../docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)
 for why it is not per-team yet.
 
-## Asking, simulating, remembering
+## Remembering
 
-Three route groups added with D19–D21, all `guards.boss()` and all reading
-the team from the signed cookie:
-
-- **`POST /ask` and `POST /tool` write nothing**, and `/ask`'s response type
-  has **no operations field at all** — there is nothing an `apply` could read
-  out of an answer, the same property `/brief` has (D15). Asking about the
-  schedule and asking to change it are separate endpoints because they are
-  separate acts; a question whose answer implies a change comes back with
-  `needs_confirmation` and still goes through propose-then-confirm.
-- **`POST /simulate` persists nothing** and returns an impact report rather
-  than something confirmable. Approving one is an ordinary `POST /apply`
-  with the manager's reason — there is deliberately **no** "apply
-  simulation" endpoint, because a second write path is how the confirmation
-  step gets routed around (D8/D12).
-- **`/preferences*` are boss-only and fully visible.** A suggested preference
-  is inert until a `PATCH` sets it active.
-
-An unknown tool name on `/tool` answers `200` with `ok: false` rather than
-raising: the caller is a UI that has to render something, and "there is no
-such tool" is information rather than a failed request.
+`/preferences*` are boss-only, read the team from the signed cookie, and are
+fully visible (D21). A suggested preference is inert until a `PATCH` sets it
+active. Questions and simulations go through the manager chat; the old
+`/ask`, `/tool`, `/simulate` and `/brief` routes are gone.
 
 **These are declared before `/{schedule_id}`** like every other literal path
 under this prefix — `/preferences/list` read as a schedule id is exactly the

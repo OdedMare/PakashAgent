@@ -30,16 +30,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Cookie, Depends, Header
 
-from app.api.contracts import ModelsProbeRequest, RedisProbeRequest
-from app.common import redis_hub
+from app.api.contracts import ModelsProbeRequest
 from app.common.errors import AppError, ForbiddenError
-from app.common.runtime_settings.normalizers import (
-    normalize_redis_host,
-    normalize_redis_port,
-    normalize_redis_prefix,
-    normalize_redis_url,
-    redis_connection_url,
-)
 from app.common.sessions import ADMIN_COOKIE_NAME, COOKIE_NAME
 from app.common.throttle import LoginThrottle
 
@@ -81,7 +73,7 @@ def _settings_guard(guards, password: str, throttle: LoginThrottle):
 
 def build_router(
     store, llm, guards, password: str = "",
-    throttle: Optional[LoginThrottle] = None, redis=None,
+    throttle: Optional[LoginThrottle] = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api", tags=["settings"])
     unlocked = _settings_guard(guards, password, throttle or LoginThrottle())
@@ -129,53 +121,4 @@ def build_router(
             verify_ssl_override=request.llm_verify_ssl,
         )}
 
-    @router.post("/settings/redis")
-    def probe_redis(
-        request: RedisProbeRequest, session: dict = Depends(unlocked)
-    ) -> dict:
-        """Test a Redis connection -- the one typed in the form, or the
-        saved one -- and report what is in it, beside what this process is
-        using right now. A failed connection is an answer, not an error."""
-        return _redis_report(store.get(), request, redis)
-
     return router
-
-
-def _redis_report(saved, request: RedisProbeRequest, redis) -> dict:
-    try:
-        url = redis_connection_url(
-            normalize_redis_url(_typed(request.redis_url, saved.redis_url)),
-            normalize_redis_host(_typed(request.redis_host, saved.redis_host)),
-            normalize_redis_port(_typed(request.redis_port, saved.redis_port)),
-            str(_typed(request.redis_username, saved.redis_username)).strip(),
-        )
-        prefix = normalize_redis_prefix(
-            request.redis_key_prefix or saved.redis_key_prefix
-        )
-    except ValueError as exc:
-        raise AppError(str(exc))
-    password = request.password()
-    report = {
-        "configured": bool(url),
-        "connected": False,
-        "error": "",
-        "url": redis_hub.mask_url(url),
-        "live": redis.status() if redis is not None else None,
-    }
-    if not url:
-        return report
-    try:
-        report.update(redis_hub.probe(
-            url,
-            saved.redis_password if password is None else password,
-            prefix,
-        ))
-        report["connected"] = True
-    except Exception as exc:  # noqa: BLE001 -- shown to the operator as-is
-        report["error"] = str(exc) or type(exc).__name__
-    return report
-
-
-def _typed(value, saved):
-    """What the form sent, or the saved value when it sent nothing."""
-    return saved if value is None else value

@@ -10,9 +10,8 @@ __all__ = [
     "text", "window",
 ]
 
-# Logged against the change log when a manager rules on a request, so an
-# approval is traceable in the same place every other change is (D4).
-ACTION_REQUEST_APPROVED = "request_approved"
+# Logged against the change log when a manager refuses a request, so the
+# ruling is traceable in the same place every other change is (D4).
 ACTION_REQUEST_REJECTED = "request_rejected"
 # A swap the manager refused. The approval has no action of its own: applying
 # it goes through the ordinary swap path in `schedule_service`, which appends

@@ -33,13 +33,14 @@ per-day progress, drag a shift (which asks why before it
 moves), talk to the agent about the assignment, record constraints against
 employees, and publish to the team.
 
-**The agent speaks first.** It reads the state on its own and opens the
-conversation — when the manager arrives, after anything changes, before a
-period is published, and periodically in an idle room. It says what it
-noticed and offers the sentence that would act on it, but it still writes
-nothing: the manager sends the sentence, the agent proposes, the manager
-confirms with their reason
-([D15](docs/DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)).
+**A constraint solver builds the schedule; the model only translates.**
+OR-Tools CP-SAT assigns a whole span (up to four weeks) at once: every
+availability, rotation, rest, run-of-days, weekly-hours and staffing rule,
+every structured request, and an even share of hours and nights. The model
+turns the manager's free-text rules and instructions into those structured
+requests; anything it cannot translate is named in the build's notes
+rather than silently dropped
+([D34](docs/DECISIONS.md)).
 
 **The copilot stays awake when the browser closes.** A separate durable worker
 checks every workspace, records profile gaps and schedule problems in a
@@ -48,12 +49,12 @@ Permissions are set per action type; every decision, verification and rollback
 is recorded in an append-only audit trail
 ([D23](docs/DECISIONS.md#d23--the-copilot-is-durable-permissioned-and-reversible)).
 
-**The agent answers questions, not only requests.** The manager can ask
-*"מי יכול להחליף את יוסי בסופ״ש"* or *"מה חסר לפני פרסום"* and get an
-answer assembled from deterministic tools — who is free, who is qualified,
-what is unstaffed, what stands before publishing. The model picks which
-questions to ask; `bl/tools.py` answers each with arithmetic, so the agent
-cannot claim a placement is valid unless the check said so
+**The agent answers questions, not only requests.** In the manager chat,
+*"מי יכול להחליף את יוסי בסופ״ש"* or *"מה חסר לפני פרסום"* is answered from
+deterministic tools — who is free, who is qualified, what is unstaffed, what
+stands before publishing. The model picks which questions to ask;
+`bl/tools/` answers each with arithmetic, so the agent cannot claim a
+placement is valid unless the check said so
 ([D19](docs/DECISIONS.md#d19--the-agent-answers-with-tools-asking-and-changing-stay-separate)).
 An answer carries no operations: asking is not changing.
 
@@ -87,9 +88,9 @@ and imported back. A message for the group chat is asked of the agent instead
 
 Built: the ported `dal/llm` client, settings and runtime settings, structured
 unit setup, the workspace layer (teams, boss login, member share links, route
-guards), `bl/audit.py` and its table-driven tests, `bl/scheduler.py`,
-`bl/changes.py`, `bl/briefing.py`, `bl/export.py`, `bl/placement.py`, the agent's
-tool layer (`bl/tools.py`, `bl/planner.py`, `bl/intent.py`, `bl/simulate.py`),
+guards), `bl/audit/` and its table-driven tests, `bl/scheduler/` and the
+`bl/solver/` constraint solver, `bl/changes/`, `bl/export.py`, `bl/placement/`,
+the agent's tool layer (`bl/tools/`, `bl/intent/`, `bl/simulate/`),
 the schedule tables, the management HTTP layer, and the RTL UI for all of it.
 
 Every architectural decision was settled in a design interview and is recorded —
@@ -117,8 +118,9 @@ See [Manager chat](docs/MANAGER_CHAT.md) for supported actions and approval beha
 ```
 backend/              FastAPI + Postgres, layered api / bl / dal
   app/api/            HTTP contracts and routers
-  app/bl/             Decisions: profiles, scheduling, changes, audit, import
-  app/dal/            Data access: Postgres, LLM client
+  app/bl/             Decisions: profiles, the solver, changes, audit
+  app/bl/solver/      OR-Tools CP-SAT: who works which shift
+  app/dal/            Data access: Postgres (data, throttle, live signals, model slots), LLM client
   app/common/         Config, runtime settings, logging, errors
 frontend/             Next.js, RTL, chat-first with a schedule grid
 ```
@@ -157,43 +159,14 @@ schedules the manager has published.
 Postgres must be reachable at `PAKASH_DATABASE_URL`; the app creates its own
 tables on startup (the schema itself must already exist).
 
-**Who builds the schedule is also a setting.** *הגדרות ← בניית סידור* offers
-`AI`, zero-token deterministic `code`, and `auto` (the default). Auto uses code
-only when every placement input is structured and keeps the result only when
-the deterministic audit is clean. Free-text rules, preferences, instructions,
-soft constraints, training policy, or a code result with warnings route the
-request to AI. Explicit code mode refuses semantic input instead of ignoring
-it. Also settable as `PAKASH_SCHEDULE_GENERATION_ENGINE`.
-
-**How fast a schedule builds is a setting.** *הגדרות ← בניית סידור* chooses
-how wide one model call is: `day` (the default) asks for one date at a time
-and verifies and repairs each on its own; `week` asks for up to seven in one
-call, which is several times faster on a slow local model because a week
-costs the scheduler prompt once instead of seven times. Both run the same
-checks — the same candidate lists, response schema, rejection rules and audit
-— so the tradeoff is granularity, not trust: in `week` mode one bad row
-re-answers the whole span. Also settable as
-`PAKASH_SCHEDULE_GENERATION_MODE`. The board says which mode a running build
-is using.
-
-Weekly requests are also divided by input size (profile, candidates, constraints
-and schema), while keeping every date whole. Context overflow or invalid model
-output splits an unfinished multi-day request into smaller requests. Board jobs
-checkpoint each smaller request, so a later failure resumes from unfinished
-dates. Connection and authentication failures retain the ordinary bounded retry.
-
-Repairs re-answer only problematic dates and retain the other dates and manager
-pins. Both adjacent days and the fixed period's load totals are shown to the
-model. A repair is adopted only when a full-period audit introduces no new or
-worse findings and rejects no more rows than the first answer. If the repair
-call fails, the audited first draft survives with its warnings and an explicit
-note. Completion still means a draft was built; warnings remain advisory.
-
-Each generation checkpoint records logical model calls, failed calls, character
-counts, duration, reported tokens, coverage, warning counts and per-person load.
-Failed attempts and split requests are included in the totals. Token counts are
-zero when the provider does not report them; character counts are not tokens.
-To compare saved outputs against the same profile, constraints and dates:
+**The solver has two settings.** *הגדרות ← בניית סידור* sets its wall
+time per solve (`PAKASH_SOLVER_TIME_LIMIT_SECONDS`, default 10) and its
+parallel workers (`PAKASH_SOLVER_WORKERS`, default 8). It solves coverage
+first and then, without giving any of it back, wishes and fairness; a seat
+nobody can legally fill is reported, never refused. Every build records its
+duration, solver status, model calls for translation (often none), tokens,
+coverage, warnings and per-person load. To compare saved outputs against the
+same profile, constraints and dates:
 
 ```bash
 cd backend
@@ -201,20 +174,18 @@ cd backend
   ../docs/scheduler-comparison.example.json --output /tmp/scheduler-comparison.json
 ```
 
-The example uses scripted model replies, with Tuesday missing on the first
-attempt. The old repair re-answered seven dates; the new repair re-answered one.
-It sends 22% fewer payload characters and produces identical coverage, warnings
-and load distribution. This measures request work, not live model latency.
-The saved report is in `docs/scheduler-comparison.report.json`. For a real
-comparison, use the same snapshot fields with recorded baseline and candidate
-results. Natural-language preferences still need manager review; these numeric
-measurements cover the facts the audit can check.
+**PostgreSQL is the only stateful service.** The login throttle, the
+manager's live inbox (LISTEN/NOTIFY) and the model-call limit
+(`PAKASH_LLM_MAX_CONCURRENCY`, default 4; set 1 for a local Ollama) all go
+through it ([D35](docs/DECISIONS.md)). There is no Redis.
 
 **Set `PAKASH_SESSION_SECRET` in any real deployment.** Left unset it is
 generated per process, so sessions do not survive a restart and break across
 workers.
 
 The model defaults to a local Ollama endpoint; set `PAKASH_LLM_BASE_URL` and
-`PAKASH_LLM_MODEL` to point elsewhere. Fast, default, and advanced roles may
+`PAKASH_LLM_MODEL` (and `OPENAI_API_KEY`) to point at a hosted API. Structured
+outputs are requested in strict mode first and degrade gracefully on servers
+that refuse it. Fast, default, and advanced roles may
 override both with `PAKASH_LLM_MODEL_<ROLE>` and
 `PAKASH_LLM_BASE_URL_<ROLE>`. Nothing here is OpenAI-specific.

@@ -22,6 +22,9 @@ services:
       PAKASH_DATABASE_SCHEMA: ${PAKASH_DATABASE_SCHEMA:-pakash}
       PAKASH_DATABASE_HOST: db
       PAKASH_RUNTIME_SETTINGS_FILE: /data/runtime-settings.json
+      # The API runs the job worker in-process by default; here the
+      # `copilot` service below is the worker, so the API leaves it to it.
+      PAKASH_EMBEDDED_WORKER: ${PAKASH_EMBEDDED_WORKER:-false}
       # Signs the workspace session cookie. Unset, the backend generates one
       # per process — fine for a single-container dev run, but sessions then
       # die on every restart. Set it in .env for anything long-lived.
@@ -48,31 +51,13 @@ services:
       # calls should deliberately give up while the model slot is occupied.
       PAKASH_LLM_QUEUE_SECONDS: ${PAKASH_LLM_QUEUE_SECONDS:-0}
       # Shared across API and worker processes through PostgreSQL advisory
-      # locks. 1 suits Ollama; raise it for a batching server (vLLM, TGI).
-      PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-1}
-      # How wide one scheduling model call is: `day` or `week`. `day` is the
-      # accurate default -- each date is verified and repaired on its own.
-      # `week` builds up to seven days per call, which is several times
-      # faster on a slow local model, at the cost of re-answering the whole
-      # span when one row is wrong. Also editable live in the settings panel.
-      PAKASH_SCHEDULE_GENERATION_MODE: ${PAKASH_SCHEDULE_GENERATION_MODE:-day}
-      PAKASH_SCHEDULE_GENERATION_ENGINE: ${PAKASH_SCHEDULE_GENERATION_ENGINE:-auto}
+      # locks. 4 suits a hosted API; lower it to 1 for a local Ollama.
+      PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-4}
+      # The constraint solver that assigns every schedule (bl/solver/):
+      # seconds per solve and parallel workers. Also editable in the panel.
+      PAKASH_SOLVER_TIME_LIMIT_SECONDS: ${PAKASH_SOLVER_TIME_LIMIT_SECONDS:-10}
+      PAKASH_SOLVER_WORKERS: ${PAKASH_SOLVER_WORKERS:-8}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      # Opik tracing of every model call, prompts and replies included
-      # (dal/llm/tracing.py). Empty key = off. The worker gets the same
-      # values so a build it runs is traced like one the API runs.
-      OPIK_API_KEY: ${OPIK_API_KEY:-}
-      OPIK_WORKSPACE: ${OPIK_WORKSPACE:-}
-      OPIK_PROJECT_NAME: ${OPIK_PROJECT_NAME:-pakash}
-      # Redis shared by the API and the worker (common/redis_hub.py). All
-      # empty = off. Host/port/username override the same parts of the URL;
-      # a host alone is enough. Also editable in the settings panel.
-      PAKASH_REDIS_URL: ${PAKASH_REDIS_URL:-}
-      PAKASH_REDIS_HOST: ${PAKASH_REDIS_HOST:-}
-      PAKASH_REDIS_PORT: ${PAKASH_REDIS_PORT:-}
-      PAKASH_REDIS_USERNAME: ${PAKASH_REDIS_USERNAME:-}
-      PAKASH_REDIS_PASSWORD: ${PAKASH_REDIS_PASSWORD:-}
-      PAKASH_REDIS_KEY_PREFIX: ${PAKASH_REDIS_KEY_PREFIX:-pakash}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -100,19 +85,10 @@ services:
       # picked it up.
       PAKASH_LLM_TIMEOUT_SECONDS: ${PAKASH_LLM_TIMEOUT_SECONDS:-0}
       PAKASH_LLM_QUEUE_SECONDS: ${PAKASH_LLM_QUEUE_SECONDS:-0}
-      PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-1}
-      PAKASH_SCHEDULE_GENERATION_MODE: ${PAKASH_SCHEDULE_GENERATION_MODE:-day}
-      PAKASH_SCHEDULE_GENERATION_ENGINE: ${PAKASH_SCHEDULE_GENERATION_ENGINE:-auto}
+      PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-4}
+      PAKASH_SOLVER_TIME_LIMIT_SECONDS: ${PAKASH_SOLVER_TIME_LIMIT_SECONDS:-10}
+      PAKASH_SOLVER_WORKERS: ${PAKASH_SOLVER_WORKERS:-8}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPIK_API_KEY: ${OPIK_API_KEY:-}
-      OPIK_WORKSPACE: ${OPIK_WORKSPACE:-}
-      OPIK_PROJECT_NAME: ${OPIK_PROJECT_NAME:-pakash}
-      PAKASH_REDIS_URL: ${PAKASH_REDIS_URL:-}
-      PAKASH_REDIS_HOST: ${PAKASH_REDIS_HOST:-}
-      PAKASH_REDIS_PORT: ${PAKASH_REDIS_PORT:-}
-      PAKASH_REDIS_USERNAME: ${PAKASH_REDIS_USERNAME:-}
-      PAKASH_REDIS_PASSWORD: ${PAKASH_REDIS_PASSWORD:-}
-      PAKASH_REDIS_KEY_PREFIX: ${PAKASH_REDIS_KEY_PREFIX:-pakash}
       PAKASH_COPILOT_SCAN_SECONDS: ${PAKASH_COPILOT_SCAN_SECONDS:-1800}
       # One lane stays available for manager chat; the rest checkpoint one
       # generation span at a time across teams.
