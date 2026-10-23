@@ -4,7 +4,9 @@ import datetime
 from typing import Dict, List
 
 from app.bl.rotation.closures import closure_days
-from app.bl.rotation.vocabulary import label, people, text
+from app.bl.rotation.vocabulary import (
+    GROUPED_PATTERNS, exit_pattern, groups_for, label, people, text,
+)
 
 
 class _DateEntry:
@@ -24,7 +26,7 @@ class _DateEntry:
     def add(self, name: str, row: dict) -> None:
         if row["cycle"] and row["group"]:
             self.closing_groups[row["cycle"]] = row["group"]
-        if name not in self.employees:
+        if name and name not in self.employees:
             self.employees.append(name)
         self.until_handover = self.until_handover and row["until_handover"]
         if not (row["until_handover"] or row.get("restricted_shifts")):
@@ -59,7 +61,30 @@ def by_date(profile: dict, start: datetime.date, end: datetime.date) -> Dict[str
     if start > end:
         return {}
     entries: Dict[str, _DateEntry] = {}
-    for person in people(profile):
+    roster = people(profile)
+
+    # A cycle still has an owner on a weekend when that group currently has
+    # nobody in the roster. Seed every used cycle before adding its people so
+    # the board does not skip, for example, triplet A between triplet C and B.
+    active_cycles = set()
+    for person in roster:
+        pattern = exit_pattern(profile, person)
+        if text(person.get("rotation_group")) and pattern in GROUPED_PATTERNS:
+            active_cycles.add(pattern)
+    for pattern in sorted(active_cycles):
+        for group in groups_for(pattern) or ():
+            for row in closure_days(
+                profile,
+                {"exit_pattern": pattern, "rotation_group": group},
+                start,
+                end,
+            ):
+                entry = entries.setdefault(
+                    row["date"], _DateEntry(row["date"], row["weekend"])
+                )
+                entry.add("", row)
+
+    for person in roster:
         name = text(person.get("name"))
         for row in closure_days(profile, person, start, end):
             entry = entries.setdefault(row["date"], _DateEntry(row["date"], row["weekend"]))

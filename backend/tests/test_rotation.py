@@ -88,6 +88,30 @@ def test_the_two_cycles_run_side_by_side_and_do_not_share_a_group():
     assert "2026-09-12" not in _saturdays(profile, profile["employees"][1])
 
 
+def test_the_board_shows_a_closing_group_even_when_it_has_no_people():
+    profile = _profile([
+        {"name": "דנה", "exit_pattern": "round", "rotation_group": "א"},
+        {"name": "יוסי", "exit_pattern": "round", "rotation_group": "ב"},
+        {"name": "רון", "exit_pattern": "triplet", "rotation_group": "ב"},
+    ],
+        round_first_closure_date=ANCHOR,
+        round_first_closure_group="א",
+        triplet_first_closure_date=ANCHOR,
+        triplet_first_closure_group="א",
+    )
+
+    days = rotation.by_date(
+        profile,
+        datetime.date.fromisoformat(ANCHOR),
+        datetime.date.fromisoformat(ANCHOR) + datetime.timedelta(days=14),
+    )
+
+    assert days[ANCHOR]["label"] == "סבב א ותלתון א"
+    assert days[ANCHOR]["employees"] == ["דנה"]
+    assert days["2026-09-05"]["label"] == "סבב ב ותלתון ב"
+    assert days["2026-09-05"]["employees"] == ["יוסי", "רון"]
+
+
 def test_round_and_triplet_can_start_from_different_weekends_and_groups():
     """Each structure keeps its own phase even when both staff one shift."""
     profile = _profile([
