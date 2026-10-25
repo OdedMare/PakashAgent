@@ -113,7 +113,8 @@ preview (the solver, through `chat_generation.py`), a vocabulary rebuild
 (`chat_lifecycle.py`, keeping existing rows where they fit), profile or
 constraint edits, management actions. Nothing is written until the manager
 approves; `chat_apply.py` then applies the stored plan in one transaction,
-after checking the state it was prepared against has not moved.
+after checking the state it was prepared against has not moved. `chat_state.py` gathers
+what a turn starts from; `chat_draft.py` saves the reply as it streams.
 
 ## `changes/`
 

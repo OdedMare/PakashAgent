@@ -74,7 +74,13 @@ workspace_service = WorkspaceService(repository)
 # with no restart — the same property the model settings have.
 schedule_service = ScheduleService(repository, llm, settings=store)
 profile_service = ProfileService(repository)
-manager_chat_service = ManagerChatService(repository, llm, schedule_service)
+# Wakes the manager's screen when an employee submits or answers something,
+# or when a chat turn moves. Shared by the routes and services that publish
+# and the stream that listens.
+team_events = TeamEvents(bus=PostgresSignals(store))
+manager_chat_service = ManagerChatService(
+    repository, llm, schedule_service, events=team_events,
+)
 copilot_service = CopilotService(repository, schedule_service)
 # Takes the schedule service, not just the repository: the personal view needs
 # an audited schedule, and recomputing the audit for the employee would be a
@@ -113,9 +119,6 @@ guards = Guards(session_secret, team_active=repository.team_is_active)
 # One throttle for every password check in the process. Keys are namespaced
 # (`boss:`, `employee:`, `settings:`), so sharing it couples nothing.
 login_throttle = LoginThrottle(shared=repository)
-# Wakes the manager's screen when an employee submits or answers something.
-# Shared by the employee routes that publish and the stream that listens.
-team_events = TeamEvents(bus=PostgresSignals(store))
 if not env.settings_password:
     _log.warning(
         "PAKASH_SETTINGS_PASSWORD is not set; the settings panel is locked."

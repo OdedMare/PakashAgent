@@ -10,13 +10,14 @@ import { hebrewWeekday } from "./Calendar";
 import type { useManagerChat } from "./useManagerChat";
 import { ChatPlanCard } from "./ChatPlanCard";
 import { ChatCandidates } from "./ChatCandidates";
+import { DismissFeedback, Suggestions, Thinking } from "./ChatLive";
 
 /** The manager's one agent: every instruction to the scheduling agent goes
  *  through this conversation. The board can open it focused on one day
  *  (`focusDate`); messages then carry that day, and the agent treats requests
  *  that name no date as being about it. */
-export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employees, draft, draftKey, boardBusy, hidden = false, onClearFocus, onPreview, onOpenReceipt }: {
-  agent: ReturnType<typeof useManagerChat>; visibleWeek: string; focusDate?: string; focusKey?: number; employees: string[];
+export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employees, starters, draft, draftKey, boardBusy, hidden = false, onClearFocus, onPreview, onOpenReceipt }: {
+  agent: ReturnType<typeof useManagerChat>; visibleWeek: string; focusDate?: string; focusKey?: number; employees: string[]; starters: string[];
   draft?: string; draftKey?: number; boardBusy: boolean; hidden?: boolean; onClearFocus?: () => void;
   onPreview: (proposal: Proposal | null) => void; onOpenReceipt: (date: string) => void;
 }) {
@@ -24,7 +25,12 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
-  const [revising, setRevising] = useState(false);
+  // The manager message being edited. `inPlace` replaces it and what followed;
+  // after an applied plan that history stays, so the edit is sent as a new message.
+  const [editing, setEditing] = useState<{ id: string; inPlace: boolean } | null>(null);
+  // A message written while the agent is still answering, sent when it is done.
+  const [queued, setQueued] = useState("");
+  const [feedbackFor, setFeedbackFor] = useState("");
   const input = useRef<HTMLTextAreaElement>(null);
   const log = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
@@ -34,7 +40,7 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
   const [copyError, setCopyError] = useState("");
   const [conversationId, setConversationId] = useState(agent.chat?.id);
   if (conversationId !== agent.chat?.id) {
-    setConversationId(agent.chat?.id); setText(readDraft(agent.chat?.id)); setRevising(false); setDeleteOpen(false);
+    setConversationId(agent.chat?.id); setText(readDraft(agent.chat?.id)); setEditing(null); setDeleteOpen(false); setQueued(""); setFeedbackFor("");
   }
   useEffect(() => {
     if (!conversationId) return;
@@ -72,17 +78,33 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
     }
   }, [text]);
   useEffect(() => { if (copied) { const timer = setTimeout(() => setCopied(""), 2000); return () => clearTimeout(timer); } }, [copied]);
-  const send = async (value: string) => {
-    if (disabled || sending.current || !value.trim()) return;
+  const send = async (value: string, replaces?: string) => {
+    if (agent.loading || sending.current || !value.trim()) return;
+    if (agent.busy || agent.working) {
+      // Nothing is lost by typing ahead: it goes out once the answer lands.
+      setQueued(value.trim()); setText(""); setEditing(null);
+      return;
+    }
     sending.current = true;
     pinned.current = true;
     const draftBefore = text;
-    setText(""); setRevising(false);
+    setText(""); setEditing(null); setFeedbackFor("");
     try {
-      if (!await agent.send(value)) setText((current) => current || draftBefore || value);
+      if (!await agent.send(value, replaces)) setText((current) => current || draftBefore || value);
     } finally { sending.current = false; input.current?.focus(); }
   };
   const disabled = agent.busy || agent.working || agent.loading;
+  useEffect(() => {
+    if (!queued || disabled) return;
+    // Out of the effect body: sending sets state, and the answer that just
+    // landed should paint before the next message goes.
+    const timer = setTimeout(() => { setQueued(""); void send(queued); }, 0);
+    return () => clearTimeout(timer);
+    // `send` is rebuilt every render; the queue only needs to react to the agent finishing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queued, disabled]);
+  const appliedAfter = (index: number) => messages.slice(index).some((row) => row.status === "applied" || row.payload.receipt);
+  const outgoing = agent.outgoing && !messages.some((row) => row.request_id === agent.outgoing!.requestId) ? agent.outgoing : null;
   const scrollBehavior = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" as const : "smooth" as const;
   return <section className="conversation" hidden={hidden} aria-label="שיחה עם סוכן הסידור">
     <header className="conversation-toolbar">
@@ -127,20 +149,25 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
         <div className="conversation-empty-mark"><MessageSquare size={25} /></div>
         <h3>{focusDate ? `מה נעשה ביום ${hebrewWeekday(focusDate)}?` : "איך ננהל את הסידור היום?"}</h3>
         <p>{focusDate ? "שיבוץ, החלפה או אילוץ — נדבר על היום שנבחר בלוח." : "שיבוצים, אנשים ואילוצים. מתחילים בבקשה שלך."}</p>
-        <div className="conversation-starters">{(focusDate ? DAY_STARTERS : WEEK_STARTERS).map((value) =>
+        <div className="conversation-starters">{starters.map((value) =>
           <button type="button" key={value} disabled={disabled} onClick={() => void send(value)}>{value}</button>)}</div>
       </div> : null}
-      {messages.map((message) => <article id={`chat-message-${message.id}`} key={message.id} className={`conversation-message is-${message.role}${message.status === "error" ? " is-error" : ""}`}>
-        <div className="conversation-speaker">{message.role === "assistant" ? <><Sparkles size={13} /> סוכן הסידור</> : "את/ה"}</div>
-        {message.status === "working" ? <Thinking steps={message.payload.steps ?? []} activity={message.payload.activity} /> :
+      {messages.map((message, index) => <article id={`chat-message-${message.id}`} key={message.id} className={`conversation-message is-${message.role}${message.status === "error" ? " is-error" : ""}`}>
+        <div className="conversation-speaker">{message.role === "assistant" ? <><Sparkles size={13} /> סוכן הסידור</> : "אני"}</div>
+        {message.status === "working" ? <Thinking steps={message.payload.steps ?? []} activity={message.payload.activity} draft={message.payload.draft} /> :
           message.role === "assistant" ? <Markdown text={message.content} /> : <div className="conversation-text">{message.content}</div>}
         {message.payload.plan ? <ChatPlanCard message={message} employees={employees} disabled={disabled || boardBusy}
-          onApply={(exceptions) => void agent.apply(message.id, exceptions)} onDismiss={() => void agent.dismiss(message.id)} onAdjust={(value) => void send(value)} /> : null}
+          onApply={(exceptions) => void agent.apply(message.id, exceptions)}
+          onDismiss={async () => { if (await agent.dismiss(message.id)) setFeedbackFor(message.id); }} onAdjust={(value) => void send(value)} /> : null}
+        {feedbackFor === message.id && message.id === last?.id && message.status === "dismissed" ?
+          <DismissFeedback disabled={disabled} onAnswer={(value) => void send(value)} onClose={() => setFeedbackFor("")} /> : null}
         {message.role === "assistant" && (message.status === "complete" || message.status === "pending") && message.payload.results ?
           <ChatCandidates results={message.payload.results} plan={message.payload.plan} disabled={disabled || message.id !== last?.id} onChoose={(value) => void send(value)} /> : null}
         {message.payload.question?.options.length ? <div className="conversation-options">{message.payload.question.options.map((option, index) =>
           <button type="button" key={option.label} disabled={disabled || message.id !== last?.id || message.status === "applied"}
             onClick={() => void send(option.answer)}>{index === 0 ? <Sparkles size={12} /> : null}{option.label}</button>)}</div> : null}
+        {message.id === last?.id && (message.status === "complete" || message.status === "pending") && !message.payload.question?.options.length ?
+          <Suggestions values={message.payload.suggestions ?? []} disabled={disabled} onChoose={(value) => void send(value)} /> : null}
         {message.status !== "working" && message.payload.steps?.length ? <details className="conversation-checks"><summary><ChevronDown size={12} /> מה נבדק ({message.payload.steps.length})</summary>
           <ul>{message.payload.steps.map((step, index) => <li key={index}>{TOOL_LABELS[step.tool] ?? "בדיקת הסידור"}{step.ok ? "" : " — הבדיקה לא הושלמה"}</li>)}</ul></details> : null}
         {message.status === "error" && message.id === last?.id ? <button type="button" className="ghost-button" disabled={disabled} onClick={() => {
@@ -152,13 +179,19 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
             if (await copyText(message.content)) { setCopied(message.id); setCopyError(""); }
             else setCopyError("ההעתקה לא זמינה בדפדפן הזה. אפשר לבחור ולהעתיק את הטקסט.");
           }}>{copied === message.id ? <Check size={15} /> : <Copy size={15} />}</button>
-          {message.role === "user" ? <button type="button" className="icon-button" aria-label="עריכת הבקשה כהודעת המשך" title="עריכת הבקשה כהודעת המשך" disabled={disabled}
-            onClick={() => { setText(message.content); setRevising(true); input.current?.focus(); }}><Pencil size={15} /></button> : null}
+          {message.role === "user" ? <button type="button" className="icon-button" aria-label="עריכת הבקשה" title="עריכת הבקשה" disabled={disabled}
+            onClick={() => { setText(message.content); setEditing({ id: message.id, inPlace: !appliedAfter(index) }); input.current?.focus(); }}><Pencil size={15} /></button> : null}
           {message.id === last?.id && message.role === "assistant" && message.status === "complete" && !message.payload.plan && !message.payload.receipt ?
             <button type="button" className="icon-button" aria-label="תשובה נוספת" title="תשובה נוספת" disabled={disabled}
-              onClick={() => void send("ענה מחדש על הבקשה האחרונה שלי, בניסוח אחר. זו בקשה לתשובה בלבד, ללא ביצוע או אישור שינויים.")}><RotateCcw size={15} /></button> : null}
+              onClick={() => { pinned.current = true; void agent.regenerate(); }}><RotateCcw size={15} /></button> : null}
         </div> : null}
       </article>)}
+      {outgoing ? <>
+        <article className="conversation-message is-user is-sending"><div className="conversation-speaker">אני</div>
+          <div className="conversation-text">{outgoing.content}</div></article>
+        <article className="conversation-message is-assistant"><div className="conversation-speaker"><Sparkles size={13} /> סוכן הסידור</div>
+          <Thinking steps={[]} /></article>
+      </> : null}
     </div>
     <div className="conversation-bottom">
     {awayFromBottom ? <button type="button" className="conversation-jump" aria-label="מעבר להודעה האחרונה"
@@ -169,18 +202,21 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
     {agent.error ? <p className="conversation-error" role="alert">{agent.error}</p> : null}
     {agent.refreshPending ? <button type="button" className="ghost-button" disabled={agent.busy}
       onClick={() => void agent.retryRefresh()}><RotateCcw size={14} />רענון הלוח</button> : null}
-    <form className="conversation-composer" data-tour="agent-composer" onSubmit={(event) => { event.preventDefault(); if (!disabled) void send(text); }}>
-      {revising ? <div className="conversation-revising"><span>הבקשה הערוכה תישלח כהודעת המשך</span>
-        <button type="button" className="icon-button" aria-label="ביטול עריכת הבקשה" onClick={() => { setRevising(false); setText(""); }}><X size={15} /></button></div> : null}
+    <form className="conversation-composer" data-tour="agent-composer" onSubmit={(event) => { event.preventDefault(); void send(text, editing?.inPlace ? editing.id : undefined); }}>
+      {editing ? <div className="conversation-revising"><span>{editing.inPlace ? "עריכת הבקשה — התשובה תתעדכן בהתאם" : "אחרי הבקשה כבר אושר שינוי, אז הגרסה הערוכה תישלח כהודעה חדשה"}</span>
+        <button type="button" className="icon-button" aria-label="ביטול עריכת הבקשה" onClick={() => { setEditing(null); setText(""); }}><X size={15} /></button></div> : null}
+      {queued ? <div className="conversation-revising"><span>יישלח כשהסוכן יסיים: {queued}</span>
+        <button type="button" className="icon-button" aria-label="ביטול ההודעה הממתינה" onClick={() => { setText(queued); setQueued(""); }}><X size={15} /></button></div> : null}
       <label className="sr-only" htmlFor="agent-composer-input">הודעה לסוכן הסידור</label>
       <textarea id="agent-composer-input" ref={input} value={text} rows={1} maxLength={4000} dir="auto" aria-describedby="agent-composer-hint" placeholder={focusDate ? `שאלו על יום ${hebrewWeekday(focusDate)} ${formatDate(focusDate)}…` : "מה תרצו לעשות בסידור?"}
         onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!disabled && text.trim()) void send(text); }
+          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (text.trim()) void send(text, editing?.inPlace ? editing.id : undefined); }
+          if (event.key === "Escape" && editing) { event.preventDefault(); setEditing(null); setText(""); }
         }} />
       <div className="conversation-composer-footer">
-        <small id="agent-composer-hint">Enter לשליחה · Shift+Enter לשורה חדשה</small>
+        <small id="agent-composer-hint">{agent.working ? "אפשר להמשיך לכתוב — ההודעה תישלח כשהסוכן יסיים" : "Enter לשליחה · Shift+Enter לשורה חדשה"}</small>
         {agent.working ? <button type="button" className="conversation-send" aria-label="עצירת הבקשה" disabled={agent.busy} onClick={() => void agent.stop()}><Square size={16} /></button> :
-          <button type="submit" className="conversation-send" aria-label="שליחת הודעה" disabled={disabled || !text.trim()}>{agent.busy ? <LoaderCircle size={17} /> : <ArrowUp size={19} />}</button>}
+          <button type="submit" className="conversation-send" aria-label="שליחת הודעה" disabled={agent.loading || agent.busy || !text.trim()}>{agent.busy ? <LoaderCircle size={17} /> : <ArrowUp size={19} />}</button>}
       </div>
     </form>
     <p className="conversation-disclaimer">הסוכן יכול לטעות. בדקו את התוכנית לפני האישור.</p>
@@ -188,21 +224,9 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
   </section>;
 }
 
-/** What the agent is checking right now. The server saves each round's checks
- *  on the working message, and the existing poll brings them here. */
-function Thinking({ steps, activity }: { steps: { tool: string; ok: boolean }[]; activity?: string }) {
-  const current = steps.length ? TOOL_LABELS[steps[steps.length - 1].tool] ?? "בדיקת הסידור" : "";
-  return <div className="conversation-thinking" role="status"><LoaderCircle size={16} />
-    <span>{activity || (current ? `${current}…` : "הבקשה נשמרה וממתינה להתחלת העבודה…")}
-      {steps.length > 1 ? <small> · {steps.length} בדיקות עד עכשיו</small> : null}</span></div>;
-}
-
-
 function readDraft(id?: string) {
   try { return id ? localStorage.getItem(`manager-chat-draft:${id}`) ?? "" : ""; }
   catch { return ""; }
 }
 
-const WEEK_STARTERS = ["תשבץ את שני כמו בשבוע שעבר", "מי יכול להחליף ברביעי?", "מי משובץ הכי הרבה בסופ״ש?", "אני רוצה להוסיף אילוץ קבוע לעובד"];
-const DAY_STARTERS = ["תשבץ את היום הזה", "תמלא רק את המשמרות הפנויות ביום הזה", "איך כדאי לפתור חוסר בעובדים ביום הזה?", "מי זמין להחליף ביום הזה?"];
 const TOOL_LABELS: Record<string, string> = { team_overview: "פרטי הצוות והכללים", read_period: "הסידור והסגירות", employee_state: "משמרות, שעות ואילוצים", coverage_gaps: "משמרות חסרות", validate_placement: "תקינות השיבוץ", find_replacements: "חלופות מתאימות", publish_readiness: "מוכנות לפרסום", profile_gaps: "פרטים חסרים", list_periods: "סידורים קודמים ועתידיים", workload_report: "השוואת עומסים", change_history: "היסטוריית שינויים", simulate_changes: "בדיקת ההשפעה של השינויים בלי לשמור", plan_review: "בחינת החריגות ותיקון ההצעה", plan_check: "תיקון התוכנית לפי בדיקת השרת" };

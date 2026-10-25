@@ -33,6 +33,7 @@ import type { ChatPlan, ManagementOverview, Proposal, TeamView } from "@/types";
 import { AccountMenu } from "./AccountMenu";
 import { AgentChat } from "./AgentChat";
 import { useManagerChat } from "./useManagerChat";
+import { chatStarters } from "./chatStarters";
 import { useChatSplit } from "./useChatSplit";
 import { ProfileGapsNotice } from "./ProfileGapsNotice";
 import { CopilotInbox } from "./CopilotInbox";
@@ -743,6 +744,7 @@ export function Management({
             focusKey={focusDay.n}
             onClearFocus={() => setFocusDay((previous) => ({ date: "", n: previous.n }))}
             employees={overview?.employees.map((person) => String(person.name ?? "")).filter(Boolean) ?? []}
+            starters={chatStarters({ warnings: schedule?.warnings ?? [], requests: requests.rows, focusDate })}
             boardBusy={state.busy}
             draft={suggested.text}
             draftKey={suggested.n}

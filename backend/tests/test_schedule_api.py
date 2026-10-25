@@ -319,7 +319,7 @@ class _ScriptedLlm:
         self._answers = list(answers or [])
         self.calls = []
 
-    def complete_json(self, system, user, schema=None, flow="", time_context=""):
+    def complete_json(self, system, user, schema=None, flow="", time_context="", on_text=None):
         self.calls.append({"system": system, "user": user, "schema": schema,
                            "time_context": time_context})
         if not self._answers:

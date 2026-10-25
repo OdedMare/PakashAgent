@@ -92,6 +92,47 @@ change until it finishes, and the whole thread with every earlier plan grew
 with the conversation. Stop discards any late response;
 it does not interrupt an HTTP completion already running at the provider.
 
+**The reply streams in.** Each model round is read as a stream
+(`dal/llm/streaming.py`); `bl/chat_draft.py` reads the `reply` string out of
+the JSON as it is written and saves it on the working message as
+`payload.draft` a few times a second. Every saved check, draft and finished
+turn also publishes a bare `chat` signal on the manager's existing SSE line
+(`common/events.py`, D29), and the browser re-reads the turn at once; the
+one-second poll stays underneath for a stream a proxy buffers. A draft is
+shown only on a `working` message and is replaced by the finished content —
+the plan, the checks and the server's corrections still decide what the turn
+says. A server that refuses `stream` is asked the same ladder rung again
+without it, and is not asked to stream again for the life of the process.
+
+**The conversation responds before the server does.** The manager's message
+appears the moment it is sent, with the agent's "thinking" line under it,
+and is swapped for the stored one once the thread carries its `request_id`.
+A message typed while the agent is still answering waits beside the composer
+and goes out when the turn ends.
+
+**Editing and answering again replace, they do not append.** Editing a
+manager message sends `replaces_message_id`: that message and everything after
+it are removed in the same transaction that starts the new turn, and the edit
+is never read as approval of a plan on screen. "תשובה נוספת" is
+`POST /{chat_id}/regenerate`: the last request is asked again in place of the
+last answer, with `answer_again.previous_answer` so the model words it
+differently (the model runs at temperature 0), and it skips the code-only fast
+path, which would answer identically. Neither may take back an applied plan or
+its receipt — those are the record of a real change — so after one an edit is
+sent as an ordinary new message.
+
+**Follow-ups and openers.** A finished answer may carry up to three
+`suggestions`, offered as one-click next messages. Any that reads as approval
+or execution is dropped in code (`chat_schema.suggestions`), so a click on an
+idea can never confirm a plan. The empty conversation opens with starters built
+from the board itself — empty shifts and requests waiting for an answer —
+before the general ones. Turning a plan down asks, optionally, what did not
+fit; the answer goes to the agent as a message, which may propose remembering
+it as a preference the manager approves (D21). The model is also told how many
+history entries were logged since its last answer
+(`history_since_last_reply`), so edits made on the board meanwhile are read
+rather than assumed away.
+
 The Apply button approves the server-stored plan. The server checks its owner
 and a snapshot of the profile, availability, preferences and target schedule.
 For a new period it also checks the existing period list. Stale plans must be
@@ -126,7 +167,8 @@ the private transcripts, turn idempotency and approval transaction.
 `useManagerChat.ts` manages history, polling and explicit approval requests.
 
 Routes live under `/api/agent/chats`: list/create, read/delete by chat id,
-send messages, stop, and apply/dismiss a stored message plan. They all require
+send messages (optionally replacing an earlier one), answer the last request
+again (`/regenerate`), stop, and apply/dismiss a stored message plan. They all require
 the existing boss role plus the signed conversation identity. Employee and
 member sessions cannot use them. The new tables are created by the existing
 idempotent startup schema initialization.
@@ -306,5 +348,5 @@ needed; they are not defaults to guess during implementation.
 - Measure missing-slot rate, repeated clarification questions, failed approvals,
   latency and model/tool rounds without logging credentials or unnecessary private
   conversation content. Use the real requests above as a dialogue regression set.
-- Consider streaming replies after correctness and proposal handling are stable;
-  retain the current saved-progress mechanism until a measured need warrants it.
+- Streaming replies: done, on top of the saved-progress mechanism rather than
+  instead of it (see Approval and persistence).

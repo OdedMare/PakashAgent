@@ -15,6 +15,8 @@ from app.bl.compiled_sources.compiler import JOB_KIND as COMPILE_SOURCES
 from app.bl.copilot import CopilotService
 from app.bl.schedule_service import ScheduleService
 from app.bl.manager_chat import ManagerChatService
+from app.common.events import TeamEvents
+from app.dal.notify import PostgresSignals
 from app.common.activity import track_activity
 from app.common.errors import NotFoundError
 from app.common.config import Settings
@@ -131,7 +133,11 @@ def _build():
     schedules = ScheduleService(repository, llm, settings=store)
     return repository, CopilotWorker(
         repository, CopilotService(repository, schedules),
-        schedules=schedules, chat=ManagerChatService(repository, llm, schedules),
+        schedules=schedules, chat=ManagerChatService(
+            repository, llm, schedules,
+            # A turn answered here wakes the manager's screen in the API.
+            events=TeamEvents(bus=PostgresSignals(store)),
+        ),
         compiler=SourceCompiler(repository, llm),
     )
 

@@ -1116,6 +1116,10 @@ export interface ManagerChatMessage {
   request_id?: string;
   payload: {
     activity?: string;
+    /** The reply so far, while the model is still writing it (`working` only). */
+    draft?: string;
+    /** Up to three next messages the agent offers as one-click follow-ups. */
+    suggestions?: string[];
     plan?: ChatPlan;
     results?: { tool: string; ok?: boolean; date?: string; shift?: string; replacing?: string;
       candidates?: { employee: string; hours?: number; why?: string; requires_exception?: boolean }[] }[];
