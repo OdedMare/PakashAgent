@@ -50,6 +50,38 @@ export const getReplacementOptions = (employee: string, startsOn: string, endsOn
 export const stopManagerReply = (id: string) =>
   request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/stop`, { method: "POST" });
 
+/** Routes whose 401 is an answer rather than a symptom: the probes that
+ *  ask "who am I". */
+const EXPECTED_401 = ["/api/workspace/me", "/api/employee/me"];
+
+const sessionLostListeners = new Set<() => void>();
+
+/** Hear about a read refused for want of a session.
+ *
+ *  The pollers behind the management area (requests, copilot, chat) run
+ *  until they are unmounted, and nothing unmounted them when the cookie
+ *  died under them — a backend restart with no fixed session secret, a
+ *  suspended team, an expired session. Each kept asking every few seconds
+ *  and filled the server log with 401s while the screen still looked
+ *  signed in. `useWorkspace` listens here and re-asks `/me`, which is
+ *  what returns the browser to the login gate and stops them all. */
+export function onSessionLost(listener: () => void): () => void {
+  sessionLostListeners.add(listener);
+  return () => {
+    sessionLostListeners.delete(listener);
+  };
+}
+
+/** A GET is a read the session should have covered. A refused POST is
+ *  usually a wrong password or passcode, which is the form's to answer, and
+ *  the operator console's cookie is a separate session whose loss says
+ *  nothing about the team's. */
+function signalsSessionLost(method: string, path: string): boolean {
+  if (method !== "GET") return false;
+  if (path.startsWith("/api/admin/")) return false;
+  return !EXPECTED_401.some((probe) => path === probe || path.startsWith(`${probe}?`));
+}
+
 /**
  * Every backend call is traced to the browser console.
  *
@@ -85,7 +117,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const elapsed = performance.now() - started;
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (!(response.status === 401 && path === "/api/workspace/me")) console.error(`[api] ✗ ${label} → ${response.status}`);
+    if (response.status === 401 && signalsSessionLost(method, path)) {
+      sessionLostListeners.forEach((listener) => listener());
+    }
+    if (!(response.status === 401 && EXPECTED_401.includes(path))) console.error(`[api] ✗ ${label} → ${response.status}`);
     throw apiError(data, response.status);
   }
   console.debug(`[api] ✓ ${label} (${elapsed.toFixed(0)}ms)`);
@@ -130,7 +165,13 @@ function apiError(data: unknown, status: number): Error {
       lines(body.blocks),
     );
   }
-  return new Error(message);
+  return Object.assign(new Error(message), { status });
+}
+
+/** The HTTP status a failed `request` answered with, when there was one. */
+export function errorStatus(reason: unknown): number | undefined {
+  const status = (reason as { status?: unknown } | null)?.status;
+  return typeof status === "number" ? status : undefined;
 }
 
 function lines(value: unknown): string[] {
