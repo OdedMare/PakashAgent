@@ -14,6 +14,15 @@ class ChatTurn(BaseModel):
     focus_date: str = Field(default="", max_length=10)
     approval_message_id: Optional[str] = Field(default=None, max_length=80)
     displayed_plan_id: Optional[str] = Field(default=None, max_length=80)
+    # A manager message to take back and replace with this one (an edit).
+    replaces_message_id: Optional[str] = Field(default=None, max_length=80)
+
+
+class ChatRegenerate(BaseModel):
+    request_id: str = Field(min_length=1, max_length=80)
+    schedule_id: Optional[str] = None
+    visible_week: str = Field(default="", max_length=10)
+    focus_date: str = Field(default="", max_length=10)
 
 
 class ChatApproval(BaseModel):
@@ -51,6 +60,8 @@ def build_router(service, repository, guards):
         )
         return repository.get_chat(session["team_id"], session["manager_id"], chat_id)
 
+    _regenerate_route(router, service, repository, manager)
+
     @router.post("/{chat_id}/messages/{message_id}/apply")
     def apply(chat_id: str, message_id: str, request: ChatApproval,
               session: dict = Depends(manager)):
@@ -69,3 +80,14 @@ def build_router(service, repository, guards):
         return repository.get_chat(session["team_id"], session["manager_id"], chat_id)
 
     return router
+
+
+def _regenerate_route(router, service, repository, manager):
+    @router.post("/{chat_id}/regenerate")
+    def regenerate(chat_id: str, request: ChatRegenerate,
+                   session: dict = Depends(manager)):
+        """Answer the last request again, in place of the last answer."""
+        service.regenerate(
+            session["team_id"], session["manager_id"], chat_id, request.model_dump(),
+        )
+        return repository.get_chat(session["team_id"], session["manager_id"], chat_id)

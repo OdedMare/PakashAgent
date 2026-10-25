@@ -106,6 +106,8 @@ interface ManagementState {
     build_through?: string;
     instructions?: string;
     required_assignments?: import("@/types").RequiredAssignment[];
+    /** Only these shift types; empty or absent builds every shift. */
+    shifts?: string[];
   }) => Promise<void>;
   /** Open an empty period to fill in by hand (D18). Calls no model. */
   openBlank: (input: { starts_on?: string; ends_on?: string }) => Promise<void>;
@@ -355,6 +357,7 @@ export function useManagement(): ManagementState {
       build_through?: string;
       instructions?: string;
       required_assignments?: import("@/types").RequiredAssignment[];
+      shifts?: string[];
       keep_existing?: boolean;
     }) => {
       const firstDay = input.build_from ?? input.starts_on;
@@ -378,6 +381,7 @@ export function useManagement(): ManagementState {
           starts_on: period.starts_on,
           ends_on: period.ends_on,
           instructions: period.instructions,
+          shifts: period.shifts,
           keep_existing: keepExisting,
         };
         await watchGeneration(

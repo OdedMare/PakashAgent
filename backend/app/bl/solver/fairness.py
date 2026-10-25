@@ -18,7 +18,7 @@ def apply_fairness(model: Model) -> None:
     _closers(model)
     _spread(model, lambda times: int(round(times["hours"] * HOUR_SCALE)), HOUR_SPREAD, "hours")
     _spread(model, lambda times: int(bool(times["night"])), NIGHT_SPREAD, "nights")
-    for name in model.problem.staff:
+    for name in model.problem.people:
         _back_to_back(model, name)
 
 

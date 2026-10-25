@@ -92,7 +92,7 @@ def _min_rest(model: Model, request: dict) -> None:
             return False
         return covers(scope, later["shift"], later["date"]) or covers(scope, earlier["shift"], earlier["date"])
 
-    for name in problem.staff:
+    for name in problem.people:
         if not concerns(request, name):
             continue
         for first, second in rest_pairs(problem, model, name, request["count"], matters):
@@ -117,7 +117,7 @@ def _pair(model: Model, request: dict, first, second) -> None:
 
 def _max_consecutive(model: Model, request: dict) -> None:
     problem = model.problem
-    for name in problem.staff:
+    for name in problem.people:
         if not concerns(request, name):
             continue
         windows = day_windows(problem, model, name, request["count"],

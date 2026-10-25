@@ -45,8 +45,11 @@ class Scheduler:
         preferences: Optional[List[dict]] = None,
         translation_cache=None,
         keep: Optional[List[dict]] = None,
+        shift_names: Optional[List[str]] = None,
     ) -> dict:
         """Assign every slot from `starts_on` through `ends_on`.
+
+        `shift_names` narrows it to those shifts; rows on the others stand.
 
         `keep` are rows to hold where they still fit — a rebuild after a
         new person or a changed shift vocabulary should move as few people
@@ -65,6 +68,7 @@ class Scheduler:
             already_scheduled=already_scheduled,
             requests=translated["requests"],
             keep=keep,
+            shift_names=shift_names,
             **self._limits(),
         )
         if translated["sources"]:

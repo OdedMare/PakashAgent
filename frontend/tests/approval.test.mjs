@@ -230,3 +230,39 @@ test("an older overview response cannot replace the read made after approval", a
   await assert.rejects(h.render().refresh(true), /offline/);
   assert.equal(h.render().overview, fresh);
 });
+
+test("a sent message is on screen before the server answers, and leaves once the thread has it", async () => {
+  const answer = deferred();
+  let sent;
+  const h = await chat({
+    readManagerChat: async () => conversation("complete"),
+    sendManagerMessage: async (id, input) => { sent = input; return answer.promise; },
+  });
+  const sending = h.render().send("מי עובד מחר?");
+  await h.settle();
+  assert.equal(h.render().outgoing.content, "מי עובד מחר?");
+  assert.equal(h.render().outgoing.requestId, sent.request_id);
+  answer.resolve({ id: "chat", messages: [{ id: "u", role: "user", status: "complete", request_id: sent.request_id, payload: {} }] });
+  await sending;
+  assert.equal(h.render().outgoing, null);
+});
+
+test("an edit names the message it replaces and is never sent as approval of the showing plan", async () => {
+  let sent;
+  const h = await chat({ sendManagerMessage: async (id, input) => { sent = input; return conversation("superseded"); } });
+  await h.render().send("בעצם ביום שלישי", "user-1");
+  assert.equal(sent.replaces_message_id, "user-1");
+  assert.equal(sent.displayed_plan_id, undefined);
+});
+
+test("answering again asks the regenerate route, not a hidden message", async () => {
+  let regenerated, messages = 0;
+  const h = await chat({
+    readManagerChat: async () => conversation("complete"),
+    sendManagerMessage: async () => { messages++; return conversation("complete"); },
+    regenerateManagerReply: async (id, input) => { regenerated = input; return conversation("complete"); },
+  });
+  assert.equal(await h.render().regenerate(), true);
+  assert.ok(regenerated.request_id);
+  assert.equal(messages, 0);
+});

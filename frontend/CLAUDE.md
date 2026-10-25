@@ -153,7 +153,6 @@ profile comes from the setup form.
 | Manager chat | **The** agent: every instruction, question and plan, optionally focused on one day — `Management/AgentChat.tsx` |
 | Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `Board/ConfirmDrop.tsx` |
 | Replacement tab | Who is out and when → covers ranked so the load spreads evenly; the picks go to the chat as a plan (D36) — `Management/ReplacementPanel.tsx`. Reads only; the wording it sends is shared with the chat cards in `lib/replacement.ts` and read back by the server |
-| Copilot inbox | Durable observations, proposals, failures, permissions and audit — `Management/CopilotInbox.tsx` |
 | Preferences | What the agent remembers, all of it visible — `Management/Preferences.tsx` |
 | Employee view | **Read-only** schedule — `MemberArea` renders the same `Calendar` with `readOnly` |
 | Personal area | One employee's own shifts, constraint requests and swaps — `src/components/Employee/` |
@@ -206,7 +205,6 @@ impression.
   the shift-row order; nothing is written to the server. The X at the end
   of the drawer's tab row closes the agent outright, and the board takes the
   full width back — full-size cards, roles and the week rail return.
-  The autonomous copilot console lives under Overview.
 - **Export downloads; it does not navigate.** `downloadSchedule` fetches the
   binary with the session cookie and triggers the browser's own download from
   an object URL, so a failure surfaces as a Hebrew error rather than a blank
@@ -229,6 +227,9 @@ impression.
   it as `build_from`/`build_through`. The board finds a week by its Sunday,
   so a period beginning on a Wednesday would be stored and never drawn; the
   days outside the run open empty instead.
+  The dialog also narrows a build by shift type: "כל המשמרות" or one or
+  more "רק <משמרת>" buttons, named from setup. Only the chosen shifts are
+  built (`shifts` on both calls); the others on those days stay as they are.
 - **Building a period does not lock the area.** `generate` and its two
   siblings report through `state.generating`, never through `state.busy`:
   a build is a background job — seconds per four-week span for the solver

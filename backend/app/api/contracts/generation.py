@@ -27,6 +27,8 @@ class GenerateRequest(BaseModel):
     required_assignments: List[RequiredAssignment] = Field(
         default=[], max_length=100
     )
+    # Only these shift types are built ("only the nights"); empty means all.
+    shifts: List[str] = Field(default=[], max_length=50)
 
 
 class GenerateDayRequest(BaseModel):
@@ -45,6 +47,8 @@ class GenerateRangeRequest(BaseModel):
     # Absorb into the rows already there instead of rebuilding them: a new
     # soldier or a new shift moves as few people as it needs.
     keep_existing: bool = False
+    # Only these shift types are rebuilt; rows on the others stand.
+    shifts: List[str] = Field(default=[], max_length=50)
 
 
 class BlankRequest(BaseModel):

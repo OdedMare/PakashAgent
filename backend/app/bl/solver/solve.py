@@ -38,6 +38,7 @@ def solve(problem, time_limit: float = 10.0, workers: int = 8) -> dict:
     solver, status = _two_phases(model, max(0.2, float(time_limit)), max(1, int(workers)))
     chosen = [_row(problem, name, index) for (name, index), var in sorted(model.x.items())
               if solver.Value(var)]
+    _shadow_reasons(problem, chosen)
     final = _ordered(problem, problem.pins + chosen)
     warnings = _warnings(problem, final)
     metrics = _metrics(problem, solver, status, started, final)
@@ -108,6 +109,18 @@ def _reason(problem, name: str, index: int, row: dict) -> str:
     if matched:
         return "שובץ/ה לתפקיד %s, לפי זמינות ואיזון עומס." % ", ".join(matched)
     return "שובץ/ה לפי זמינות, כשירות ואיזון עומס."
+
+
+def _shadow_reasons(problem, chosen: List[dict]) -> None:
+    """A placed נחפף/ת's row names who they shadow on it."""
+    for row in chosen:
+        if row["employee"] not in problem.shadows:
+            continue
+        beside = [other["employee"] for other in chosen + problem.fixed
+                  if other["shift"] == row["shift"] and other["date"] == row["date"]
+                  and other["employee"] in problem.trainers_of(row["employee"])]
+        row["reason"] = "שובץ/ה בחפיפה לצד %s; לא נספר/ת בתקן המשמרת." % (
+            ", ".join(dict.fromkeys(beside)) or "חונך/ת")
 
 
 def _ordered(problem, rows: List[dict]) -> List[dict]:

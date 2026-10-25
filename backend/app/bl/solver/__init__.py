@@ -14,7 +14,7 @@ schedules the pick may differ from one build to the next.
 |---|---|
 | `problem.py` | `Problem`: slots, roster, fixed rows and which placements are legal |
 | `model.py` | `Model`: the CP-SAT model, its variables and priced terms; the weights |
-| `rules.py` | Seats, roles, the shift manager, rest, runs of days, weekly hours |
+| `rules.py` | Seats, roles, the shift manager, נחפפים beside a trainer, rest, runs of days, weekly hours |
 | `requests.py` | Structured requests (`bl/schedule_requests.py`) and soft availability |
 | `fairness.py` | Closers, even hours and nights, a day off between shifts |
 | `stability.py` | Absorbing a change into an existing board: moving as few rows as it needs |

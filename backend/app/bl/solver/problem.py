@@ -36,6 +36,8 @@ class Problem:
         self.people = {text(person["name"]): person for person in self.employees}
         self.staff = [name for name, person in self.people.items()
                       if counts_toward_staffing(person, self.profile)]
+        # נחפפים: placed beside a trainer, never in a seat (`rules._shadows`).
+        self.shadows = [name for name in self.people if name not in self.staff]
         self.policy = policy(self.profile)
         self.requests = checked_requests(self.profile, requests)
         self.dates = sorted({slot["slot_date"] for slot in slots})
@@ -48,7 +50,7 @@ class Problem:
         self.times = [_slot_time(slot, self.shifts) for slot in slots]
         self.pins = self._pins(required_assignments)
         self.fixed = self._fixed(already_scheduled, history)
-        self.legal = {(name, index): True for name in self.staff
+        self.legal = {(name, index): True for name in self.people
                       for index in range(len(slots)) if self._legal(name, index)}
         self.keep, self.kept_rows = self._keep(keep)
 
@@ -68,7 +70,7 @@ class Problem:
     def _check_pin(self, row: dict) -> None:
         if row["employee"] not in self.people:
             raise AgentError("עובד/ת בשיבוץ החובה לא נמצא/ה בצוות")
-        if not eligible(self.people[row["employee"]], row["shift"]):
+        if not eligible(self.people[row["employee"]], row["shift"], self.shifts.get(row["shift"])):
             raise AgentError("%s אינו/ה כשיר/ה למשמרת %s" % (row["employee"], row["shift"]))
         if self._blocked(row["employee"], self.keys[(row["shift"], row["date"])]):
             raise AgentError("שיבוץ החובה של %s ב-%s סותר אילוץ קשיח, נוכחות קבוצה, סבב או תלתון"
@@ -110,7 +112,7 @@ class Problem:
 
     def _legal(self, name: str, index: int) -> bool:
         slot = self.slots[index]
-        if not eligible(self.people[name], slot["shift_name"]):
+        if not eligible(self.people[name], slot["shift_name"], self.shifts.get(slot["shift_name"])):
             return False
         if any(row["employee"] == name for row in self.fixed_on(index)):
             return False
@@ -151,6 +153,17 @@ class Problem:
 
     def holders(self, index: int, test) -> List[str]:
         return [name for name in self.staff if (name, index) in self.legal and test(self.people[name])]
+
+    def trainers_of(self, name: str) -> List[str]:
+        """Who may stand beside this נחפף/ת: their own `trainers`, else
+        whoever can train, else (nobody can) any counted member."""
+        listed = self.people[name].get("trainers")
+        named = [text(item) for item in listed if text(item) in self.people] \
+            if isinstance(listed, list) else []
+        if named:
+            return [item for item in named if item in self.staff]
+        able = [item for item in self.staff if self.people[item].get("can_train")]
+        return able or list(self.staff)
 
 
 def checked_requests(profile: dict, requests: Optional[List[dict]]) -> List[dict]:

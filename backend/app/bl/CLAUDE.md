@@ -17,7 +17,6 @@ Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
 | `scheduler/` | Building a span: the grid, translating the manager's words, then the solver |
 | `solver/` | **The OR-Tools CP-SAT constraint solver that assigns every schedule** (D34), and holds the existing board when a change is absorbed (D37). No model |
 | `changes/` | Conversational edits and the change log |
-| `copilot/` | The durable observation loop the worker drives |
 | `schedule_service/` | Persistence and orchestration around all three: propose, confirm, apply |
 | `audit/` | **Pure-Python advisory checks. No LLM.** Also the fairness arithmetic the scheduler and the employee area read |
 | `export/` | **A period out as `.xlsx`.** Pure functions, no model, no repository |
@@ -118,7 +117,8 @@ preview (the solver, through `chat_generation.py`), a vocabulary rebuild
 (`chat_lifecycle.py`, keeping existing rows where they fit), profile or
 constraint edits, management actions. Nothing is written until the manager
 approves; `chat_apply.py` then applies the stored plan in one transaction,
-after checking the state it was prepared against has not moved.
+after checking the state it was prepared against has not moved. `chat_state.py` gathers
+what a turn starts from; `chat_draft.py` saves the reply as it streams.
 
 ## `changes/`
 
