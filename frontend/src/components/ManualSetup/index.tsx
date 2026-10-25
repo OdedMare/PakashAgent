@@ -117,6 +117,11 @@ export function ManualSetup({
     () => shifts.map((shift) => text(shift.name)).filter(Boolean),
     [shifts],
   );
+  // The roles a shift can be limited to are the ones typed on the roster.
+  const roleNames = useMemo(
+    () => [...new Set(employees.filter(named).map((person) => text(person.role)).filter(Boolean))].sort(),
+    [employees],
+  );
   const originalEmployees = useMemo(
     () => new Set(rows(profile.employees).map((row) => text(row.name))),
     [profile.employees],
@@ -199,6 +204,7 @@ export function ManualSetup({
           days: strings(shift.days),
           headcount: number(shift.headcount, headcount(shift)),
           requires_shift_manager: Boolean(shift.requires_shift_manager),
+          allowed_roles: strings(shift.allowed_roles),
         })),
         rules: rules
           .filter((rule) => text(rule.text))
@@ -359,6 +365,7 @@ export function ManualSetup({
                 </div>
                 <label className="manual-check"><input type="checkbox" checked={Boolean(shift.requires_shift_manager)} onChange={(e) => edit(setShifts, index, "requires_shift_manager", e.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
                 <CheckboxGrid label="ימים" values={DAYS} selected={strings(shift.days)} onChange={(value) => edit(setShifts, index, "days", value)} />
+                <RoleOptions roles={roleNames} selected={strings(shift.allowed_roles)} onChange={(value) => edit(setShifts, index, "allowed_roles", value)} />
                 <button type="button" className="icon-button subtle manual-delete" aria-label="מחיקת סוג משמרת" disabled={originalShifts.has(text(shift.name))} onClick={() => setShifts((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
               </article>
             ))}
@@ -402,6 +409,16 @@ export function ManualSetup({
 
 function SetupSection({ icon, title, hint, children }: { icon: React.ReactNode; title: string; hint: string; children: React.ReactNode }) {
   return <section className="manual-section"><header><span>{icon}</span><div><h2>{title}</h2><p>{hint}</p></div></header><div className="manual-section-body">{children}</div></section>;
+}
+
+/** Which roles may stand a shift. A role no longer on the roster stays
+ *  listed while selected, so it can still be cleared. */
+function RoleOptions({ roles, selected, onChange }: { roles: string[]; selected: string[]; onChange: (value: string[]) => void }) {
+  const values = [...new Set([...roles, ...selected])];
+  if (!values.length) {
+    return <fieldset className="manual-checkboxes"><legend>תפקידים מוסמכים</legend><small>הגדירו תפקיד לאנשי הצוות כדי להגביל את המשמרת לתפקידים מסוימים.</small></fieldset>;
+  }
+  return <fieldset className="manual-checkboxes"><legend>תפקידים מוסמכים</legend>{values.map((value) => <label key={value}><input type="checkbox" checked={selected.includes(value)} onChange={(event) => onChange(event.target.checked ? [...selected, value] : selected.filter((item) => item !== value))} /><span>{value}</span></label>)}<small>{selected.length ? "רק בעלי התפקידים שסומנו ישובצו במשמרת הזו." : "לא סומן תפקיד — כל אנשי הצוות מוסמכים."}</small></fieldset>;
 }
 
 function PatternOptions({ selected, locked, onChange }: { selected: string[]; locked: Set<string>; onChange: (value: string[]) => void }) {
