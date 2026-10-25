@@ -1,17 +1,19 @@
 "use client";
 
-import { LoaderCircle, Sparkles, X } from "lucide-react";
+import { Sparkles, X } from "lucide-react";
+import { CrewStage } from "@/components/Crew";
+import type { Who } from "@/components/Crew";
 import { Markdown } from "@/components/Markdown";
 
 /** A turn still being answered: the reply as it is written, or, before the
  *  first words arrive, what the agent is checking right now. The server saves
  *  both on the working message and signals each change. */
-export function Thinking({ steps, activity, draft }: { steps: { tool: string; ok: boolean }[]; activity?: string; draft?: string }) {
+export function Thinking({ who, steps, activity, draft }: { who: Who; steps: { tool: string; ok: boolean }[]; activity?: string; draft?: string }) {
   const current = steps.length ? ACTIVE_LABELS[steps[steps.length - 1].tool] ?? "בודק את הסידור" : "";
   const status = activity || (current ? `${current}…` : "רגע, קורא את הבקשה…");
   return <>
     {draft ? <div className="conversation-draft" aria-busy="true"><Markdown text={draft} /></div> : null}
-    <div className="conversation-thinking" role="status"><LoaderCircle size={16} />
+    <div className="conversation-thinking has-crew" role="status"><CrewStage size="sm" only={who} />
       <span>{draft ? "ממשיך לכתוב…" : status}
         {steps.length > 1 ? <small> · {steps.length} בדיקות עד עכשיו</small> : null}</span></div>
   </>;

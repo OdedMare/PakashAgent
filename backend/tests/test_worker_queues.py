@@ -2,7 +2,7 @@
 
 from contextlib import contextmanager
 
-from app.worker import CopilotWorker
+from app.worker import JobWorker
 
 
 class _Repository:
@@ -40,7 +40,7 @@ class _Schedules:
 
 def test_worker_claims_only_its_lane():
     repository = _Repository()
-    worker = CopilotWorker(repository, service=None)
+    worker = JobWorker(repository)
 
     assert worker.run_once("interactive") == 0
     assert repository.lanes == ["interactive"]
@@ -57,7 +57,7 @@ def test_generation_job_runs_one_named_span_then_reconciles_queue():
     }
     repository = _Repository([job])
     schedules = _Schedules()
-    worker = CopilotWorker(repository, service=None, schedules=schedules)
+    worker = JobWorker(repository, schedules=schedules)
 
     assert worker.run_once("background") == 1
     assert schedules.calls == [
@@ -65,3 +65,13 @@ def test_generation_job_runs_one_named_span_then_reconciles_queue():
     ]
     assert repository.reconciled == [("team-a", "schedule-1")]
     assert repository.finished == [("job-1", "", False)]
+
+
+def test_a_leftover_copilot_scan_is_finished_without_running_anything():
+    """The copilot is gone, but an existing database may still hold scans."""
+    job = {"id": "job-2", "team_id": "team-a", "kind": "scan",
+           "attempts": 1, "payload": {}}
+    repository = _Repository([job])
+
+    assert JobWorker(repository).run_once("background") == 1
+    assert repository.finished == [("job-2", "", False)]

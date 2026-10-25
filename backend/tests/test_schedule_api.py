@@ -1912,7 +1912,9 @@ def test_checking_a_placement_calls_no_model():
         "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-17",
     })
     assert response.status_code == 200
-    assert response.json()["ok"] is True
+    body = response.json()
+    assert body["ok"] is True
+    assert {"exit_pattern", "is_overlap"} <= set(body["candidates"][0])
 
 
 def test_a_check_that_warns_still_returns_200_and_never_blocks():

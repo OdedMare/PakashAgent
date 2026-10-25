@@ -2,6 +2,8 @@
 
 import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, Copy, History, LoaderCircle, MessageSquare, Pencil, Plus, RotateCcw, Search, Sparkles, Square, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Guard } from "@/components/Crew";
+import type { Who } from "@/components/Crew";
 import { Markdown } from "@/components/Markdown";
 import { copyText } from "@/lib/clipboard";
 import type { Proposal } from "@/types";
@@ -16,8 +18,8 @@ import { DismissFeedback, Suggestions, Thinking } from "./ChatLive";
  *  through this conversation. The board can open it focused on one day
  *  (`focusDate`); messages then carry that day, and the agent treats requests
  *  that name no date as being about it. */
-export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employees, starters, draft, draftKey, boardBusy, hidden = false, onClearFocus, onPreview, onOpenReceipt }: {
-  agent: ReturnType<typeof useManagerChat>; visibleWeek: string; focusDate?: string; focusKey?: number; employees: string[]; starters: string[];
+export function AgentChat({ who = "him", agent, visibleWeek, focusDate = "", focusKey, employees, starters, draft, draftKey, boardBusy, hidden = false, onClearFocus, onPreview, onOpenReceipt }: {
+  who?: Who; agent: ReturnType<typeof useManagerChat>; visibleWeek: string; focusDate?: string; focusKey?: number; employees: string[]; starters: string[];
   draft?: string; draftKey?: number; boardBusy: boolean; hidden?: boolean; onClearFocus?: () => void;
   onPreview: (proposal: Proposal | null) => void; onOpenReceipt: (date: string) => void;
 }) {
@@ -108,7 +110,7 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
   const scrollBehavior = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" as const : "smooth" as const;
   return <section className="conversation" hidden={hidden} aria-label="שיחה עם סוכן הסידור">
     <header className="conversation-toolbar">
-      <div className="conversation-title"><Sparkles size={17} aria-hidden="true" /><strong>{agent.chat?.title === "שיחה חדשה" ? "סוכן הסידור" : agent.chat?.title ?? "סוכן הסידור"}</strong></div>
+      <div className="conversation-title"><Guard who={who} face /><strong>{agent.chat?.title === "שיחה חדשה" ? "סוכן הסידור" : agent.chat?.title ?? "סוכן הסידור"}</strong></div>
       <div className="conversation-tools">
         <button type="button" className="icon-button" aria-label="היסטוריית שיחות" aria-expanded={historyOpen}
           onClick={() => setHistoryOpen(!historyOpen)}><History size={17} /></button>
@@ -146,15 +148,15 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
       onScroll={() => { const element = log.current; if (element) { pinned.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; setAwayFromBottom(!pinned.current); } }}>
       {agent.loading ? <p className="conversation-loading"><LoaderCircle size={17} /> טוען שיחות…</p> : null}
       {!agent.loading && !messages.length ? <div className="conversation-empty">
-        <div className="conversation-empty-mark"><MessageSquare size={25} /></div>
+        <div className="conversation-empty-mark is-guard"><Guard who={who} /></div>
         <h3>{focusDate ? `מה נעשה ביום ${hebrewWeekday(focusDate)}?` : "איך ננהל את הסידור היום?"}</h3>
         <p>{focusDate ? "שיבוץ, החלפה או אילוץ — נדבר על היום שנבחר בלוח." : "שיבוצים, אנשים ואילוצים. מתחילים בבקשה שלך."}</p>
         <div className="conversation-starters">{starters.map((value) =>
           <button type="button" key={value} disabled={disabled} onClick={() => void send(value)}>{value}</button>)}</div>
       </div> : null}
       {messages.map((message, index) => <article id={`chat-message-${message.id}`} key={message.id} className={`conversation-message is-${message.role}${message.status === "error" ? " is-error" : ""}`}>
-        <div className="conversation-speaker">{message.role === "assistant" ? <><Sparkles size={13} /> סוכן הסידור</> : "אני"}</div>
-        {message.status === "working" ? <Thinking steps={message.payload.steps ?? []} activity={message.payload.activity} draft={message.payload.draft} /> :
+        <div className="conversation-speaker">{message.role === "assistant" ? <><Guard who={who} face /> סוכן הסידור</> : "אני"}</div>
+        {message.status === "working" ? <Thinking who={who} steps={message.payload.steps ?? []} activity={message.payload.activity} draft={message.payload.draft} /> :
           message.role === "assistant" ? <Markdown text={message.content} /> : <div className="conversation-text">{message.content}</div>}
         {message.payload.plan ? <ChatPlanCard message={message} employees={employees} disabled={disabled || boardBusy}
           onApply={(exceptions) => void agent.apply(message.id, exceptions)}
@@ -189,8 +191,8 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
       {outgoing ? <>
         <article className="conversation-message is-user is-sending"><div className="conversation-speaker">אני</div>
           <div className="conversation-text">{outgoing.content}</div></article>
-        <article className="conversation-message is-assistant"><div className="conversation-speaker"><Sparkles size={13} /> סוכן הסידור</div>
-          <Thinking steps={[]} /></article>
+        <article className="conversation-message is-assistant"><div className="conversation-speaker"><Guard who={who} face /> סוכן הסידור</div>
+          <Thinking who={who} steps={[]} /></article>
       </> : null}
     </div>
     <div className="conversation-bottom">

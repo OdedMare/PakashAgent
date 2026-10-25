@@ -3,6 +3,7 @@
 import { AlertCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { CrewLoading } from "@/components/Crew";
 import { openMemberLink } from "@/services/api";
 
 import { Workspace } from "./index";
@@ -50,7 +51,7 @@ export function MemberEntry({ token }: { token: string }) {
   }
 
   if (!done) {
-    return <div className="workspace-gate" aria-busy="true" />;
+    return <CrewLoading label="פותחים את הסידור של הצוות…" />;
   }
 
   return <Workspace />;

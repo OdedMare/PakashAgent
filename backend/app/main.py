@@ -11,13 +11,12 @@ from fastapi.responses import JSONResponse
 
 from app.api.dependencies import Guards
 from app.api.routers import (
-    admin, copilot, employee, health, profile, schedules, settings,
+    admin, employee, health, profile, schedules, settings,
     workspace,
 )
-from app import worker as copilot_worker
+from app import worker as job_worker
 from app.bl.admin_service import AdminService
 from app.bl.compiled_sources import SourceCompiler
-from app.bl.copilot import CopilotService
 from app.bl.employee_service import EmployeeService
 from app.bl.profile_service import ProfileService
 from app.bl.schedule_service import ScheduleService
@@ -27,7 +26,7 @@ from app.api.routers import manager_chat, replacements
 from app.common.config import Settings
 from app.common.errors import AppError, error_payload
 from app.common.events import TeamEvents
-from app.common.logging_setup import configure_logging
+from app.common.logging_setup import QUIET_401_METHODS, configure_logging
 from app.common.sessions import COOKIE_NAME, generate_secret, read
 from app.common.throttle import LoginThrottle
 from app.dal.notify import PostgresSignals
@@ -81,7 +80,6 @@ team_events = TeamEvents(bus=PostgresSignals(store))
 manager_chat_service = ManagerChatService(
     repository, llm, schedule_service, events=team_events,
 )
-copilot_service = CopilotService(repository, schedule_service)
 # Takes the schedule service, not just the repository: the personal view needs
 # an audited schedule, and recomputing the audit for the employee would be a
 # second implementation of the arithmetic the manager sees (D14).
@@ -169,12 +167,12 @@ async def lifespan(_app):
     startup()
     threads, stopped = [], threading.Event()
     if _embedded_worker():
-        threads = copilot_worker.start(copilot_worker.CopilotWorker(
-            repository, copilot_service, schedules=schedule_service,
+        threads = job_worker.start(job_worker.JobWorker(
+            repository, schedules=schedule_service,
             chat=manager_chat_service, compiler=SourceCompiler(repository, llm),
         ), stopped)
     yield
-    copilot_worker.stop(threads, stopped)
+    job_worker.stop(threads, stopped)
     shutdown()
 
 
@@ -215,7 +213,6 @@ app.include_router(
         store, llm, guards, env.settings_password, login_throttle,
     )
 )
-app.include_router(copilot.build_router(copilot_service, repository, guards))
 app.include_router(
     employee.build_router(
         employee_service, guards, session_secret, env.session_days,
@@ -236,8 +233,16 @@ app.include_router(employee.build_swap_router(employee_service, guards))
 
 @app.exception_handler(AppError)
 async def app_error_handler(request, exc: AppError) -> JSONResponse:
-    """`AgentError` and friends carry Hebrew copy meant for the boss."""
-    _log.warning(
+    """`AgentError` and friends carry Hebrew copy meant for the boss.
+
+    A 401 on a read is a browser without a session asking anyway — the
+    `/me` probes on every visit, a poller still running after its cookie
+    died — and at WARNING it buried everything else in the log. Kept at
+    DEBUG. A refused write still warns: that is a wrong password.
+    """
+    quiet = exc.status_code == 401 and request.method in QUIET_401_METHODS
+    _log.log(
+        logging.DEBUG if quiet else logging.WARNING,
         "AppError %s %s -> %s: %s",
         request.method, request.url.path, exc.status_code, exc,
     )

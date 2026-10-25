@@ -155,8 +155,8 @@ The conversation supports one plan kind per approval. A request to add an
 employee and then schedule a week proceeds in two approvals. Ordinary changes
 have the existing 40-operation ceiling; generation previews can cover up to
 63 days. Existing published schedules must return to draft before editing.
-The existing autonomous copilot console remains available under the drawer's
-Overview tab. Invisible automatic briefings are disabled for this surface.
+The autonomous copilot console has been removed. Invisible automatic
+briefings are disabled for this surface.
 
 ## Code and verification
 

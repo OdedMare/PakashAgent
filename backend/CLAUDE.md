@@ -75,12 +75,12 @@ uvicorn app.main:app --reload
 - `bl/changes/` — conversational edits; asks for the boss's reason, proposes a
   replacement with justification, applies on confirmation. Proposes only — it is
   handed no repository, so it cannot write.
-- `bl/copilot.py` + `app/worker.py` — the durable job loop. PostgreSQL owns
-  jobs (claimed once with `FOR UPDATE SKIP LOCKED`), inbox items, per-action
-  permissions and append-only audit events. The worker runs **inside the API
+- `app/worker.py` — the durable job loop. PostgreSQL owns the jobs (the
+  `copilot_jobs` table, claimed once with `FOR UPDATE SKIP LOCKED`); the
+  copilot inbox that named it is gone. The worker runs **inside the API
   process by default** (`PAKASH_EMBEDDED_WORKER=0` turns it off) and can also
   run on its own as `python -m app.worker`. Generation is queued as one job
-  per span; manager-chat turns, scans and `compile_sources` are jobs too.
+  per span; manager-chat turns and `compile_sources` are jobs too.
   Several lanes, with at least one reserved for manager chat so a long build
   cannot occupy every worker.
 - `bl/schedule_service/` — persistence and ordering around the solver, the
@@ -267,7 +267,7 @@ package's `__init__` docstring carries a table of which module owns what.
 - **`PAKASH_SESSION_SECRET` must be set in any real deployment.** Unset, each
   worker signs with its own key and rejects the others' cookies.
 - **A partial profile reports its gaps; it never blocks.** `completeness` is
-  read by `profile_gaps` and the copilot scan. The solver runs on a thin
+  read by `profile_gaps`. The solver runs on a thin
   profile and returns a thin schedule — only a profile with no shift
   vocabulary at all is refused, because there is no grid to build (D9).
 - **The tool layer never writes** ([D19](../docs/DECISIONS.md#d19--the-agent-answers-with-tools-asking-and-changing-stay-separate)).
