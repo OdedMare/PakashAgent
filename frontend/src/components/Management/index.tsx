@@ -23,7 +23,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { Board } from "@/components/Board";
-import { CrewStage } from "@/components/Crew";
+import { AgentGuard, CrewStage, randomGuard } from "@/components/Crew";
+import type { Who } from "@/components/Crew";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import type { ChecklistItem } from "@/components/Guide";
 import { useTheme } from "@/hooks/useTheme";
@@ -123,6 +124,23 @@ export function Management({
   // week drops it, so the agent is never told about a day off screen.
   const focusDate = focusDay.date && inWeek(focusDay.date, state.focusedWeek) ? focusDay.date : "";
   const agent = useManagerChat(workspace.id, state.focusedScheduleId, state.focusedWeek, focusDate, onChatApplied);
+  // The agent is one of the two guards, rolled again for every conversation
+  // and every time it steps back into the corner — never while it is open,
+  // so the chat shows the guard that was pressed.
+  const agentOpen = drawerOpen && section === "agent";
+  const [agentWho, setAgentWho] = useState<Who>("him");
+  const rollAgent = useCallback(() => setAgentWho(randomGuard()), []);
+  const chatId = agent.chat?.id;
+  useEffect(() => {
+    if (agentOpen) return;
+    const frame = requestAnimationFrame(rollAgent);
+    return () => cancelAnimationFrame(frame);
+  }, [agentOpen, rollAgent]);
+  useEffect(() => {
+    if (chatId === undefined) return;
+    const frame = requestAnimationFrame(rollAgent);
+    return () => cancelAnimationFrame(frame);
+  }, [chatId, rollAgent]);
   const [copilotPending, setCopilotPending] = useState(0);
   // Pending constraint requests, polled here rather than inside the inbox so
   // the tab can count them and a new one pops up wherever the manager is.
@@ -654,6 +672,9 @@ export function Management({
             }}
           />
         )}
+        {agentOpen ? null : (
+          <AgentGuard who={agentWho} onOpen={() => openAgent()} onSwap={rollAgent} />
+        )}
         <button
           type="button"
           className="manager-drawer-backdrop"
@@ -736,6 +757,7 @@ export function Management({
           ) : null}
           </> : null}
           <AgentChat
+            who={agentWho}
             hidden={section !== "agent"}
             agent={agent}
             visibleWeek={state.focusedWeek}

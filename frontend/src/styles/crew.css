@@ -139,3 +139,103 @@
 }
 
 .conversation-thinking.has-crew { flex-direction: column; align-items: stretch; }
+
+.crew-walker.is-solo { width: calc(var(--crew-h) * 0.77); }
+.crew-walker.is-solo { animation-name: crew-patrol-solo; }
+
+@keyframes crew-patrol-solo {
+  from { inset-inline-start: 0; }
+  to { inset-inline-start: calc(100% - var(--crew-h) * 0.77); }
+}
+
+/* The agent's face, as an avatar in the chat */
+.crew-guard--face {
+  width: 1.6em;
+  height: 1.6em;
+  flex: none;
+  overflow: hidden;
+  border-radius: 50%;
+  background: color-mix(in srgb, #dcf51c 30%, var(--surface));
+}
+.crew-guard--face .crew-body { animation: none; }
+
+/* The agent in the corner of the board. It sits beside the help button. */
+.crew-agent {
+  position: fixed;
+  z-index: 40;
+  bottom: 12px;
+  inset-inline-end: 84px;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.crew-agent-figure {
+  display: block;
+  height: 96px;
+  animation: crew-arrive 420ms cubic-bezier(0.3, 1.5, 0.6, 1);
+  transition: transform 160ms ease;
+}
+.crew-agent-figure .crew-guard { height: 100%; }
+.crew-agent:hover .crew-agent-figure,
+.crew-agent:focus-visible .crew-agent-figure { transform: translateY(-4px) scale(1.05); }
+.crew-agent:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; border-radius: 12px; }
+
+/* Standing still, the legs rest and only the sign and body move. */
+.crew-agent .crew-leg,
+.crew-agent .crew-arm { animation: none; }
+.crew-agent .crew-body { animation-duration: 1.4s; }
+
+@keyframes crew-arrive {
+  from { transform: translateY(30px) scale(0.6); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+.crew-agent-bubble {
+  position: relative;
+  max-width: 190px;
+  margin-bottom: 70px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: start;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 200ms ease, transform 200ms ease;
+  pointer-events: none;
+}
+.crew-agent.is-greeting .crew-agent-bubble,
+.crew-agent:hover .crew-agent-bubble,
+.crew-agent:focus-visible .crew-agent-bubble { opacity: 1; transform: none; }
+
+@media (max-width: 700px) {
+  .crew-agent-figure { height: 72px; }
+  .crew-agent-bubble { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crew-agent-figure { animation: none; transition: none; }
+  .crew-agent .crew-body,
+  .crew-agent .crew-sign { animation: none; }
+}
+
+/* The agent greeting an empty conversation */
+.conversation-empty-mark.is-guard {
+  width: 92px;
+  height: 120px;
+  background: none;
+  border-radius: 0;
+}
+.conversation-empty-mark.is-guard .crew-guard { height: 100%; }
+.conversation-empty-mark.is-guard :is(.crew-leg, .crew-arm) { animation: none; }
+.conversation-empty-mark.is-guard .crew-body { animation-duration: 1.4s; }
+.conversation-speaker:has(.crew-guard--face) { display: flex; align-items: center; gap: 6px; }
