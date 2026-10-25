@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { CrewLoading } from "@/components/Crew";
 import { Employee } from "@/components/Employee";
 import { Management } from "@/components/Management";
 import { ManualSetup } from "@/components/ManualSetup";
@@ -24,7 +25,7 @@ export function Workspace({ memberToken }: { memberToken?: string }) {
   // The first `me` call has not answered yet. Rendering the login screen here
   // would flash it at a boss who is already signed in.
   if (workspace === undefined) {
-    return <div className="workspace-gate" aria-busy="true" />;
+    return <CrewLoading label="רגע, מכינים הכול…" />;
   }
 
   if (workspace === null) {

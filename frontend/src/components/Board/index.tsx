@@ -31,6 +31,7 @@ import type {
   WorkplaceProfile,
 } from "@/types";
 
+import { CrewStage } from "@/components/Crew";
 import { displayDate } from "@/components/DateInput";
 import { hebrewWeekday } from "@/components/Management/Calendar";
 
@@ -790,6 +791,11 @@ export function Board({
               onDropCard={openMove}
               onDropEmployee={(input) =>
                 void onAssign({ ...input, schedule_id: schedule.id })}
+              onRemoveCard={(assignment) =>
+                void onUnassign({
+                  assignment_id: assignment.id,
+                  schedule_id: schedule.id,
+                })}
               onOpenCard={(assignment) => {
                 setCheck(null);
                 setEditor({ mode: "edit", assignment });
@@ -1181,10 +1187,7 @@ function BoardLoading({
 }) {
   return (
     <div className="board-loading" role="status" aria-busy="true">
-      <p className="board-loading-line">
-        <LoaderCircle className="spin" size={16} aria-hidden="true" />
-        טוען את השיבוצים לשבוע…
-      </p>
+      <CrewStage label="טוען את השיבוצים לשבוע…" />
 
       {/* Marked hidden from assistive tech: the line above already says
           what is happening, and a screen reader walking twenty-one empty

@@ -23,6 +23,7 @@ three are per role, so different kinds of work can run on different providers.
 | `model_roles.py` | Flow → role → model id, endpoint and API key, and the fallbacks |
 | `model_slots.py` | `ModelSlots` (one process) and `PostgresModelSlots` (advisory locks) — the concurrency limit across every process (D35) |
 | `strict_schema.py` | A caller's schema in strict-mode form, and the reply read back in the caller's shape |
+| `streaming.py` | One completion read as a stream, for callers passing `on_text`; a refused stream retries the same rung plainly |
 
 Each helper is separate because each handles a different failure of
 "OpenAI-compatible" servers that are only approximately compatible.
@@ -95,6 +96,14 @@ correction (`_NO_CONTENT`) tells it not to call functions, which "not valid
 JSON" would not.
 
 `llm_diet_mode` caps completion tokens.
+
+**`on_text` streams without changing the answer.** A caller passing it (the
+manager chat, to show its reply as it is written) gets the raw text so far
+after every chunk; the parsed object returned is the same. A 400 on the
+streamed request — some compatible servers refuse `stream` or
+`stream_options` — does not advance the ladder: the same rung is asked again
+without a stream, and that endpoint and model are not asked to stream again
+for the life of the process.
 
 **3. The total budget** — `_TOTAL_BUDGET_SECONDS` bounds one logical
 `complete_json`. `llm_timeout_seconds` bounds a single HTTP round-trip, but

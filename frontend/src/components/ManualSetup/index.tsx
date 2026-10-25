@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { TimeInput } from "@/components/TimeInput";
 import { updateProfile } from "@/services/api";
 import type { RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
 
@@ -303,8 +304,8 @@ export function ManualSetup({
                 <CheckboxGrid label="ימים שבהם סבב א׳ אינו זמין" values={DAYS} selected={strings(rule.days)} onChange={(value) => edit(setRotationAUnavailability, index, "days", value)} />
                 {shiftNames.length ? <CheckboxGrid label="משמרות (ללא בחירה = כל המשמרות)" values={shiftNames} selected={strings(rule.shifts)} onChange={(value) => edit(setRotationAUnavailability, index, "shifts", value)} /> : null}
                 <div className="manual-grid three">
-                  <Field label="משעה (רשות)"><input type="time" step={300} value={inputText(rule.start_time)} onChange={(event) => edit(setRotationAUnavailability, index, "start_time", event.target.value)} /></Field>
-                  <Field label="עד שעה (רשות)"><input type="time" step={300} value={inputText(rule.end_time)} onChange={(event) => edit(setRotationAUnavailability, index, "end_time", event.target.value)} /></Field>
+                  <Field label="משעה (רשות)"><TimeInput value={inputText(rule.start_time)} onChange={(time) => edit(setRotationAUnavailability, index, "start_time", time)} /></Field>
+                  <Field label="עד שעה (רשות)"><TimeInput value={inputText(rule.end_time)} onChange={(time) => edit(setRotationAUnavailability, index, "end_time", time)} /></Field>
                   <Field label="סיבה / תיאור"><input value={inputText(rule.reason)} onChange={(event) => edit(setRotationAUnavailability, index, "reason", event.target.value)} placeholder="לדוגמה: יציאה קבועה" /></Field>
                 </div>
               </article>
@@ -358,8 +359,8 @@ export function ManualSetup({
                 <div className="manual-grid shift-grid">
                   <Field label="שם המשמרת *"><input value={inputText(shift.name)} readOnly={originalShifts.has(text(shift.name))} onChange={(e) => edit(setShifts, index, "name", e.target.value)} /></Field>
                   <Field label="סוג"><select value={text(shift.shift_type) || (shift.is_on_call ? "on_call" : "regular")} onChange={(e) => edit(setShifts, index, "shift_type", e.target.value)}>{Object.entries(SHIFT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
-                  <Field label="התחלה"><input type="time" step={300} value={text(shift.start_time)} onChange={(e) => edit(setShifts, index, "start_time", e.target.value)} /></Field>
-                  <Field label="סיום"><input type="time" step={300} value={text(shift.end_time)} onChange={(e) => edit(setShifts, index, "end_time", e.target.value)} /></Field>
+                  <Field label="התחלה"><TimeInput value={text(shift.start_time)} onChange={(time) => edit(setShifts, index, "start_time", time)} /></Field>
+                  <Field label="סיום"><TimeInput value={text(shift.end_time)} onChange={(time) => edit(setShifts, index, "end_time", time)} /></Field>
                   <Field label="תקן"><input type="number" min={1} max={100} value={number(shift.headcount, headcount(shift))} onChange={(e) => edit(setShifts, index, "headcount", Number(e.target.value) || 1)} /></Field>
                   <Field label="ייעוד"><input value={inputText(shift.purpose)} onChange={(e) => edit(setShifts, index, "purpose", e.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></Field>
                 </div>
