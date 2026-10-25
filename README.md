@@ -42,11 +42,9 @@ requests; anything it cannot translate is named in the build's notes
 rather than silently dropped
 ([D34](docs/DECISIONS.md)).
 
-**The copilot stays awake when the browser closes.** A separate durable worker
-checks every workspace, records profile gaps and schedule problems in a
-manager inbox, retries failed work, and points profile gaps back to unit setup.
-Permissions are set per action type; every decision, verification and rollback
-is recorded in an append-only audit trail
+**Work keeps running when the browser closes.** Builds, chat turns and
+translations are durable jobs in PostgreSQL, claimed once and retried by a
+worker that runs inside the API or on its own
 ([D23](docs/DECISIONS.md#d23--the-copilot-is-durable-permissioned-and-reversible)).
 
 **The agent answers questions, not only requests.** In the manager chat,
@@ -133,7 +131,7 @@ and the repository base. See [`backend/CLAUDE.md`](backend/CLAUDE.md).
 ## Running it
 
 ```bash
-docker compose up          # backend, copilot worker, frontend, postgres
+docker compose up          # backend, job worker, frontend, postgres
 ```
 
 Running the two halves directly instead:

@@ -64,10 +64,10 @@ def _items(answer: dict, by_id: Dict[str, dict], profile: dict, starts_on: str, 
     }
     slots = {(row["shift_name"], row["slot_date"]) for row in build_slots(profile, starts_on, ends_on)}
     standing = {source_id for source_id, row in by_id.items() if row.get("persistent")}
-    shifts = {text(row.get("name")) for row in (profile or {}).get("shifts") or []
-              if isinstance(row, dict)}
+    definitions = {text(row.get("name")): row for row in (profile or {}).get("shifts") or []
+                   if isinstance(row, dict)}
     for row in _rows(answer.get("directives")):
-        read = translated_row(row, set(by_id), people, slots, standing, shifts)
+        read = translated_row(row, set(by_id), people, slots, standing, set(definitions), definitions)
         yield (row.get("source_id"), None) if read is None else (read[0], (read[1], read[2]))
     for row in _rows(answer.get("requests")):
         valid, errors = read_requests([row], profile)

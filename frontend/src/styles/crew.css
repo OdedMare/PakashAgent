@@ -1,0 +1,246 @@
+/* The crossing-guard pair (`components/Crew`). They patrol a strip while the
+   app waits; under reduced motion they stand still. */
+
+.crew-stage {
+  --crew-h: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.crew-stage--sm { --crew-h: 46px; }
+.crew-stage--lg { --crew-h: 120px; max-width: 520px; }
+
+.crew-track {
+  position: relative;
+  width: 100%;
+  height: var(--crew-h);
+  overflow: hidden;
+  border-bottom: 2px dashed color-mix(in srgb, var(--text-muted) 35%, transparent);
+}
+
+.crew-walker {
+  position: absolute;
+  bottom: 0;
+  inset-inline-start: 0;
+  display: flex;
+  height: 100%;
+  width: calc(var(--crew-h) * 1.5);
+  animation: crew-patrol 7s ease-in-out infinite alternate;
+}
+
+.crew-guard {
+  height: 100%;
+  width: auto;
+  flex: none;
+  overflow: visible;
+}
+
+.crew-guard--her { margin-inline-start: calc(var(--crew-h) * -0.2); }
+
+@keyframes crew-patrol {
+  from { inset-inline-start: 0; }
+  to { inset-inline-start: calc(100% - var(--crew-h) * 1.5); }
+}
+
+.crew-body { animation: crew-bob 0.5s ease-in-out infinite alternate; }
+.crew-guard--her .crew-body { animation-delay: -0.25s; }
+
+@keyframes crew-bob {
+  from { transform: translateY(0); }
+  to { transform: translateY(-3px); }
+}
+
+.crew-leg { animation: crew-step 0.5s ease-in-out infinite alternate; }
+.crew-leg--a { transform-origin: 44px 102px; }
+.crew-leg--b { transform-origin: 56px 102px; animation-direction: alternate-reverse; }
+.crew-guard--her .crew-leg { animation-delay: -0.25s; }
+
+@keyframes crew-step {
+  from { transform: rotate(-14deg); }
+  to { transform: rotate(14deg); }
+}
+
+.crew-arm {
+  transform-origin: 32px 68px;
+  animation: crew-swing 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes crew-swing {
+  from { transform: rotate(16deg); }
+  to { transform: rotate(-16deg); }
+}
+
+.crew-sign {
+  transform-origin: 86px 80px;
+  animation: crew-wave 1.2s ease-in-out infinite alternate;
+}
+.crew-guard--her .crew-sign { animation-delay: -0.6s; }
+
+@keyframes crew-wave {
+  from { transform: rotate(-10deg); }
+  to { transform: rotate(10deg); }
+}
+
+.crew-ponytail {
+  transform-origin: 70px 36px;
+  animation: crew-swing 0.5s ease-in-out infinite alternate;
+}
+
+.crew-glint { animation: crew-glint 3s ease-in-out infinite; opacity: 0; }
+
+@keyframes crew-glint {
+  0%, 80%, 100% { opacity: 0; }
+  88% { opacity: 1; }
+}
+
+.crew-label {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.crew-stage--lg .crew-label { font-size: 15px; }
+
+/* A screen that has not answered yet */
+.crew-loading {
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+/* The two guards greeting visitors at the entrance, standing and waving */
+.gate-hero-crew {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 8px;
+  height: 180px;
+  padding-top: 16px;
+  border-radius: 16px;
+  background: color-mix(in srgb, #dcf51c 18%, var(--surface-2));
+}
+.gate-hero-crew .crew-guard { height: 100%; }
+.gate-hero-crew :is(.crew-leg, .crew-arm) { animation: none; }
+.gate-hero-crew .crew-body { animation-duration: 1.4s; }
+
+/* The pair beside the agent's working message and the build banner */
+.conversation-thinking .crew-stage { margin-bottom: 4px; }
+.schedule-generation .crew-stage { max-width: 360px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .crew-walker,
+  .crew-body,
+  .crew-leg,
+  .crew-arm,
+  .crew-sign,
+  .crew-ponytail,
+  .crew-glint { animation: none; }
+  .crew-walker { inset-inline-start: calc(50% - var(--crew-h) * 0.75); }
+}
+
+.conversation-thinking.has-crew { flex-direction: column; align-items: stretch; }
+
+.crew-walker.is-solo { width: calc(var(--crew-h) * 0.77); }
+.crew-walker.is-solo { animation-name: crew-patrol-solo; }
+
+@keyframes crew-patrol-solo {
+  from { inset-inline-start: 0; }
+  to { inset-inline-start: calc(100% - var(--crew-h) * 0.77); }
+}
+
+/* The agent's face, as an avatar in the chat */
+.crew-guard--face {
+  width: 1.6em;
+  height: 1.6em;
+  flex: none;
+  overflow: hidden;
+  border-radius: 50%;
+  background: color-mix(in srgb, #dcf51c 30%, var(--surface));
+}
+.crew-guard--face .crew-body { animation: none; }
+
+/* The agent in the corner of the board. It sits beside the help button. */
+.crew-agent {
+  position: fixed;
+  z-index: 40;
+  bottom: 12px;
+  inset-inline-end: 84px;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.crew-agent-figure {
+  display: block;
+  height: 96px;
+  animation: crew-arrive 420ms cubic-bezier(0.3, 1.5, 0.6, 1);
+  transition: transform 160ms ease;
+}
+.crew-agent-figure .crew-guard { height: 100%; }
+.crew-agent:hover .crew-agent-figure,
+.crew-agent:focus-visible .crew-agent-figure { transform: translateY(-4px) scale(1.05); }
+.crew-agent:focus-visible { outline: 2px solid var(--primary); outline-offset: 4px; border-radius: 12px; }
+
+/* Standing still, the legs rest and only the sign and body move. */
+.crew-agent .crew-leg,
+.crew-agent .crew-arm { animation: none; }
+.crew-agent .crew-body { animation-duration: 1.4s; }
+
+@keyframes crew-arrive {
+  from { transform: translateY(30px) scale(0.6); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+.crew-agent-bubble {
+  position: relative;
+  max-width: 190px;
+  margin-bottom: 70px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: start;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 200ms ease, transform 200ms ease;
+  pointer-events: none;
+}
+.crew-agent.is-greeting .crew-agent-bubble,
+.crew-agent:hover .crew-agent-bubble,
+.crew-agent:focus-visible .crew-agent-bubble { opacity: 1; transform: none; }
+
+@media (max-width: 700px) {
+  .crew-agent-figure { height: 72px; }
+  .crew-agent-bubble { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crew-agent-figure { animation: none; transition: none; }
+  .crew-agent .crew-body,
+  .crew-agent .crew-sign { animation: none; }
+}
+
+/* The agent greeting an empty conversation */
+.conversation-empty-mark.is-guard {
+  width: 92px;
+  height: 120px;
+  background: none;
+  border-radius: 0;
+}
+.conversation-empty-mark.is-guard .crew-guard { height: 100%; }
+.conversation-empty-mark.is-guard :is(.crew-leg, .crew-arm) { animation: none; }
+.conversation-empty-mark.is-guard .crew-body { animation-duration: 1.4s; }
+.conversation-speaker:has(.crew-guard--face) { display: flex; align-items: center; gap: 6px; }

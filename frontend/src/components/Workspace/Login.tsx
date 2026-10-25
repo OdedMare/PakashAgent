@@ -12,6 +12,7 @@ import {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { CrewStage, Guard } from "@/components/Crew";
 import { listTeams } from "@/services/api";
 import type { TeamSummary } from "@/types";
 
@@ -141,9 +142,15 @@ export function Login({
       </section>
 
       {teams === undefined ? (
-        <div className="gate-card" aria-busy="true" />
+        <div className="gate-card" aria-busy="true">
+          <CrewStage label="טוען את הצוותים…" />
+        </div>
       ) : (
         <form className="gate-card" onSubmit={submit} aria-labelledby="gate-form-title">
+          <div className="gate-hero-crew" aria-hidden="true">
+            <Guard who="him" />
+            <Guard who="her" />
+          </div>
           <div className="gate-form-head">
             <span>כניסה מאובטחת</span>
             <h2 id="gate-form-title">
@@ -237,6 +244,8 @@ export function Login({
               <span>{error}</span>
             </div>
           ) : null}
+
+          {busy ? <CrewStage size="sm" /> : null}
 
           <button
             type="submit"

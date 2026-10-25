@@ -652,6 +652,12 @@ question to the agent first. **It still writes nothing and fills no gap**
 
 ## D23 — The copilot is durable, permissioned, and reversible
 
+> **Partly withdrawn.** The copilot itself — its scans, inbox, permissions
+> and audit — was removed: its approve and rollback changed only a status,
+> and everything it noticed the board and the chat already say. What stays
+> is the durable queue below, which carries builds, chat turns and
+> translations.
+
 The proactive agent now runs in a separate backend process. PostgreSQL owns
 its queue: jobs are deduplicated, claimed with row locking, retried, and
 recovered when a worker dies. Closing the browser therefore stops neither the

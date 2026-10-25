@@ -3,6 +3,7 @@
 import { Plus, Trash2 } from "lucide-react";
 
 import { DateInput, shortDate } from "@/components/DateInput";
+import { TimeInput } from "@/components/TimeInput";
 import type { RotationClosureWindow, RotationPresenceRule } from "@/types";
 
 import { CheckboxGrid, Field } from "./fields";
@@ -95,9 +96,9 @@ export function CycleSetup({
               </div>
               <div className="manual-grid rotation-window-grid">
                 <Field label="תחילת הסגירה"><select value={row.start_day} onChange={(event) => editWindow(index, { start_day: Number(event.target.value) })}>{DAYS.map((day, i) => <option key={day} value={i - 6}>{day}</option>)}</select></Field>
-                <Field label="שעת התחלה"><input type="time" step={300} value={row.start_time} onChange={(event) => editWindow(index, { start_time: event.target.value })} /></Field>
+                <Field label="שעת התחלה"><TimeInput value={row.start_time} onChange={(time) => editWindow(index, { start_time: time })} /></Field>
                 <Field label="סיום הסגירה"><select value={row.end_day} onChange={(event) => editWindow(index, { end_day: Number(event.target.value) })}>{END_DAYS.map((day, i) => <option key={day} value={i}>{day}</option>)}</select></Field>
-                <Field label="שעת חילוף / יציאה"><input type="time" step={300} value={row.end_time} onChange={(event) => editWindow(index, { end_time: event.target.value })} /></Field>
+                <Field label="שעת חילוף / יציאה"><TimeInput value={row.end_time} onChange={(time) => editWindow(index, { end_time: time })} /></Field>
               </div>
               <DateRange startsOn={row.starts_on} endsOn={row.ends_on} onChange={(patch) => editWindow(index, patch)} />
             </article>
@@ -129,8 +130,8 @@ export function CycleSetup({
             <CheckboxGrid label="ימים" values={DAYS} selected={row.days} onChange={(days) => editPresence(index, { days })} />
             {shiftNames.length ? <CheckboxGrid label="משמרות" values={shiftNames} selected={row.shifts} onChange={(shifts) => editPresence(index, { shifts })} /> : null}
             <div className="manual-grid rotation-window-grid">
-              <Field label="משעה (רשות)"><input type="time" step={300} value={row.start_time} onChange={(event) => editPresence(index, { start_time: event.target.value })} /></Field>
-              <Field label="עד שעה (רשות)"><input type="time" step={300} value={row.end_time} onChange={(event) => editPresence(index, { end_time: event.target.value })} /></Field>
+              <Field label="משעה (רשות)"><TimeInput value={row.start_time} onChange={(time) => editPresence(index, { start_time: time })} /></Field>
+              <Field label="עד שעה (רשות)"><TimeInput value={row.end_time} onChange={(time) => editPresence(index, { end_time: time })} /></Field>
             </div>
             <DateRange startsOn={row.starts_on} endsOn={row.ends_on} onChange={(patch) => editPresence(index, patch)} />
           </article>

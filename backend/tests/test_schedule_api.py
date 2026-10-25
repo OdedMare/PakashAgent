@@ -322,7 +322,7 @@ class _ScriptedLlm:
         self._answers = list(answers or [])
         self.calls = []
 
-    def complete_json(self, system, user, schema=None, flow="", time_context=""):
+    def complete_json(self, system, user, schema=None, flow="", time_context="", on_text=None):
         self.calls.append({"system": system, "user": user, "schema": schema,
                            "time_context": time_context})
         if not self._answers:
@@ -1994,7 +1994,9 @@ def test_checking_a_placement_calls_no_model():
         "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-17",
     })
     assert response.status_code == 200
-    assert response.json()["ok"] is True
+    body = response.json()
+    assert body["ok"] is True
+    assert {"exit_pattern", "is_overlap"} <= set(body["candidates"][0])
 
 
 def test_a_check_that_warns_still_returns_200_and_never_blocks():
