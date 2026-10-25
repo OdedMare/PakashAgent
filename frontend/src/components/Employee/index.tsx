@@ -108,7 +108,12 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
         </div>
       </header>
 
-      <main id="main-content" className="employee-main">
+      {/* The full board gets the whole window: a week of shifts squeezed into
+          the reading column hides most of it behind a sideways scroll. */}
+      <main
+        id="main-content"
+        className={section === "schedule" ? "employee-main is-wide" : "employee-main"}
+      >
         {/* What moved since this person last looked (D16). Above everything
             because it is the reason to open the app at all — an employee
             whose shift changed should not have to spot it by comparing the
@@ -181,7 +186,7 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
 
           {section === "schedule" ? (
             view.schedule ? (
-              <section className="employee-panel">
+              <section className="employee-panel employee-board">
                 <h2>הסידור המלא</h2>
                 {/* `readOnly`, no `onDrop`: there is no gesture here that could
                     change anything. The same component the manager uses, so the

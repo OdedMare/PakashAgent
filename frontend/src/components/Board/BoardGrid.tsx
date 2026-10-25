@@ -13,6 +13,7 @@ import {
   Plus,
   Repeat2,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -82,6 +83,7 @@ export function BoardGrid({
   touches,
   onDropCard,
   onDropEmployee,
+  onRemoveCard,
   onOpenCard,
   onAddShift,
   onOpenDay,
@@ -118,6 +120,8 @@ export function BoardGrid({
     shift_name: string;
     slot_date: string;
   }) => void;
+  /** Remove one assignment by keyboard, touch, or dragging it to the trash. */
+  onRemoveCard?: (assignment: Assignment) => void;
   onOpenCard?: (assignment: Assignment) => void;
   onAddShift?: (input: { shift_name: string; slot_date: string }) => void;
   onOpenDay?: (date: string) => void;
@@ -134,6 +138,7 @@ export function BoardGrid({
 }) {
   const [dragging, setDragging] = useState<Assignment | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  const [overTrash, setOverTrash] = useState(false);
   // The row being dragged to a new position, and the row it is currently
   // over. Separate from the card drag above because they are different acts
   // on different targets: one proposes a change to the week, the other only
@@ -274,8 +279,46 @@ export function BoardGrid({
     onDropCard?.({ assignment: card, shift_name: shift, slot_date: date });
   };
 
+  const removeCard = (card: Assignment) => {
+    setDragging(null);
+    setOver(null);
+    setOverTrash(false);
+    move.cancel();
+    onRemoveCard?.(card);
+  };
+
   return (
-    <div className="board-grid-scroll" ref={scroller} data-tour="grid">
+    <div
+      className="board-grid-scroll"
+      ref={scroller}
+      data-tour="grid"
+      onDragEndCapture={() => setOverTrash(false)}
+    >
+      {dragging || move.picked ? (
+        <button
+          type="button"
+          className={`board-trash-target${overTrash ? " is-over" : ""}`}
+          onDragOver={(event) => {
+            if (!dragging) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+            setOverTrash(true);
+          }}
+          onDragLeave={() => setOverTrash(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            if (dragging) removeCard(dragging);
+          }}
+          onClick={() => {
+            if (move.picked) removeCard(move.picked);
+          }}
+          aria-label={`הסרת השיבוץ של ${(dragging ?? move.picked)?.employee ?? ""}`}
+        >
+          <Trash2 size={17} />
+          {dragging ? "שחרור כאן להסרת השיבוץ" : "הסרת השיבוץ"}
+        </button>
+      ) : null}
+
       {/* What a picked-up card is waiting for, said rather than left to be
           inferred from an outline. It carries no confirm: placing still
           opens the dialog that collects the reason (D12). */}
@@ -389,6 +432,7 @@ export function BoardGrid({
             onPlace={placeOn}
             onDropCard={onDropCard}
             onDropEmployee={onDropEmployee}
+            onRemoveCard={removeCard}
             onOpenCard={onOpenCard}
             onAddShift={onAddShift}
           />
@@ -572,6 +616,7 @@ function BoardRow({
   onPlace,
   onDropCard,
   onDropEmployee,
+  onRemoveCard,
   onOpenCard,
   onAddShift,
 }: {
@@ -613,6 +658,7 @@ function BoardRow({
     shift_name: string;
     slot_date: string;
   }) => void;
+  onRemoveCard: (assignment: Assignment) => void;
   onOpenCard?: (assignment: Assignment) => void;
   onAddShift?: (input: { shift_name: string; slot_date: string }) => void;
 }) {
@@ -863,6 +909,7 @@ function BoardRow({
                   setOver(null);
                 }}
                 onPick={readOnly ? undefined : () => move.pick(row)}
+                onRemove={readOnly ? undefined : () => onRemoveCard(row)}
                 onOpen={readOnly ? undefined : () => onOpenCard?.(row)}
               />
             ))}
