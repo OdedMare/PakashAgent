@@ -23,6 +23,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { Board } from "@/components/Board";
+import { CrewStage } from "@/components/Crew";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import type { ChecklistItem } from "@/components/Guide";
 import { useTheme } from "@/hooks/useTheme";
@@ -456,6 +457,7 @@ export function Management({
           that is not finished. */}
       {autoGenerating || buildState ? (
         <div className="schedule-generation" role="status" aria-live="polite">
+          {buildState !== "failed" && buildState !== "cancelled" ? <CrewStage size="sm" /> : null}
           <div className="schedule-generation-copy">
             <strong>
               {buildState === "failed"
@@ -617,7 +619,7 @@ export function Management({
               />
             ) : (
               <div className="manager-analytics-loading" aria-busy="true">
-                טוען את פרטי הצוות…
+                <CrewStage label="טוען את פרטי הצוות…" />
               </div>
             )}
           </section>
@@ -885,7 +887,7 @@ function ManagerOverview({
       <div className="manager-overview-flow">
         {overview ? <Stats overview={overview} expanded /> : (
           <div className="manager-analytics-loading" aria-busy="true">
-            טוען את נתוני התקופה…
+            <CrewStage label="טוען את נתוני התקופה…" />
           </div>
         )}
 

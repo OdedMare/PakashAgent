@@ -2,6 +2,7 @@
 
 import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, Copy, History, LoaderCircle, MessageSquare, Pencil, Plus, RotateCcw, Search, Sparkles, Square, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { CrewStage } from "@/components/Crew";
 import { Markdown } from "@/components/Markdown";
 import { copyText } from "@/lib/clipboard";
 import type { Proposal } from "@/types";
@@ -192,7 +193,7 @@ export function AgentChat({ agent, visibleWeek, focusDate = "", focusKey, employ
  *  on the working message, and the existing poll brings them here. */
 function Thinking({ steps, activity }: { steps: { tool: string; ok: boolean }[]; activity?: string }) {
   const current = steps.length ? TOOL_LABELS[steps[steps.length - 1].tool] ?? "בדיקת הסידור" : "";
-  return <div className="conversation-thinking" role="status"><LoaderCircle size={16} />
+  return <div className="conversation-thinking has-crew" role="status"><CrewStage size="sm" />
     <span>{activity || (current ? `${current}…` : "הבקשה נשמרה וממתינה להתחלת העבודה…")}
       {steps.length > 1 ? <small> · {steps.length} בדיקות עד עכשיו</small> : null}</span></div>;
 }

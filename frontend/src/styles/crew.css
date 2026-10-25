@@ -1,0 +1,141 @@
+/* The crossing-guard pair (`components/Crew`). They patrol a strip while the
+   app waits; under reduced motion they stand still. */
+
+.crew-stage {
+  --crew-h: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.crew-stage--sm { --crew-h: 46px; }
+.crew-stage--lg { --crew-h: 120px; max-width: 520px; }
+
+.crew-track {
+  position: relative;
+  width: 100%;
+  height: var(--crew-h);
+  overflow: hidden;
+  border-bottom: 2px dashed color-mix(in srgb, var(--text-muted) 35%, transparent);
+}
+
+.crew-walker {
+  position: absolute;
+  bottom: 0;
+  inset-inline-start: 0;
+  display: flex;
+  height: 100%;
+  width: calc(var(--crew-h) * 1.5);
+  animation: crew-patrol 7s ease-in-out infinite alternate;
+}
+
+.crew-guard {
+  height: 100%;
+  width: auto;
+  flex: none;
+  overflow: visible;
+}
+
+.crew-guard--her { margin-inline-start: calc(var(--crew-h) * -0.2); }
+
+@keyframes crew-patrol {
+  from { inset-inline-start: 0; }
+  to { inset-inline-start: calc(100% - var(--crew-h) * 1.5); }
+}
+
+.crew-body { animation: crew-bob 0.5s ease-in-out infinite alternate; }
+.crew-guard--her .crew-body { animation-delay: -0.25s; }
+
+@keyframes crew-bob {
+  from { transform: translateY(0); }
+  to { transform: translateY(-3px); }
+}
+
+.crew-leg { animation: crew-step 0.5s ease-in-out infinite alternate; }
+.crew-leg--a { transform-origin: 44px 102px; }
+.crew-leg--b { transform-origin: 56px 102px; animation-direction: alternate-reverse; }
+.crew-guard--her .crew-leg { animation-delay: -0.25s; }
+
+@keyframes crew-step {
+  from { transform: rotate(-14deg); }
+  to { transform: rotate(14deg); }
+}
+
+.crew-arm {
+  transform-origin: 32px 68px;
+  animation: crew-swing 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes crew-swing {
+  from { transform: rotate(16deg); }
+  to { transform: rotate(-16deg); }
+}
+
+.crew-sign {
+  transform-origin: 86px 80px;
+  animation: crew-wave 1.2s ease-in-out infinite alternate;
+}
+.crew-guard--her .crew-sign { animation-delay: -0.6s; }
+
+@keyframes crew-wave {
+  from { transform: rotate(-10deg); }
+  to { transform: rotate(10deg); }
+}
+
+.crew-ponytail {
+  transform-origin: 70px 36px;
+  animation: crew-swing 0.5s ease-in-out infinite alternate;
+}
+
+.crew-glint { animation: crew-glint 3s ease-in-out infinite; opacity: 0; }
+
+@keyframes crew-glint {
+  0%, 80%, 100% { opacity: 0; }
+  88% { opacity: 1; }
+}
+
+.crew-label {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.crew-stage--lg .crew-label { font-size: 15px; }
+
+/* A screen that has not answered yet */
+.crew-loading {
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+/* The entrance photo */
+.gate-hero {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 16px;
+}
+
+/* The pair beside the agent's working message and the build banner */
+.conversation-thinking .crew-stage { margin-bottom: 4px; }
+.schedule-generation .crew-stage { max-width: 360px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .crew-walker,
+  .crew-body,
+  .crew-leg,
+  .crew-arm,
+  .crew-sign,
+  .crew-ponytail,
+  .crew-glint { animation: none; }
+  .crew-walker { inset-inline-start: calc(50% - var(--crew-h) * 0.75); }
+}
+
+.conversation-thinking.has-crew { flex-direction: column; align-items: stretch; }

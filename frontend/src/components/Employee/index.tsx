@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import { CrewLoading } from "@/components/Crew";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import { useTheme } from "@/hooks/useTheme";
 import { Calendar } from "@/components/Management/Calendar";
@@ -49,7 +50,7 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
   // Not asked yet. Rendering the gate here would flash a claim screen at
   // someone who is already signed in.
   if (view === undefined) {
-    return <div className="workspace-gate" aria-busy="true" />;
+    return <CrewLoading label="פותחים את האזור האישי…" />;
   }
 
   if (view === null) {
