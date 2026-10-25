@@ -113,15 +113,20 @@
   padding: 24px 16px;
 }
 
-/* The entrance photo */
-.gate-hero {
-  display: block;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
+/* The two guards greeting visitors at the entrance, standing and waving */
+.gate-hero-crew {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 8px;
+  height: 180px;
+  padding-top: 16px;
   border-radius: 16px;
+  background: color-mix(in srgb, #dcf51c 18%, var(--surface-2));
 }
+.gate-hero-crew .crew-guard { height: 100%; }
+.gate-hero-crew :is(.crew-leg, .crew-arm) { animation: none; }
+.gate-hero-crew .crew-body { animation-duration: 1.4s; }
 
 /* The pair beside the agent's working message and the build banner */
 .conversation-thinking .crew-stage { margin-bottom: 4px; }

@@ -65,8 +65,7 @@ export function Guard({ who, face = false }: { who: Who; face?: boolean }) {
         {who === "him" ? (
           <>
             <path d="M28 36 Q27 13 50 14 Q73 13 72 36 Q67 23 50 23 Q34 23 28 36 Z" fill="#6b4a2f" />
-            <path d="M29 42 Q31 62 50 62 Q69 62 71 42 Q66 53 50 54 Q34 53 29 42 Z" fill="#6b4a2f" opacity="0.85" />
-            <path d="M45 50 Q50 52.5 55 50" fill="none" stroke="#5a3422" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M44 48 Q50 53 56 48" fill="none" stroke="#7a3a2a" strokeWidth="1.8" strokeLinecap="round" />
             <rect x="32.5" y="32" width="15" height="9" rx="2" fill="#23281f" stroke="#55654a" strokeWidth="1.6" />
             <rect x="52.5" y="32" width="15" height="9" rx="2" fill="#23281f" stroke="#55654a" strokeWidth="1.6" />
             <path d="M47.5 35 L52.5 35" stroke="#55654a" strokeWidth="1.6" />
