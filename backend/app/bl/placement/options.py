@@ -85,6 +85,8 @@ def _option(context, person, shift_name, slot_date, day, load) -> dict:
         ),
         "closing": bool(
             day is not None
+            # Ungrouped חמשושים/שושים "hold" the weekend they are home for.
+            and values.text(person.get("rotation_group"))
             and rotation.holds(context.profile, person, day, shift_name)
         ),
     }
