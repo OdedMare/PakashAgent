@@ -27,7 +27,7 @@ from app.api.routers import manager_chat, replacements
 from app.common.config import Settings
 from app.common.errors import AppError, error_payload
 from app.common.events import TeamEvents
-from app.common.logging_setup import configure_logging
+from app.common.logging_setup import QUIET_401_METHODS, configure_logging
 from app.common.sessions import COOKIE_NAME, generate_secret, read
 from app.common.throttle import LoginThrottle
 from app.dal.notify import PostgresSignals
@@ -233,8 +233,16 @@ app.include_router(employee.build_swap_router(employee_service, guards))
 
 @app.exception_handler(AppError)
 async def app_error_handler(request, exc: AppError) -> JSONResponse:
-    """`AgentError` and friends carry Hebrew copy meant for the boss."""
-    _log.warning(
+    """`AgentError` and friends carry Hebrew copy meant for the boss.
+
+    A 401 on a read is a browser without a session asking anyway — the
+    `/me` probes on every visit, a poller still running after its cookie
+    died — and at WARNING it buried everything else in the log. Kept at
+    DEBUG. A refused write still warns: that is a wrong password.
+    """
+    quiet = exc.status_code == 401 and request.method in QUIET_401_METHODS
+    _log.log(
+        logging.DEBUG if quiet else logging.WARNING,
         "AppError %s %s -> %s: %s",
         request.method, request.url.path, exc.status_code, exc,
     )

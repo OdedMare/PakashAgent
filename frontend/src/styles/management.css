@@ -1546,6 +1546,40 @@
   color: var(--text-soft);
 }
 
+.stats-chart-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.stats-chart-expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.65rem;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.stats-chart-expand:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.stats-chart-expand:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .stats-legend {
   display: inline-flex;
   align-items: center;
@@ -1842,12 +1876,26 @@
   border-radius: var(--radius-sm);
 }
 
+.stats-chart.is-expanded {
+  grid-column: 1 / -1;
+  min-height: 19rem;
+}
+
 .stats-page .stats-chart figcaption {
   font-size: 0.9rem;
 }
 
 .stats-page .day-bars {
   height: 9.5rem;
+}
+
+.stats-chart.is-expanded .day-bars {
+  height: 14rem;
+}
+
+.stats-chart.is-expanded .load-rows,
+.stats-chart.is-expanded .warning-counts {
+  gap: 0.55rem;
 }
 
 .stats-empty {
