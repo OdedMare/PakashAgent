@@ -1642,7 +1642,6 @@
   border: 0;
 }
 
-
 .management-nav-item svg {
   color: var(--tint, currentColor);
 }
@@ -1741,23 +1740,6 @@
 
 .manager-overview .stats-page {
   box-shadow: none;
-}
-
-.manager-overview .copilot-console {
-  padding: clamp(1rem, 2vw, 1.35rem);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
-.manager-overview .copilot-console-head {
-  background: var(--hue-violet);
-  box-shadow: none;
-}
-
-.manager-overview .copilot-console-head .primary-button {
-  color: var(--hue-violet);
-  background: #ffffff;
 }
 
 .manager-analytics-head {

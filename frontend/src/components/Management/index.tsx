@@ -37,7 +37,6 @@ import { AgentChat } from "./AgentChat";
 import { useManagerChat } from "./useManagerChat";
 import { useChatSplit } from "./useChatSplit";
 import { ProfileGapsNotice } from "./ProfileGapsNotice";
-import { CopilotInbox } from "./CopilotInbox";
 import { LearnedFromChanges } from "./LearnedFromChanges";
 import { Preferences } from "./Preferences";
 import { RequestInbox } from "./RequestInbox";
@@ -141,7 +140,6 @@ export function Management({
     const frame = requestAnimationFrame(rollAgent);
     return () => cancelAnimationFrame(frame);
   }, [chatId, rollAgent]);
-  const [copilotPending, setCopilotPending] = useState(0);
   // Pending constraint requests, polled here rather than inside the inbox so
   // the tab can count them and a new one pops up wherever the manager is.
   const requests = useConstraintRequests(section === "requests" && drawerOpen);
@@ -372,14 +370,6 @@ export function Management({
           >
             <BarChart3 size={15} />
             <span>סקירה</span>
-            {copilotPending ? (
-              <span
-                className="management-nav-badge"
-                aria-label={`${copilotPending} פריטים דורשים מבט`}
-              >
-                {copilotPending > 9 ? "9+" : copilotPending}
-              </span>
-            ) : null}
           </button>
 
         </nav>
@@ -597,12 +587,6 @@ export function Management({
         <ManagerOverview
           hidden={view !== "overview"}
           overview={overview}
-          onOpenSetup={onOpenManualSetup}
-          onPendingChange={setCopilotPending}
-          onAct={(text) => {
-            setSuggested((previous) => ({ text, n: previous.n + 1 }));
-            openAgent();
-          }}
         />
         {view === "overview" ? null : view === "team" ? (
           <section className="manager-analytics" aria-labelledby="manager-team-title">
@@ -869,15 +853,9 @@ function activeEmployees(employees: Record<string, unknown>[], today: string): s
 function ManagerOverview({
   hidden,
   overview,
-  onOpenSetup,
-  onPendingChange,
-  onAct,
 }: {
   hidden: boolean;
   overview: ManagementOverview | undefined;
-  onOpenSetup?: () => void;
-  onPendingChange: (count: number) => void;
-  onAct: (suggestion: string) => void;
 }) {
   const schedule = overview?.schedule;
 
@@ -893,8 +871,8 @@ function ManagerOverview({
           <h1 id="manager-overview-title">כל מה שדורש מבט, במקום אחד</h1>
           <p>
             {schedule
-              ? `${displayDate(schedule.starts_on)}–${displayDate(schedule.ends_on)} · נתוני הסידור ופעילות הסוכן`
-              : "כשתיפתח תקופת שיבוץ, הנתונים והפעילות שלה יופיעו כאן."}
+              ? `${displayDate(schedule.starts_on)}–${displayDate(schedule.ends_on)} · נתוני הסידור`
+              : "כשתיפתח תקופת שיבוץ, הנתונים שלה יופיעו כאן."}
           </p>
         </div>
         {schedule ? (
@@ -910,12 +888,6 @@ function ManagerOverview({
             <CrewStage label="טוען את נתוני התקופה…" />
           </div>
         )}
-
-        <CopilotInbox
-          onOpenSetup={onOpenSetup}
-          onPendingChange={onPendingChange}
-          onAct={onAct}
-        />
 
         <LearnedFromChanges />
       </div>

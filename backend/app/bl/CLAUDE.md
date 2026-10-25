@@ -17,7 +17,6 @@ Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
 | `scheduler/` | Building a span: the grid, translating the manager's words, then the solver |
 | `solver/` | **The OR-Tools CP-SAT constraint solver that assigns every schedule** (D34). No model |
 | `changes/` | Conversational edits and the change log |
-| `copilot/` | The durable observation loop the worker drives |
 | `schedule_service/` | Persistence and orchestration around all three: propose, confirm, apply |
 | `audit/` | **Pure-Python advisory checks. No LLM.** Also the fairness arithmetic the scheduler and the employee area read |
 | `export/` | **A period out as `.xlsx`.** Pure functions, no model, no repository |
