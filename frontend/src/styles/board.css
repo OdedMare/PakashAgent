@@ -480,6 +480,11 @@
   box-shadow: none;
 }
 
+.board-grid-wrap {
+  position: relative;
+  min-width: 0;
+}
+
 .board-grid {
   display: grid;
   /* The row head is fixed; every day shares what is left, with a floor so a
@@ -745,19 +750,19 @@
   pointer-events: none;
 }
 
-/* Shown only while an assignment is in hand. The explicit target makes
+/* Shown only while an assignment is being dragged. The explicit target makes
    removal discoverable without leaving a permanent destructive control in
-   every cell, and doubles as the touch/keyboard path after picking a card. */
+   every cell; touch and keyboard use the picked-card bar below. */
 .board-trash-target {
-  position: sticky;
-  inset-block-start: 0;
-  inset-inline-start: 0;
+  position: absolute;
+  inset-block-start: 0.45rem;
+  inset-inline: 0.45rem;
   z-index: 6;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
-  width: 100%;
+  width: auto;
   min-height: 2.75rem;
   border: 1px dashed color-mix(in srgb, var(--danger) 55%, transparent);
   border-radius: var(--radius-sm);
@@ -2260,6 +2265,28 @@
   color: var(--text-muted);
   font-size: 0.78rem;
   cursor: pointer;
+}
+
+.board-move-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--danger);
+  font: inherit;
+  cursor: pointer;
+}
+
+.board-move-remove:hover,
+.board-move-remove:focus-visible {
+  background: var(--danger-soft);
+  outline: none;
+  box-shadow: var(--focus);
 }
 
 .board-move-cancel:hover {
