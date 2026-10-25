@@ -143,8 +143,10 @@ class GenerationStepper:
                 team_id, schedule, profile, job, target, dates
             )
             fresh = self._repository.get_schedule(schedule_id, team_id)
-            rows = persisted_rows(fresh, result.get("assignments") or [], dates)
-            self._write_span(schedule_id, team_id, dates, rows)
+            rows = persisted_rows(
+                fresh, result.get("assignments") or [], dates, job.shifts
+            )
+            self._write_span(schedule_id, team_id, dates, rows, job.shifts)
             job.complete_span(target, result)
         except Exception as exc:
             job.fail_span(target, exc)
@@ -183,17 +185,19 @@ class GenerationStepper:
             ],
             preferences=self._context.active_preferences(team_id),
             translation_cache=self._context.translation_cache(team_id),
+            shift_names=job.shifts or None,
         )
 
     def _write_span(
         self, schedule_id: str, team_id: str, dates: List[str], rows: List[dict],
+        shifts: List[str],
     ) -> None:
         """Persist one span's checkpoint, touching only that span's dates.
 
         Falls back to rewriting the period on a repository that predates
         `replace_span_assignments`, because a checkpoint that raises loses the
         model answer it was holding — the one outcome worse than writing too
-        much.
+        much. A job narrowed to some shifts deletes only those shifts' rows.
         """
         scoped = getattr(self._repository, "replace_span_assignments", None)
         if scoped is None:
@@ -203,6 +207,7 @@ class GenerationStepper:
         scoped(
             schedule_id, team_id, sorted(wanted),
             [row for row in rows if row.get("date") in wanted],
+            shifts=shifts or None,
         )
 
     def _log_completion(

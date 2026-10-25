@@ -224,6 +224,9 @@ impression.
   it as `build_from`/`build_through`. The board finds a week by its Sunday,
   so a period beginning on a Wednesday would be stored and never drawn; the
   days outside the run open empty instead.
+  The dialog also narrows a build by shift type: "כל המשמרות" or one or
+  more "רק <משמרת>" buttons, named from setup. Only the chosen shifts are
+  built (`shifts` on both calls); the others on those days stay as they are.
 - **Building a period does not lock the area.** `generate` and its two
   siblings report through `state.generating`, never through `state.busy`:
   a build is a background job — seconds per four-week span for the solver

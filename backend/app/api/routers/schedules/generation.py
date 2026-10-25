@@ -47,6 +47,7 @@ class GenerationRoutes(RouteGroup):
                 build_through=request.build_through,
                 instructions=request.instructions,
                 required_assignments=_required(request),
+                shifts=request.shifts,
             )
 
         @router.post("/generate/{schedule_id}/next", response_model=Schedule)
@@ -114,7 +115,7 @@ class GenerationRoutes(RouteGroup):
             return service.start_range_generation(
                 session["team_id"], schedule_id,
                 starts_on=request.starts_on, ends_on=request.ends_on,
-                instructions=request.instructions,
+                instructions=request.instructions, shifts=request.shifts,
             )
 
         @router.post("/blank", response_model=Schedule)
