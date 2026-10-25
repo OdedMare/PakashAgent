@@ -12,7 +12,7 @@ import {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { CrewStage } from "@/components/Crew";
+import { CrewStage, Guard } from "@/components/Crew";
 import { listTeams } from "@/services/api";
 import type { TeamSummary } from "@/types";
 
@@ -147,15 +147,10 @@ export function Login({
         </div>
       ) : (
         <form className="gate-card" onSubmit={submit} aria-labelledby="gate-form-title">
-          {/* eslint-disable-next-line @next/next/no-img-element -- a static
-              file in public/, and next/image would add nothing here */}
-          <img
-            className="gate-hero"
-            src="/brand/crew.webp"
-            alt="שני מאבטחי מעבר חציה באפודים זוהרים מחזיקים תמרורי עצור"
-            width={1448}
-            height={1086}
-          />
+          <div className="gate-hero-crew" aria-hidden="true">
+            <Guard who="him" />
+            <Guard who="her" />
+          </div>
           <div className="gate-form-head">
             <span>כניסה מאובטחת</span>
             <h2 id="gate-form-title">
