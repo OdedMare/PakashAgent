@@ -745,6 +745,45 @@
   pointer-events: none;
 }
 
+/* Shown only while an assignment is in hand. The explicit target makes
+   removal discoverable without leaving a permanent destructive control in
+   every cell, and doubles as the touch/keyboard path after picking a card. */
+.board-trash-target {
+  position: sticky;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  width: 100%;
+  min-height: 2.75rem;
+  border: 1px dashed color-mix(in srgb, var(--danger) 55%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger-soft) 94%, var(--surface));
+  color: var(--danger);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.board-trash-target:hover,
+.board-trash-target:focus-visible,
+.board-trash-target.is-over {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  box-shadow: inset 0 0 0 1px var(--danger);
+  outline: none;
+}
+
+.board-trash-target > * {
+  pointer-events: none;
+}
+
 .board-gap {
   display: inline-flex;
   align-items: center;
@@ -1330,7 +1369,32 @@
   gap: 0.4rem;
 }
 
+.board-candidate-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.board-candidate-filters button {
+  min-height: 44px;
+  padding: 0.3rem 0.65rem;
+  color: var(--text-soft);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.board-candidate-filters button.is-active {
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
+}
+
 .board-candidate {
+  position: relative;
   display: flex;
   min-height: 48px;
   align-items: center;
@@ -1344,8 +1408,39 @@
   cursor: pointer;
 }
 
+.board-candidate::after {
+  position: absolute;
+  z-index: 20;
+  inset-block-end: calc(100% + 0.4rem);
+  inset-inline-start: 0;
+  width: max-content;
+  max-width: min(20rem, calc(100vw - 3rem));
+  padding: 0.45rem 0.55rem;
+  color: var(--text);
+  text-align: start;
+  white-space: normal;
+  content: attr(data-tooltip);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+}
+
+.board-candidate:hover::after,
+.board-candidate:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
 .board-candidate.is-available > svg { color: var(--success); }
 .board-candidate.is-unavailable > svg { color: var(--warning); }
+.board-candidate.is-overlap { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); }
 .board-candidate.is-selected { border-color: var(--primary); box-shadow: var(--focus); }
 
 .board-candidate-copy {
@@ -1379,6 +1474,19 @@
 .board-candidate-badge.is-closing {
   color: var(--text-soft);
   background: var(--surface-3);
+}
+
+.board-candidate-badge.is-overlap {
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.board-candidate-empty {
+  grid-column: 1 / -1;
+  padding: 0.7rem;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 0.75rem;
 }
 
 /* Whose closure the slot being edited falls in. A statement of fact above
@@ -1626,8 +1734,7 @@
   gap: clamp(1.1rem, 2.5vw, 1.8rem);
 }
 
-.manager-overview .stats-page,
-.manager-overview .manager-analytics-warnings {
+.manager-overview .stats-page {
   box-shadow: none;
 }
 
@@ -1646,17 +1753,6 @@
 .manager-overview .copilot-console-head .primary-button {
   color: var(--hue-violet);
   background: #ffffff;
-}
-
-.manager-overview-records {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  gap: 1rem;
-}
-
-.manager-overview-records:empty {
-  display: none;
 }
 
 .manager-analytics-head {
@@ -2414,10 +2510,6 @@
 
   .manager-analytics-head {
     align-items: flex-start;
-  }
-
-  .manager-overview-records {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .manager-overview .manager-analytics-head {

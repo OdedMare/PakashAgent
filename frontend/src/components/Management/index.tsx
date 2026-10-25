@@ -36,7 +36,6 @@ import { useManagerChat } from "./useManagerChat";
 import { useChatSplit } from "./useChatSplit";
 import { ProfileGapsNotice } from "./ProfileGapsNotice";
 import { CopilotInbox } from "./CopilotInbox";
-import { History } from "./History";
 import { LearnedFromChanges } from "./LearnedFromChanges";
 import { Preferences } from "./Preferences";
 import { RequestInbox } from "./RequestInbox";
@@ -45,7 +44,6 @@ import { RequestToast } from "./RequestToast";
 import { SwapInbox } from "./SwapInbox";
 import { Stats } from "./Stats";
 import { TeamPanel } from "./TeamPanel";
-import { Warnings } from "./Warnings";
 import { useConstraintRequests } from "./useConstraintRequests";
 import { useLiveInbox } from "./useLiveInbox";
 import { useManagement } from "./useManagement";
@@ -871,7 +869,7 @@ function ManagerOverview({
           <h1 id="manager-overview-title">כל מה שדורש מבט, במקום אחד</h1>
           <p>
             {schedule
-              ? `${displayDate(schedule.starts_on)}–${displayDate(schedule.ends_on)} · נתוני הסידור, פעילות הסוכן והשינויים האחרונים`
+              ? `${displayDate(schedule.starts_on)}–${displayDate(schedule.ends_on)} · נתוני הסידור ופעילות הסוכן`
               : "כשתיפתח תקופת שיבוץ, הנתונים והפעילות שלה יופיעו כאן."}
           </p>
         </div>
@@ -895,28 +893,7 @@ function ManagerOverview({
           onAct={onAct}
         />
 
-        {schedule?.notes?.length || schedule?.warnings.length ? (
-          <section className="manager-analytics-warnings">
-            <div className="manager-analytics-section-head">
-              <div>
-                <span>לפני שממשיכים</span>
-                <h2>דברים שכדאי לבדוק</h2>
-              </div>
-              {schedule.warnings.length ? <strong>{schedule.warnings.length}</strong> : null}
-            </div>
-            {schedule.notes?.length ? (
-              <ul className="schedule-notes">
-                {schedule.notes.map((note, index) => <li key={index}>{note}</li>)}
-              </ul>
-            ) : null}
-            {schedule.warnings.length ? <Warnings warnings={schedule.warnings} /> : null}
-          </section>
-        ) : null}
-
-        <div className="manager-overview-records">
-          <History entries={overview?.changes ?? []} />
-          <LearnedFromChanges />
-        </div>
+        <LearnedFromChanges />
       </div>
     </section>
   );

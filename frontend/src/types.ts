@@ -497,6 +497,9 @@ export interface PlacementCandidate {
   hours: number;
   is_shift_manager: boolean;
   can_train: boolean;
+  is_overlap: boolean;
+  /** Raw roster value, used to filter the manual picker without parsing Hebrew labels. */
+  exit_pattern: "round" | "triplet" | "hamshushim" | "shushim" | string;
   /** "סבב א" / "תלתון ג", written by the backend so the two screens that
    *  show a rotation cannot word it differently. Empty when the person is
    *  not in one. */
