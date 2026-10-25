@@ -289,12 +289,10 @@ export function BoardGrid({
 
   return (
     <div
-      className="board-grid-scroll"
-      ref={scroller}
-      data-tour="grid"
+      className="board-grid-wrap"
       onDragEndCapture={() => setOverTrash(false)}
     >
-      {dragging || move.picked ? (
+      {dragging ? (
         <button
           type="button"
           className={`board-trash-target${overTrash ? " is-over" : ""}`}
@@ -310,34 +308,43 @@ export function BoardGrid({
             if (dragging) removeCard(dragging);
           }}
           onClick={() => {
-            if (move.picked) removeCard(move.picked);
+            removeCard(dragging);
           }}
-          aria-label={`הסרת השיבוץ של ${(dragging ?? move.picked)?.employee ?? ""}`}
+          aria-label={`הסרת השיבוץ של ${dragging.employee}`}
         >
           <Trash2 size={17} />
-          {dragging ? "שחרור כאן להסרת השיבוץ" : "הסרת השיבוץ"}
+          שחרור כאן להסרת השיבוץ
         </button>
       ) : null}
 
-      {/* What a picked-up card is waiting for, said rather than left to be
-          inferred from an outline. It carries no confirm: placing still
-          opens the dialog that collects the reason (D12). */}
-      {move.picked ? (
-        <div className="board-move-bar" role="status">
-          <Check size={14} />
-          <span className="board-move-bar-text">
-            {move.picked.employee} מוכן/ה למעבר — יש לבחור תא יעד.
-          </span>
-          <button
-            type="button"
-            className="board-move-cancel"
-            onClick={move.cancel}
-          >
-            <X size={13} />
-            ביטול
-          </button>
-        </div>
-      ) : null}
+      <div className="board-grid-scroll" ref={scroller} data-tour="grid">
+        {/* What a picked-up card is waiting for, said rather than left to be
+            inferred from an outline. It carries no confirm: placing still
+            opens the dialog that collects the reason (D12). */}
+        {move.picked ? (
+          <div className="board-move-bar" role="status">
+            <Check size={14} />
+            <span className="board-move-bar-text">
+              {move.picked.employee} מוכן/ה למעבר — יש לבחור תא יעד.
+            </span>
+            <button
+              type="button"
+              className="board-move-remove"
+              onClick={() => removeCard(move.picked!)}
+            >
+              <Trash2 size={13} />
+              הסרה
+            </button>
+            <button
+              type="button"
+              className="board-move-cancel"
+              onClick={move.cancel}
+            >
+              <X size={13} />
+              ביטול
+            </button>
+          </div>
+        ) : null}
 
       {/* A board no longer in clock order says so, and offers the clock
           back in one click. Shown only while the manager's own order
@@ -437,6 +444,7 @@ export function BoardGrid({
             onAddShift={onAddShift}
           />
         ))}
+        </div>
       </div>
     </div>
   );
