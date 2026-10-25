@@ -28,7 +28,7 @@ LOOKBACK_DAYS = 14
 class Problem:
     def __init__(self, profile: dict, slots: List[dict], availability=None,
                  history=None, required_assignments=None, already_scheduled=None,
-                 requests=None):
+                 requests=None, keep=None):
         self.profile = profile or {}
         self.slots = slots
         self.shifts = index_shifts(self.profile.get("shifts") or [])
@@ -50,6 +50,7 @@ class Problem:
         self.fixed = self._fixed(already_scheduled, history)
         self.legal = {(name, index): True for name in self.staff
                       for index in range(len(slots)) if self._legal(name, index)}
+        self.keep, self.kept_rows = self._keep(keep)
 
     # -- fixed rows ---------------------------------------------------------
 
@@ -86,6 +87,20 @@ class Problem:
         rows = current + [row for row in unique(past) if _key(row) not in {_key(item) for item in current}]
         return [dict(row, past=row not in current, **_times(timed_row(row, self.shifts)))
                 for row in rows]
+
+    def _keep(self, keep) -> tuple:
+        """The board's rows inside the plan, as {(name, slot): reason}, and
+        how many there were. A row whose person, shift or legality is gone
+        is counted (it is one the rebuild had to move) but cannot be kept."""
+        pinned = {_key(row) for row in self.pins}
+        rows = [row for row in unique([row for row in map(assignment, keep or []) if row])
+                if (row["shift"], row["date"]) in self.keys and _key(row) not in pinned]
+        kept = {}
+        for row in rows:
+            index = self.keys[(row["shift"], row["date"])]
+            if (row["employee"], index) in self.legal:
+                kept[(row["employee"], index)] = row["reason"]
+        return kept, len(rows)
 
     def fixed_on(self, index: int) -> List[dict]:
         shift, date = self.slots[index]["shift_name"], self.slots[index]["slot_date"]

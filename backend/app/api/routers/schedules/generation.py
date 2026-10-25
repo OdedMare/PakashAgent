@@ -109,12 +109,15 @@ class GenerationRoutes(RouteGroup):
 
             "From this day until Saturday": what the agent built on those
             dates is replaced, what the manager placed there is kept as a pin
-            (D18), and every other date of the period is left alone.
+            (D18), and every other date of the period is left alone. With
+            `keep_existing` the generated rows are held where they still fit
+            and only what a new soldier or shift needs moves.
             """
             return service.start_range_generation(
                 session["team_id"], schedule_id,
                 starts_on=request.starts_on, ends_on=request.ends_on,
                 instructions=request.instructions,
+                keep_existing=request.keep_existing,
             )
 
         @router.post("/blank", response_model=Schedule)

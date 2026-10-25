@@ -314,11 +314,21 @@ export function updateProfile(body: {
   conflict_policy?: string;
   existing_schedule_source?: string;
   summary?: string;
-}): Promise<import("@/types").WorkplaceProfile> {
+}): Promise<import("@/types").WorkplaceProfile & { absorbed?: ProfileAbsorption | null }> {
   return request("/api/profile", {
     method: "PUT",
     body: JSON.stringify(body),
   });
+}
+
+/** What a profile save fit into the drafts already built: the new soldiers
+ *  and shifts, each draft ahead of today now being refit while keeping its
+ *  rows, and the weeks left alone (published, or busy) with the reason. */
+export interface ProfileAbsorption {
+  employees: string[];
+  shifts: string[];
+  schedules: { schedule_id: string; starts_on: string; ends_on: string }[];
+  skipped: { schedule_id: string; starts_on: string; ends_on: string; reason: string }[];
 }
 
 /** One rule, policy or note as the code scheduler understood it (D32).
@@ -517,6 +527,7 @@ export async function generateScheduleRange(
     starts_on: string;
     ends_on: string;
     instructions?: string;
+    keep_existing?: boolean;
   },
   onProgress?: (schedule: Schedule) => void,
   options?: { signal?: AbortSignal },
@@ -529,6 +540,7 @@ export async function generateScheduleRange(
         starts_on: body.starts_on,
         ends_on: body.ends_on,
         instructions: body.instructions ?? "",
+        keep_existing: body.keep_existing ?? false,
       }),
     },
   );

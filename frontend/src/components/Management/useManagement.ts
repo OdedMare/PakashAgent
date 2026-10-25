@@ -355,6 +355,7 @@ export function useManagement(): ManagementState {
       build_through?: string;
       instructions?: string;
       required_assignments?: import("@/types").RequiredAssignment[];
+      keep_existing?: boolean;
     }) => {
       const firstDay = input.build_from ?? input.starts_on;
       const lastDay = input.build_through ?? input.ends_on;
@@ -370,13 +371,14 @@ export function useManagement(): ManagementState {
         failed_days: 0,
         days: [],
       });
-      const { schedule_id: scheduleId, ...period } = input;
+      const { schedule_id: scheduleId, keep_existing: keepExisting, ...period } = input;
       if (scheduleId && period.starts_on && period.ends_on) {
         const days = {
           schedule_id: scheduleId,
           starts_on: period.starts_on,
           ends_on: period.ends_on,
           instructions: period.instructions,
+          keep_existing: keepExisting,
         };
         await watchGeneration(
           (onProgress, signal) =>
@@ -533,12 +535,22 @@ export function useManagement(): ManagementState {
     }
   }, []);
 
+  /** A save that added a soldier or a shift refits the drafts ahead of
+   *  today on the server. The one on screen is watched like any build, so
+   *  its banner shows the refit; a published week left alone is said. */
   const saveProfile = useCallback(async (input: {
     employees?: Record<string, unknown>[];
     shifts?: Record<string, unknown>[];
   }) => {
-    await run(() => updateProfile(input));
-  }, [run]);
+    const saved = await run(() => updateProfile(input));
+    const absorbed = saved?.absorbed;
+    if (!absorbed) return;
+    const onScreen = absorbed.schedules.find(
+      (row) => row.schedule_id === overview?.schedule?.id,
+    );
+    if (onScreen) void resumeGeneration(onScreen.schedule_id);
+    if (absorbed.skipped.length) setError(skippedMessage(absorbed.skipped));
+  }, [run, overview?.schedule?.id, resumeGeneration]);
 
   /** Not `run()`: a preview writes nothing, and its error belongs in the
    *  dialog that asked rather than in the area's banner. */
@@ -664,4 +676,17 @@ function inclusiveDays(first?: string, last?: string): number | null {
     return null;
   }
   return Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
+}
+
+/** Weeks a profile save did not refit, and why, in one line. */
+function skippedMessage(
+  rows: { starts_on: string; ends_on: string; reason: string }[],
+): string {
+  const weeks = rows.map((row) => `${dayMonth(row.starts_on)} – ${dayMonth(row.ends_on)} (${row.reason})`);
+  return `השינוי נשמר, אך לא הוטמע בסידורים: ${weeks.join("; ")}.`;
+}
+
+function dayMonth(iso: string): string {
+  const [, month, day] = iso.split("-");
+  return day && month ? `${day}/${month}` : iso;
 }

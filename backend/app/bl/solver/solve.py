@@ -19,6 +19,7 @@ from app.bl.solver.model import COVERAGE, Model
 from app.bl.solver.requests import apply_requests
 from app.bl.solver.rows import roles
 from app.bl.solver.rules import apply_rules
+from app.bl.solver.stability import absorbed, absorbed_note, apply_stability, kept_reason
 from app.bl import rotation
 from app.common.errors import AgentError
 
@@ -33,6 +34,7 @@ def solve(problem, time_limit: float = 10.0, workers: int = 8) -> dict:
     apply_rules(model)
     apply_requests(model)
     apply_fairness(model)
+    apply_stability(model)
     solver, status = _two_phases(model, max(0.2, float(time_limit)), max(1, int(workers)))
     chosen = [_row(problem, name, index) for (name, index), var in sorted(model.x.items())
               if solver.Value(var)]
@@ -40,8 +42,12 @@ def solve(problem, time_limit: float = 10.0, workers: int = 8) -> dict:
     warnings = _warnings(problem, final)
     metrics = _metrics(problem, solver, status, started, final)
     metrics["warnings"] = len(warnings)
+    notes = _notes(solver, model)
+    if problem.kept_rows:
+        metrics.update(absorbed(problem, chosen))
+        notes.insert(0, absorbed_note(metrics))
     return {
-        "slots": problem.slots, "assignments": final, "notes": _notes(solver, model),
+        "slots": problem.slots, "assignments": final, "notes": notes,
         "warnings": warnings, "summary": SUMMARY, "metrics": metrics,
     }
 
@@ -85,6 +91,8 @@ def _row(problem, name: str, index: int) -> dict:
 
 def _reason(problem, name: str, index: int, row: dict) -> str:
     person, slot = problem.people[name], problem.slots[index]
+    if (name, index) in problem.keep:
+        return kept_reason(problem, name, index)
     if person.get("rotation_group") and problem.closes(name, index):
         return "%s סוגר/ת במועד הזה; השיבוץ עומד במחזור המחייב." % (
             rotation.label(rotation.exit_pattern(problem.profile, person),

@@ -183,6 +183,7 @@ class GenerationStepper:
             ],
             preferences=self._context.active_preferences(team_id),
             translation_cache=self._context.translation_cache(team_id),
+            keep=_board_on(schedule, dates) if job.get("keep_existing") else None,
         )
 
     def _write_span(
@@ -238,3 +239,10 @@ class GenerationStepper:
             self._repository.set_generation(schedule_id, team_id, job.to_dict()),
             team_id, light,
         )
+
+
+def _board_on(schedule: dict, dates: List[str]) -> List[dict]:
+    """The rows standing on these dates, for a job absorbing a change."""
+    wanted = set(dates)
+    return [model_assignment(row) for row in schedule.get("assignments") or []
+            if iso(row.get("date")) in wanted]

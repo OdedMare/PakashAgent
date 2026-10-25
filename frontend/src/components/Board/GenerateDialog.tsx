@@ -44,12 +44,16 @@ export function GenerateDialog({
     ends_on: string;
     instructions: string;
     required_assignments: RequiredAssignment[];
+    /** Hold the rows already built and move only what a new soldier or
+     *  shift needs, instead of rebuilding the days. */
+    keep_existing: boolean;
   }) => void;
   onCancel: () => void;
 }) {
   const [startsOn, setStartsOn] = useState(from);
   const [endsOn, setEndsOn] = useState(through);
   const [instructions, setInstructions] = useState("");
+  const [keepExisting, setKeepExisting] = useState(false);
   const dates = useMemo(
     () => dateRange(startsOn, endsOn),
     [startsOn, endsOn],
@@ -132,6 +136,7 @@ export function GenerateDialog({
               ends_on: endsOn,
               instructions: instructions.trim(),
               required_assignments: rows.map(({ employee, shift, date }) => ({ employee, shift, date })),
+              keep_existing: Boolean(period) && keepExisting,
             });
           }
         }}>
@@ -205,10 +210,25 @@ export function GenerateDialog({
               onChange={(event) => setInstructions(event.target.value)}
             />
           </label>
+          {period && standing.replaced ? (
+            <label className="generate-keep">
+              <input
+                type="checkbox"
+                checked={keepExisting}
+                onChange={(event) => setKeepExisting(event.target.checked)}
+              />
+              <span>
+                שמירה על השיבוץ הקיים
+                <small>מזיזים רק את מה שצריך כדי לשלב חייל או משמרת חדשים</small>
+              </span>
+            </label>
+          ) : null}
           {period ? (
             <p className="modal-note">
               {standing.replaced
-                ? `${standing.replaced} שיבוצים שנבנו בימים האלה יוחלפו. `
+                ? keepExisting
+                  ? `${standing.replaced} שיבוצים שנבנו בימים האלה נשארים במקומם ככל האפשר; יוזזו רק אלה שנדרשים לאיזון. `
+                  : `${standing.replaced} שיבוצים שנבנו בימים האלה יוחלפו. `
                 : ""}
               {standing.kept
                 ? `${standing.kept} שיבוצים ששיבצתם ידנית נשארים במקומם, והסוכן ימלא סביבם.`

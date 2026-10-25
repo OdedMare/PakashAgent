@@ -102,7 +102,10 @@ uvicorn app.main:app --reload
   takes `build_from`/`build_through` (the grid opens whole, the solver is
   asked for the run), and `range.py` opens a job over a run of dates inside
   a draft that already exists — manager-placed rows there are pins, the rest
-  of those dates is replaced, every other date is untouched.
+  of those dates is replaced, every other date is untouched. With
+  `keep_existing` the rest is held where it fits instead (D37), and
+  `absorb.py` opens such a job on every draft ahead of today when a profile
+  save adds a soldier or a shift; published weeks are listed, never touched.
 - `bl/schedule_service.create_blank/assign/unassign` — the manual path (D18).
   Writes with no model and no solver on them.
 - `bl/export.py` — a period out as `.xlsx`. Pure functions, no model, no

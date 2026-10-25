@@ -140,6 +140,15 @@ class _FakeScheduleRepo:
         ]
         return self.slots[schedule_id]
 
+    def add_slots(self, schedule_id, team_id, slots):
+        self.get_schedule(schedule_id, team_id)
+        stored = {(slot["shift_name"], slot["slot_date"]) for slot in self.slots[schedule_id]}
+        self.slots[schedule_id] += [
+            dict(slot, id=self._id("slot"), team_id=team_id) for slot in slots
+            if (slot["shift_name"], slot["slot_date"]) not in stored
+        ]
+        return self.slots[schedule_id]
+
     def find_slot(self, schedule_id, team_id, shift_name, slot_date):
         self.get_schedule(schedule_id, team_id)
         for slot in self.slots.get(schedule_id, []):

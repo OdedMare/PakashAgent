@@ -52,6 +52,10 @@ class ProfileService:
         compiled_sources.queue(self._repository, team_id)
         return saved
 
+    def current(self, team_id: str) -> Optional[dict]:
+        """The saved profile, or None before the first save. A read."""
+        return self._repository.team_profile(team_id)
+
     def compiled(self, team_id: str) -> List[dict]:
         """What code made of each rule, policy and note (D32). A read."""
         return compiled_sources.report(self._repository, team_id)

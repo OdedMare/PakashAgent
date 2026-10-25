@@ -42,6 +42,9 @@ class GenerateRangeRequest(BaseModel):
     starts_on: str = Field(min_length=10, max_length=10)
     ends_on: str = Field(min_length=10, max_length=10)
     instructions: str = Field(default="", max_length=2000)
+    # Absorb into the rows already there instead of rebuilding them: a new
+    # soldier or a new shift moves as few people as it needs.
+    keep_existing: bool = False
 
 
 class BlankRequest(BaseModel):

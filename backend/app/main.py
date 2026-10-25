@@ -204,7 +204,7 @@ app.include_router(
     )
 )
 app.include_router(schedules.build_router(schedule_service, guards))
-app.include_router(profile.build_router(profile_service, guards))
+app.include_router(profile.build_router(profile_service, guards, schedule_service))
 app.include_router(manager_chat.build_router(manager_chat_service, repository, guards))
 app.include_router(replacements.build_router(manager_chat_service, guards))
 app.include_router(

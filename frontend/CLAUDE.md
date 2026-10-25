@@ -101,8 +101,9 @@ cycle, for the weekend group א closes and for group א's closure hours; the
 other groups' turns and hours are derived by the server. The dates shown
 beside the anchor are a preview of that one typed fact, and an anchor stored
 for another group is shown as א's next turn in the same cycle. Presence rules
-stay per group. The whole screen saves in one `updateProfile`, and a saved
-change applies to the next build — an existing schedule is not rebuilt.
+stay per group. The whole screen saves in one `updateProfile`. A save that
+adds a soldier or a shift refits every draft ahead of today, keeping its
+rows (D37); anything else applies to the next build.
 
 **Taking a week back is two different acts.** *ניקוי* empties the
 assignments and keeps the shift rows, so the week can be filled in again
@@ -220,7 +221,9 @@ impression.
   those days are solved, what was generated on them is replaced, and
   what the manager placed is kept and filled around (D18) — the dialog counts
   both before the click, and takes no list of required shifts because the
-  board behind it already is one. The run is bounded by the period: a build
+  board behind it already is one. "שמירה על השיבוץ הקיים" sends
+  `keep_existing`: the built rows stay where they fit and only what a new
+  soldier or shift needs moves (D37). The run is bounded by the period: a build
   is one job on one period. On a week with nothing stored, the period is
   still opened as **whole weeks** (`inWholeWeeks`) with the run sent beside
   it as `build_from`/`build_through`. The board finds a week by its Sunday,
@@ -316,7 +319,10 @@ door into the personal area), `employee` → the personal area, `boss` → unit
 setup (`ManualSetup`) until the workplace has a profile, then the management
 area. `workspace.profile` is what switches those last two; the sliders icon
 reopens setup over an existing profile, and a save there applies to the next
-build — an existing schedule is not rebuilt.
+build — except a new soldier or shift, which is absorbed into the drafts
+ahead of today with as few moves as possible (D37). The management area
+picks the refit up as a running build on mount; `saveProfile` watches the
+one on screen and names any published week it left alone.
 
 - **The session is an HttpOnly cookie**, so this code cannot read it. "Am I
   logged in?" is answered by `GET /api/workspace/me`, never by local state

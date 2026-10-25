@@ -17,6 +17,7 @@ schedules the pick may differ from one build to the next.
 | `rules.py` | Seats, roles, the shift manager, rest, runs of days, weekly hours |
 | `requests.py` | Structured requests (`bl/schedule_requests.py`) and soft availability |
 | `fairness.py` | Closers, even hours and nights, a day off between shifts |
+| `stability.py` | Absorbing a change into an existing board: moving as few rows as it needs |
 | `solve.py` | Solving, reasons, notes, warnings and metrics |
 | `rows.py` | Row and roster helpers |
 """
@@ -37,6 +38,7 @@ def generate_span(
     already_scheduled: Optional[List[dict]] = None,
     requests: Optional[List[dict]] = None,
     shift_names: Optional[List[str]] = None,
+    keep: Optional[List[dict]] = None,
     time_limit: float = 10.0,
     workers: int = 8,
 ) -> dict:
@@ -46,12 +48,15 @@ def generate_span(
     span (or on shifts outside `shift_names`) stand as they are, and rows
     inside it are rebuilt. `history` is the time before the span: it counts
     for rest, runs of days and the load each person already carries.
+    `keep` is the board as it stood on these dates: each row is rewarded for
+    staying where it is (`stability.py`), so a new person or a new shift is
+    absorbed with as few moves as evenness and coverage call for.
     """
     slots = slots_for(profile, starts_on, ends_on, shift_names)
     if not slots:
         return _empty(starts_on, ends_on)
     problem = Problem(profile, slots, availability, history, required_assignments,
-                      already_scheduled, requests)
+                      already_scheduled, requests, keep)
     return solve(problem, time_limit, workers)
 
 
