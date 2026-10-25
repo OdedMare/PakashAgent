@@ -103,6 +103,8 @@ uvicorn app.main:app --reload
   asked for the run), and `range.py` opens a job over a run of dates inside
   a draft that already exists — manager-placed rows there are pins, the rest
   of those dates is replaced, every other date is untouched.
+  Both also take `shifts` (`shift_filter.py`): only those shift types are
+  solved and rewritten, and rows on every other shift stand as fixed rows.
 - `bl/schedule_service.create_blank/assign/unassign` — the manual path (D18).
   Writes with no model and no solver on them.
 - `bl/export.py` — a period out as `.xlsx`. Pure functions, no model, no

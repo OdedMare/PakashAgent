@@ -133,6 +133,8 @@ export function Board({
     build_through?: string;
     instructions?: string;
     required_assignments?: RequiredAssignment[];
+    /** Only these shift types are built; empty means every shift. */
+    shifts?: string[];
   }) => void;
   /** Open the agent conversation focused on one day, to give it
    *  instructions for that date. The chat is the only place the agent takes
@@ -953,6 +955,7 @@ export function Board({
                     starts_on: input.starts_on,
                     ends_on: input.ends_on,
                     instructions: input.instructions,
+                    shifts: input.shifts,
                   }
                 : inWholeWeeks(input),
             );

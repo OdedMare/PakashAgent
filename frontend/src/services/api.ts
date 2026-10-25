@@ -352,6 +352,8 @@ export async function generateSchedule(
     build_through?: string;
     instructions?: string;
     required_assignments?: import("@/types").RequiredAssignment[];
+    /** Only these shift types are built; empty or absent means all. */
+    shifts?: string[];
   } = {},
   onProgress?: (schedule: Schedule) => void,
   options?: { signal?: AbortSignal },
@@ -510,13 +512,15 @@ export function dismissScheduleGeneration(
 
 /** Build a run of dates in an existing draft — "from this day until
  *  Saturday". What the agent built there is replaced; what the manager
- *  placed there is kept, and every other date is left alone. */
+ *  placed there is kept, and every other date is left alone. `shifts`
+ *  narrows it to those shift types ("only the nights"); the rest stand. */
 export async function generateScheduleRange(
   body: {
     schedule_id: string;
     starts_on: string;
     ends_on: string;
     instructions?: string;
+    shifts?: string[];
   },
   onProgress?: (schedule: Schedule) => void,
   options?: { signal?: AbortSignal },
@@ -529,6 +533,7 @@ export async function generateScheduleRange(
         starts_on: body.starts_on,
         ends_on: body.ends_on,
         instructions: body.instructions ?? "",
+        shifts: body.shifts ?? [],
       }),
     },
   );

@@ -385,6 +385,8 @@ export interface GenerationProgress {
   completed_days: number;
   failed_days: number;
   days: GenerationDay[];
+  /** The shift types this build covers; empty or absent means all. */
+  shifts?: string[];
   /** When a worker last said it was still on this job, UTC ISO-8601.
    *
    *  What separates a slow model from a hung one: with no LLM timeout
