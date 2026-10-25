@@ -173,7 +173,7 @@ interface ManagementState {
   saveProfile: (input: {
     employees?: Record<string, unknown>[];
     shifts?: Record<string, unknown>[];
-  }) => Promise<void>;
+  }) => Promise<boolean>;
   previewDeparture: (input: { employee: string; effective_date?: string }) => Promise<Departure>;
   depart: (input: { employee: string; effective_date?: string; reason?: string }) => Promise<boolean>;
   clearError: () => void;
@@ -548,12 +548,13 @@ export function useManagement(): ManagementState {
   }) => {
     const saved = await run(() => updateProfile(input));
     const absorbed = saved?.absorbed;
-    if (!absorbed) return;
+    if (!absorbed) return saved !== null;
     const onScreen = absorbed.schedules.find(
       (row) => row.schedule_id === overview?.schedule?.id,
     );
     if (onScreen) void resumeGeneration(onScreen.schedule_id);
     if (absorbed.skipped.length) setError(skippedMessage(absorbed.skipped));
+    return true;
   }, [run, overview?.schedule?.id, resumeGeneration]);
 
   /** Not `run()`: a preview writes nothing, and its error belongs in the

@@ -345,7 +345,7 @@ export function TeamPanel({
           )
         ) : null}
         <p className="roster-help">
-          שינוי סוג משמרת משפיע על סידורים חדשים; לוחות קיימים נשמרים כפי שנבנו.
+          משמרת חדשה נכנסת גם לטיוטות מהיום והלאה, בלי לשנות את השיבוץ הקיים. שינוי במשמרת קיימת חל על בנייה הבאה.
         </p>
       </section>
 
@@ -468,7 +468,7 @@ export function TeamPanel({
   );
 }
 
-function EmployeeForm({
+export function EmployeeForm({
   initial,
   shiftNames,
   defaultExitPattern,
@@ -551,7 +551,7 @@ function EmployeeForm({
   );
 }
 
-function ShiftForm({
+export function ShiftForm({
   initial,
   onCancel,
   onSubmit,

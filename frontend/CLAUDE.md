@@ -152,7 +152,7 @@ profile comes from the setup form.
 | Schedule | The living grid for a period, RTL — `Management/Calendar.tsx` |
 | Manager chat | **The** agent: every instruction, question and plan, optionally focused on one day — `Management/AgentChat.tsx` |
 | Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `Board/ConfirmDrop.tsx` |
-| Replacement tab | Who is out and when → covers ranked so the load spreads evenly; the picks go to the chat as a plan (D36) — `Management/ReplacementPanel.tsx`. Reads only; the wording it sends is shared with the chat cards in `lib/replacement.ts` and read back by the server |
+| Changes tab | "שינויים" — `Management/ChangesPanel.tsx`, three actions. **החלפת משמרת**: who is out and when → covers ranked so the load spreads evenly; the picks go to the chat as a plan (D36) — `ReplacementPanel.tsx`, reads only; its wording is shared with the chat cards in `lib/replacement.ts` and read back by the server. **הוספת חייל** / **הוספת משמרת**: the roster's own `EmployeeForm`/`ShiftForm`, saved through `saveProfile`, after which the server fits the newcomer into every draft from today on, keeping the board (D37) |
 | Preferences | What the agent remembers, all of it visible — `Management/Preferences.tsx` |
 | Employee view | **Read-only** schedule — `MemberArea` renders the same `Calendar` with `readOnly` |
 | Personal area | One employee's own shifts, constraint requests and swaps — `src/components/Employee/` |

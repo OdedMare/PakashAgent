@@ -41,7 +41,7 @@ import { ProfileGapsNotice } from "./ProfileGapsNotice";
 import { LearnedFromChanges } from "./LearnedFromChanges";
 import { Preferences } from "./Preferences";
 import { RequestInbox } from "./RequestInbox";
-import { ReplacementPanel } from "./ReplacementPanel";
+import { ChangesPanel } from "./ChangesPanel";
 import { RequestToast } from "./RequestToast";
 import { SwapInbox } from "./SwapInbox";
 import { Stats } from "./Stats";
@@ -703,7 +703,7 @@ export function Management({
             <ManagerTab
               active={section === "replace"}
               icon={<ArrowLeftRight size={15} />}
-              label="החלפה"
+              label="שינויים"
               onClick={() => setSection("replace")}
             />
             <ManagerTab
@@ -765,10 +765,14 @@ export function Management({
               busy={state.busy}
             />
           ) : null}
-          <ReplacementPanel
-            employees={activeEmployees(overview?.employees ?? [], overview?.today ?? "")}
+          <ChangesPanel
+            employees={overview?.employees ?? []}
+            activeEmployees={activeEmployees(overview?.employees ?? [], overview?.today ?? "")}
+            shifts={overview?.shifts ?? []}
             today={overview?.today ?? ""}
+            rotationMode={overview?.profile?.workplace?.rotation_mode}
             disabled={agent.busy || agent.working}
+            onSaveProfile={state.saveProfile}
             onPrepare={(message) => {
               // The picks become a plan in the conversation, where approving
               // it is the one write path (D12); the server reads this wording
