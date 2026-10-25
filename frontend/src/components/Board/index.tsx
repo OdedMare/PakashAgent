@@ -790,6 +790,11 @@ export function Board({
               onDropCard={openMove}
               onDropEmployee={(input) =>
                 void onAssign({ ...input, schedule_id: schedule.id })}
+              onRemoveCard={(assignment) =>
+                void onUnassign({
+                  assignment_id: assignment.id,
+                  schedule_id: schedule.id,
+                })}
               onOpenCard={(assignment) => {
                 setCheck(null);
                 setEditor({ mode: "edit", assignment });

@@ -6,6 +6,8 @@ import {
   CalendarRange,
   ChevronDown,
   ClipboardList,
+  Maximize2,
+  Minimize2,
   Moon,
   Repeat,
   ShieldCheck,
@@ -386,8 +388,7 @@ function DayChart({ days }: { days: ShiftStats["by_day"] }) {
   const dense = days.length > 14;
 
   return (
-    <figure className="stats-chart">
-      <figcaption>שיבוצים לפי יום</figcaption>
+    <Chart title="שיבוצים לפי יום">
       <div className={dense ? "day-bars is-dense" : "day-bars"} role="list">
         {days.map((day) => (
           <div
@@ -425,7 +426,7 @@ function DayChart({ days }: { days: ShiftStats["by_day"] }) {
           </div>
         ))}
       </div>
-    </figure>
+    </Chart>
   );
 }
 
@@ -444,14 +445,15 @@ function EmployeeChart({ people }: { people: ShiftStats["by_employee"] }) {
   const peak = Math.max(...people.map((row) => row.shifts), 1);
 
   return (
-    <figure className="stats-chart">
-      <figcaption>
-        משמרות לפי חייל/ת
+    <Chart
+      title="משמרות לפי חייל/ת"
+      legend={
         <span className="stats-legend">
           <span className="stats-legend-swatch is-night" aria-hidden="true" />
           מתוכן לילה
         </span>
-      </figcaption>
+      }
+    >
       <ul className="load-rows">
         {people.map((row) => {
           const rotation = rotationLabel(row.exit_pattern, row.rotation_group);
@@ -499,7 +501,7 @@ function EmployeeChart({ people }: { people: ShiftStats["by_employee"] }) {
           );
         })}
       </ul>
-    </figure>
+    </Chart>
   );
 }
 
@@ -527,8 +529,7 @@ function ShiftChart({ shifts }: { shifts: ShiftStats["by_shift"] }) {
   const peak = Math.max(...shifts.map((row) => row.count), 1);
 
   return (
-    <figure className="stats-chart">
-      <figcaption>שיבוצים לפי משמרת</figcaption>
+    <Chart title="שיבוצים לפי משמרת">
       <ul className="load-rows">
         {shifts.map((row) => (
           <li className="load-row" key={row.shift}>
@@ -552,7 +553,7 @@ function ShiftChart({ shifts }: { shifts: ShiftStats["by_shift"] }) {
           </li>
         ))}
       </ul>
-    </figure>
+    </Chart>
   );
 }
 
@@ -565,8 +566,7 @@ function WarningChart({ counts }: { counts: WarningCount[] }) {
   if (!counts.length) return null;
 
   return (
-    <figure className="stats-chart">
-      <figcaption>התראות לפי סוג</figcaption>
+    <Chart title="התראות לפי סוג">
       <ul className="warning-counts">
         {counts.map((row) => (
           <li key={row.code} className={row.severity}>
@@ -577,6 +577,40 @@ function WarningChart({ counts }: { counts: WarningCount[] }) {
           </li>
         ))}
       </ul>
+    </Chart>
+  );
+}
+
+function Chart({
+  title,
+  legend,
+  children,
+}: {
+  title: string;
+  legend?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <figure className={`stats-chart${expanded ? " is-expanded" : ""}`}>
+      <figcaption>
+        <span className="stats-chart-label">
+          {title}
+          {legend}
+        </span>
+        <button
+          type="button"
+          className="stats-chart-expand"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+          aria-label={`${expanded ? "צמצום" : "הרחבת"} התרשים ${title}`}
+        >
+          {expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          {expanded ? "צמצום" : "הרחבה"}
+        </button>
+      </figcaption>
+      {children}
     </figure>
   );
 }
