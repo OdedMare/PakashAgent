@@ -248,3 +248,52 @@ def test_group_presence_settings_are_persisted_without_changing_roster_or_shifts
     assert result["workplace"]["rotation_presence"][0]["ends_on"] == "2026-09-06"
     assert result["workplace"]["rotation_closure_windows"][0]["end_time"] == "10:00"
     assert result["employees"] == employees and result["shifts"] == shifts
+
+
+def _two_shift_repo():
+    repo = _Repo()
+    repo.profile["shifts"].append({
+        "name": "ערב", "start_time": "15:00", "end_time": "23:00",
+        "staffing": [{"days": [], "headcount": 1}],
+    })
+    repo.profile["employees"] = [
+        {"name": "דנה", "eligible_shifts": ["בוקר", "ערב"], "recurring_constraints": [
+            {"days": ["ראשון"], "shifts": ["ערב"], "available": False},
+            {"days": ["שני"], "shifts": ["בוקר", "ערב"], "available": False},
+        ]},
+        {"name": "מאיה"},
+    ]
+    return repo
+
+
+def test_deleting_a_shift_archives_it_and_cleans_the_roster():
+    repo = _two_shift_repo()
+    result = ProfileService(repo).delete_shift("team", "ערב")
+    assert [row["name"] for row in result["shifts"]] == ["בוקר"]
+    assert [row["name"] for row in result["archived_shifts"]] == ["ערב"]
+    dana = result["employees"][0]
+    assert dana["eligible_shifts"] == ["בוקר"]
+    assert dana["archived_eligible_shifts"] == ["ערב"]
+    # A rule scoped to the deleted shift alone goes with it rather than
+    # widening to every shift.
+    assert dana["recurring_constraints"] == [
+        {"days": ["שני"], "shifts": ["בוקר"], "available": False},
+    ]
+    assert result["rules"] == [{"text": "כלל שנשמר"}]
+
+
+def test_deleting_the_last_or_an_unknown_shift_is_refused():
+    repo = _Repo()
+    with pytest.raises(AgentError):
+        ProfileService(repo).delete_shift("team", "בוקר")
+    with pytest.raises(AgentError):
+        ProfileService(_two_shift_repo()).delete_shift("team", "לילה")
+
+
+def test_deleting_someones_only_shift_is_refused_and_writes_nothing():
+    repo = _two_shift_repo()
+    repo.profile["employees"][1]["eligible_shifts"] = ["ערב"]
+    with pytest.raises(AgentError):
+        ProfileService(repo).delete_shift("team", "ערב")
+    assert [row["name"] for row in repo.profile["shifts"]] == ["בוקר", "ערב"]
+    assert repo.profile["employees"][0]["eligible_shifts"] == ["בוקר", "ערב"]

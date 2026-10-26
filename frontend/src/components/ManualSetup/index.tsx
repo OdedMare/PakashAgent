@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { updateProfile } from "@/services/api";
+import { deleteShiftType, updateProfile } from "@/services/api";
 import type { RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
 
 import { CompiledSources } from "./CompiledSources";
@@ -110,6 +110,9 @@ export function ManualSetup({
   const [maxWeeklyHours, setMaxWeeklyHours] = useState(number(audit.max_weekly_hours, 45));
   const [maxConsecutiveDays, setMaxConsecutiveDays] = useState(number(audit.max_consecutive_days, 6));
   const [minRestHours, setMinRestHours] = useState(number(audit.min_rest_hours, 8));
+  // Saved shift types the manager deleted here. They are archived by their
+  // own call after the save, which also cleans them out of the roster.
+  const [removedShifts, setRemovedShifts] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -189,7 +192,11 @@ export function ManualSetup({
           can_train: Boolean(person.can_train),
           notes: text(person.notes),
         })),
-        shifts: shifts.filter(named).map((shift) => ({
+        // A deleted saved shift is still sent here: names are identity keys
+        // the profile save refuses to drop, so it leaves through
+        // `deleteShiftType` below.
+        shifts: [...shifts, ...rows(profile.shifts).filter((row) => removedShifts.includes(text(row.name)))]
+          .filter(named).map((shift) => ({
           ...shift,
           name: text(shift.name),
           purpose: text(shift.purpose),
@@ -213,6 +220,10 @@ export function ManualSetup({
         },
         summary: "יחידה צבאית עם מבנה יציאות אישי לכל חייל/ת",
       });
+      for (const name of removedShifts) {
+        await deleteShiftType(name);
+      }
+      setRemovedShifts([]);
       await onDone();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "לא ניתן לשמור את ההגדרות");
@@ -359,7 +370,14 @@ export function ManualSetup({
                 </div>
                 <label className="manual-check"><input type="checkbox" checked={Boolean(shift.requires_shift_manager)} onChange={(e) => edit(setShifts, index, "requires_shift_manager", e.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
                 <CheckboxGrid label="ימים" values={DAYS} selected={strings(shift.days)} onChange={(value) => edit(setShifts, index, "days", value)} />
-                <button type="button" className="icon-button subtle manual-delete" aria-label="מחיקת סוג משמרת" disabled={originalShifts.has(text(shift.name))} onClick={() => setShifts((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
+                <button type="button" className="icon-button subtle manual-delete" aria-label="מחיקת סוג משמרת" title={originalShifts.has(text(shift.name)) ? "סידורים קיימים נשארים כפי שהם; הבנייה הבאה לא תכלול את המשמרת" : undefined} onClick={() => {
+                  const name = text(shift.name);
+                  if (originalShifts.has(name)) {
+                    if (!window.confirm(`למחוק את סוג המשמרת ${name}? סידורים שכבר נבנו נשארים כפי שהם, והמחיקה תיכנס לתוקף בשמירה.`)) return;
+                    setRemovedShifts((current) => [...current, name]);
+                  }
+                  setShifts((current) => current.filter((_, row) => row !== index));
+                }}><Trash2 size={15} /></button>
               </article>
             ))}
           </div>

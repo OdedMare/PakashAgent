@@ -35,6 +35,7 @@ export function TeamPanel({
   onAdd,
   onRemove,
   onSaveProfile,
+  onDeleteShift,
   onPreviewDeparture,
   onDepart,
 }: {
@@ -64,6 +65,8 @@ export function TeamPanel({
     employees?: Record<string, unknown>[];
     shifts?: Record<string, unknown>[];
   }) => void;
+  /** Deleting a shift type archives it: stored schedules keep their rows. */
+  onDeleteShift?: (name: string) => Promise<void>;
   /** Deleting an employee is a departure: an end date, later shifts vacated. */
   onPreviewDeparture?: (input: { employee: string; effective_date?: string }) => Promise<Departure>;
   onDepart?: (input: { employee: string; effective_date?: string; reason?: string }) => Promise<boolean>;
@@ -75,6 +78,7 @@ export function TeamPanel({
   const [addingEmployee, setAddingEmployee] = useState(false);
   const [editingShift, setEditingShift] = useState<string | null>(null);
   const [addingShift, setAddingShift] = useState(false);
+  const [deletingShift, setDeletingShift] = useState<string | null>(null);
   const names = employees
     .filter((row) => !row.inactive_from || !today || text(row.inactive_from) > today)
     .map((row) => text(row.name))
@@ -307,10 +311,48 @@ export function TeamPanel({
                     <Pencil size={13} />
                   </button>
                 ) : null}
+                {onDeleteShift && shiftNames.length > 1 ? (
+                  <button
+                    type="button"
+                    className="icon-button subtle"
+                    onClick={() => {
+                      setAddingShift(false);
+                      setEditingShift(null);
+                      setDeletingShift(name);
+                    }}
+                    aria-label={`מחיקת סוג המשמרת ${name}`}
+                    title="מחיקת סוג משמרת"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                ) : null}
               </li>
             );
           })}
         </ul>
+        {deletingShift && onDeleteShift ? (
+          <div className="constraint-form profile-form" role="alertdialog" aria-label={`מחיקת סוג המשמרת ${deletingShift}`}>
+            <strong>למחוק את סוג המשמרת {deletingShift}?</strong>
+            <small>
+              סידורים שכבר נבנו נשארים כפי שהם. הבנייה הבאה לא תכלול את המשמרת,
+              והיא תוסר מהמשמרות המתאימות ומהאילוצים הקבועים של העובדים.
+            </small>
+            <div className="constraint-form-actions">
+              <button type="button" className="ghost-button" onClick={() => setDeletingShift(null)}>ביטול</button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={async () => {
+                  const name = deletingShift;
+                  setDeletingShift(null);
+                  await onDeleteShift(name);
+                }}
+              >
+                <Trash2 size={13} /> מחיקה
+              </button>
+            </div>
+          </div>
+        ) : null}
         {onSaveProfile ? (
           addingShift || editingShift ? (
             <ShiftForm

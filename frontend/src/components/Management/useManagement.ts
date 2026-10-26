@@ -25,6 +25,7 @@ import {
   unassignEmployee,
   unpublishSchedule,
   updateProfile,
+  deleteShiftType,
 } from "@/services/api";
 import type { Departure } from "@/services/api";
 import type {
@@ -172,6 +173,7 @@ interface ManagementState {
     employees?: Record<string, unknown>[];
     shifts?: Record<string, unknown>[];
   }) => Promise<void>;
+  deleteShift: (name: string) => Promise<void>;
   previewDeparture: (input: { employee: string; effective_date?: string }) => Promise<Departure>;
   depart: (input: { employee: string; effective_date?: string; reason?: string }) => Promise<boolean>;
   clearError: () => void;
@@ -540,6 +542,10 @@ export function useManagement(): ManagementState {
     await run(() => updateProfile(input));
   }, [run]);
 
+  const deleteShift = useCallback(async (name: string) => {
+    await run(() => deleteShiftType(name));
+  }, [run]);
+
   /** Not `run()`: a preview writes nothing, and its error belongs in the
    *  dialog that asked rather than in the area's banner. */
   const preview = useCallback(
@@ -648,6 +654,7 @@ export function useManagement(): ManagementState {
     addConstraint,
     removeConstraint,
     saveProfile,
+    deleteShift,
     previewDeparture: preview,
     depart,
     clearError,

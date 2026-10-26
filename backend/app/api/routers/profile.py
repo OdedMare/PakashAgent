@@ -21,4 +21,10 @@ def build_router(service, guards) -> APIRouter:
             session["team_id"], **request.model_dump(exclude_unset=True)
         )
 
+    @router.delete("/shifts/{name}")
+    def delete_shift(name: str, session: dict = Depends(boss)) -> dict:
+        """Archive a shift type: the next build stops producing it, and
+        schedules already stored keep their rows."""
+        return service.delete_shift(session["team_id"], name)
+
     return router
