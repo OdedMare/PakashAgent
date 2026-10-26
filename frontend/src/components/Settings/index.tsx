@@ -6,8 +6,6 @@ import {
   LoaderCircle,
   LockKeyhole,
   Save,
-  Settings2,
-  X,
 } from "lucide-react";
 import { FormEvent, useEffect, useRef, useState } from "react";
 
@@ -15,45 +13,8 @@ import { SettingsContent, SettingsNavigation } from "./SettingsSections";
 import type { SettingsController } from "./useSettings";
 import { useSettings } from "./useSettings";
 
-/**
- * The settings modal: model connection and database, saved live.
- *
- * Ported from AiSummryIO's SettingsPanel. Opens locked: these settings are
- * shared by every workspace on the server, so the boss login is not enough
- * and the panel asks for the settings password first. The backend checks it
- * on every call; this screen only collects it.
- */
-export function SettingsPanel({ onClose }: { onClose: () => void }) {
-  const settings = useSettings();
-
-  // Escape closes, as a modal should. Bound on the document rather than the
-  // dialog so it works before anything inside has taken focus.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div className="modal-backdrop settings-backdrop" role="presentation" onClick={onClose}>
-      <section
-        className="modal settings-workspace-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="settings-title"
-        // The backdrop closes on click; the dialog must not inherit that.
-        onClick={(event) => event.stopPropagation()}
-      >
-        <ModalHeader onClose={onClose} />
-        <PanelContent settings={settings} />
-      </section>
-    </div>
-  );
-}
-
-/** The system settings inline, for the צוות משמרות זהב console (D28).
+/** The system settings inline, for the צוות משמרות זהב console (D28) —
+ *  the only place they are reachable from; team screens no longer open them.
  *
  *  The operator's own session already passed the operator password, which
  *  the server accepts in place of the settings password — so this unlocks
@@ -81,23 +42,6 @@ export function SystemSettings() {
     );
   }
   return <PanelContent settings={settings} />;
-}
-
-function ModalHeader({ onClose }: { onClose: () => void }) {
-  return (
-    <header className="modal-header">
-      <span className="modal-icon" aria-hidden="true">
-        <Settings2 size={20} />
-      </span>
-      <div>
-        <h2 id="settings-title">הגדרות</h2>
-        <p>מודל הבינה, פותר האילוצים ומסד הנתונים.</p>
-      </div>
-      <button type="button" onClick={onClose} aria-label="סגירת הגדרות">
-        <X size={18} />
-      </button>
-    </header>
-  );
 }
 
 function PanelContent({ settings }: { settings: SettingsController }) {

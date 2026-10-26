@@ -9,7 +9,6 @@ import {
   LayoutGrid,
   Moon,
   MessagesSquare,
-  Settings2,
   SlidersHorizontal,
   Share2,
   Sparkles,
@@ -28,7 +27,6 @@ import type { Who } from "@/components/Crew";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import type { ChecklistItem } from "@/components/Guide";
 import { useTheme } from "@/hooks/useTheme";
-import { SettingsPanel } from "@/components/Settings";
 import { ShareLink } from "@/components/Workspace/ShareLink";
 import type { ChatPlan, ManagementOverview, Proposal, TeamView } from "@/types";
 
@@ -158,7 +156,6 @@ export function Management({
     setDrawerOpen(true);
     dismissArrivals();
   }, [dismissArrivals]);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [autoGenerating, setAutoGenerating] = useState(false);
   const autoGenerationStarted = useRef(false);
@@ -393,7 +390,7 @@ export function Management({
         </section>
       </header>
 
-      {/* The bar over the workspace: setup, sharing, settings, theme, and
+      {/* The bar over the workspace: setup, sharing, theme, and
           the account menu that signs out. Kept out of the sidebar so it sits
           where the manager looks first rather than under the chat list. */}
       <div className="management-topbar">
@@ -424,15 +421,6 @@ export function Management({
           <button
             type="button"
             className="icon-button"
-            onClick={() => setSettingsOpen(true)}
-            aria-label="הגדרות"
-            title="הגדרות"
-          >
-            <Settings2 size={17} />
-          </button>
-          <button
-            type="button"
-            className="icon-button"
             onClick={toggle}
             aria-label={theme === "dark" ? "מצב בהיר" : "מצב כהה"}
           >
@@ -441,7 +429,6 @@ export function Management({
           <HelpButton />
           <AccountMenu
             name={workspace.name}
-            onOpenSettings={() => setSettingsOpen(true)}
             onLogout={onLogout}
           />
         </div>
@@ -832,9 +819,6 @@ export function Management({
         />
       </main>
 
-      {settingsOpen ? (
-        <SettingsPanel onClose={() => setSettingsOpen(false)} />
-      ) : null}
     </div>
   );
 }

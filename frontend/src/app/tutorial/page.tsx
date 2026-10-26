@@ -153,7 +153,7 @@ export default function TutorialPage() {
           <div className="tutorial-action-list">
             <div><FileDown size={18} /><strong>Excel</strong><p>כפתור ‘אקסל’ מוריד את התקופה הנוכחית כקובץ, בלי לשנות את הלוח.</p></div>
             <div><Users size={18} /><strong>קישור לצוות</strong><p>אייקון השיתוף מציג קישור צפייה. החלפת הקישור מבטלת את הקודם.</p></div>
-            <div><HelpCircle size={18} /><strong>הגדרות והגדרת יחידה</strong><p>גלגל השיניים מנהל חיבור מודל וסיסמה; אייקון הכוונון פותח את פרטי היחידה, העובדים והמשמרות.</p></div>
+            <div><HelpCircle size={18} /><strong>הגדרת יחידה</strong><p>אייקון הכוונון פותח את פרטי היחידה, העובדים והמשמרות. הגדרות המערכת מנוהלות על ידי צוות משמרות זהב.</p></div>
           </div>
         </TutorialChapter>
       </section>
