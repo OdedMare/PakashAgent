@@ -74,7 +74,7 @@ workspace_service = WorkspaceService(repository)
 # with no restart — the same property the model settings have.
 schedule_service = ScheduleService(repository, llm, settings=store)
 profile_service = ProfileService(repository)
-manager_chat_service = ManagerChatService(repository, llm, schedule_service)
+manager_chat_service = ManagerChatService(repository, llm, schedule_service, settings=store)
 copilot_service = CopilotService(repository, schedule_service)
 # Takes the schedule service, not just the repository: the personal view needs
 # an audited schedule, and recomputing the audit for the employee would be a

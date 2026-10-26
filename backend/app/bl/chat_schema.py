@@ -21,6 +21,7 @@ props.update({
     "effective_date": {"type": "string"},
     "instructions": {"type": "string"},
     "replace_existing": {"type": "boolean"},
+    "leave_vacant": {"type": "boolean"},
     "required_assignments": {"type": "array", "maxItems": 2000, "items": {
         "type": "object", "additionalProperties": False,
         "properties": {key: {"type": "string"} for key in ("employee", "shift", "date")},

@@ -131,7 +131,7 @@ def _build():
     schedules = ScheduleService(repository, llm, settings=store)
     return repository, CopilotWorker(
         repository, CopilotService(repository, schedules),
-        schedules=schedules, chat=ManagerChatService(repository, llm, schedules),
+        schedules=schedules, chat=ManagerChatService(repository, llm, schedules, settings=store),
         compiler=SourceCompiler(repository, llm),
     )
 

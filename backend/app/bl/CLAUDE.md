@@ -108,7 +108,8 @@ The one place the manager talks to the agent; see
 `manager_chat` job: `chat_reply.py` first tries the zero-model fast path
 (`chat_tools.replacement_lookup`, over `intent/` and `tools/`), then up to
 seven model rounds that may call read-only tools, then `chat_planner.py`
-validates and audits the plan the model proposes — changes, a generation
+validates and audits the plan the model proposes — changes (a seat a
+removal leaves empty is filled by the solver, `chat_vacancies.py`), a generation
 preview (the solver, through `chat_generation.py`), a vocabulary rebuild
 (`chat_lifecycle.py`, keeping existing rows where they fit), profile or
 constraint edits, management actions. Nothing is written until the manager

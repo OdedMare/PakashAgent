@@ -11,6 +11,7 @@ from app.bl.chat_lifecycle import (
     prepare_blank, prepare_profile, prepare_retirement, prepare_structure,
 )
 from app.bl.chat_management import prepare_management
+from app.bl.chat_vacancies import fill_vacancies
 from app.bl.shared import warning_key
 from app.bl.schedule_service.generation.history import AssignmentHistory
 from app.bl.scheduler import Scheduler
@@ -20,11 +21,13 @@ from app.bl.tools import ScheduleTools
 
 
 class ChatPlanBuilder:
-    def __init__(self, repository, llm, context, profiles):
+    def __init__(self, repository, llm, context, profiles, settings=None):
         self._repo = repository
         self._context = context
         self._profiles = profiles
-        self._scheduler = Scheduler(llm)
+        # The live settings store, so the solver limits saved in the panel
+        # apply to chat builds exactly as to every other build.
+        self._scheduler = Scheduler(llm, settings)
         self._history = AssignmentHistory(repository)
         self._tools = ScheduleTools(repository)
 
@@ -203,6 +206,11 @@ class ChatPlanBuilder:
         names = {person["name"] for person in profile.get("employees") or []}
         if any(row["employee"] not in names for row in rows):
             raise RejectedPlan("התוכנית מכילה עובד שאינו נמצא בצוות")
+        if schedule:
+            rows = fill_vacancies(
+                self._scheduler, self._history, self._context.translation_cache(team_id),
+                team_id, turn, plan, state, rows,
+            )
         self._audit_changes(
             team_id, plan, state, schedule, profile, schedule_id, rows,
         )

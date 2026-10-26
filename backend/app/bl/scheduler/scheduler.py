@@ -46,12 +46,14 @@ class Scheduler:
         preferences: Optional[List[dict]] = None,
         translation_cache=None,
         keep: Optional[List[dict]] = None,
+        requests: Optional[List[dict]] = None,
     ) -> dict:
         """Assign every slot from `starts_on` through `ends_on`.
 
         `keep` are rows to hold where they still fit — a rebuild after the
         shift vocabulary changed should move as few people as it can.
-        `translation_cache` is the team's kept translations
+        `requests` are structured requests the caller already holds; they
+        join the translated ones. `translation_cache` is the team's kept translations
         (`bl/compiled_sources/`); without one every source is translated."""
         translated = self._translate(
             profile, starts_on, ends_on, availability, instructions, preferences,
@@ -63,7 +65,7 @@ class Scheduler:
             history=history,
             required_assignments=list(required_assignments or []) + translated["required_assignments"],
             already_scheduled=already_scheduled,
-            requests=translated["requests"] + _kept(profile, keep),
+            requests=translated["requests"] + list(requests or []) + _kept(profile, keep),
             **self._limits(),
         )
         if translated["sources"]:

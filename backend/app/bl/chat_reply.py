@@ -265,6 +265,8 @@ class ManagerChatReply:
             ]
             reply = "הכנתי תוכנית חלקית לאישור. המשמרות שעדיין דורשות טיפול:\n" + \
                     "\n".join("- " + value for value in gaps)
+        if (state.plan or {}).get("solver_note"):
+            reply = "\n\n".join(part for part in (reply, state.plan["solver_note"]) if part)
         if not reply and output["question"]:
             reply = output["question"]["question"]
         self._repo.finish_chat_turn(

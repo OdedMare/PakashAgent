@@ -163,7 +163,12 @@ state and invalidate proposals whose underlying facts changed.
   with short explanations, then prepare the complete plan after the manager
   selects. (A plain absence handled in code by `bl/absence/` instead proposes
   the fairest cover in the plan, with the alternatives beside it — D36.) An
-  explicitly named replacement goes directly to validation and proposal. Candidate selection and answers to clarification questions are
+  explicitly named replacement goes directly to validation and proposal. A
+  removal with no named replacement is filled by the solver: every seat a
+  `changes` plan leaves empty is solved over the touched dates, the rest of
+  the day pinned and the person who left a hard `avoid`, and its picks join the
+  plan as `assign` operations listed under the reply (`bl/chat_vacancies.py`;
+  `leave_vacant` keeps the seat empty). The model never picks the person. Candidate selection and answers to clarification questions are
   distinct from approval of a prepared plan.
 - **No unsolicited rule exceptions.** If nobody fits, explain the uncovered
   shift and offer compliant alternatives or ask for guidance. Do not propose

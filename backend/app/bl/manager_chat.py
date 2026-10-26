@@ -32,13 +32,13 @@ def _iso_or_blank(value):
 
 
 class ManagerChatService:
-    def __init__(self, repository, llm, schedules):
+    def __init__(self, repository, llm, schedules, settings=None):
         self._repo = repository
         self._context = ScheduleContext(repository)
         profiles = ProfileService(repository)
         self._chat_tools = ManagerChatTools(repository, schedules, self._context)
         self._planner = ChatPlanBuilder(
-            repository, llm, self._context, profiles,
+            repository, llm, self._context, profiles, settings,
         )
         self._reply = ManagerChatReply(
             repository, llm, self._context, self._chat_tools, self._planner,
