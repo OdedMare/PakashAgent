@@ -882,6 +882,14 @@ export function setConstraint(body: {
   });
 }
 
+/** Archive a shift type. Stored schedules keep their rows; the next build
+ * stops producing it, and the roster's references to it are cleaned up. */
+export function deleteShiftType(name: string): Promise<import("@/types").WorkplaceProfile> {
+  return request(`/api/profile/shifts/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
+}
+
 export function deleteConstraint(rowId: string): Promise<{ status: string }> {
   return request<{ status: string }>(`/api/schedule/constraints/${rowId}`, {
     method: "DELETE",

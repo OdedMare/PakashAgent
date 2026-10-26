@@ -615,6 +615,7 @@ export function Management({
                 onAdd={state.addConstraint}
                 onRemove={state.removeConstraint}
                 onSaveProfile={state.saveProfile}
+                onDeleteShift={state.deleteShift}
                 onPreviewDeparture={state.previewDeparture}
                 onDepart={state.depart}
               />
@@ -816,6 +817,7 @@ export function Management({
             onAdd={state.addConstraint}
             onRemove={state.removeConstraint}
             onSaveProfile={state.saveProfile}
+            onDeleteShift={state.deleteShift}
             onPreviewDeparture={state.previewDeparture}
             onDepart={state.depart}
           />

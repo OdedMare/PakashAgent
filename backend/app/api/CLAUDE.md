@@ -9,7 +9,7 @@ the result.
 |---|---|
 | `workspace.py` | Enter a workspace, the member share link, logout. Creating one is refused unless `allow_signup` (D28) |
 | `admin.py` | The צוות משמרות זהב console (D28): operator sign-in, every team with its counts, open (name + password)/rename/suspend/delete a team, reset its manager password, rotate its link |
-| `profile.py` | Boss-only structured unit setup, profile updates, and `/compiled` — what code made of each rule and note (D32) |
+| `profile.py` | Boss-only structured unit setup, profile updates, `DELETE /shifts/{name}` — archiving a shift type (stored schedules keep their rows) — and `/compiled`, what code made of each rule and note (D32) |
 | `manager_chat.py` | `/api/agent/chats` — the manager's conversations: send a message (queued as a job), poll, stop, apply or dismiss a pending plan |
 | `schedules/` | `/api/schedule` — the management area. `reading.py`: the overview, one period, a span (`/between`, capped at 62 days), stats, audit. `generation.py`: solve a period now (`/generate`), or open a resumable job (`/generate/start`, `build_from`/`build_through`), run, poll `progress`, cancel, dismiss, one day (`/day/start`) or a run of days in a draft (`/range/start`). `manual.py`: blank period, assign, unassign, check, departure (D18). `periods.py`: publish, unpublish, clear, delete, export. `agent.py`: propose, apply, move (D8/D12). Constraints, history, learning and preferences (D21) |
 | `settings.py` | `/api/settings` and `/api/models` — the process-wide settings and the model-list probe |

@@ -38,4 +38,10 @@ def build_router(service, guards, schedules=None) -> APIRouter:
             absorbed = None
         return dict(saved, absorbed=absorbed)
 
+    @router.delete("/shifts/{name}")
+    def delete_shift(name: str, session: dict = Depends(boss)) -> dict:
+        """Archive a shift type: the next build stops producing it, and
+        schedules already stored keep their rows."""
+        return service.delete_shift(session["team_id"], name)
+
     return router
