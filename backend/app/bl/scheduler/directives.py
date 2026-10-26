@@ -7,7 +7,7 @@ from typing import Any, List, Optional
 
 from app.bl.schedule_requests import KINDS, PERIODS, read_requests
 from app.bl.scheduler.slots import build_slots
-from app.bl.shared import usage_of
+from app.bl.shared import role_qualified, usage_of
 from app.bl.scheduler.values import bounded
 
 
@@ -150,13 +150,14 @@ def _unresolved_ids(rows, source_ids):
     return found
 
 
-def translated_row(row, source_ids, people, slots, standing=(), shifts=()):
+def translated_row(row, source_ids, people, slots, standing=(), shifts=(), definitions=None):
     """One directive as `(source_id, action, value)`, or None.
 
     A directive translated from a `standing` source (one that stays from
     build to build) may name a date outside this period: it is kept for
     later periods, so it is checked against the shift vocabulary and the
-    calendar instead of this period's grid.
+    calendar instead of this period's grid. `definitions` (shift rows by
+    name) refuses a pin on a shift the person's role is not qualified for.
     """
     if not isinstance(row, dict):
         return None
@@ -171,6 +172,9 @@ def translated_row(row, source_ids, people, slots, standing=(), shifts=()):
         return None
     allowed = people[employee].get("eligible_shifts")
     if action == "required_assignment" and isinstance(allowed, list) and allowed and shift not in allowed:
+        return None
+    if action == "required_assignment" and not role_qualified(
+            people[employee], (definitions or {}).get(shift)):
         return None
     if action == "unavailable":
         value = {"employee": employee, "date": date, "shift": shift,
@@ -211,13 +215,17 @@ def read_translation(answer: Any, sources: List[dict], profile: dict,
         (row["shift_name"], row["slot_date"])
         for row in build_slots(profile, starts_on, ends_on)
     }
+    definitions = {
+        bounded(row.get("name")): row for row in (profile or {}).get("shifts") or []
+        if isinstance(row, dict)
+    }
     requests, errors = read_requests(answer.get("requests") or [], profile)
     if errors or any(row["source_id"] not in source_ids for row in requests):
         return None
     translated_availability, required = [], []
     covered = {row["source_id"] for row in requests}
     for row in directives:
-        translated = translated_row(row, source_ids, people, slots)
+        translated = translated_row(row, source_ids, people, slots, definitions=definitions)
         if translated is None:
             return None
         source_id, action, value = translated

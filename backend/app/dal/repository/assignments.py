@@ -80,9 +80,11 @@ class AssignmentRepository(RepositoryBase):
 
     def replace_span_assignments(
         self, schedule_id: str, team_id: str, dates: List[str],
-        assignments: List[dict],
+        assignments: List[dict], shifts: Optional[List[str]] = None,
     ) -> List[dict]:
         """Rewrite the rows on these dates. **Every other date is untouched.**
+
+        With `shifts`, only those shifts' rows on the dates are rewritten.
 
         Rewriting the period per day was quadratic and lossy at once: a
         thirty-day build re-inserted every earlier day thirty times, and each
@@ -101,8 +103,10 @@ class AssignmentRepository(RepositoryBase):
                 WHERE schedule_id=%s AND team_id=%s AND slot_id IN (
                     SELECT id FROM shift_slots
                     WHERE schedule_id=%s AND slot_date = ANY(%s)
+                      AND (%s::text[] IS NULL OR shift_name = ANY(%s::text[]))
                 )
-            """, (schedule_id, team_id, schedule_id, wanted))
+            """, (schedule_id, team_id, schedule_id, wanted,
+                  shifts or None, shifts or None))
             _insert_all(connection, team_id, schedule_id, assignments)
             self._touch_schedule(connection, schedule_id)
             connection.commit()

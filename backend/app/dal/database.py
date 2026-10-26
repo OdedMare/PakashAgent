@@ -31,9 +31,10 @@ from app.common.runtime_settings.runtime_settings_store import (
 # Sized for the threadpool FastAPI runs sync handlers in, not for the model:
 # a request blocked on a 3-minute generation is holding a worker thread, not a
 # connection, because `bl/` reads what it needs and returns before the model
-# is ever called.
+# is ever called. A running job does hold one for its whole run (its job lock
+# lives on it), so the six worker lanes come on top of the request threads.
 _MIN_POOL_SIZE = 1
-_MAX_POOL_SIZE = 10
+_MAX_POOL_SIZE = 16
 # A connection that cannot be had in this long means the pool is exhausted and
 # the caller should fail rather than queue indefinitely behind whatever is
 # holding them.

@@ -359,7 +359,7 @@ def test_a_null_cache_keeps_nothing():
 
 
 def test_the_worker_runs_a_compile_job_and_does_not_report_its_failure():
-    from app.worker import CopilotWorker
+    from app.worker import JobWorker
 
     class _Compiler:
         def __init__(self):
@@ -371,19 +371,16 @@ def test_the_worker_runs_a_compile_job_and_does_not_report_its_failure():
 
     class _Jobs:
         def __init__(self):
-            self.finished, self.items = [], []
+            self.finished = []
 
         def finish_copilot_job(self, job_id, error="", retry=False):
             self.finished.append((job_id, retry))
 
-        def create_copilot_item(self, *args, **kwargs):
-            self.items.append(args)
-
     compiler, jobs = _Compiler(), _Jobs()
-    worker = CopilotWorker(jobs, service=None, compiler=compiler)
+    worker = JobWorker(jobs, compiler=compiler)
 
     worker._process({"id": "j1", "team_id": TEAM, "kind": "compile_sources",
                      "payload": {}, "attempts": 3})
 
     assert compiler.teams == [TEAM]
-    assert jobs.finished == [("j1", False)] and jobs.items == []
+    assert jobs.finished == [("j1", False)]

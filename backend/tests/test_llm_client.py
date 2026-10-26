@@ -622,21 +622,23 @@ def test_the_budget_always_leaves_room_for_one_round_trip():
             assert _budget_seconds(settings, flow) > timeout, (timeout, flow)
 
 
-def test_no_timeout_means_no_budget_either():
-    """A deadline over an unbounded call could only fire mid-generation,
-    discarding an answer the server was still producing — the exact failure
-    turning the timeout off is meant to avoid."""
+def test_no_timeout_still_ends_a_stuck_chat_call():
+    """0 used to mean "wait forever", and one chat call the server never
+    answered then held its worker and model slot until a restart: every later
+    message sat on "ממתין למודל…". It now means the built-in ceiling."""
     for timeout in (0, -30):
         settings = _Settings(llm_timeout_seconds=timeout)
-        for flow in ("changes", ""):
-            assert _budget_seconds(settings, flow) is None, (timeout, flow)
+        for flow in ("changes", "planner", ""):
+            ceiling = read_timeout_for(settings, flow)
+            assert ceiling == 300, (timeout, flow)
+            assert _budget_seconds(settings, flow) > ceiling, (timeout, flow)
 
 
-def test_an_unbounded_call_is_not_cut_short_by_a_deadline():
-    """End to end: with no timeout the ladder runs every rung it needs.
+def test_the_default_ceiling_leaves_room_for_the_ladder():
+    """End to end: with the default timeout the ladder runs every rung it needs.
 
-    Guards the wiring, not the arithmetic — a budget of 0 seconds rather than
-    None would have stopped this after the first BadRequestError.
+    Guards the wiring, not the arithmetic — a budget of 0 seconds would have
+    stopped this after the first BadRequestError.
     """
     settings = _Settings(llm_timeout_seconds=0)
     llm, fake = _client([
@@ -712,12 +714,11 @@ def test_the_scheduler_client_is_built_with_its_own_ceiling():
 def test_a_settings_object_without_the_field_still_resolves():
     """A saved file from an older version, or a test double, must not raise.
 
-    It resolves to no ceiling, which is the same answer an explicit 0 gets:
-    a settings object that never heard of the field cannot be asserting a
-    limit, and inventing one for it would time out calls on the strength of
-    a missing attribute.
+    It resolves to the default ceiling, which is the same answer an explicit
+    0 gets.
     """
-    assert _budget_seconds(object(), "changes") is None
+    assert read_timeout_for(object(), "changes") == 300
+    assert _budget_seconds(object(), "changes") > 300
 
 
 def test_ssl_verification_is_on_unless_turned_off(monkeypatch):
@@ -761,3 +762,56 @@ def test_the_models_probe_honours_the_ssl_switch(monkeypatch):
     llm.list_models(verify_ssl_override=True)
 
     assert seen == [False, True]
+
+
+# --- the server tripping over its own output, and how long it thinks -------
+
+_HARMONY = "unexpected tokens remaining in message header: Some(\"<|start|>assistant\")"
+
+
+def test_a_harmony_glitch_asks_the_same_rung_again():
+    """gpt-oss on vLLM 400s when its sampled text breaks its own format.
+    Stepping down the ladder would only drop the structured output."""
+    llm, fake = _client([_bad_request(_HARMONY), _Response('{"ok": true}')])
+    assert llm.complete_json("sys", "usr", schema={"type": "object"})["ok"] is True
+    first, second = fake.completions.calls
+    assert first["response_format"] == second["response_format"]
+
+
+def test_a_harmony_glitch_that_persists_still_steps_down():
+    llm, fake = _client([_bad_request(_HARMONY)] * 3 + [_Response('{"ok": true}')])
+    assert llm.complete_json("sys", "usr")["ok"] is True
+    formats = [call.get("response_format") for call in fake.completions.calls]
+    assert formats[:3] == [{"type": "json_object"}] * 3
+    assert formats[3] is None
+
+
+def test_reasoning_effort_is_sent_only_when_set():
+    llm, fake = _client([_Response('{"ok": true}')])
+    llm.complete_json("sys", "usr")
+    assert "reasoning_effort" not in fake.completions.calls[0]
+    assert "extra_body" not in fake.completions.calls[0]
+
+
+@pytest.mark.parametrize("effort, sent", [("off", "low"), ("low", "low"), ("high", "high")])
+def test_gpt_oss_gets_reasoning_effort(effort, sent):
+    settings = _Settings(llm_model="gpt-oss-120b", llm_reasoning_effort=effort)
+    llm, fake = _client([_Response('{"ok": true}')], settings)
+    llm.complete_json("sys", "usr")
+    assert fake.completions.calls[0]["reasoning_effort"] == sent
+
+
+@pytest.mark.parametrize("effort, thinking", [("off", False), ("low", False), ("medium", True)])
+def test_qwen_gets_its_chat_template_switch(effort, thinking):
+    settings = _Settings(
+        llm_model="qwen3.5-35b-a3b", llm_reasoning_effort=effort,
+        llm_repetition_penalty=1.1,
+    )
+    llm, fake = _client([_Response('{"ok": true}')], settings)
+    llm.complete_json("sys", "usr")
+    call = fake.completions.calls[0]
+    assert "reasoning_effort" not in call
+    assert call["extra_body"] == {
+        "repetition_penalty": 1.1,
+        "chat_template_kwargs": {"enable_thinking": thinking},
+    }

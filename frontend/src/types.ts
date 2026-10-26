@@ -117,6 +117,8 @@ export interface RuntimeSettings {
   llm_repetition_penalty: number;
   llm_timeout_seconds: number;
   llm_queue_seconds: number;
+  /** "", "off", "low", "medium" or "high": how long the model thinks. */
+  llm_reasoning_effort: string;
   /** False accepts any TLS certificate from the model server. */
   llm_verify_ssl: boolean;
   llm_base_url: string | null;
@@ -385,6 +387,8 @@ export interface GenerationProgress {
   completed_days: number;
   failed_days: number;
   days: GenerationDay[];
+  /** The shift types this build covers; empty or absent means all. */
+  shifts?: string[];
   /** When a worker last said it was still on this job, UTC ISO-8601.
    *
    *  What separates a slow model from a hung one: with no LLM timeout
@@ -497,6 +501,9 @@ export interface PlacementCandidate {
   hours: number;
   is_shift_manager: boolean;
   can_train: boolean;
+  is_overlap: boolean;
+  /** Raw roster value, used to filter the manual picker without parsing Hebrew labels. */
+  exit_pattern: "round" | "triplet" | "hamshushim" | "shushim" | string;
   /** "סבב א" / "תלתון ג", written by the backend so the two screens that
    *  show a rotation cannot word it differently. Empty when the person is
    *  not in one. */
@@ -1018,68 +1025,6 @@ export interface Preference {
   source: string;
 }
 
-export type CopilotMode = "observe" | "suggest" | "auto";
-export type CopilotItemStatus =
-  | "pending"
-  | "approved"
-  | "dismissed"
-  | "applied"
-  | "failed"
-  | "rolled_back";
-
-export interface CopilotItem {
-  id: string;
-  kind: "observation" | "proposal" | "failure";
-  action_type: string;
-  status: CopilotItemStatus;
-  title: string;
-  detail: string;
-  payload: Record<string, unknown>;
-  before_state?: Record<string, unknown> | null;
-  after_state?: Record<string, unknown> | null;
-  verification?: Record<string, unknown> | null;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface CopilotPermission {
-  action_type: string;
-  mode: CopilotMode;
-  updated_at?: string | null;
-}
-
-export interface CopilotInboxData {
-  items: CopilotItem[];
-  permissions: CopilotPermission[];
-  health: CopilotHealth;
-}
-
-export interface CopilotHealth {
-  queued_jobs: number;
-  running_jobs: number;
-  last_completed_at?: string | null;
-  latest_job?: {
-    id: string;
-    status: "queued" | "running" | "complete" | "failed";
-    attempts: number;
-    error?: string;
-    created_at?: string;
-    started_at?: string | null;
-    finished_at?: string | null;
-  } | null;
-}
-
-export interface CopilotAuditEvent {
-  id: string;
-  item_id?: string | null;
-  event: string;
-  actor: string;
-  message: string;
-  before_state?: Record<string, unknown> | null;
-  after_state?: Record<string, unknown> | null;
-  verification?: Record<string, unknown> | null;
-  created_at?: string;
-}
 export interface ChatPlan {
   kind: "changes" | "profile" | "generate" | "publish" | "unpublish" | "clear" | "retire" | "restructure";
   schedule_id: string;
@@ -1116,6 +1061,10 @@ export interface ManagerChatMessage {
   request_id?: string;
   payload: {
     activity?: string;
+    /** The reply so far, while the model is still writing it (`working` only). */
+    draft?: string;
+    /** Up to three next messages the agent offers as one-click follow-ups. */
+    suggestions?: string[];
     plan?: ChatPlan;
     results?: { tool: string; ok?: boolean; date?: string; shift?: string; replacing?: string;
       candidates?: { employee: string; hours?: number; why?: string; requires_exception?: boolean }[] }[];

@@ -83,6 +83,8 @@ class RuntimeSettingsStore:
             llm_api_key_default=env.llm_api_key_default,
             llm_api_key_advanced=env.llm_api_key_advanced,
             llm_queue_seconds=env.llm_queue_seconds,
+            llm_team_concurrency=max(0, int(env.llm_team_concurrency)),
+            llm_reasoning_effort=_reasoning_effort(env.llm_reasoning_effort),
             llm_verify_ssl=env.llm_verify_ssl,
             solver_time_limit_seconds=_seconds(env.solver_time_limit_seconds),
             solver_workers=max(1, int(env.solver_workers)),
@@ -206,18 +208,27 @@ def _normalized(key: str, value, patch: dict, settings):
     if key == "llm_repetition_penalty":
         # Float, and 0 is meaningful ("do not send it").
         return _clamp_penalty(value)
-    if key in ("llm_timeout_seconds", "llm_queue_seconds"):
-        # 0 means "no timeout, wait as long as the server needs", so these
-        # cannot join the max(1, ...) group below -- that would turn a request
-        # for no limit into a one-second one. Negatives fold to 0.
+    if key in ("llm_timeout_seconds", "llm_queue_seconds", "llm_team_concurrency"):
+        # 0 is meaningful in each -- the default model-call ceiling, no queue
+        # limit, no per-team quota -- so these cannot join the max(1, ...)
+        # group below, which would turn it into a one. Negatives fold to 0.
         return max(0, int(value))
     if key in _POSITIVE_INTS:
         return max(1, int(value))
     if key == "llm_verify_ssl":
         return _flag(value)
+    if key == "llm_reasoning_effort":
+        return _reasoning_effort(value)
     if key == "solver_time_limit_seconds":
         return _seconds(value)
     return value
+
+
+def _reasoning_effort(value) -> str:
+    """One of the values servers accept, or empty (send nothing): a typo sent
+    as-is would 400 every call."""
+    value = str(value or "").strip().lower()
+    return value if value in ("off", "low", "medium", "high") else ""
 
 
 def _safe_database_url(value: str) -> str:

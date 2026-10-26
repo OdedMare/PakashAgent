@@ -165,6 +165,21 @@ class PeriodRepository(RepositoryBase):
             connection.commit()
         return self.slots(schedule_id, team_id)
 
+    def add_slots(self, schedule_id: str, team_id: str, slots: List[dict]) -> List[dict]:
+        """Add slots the grid lacks; existing slots and their rows stay."""
+        self._require_schedule(schedule_id, team_id)
+        with connect(self._store) as connection:
+            for slot in slots:
+                connection.execute("""
+                    INSERT INTO shift_slots(id,team_id,schedule_id,shift_name,slot_date,
+                        start_time,end_time,headcount,required_roles,requires_shift_manager,is_on_call)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT (schedule_id, shift_name, slot_date) DO NOTHING
+                """, _slot_values(team_id, schedule_id, slot))
+            self._touch_schedule(connection, schedule_id)
+            connection.commit()
+        return self.slots(schedule_id, team_id)
+
     def find_slot(
         self, schedule_id: str, team_id: str, shift_name: str, slot_date: str
     ) -> Optional[dict]:

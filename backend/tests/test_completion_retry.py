@@ -72,6 +72,31 @@ def test_a_transient_failure_is_retried():
     assert client.calls == 2
 
 
+def _timed_out(cause):
+    try:
+        raise cause
+    except httpx.TimeoutException as exc:
+        error = APITimeoutError(request=_request())
+        error.__cause__ = exc
+        return error
+
+
+def test_a_read_timeout_is_not_retried(slept):
+    """The server took the request and stayed silent for the whole ceiling:
+    asking again would hold the model slot for another one."""
+    client = _Client([_timed_out(httpx.ReadTimeout("silent"))])
+    with pytest.raises(APITimeoutError):
+        create_with_retry(client, "m", {})
+    assert client.calls == 1
+    assert slept == []
+
+
+def test_a_connect_timeout_is_still_retried(slept):
+    client = _Client([_timed_out(httpx.ConnectTimeout("no route"))])
+    assert create_with_retry(client, "m", {}) == "ok"
+    assert client.calls == 2
+
+
 def test_a_bad_request_is_not_retried():
     """It is the ladder's job, not this one's — the request shape is wrong and
     sending it again unchanged cannot fix it."""
