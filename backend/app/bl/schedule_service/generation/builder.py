@@ -7,6 +7,8 @@ from app.bl.schedule_service.constants import ACTION_GENERATED, ACTION_OPENED
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.generation.job import GenerationJob
 from app.bl.schedule_service.generation.pins import required_rows
+from app.bl.schedule_service.generation.range import within
+from app.bl.schedule_service.generation.shift_filter import chosen_shifts, dates_with
 from app.bl.schedule_service.profile_gate import ProfileGate
 from app.bl.schedule_service.generation.history import AssignmentHistory
 from app.bl.schedule_service.rows import iso, slot_index
@@ -97,12 +99,14 @@ class PeriodBuilder:
         required_assignments: Optional[List[dict]] = None,
         build_from: Optional[str] = None,
         build_through: Optional[str] = None,
+        shifts: Optional[List[str]] = None,
     ) -> dict:
         """Open a persistent range job; each later request generates one span.
 
         `build_from`/`build_through` narrow what the agent is asked for. The grid opens
         whole and the job covers the run asked for. The rest stays empty —
-        for the manager (D18), or for a later range build.
+        for the manager (D18), or for a later range build. `shifts` narrows
+        it the other way, to those shift types; the others open empty too.
         """
         profile = self._gate.buildable_profile(team_id)
         starts_on, ends_on = _bounds(starts_on, ends_on)
@@ -112,19 +116,21 @@ class PeriodBuilder:
             raise AgentError(
                 "לא ניתן לבנות סידור: לא הוגדרו משמרות לתקופה הזו"
             )
+        chosen = chosen_shifts(shifts, slots)
+        spans = within(plan_spans(profile, first, last), dates_with(slots, chosen))
+        if not spans:
+            raise AgentError("המשמרות שנבחרו אינן חלות בתאריכים האלה")
         schedule = self._repository.create_schedule(team_id, starts_on, ends_on)
         stored = self._repository.replace_slots(schedule["id"], team_id, slots)
         pinned = required_rows(required_assignments or [], stored, profile)
         if pinned:
             self._repository.replace_assignments(schedule["id"], team_id, pinned)
         job = GenerationJob.open(
-            plan_spans(profile, first, last),
-            total_days=len({
-                iso(slot.get("slot_date")) for slot in stored
-                if first <= iso(slot.get("slot_date")) <= last
-            }),
+            spans,
+            total_days=sum(len(span["dates"]) for span in spans),
             instructions=instructions,
             required=required_assignments or [],
+            shifts=chosen,
         )
         schedule = self._repository.set_generation(
             schedule["id"], team_id, job.to_dict()

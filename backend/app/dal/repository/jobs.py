@@ -1,4 +1,8 @@
-"""The shared durable queue for chat, generation, and copilot scans."""
+"""The shared durable queue for chat turns, generation, and translations.
+
+The table is still called `copilot_jobs`: the copilot that named it is gone,
+and renaming a live table is a migration for no behaviour.
+"""
 
 from contextlib import contextmanager
 

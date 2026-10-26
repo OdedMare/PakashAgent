@@ -14,6 +14,11 @@ _NO_CLOSURE = {
     "until_handover": False,
 }
 
+_PATTERN_LABELS = {
+    "hamshushim": "חמשושים",
+    "shushim": "שושים",
+}
+
 
 def closure_of(profile: dict, slot_date: str, shift_name: str = "") -> dict:
     """Whose closure this slot falls in, for the dialog to say so.
@@ -71,6 +76,8 @@ def employee_options(
 
 def _option(context, person, shift_name, slot_date, day, load) -> dict:
     name = values.text(person.get("name"))
+    exit_pattern = rotation.exit_pattern(context.profile, person)
+    rotation_group = values.text(person.get("rotation_group"))
     verdict = context.verdict(name, shift_name, slot_date)
     return {
         "employee": name,
@@ -79,12 +86,14 @@ def _option(context, person, shift_name, slot_date, day, load) -> dict:
         "hours": load.get(name, 0.0),
         "is_shift_manager": bool(person.get("is_shift_manager")),
         "can_train": bool(person.get("can_train")),
-        "rotation": rotation.label(
-            _cycle_of(context.profile, person),
-            values.text(person.get("rotation_group")),
-        ),
+        "is_overlap": values.text(person.get("service_type")) == "overlap",
+        "exit_pattern": exit_pattern,
+        "rotation": rotation.label(_cycle_of(context.profile, person), rotation_group)
+        or _PATTERN_LABELS.get(exit_pattern, ""),
         "closing": bool(
             day is not None
+            # Ungrouped חמשושים/שושים "hold" the weekend they are home for.
+            and values.text(person.get("rotation_group"))
             and rotation.holds(context.profile, person, day, shift_name)
         ),
     }
@@ -94,7 +103,7 @@ def _cycle_of(profile: dict, person: dict) -> str:
     """Which cycle a person turns on -- ג can only be a תלתון, so the label
     needs the cycle, not just the letter."""
     pattern = rotation.exit_pattern(profile, person)
-    if pattern in ("round", "triplet"):
+    if pattern in ("round", "triplet", "hamshushim", "shushim"):
         return pattern
     if values.text(person.get("rotation_group")) == "ג":
         return "triplet"

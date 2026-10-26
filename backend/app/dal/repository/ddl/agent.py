@@ -1,4 +1,4 @@
-"""Agent preferences (D21), the durable copilot (D23) and kept translations (D32)."""
+"""Agent preferences (D21), the durable job queue (D23) and kept translations (D32)."""
 
 AGENT_DDL = """-- What this workplace has taught the agent, beyond the one-off decisions.
 --
@@ -59,7 +59,9 @@ CREATE INDEX IF NOT EXISTS agent_preferences_team_idx
 COMMIT;
 
 -- ---------------------------------------------------------------------------
--- Durable copilot: work survives browser and process restarts.
+-- Durable jobs: work survives browser and process restarts. The copilot
+-- that named the table is gone; its inbox, permission and audit tables are
+-- no longer created, and any left in an existing database are unused.
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS copilot_jobs (
@@ -86,67 +88,6 @@ CREATE INDEX IF NOT EXISTS copilot_jobs_ready_idx
 
 COMMIT;
 
-CREATE TABLE IF NOT EXISTS copilot_items (
-    id TEXT PRIMARY KEY,
-    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-    source_job_id TEXT REFERENCES copilot_jobs(id) ON DELETE SET NULL,
-    fingerprint TEXT NOT NULL,
-    kind TEXT NOT NULL
-        CHECK (kind IN ('observation','proposal','failure')),
-    action_type TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending'
-        CHECK (status IN ('pending','approved','dismissed','applied',
-                          'failed','rolled_back')),
-    title TEXT NOT NULL,
-    detail TEXT NOT NULL DEFAULT '',
-    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-    before_state JSONB,
-    after_state JSONB,
-    verification JSONB,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (team_id, fingerprint)
-);
-
-COMMIT;
-
-CREATE INDEX IF NOT EXISTS copilot_items_team_idx
-    ON copilot_items (team_id, status, created_at DESC);
-
-COMMIT;
-
-CREATE TABLE IF NOT EXISTS copilot_permissions (
-    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-    action_type TEXT NOT NULL,
-    mode TEXT NOT NULL DEFAULT 'suggest'
-        CHECK (mode IN ('observe','suggest','auto')),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (team_id, action_type)
-);
-
-COMMIT;
-
--- Append-only. Rollback adds another event; it never erases the action that
--- happened, so the record remains honest after recovery.
-CREATE TABLE IF NOT EXISTS copilot_audit (
-    id TEXT PRIMARY KEY,
-    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-    item_id TEXT REFERENCES copilot_items(id) ON DELETE SET NULL,
-    event TEXT NOT NULL,
-    actor TEXT NOT NULL DEFAULT 'system',
-    before_state JSONB,
-    after_state JSONB,
-    verification JSONB,
-    message TEXT NOT NULL DEFAULT '',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-COMMIT;
-
-CREATE INDEX IF NOT EXISTS copilot_audit_team_idx
-    ON copilot_audit (team_id, created_at DESC);
-
-COMMIT;
 -- What code made of a standing source: a rule, a policy, an employee's note,
 -- a preference (D32). A *derivative* of the manager's sentence, never a
 -- replacement for it -- the sentence stays where it is, and the row is

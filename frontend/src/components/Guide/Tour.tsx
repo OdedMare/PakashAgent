@@ -4,6 +4,8 @@ import { ArrowLeft, ArrowRight, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
+import { Guard } from "@/components/Crew/Guard";
+
 import type { TourStep } from "./content";
 
 /** A spotlight walk through the real screen.
@@ -180,8 +182,16 @@ export function Tour({
             <X size={15} />
           </button>
         </header>
-        <h2 id="guide-tour-title">{step.title}</h2>
-        <p id="guide-tour-body">{step.body}</p>
+        {/* The two guards take turns explaining, one step each. */}
+        <div className="guide-tour-say">
+          <span key={index} className="guide-guard" aria-hidden="true">
+            <Guard who={index % 2 ? "her" : "him"} />
+          </span>
+          <div>
+            <h2 id="guide-tour-title">{step.title}</h2>
+            <p id="guide-tour-body">{step.body}</p>
+          </div>
+        </div>
         <div className="guide-tour-dots" aria-hidden="true">
           {steps.map((item, dot) => (
             <span key={item.target} className={dot === index ? "is-active" : dot < index ? "is-done" : ""} />

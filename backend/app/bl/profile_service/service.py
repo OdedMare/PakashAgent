@@ -7,6 +7,7 @@ from app.bl import compiled_sources
 from app.bl.profile_service import roster
 from app.bl.profile_service import shifts as shift_rules
 from app.bl.profile_service import workplace as workplace_rules
+from app.bl.profile_service.retire import retire_shift
 from app.bl.profile_service.validation import keep_existing_names, text, text_list
 from app.common.errors import AgentError, NotFoundError
 
@@ -49,6 +50,20 @@ class ProfileService:
             saved = self._repository.create_team_profile(team_id, updated)
         # Still no model call here: the rules, policies and notes just saved
         # are translated for the code scheduler by the worker (D32).
+        compiled_sources.queue(self._repository, team_id)
+        return saved
+
+    def current(self, team_id: str) -> Optional[dict]:
+        """The saved profile, or None before the first save. A read."""
+        return self._repository.team_profile(team_id)
+
+    def delete_shift(self, team_id: str, name: str) -> dict:
+        """Archive a shift type; existing schedules keep their rows."""
+        current = self._repository.team_profile(team_id)
+        if current is None:
+            raise NotFoundError("פרופיל הצוות לא נמצא")
+        updated = retire_shift(current, name)
+        saved = self._repository.update_team_profile(team_id, updated)
         compiled_sources.queue(self._repository, team_id)
         return saved
 

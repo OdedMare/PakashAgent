@@ -1,27 +1,22 @@
 """Run the read-only model loop for one manager-chat turn."""
 
-import datetime
 import json
 import logging
-from dataclasses import dataclass, field
 
-from app.bl.changes.agent import _closures_for_model, _schedule_for_model
 from app.bl.changes.values import json_default
+from app.bl.chat_draft import ReplyDraft
 from app.bl.chat_fast import ChatFastAnswers
 from app.bl.chat_contract import NeedsManager, RejectedPlan, normalize_day_turn, normalize_week_turn, plan_for_model
-from app.bl.chat_schema import CHAT_SCHEMA, PROFILE_SECTIONS
+from app.bl.chat_schema import CHAT_SCHEMA, suggestions
+from app.bl.chat_state import PAYLOAD_ORDER, build_state
 from app.bl.planner.shaping import question
 from app.bl.shared import add_usage, usage_of
-from app.bl.shared import iso
 from app.common.errors import AgentError, AppError
-from app.common.time_context import agent_time_context, israel_today
 
 _log = logging.getLogger("pakash.chat")
 _ROUNDS = 7
 _REPAIRS = 2
 _MAX_CALLS = 4
-_AVAILABILITY_LOOKBACK_DAYS = 7
-_ROW_NOISE = ("id", "team_id", "created_at")
 
 
 def _json(value):
@@ -30,57 +25,23 @@ def _json(value):
 
 def _model_input(payload, results, final):
     """Keep the stable context first so inference servers can reuse its prefix."""
-    tail = _json({"final_round": final, "results": results})
-    return _json(payload)[:-1] + ", " + tail[1:]
-
-
-def _availability_since(schedule):
-    recent = (israel_today() - datetime.timedelta(
-        days=_AVAILABILITY_LOOKBACK_DAYS,
-    )).isoformat()
-    starts = iso((schedule or {}).get("starts_on"))
-    return min(recent, starts) if starts else recent
-
-
-def _availability_for_model(rows):
-    return [
-        {key: value for key, value in row.items() if key not in _ROW_NOISE}
-        for row in rows
-    ]
+    keys = [key for key in PAYLOAD_ORDER if key in payload]
+    keys += [key for key in payload if key not in PAYLOAD_ORDER]
+    fields = [(key, payload[key]) for key in keys]
+    fields += [("final_round", final), ("results", results)]
+    return "{" + ", ".join(_json(key) + ": " + _json(value) for key, value in fields) + "}"
 
 
 def _turn_usage(usage, rounds):
     return dict(usage, model_rounds=rounds)
 
 
-@dataclass
-class ReplyState:
-    team_id: str
-    chat_id: str
-    message_id: str
-    context: dict
-    schedule_id: str
-    profile: dict
-    clock: str
-    request: str
-    payload: dict
-    steps: list = field(default_factory=list)
-    results: list = field(default_factory=list)
-    usage: dict = field(default_factory=lambda: dict(
-        prompt_tokens=0, completion_tokens=0, total_tokens=0,
-    ))
-    model_rounds: int = 0
-    plan: dict = None
-    asked: str = ""
-    task: dict = None
-    repairs: int = 0
-    reviewed: bool = False
-    turn: dict = None
-
-
 class ManagerChatReply:
-    def __init__(self, repository, llm, context, tools, planner):
+    def __init__(self, repository, llm, context, tools, planner, notify=None):
         self._repo = repository
+        # Wakes the manager's screen to re-read the turn (`common/events.py`);
+        # the poll stays underneath for a missed signal.
+        self._notify = notify or (lambda team_id: None)
         self._llm = llm
         self._context = context
         self._tools = tools
@@ -95,7 +56,9 @@ class ManagerChatReply:
             if message["status"] != "working":
                 return
             state = self._state(team_id, chat_id, message_id, chat, message)
-            if self._fast.handle(state):
+            # Code answers the same sentence the same way every time, so a
+            # request to answer again goes to the model.
+            if not state.context.get("answer_again") and self._fast.handle(state):
                 return
             self._rounds(state)
             self._finish(state)
@@ -115,32 +78,9 @@ class ManagerChatReply:
             return False
 
     def _state(self, team_id, chat_id, message_id, chat, message):
-        context = message["payload"]
-        schedule_id = context.get("schedule_id") or ""
-        schedule = self._repo.get_schedule(schedule_id, team_id) if schedule_id else None
-        profile = self._context.profile(team_id)
-        clock = agent_time_context()
-        conversation = self._tools.conversation(chat, message_id)
-        request = next((
-            row["content"] for row in reversed(conversation) if row["role"] == "user"
-        ), "")
-        payload = {
-            "clock": clock, "profile": profile, "profile_sections": PROFILE_SECTIONS,
-            "focused_schedule_id": schedule_id,
-            "visible_week": context.get("visible_week") or "",
-            "focused_date": context.get("focus_date") or "",
-            "schedule": _schedule_for_model(schedule or {}),
-            "closures": _closures_for_model(profile, schedule or {}),
-            "availability": _availability_for_model(self._repo.availability(
-                team_id, starts_on=_availability_since(schedule))),
-            "preferences": self._context.active_preferences(team_id),
-            "history": self._repo.change_log(team_id, limit=12),
-            "conversation": conversation,
-            "current_request": request,
-        }
-        return ReplyState(
-            team_id, chat_id, message_id, context, schedule_id, profile,
-            clock, request, payload,
+        return build_state(
+            self._repo, self._context, self._tools,
+            team_id, chat_id, message_id, chat, message,
         )
 
     def _rounds(self, state):
@@ -150,6 +90,7 @@ class ManagerChatReply:
             state.turn = self._llm.complete_json(
                 self._tools.system_prompt, _model_input(state.payload, state.results, final),
                 schema=CHAT_SCHEMA, flow="planner", time_context=state.clock,
+                on_text=self._draft(state),
             )
             if not isinstance(state.turn, dict):
                 raise AgentError("הסוכן החזיר תשובה לא תקינה. אפשר לנסות שוב")
@@ -166,7 +107,10 @@ class ManagerChatReply:
                 state.results.extend(exc.results)
             except RejectedPlan as exc:
                 if final or state.repairs >= _REPAIRS:
-                    raise
+                    raise AgentError(
+                        "לא הצלחתי להכין תוכנית תקינה: %s. לא בוצע שינוי בסידור; "
+                        "אפשר לנסח את הבקשה מחדש או לפצל אותה" % str(exc).rstrip(".")
+                    ) from exc
                 state.repairs += 1
                 state.results.append({"tool": "plan_check", "ok": False, "error": str(exc)})
                 state.steps.append({"tool": "plan_check", "ok": False})
@@ -252,6 +196,9 @@ class ManagerChatReply:
         }
         if state.task:
             output["task"] = state.task
+        offered = [] if state.asked else suggestions(state.turn.get("suggestions"))
+        if offered:
+            output["suggestions"] = offered
         if state.plan:
             output["plan"] = state.plan
         reply = state.asked or (state.turn.get("reply") or "").strip()
@@ -265,12 +212,15 @@ class ManagerChatReply:
             ]
             reply = "הכנתי תוכנית חלקית לאישור. המשמרות שעדיין דורשות טיפול:\n" + \
                     "\n".join("- " + value for value in gaps)
+        if (state.plan or {}).get("solver_note"):
+            reply = "\n\n".join(part for part in (reply, state.plan["solver_note"]) if part)
         if not reply and output["question"]:
             reply = output["question"]["question"]
         self._repo.finish_chat_turn(
             state.chat_id, state.message_id, reply or "מה תרצה לבדוק בסידור?",
             "pending" if state.plan else "complete", json.loads(_json(output)),
         )
+        self._notify(state.team_id)
         _log.info(
             "chat usage rounds=%d prompt=%d completion=%d total=%d",
             state.model_rounds, state.usage["prompt_tokens"],
@@ -282,6 +232,13 @@ class ManagerChatReply:
             state.chat_id, state.message_id,
             dict(state.context, steps=state.steps, **extra),
         )
+        self._notify(state.team_id)
+
+    def _draft(self, state):
+        def write(text):
+            self._repo.chat_turn_draft(state.chat_id, state.message_id, text)
+            self._notify(state.team_id)
+        return ReplyDraft(write)
 
     def _error(self, chat_id, message_id, state, exc):
         usage = state.usage if state else {
@@ -295,3 +252,5 @@ class ManagerChatReply:
         self._repo.finish_chat_turn(chat_id, message_id, content, "error", {
             "steps": steps, "_usage": _turn_usage(usage, rounds),
         })
+        if state:
+            self._notify(state.team_id)

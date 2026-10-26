@@ -42,6 +42,27 @@ COMMIT;
 """
 
 
+def _take_back(connection, chat_id, message_id):
+    """Remove a manager message and everything after it. Refused once any of
+    it was applied: an approved plan and its receipt are the conversation's
+    record of a real change and stay where they are."""
+    anchor = connection.execute("""
+        SELECT sequence, role FROM manager_chat_messages WHERE id=%s AND chat_id=%s
+    """, (message_id, chat_id)).fetchone()
+    if anchor is None or anchor["role"] != "user":
+        raise NotFoundError("ההודעה לא נמצאה")
+    applied = connection.execute("""
+        SELECT 1 FROM manager_chat_messages
+        WHERE chat_id=%s AND sequence >= %s AND (status='applied' OR payload ? 'receipt')
+        LIMIT 1
+    """, (chat_id, anchor["sequence"])).fetchone()
+    if applied:
+        raise ConflictError("אחרי ההודעה הזו כבר אושר שינוי, ולכן אי אפשר לערוך אותה. שלחו בקשה חדשה")
+    connection.execute("""
+        DELETE FROM manager_chat_messages WHERE chat_id=%s AND sequence >= %s
+    """, (chat_id, anchor["sequence"]))
+
+
 class ChatRepository(RepositoryBase):
     def list_chats(self, team_id, manager_id):
         return self._all("""
@@ -83,8 +104,14 @@ class ChatRepository(RepositoryBase):
             DELETE FROM manager_chats WHERE id=%s AND team_id=%s AND manager_id=%s
         """, (chat_id, team_id, manager_id))
 
-    def start_chat_turn(self, team_id, manager_id, chat_id, content, request_id, payload):
-        """One in-flight turn per conversation; retries do not duplicate it."""
+    def start_chat_turn(self, team_id, manager_id, chat_id, content, request_id, payload,
+                        replace_from=None):
+        """One in-flight turn per conversation; retries do not duplicate it.
+
+        `replace_from` names a manager message to take back: it and every
+        later message are removed in the same transaction, so an edited
+        request or a second answer replaces the old exchange instead of
+        following it."""
         with connect(self._store) as connection:
             chat = connection.execute("""
                 SELECT * FROM manager_chats
@@ -102,6 +129,8 @@ class ChatRepository(RepositoryBase):
             """, (chat_id,)).fetchone()
             if working:
                 raise ConflictError("הסוכן עדיין עובד על ההודעה הקודמת")
+            if replace_from:
+                _take_back(connection, chat_id, replace_from)
             user_id, assistant_id = new_id(), new_id()
             connection.execute("""
                 UPDATE manager_chat_messages SET status='superseded'
@@ -138,6 +167,14 @@ class ChatRepository(RepositoryBase):
             UPDATE manager_chat_messages SET payload=%s
             WHERE id=%s AND chat_id=%s AND status='working'
         """, (Jsonb(payload), message_id, chat_id))
+
+    def chat_turn_draft(self, chat_id, message_id, draft):
+        """The reply so far, while the model is still writing it."""
+        self._execute("""
+            UPDATE manager_chat_messages
+            SET payload=jsonb_set(payload, '{draft}', to_jsonb(%s::text), true)
+            WHERE id=%s AND chat_id=%s AND status='working'
+        """, (draft, message_id, chat_id))
 
     def chat_activity(self, chat_id, message_id, activity):
         self._execute("""

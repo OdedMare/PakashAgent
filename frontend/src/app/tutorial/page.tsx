@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+
+import { Guard } from "@/components/Crew/Guard";
+import type { Who } from "@/components/Crew/Guard";
 import {
   ArrowLeft,
   BarChart3,
@@ -35,6 +38,10 @@ export default function TutorialPage() {
 
       <section className="tutorial-hero" aria-labelledby="tutorial-title">
         <div className="tutorial-hero-copy">
+          <div className="tutorial-crew">
+            <span className="guide-crew-pair" aria-hidden="true"><Guard who="him" /><Guard who="her" /></span>
+            <p>היי, אנחנו נלווה אתכם במדריך. בחרו מסלול ונראה לכם בדיוק איפה כל דבר נמצא.</p>
+          </div>
           <span className="tutorial-kicker"><Sparkles size={14} /> מהכניסה ועד לפרסום</span>
           <h1 id="tutorial-title">לא צריך לזכור<br />איפה כל דבר נמצא.</h1>
           <p>
@@ -85,6 +92,9 @@ export default function TutorialPage() {
           <h2 id="manager-title">מכינים שבוע, בודקים, ורק אז מפרסמים</h2>
           <p>הלוח הוא מרכז העבודה. כל כלי אחר נפתח לידו, כדי שלא תאבדו את ההקשר.</p>
         </div>
+        <Narrator who="him">
+          אני אסביר את צד המנהל: בונים שבוע עם הסוכן או ידנית, בודקים את האזהרות, ורק אז מפרסמים לצוות.
+        </Narrator>
 
         <TutorialChapter number="01" title="לקרוא את הלוח" icon={<CalendarCheck size={19} />}>
           <p>מסילת השבוע מציגה מיד מה מוכן ומה דורש טיפול. הכרטיסים מסכמים איוש, חוסרים, התנגשויות ושעות; לחיצה על התנגשות מסננת את הלוח למקומות הרלוונטיים.</p>
@@ -124,18 +134,18 @@ export default function TutorialPage() {
             ["בקשות", "אישור או דחייה של אילוצי עובדים; דחייה דורשת סיבה."],
             ["החלפות", "החלפה ששני העובדים אישרו מגיעה להכרעת המנהל."],
             ["צוות", "ניהול עובדים, אילוצים וזהויות אישיות שנתפסו."],
-            ["סקירה", "מסך עצמאי לנתונים, פעילות הסוכן, היסטוריה והצעות שנלמדו."],
+            ["סקירה", "מסך עצמאי לנתונים, פעילות הסוכן והצעות שנלמדו."],
           ]} />
         </TutorialChapter>
 
         <TutorialChapter number="03" title="לבדוק את התמונה הרחבה" icon={<BarChart3 size={19} />}>
-          <p>מסך ‘סקירה’ מתרגם את אותו לוח לכיסוי, שעות ועומס, ומרכז גם התראות, פעילות הסוכן והשינויים האחרונים. המספרים מסבירים את הלוח — הם לא נותנים לו ציון.</p>
+          <p>מסך ‘סקירה’ מתרגם את אותו לוח לכיסוי, שעות ועומס, ומרכז גם את פעילות הסוכן. המספרים מסבירים את הלוח — הם לא נותנים לו ציון.</p>
           <Screenshot
             src="/tutorial/manager-analytics.png"
-            alt="מסך הסקירה של המנהל עם כיסוי, שעות, עומס והתראות"
+            alt="מסך הסקירה של המנהל עם כיסוי, שעות ועומס"
             caption="סקירת הסידור"
             note="כל תרשים מחושב מאותם שיבוצים ואילוצים שמופיעים בלוח."
-            callouts={[{ n: 1, label: "מדדי מפתח", x: "61%", y: "25%" }, { n: 2, label: "עומס וחלוקה", x: "60%", y: "50%" }, { n: 3, label: "אזהרות", x: "62%", y: "82%" }]}
+            callouts={[{ n: 1, label: "מדדי מפתח", x: "61%", y: "25%" }, { n: 2, label: "עומס וחלוקה", x: "60%", y: "50%" }]}
           />
         </TutorialChapter>
 
@@ -143,7 +153,7 @@ export default function TutorialPage() {
           <div className="tutorial-action-list">
             <div><FileDown size={18} /><strong>Excel</strong><p>כפתור ‘אקסל’ מוריד את התקופה הנוכחית כקובץ, בלי לשנות את הלוח.</p></div>
             <div><Users size={18} /><strong>קישור לצוות</strong><p>אייקון השיתוף מציג קישור צפייה. החלפת הקישור מבטלת את הקודם.</p></div>
-            <div><HelpCircle size={18} /><strong>הגדרות והגדרת יחידה</strong><p>גלגל השיניים מנהל חיבור מודל וסיסמה; אייקון הכוונון פותח את פרטי היחידה, העובדים והמשמרות.</p></div>
+            <div><HelpCircle size={18} /><strong>הגדרת יחידה</strong><p>אייקון הכוונון פותח את פרטי היחידה, העובדים והמשמרות. הגדרות המערכת מנוהלות על ידי צוות משמרות זהב.</p></div>
           </div>
         </TutorialChapter>
       </section>
@@ -155,6 +165,9 @@ export default function TutorialPage() {
           <h2 id="team-title">הקישור מציג רק מה שפורסם</h2>
           <p>מי שפותח את קישור הצוות רואה את הסידור המלא במצב קריאה בלבד. אין כאן גרירה, מחיקה או אישור.</p>
         </div>
+        <Narrator who="her">
+          כאן רק מסתכלים: הקישור מראה את הסידור שפורסם, ואי אפשר לשנות בו כלום.
+        </Narrator>
         <Screenshot
           src="/tutorial/team-view.png"
           alt="תצוגת צוות לקריאה בלבד של סידור העבודה"
@@ -171,6 +184,9 @@ export default function TutorialPage() {
           <h2 id="employee-title">המשמרות, השעות והבקשות — במקום אחד</h2>
           <p>בכניסה הראשונה בוחרים שם ומגדירים קוד אישי. מכאן המערכת מציגה רק את המידע האישי שלכם.</p>
         </div>
+        <Narrator who="her">
+          ואני אסביר את צד העובד: רואים את המשמרות שלכם, מה השתנה, ושולחים בקשות ואילוצים למנהל.
+        </Narrator>
 
         <TutorialChapter number="01" title="לראות מה שובץ ומה השתנה" icon={<UserRound size={19} />}>
           <Screenshot
@@ -242,4 +258,14 @@ function Screenshot({ src, alt, caption, note, callouts }: { src: string; alt: s
 
 function FeatureGrid({ items }: { items: string[][] }) {
   return <div className="tutorial-feature-grid">{items.map(([title, copy]) => <div key={title}><strong>{title}</strong><p>{copy}</p></div>)}</div>;
+}
+
+/** One of the two guards introducing a path, in a speech bubble. */
+function Narrator({ who, children }: { who: Who; children: React.ReactNode }) {
+  return (
+    <div className="tutorial-crew">
+      <span className="guide-guard" aria-hidden="true"><Guard who={who} /></span>
+      <p>{children}</p>
+    </div>
+  );
 }

@@ -101,8 +101,9 @@ cycle, for the weekend group א closes and for group א's closure hours; the
 other groups' turns and hours are derived by the server. The dates shown
 beside the anchor are a preview of that one typed fact, and an anchor stored
 for another group is shown as א's next turn in the same cycle. Presence rules
-stay per group. The whole screen saves in one `updateProfile`, and a saved
-change applies to the next build — an existing schedule is not rebuilt.
+stay per group. The whole screen saves in one `updateProfile`. A save that
+adds a soldier or a shift refits every draft ahead of today, keeping its
+rows (D37); anything else applies to the next build.
 
 **Taking a week back is two different acts.** *ניקוי* empties the
 assignments and keeps the shift rows, so the week can be filled in again
@@ -151,8 +152,7 @@ profile comes from the setup form.
 | Schedule | The living grid for a period, RTL — `Management/Calendar.tsx` |
 | Manager chat | **The** agent: every instruction, question and plan, optionally focused on one day — `Management/AgentChat.tsx` |
 | Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `Board/ConfirmDrop.tsx` |
-| Replacement tab | Who is out and when → covers ranked so the load spreads evenly; the picks go to the chat as a plan (D36) — `Management/ReplacementPanel.tsx`. Reads only; the wording it sends is shared with the chat cards in `lib/replacement.ts` and read back by the server |
-| Copilot inbox | Durable observations, proposals, failures, permissions and audit — `Management/CopilotInbox.tsx` |
+| Changes tab | "שינויים" — `Management/ChangesPanel.tsx`, three actions. **החלפת משמרת**: who is out and when → covers ranked so the load spreads evenly; the picks go to the chat as a plan (D36) — `ReplacementPanel.tsx`, reads only; its wording is shared with the chat cards in `lib/replacement.ts` and read back by the server. **הוספת חייל** / **הוספת משמרת**: the roster's own `EmployeeForm`/`ShiftForm`, saved through `saveProfile`, after which the server fits the newcomer into every draft from today on, keeping the board (D37) |
 | Preferences | What the agent remembers, all of it visible — `Management/Preferences.tsx` |
 | Employee view | **Read-only** schedule — `MemberArea` renders the same `Calendar` with `readOnly` |
 | Personal area | One employee's own shifts, constraint requests and swaps — `src/components/Employee/` |
@@ -205,7 +205,6 @@ impression.
   the shift-row order; nothing is written to the server. The X at the end
   of the drawer's tab row closes the agent outright, and the board takes the
   full width back — full-size cards, roles and the week rail return.
-  The autonomous copilot console lives under Overview.
 - **Export downloads; it does not navigate.** `downloadSchedule` fetches the
   binary with the session cookie and triggers the browser's own download from
   an object URL, so a failure surfaces as a Hebrew error rather than a blank
@@ -220,12 +219,17 @@ impression.
   those days are solved, what was generated on them is replaced, and
   what the manager placed is kept and filled around (D18) — the dialog counts
   both before the click, and takes no list of required shifts because the
-  board behind it already is one. The run is bounded by the period: a build
+  board behind it already is one. "שמירה על השיבוץ הקיים" sends
+  `keep_existing`: the built rows stay where they fit and only what a new
+  soldier or shift needs moves (D37). The run is bounded by the period: a build
   is one job on one period. On a week with nothing stored, the period is
   still opened as **whole weeks** (`inWholeWeeks`) with the run sent beside
   it as `build_from`/`build_through`. The board finds a week by its Sunday,
   so a period beginning on a Wednesday would be stored and never drawn; the
   days outside the run open empty instead.
+  The dialog also narrows a build by shift type: "כל המשמרות" or one or
+  more "רק <משמרת>" buttons, named from setup. Only the chosen shifts are
+  built (`shifts` on both calls); the others on those days stay as they are.
 - **Building a period does not lock the area.** `generate` and its two
   siblings report through `state.generating`, never through `state.busy`:
   a build is a background job — seconds per four-week span for the solver
@@ -316,7 +320,10 @@ door into the personal area), `employee` → the personal area, `boss` → unit
 setup (`ManualSetup`) until the workplace has a profile, then the management
 area. `workspace.profile` is what switches those last two; the sliders icon
 reopens setup over an existing profile, and a save there applies to the next
-build — an existing schedule is not rebuilt.
+build — except a new soldier or shift, which is absorbed into the drafts
+ahead of today with as few moves as possible (D37). The management area
+picks the refit up as a running build on mount; `saveProfile` watches the
+one on screen and names any published week it left alone.
 
 - **The session is an HttpOnly cookie**, so this code cannot read it. "Am I
   logged in?" is answered by `GET /api/workspace/me`, never by local state

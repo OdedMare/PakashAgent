@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarPlus, CalendarRange, Plus, Trash2, X } from "lucide-react";
+import { CalendarPlus, CalendarRange, Layers, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DateInput, displayDate } from "@/components/DateInput";
@@ -18,6 +18,10 @@ type Row = RequiredAssignment & { id: number };
  *  — "from this day until Saturday, or until the day I choose". The second
  *  takes no list of required shifts, because the board behind it already is
  *  one: whatever the manager placed by hand is kept and filled around (D18).
+ *
+ *  Either way the build can be narrowed to some shift types — "only the
+ *  nights for the month". Rows on every other shift stay as they are; the
+ *  names come from setup, never from this file (D9).
  */
 export function GenerateDialog({
   employees,
@@ -44,17 +48,35 @@ export function GenerateDialog({
     ends_on: string;
     instructions: string;
     required_assignments: RequiredAssignment[];
+    /** Only these shift types; empty means every shift. */
+    shifts: string[];
+    /** Hold the rows already built and move only what a new soldier or
+     *  shift needs, instead of rebuilding the days. */
+    keep_existing: boolean;
   }) => void;
   onCancel: () => void;
 }) {
   const [startsOn, setStartsOn] = useState(from);
   const [endsOn, setEndsOn] = useState(through);
   const [instructions, setInstructions] = useState("");
+  const [keepExisting, setKeepExisting] = useState(false);
   const dates = useMemo(
     () => dateRange(startsOn, endsOn),
     [startsOn, endsOn],
   );
   const options = useMemo(() => shiftOptions(shifts), [shifts]);
+  // Empty is "every shift", the default; a choice narrows the build to it.
+  const [chosen, setChosen] = useState<string[]>([]);
+  const toggleShift = (name: string) =>
+    setChosen((current) =>
+      current.includes(name)
+        ? current.filter((item) => item !== name)
+        : [...current, name],
+    );
+  const built = chosen.length
+    ? options.filter((option) => chosen.includes(option.name))
+    : options;
+  const runsInRange = dates.some((date) => shiftsForDate(built, date).length > 0);
   const nextId = useRef(1);
   const [rows, setRows] = useState<Row[]>([]);
 
@@ -80,7 +102,7 @@ export function GenerateDialog({
     }));
   };
   const validRange = dates.length > 0 && startsOn <= endsOn;
-  const valid = validRange && rows.every(
+  const valid = validRange && runsInRange && rows.every(
     (row) => row.employee && dates.includes(row.date) && row.shift,
   );
 
@@ -93,11 +115,12 @@ export function GenerateDialog({
   // server applies — the manager's rows stay, everything else is replaced.
   const standing = useMemo(() => {
     const rows = (period?.assignments ?? []).filter(
-      (row) => row.date >= startsOn && row.date <= endsOn,
+      (row) => row.date >= startsOn && row.date <= endsOn
+        && (!chosen.length || chosen.includes(row.shift)),
     );
     const kept = rows.filter((row) => row.source === "manager").length;
     return { kept, replaced: rows.length - kept };
-  }, [period, startsOn, endsOn]);
+  }, [period, startsOn, endsOn, chosen]);
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onCancel}>
@@ -132,6 +155,8 @@ export function GenerateDialog({
               ends_on: endsOn,
               instructions: instructions.trim(),
               required_assignments: rows.map(({ employee, shift, date }) => ({ employee, shift, date })),
+              shifts: chosen,
+              keep_existing: Boolean(period) && keepExisting,
             });
           }
         }}>
@@ -196,6 +221,47 @@ export function GenerateDialog({
             </div>
           </section>
 
+          {options.length > 1 ? (
+            <section className="generate-shifts" aria-labelledby="generate-shifts-title">
+              <div className="generate-period-head">
+                <span className="generate-period-mark" aria-hidden="true">
+                  <Layers size={18} />
+                </span>
+                <div>
+                  <h3 id="generate-shifts-title">אילו משמרות לשבץ?</h3>
+                  <p>אפשר לשבץ רק סוג משמרת אחד או כמה. שאר המשמרות נשארות כמו שהן.</p>
+                </div>
+              </div>
+              <div className="generate-shift-choices" role="group" aria-label="סוגי משמרות">
+                <button
+                  type="button"
+                  className={chosen.length ? "" : "is-active"}
+                  aria-pressed={!chosen.length}
+                  onClick={() => setChosen([])}
+                >
+                  כל המשמרות
+                </button>
+                {options.map((option) => (
+                  <button
+                    key={option.name}
+                    type="button"
+                    className={chosen.includes(option.name) ? "is-active" : ""}
+                    aria-pressed={chosen.includes(option.name)}
+                    onClick={() => toggleShift(option.name)}
+                  >
+                    רק {option.name}
+                    {option.hours ? <small>{option.hours}</small> : null}
+                  </button>
+                ))}
+              </div>
+              {chosen.length && validRange && !runsInRange ? (
+                <p className="generate-shifts-empty" role="alert">
+                  המשמרות שנבחרו לא מתקיימות בימים האלה.
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+
           <label className="generate-instructions">
             <span>הנחיות מיוחדות לתקופה הזאת <small>לא חובה</small></span>
             <textarea
@@ -205,10 +271,28 @@ export function GenerateDialog({
               onChange={(event) => setInstructions(event.target.value)}
             />
           </label>
+          {period && standing.replaced ? (
+            <label className="generate-keep">
+              <input
+                type="checkbox"
+                checked={keepExisting}
+                onChange={(event) => setKeepExisting(event.target.checked)}
+              />
+              <span>
+                שמירה על השיבוץ הקיים
+                <small>מזיזים רק את מה שצריך כדי לשלב חייל או משמרת חדשים</small>
+              </span>
+            </label>
+          ) : null}
           {period ? (
             <p className="modal-note">
+              {chosen.length
+                ? `רק ${chosen.join(", ")} ייבנו מחדש. שאר המשמרות בימים האלה נשארות כמו שהן. `
+                : ""}
               {standing.replaced
-                ? `${standing.replaced} שיבוצים שנבנו בימים האלה יוחלפו. `
+                ? keepExisting
+                  ? `${standing.replaced} שיבוצים שנבנו בימים האלה נשארים במקומם ככל האפשר; יוזזו רק אלה שנדרשים לאיזון. `
+                  : `${standing.replaced} שיבוצים שנבנו בימים האלה יוחלפו. `
                 : ""}
               {standing.kept
                 ? `${standing.kept} שיבוצים ששיבצתם ידנית נשארים במקומם, והסוכן ימלא סביבם.`
@@ -298,7 +382,11 @@ export function GenerateDialog({
           <div className="modal-actions">
             <button type="button" className="ghost-button" onClick={onCancel}>ביטול</button>
             <button type="submit" className="primary-button" disabled={!valid || busy}>
-              {busy ? "בונה…" : dates.length === 1 ? "בניית הסידור ליום" : `בניית הסידור ל-${dates.length} ימים`}
+              {busy
+                ? "בונה…"
+                : `${chosen.length ? `שיבוץ רק ${chosen.join(", ")}` : "בניית הסידור"} ${
+                    dates.length === 1 ? "ליום" : `ל-${dates.length} ימים`
+                  }`}
             </button>
           </div>
         </form>

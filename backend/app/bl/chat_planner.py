@@ -1,6 +1,8 @@
 """Build and validate manager-chat plans without writing them."""
 
 from app.bl.changes.proposal import build_proposal
+from app.bl.changes.questions import report_dropped
+from app.bl.changes.targets import bound_operations
 from app.bl.chat_constraints import affected_periods, constraint_impact, normalize_constraints
 from app.bl.chat_contract import (
     NeedsManager, RejectedPlan, add_coverage, audit_plan, changed_rows,
@@ -11,6 +13,7 @@ from app.bl.chat_lifecycle import (
     prepare_blank, prepare_profile, prepare_retirement, prepare_structure,
 )
 from app.bl.chat_management import prepare_management
+from app.bl.chat_vacancies import fill_vacancies
 from app.bl.shared import warning_key
 from app.bl.schedule_service.generation.history import AssignmentHistory
 from app.bl.scheduler import Scheduler
@@ -20,11 +23,13 @@ from app.bl.tools import ScheduleTools
 
 
 class ChatPlanBuilder:
-    def __init__(self, repository, llm, context, profiles):
+    def __init__(self, repository, llm, context, profiles, settings=None):
         self._repo = repository
         self._context = context
         self._profiles = profiles
-        self._scheduler = Scheduler(llm)
+        # The live settings store, so the solver limits saved in the panel
+        # apply to chat builds exactly as to every other build.
+        self._scheduler = Scheduler(llm, settings)
         self._history = AssignmentHistory(repository)
         self._tools = ScheduleTools(repository)
 
@@ -100,9 +105,10 @@ class ChatPlanBuilder:
         )
         if mismatched:
             raise RejectedPlan(
-                "סוג התשובה אינו תואם לפעולות. הוראת שיבוץ דורשת kind=changes; "
-                "התייעצות דורשת kind=answer בלי פעולות; עריכת צוות דורשת "
-                "kind=profile ו-profile_patch_json"
+                "סוג התשובה אינו תואם לפעולות. הוראת שיבוץ ואילוץ לתאריך דורשים "
+                "kind=changes עם operations/constraints; אילוץ קבוע (למשל כל יום "
+                "שלישי) דורש kind=profile ו-recurring_constraints בתוך "
+                "profile_patch_json בלי constraints; התייעצות דורשת kind=answer בלי פעולות"
             )
 
     def _schedule_id(self, team_id, kind, turn, focused_id):
@@ -187,14 +193,18 @@ class ChatPlanBuilder:
             if row.get("action") == "assign" and person.get("inactive_from") \
                     and (row.get("date") or "") >= person["inactive_from"]:
                 raise RejectedPlan("העובד סיים את העבודה לפני המשמרת. יש לבחור מחליף פעיל")
-        self._require_selected_replacements(
+        turn = self._require_selected_replacements(
             team_id, turn, state, profile, schedule_id, request, choices,
         )
         proposal = build_proposal(turn, profile, schedule, plan["reason"])
         if proposal["needs_input"] or proposal["needs_reason"]:
             raise NeedsManager(proposal["reply"] or "נדרשים פרטים נוספים לפני שינוי")
         if len(proposal["operations"]) != len(turn.get("operations") or []):
-            raise RejectedPlan("חלק מהשינויים לא תואמים לסידור. יש לבקש תוכנית מעודכנת")
+            _, dropped = bound_operations(turn.get("operations"), schedule)
+            raise RejectedPlan(
+                (report_dropped(dropped) if dropped else "חלק מהשינויים לא תואמים לסידור")
+                + " יש לתקן או להסיר את הפעולה הזו ולהחזיר את שאר התוכנית"
+            )
         plan["operations"] = proposal["operations"]
         plan["constraints"] = normalize_constraints(
             turn.get("constraints") or [], profile, state["availability"],
@@ -203,6 +213,11 @@ class ChatPlanBuilder:
         names = {person["name"] for person in profile.get("employees") or []}
         if any(row["employee"] not in names for row in rows):
             raise RejectedPlan("התוכנית מכילה עובד שאינו נמצא בצוות")
+        if schedule:
+            rows = fill_vacancies(
+                self._scheduler, self._history, self._context.translation_cache(team_id),
+                team_id, turn, plan, state, rows,
+            )
         self._audit_changes(
             team_id, plan, state, schedule, profile, schedule_id, rows,
         )
@@ -210,42 +225,38 @@ class ChatPlanBuilder:
     def _require_selected_replacements(
         self, team_id, turn, state, profile, schedule_id, request, choices,
     ):
+        """The turn without covers the model picked for seats it vacates: the
+        solver fills those (`chat_vacancies`). Asking instead looped, since an
+        answer not spelling out the name brought the same question back."""
         constraints = turn.get("constraints") or []
         if not any(
             row.get("action") != "remove" and not row.get("available", False)
             for row in constraints
         ):
-            return
+            return turn
         operations = turn.get("operations") or []
         selections = "\n".join(list(choices) + [request])
-        assignments = [
-            row for row in operations if row.get("action") == "assign"
-        ]
+        vacated = {
+            (row.get("shift"), row.get("date"))
+            for row in operations if row.get("action") == "remove"
+        }
         unselected = [
-            row for row in assignments
-            if row.get("employee") and row["employee"] not in selections
+            row for row in operations
+            if row.get("action") == "assign" and row.get("employee")
+            and row["employee"] not in selections
         ]
+        covers = [row for row in unselected if (row.get("shift"), row.get("date")) in vacated]
+        turn = dict(turn, operations=[row for row in operations if row not in covers])
+        unselected = [row for row in unselected if row not in covers]
         if not unselected:
-            return
-        removed_by_slot = {}
-        for row in operations:
-            if row.get("action") == "remove":
-                slot = row.get("shift"), row.get("date")
-                removed_by_slot.setdefault(slot, row.get("employee", ""))
-        candidates = []
-        for row in unselected:
-            leaving = removed_by_slot.get((row.get("shift"), row.get("date")), "")
-            candidates.append(self._tools.run(team_id, "find_replacements", {
-                "schedule_id": schedule_id, "employee": leaving,
-                "shift_name": row.get("shift"), "slot_date": row.get("date"),
-            }))
-        if any(result.get("candidates") for result in candidates):
-            prompt = "בדקתי מועמדים להחלפה. בחרו מי יחליף בכל משמרת כדי שאכין תוכנית מלאה לאישור."
-        else:
-            prompt = (
-                "לא נמצאו מחליפים שעומדים בכל הכללים. אפשר לשנות את היקף המשמרת "
-                "או להוסיף תגבור. איך תרצו לפתור את החוסר?"
-            )
+            return turn
+        candidates = [self._tools.run(team_id, "find_replacements", {
+            "schedule_id": schedule_id, "employee": "",
+            "shift_name": row.get("shift"), "slot_date": row.get("date"),
+        }) for row in unselected]
+        prompt = "בדקתי מועמדים להחלפה. בחרו מי יחליף בכל משמרת כדי שאכין תוכנית מלאה לאישור." \
+            if any(result.get("candidates") for result in candidates) else \
+            "לא נמצאו מחליפים שעומדים בכל הכללים. אפשר לשנות את היקף המשמרת או להוסיף תגבור. איך תרצו לפתור את החוסר?"
         raise NeedsManager(
             prompt, candidates,
             dict(

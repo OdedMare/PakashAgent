@@ -6,9 +6,10 @@ agent fills around, and the checkpoint keeps it with the manager's own source
 whether or not the model repeats it.
 """
 
-from typing import Iterable, List
+from typing import Iterable, List, Optional
 
 from app.bl.schedule_service.constants import PINNED_REASON
+from app.bl.schedule_service.generation.shift_filter import covered
 from app.bl.schedule_service.rows import employees, iso, text
 from app.common.errors import AgentError
 from app.dal.repository.schedules import ASSIGNED_BY_AGENT, ASSIGNED_BY_MANAGER
@@ -101,13 +102,15 @@ def span_pins(schedule: dict, required: List[dict], dates: List[str]) -> List[di
 
 
 def persisted_rows(
-    schedule: dict, generated: List[dict], dates: Iterable[str]
+    schedule: dict, generated: List[dict], dates: Iterable[str],
+    shifts: Optional[List[str]] = None,
 ) -> List[dict]:
     """Replace the generated dates while preserving every other checkpoint.
 
     Manager-placed rows on those dates are kept rather than replaced. They
     went in as pins the model was told to work around, so dropping the ones
-    it failed to repeat would silently undo a manager's own click.
+    it failed to repeat would silently undo a manager's own click. With
+    `shifts`, only rows on those shifts are rebuilt; the rest stand.
 
     Returns the **whole period's** rows, each carrying its date. Both writers
     read what they need: `replace_span_assignments` filters to the span it is
@@ -115,7 +118,7 @@ def persisted_rows(
     """
     wanted = set(dates)
     stored = schedule.get("assignments") or []
-    rows = [_kept_row(row) for row in stored if _survives(row, wanted)]
+    rows = [_kept_row(row) for row in stored if _survives(row, wanted, shifts)]
     pinned = {
         _key(row) for row in stored
         if iso(row.get("date")) in wanted
@@ -143,10 +146,11 @@ def persisted_rows(
     return rows
 
 
-def _survives(row: dict, wanted: set) -> bool:
+def _survives(row: dict, wanted: set, shifts: Optional[List[str]]) -> bool:
     return (
         iso(row.get("date")) not in wanted
         or row.get("source") == ASSIGNED_BY_MANAGER
+        or not covered(row, shifts or [])
     )
 
 

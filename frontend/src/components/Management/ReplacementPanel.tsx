@@ -63,7 +63,7 @@ export function ReplacementPanel({ employees, today, disabled, onPrepare }: {
 
   return <section className="replacement-panel" aria-labelledby="replacement-title">
     <header>
-      <h2 id="replacement-title">החלפת עובד/ת</h2>
+      <h3 id="replacement-title">החלפת משמרת</h3>
       <p>בחרו מי לא זמין/ה ומתי. המועמדים מסודרים כך שהעומס יתחלק הכי שווה.</p>
     </header>
     <div className="replacement-fields">

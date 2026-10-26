@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { EMPLOYEE_DRAG_TYPE } from "@/components/Board/dragData";
 import { DateInput, displayDate } from "@/components/DateInput";
+import { TimeInput } from "@/components/TimeInput";
 import type { Departure } from "@/services/api";
 import type { Constraint, ShiftStats } from "@/types";
 
@@ -35,6 +36,7 @@ export function TeamPanel({
   onAdd,
   onRemove,
   onSaveProfile,
+  onDeleteShift,
   onPreviewDeparture,
   onDepart,
 }: {
@@ -64,6 +66,8 @@ export function TeamPanel({
     employees?: Record<string, unknown>[];
     shifts?: Record<string, unknown>[];
   }) => void;
+  /** Deleting a shift type archives it: stored schedules keep their rows. */
+  onDeleteShift?: (name: string) => Promise<void>;
   /** Deleting an employee is a departure: an end date, later shifts vacated. */
   onPreviewDeparture?: (input: { employee: string; effective_date?: string }) => Promise<Departure>;
   onDepart?: (input: { employee: string; effective_date?: string; reason?: string }) => Promise<boolean>;
@@ -75,6 +79,7 @@ export function TeamPanel({
   const [addingEmployee, setAddingEmployee] = useState(false);
   const [editingShift, setEditingShift] = useState<string | null>(null);
   const [addingShift, setAddingShift] = useState(false);
+  const [deletingShift, setDeletingShift] = useState<string | null>(null);
   const names = employees
     .filter((row) => !row.inactive_from || !today || text(row.inactive_from) > today)
     .map((row) => text(row.name))
@@ -307,10 +312,48 @@ export function TeamPanel({
                     <Pencil size={13} />
                   </button>
                 ) : null}
+                {onDeleteShift && shiftNames.length > 1 ? (
+                  <button
+                    type="button"
+                    className="icon-button subtle"
+                    onClick={() => {
+                      setAddingShift(false);
+                      setEditingShift(null);
+                      setDeletingShift(name);
+                    }}
+                    aria-label={`מחיקת סוג המשמרת ${name}`}
+                    title="מחיקת סוג משמרת"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                ) : null}
               </li>
             );
           })}
         </ul>
+        {deletingShift && onDeleteShift ? (
+          <div className="constraint-form profile-form" role="alertdialog" aria-label={`מחיקת סוג המשמרת ${deletingShift}`}>
+            <strong>למחוק את סוג המשמרת {deletingShift}?</strong>
+            <small>
+              סידורים שכבר נבנו נשארים כפי שהם. הבנייה הבאה לא תכלול את המשמרת,
+              והיא תוסר מהמשמרות המתאימות ומהאילוצים הקבועים של העובדים.
+            </small>
+            <div className="constraint-form-actions">
+              <button type="button" className="ghost-button" onClick={() => setDeletingShift(null)}>ביטול</button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={async () => {
+                  const name = deletingShift;
+                  setDeletingShift(null);
+                  await onDeleteShift(name);
+                }}
+              >
+                <Trash2 size={13} /> מחיקה
+              </button>
+            </div>
+          </div>
+        ) : null}
         {onSaveProfile ? (
           addingShift || editingShift ? (
             <ShiftForm
@@ -344,7 +387,7 @@ export function TeamPanel({
           )
         ) : null}
         <p className="roster-help">
-          שינוי סוג משמרת משפיע על סידורים חדשים; לוחות קיימים נשמרים כפי שנבנו.
+          משמרת חדשה נכנסת גם לטיוטות מהיום והלאה, בלי לשנות את השיבוץ הקיים. שינוי במשמרת קיימת חל על בנייה הבאה.
         </p>
       </section>
 
@@ -467,7 +510,7 @@ export function TeamPanel({
   );
 }
 
-function EmployeeForm({
+export function EmployeeForm({
   initial,
   shiftNames,
   defaultExitPattern,
@@ -550,14 +593,17 @@ function EmployeeForm({
   );
 }
 
-function ShiftForm({
+export function ShiftForm({
   initial,
   onCancel,
   onSubmit,
+  children,
 }: {
   initial?: Record<string, unknown>;
   onCancel: () => void;
   onSubmit: (shift: Record<string, unknown>) => void;
+  /** Extra fields shown above the buttons, saved by the caller. */
+  children?: React.ReactNode;
 }) {
   const [name, setName] = useState(text(initial?.name));
   const [start, setStart] = useState(text(initial?.start_time));
@@ -586,8 +632,8 @@ function ShiftForm({
       <fieldset className="profile-time-card">
         <legend>שעות המשמרת</legend>
         <div className="constraint-time-grid">
-          <label><span>שעת התחלה</span><input type="time" step={300} value={start} onChange={(event) => setStart(event.target.value)} /></label>
-          <label><span>שעת סיום</span><input type="time" step={300} value={end} onChange={(event) => setEnd(event.target.value)} /></label>
+          <label><span>שעת התחלה</span><TimeInput value={start} onChange={setStart} /></label>
+          <label><span>שעת סיום</span><TimeInput value={end} onChange={setEnd} /></label>
         </div>
         <small>אפשר להקליד שעה ישירות. סיום מוקדם מההתחלה מסמן משמרת שחוצה חצות.</small>
       </fieldset>
@@ -595,6 +641,7 @@ function ShiftForm({
       <label><span>ייעוד</span><input value={purpose} maxLength={120} onChange={(event) => setPurpose(event.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></label>
       <label><span>תקן בסיסי</span><input type="number" min={1} max={100} value={headcount} onChange={(event) => setHeadcount(Number(event.target.value) || 1)} /></label>
       <label className="profile-check"><input type="checkbox" checked={requiresManager} onChange={(event) => setRequiresManager(event.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
+      {children}
       <FormActions onCancel={onCancel} ready={Boolean(name.trim())} />
     </form>
   );
@@ -762,18 +809,16 @@ function ConstraintForm({
         <div className="constraint-time-grid">
           <label>
             <span>יכול/ה להתחיל מ־</span>
-            <input
-              type="time"
+            <TimeInput
               value={startTime}
-              onChange={(event) => setStartTime(event.target.value)}
+              onChange={setStartTime}
             />
           </label>
           <label>
             <span>חייב/ת לסיים עד</span>
-            <input
-              type="time"
+            <TimeInput
               value={endTime}
-              onChange={(event) => setEndTime(event.target.value)}
+              onChange={setEndTime}
             />
           </label>
           <small>אפשר למלא רק אחד מהגבולות. למשל 16:00 בלבד.</small>
