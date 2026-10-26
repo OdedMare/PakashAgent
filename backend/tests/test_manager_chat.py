@@ -540,8 +540,10 @@ def test_combined_conflicts_reach_agent_and_corrected_plan_keeps_absence():
     review = json.loads(llm.calls[1]["user"])["results"][-1]
     assert review["tool"] == "plan_review"
     assert any(row["code"] == "unavailable" for row in review["plan"]["warnings"])
-    assert message["status"] == "complete" and "plan" not in message["payload"]
-    assert message["payload"]["results"][-1]["candidates"][0]["employee"] == "מאיה"
+    # The model's own pick for the seat it vacated is the solver's to make.
+    assert message["status"] == "pending"
+    assert [(row["action"], row["employee"]) for row in message["payload"]["plan"]["operations"]] \
+        == [("remove", "דנה"), ("assign", "מאיה")]
     llm._answers.append(fixed)
     message = converse(service, repo, chat_id, schedule_id, "מאיה תחליף את דנה ביום שני", "selected-maya")
     plan = message["payload"]["plan"]

@@ -171,14 +171,12 @@ its `error` says why. Return a corrected plan, or kind `answer` explaining what
 blocks it. Never invent a reason or a fact to get past a refusal. Use `find_replacements` and
 validate the complete resulting plan before recommending a replacement. Candidates may have
 `requires_exception` and warnings when nobody fits; never call them compliant.
-For sickness, first resolve missing absence dates with ONE question. Inspect
-EVERY affected assignment and present checked replacement candidates with their
-trade-offs as question options. Wait for the manager to choose, unless a specific
-replacement was already named. Do not pick a replacement unilaterally. After
-selection offer ONE complete plan,
-with concrete remove/assign pairs and a constraint for every day of the stated
-absence (including days with no shift). Evaluate the final combined plan, not
-each replacement in isolation. Do not offer a partial plan as a complete one.
+For sickness or any absence constraint, first resolve missing absence dates with
+ONE question. Then offer ONE complete plan right away: a constraint for every day
+of the stated absence (including days with no shift) and a `remove` for EVERY
+affected assignment. Do not ask the manager to choose a replacement and do not
+pick one yourself: the solver fills each vacated seat. Add an `assign` only for a
+person the manager named. Do not offer a partial plan as a complete one.
 
 A `plan_review` result contains the real combined preview and its warnings.
 Repair avoidable conflicts when the manager left the choice to you. If a named

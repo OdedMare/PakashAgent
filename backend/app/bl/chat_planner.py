@@ -193,7 +193,7 @@ class ChatPlanBuilder:
             if row.get("action") == "assign" and person.get("inactive_from") \
                     and (row.get("date") or "") >= person["inactive_from"]:
                 raise RejectedPlan("העובד סיים את העבודה לפני המשמרת. יש לבחור מחליף פעיל")
-        self._require_selected_replacements(
+        turn = self._require_selected_replacements(
             team_id, turn, state, profile, schedule_id, request, choices,
         )
         proposal = build_proposal(turn, profile, schedule, plan["reason"])
@@ -225,42 +225,38 @@ class ChatPlanBuilder:
     def _require_selected_replacements(
         self, team_id, turn, state, profile, schedule_id, request, choices,
     ):
+        """The turn without covers the model picked for seats it vacates: the
+        solver fills those (`chat_vacancies`). Asking instead looped, since an
+        answer not spelling out the name brought the same question back."""
         constraints = turn.get("constraints") or []
         if not any(
             row.get("action") != "remove" and not row.get("available", False)
             for row in constraints
         ):
-            return
+            return turn
         operations = turn.get("operations") or []
         selections = "\n".join(list(choices) + [request])
-        assignments = [
-            row for row in operations if row.get("action") == "assign"
-        ]
+        vacated = {
+            (row.get("shift"), row.get("date"))
+            for row in operations if row.get("action") == "remove"
+        }
         unselected = [
-            row for row in assignments
-            if row.get("employee") and row["employee"] not in selections
+            row for row in operations
+            if row.get("action") == "assign" and row.get("employee")
+            and row["employee"] not in selections
         ]
+        covers = [row for row in unselected if (row.get("shift"), row.get("date")) in vacated]
+        turn = dict(turn, operations=[row for row in operations if row not in covers])
+        unselected = [row for row in unselected if row not in covers]
         if not unselected:
-            return
-        removed_by_slot = {}
-        for row in operations:
-            if row.get("action") == "remove":
-                slot = row.get("shift"), row.get("date")
-                removed_by_slot.setdefault(slot, row.get("employee", ""))
-        candidates = []
-        for row in unselected:
-            leaving = removed_by_slot.get((row.get("shift"), row.get("date")), "")
-            candidates.append(self._tools.run(team_id, "find_replacements", {
-                "schedule_id": schedule_id, "employee": leaving,
-                "shift_name": row.get("shift"), "slot_date": row.get("date"),
-            }))
-        if any(result.get("candidates") for result in candidates):
-            prompt = "בדקתי מועמדים להחלפה. בחרו מי יחליף בכל משמרת כדי שאכין תוכנית מלאה לאישור."
-        else:
-            prompt = (
-                "לא נמצאו מחליפים שעומדים בכל הכללים. אפשר לשנות את היקף המשמרת "
-                "או להוסיף תגבור. איך תרצו לפתור את החוסר?"
-            )
+            return turn
+        candidates = [self._tools.run(team_id, "find_replacements", {
+            "schedule_id": schedule_id, "employee": "",
+            "shift_name": row.get("shift"), "slot_date": row.get("date"),
+        }) for row in unselected]
+        prompt = "בדקתי מועמדים להחלפה. בחרו מי יחליף בכל משמרת כדי שאכין תוכנית מלאה לאישור." \
+            if any(result.get("candidates") for result in candidates) else \
+            "לא נמצאו מחליפים שעומדים בכל הכללים. אפשר לשנות את היקף המשמרת או להוסיף תגבור. איך תרצו לפתור את החוסר?"
         raise NeedsManager(
             prompt, candidates,
             dict(
