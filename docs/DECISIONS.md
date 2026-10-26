@@ -1184,6 +1184,27 @@ to the conversation, where approval is the one write (D12/D19).
 code-answered turn comes back finished in the send response with no worker
 pickup and no poll. The queued job still runs and finds the turn finished.
 
+## D37 — A stuck model call fails, and a team may run several at once *(amends D35's one-call-per-team quota)*
+
+Every chat message and build of a team sat on "ממתין למודל…" behind one
+call the model server never answered. Three things combined: `llm_timeout_
+seconds` defaulted to 0, meaning no read limit for chat; each team could hold
+one model call at a time; and only one worker lane took chat turns.
+
+- **0 is the built-in ceiling, not "forever".** 300s for chat and every
+  other flow, 900s for a build's translation. A read timeout is not retried,
+  and the SDK's own retries are off, so a stuck call fails once with a
+  Hebrew error and releases its slot.
+- **A team may use every global slot** (`llm_team_concurrency`, 0 by
+  default). Set it on a deployment shared by several busy teams.
+- **Three chat lanes of six worker threads**, so one slow turn does not hold
+  every other manager's; the pool grows to 16 to carry them.
+
+What this gives up: a model genuinely slower than five minutes per chat
+answer now fails, and `llm_timeout_seconds` must be raised for it. A
+server that serves one request at a time queues concurrent calls itself,
+and a call waiting in its queue counts against the same ceiling.
+
 ---
 
 ## Open

@@ -27,8 +27,10 @@ from app.dal.repository import Repository
 _log = logging.getLogger("pakash.copilot.worker")
 _SCAN_SECONDS = max(60, int(os.getenv("PAKASH_COPILOT_SCAN_SECONDS", "1800")))
 _POLL_SECONDS = max(1, int(os.getenv("PAKASH_COPILOT_POLL_SECONDS", "1")))
-_WORKER_CONCURRENCY = max(1, int(os.getenv("PAKASH_WORKER_CONCURRENCY", "4")))
-_CHAT_WORKERS = max(1, int(os.getenv("PAKASH_CHAT_WORKERS", "1")))
+# Chat turns get their own lanes so a build never delays an answer; several
+# of them so one slow (or stuck) turn does not hold every other manager's.
+_WORKER_CONCURRENCY = max(1, int(os.getenv("PAKASH_WORKER_CONCURRENCY", "6")))
+_CHAT_WORKERS = max(1, int(os.getenv("PAKASH_CHAT_WORKERS", "3")))
 
 
 class CopilotWorker:

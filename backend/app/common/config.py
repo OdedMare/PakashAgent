@@ -96,7 +96,14 @@ class Settings(BaseSettings):
 
     llm_timeout_seconds: int = 0
     """Maximum wall time for ONE HTTP completion to the model.
-    **0 — the default — means no limit: wait for as long as the server takes.**
+    **0 — the default — means the built-in ceiling: 300s for chat and every
+    other flow, 900s for a build's translation** (`dal/llm/budgets.py`).
+
+    It used to mean no limit at all, and the cost described under "What this
+    gave up" below is what happened: one call the server never answered held
+    its worker and model slot until a restart, and every later chat message
+    and build waited on "ממתין למודל…" behind it. A stuck call now fails with
+    a Hebrew error and gives its slot back; a read timeout is not retried.
 
     Not a budget for the whole logical call: the degradation ladder and the
     parse retry above it each get their own, derived from this one. Set to 0,
@@ -116,7 +123,7 @@ class Settings(BaseSettings):
     holding the connection open, and **giving up is the UI's decision** — it
     is the only participant that knows whether anyone is still waiting.
 
-    **What this gives up.** A server that is genuinely hung — not slow — now
+    **What this gave up.** A server that is genuinely hung — not slow — now
     holds its worker thread until the process restarts, and with
     `llm_max_concurrency` at 1 that blocks every other model call. Set a
     positive value here if that ever happens; it should be comfortably above
@@ -138,7 +145,8 @@ class Settings(BaseSettings):
     PostgreSQL advisory locks coordinate every process and read this setting
     on acquisition, so a saved change applies to the next model call.
 
-    Each team may occupy one of these slots at a time. The right global
+    A team may occupy all of them unless `llm_team_concurrency` says
+    otherwise. The right global
     number depends entirely on what is serving the model. A server
     that batches continuously — vLLM, TGI — does its own scheduling and is
     *starved* by a low limit here, because requests this process is holding
@@ -147,6 +155,13 @@ class Settings(BaseSettings):
     is only thrashed by concurrency, and 1-2 keeps latency honest. 4 is the
     middle that assumes neither.
     """
+
+    llm_team_concurrency: int = 0
+    """How many of those calls one team may hold at once. **0 — the default —
+    means all of them.** It was one, so a team's chat waited behind its own
+    build's translation and one hung call stopped the whole team. Set a
+    positive number on a deployment shared by several busy teams to keep one
+    from occupying every slot."""
 
     llm_repetition_penalty: float = 0.0
     """Penalty applied to already-emitted tokens, discouraging loops.

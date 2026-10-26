@@ -96,6 +96,14 @@ JSON" would not.
 
 `llm_diet_mode` caps completion tokens.
 
+**Every call has a read ceiling (D37).** `llm_timeout_seconds` of 0 means
+the built-in ceiling (300s; the scheduler's own 900s), never "forever": an
+unanswered call used to hold its worker and model slot until a restart, and
+every chat and build behind it read "ממתין למודל…". A read timeout is not
+retried (`completion_retry._read_timed_out`), and the SDK's own silent
+retries are off (`max_retries=0`), so a stuck call fails after one ceiling
+and gives its slot back.
+
 **3. The total budget** — `_TOTAL_BUDGET_SECONDS` bounds one logical
 `complete_json`. `llm_timeout_seconds` bounds a single HTTP round-trip, but
 the ladder can run four of them and each retries up to three times; multiplied
@@ -205,15 +213,18 @@ be ready and the backoff is a guess.
 `PostgresModelSlots` bounds in-flight completions across the API and every
 worker with session advisory locks (D35). `llm_max_concurrency` is read on
 each acquisition, so a saved value applies to the next call without a
-restart. Each team also holds one team lock, preventing one workspace from
-occupying all global slots. A dead process loses both locks with its
-database session. Callers without database settings (small adapters and
+restart. Each call also holds one of its team's numbered locks;
+`llm_team_concurrency` caps how many (0, the default, is the whole global
+limit, so a team's chat never waits behind its own build). A dead process
+loses both locks with its database session. Callers without database settings (small adapters and
 unit tests) retain the priority-aware process-local `ModelSlots`.
 
 The default is 4: a hosted API or a continuously-batching server (vLLM,
 TGI) takes several calls at once and is *starved* by a low limit. A
 one-request-at-a-time local server (Ollama's default) is only thrashed by a
-high one and should be set to 1. The per-team quota remains one call.
+high one and should be set to 1. A server that serves one request at a time
+queues concurrent calls itself, and a queued call counts against the read
+ceiling.
 
 ## Telemetry
 

@@ -38,6 +38,8 @@ class RuntimeSettings:
     llm_api_key_default: str = ""
     llm_api_key_advanced: str = ""
     llm_queue_seconds: int = 180
+    # Model calls one team may have in flight at once; 0 = `llm_max_concurrency`.
+    llm_team_concurrency: int = 0
     # False accepts any TLS certificate from the model server. See
     # `Settings.llm_verify_ssl` for why this is a last resort.
     llm_verify_ssl: bool = True

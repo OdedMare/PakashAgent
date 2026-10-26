@@ -110,9 +110,9 @@ function AgentSettings({ settings }: { settings: SettingsController }) {
         name="llm_timeout_seconds"
         label="זמן מרבי לתשובת המודל"
         type="number"
-        min="1"
-        optional="שניות"
-        placeholder="120"
+        min="0"
+        optional="שניות; 0 = ברירת המחדל (5 דקות). בקשה תקועה נכשלת ומשחררת את התור"
+        placeholder="0"
       />
       <Field
         settings={settings}

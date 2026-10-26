@@ -237,6 +237,10 @@ class OpenAIJsonClient:
                 api_key=api_key or _LOCAL_SERVER_KEY_PLACEHOLDER,
                 base_url=base_url or None,
                 timeout=httpx_timeout(timeout),
+                # Retrying is `completion_retry`'s job, bounded by the call's
+                # budget. The SDK's own two silent retries ran inside one
+                # attempt, so a stuck server cost three read ceilings each.
+                max_retries=0,
                 **options,
             )
         return self._cached_clients[cache_key]

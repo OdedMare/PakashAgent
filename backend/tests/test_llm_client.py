@@ -622,21 +622,23 @@ def test_the_budget_always_leaves_room_for_one_round_trip():
             assert _budget_seconds(settings, flow) > timeout, (timeout, flow)
 
 
-def test_no_timeout_means_no_budget_either():
-    """A deadline over an unbounded call could only fire mid-generation,
-    discarding an answer the server was still producing — the exact failure
-    turning the timeout off is meant to avoid."""
+def test_no_timeout_still_ends_a_stuck_chat_call():
+    """0 used to mean "wait forever", and one chat call the server never
+    answered then held its worker and model slot until a restart: every later
+    message sat on "ממתין למודל…". It now means the built-in ceiling."""
     for timeout in (0, -30):
         settings = _Settings(llm_timeout_seconds=timeout)
-        for flow in ("changes", ""):
-            assert _budget_seconds(settings, flow) is None, (timeout, flow)
+        for flow in ("changes", "planner", ""):
+            ceiling = read_timeout_for(settings, flow)
+            assert ceiling == 300, (timeout, flow)
+            assert _budget_seconds(settings, flow) > ceiling, (timeout, flow)
 
 
-def test_an_unbounded_call_is_not_cut_short_by_a_deadline():
-    """End to end: with no timeout the ladder runs every rung it needs.
+def test_the_default_ceiling_leaves_room_for_the_ladder():
+    """End to end: with the default timeout the ladder runs every rung it needs.
 
-    Guards the wiring, not the arithmetic — a budget of 0 seconds rather than
-    None would have stopped this after the first BadRequestError.
+    Guards the wiring, not the arithmetic — a budget of 0 seconds would have
+    stopped this after the first BadRequestError.
     """
     settings = _Settings(llm_timeout_seconds=0)
     llm, fake = _client([
@@ -712,12 +714,11 @@ def test_the_scheduler_client_is_built_with_its_own_ceiling():
 def test_a_settings_object_without_the_field_still_resolves():
     """A saved file from an older version, or a test double, must not raise.
 
-    It resolves to no ceiling, which is the same answer an explicit 0 gets:
-    a settings object that never heard of the field cannot be asserting a
-    limit, and inventing one for it would time out calls on the strength of
-    a missing attribute.
+    It resolves to the default ceiling, which is the same answer an explicit
+    0 gets.
     """
-    assert _budget_seconds(object(), "changes") is None
+    assert read_timeout_for(object(), "changes") == 300
+    assert _budget_seconds(object(), "changes") > 300
 
 
 def test_ssl_verification_is_on_unless_turned_off(monkeypatch):

@@ -84,11 +84,16 @@ class ModelSlots:
 
 
 class PostgresModelSlots:
-    """Cross-process model slots with one in-flight call per team.
+    """Cross-process model slots, with an optional per-team quota.
 
     PostgreSQL session advisory locks disappear when a process or connection
-    dies, so a crashed API or worker cannot strand capacity. The team lock is
-    the fairness quota; the numbered locks enforce the deployment-wide limit.
+    dies, so a crashed API or worker cannot strand capacity. The numbered
+    team locks are the fairness quota (`llm_team_concurrency`; 0 means the
+    whole deployment limit); the numbered slot locks enforce that limit.
+
+    The quota used to be one call per team, so a manager's chat waited
+    behind the team's own build translation, and one call that hung blocked
+    the whole team.
     """
 
     def __init__(self, store, poll_seconds: float = 0.05) -> None:
@@ -106,21 +111,17 @@ class PostgresModelSlots:
         team_id = current_team() or "unscoped"
         team_key = namespace + ":llm:team"
         slot_key = namespace + ":llm:slot"
-        team_locked = False
+        team_slot = None
         slot = None
         try:
-            while not team_locked:
-                team_locked = self._try_lock(connection, team_key, team_id)
-                if not team_locked:
+            while team_slot is None:
+                team_slot = self._first_free(
+                    connection, team_key, team_id, _team_limit(self._store.get()))
+                if team_slot is None:
                     self._wait(deadline, priority)
             while slot is None:
-                limit = max(1, int(getattr(
-                    self._store.get(), "llm_max_concurrency", 1
-                ) or 1))
-                for candidate in range(limit):
-                    if self._try_lock(connection, slot_key, candidate):
-                        slot = candidate
-                        break
+                slot = self._first_free(
+                    connection, slot_key, "", _global_limit(self._store.get()))
                 if slot is None:
                     self._wait(deadline, priority)
             report_activity("המודל מכין תשובה…")
@@ -129,9 +130,23 @@ class PostgresModelSlots:
         finally:
             if slot is not None:
                 self._unlock(connection, slot_key, slot)
-            if team_locked:
-                self._unlock(connection, team_key, team_id)
+            if team_slot is not None:
+                self._unlock(connection, team_key, team_slot)
             connection.close()
+
+    def _first_free(self, connection, namespace, prefix, limit):
+        """The lock value taken, or None when all `limit` are held.
+
+        Slot values are the bare numbers they always were; team values are
+        the team id, then `team_id:1`, `team_id:2`… so a process still
+        running the one-per-team code keeps contending for the same first
+        lock during a rolling restart.
+        """
+        for index in range(limit):
+            value = (prefix + (":%d" % index if index else "")) if prefix else index
+            if self._try_lock(connection, namespace, value):
+                return value
+        return None
 
     @staticmethod
     def _try_lock(connection, namespace, value) -> bool:
@@ -155,6 +170,20 @@ class PostgresModelSlots:
         if deadline is not None:
             delay = min(delay, max(0, deadline - time.monotonic()))
         time.sleep(delay)
+
+
+def _global_limit(settings) -> int:
+    return max(1, int(getattr(settings, "llm_max_concurrency", 1) or 1))
+
+
+def _team_limit(settings) -> int:
+    """`llm_team_concurrency`, capped by the global limit; 0 is the limit."""
+    limit = _global_limit(settings)
+    try:
+        team = int(getattr(settings, "llm_team_concurrency", 0) or 0)
+    except (TypeError, ValueError):
+        team = 0
+    return min(team, limit) if team > 0 else limit
 
 
 __all__ = [

@@ -42,10 +42,9 @@ services:
       # The model runs on the host, not in the compose network.
       PAKASH_LLM_BASE_URL: ${PAKASH_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       PAKASH_LLM_MODEL: ${PAKASH_LLM_MODEL:-gemma3:27b}
-      # Wall time for ONE HTTP completion. 0 = no limit: generation is a
-      # background job the browser polls, so giving up is the UI's decision,
-      # not a number guessed here. Set a positive value only to bound a
-      # server that HANGS.
+      # Wall time for ONE HTTP completion. 0 = the built-in ceiling (300s for
+      # chat, 900s for a build's translation); a call past it fails and frees
+      # its slot instead of blocking everything behind it.
       PAKASH_LLM_TIMEOUT_SECONDS: ${PAKASH_LLM_TIMEOUT_SECONDS:-0}
       # 0 = no queue deadline. Set a positive value only when interactive
       # calls should deliberately give up while the model slot is occupied.
@@ -53,6 +52,8 @@ services:
       # Shared across API and worker processes through PostgreSQL advisory
       # locks. 4 suits a hosted API; lower it to 1 for a local Ollama.
       PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-4}
+      # How many of those one team may hold; 0 = all of them.
+      PAKASH_LLM_TEAM_CONCURRENCY: ${PAKASH_LLM_TEAM_CONCURRENCY:-0}
       # The constraint solver that assigns every schedule (bl/solver/):
       # seconds per solve and parallel workers. Also editable in the panel.
       PAKASH_SOLVER_TIME_LIMIT_SECONDS: ${PAKASH_SOLVER_TIME_LIMIT_SECONDS:-10}
@@ -86,14 +87,15 @@ services:
       PAKASH_LLM_TIMEOUT_SECONDS: ${PAKASH_LLM_TIMEOUT_SECONDS:-0}
       PAKASH_LLM_QUEUE_SECONDS: ${PAKASH_LLM_QUEUE_SECONDS:-0}
       PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-4}
+      PAKASH_LLM_TEAM_CONCURRENCY: ${PAKASH_LLM_TEAM_CONCURRENCY:-0}
       PAKASH_SOLVER_TIME_LIMIT_SECONDS: ${PAKASH_SOLVER_TIME_LIMIT_SECONDS:-10}
       PAKASH_SOLVER_WORKERS: ${PAKASH_SOLVER_WORKERS:-8}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       PAKASH_COPILOT_SCAN_SECONDS: ${PAKASH_COPILOT_SCAN_SECONDS:-1800}
-      # One lane stays available for manager chat; the rest checkpoint one
-      # generation span at a time across teams.
-      PAKASH_WORKER_CONCURRENCY: ${PAKASH_WORKER_CONCURRENCY:-4}
-      PAKASH_CHAT_WORKERS: ${PAKASH_CHAT_WORKERS:-1}
+      # Three lanes only take manager chat, so one slow turn does not hold
+      # the others; the rest checkpoint one generation span at a time.
+      PAKASH_WORKER_CONCURRENCY: ${PAKASH_WORKER_CONCURRENCY:-6}
+      PAKASH_CHAT_WORKERS: ${PAKASH_CHAT_WORKERS:-3}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
