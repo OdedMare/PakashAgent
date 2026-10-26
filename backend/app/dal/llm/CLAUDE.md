@@ -23,6 +23,7 @@ three are per role, so different kinds of work can run on different providers.
 | `model_roles.py` | Flow → role → model id, endpoint and API key, and the fallbacks |
 | `model_slots.py` | `ModelSlots` (one process) and `PostgresModelSlots` (advisory locks) — the concurrency limit across every process (D35) |
 | `strict_schema.py` | A caller's schema in strict-mode form, and the reply read back in the caller's shape |
+| `streaming.py` | One completion read as a stream, for callers passing `on_text`; a refused stream retries the same rung plainly |
 
 Each helper is separate because each handles a different failure of
 "OpenAI-compatible" servers that are only approximately compatible.
@@ -96,7 +97,15 @@ JSON" would not.
 
 `llm_diet_mode` caps completion tokens.
 
-**Every call has a read ceiling (D37).** `llm_timeout_seconds` of 0 means
+**`on_text` streams without changing the answer.** A caller passing it (the
+manager chat, to show its reply as it is written) gets the raw text so far
+after every chunk; the parsed object returned is the same. A 400 on the
+streamed request — some compatible servers refuse `stream` or
+`stream_options` — does not advance the ladder: the same rung is asked again
+without a stream, and that endpoint and model are not asked to stream again
+for the life of the process.
+
+**Every call has a read ceiling (D38).** `llm_timeout_seconds` of 0 means
 the built-in ceiling (300s; the scheduler's own 900s), never "forever": an
 unanswered call used to hold its worker and model slot until a restart, and
 every chat and build behind it read "ממתין למודל…". A read timeout is not

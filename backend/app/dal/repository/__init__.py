@@ -3,7 +3,6 @@
 from app.dal.database import connect, require_schema
 from app.dal.repository.admin import AdminRepository
 from app.dal.repository.identities import IdentityRepository
-from app.dal.repository.copilot import CopilotRepository
 from app.dal.repository.chat import ChatRepository
 from app.dal.repository.compiled_sources import CompiledSourcesRepository
 from app.dal.repository.jobs import JobsRepository
@@ -15,7 +14,7 @@ from app.dal.repository.throttle import ThrottleRepository
 
 class Repository(
     TeamRepository, ScheduleRepository, IdentityRepository,
-    CopilotRepository, ChatRepository, AdminRepository, JobsRepository,
+    ChatRepository, AdminRepository, JobsRepository,
     CompiledSourcesRepository, ThrottleRepository,
 ):
     """One repository object composed of the per-concern mixins.
@@ -45,5 +44,5 @@ class Repository(
 
 __all__ = [
     "Repository", "TeamRepository",
-    "ScheduleRepository", "IdentityRepository", "CopilotRepository", "SCHEMA",
+    "ScheduleRepository", "IdentityRepository", "SCHEMA",
 ]

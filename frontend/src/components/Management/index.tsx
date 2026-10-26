@@ -9,7 +9,6 @@ import {
   LayoutGrid,
   Moon,
   MessagesSquare,
-  Settings2,
   SlidersHorizontal,
   Share2,
   Sparkles,
@@ -23,29 +22,28 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { Board } from "@/components/Board";
+import { AgentGuard, CrewStage, randomGuard } from "@/components/Crew";
+import type { Who } from "@/components/Crew";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import type { ChecklistItem } from "@/components/Guide";
 import { useTheme } from "@/hooks/useTheme";
-import { SettingsPanel } from "@/components/Settings";
 import { ShareLink } from "@/components/Workspace/ShareLink";
 import type { ChatPlan, ManagementOverview, Proposal, TeamView } from "@/types";
 
 import { AccountMenu } from "./AccountMenu";
 import { AgentChat } from "./AgentChat";
 import { useManagerChat } from "./useManagerChat";
+import { chatStarters } from "./chatStarters";
 import { useChatSplit } from "./useChatSplit";
 import { ProfileGapsNotice } from "./ProfileGapsNotice";
-import { CopilotInbox } from "./CopilotInbox";
-import { History } from "./History";
 import { LearnedFromChanges } from "./LearnedFromChanges";
 import { Preferences } from "./Preferences";
 import { RequestInbox } from "./RequestInbox";
-import { ReplacementPanel } from "./ReplacementPanel";
+import { ChangesPanel } from "./ChangesPanel";
 import { RequestToast } from "./RequestToast";
 import { SwapInbox } from "./SwapInbox";
 import { Stats } from "./Stats";
 import { TeamPanel } from "./TeamPanel";
-import { Warnings } from "./Warnings";
 import { useConstraintRequests } from "./useConstraintRequests";
 import { useLiveInbox } from "./useLiveInbox";
 import { useManagement } from "./useManagement";
@@ -124,7 +122,23 @@ export function Management({
   // week drops it, so the agent is never told about a day off screen.
   const focusDate = focusDay.date && inWeek(focusDay.date, state.focusedWeek) ? focusDay.date : "";
   const agent = useManagerChat(workspace.id, state.focusedScheduleId, state.focusedWeek, focusDate, onChatApplied);
-  const [copilotPending, setCopilotPending] = useState(0);
+  // The agent is one of the two guards, rolled again for every conversation
+  // and every time it steps back into the corner — never while it is open,
+  // so the chat shows the guard that was pressed.
+  const agentOpen = drawerOpen && section === "agent";
+  const [agentWho, setAgentWho] = useState<Who>("him");
+  const rollAgent = useCallback(() => setAgentWho(randomGuard()), []);
+  const chatId = agent.chat?.id;
+  useEffect(() => {
+    if (agentOpen) return;
+    const frame = requestAnimationFrame(rollAgent);
+    return () => cancelAnimationFrame(frame);
+  }, [agentOpen, rollAgent]);
+  useEffect(() => {
+    if (chatId === undefined) return;
+    const frame = requestAnimationFrame(rollAgent);
+    return () => cancelAnimationFrame(frame);
+  }, [chatId, rollAgent]);
   // Pending constraint requests, polled here rather than inside the inbox so
   // the tab can count them and a new one pops up wherever the manager is.
   const requests = useConstraintRequests(section === "requests" && drawerOpen);
@@ -142,7 +156,6 @@ export function Management({
     setDrawerOpen(true);
     dismissArrivals();
   }, [dismissArrivals]);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [autoGenerating, setAutoGenerating] = useState(false);
   const autoGenerationStarted = useRef(false);
@@ -355,14 +368,6 @@ export function Management({
           >
             <BarChart3 size={15} />
             <span>סקירה</span>
-            {copilotPending ? (
-              <span
-                className="management-nav-badge"
-                aria-label={`${copilotPending} פריטים דורשים מבט`}
-              >
-                {copilotPending > 9 ? "9+" : copilotPending}
-              </span>
-            ) : null}
           </button>
 
         </nav>
@@ -385,7 +390,7 @@ export function Management({
         </section>
       </header>
 
-      {/* The bar over the workspace: setup, sharing, settings, theme, and
+      {/* The bar over the workspace: setup, sharing, theme, and
           the account menu that signs out. Kept out of the sidebar so it sits
           where the manager looks first rather than under the chat list. */}
       <div className="management-topbar">
@@ -416,15 +421,6 @@ export function Management({
           <button
             type="button"
             className="icon-button"
-            onClick={() => setSettingsOpen(true)}
-            aria-label="הגדרות"
-            title="הגדרות"
-          >
-            <Settings2 size={17} />
-          </button>
-          <button
-            type="button"
-            className="icon-button"
             onClick={toggle}
             aria-label={theme === "dark" ? "מצב בהיר" : "מצב כהה"}
           >
@@ -433,7 +429,6 @@ export function Management({
           <HelpButton />
           <AccountMenu
             name={workspace.name}
-            onOpenSettings={() => setSettingsOpen(true)}
             onLogout={onLogout}
           />
         </div>
@@ -456,6 +451,7 @@ export function Management({
           that is not finished. */}
       {autoGenerating || buildState ? (
         <div className="schedule-generation" role="status" aria-live="polite">
+          {buildState !== "failed" && buildState !== "cancelled" ? <CrewStage size="sm" /> : null}
           <div className="schedule-generation-copy">
             <strong>
               {buildState === "failed"
@@ -579,12 +575,6 @@ export function Management({
         <ManagerOverview
           hidden={view !== "overview"}
           overview={overview}
-          onOpenSetup={onOpenManualSetup}
-          onPendingChange={setCopilotPending}
-          onAct={(text) => {
-            setSuggested((previous) => ({ text, n: previous.n + 1 }));
-            openAgent();
-          }}
         />
         {view === "overview" ? null : view === "team" ? (
           <section className="manager-analytics" aria-labelledby="manager-team-title">
@@ -612,12 +602,13 @@ export function Management({
                 onAdd={state.addConstraint}
                 onRemove={state.removeConstraint}
                 onSaveProfile={state.saveProfile}
+                onDeleteShift={state.deleteShift}
                 onPreviewDeparture={state.previewDeparture}
                 onDepart={state.depart}
               />
             ) : (
               <div className="manager-analytics-loading" aria-busy="true">
-                טוען את פרטי הצוות…
+                <CrewStage label="טוען את פרטי הצוות…" />
               </div>
             )}
           </section>
@@ -653,6 +644,9 @@ export function Management({
               answer: null,
             }}
           />
+        )}
+        {agentOpen ? null : (
+          <AgentGuard who={agentWho} onOpen={() => openAgent()} onSwap={rollAgent} />
         )}
         <button
           type="button"
@@ -697,7 +691,7 @@ export function Management({
             <ManagerTab
               active={section === "replace"}
               icon={<ArrowLeftRight size={15} />}
-              label="החלפה"
+              label="שינויים"
               onClick={() => setSection("replace")}
             />
             <ManagerTab
@@ -736,6 +730,7 @@ export function Management({
           ) : null}
           </> : null}
           <AgentChat
+            who={agentWho}
             hidden={section !== "agent"}
             agent={agent}
             visibleWeek={state.focusedWeek}
@@ -743,6 +738,7 @@ export function Management({
             focusKey={focusDay.n}
             onClearFocus={() => setFocusDay((previous) => ({ date: "", n: previous.n }))}
             employees={overview?.employees.map((person) => String(person.name ?? "")).filter(Boolean) ?? []}
+            starters={chatStarters({ warnings: schedule?.warnings ?? [], requests: requests.rows, focusDate })}
             boardBusy={state.busy}
             draft={suggested.text}
             draftKey={suggested.n}
@@ -757,10 +753,14 @@ export function Management({
               busy={state.busy}
             />
           ) : null}
-          <ReplacementPanel
-            employees={activeEmployees(overview?.employees ?? [], overview?.today ?? "")}
+          <ChangesPanel
+            employees={overview?.employees ?? []}
+            activeEmployees={activeEmployees(overview?.employees ?? [], overview?.today ?? "")}
+            shifts={overview?.shifts ?? []}
             today={overview?.today ?? ""}
+            rotationMode={overview?.profile?.workplace?.rotation_mode}
             disabled={agent.busy || agent.working}
+            onSaveProfile={state.saveProfile}
             onPrepare={(message) => {
               // The picks become a plan in the conversation, where approving
               // it is the one write path (D12); the server reads this wording
@@ -804,6 +804,7 @@ export function Management({
             onAdd={state.addConstraint}
             onRemove={state.removeConstraint}
             onSaveProfile={state.saveProfile}
+            onDeleteShift={state.deleteShift}
             onPreviewDeparture={state.previewDeparture}
             onDepart={state.depart}
           />
@@ -818,9 +819,6 @@ export function Management({
         />
       </main>
 
-      {settingsOpen ? (
-        <SettingsPanel onClose={() => setSettingsOpen(false)} />
-      ) : null}
     </div>
   );
 }
@@ -847,15 +845,9 @@ function activeEmployees(employees: Record<string, unknown>[], today: string): s
 function ManagerOverview({
   hidden,
   overview,
-  onOpenSetup,
-  onPendingChange,
-  onAct,
 }: {
   hidden: boolean;
   overview: ManagementOverview | undefined;
-  onOpenSetup?: () => void;
-  onPendingChange: (count: number) => void;
-  onAct: (suggestion: string) => void;
 }) {
   const schedule = overview?.schedule;
 
@@ -871,8 +863,8 @@ function ManagerOverview({
           <h1 id="manager-overview-title">כל מה שדורש מבט, במקום אחד</h1>
           <p>
             {schedule
-              ? `${displayDate(schedule.starts_on)}–${displayDate(schedule.ends_on)} · נתוני הסידור, פעילות הסוכן והשינויים האחרונים`
-              : "כשתיפתח תקופת שיבוץ, הנתונים והפעילות שלה יופיעו כאן."}
+              ? `${displayDate(schedule.starts_on)}–${displayDate(schedule.ends_on)} · נתוני הסידור`
+              : "כשתיפתח תקופת שיבוץ, הנתונים שלה יופיעו כאן."}
           </p>
         </div>
         {schedule ? (
@@ -885,38 +877,11 @@ function ManagerOverview({
       <div className="manager-overview-flow">
         {overview ? <Stats overview={overview} expanded /> : (
           <div className="manager-analytics-loading" aria-busy="true">
-            טוען את נתוני התקופה…
+            <CrewStage label="טוען את נתוני התקופה…" />
           </div>
         )}
 
-        <CopilotInbox
-          onOpenSetup={onOpenSetup}
-          onPendingChange={onPendingChange}
-          onAct={onAct}
-        />
-
-        {schedule?.notes?.length || schedule?.warnings.length ? (
-          <section className="manager-analytics-warnings">
-            <div className="manager-analytics-section-head">
-              <div>
-                <span>לפני שממשיכים</span>
-                <h2>דברים שכדאי לבדוק</h2>
-              </div>
-              {schedule.warnings.length ? <strong>{schedule.warnings.length}</strong> : null}
-            </div>
-            {schedule.notes?.length ? (
-              <ul className="schedule-notes">
-                {schedule.notes.map((note, index) => <li key={index}>{note}</li>)}
-              </ul>
-            ) : null}
-            {schedule.warnings.length ? <Warnings warnings={schedule.warnings} /> : null}
-          </section>
-        ) : null}
-
-        <div className="manager-overview-records">
-          <History entries={overview?.changes ?? []} />
-          <LearnedFromChanges />
-        </div>
+        <LearnedFromChanges />
       </div>
     </section>
   );

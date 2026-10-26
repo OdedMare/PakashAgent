@@ -93,6 +93,8 @@ class GenerationProgress(BaseModel):
     # The requested assignment engine: "ai", "code" or "auto". Auto may
     # use a different actual engine per span; each span's metrics records it.
     engine: str = ""
+    # The shift types this build covers ("only the nights"); empty for all.
+    shifts: List[str] = []
     # When a worker last said it was still on this job, UTC ISO-8601. Empty
     # on a job opened before this field existed, which the client reads as
     # "cannot tell" rather than as "stalled".

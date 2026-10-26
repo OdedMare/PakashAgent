@@ -15,6 +15,8 @@ import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, RefObject } from "react";
 
+import { Guard } from "@/components/Crew/Guard";
+
 import { glossaryFor, shortcutsFor } from "./content";
 import type { Surface } from "./content";
 
@@ -32,6 +34,16 @@ export interface ChecklistItem {
 }
 
 type View = "home" | "shortcuts" | "glossary";
+
+/** What the two guards say about the system when the panel opens. */
+const INTRO: Record<Surface, string> = {
+  manager:
+    "היי, אנחנו כאן להסביר. מגדירים את הצוות פעם אחת, הסוכן בונה סידור, אתם בודקים את האזהרות ומפרסמים — וכל שינוי מחכה לאישור שלכם.",
+  employee:
+    "היי! כאן רואים את המשמרות שלכם, מה השתנה מאז הפעם הקודמת, ושולחים בקשות ואילוצים למנהל.",
+  member:
+    "היי! זה הסידור שפורסם לצוות. מכאן אפשר גם להיכנס לאזור האישי שלכם.",
+};
 
 const SURFACE_LABEL: Record<Surface, string> = {
   manager: "אזור הניהול",
@@ -148,6 +160,14 @@ export function HelpPanel({
       <div className="guide-panel-body">
         {view === "home" ? (
           <>
+            <section className="guide-crew-intro">
+              <span className="guide-crew-pair" aria-hidden="true">
+                <Guard who="him" />
+                <Guard who="her" />
+              </span>
+              <p>{INTRO[surface ?? "manager"]}</p>
+            </section>
+
             {checklist.length ? (
               <section className="guide-checklist" aria-labelledby="guide-checklist-title">
                 <div className="guide-checklist-head">

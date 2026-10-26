@@ -26,6 +26,8 @@ from typing import Dict, Iterator, Set, Tuple
 
 REQUESTS = "requests"
 SWAPS = "swaps"
+# A manager-chat turn moved: a check finished, the draft grew, or it ended.
+CHAT = "chat"
 
 _Subscriber = Tuple[asyncio.AbstractEventLoop, "asyncio.Queue[str]"]
 

@@ -188,6 +188,18 @@ def test_manual_picker_lists_every_employee_and_explains_unavailability():
     assert any("לימודים" in reason for reason in by_name[YOSSI]["reasons"])
 
 
+def test_manual_picker_exposes_exit_pattern_and_overlap_status():
+    profile = dict(PROFILE, employees=[{
+        "name": DANA,
+        "exit_pattern": "hamshushim",
+        "service_type": "overlap",
+    }])
+    candidate = check(_schedule(), profile, "", MORNING, "2026-08-17")["candidates"][0]
+    assert candidate["exit_pattern"] == "hamshushim"
+    assert candidate["rotation"] == "חמשושים"
+    assert candidate["is_overlap"] is True
+
+
 def test_an_ineligible_shift_is_reported_first():
     """Eligibility is not an audit warning, and is reported anyway.
 

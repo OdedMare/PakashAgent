@@ -48,6 +48,7 @@ from app.dal.llm.model_roles import (
     resolve_api_key, resolve_base_url, resolve_model, role_for_flow,
 )
 from app.dal.llm.model_slots import priority_for_flow
+from app.dal.llm.streaming import TextStream
 from app.dal.llm.strict_schema import drop_nulls, to_strict
 from app.dal.llm.telemetry import log_call
 
@@ -94,10 +95,14 @@ class OpenAIJsonClient:
         # Per process and never moved back up: a restart, or a different
         # endpoint or model in the settings, starts again from the top.
         self._first_rungs = {}
+        # (endpoint, model) pairs that refused a streamed request; asked
+        # without one from then on, for the life of the process.
+        self._no_stream = set()
 
     def complete_json(
         self, system: str, user: str, schema=None, flow: str = "",
         role: str = "", model: str = "", time_context: str = "",
+        on_text=None,
     ) -> dict:
         """Return the model's reply parsed as a JSON object.
 
@@ -112,6 +117,10 @@ class OpenAIJsonClient:
         `time_context` lets a caller making several calls for one request pin
         the clock they all see (`agent_time_context()` otherwise), so their
         prompts stay identical up to where the request's own state differs.
+
+        `on_text` asks for the reply as it is written: it is called with the
+        raw text so far (the JSON, unparsed) while the answer streams in. The
+        returned object is the same either way.
         """
         started = time.monotonic()
         call = self._connect(flow, role or role_for_flow(flow), model)
@@ -120,7 +129,15 @@ class OpenAIJsonClient:
              "content": system.rstrip() + "\n\n" + (time_context or agent_time_context())},
             {"role": "user", "content": user},
         ]
-        return self._until_json(call, messages, schema, flow, started)
+        stream = None
+        if on_text is not None:
+            stream = TextStream(on_text)
+            stream.refused = (call.base_url, call.model) in self._no_stream
+        try:
+            return self._until_json(call, messages, schema, flow, started, stream)
+        finally:
+            if stream is not None and stream.refused:
+                self._no_stream.add((call.base_url, call.model))
 
     def _connect(self, flow: str, role: str, model: str) -> _Call:
         try:
@@ -139,7 +156,7 @@ class OpenAIJsonClient:
             _log.exception("llm setup failed flow=%s role=%s", flow or "unknown", role)
             raise AgentError("לא ניתן להכין חיבור למודל. בדקו את הגדרות הספק.") from exc
 
-    def _until_json(self, call: _Call, messages, schema, flow: str, started) -> dict:
+    def _until_json(self, call: _Call, messages, schema, flow: str, started, stream=None) -> dict:
         settings = call.settings
         usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
         max_tokens = _DIET_MAX_COMPLETION_TOKENS if settings.llm_diet_mode else None
@@ -155,6 +172,7 @@ class OpenAIJsonClient:
                 ),
                 _budget_seconds(settings, flow),
                 self._first_rungs.get(rung_key, 0),
+                stream,
             )
             self._first_rungs[rung_key] = rung
             # Tokens spent on a rejected reply were still spent.

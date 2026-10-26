@@ -23,7 +23,7 @@ services:
       PAKASH_DATABASE_HOST: db
       PAKASH_RUNTIME_SETTINGS_FILE: /data/runtime-settings.json
       # The API runs the job worker in-process by default; here the
-      # `copilot` service below is the worker, so the API leaves it to it.
+      # `worker` service below is the worker, so the API leaves it to it.
       PAKASH_EMBEDDED_WORKER: ${PAKASH_EMBEDDED_WORKER:-false}
       # Signs the workspace session cookie. Unset, the backend generates one
       # per process — fine for a single-container dev run, but sessions then
@@ -69,7 +69,7 @@ services:
       db:
         condition: service_healthy
 
-  copilot:
+  worker:
     build: ./backend
     command: ["python", "-m", "app.worker"]
     restart: unless-stopped
@@ -91,7 +91,6 @@ services:
       PAKASH_SOLVER_TIME_LIMIT_SECONDS: ${PAKASH_SOLVER_TIME_LIMIT_SECONDS:-10}
       PAKASH_SOLVER_WORKERS: ${PAKASH_SOLVER_WORKERS:-8}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      PAKASH_COPILOT_SCAN_SECONDS: ${PAKASH_COPILOT_SCAN_SECONDS:-1800}
       # Three lanes only take manager chat, so one slow turn does not hold
       # the others; the rest checkpoint one generation span at a time.
       PAKASH_WORKER_CONCURRENCY: ${PAKASH_WORKER_CONCURRENCY:-6}

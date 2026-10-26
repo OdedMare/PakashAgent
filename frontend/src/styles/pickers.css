@@ -1,0 +1,120 @@
+/* Date and time fields: typed text plus a button that picks (DateInput,
+   TimeInput). The button sits inside the field's own border, on the left --
+   the end of an RTL line -- where native pickers put their icon. Imported
+   after the screen stylesheets so the room it needs wins over their
+   `padding` shorthands. */
+.picker-field {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.picker-field input.picker-field-text {
+  width: 100%;
+  padding-left: 2.4rem;
+}
+
+.picker-field-button {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.3rem;
+  padding: 0;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.picker-field-button:hover:not(:disabled) {
+  color: var(--primary);
+}
+
+.picker-field-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+/* The native date input exists only to own the browser's calendar. Laid over
+   the button so the calendar opens beside it, and never hit or tabbed to. */
+.picker-field input.picker-field-native {
+  position: absolute;
+  inset-block-end: 0;
+  left: 0;
+  width: 2.3rem;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.time-picker {
+  position: absolute;
+  z-index: 30;
+  inset-block-start: calc(100% + 4px);
+  left: 0;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.3rem;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+
+.time-picker.is-flipped {
+  inset-block-start: auto;
+  inset-block-end: calc(100% + 4px);
+}
+
+.time-picker-column {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 13rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.time-picker-column + .time-picker-column {
+  padding-left: 0.25rem;
+  border-left: 1px solid var(--border);
+}
+
+.time-picker-option {
+  min-width: 2.9rem;
+  min-height: 2.2rem;
+  padding: 0 0.5rem;
+  font: inherit;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.time-picker-option:hover {
+  background: var(--surface-3);
+}
+
+.time-picker-option[aria-selected="true"] {
+  color: #fff;
+  background: var(--primary-fill);
+}
+
+/* The stats bar's compact date is sized for its text alone. */
+.picker-field input.stats-date {
+  width: 9rem;
+}
+
+.stats-field .picker-field {
+  display: inline-block;
+}

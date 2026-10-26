@@ -3,7 +3,7 @@
 from typing import Dict, List
 
 from app.bl.audit.stats import shift_stats
-from app.bl.shared import employees, iso, shifts, text
+from app.bl.shared import employees, iso, role_qualified, shifts, text
 
 
 def pretty(hours: float) -> str:
@@ -42,7 +42,7 @@ def is_eligible(profile: dict, employee: str, shift_name: str, date: str = "") -
     """Whether the profile says this person works this shift.
 
     A roster that declares no `eligible_shifts` for somebody is saying
-    nothing, not saying no. Somebody on the grid the roster no longer carries
+    nothing, not saying no; likewise a shift naming no `allowed_roles`. Somebody on the grid the roster no longer carries
     is not relitigated here either.
     """
     for person in employees(profile):
@@ -50,9 +50,11 @@ def is_eligible(profile: dict, employee: str, shift_name: str, date: str = "") -
             continue
         if date and person.get("inactive_from") and date >= person["inactive_from"]:
             return False
-        active_shifts = {row.get("name") for row in shifts(profile)}
-        if shift_name not in active_shifts and shift_name in (person.get("archived_eligible_shifts") or []):
+        declared = {text(row.get("name")): row for row in shifts(profile)}
+        if shift_name not in declared and shift_name in (person.get("archived_eligible_shifts") or []):
             return True
+        if not role_qualified(person, declared.get(shift_name)):
+            return False
         eligible = person.get("eligible_shifts")
         if not isinstance(eligible, list) or not eligible:
             return True
