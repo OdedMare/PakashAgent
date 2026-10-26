@@ -84,6 +84,7 @@ class RuntimeSettingsStore:
             llm_api_key_advanced=env.llm_api_key_advanced,
             llm_queue_seconds=env.llm_queue_seconds,
             llm_team_concurrency=max(0, int(env.llm_team_concurrency)),
+            llm_reasoning_effort=_reasoning_effort(env.llm_reasoning_effort),
             llm_verify_ssl=env.llm_verify_ssl,
             solver_time_limit_seconds=_seconds(env.solver_time_limit_seconds),
             solver_workers=max(1, int(env.solver_workers)),
@@ -216,9 +217,18 @@ def _normalized(key: str, value, patch: dict, settings):
         return max(1, int(value))
     if key == "llm_verify_ssl":
         return _flag(value)
+    if key == "llm_reasoning_effort":
+        return _reasoning_effort(value)
     if key == "solver_time_limit_seconds":
         return _seconds(value)
     return value
+
+
+def _reasoning_effort(value) -> str:
+    """One of the values servers accept, or empty (send nothing): a typo sent
+    as-is would 400 every call."""
+    value = str(value or "").strip().lower()
+    return value if value in ("off", "low", "medium", "high") else ""
 
 
 def _safe_database_url(value: str) -> str:

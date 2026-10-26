@@ -117,6 +117,8 @@ export interface RuntimeSettings {
   llm_repetition_penalty: number;
   llm_timeout_seconds: number;
   llm_queue_seconds: number;
+  /** "", "off", "low", "medium" or "high": how long the model thinks. */
+  llm_reasoning_effort: string;
   /** False accepts any TLS certificate from the model server. */
   llm_verify_ssl: boolean;
   llm_base_url: string | null;

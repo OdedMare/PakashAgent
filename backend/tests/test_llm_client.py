@@ -762,3 +762,56 @@ def test_the_models_probe_honours_the_ssl_switch(monkeypatch):
     llm.list_models(verify_ssl_override=True)
 
     assert seen == [False, True]
+
+
+# --- the server tripping over its own output, and how long it thinks -------
+
+_HARMONY = "unexpected tokens remaining in message header: Some(\"<|start|>assistant\")"
+
+
+def test_a_harmony_glitch_asks_the_same_rung_again():
+    """gpt-oss on vLLM 400s when its sampled text breaks its own format.
+    Stepping down the ladder would only drop the structured output."""
+    llm, fake = _client([_bad_request(_HARMONY), _Response('{"ok": true}')])
+    assert llm.complete_json("sys", "usr", schema={"type": "object"})["ok"] is True
+    first, second = fake.completions.calls
+    assert first["response_format"] == second["response_format"]
+
+
+def test_a_harmony_glitch_that_persists_still_steps_down():
+    llm, fake = _client([_bad_request(_HARMONY)] * 3 + [_Response('{"ok": true}')])
+    assert llm.complete_json("sys", "usr")["ok"] is True
+    formats = [call.get("response_format") for call in fake.completions.calls]
+    assert formats[:3] == [{"type": "json_object"}] * 3
+    assert formats[3] is None
+
+
+def test_reasoning_effort_is_sent_only_when_set():
+    llm, fake = _client([_Response('{"ok": true}')])
+    llm.complete_json("sys", "usr")
+    assert "reasoning_effort" not in fake.completions.calls[0]
+    assert "extra_body" not in fake.completions.calls[0]
+
+
+@pytest.mark.parametrize("effort, sent", [("off", "low"), ("low", "low"), ("high", "high")])
+def test_gpt_oss_gets_reasoning_effort(effort, sent):
+    settings = _Settings(llm_model="gpt-oss-120b", llm_reasoning_effort=effort)
+    llm, fake = _client([_Response('{"ok": true}')], settings)
+    llm.complete_json("sys", "usr")
+    assert fake.completions.calls[0]["reasoning_effort"] == sent
+
+
+@pytest.mark.parametrize("effort, thinking", [("off", False), ("low", False), ("medium", True)])
+def test_qwen_gets_its_chat_template_switch(effort, thinking):
+    settings = _Settings(
+        llm_model="qwen3.5-35b-a3b", llm_reasoning_effort=effort,
+        llm_repetition_penalty=1.1,
+    )
+    llm, fake = _client([_Response('{"ok": true}')], settings)
+    llm.complete_json("sys", "usr")
+    call = fake.completions.calls[0]
+    assert "reasoning_effort" not in call
+    assert call["extra_body"] == {
+        "repetition_penalty": 1.1,
+        "chat_template_kwargs": {"enable_thinking": thinking},
+    }

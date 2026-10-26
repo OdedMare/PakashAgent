@@ -31,7 +31,7 @@ def store(tmp_path, monkeypatch):
 def test_env_defaults_are_the_starting_point(store):
     settings = store.get()
     assert settings.llm_base_url == "http://localhost:11434/v1"
-    # 0 means "no timeout": the UI decides when to stop waiting.
+    # 0 means the built-in ceiling (`dal/llm/budgets.py`), not "forever".
     assert settings.llm_timeout_seconds == 0
     assert settings.llm_queue_seconds == 0
     # 0 means "do not send repetition_penalty at all".
@@ -289,3 +289,12 @@ def test_a_solver_limit_is_clamped_to_something_that_can_run(store):
     assert store.get().solver_workers == 1
     store.update({"solver_time_limit_seconds": 9999})
     assert store.get().solver_time_limit_seconds == 600.0
+
+
+def test_reasoning_effort_keeps_only_values_servers_accept(store):
+    """A typo sent as-is would 400 every call; it reads as "send nothing"."""
+    assert store.get().llm_reasoning_effort == ""
+    store.update({"llm_reasoning_effort": " Off "})
+    assert store.get().llm_reasoning_effort == "off"
+    store.update({"llm_reasoning_effort": "fast"})
+    assert store.get().llm_reasoning_effort == ""

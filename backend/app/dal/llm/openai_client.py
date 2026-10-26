@@ -173,6 +173,7 @@ class OpenAIJsonClient:
                 _budget_seconds(settings, flow),
                 self._first_rungs.get(rung_key, 0),
                 stream,
+                getattr(settings, "llm_reasoning_effort", "") or "",
             )
             self._first_rungs[rung_key] = rung
             # Tokens spent on a rejected reply were still spent.

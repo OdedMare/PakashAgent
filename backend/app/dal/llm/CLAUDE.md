@@ -97,6 +97,19 @@ JSON" would not.
 
 `llm_diet_mode` caps completion tokens.
 
+**`llm_reasoning_effort` is how long the model thinks** — most of the wait
+on a reasoning model. Empty sends nothing. Otherwise `ladder._add_reasoning`
+sends it in the family's form: `reasoning_effort` for gpt-oss and the
+o-series (`off` is `low`; they cannot stop thinking), and
+`extra_body.chat_template_kwargs.enable_thinking` for Qwen3 (`off`/`low`
+turn thinking off). Chosen by the model id, because the field one family
+needs is the field the other rejects.
+
+**A harmony glitch is asked again, not stepped around.** gpt-oss on vLLM
+answers 400 ("unexpected tokens remaining in message header") when the text
+it sampled breaks its own message format. The request was fine, so the same
+rung is asked up to twice more (`ladder._rung`) before the ladder moves on.
+
 **`on_text` streams without changing the answer.** A caller passing it (the
 manager chat, to show its reply as it is written) gets the raw text so far
 after every chunk; the parsed object returned is the same. A 400 on the

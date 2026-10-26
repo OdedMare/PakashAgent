@@ -156,6 +156,18 @@ class Settings(BaseSettings):
     middle that assumes neither.
     """
 
+    llm_reasoning_effort: str = ""
+    """How long a reasoning model thinks before it answers: `off`, `low`,
+    `medium` or `high`. Empty — the default — sends nothing, because a model
+    that does not reason rejects the field.
+
+    Thinking is most of the wait. gpt-oss reasons at `medium` unless told
+    otherwise (sent as `reasoning_effort`; it cannot stop, so `off` is
+    `low`). Qwen3 thinks unless its chat template says otherwise (`off` and
+    `low` send `enable_thinking: false`). Reading a rule or a request is not
+    a hard problem; raise it only when the faster setting starts to misread
+    them."""
+
     llm_team_concurrency: int = 0
     """How many of those calls one team may hold at once. **0 — the default —
     means all of them.** It was one, so a team's chat waited behind its own
