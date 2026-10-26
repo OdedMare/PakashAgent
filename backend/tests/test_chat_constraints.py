@@ -7,7 +7,7 @@ import pytest
 from app.bl.chat_constraints import normalize_constraints
 from app.bl.chat_contract import RejectedPlan
 from app.bl.chat_fast import ChatFastAnswers
-from tests.test_manager_chat import MORNING, PROFILE, converse, setup, turn
+from tests.test_manager_chat import MORNING, PROFILE, converse, setup, translation, turn
 
 REQUEST = "תכניס אילוץ לדנה ב-2026-10-06"
 
@@ -75,3 +75,19 @@ def test_each_refusal_says_which_value_to_fix(row, named):
 def test_two_different_updates_for_one_slot_are_still_refused():
     with pytest.raises(RejectedPlan, match="אילוץ 2"):
         normalize_constraints([constraint(), constraint(available=True)], PROFILE, [])
+
+
+def test_a_cover_the_model_picked_is_left_to_the_solver_instead_of_asked_again():
+    picked = turn("changes")
+    picked["operations"] = [
+        dict(action="remove", employee="דנה", shift=MORNING, date="2026-10-05", reason="אילוץ"),
+        dict(action="assign", employee="יוסי", shift=MORNING, date="2026-10-05", reason="זמין"),
+    ]
+    picked["constraints"] = [constraint(date="2026-10-05")]
+    repo, llm, service, chat_id, schedule_id = setup([picked, translation()])
+    message = converse(service, repo, chat_id, schedule_id, "תכניס אילוץ לדנה ב-2026-10-05", "cover")
+    assert message["status"] == "pending", message["content"]
+    operations = message["payload"]["plan"]["operations"]
+    assert [(row["action"], row["employee"]) for row in operations] == [("remove", "דנה"), ("assign", "יוסי")]
+    assert "solver_note" in message["payload"]["plan"]
+    assert len(llm.calls) == 1
