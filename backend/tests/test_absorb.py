@@ -169,6 +169,21 @@ def test_a_save_refits_drafts_ahead_and_lists_published_weeks():
     assert "ז" in {row["employee"] for row in after["assignments"]}
 
 
+def test_a_new_shift_gets_its_row_on_an_empty_draft_without_a_build():
+    service, repo, launcher = _service()
+    blank = service.create_blank(TEAM, *WEEK)
+    service._absorber._today = lambda: "2026-11-03"
+    before = repo.team_profile(TEAM)
+    repo.profiles[TEAM] = _profile(shifts=(MORNING, EVENING, NIGHT))
+
+    result = service.absorb_profile_change(TEAM, before, repo.team_profile(TEAM))
+
+    assert result["schedules"] == [] and result["skipped"] == [] and launcher.jobs == []
+    nights = {row["slot_date"] for row in service.get(blank["id"], TEAM)["slots"]
+              if row["shift_name"] == NIGHT}
+    assert nights == {"2026-11-0%d" % day for day in range(3, 8)}
+
+
 def test_a_save_that_adds_nobody_touches_no_draft():
     service, repo, launcher = _service()
     _built_week(service)

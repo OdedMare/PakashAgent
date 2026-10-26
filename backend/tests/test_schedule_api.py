@@ -24,6 +24,7 @@ from app.api.dependencies import Guards
 from app.api.routers import schedules
 from app.bl.schedule_service import ScheduleService
 from app.common.errors import AgentError, AppError, NotFoundError, error_payload
+from app.common.time_context import israel_today
 from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 
 TEAM = "team-a"
@@ -1223,6 +1224,8 @@ def test_the_overview_returns_roster_vocabulary_and_period():
     assert [row["name"] for row in body["employees"]] == ["דנה", "יוסי"]
     assert [row["name"] for row in body["shifts"]] == [MORNING]
     assert body["schedule"]["assignments"]
+    # The replacement tab's dates default to it; dropping it left them blank.
+    assert body["today"] == israel_today().isoformat()
 
 
 def test_the_overview_carries_the_periods_numbers():

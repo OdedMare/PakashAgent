@@ -96,7 +96,8 @@ soldier takes shifts only from whoever is above their share, and a new shift
 is filled around the rows already there. A range job with `keep_existing`
 does this per span and first adds the shift's slots to the stored grid;
 `schedule_service/generation/absorb.py` opens one on every draft ahead of
-today when a profile save adds a person or a shift.
+today when a profile save adds a person or a shift. A draft with nothing on
+it is not solved, but a new shift still gets its empty rows there.
 
 **Interactive generation is a durable job.** `start_generation` stores the
 grid and the spans; the worker solves one span per job, checkpoints it, and

@@ -551,13 +551,15 @@ export function useManagement(): ManagementState {
     const saved = await run(() => updateProfile(input));
     const absorbed = saved?.absorbed;
     if (!absorbed) return saved !== null;
-    const onScreen = absorbed.schedules.find(
-      (row) => row.schedule_id === overview?.schedule?.id,
-    );
+    // The week on screen first: watching only today's period left a board
+    // paged to another week showing its old rows until a reload.
+    const onScreen = [focused, overview?.schedule?.id]
+      .map((id) => id && absorbed.schedules.find((row) => row.schedule_id === id))
+      .find(Boolean);
     if (onScreen) void resumeGeneration(onScreen.schedule_id);
     if (absorbed.skipped.length) setError(skippedMessage(absorbed.skipped));
     return true;
-  }, [run, overview?.schedule?.id, resumeGeneration]);
+  }, [run, focused, overview?.schedule?.id, resumeGeneration]);
 
   const deleteShift = useCallback(async (name: string) => {
     await run(() => deleteShiftType(name));

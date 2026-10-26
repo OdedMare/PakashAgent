@@ -6,8 +6,10 @@ job with `keep_existing` from today (or the draft's first day) to its end,
 so the newcomer takes shifts only from whoever carries more than their
 share, a new shift's slots are added and filled, and every other row stays
 where it was (`solver/stability.py`). A published week is never touched —
-it is listed as skipped so the manager can decide — and neither is a draft
-with nothing on it, which is not a board to absorb anything into.
+it is listed as skipped so the manager can decide. A draft with nothing on
+it is not solved, since there is no board to absorb into, but a new shift
+still gets its empty row there: the board draws rows from the stored grid,
+and a week being built by hand would otherwise never show the shift.
 """
 
 from typing import Iterable, List, Optional
@@ -41,7 +43,12 @@ class ChangeAbsorber:
             if iso(row.get("ends_on")) < today:
                 continue
             schedule = self._repository.get_schedule(row["id"], team_id)
-            self._refit(team_id, schedule, max(today, iso(schedule.get("starts_on"))), result)
+            first = max(today, iso(schedule.get("starts_on")))
+            if _empty_draft(schedule):
+                if added["shifts"]:
+                    self._ranges.extend_grid(team_id, schedule, first, iso(schedule.get("ends_on")))
+                continue
+            self._refit(team_id, schedule, first, result)
         return result
 
     def _refit(self, team_id: str, schedule: dict, first: str, result: dict) -> None:
@@ -60,6 +67,10 @@ class ChangeAbsorber:
             result["schedules"].append(span)
         elif reason:
             result["skipped"].append(dict(span, reason=reason))
+
+
+def _empty_draft(schedule: dict) -> bool:
+    return schedule.get("status") == "draft" and not schedule.get("assignments")
 
 
 def _refusal(schedule: dict) -> Optional[str]:

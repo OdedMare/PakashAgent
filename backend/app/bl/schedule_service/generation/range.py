@@ -49,7 +49,7 @@ class RangeBuilder:
         if schedule.get("status") != "draft":
             raise AgentError("יש להחזיר את הסידור לטיוטה לפני בניית ימים בו")
         if keep_existing:
-            schedule = self._extend_grid(team_id, schedule, iso(starts_on), iso(ends_on))
+            schedule = self.extend_grid(team_id, schedule, iso(starts_on), iso(ends_on))
         chosen = chosen_shifts(shifts, schedule.get("slots") or [])
         spans = self._spans(team_id, schedule, iso(starts_on), iso(ends_on), chosen)
         job = GenerationJob.open(
@@ -65,7 +65,7 @@ class RangeBuilder:
             team_id,
         )
 
-    def _extend_grid(self, team_id: str, schedule: dict, first: str, last: str) -> dict:
+    def extend_grid(self, team_id: str, schedule: dict, first: str, last: str) -> dict:
         """Add the slots the profile now has on these dates and the stored
         grid lacks — a shift added after the draft was opened. Existing slots
         and their rows are untouched."""

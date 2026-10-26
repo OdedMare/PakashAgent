@@ -597,10 +597,13 @@ export function ShiftForm({
   initial,
   onCancel,
   onSubmit,
+  children,
 }: {
   initial?: Record<string, unknown>;
   onCancel: () => void;
   onSubmit: (shift: Record<string, unknown>) => void;
+  /** Extra fields shown above the buttons, saved by the caller. */
+  children?: React.ReactNode;
 }) {
   const [name, setName] = useState(text(initial?.name));
   const [start, setStart] = useState(text(initial?.start_time));
@@ -638,6 +641,7 @@ export function ShiftForm({
       <label><span>ייעוד</span><input value={purpose} maxLength={120} onChange={(event) => setPurpose(event.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></label>
       <label><span>תקן בסיסי</span><input type="number" min={1} max={100} value={headcount} onChange={(event) => setHeadcount(Number(event.target.value) || 1)} /></label>
       <label className="profile-check"><input type="checkbox" checked={requiresManager} onChange={(event) => setRequiresManager(event.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
+      {children}
       <FormActions onCancel={onCancel} ready={Boolean(name.trim())} />
     </form>
   );

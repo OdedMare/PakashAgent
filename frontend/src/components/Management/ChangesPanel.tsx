@@ -49,8 +49,13 @@ export function ChangesPanel({
   // A new form after each save, so the next soldier starts from blank fields.
   const [formKey, setFormKey] = useState(0);
   const shiftNames = shifts.map((row) => nameOf(row)).filter(Boolean);
+  // Who may stand a new shift. Everyone by default: a roster that lists
+  // each soldier's shifts would otherwise leave the new one with nobody
+  // eligible, and the board would show it empty however it was built.
+  const [standers, setStanders] = useState<string[]>(activeEmployees);
 
   const choose = (next: Action) => {
+    if (next === "shift") setStanders(activeEmployees);
     setAction(next);
     setDone("");
     setError("");
@@ -69,7 +74,10 @@ export function ChangesPanel({
     }
     setError("");
     setDone("");
-    if (await onSaveProfile({ [section]: [...rows, added] })) {
+    const patch = section === "shifts"
+      ? { shifts: [...rows, added], employees: withStanders(employees, name, standers, shiftNames) }
+      : { [section]: [...rows, added] };
+    if (await onSaveProfile(patch)) {
       setDone(`${what} «${name}» נוסף/ה ומשולב/ת בסידורי הטיוטה מהיום והלאה, בלי להזיז את השיבוץ הקיים מעבר לנדרש.`);
       setFormKey((key) => key + 1);
     }
@@ -124,10 +132,56 @@ export function ChangesPanel({
           key={`shift-${formKey}`}
           onCancel={() => choose("replace")}
           onSubmit={(shift) => void save("shifts", shifts, shift, "המשמרת")}
-        />
+        >
+          {activeEmployees.length ? (
+            <fieldset className="profile-checkboxes">
+              <legend>מי יכול/ה לבצע את המשמרת</legend>
+              {activeEmployees.map((person) => (
+                <label key={person}>
+                  <input
+                    type="checkbox"
+                    checked={standers.includes(person)}
+                    onChange={(event) => setStanders(event.target.checked
+                      ? [...standers, person]
+                      : standers.filter((other) => other !== person))}
+                  />
+                  <span>{person}</span>
+                </label>
+              ))}
+            </fieldset>
+          ) : null}
+        </ShiftForm>
       ) : null}
     </section>
   );
+}
+
+/** The roster with `shift` added to what each chosen soldier may stand.
+ *
+ *  An empty `eligible_shifts` already means "every shift", so a chosen
+ *  soldier with one needs nothing, and an unchosen one is pinned to the
+ *  shifts they could stand before — otherwise "every shift" would now
+ *  include the new one too. */
+function withStanders(
+  employees: Record<string, unknown>[],
+  shift: string,
+  standers: string[],
+  previous: string[],
+): Record<string, unknown>[] {
+  const chosen = new Set(standers);
+  return employees.map((row) => {
+    const name = nameOf(row);
+    const listed = Array.isArray(row.eligible_shifts)
+      ? row.eligible_shifts.filter((value): value is string => typeof value === "string")
+      : [];
+    if (chosen.has(name)) {
+      return listed.length && !listed.includes(shift)
+        ? { ...row, eligible_shifts: [...listed, shift] }
+        : row;
+    }
+    if (row.inactive_from || listed.length) return row;
+    return { ...row, eligible_shifts: previous };
+  });
 }
 
 function nameOf(row: Record<string, unknown>): string {

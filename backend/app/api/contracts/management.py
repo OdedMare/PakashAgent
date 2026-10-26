@@ -159,6 +159,9 @@ class ManagementOverview(BaseModel):
     slightly slower one.
     """
 
+    # Israel's date, so the replacement tab and the roster filter agree with
+    # the server about which day "today" is.
+    today: str = ""
     profile: Optional[Dict[str, Any]] = None
     employees: List[Dict[str, Any]] = []
     shifts: List[Dict[str, Any]] = []
