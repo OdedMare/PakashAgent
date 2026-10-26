@@ -89,6 +89,8 @@ export function ShiftCard({
 }) {
   const alarming = blocked || warnings.some((row) => row.severity === "warning");
   const manual = assignment.source === "manager";
+  // An alarm still out-shouts everything, overlap included.
+  const overlap = person.is_overlap && !alarming;
 
   return (
     <div
@@ -97,6 +99,7 @@ export function ShiftCard({
         alarming ? "is-alarming" : "",
         blocked ? "is-blocked" : "",
         manual ? "is-manual" : "",
+        overlap ? "is-overlap" : "",
         status === "draft" ? "is-draft" : "is-published",
         touched ? `is-touched is-touched-${touched}` : "",
         dimmed ? "is-dragging" : "",
@@ -107,7 +110,9 @@ export function ShiftCard({
       // The hue is per-name and computed at render, so it cannot be a class.
       // A warning card gets none: the alarm styling in CSS has to out-shout
       // a decorative colour, and the cleanest way is for there to be none.
-      style={alarming ? undefined : colorStyle(hue, dark)}
+      // An overlap card gets none either: it wears one shared colour so a
+      // person being handed over to reads as such across the whole grid.
+      style={alarming || overlap ? undefined : colorStyle(hue, dark)}
       draggable={draggable}
       onDragStart={(event) => {
         // Some browsers refuse to start a drag without transfer data set.

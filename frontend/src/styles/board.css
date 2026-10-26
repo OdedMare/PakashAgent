@@ -918,6 +918,38 @@
    reading, and should not mistake the second for it. */
 .board-card-commander { font-weight: 650; }
 
+/* Overlap (נחפף/ת) gets its own colour and its own shape rather than a
+   per-name hue: one violet across the grid, a thick bar on the inline
+   start edge and diagonal stripes, so a manager sees at a glance who in a
+   cell is still being handed over to and probably not counted in staffing. */
+.board-card.is-overlap {
+  position: relative;
+  color: var(--hue-violet);
+  border: 2px solid var(--hue-violet);
+  border-inline-start-width: 6px;
+  border-radius: var(--radius-sm) 1rem 1rem var(--radius-sm);
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      transparent 0 6px,
+      color-mix(in srgb, var(--hue-violet) 12%, transparent) 6px 12px
+    ),
+    var(--hue-violet-soft);
+}
+
+.board-card.is-overlap .board-card-name {
+  font-weight: 750;
+}
+
+.board-card.is-overlap .board-card-overlap {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--hue-violet);
+  color: var(--hue-violet-soft);
+  font-weight: 700;
+  opacity: 1;
+}
+
 .board-card-overlap {
   font-weight: 500;
   opacity: 0.82;
