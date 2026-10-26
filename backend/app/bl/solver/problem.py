@@ -28,7 +28,7 @@ LOOKBACK_DAYS = 14
 class Problem:
     def __init__(self, profile: dict, slots: List[dict], availability=None,
                  history=None, required_assignments=None, already_scheduled=None,
-                 requests=None):
+                 requests=None, keep=None):
         self.profile = profile or {}
         self.slots = slots
         self.shifts = index_shifts(self.profile.get("shifts") or [])
@@ -36,6 +36,8 @@ class Problem:
         self.people = {text(person["name"]): person for person in self.employees}
         self.staff = [name for name, person in self.people.items()
                       if counts_toward_staffing(person, self.profile)]
+        # נחפפים: placed beside a trainer, never in a seat (`rules._shadows`).
+        self.shadows = [name for name in self.people if name not in self.staff]
         self.policy = policy(self.profile)
         self.requests = checked_requests(self.profile, requests)
         self.dates = sorted({slot["slot_date"] for slot in slots})
@@ -48,8 +50,9 @@ class Problem:
         self.times = [_slot_time(slot, self.shifts) for slot in slots]
         self.pins = self._pins(required_assignments)
         self.fixed = self._fixed(already_scheduled, history)
-        self.legal = {(name, index): True for name in self.staff
+        self.legal = {(name, index): True for name in self.people
                       for index in range(len(slots)) if self._legal(name, index)}
+        self.keep, self.kept_rows = self._keep(keep)
 
     # -- fixed rows ---------------------------------------------------------
 
@@ -67,7 +70,7 @@ class Problem:
     def _check_pin(self, row: dict) -> None:
         if row["employee"] not in self.people:
             raise AgentError("עובד/ת בשיבוץ החובה לא נמצא/ה בצוות")
-        if not eligible(self.people[row["employee"]], row["shift"]):
+        if not eligible(self.people[row["employee"]], row["shift"], self.shifts.get(row["shift"])):
             raise AgentError("%s אינו/ה כשיר/ה למשמרת %s" % (row["employee"], row["shift"]))
         if self._blocked(row["employee"], self.keys[(row["shift"], row["date"])]):
             raise AgentError("שיבוץ החובה של %s ב-%s סותר אילוץ קשיח, נוכחות קבוצה, סבב או תלתון"
@@ -87,6 +90,20 @@ class Problem:
         return [dict(row, past=row not in current, **_times(timed_row(row, self.shifts)))
                 for row in rows]
 
+    def _keep(self, keep) -> tuple:
+        """The board's rows inside the plan, as {(name, slot): reason}, and
+        how many there were. A row whose person, shift or legality is gone
+        is counted (it is one the rebuild had to move) but cannot be kept."""
+        pinned = {_key(row) for row in self.pins}
+        rows = [row for row in unique([row for row in map(assignment, keep or []) if row])
+                if (row["shift"], row["date"]) in self.keys and _key(row) not in pinned]
+        kept = {}
+        for row in rows:
+            index = self.keys[(row["shift"], row["date"])]
+            if (row["employee"], index) in self.legal:
+                kept[(row["employee"], index)] = row["reason"]
+        return kept, len(rows)
+
     def fixed_on(self, index: int) -> List[dict]:
         shift, date = self.slots[index]["shift_name"], self.slots[index]["slot_date"]
         return [row for row in self.fixed if row["shift"] == shift and row["date"] == date]
@@ -95,7 +112,7 @@ class Problem:
 
     def _legal(self, name: str, index: int) -> bool:
         slot = self.slots[index]
-        if not eligible(self.people[name], slot["shift_name"]):
+        if not eligible(self.people[name], slot["shift_name"], self.shifts.get(slot["shift_name"])):
             return False
         if any(row["employee"] == name for row in self.fixed_on(index)):
             return False
@@ -136,6 +153,17 @@ class Problem:
 
     def holders(self, index: int, test) -> List[str]:
         return [name for name in self.staff if (name, index) in self.legal and test(self.people[name])]
+
+    def trainers_of(self, name: str) -> List[str]:
+        """Who may stand beside this נחפף/ת: their own `trainers`, else
+        whoever can train, else (nobody can) any counted member."""
+        listed = self.people[name].get("trainers")
+        named = [text(item) for item in listed if text(item) in self.people] \
+            if isinstance(listed, list) else []
+        if named:
+            return [item for item in named if item in self.staff]
+        able = [item for item in self.staff if self.people[item].get("can_train")]
+        return able or list(self.staff)
 
 
 def checked_requests(profile: dict, requests: Optional[List[dict]]) -> List[dict]:

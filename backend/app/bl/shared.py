@@ -55,6 +55,31 @@ def shifts(profile: dict) -> list[dict]:
     return dict_items((profile or {}).get("shifts"))
 
 
+def person_roles(person: dict) -> set:
+    """Every role a person holds: the `roles` list plus the single `role`."""
+    listed = person.get("roles") if isinstance(person, dict) else None
+    result = {text(role) for role in listed if text(role)} if isinstance(listed, list) else set()
+    if isinstance(person, dict) and text(person.get("role")):
+        result.add(text(person.get("role")))
+    return result
+
+
+def allowed_roles(shift: Optional[dict]) -> list[str]:
+    """The roles qualified to stand a shift. Empty means every role."""
+    rows = (shift or {}).get("allowed_roles") if isinstance(shift, dict) else None
+    return [text(role) for role in rows if text(role)] if isinstance(rows, list) else []
+
+
+def role_qualified(person: dict, shift: Optional[dict]) -> bool:
+    """Whether the person's role lets them work this shift at all.
+
+    A shift naming no `allowed_roles` restricts nobody, the same way an
+    empty `eligible_shifts` does on the person's side.
+    """
+    allowed = allowed_roles(shift)
+    return not allowed or bool(person_roles(person) & set(allowed))
+
+
 def warning_key(warning: dict) -> tuple:
     return (
         text(warning.get("code")),

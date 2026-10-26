@@ -2,7 +2,7 @@
 
 from typing import Any, List, Optional
 
-from app.bl.shared import iso as date_of, text
+from app.bl.shared import iso as date_of, person_roles, role_qualified, text
 
 
 def assignment(raw: Any) -> Optional[dict]:
@@ -33,17 +33,16 @@ def same_slot(row: dict, slot: dict) -> bool:
     )
 
 
-def eligible(person: dict, shift: str) -> bool:
+def eligible(person: dict, shift: str, definition: Optional[dict] = None) -> bool:
+    """The person's own `eligible_shifts`, then the shift's `allowed_roles`."""
     allowed = person.get("eligible_shifts")
-    return not isinstance(allowed, list) or not allowed or shift in allowed
+    if isinstance(allowed, list) and allowed and shift not in allowed:
+        return False
+    return role_qualified(person, definition)
 
 
 def roles(person: dict) -> set:
-    listed = person.get("roles")
-    result = {text(role) for role in listed if text(role)} if isinstance(listed, list) else set()
-    if text(person.get("role")):
-        result.add(text(person.get("role")))
-    return result
+    return person_roles(person)
 
 
 def cycle_of(profile: dict, group: str) -> str:

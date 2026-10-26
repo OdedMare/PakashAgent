@@ -146,18 +146,26 @@ def closure_availability(
             if status is False:
                 result.append(_blocked_row(
                     bounded(person.get("name")), slot,
-                    "%s אינו נוכח במועד זה לפי הגדרות הסבבים והסגירה" % rotation_cycle.label(
-                        rotation_cycle.exit_pattern(profile, person), bounded(person.get("rotation_group")))
-                    if source == "rotation" else "הסגירה במועד זה שייכת ל%s" % rotation_cycle.label(
-                        rotation_cycle.exit_pattern(profile, person), rotation_cycle.closing_group(
-                            profile, datetime.date.fromisoformat(slot["slot_date"]) - datetime.timedelta(
-                                days=1 if datetime.date.fromisoformat(slot["slot_date"]).weekday() == 6 else 0),
-                            rotation_cycle.exit_pattern(profile, person))),
+                    _blocked_reason(profile, person, slot, source),
                     source=source,
                     rotation_group=bounded(person.get("rotation_group")),
                     derived_from="rotation_presence" if source == "rotation" else "closure_cycle",
                 ))
     return result
+
+
+def _blocked_reason(profile: dict, person: dict, slot: dict, source: str) -> str:
+    pattern = rotation_cycle.exit_pattern(profile, person)
+    group = bounded(person.get("rotation_group"))
+    if source == "rotation":
+        return "%s אינו נוכח במועד זה לפי הגדרות הסבבים והסגירה" % rotation_cycle.label(pattern, group)
+    if not group:
+        return "%s יוצא/ת הביתה בכל סופ״ש" % bounded(person.get("name"))
+    day = datetime.date.fromisoformat(slot["slot_date"])
+    # The Sunday handover belongs to the weekend that just ended.
+    saturday = day - datetime.timedelta(days=1 if day.weekday() == 6 else 0)
+    return "הסגירה במועד זה שייכת ל%s" % rotation_cycle.label(
+        pattern, rotation_cycle.closing_group(profile, saturday, pattern))
 
 
 def closures_for_model(profile: dict, start, end) -> List[dict]:
