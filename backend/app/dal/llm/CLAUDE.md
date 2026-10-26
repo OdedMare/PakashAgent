@@ -61,13 +61,15 @@ cost another flow its structured output. It only ever moves down, and lives
 per process: a restart, or a different endpoint or model in the settings,
 starts from the top again.
 
-**The clock is part of the prompt prefix.** `agent_time_context()` is
-appended to every system prompt at minute precision, and a caller making
-several calls for one request (the manager chat's rounds) passes
-`time_context=` to pin one clock for all of them. Inference servers (Ollama,
-llama.cpp, vLLM with prefix caching) reuse the computation for the part of a
-prompt that is identical to the previous one; a clock ticking every second
-made that part end right after the system prompt.
+**The clock closes the prompt.** `agent_time_context()` is appended to the
+end of the user turn at minute precision, and a caller making several calls
+for one request (the manager chat's rounds) passes `time_context=` to pin one
+clock for all of them. Inference servers (Ollama, llama.cpp, vLLM with prefix
+caching) and OpenAI's prompt caching reuse the computation for the part of a
+prompt that is identical to the previous one. A clock ticking every second
+made that part end right after the system prompt; one in the system prompt,
+even per minute, still cut every later turn's prefix there. At the end it
+costs only itself.
 
 **A context-overflow 400 does not advance it.** A prompt longer than the
 server's context window is also a `BadRequestError`, and no rung can shorten

@@ -619,6 +619,19 @@ def test_rounds_share_one_prompt_prefix_up_to_what_the_round_adds():
     assert first["time_context"] and second["time_context"] == first["time_context"]
 
 
+def test_turns_share_the_team_context_as_a_prompt_prefix():
+    # The conversation grows every turn; the profile and the schedule do not.
+    # They must come first, or each turn recomputes them on the server.
+    repo, llm, service, chat_id, schedule_id = setup([turn(), turn()])
+    converse(service, repo, chat_id, schedule_id, "מה יש?")
+    converse(service, repo, chat_id, schedule_id, "ומה עוד?", request_id="request-2")
+    first, second = llm.calls[0]["user"], llm.calls[1]["user"]
+    fixed = first.index('"conversation"')
+    assert first.index('"profile"') < first.index('"schedule"') < fixed
+    assert second[:fixed] == first[:fixed]
+    assert "clock" not in json.loads(first)
+
+
 def test_the_model_reads_recent_and_future_availability_without_storage_fields():
     repo, llm, service, chat_id, schedule_id = setup([turn()])
     repo.set_availability(TEAM, "יוסי", "2020-01-06", reason="ישן")

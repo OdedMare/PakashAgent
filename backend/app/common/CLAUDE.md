@@ -31,7 +31,8 @@ AiSummryIO.
   (`solver_time_limit_seconds`, `solver_workers`) and the database
   credentials — which is why it stays a file rather than a table.
 - `time_context.py` — Israel-local time, and the minute-precision clock line
-  appended to every system prompt.
+  that closes every prompt's user turn (after the context, so it does not cut
+  the server's prefix cache).
 - `activity.py` — the progress line a running job reports, without model
   code knowing about storage.
 

@@ -124,10 +124,13 @@ class OpenAIJsonClient:
         """
         started = time.monotonic()
         call = self._connect(flow, role or role_for_flow(flow), model)
+        # The clock closes the user turn rather than the system prompt: it
+        # changes every minute, and everything after it misses the server's
+        # prefix cache. Here only the tail does.
         messages = [
-            {"role": "system",
-             "content": system.rstrip() + "\n\n" + (time_context or agent_time_context())},
-            {"role": "user", "content": user},
+            {"role": "system", "content": system},
+            {"role": "user",
+             "content": user.rstrip() + "\n\n" + (time_context or agent_time_context())},
         ]
         stream = None
         if on_text is not None:

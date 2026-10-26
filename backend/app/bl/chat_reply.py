@@ -8,7 +8,7 @@ from app.bl.chat_draft import ReplyDraft
 from app.bl.chat_fast import ChatFastAnswers
 from app.bl.chat_contract import NeedsManager, RejectedPlan, normalize_day_turn, normalize_week_turn, plan_for_model
 from app.bl.chat_schema import CHAT_SCHEMA, suggestions
-from app.bl.chat_state import build_state
+from app.bl.chat_state import PAYLOAD_ORDER, build_state
 from app.bl.planner.shaping import question
 from app.bl.shared import add_usage, usage_of
 from app.common.errors import AgentError, AppError
@@ -25,8 +25,11 @@ def _json(value):
 
 def _model_input(payload, results, final):
     """Keep the stable context first so inference servers can reuse its prefix."""
-    tail = _json({"final_round": final, "results": results})
-    return _json(payload)[:-1] + ", " + tail[1:]
+    keys = [key for key in PAYLOAD_ORDER if key in payload]
+    keys += [key for key in payload if key not in PAYLOAD_ORDER]
+    fields = [(key, payload[key]) for key in keys]
+    fields += [("final_round", final), ("results", results)]
+    return "{" + ", ".join(_json(key) + ": " + _json(value) for key, value in fields) + "}"
 
 
 def _turn_usage(usage, rounds):

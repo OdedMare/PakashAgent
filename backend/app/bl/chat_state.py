@@ -2,7 +2,8 @@
 
 Split from `chat_reply.py`, which runs the rounds; this only gathers. The
 payload's order is load-bearing — the stable context comes first so inference
-servers can reuse its prefix across rounds (`chat_reply._model_input`).
+servers can reuse its prefix across rounds and across turns
+(`chat_reply._model_input`, in `PAYLOAD_ORDER`).
 """
 
 import datetime
@@ -16,6 +17,18 @@ from app.common.time_context import agent_time_context, israel_today
 _AVAILABILITY_LOOKBACK_DAYS = 7
 _HISTORY_ROWS = 12
 _ROW_NOISE = ("id", "team_id", "created_at")
+# Slowest-changing first. A server reuses a prompt's prefix only up to its
+# first changed byte, so the team's setup and the period lead, the
+# conversation (which only grows) follows, and this turn's own request ends
+# the turn's fixed part. Alphabetical order put the conversation ahead of the
+# profile and the schedule, and every new turn recomputed both. A key not
+# named here goes after these, in the order the payload holds it.
+PAYLOAD_ORDER = (
+    "profile_sections", "profile", "closures", "schedule", "preferences",
+    "availability", "history", "focused_schedule_id", "visible_week",
+    "focused_date", "conversation", "history_since_last_reply",
+    "current_request",
+)
 
 
 @dataclass
@@ -87,7 +100,7 @@ def build_state(repository, context_reader, tools, team_id, chat_id, message_id,
     ), "")
     history = repository.change_log(team_id, limit=_HISTORY_ROWS)
     payload = {
-        "clock": clock, "profile": profile, "profile_sections": PROFILE_SECTIONS,
+        "profile": profile, "profile_sections": PROFILE_SECTIONS,
         "focused_schedule_id": schedule_id,
         "visible_week": context.get("visible_week") or "",
         "focused_date": context.get("focus_date") or "",

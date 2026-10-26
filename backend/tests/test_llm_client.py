@@ -125,9 +125,11 @@ def test_backend_time_context_is_injected_into_every_model_request(monkeypatch):
 
     llm.complete_json("original system prompt", "usr")
 
-    system = fake.completions.calls[0]["messages"][0]
-    assert system["role"] == "system"
-    assert system["content"] == "original system prompt\n\nCURRENT ISRAEL CLOCK"
+    system, user = fake.completions.calls[0]["messages"]
+    # The clock ends the prompt, so a minute ticking past leaves the system
+    # prompt and the user's context a reusable prefix.
+    assert system == {"role": "system", "content": "original system prompt"}
+    assert user == {"role": "user", "content": "usr\n\nCURRENT ISRAEL CLOCK"}
 
 
 def test_ladder_steps_down_through_every_rung_on_bad_request():
@@ -185,8 +187,8 @@ def test_a_caller_can_pin_the_clock_for_a_series_of_calls():
     llm.complete_json("sys", "usr", time_context="PINNED CLOCK")
     llm.complete_json("sys", "usr", time_context="PINNED CLOCK")
 
-    systems = [call["messages"][0]["content"] for call in fake.completions.calls]
-    assert systems == ["sys\n\nPINNED CLOCK"] * 2
+    users = [call["messages"][1]["content"] for call in fake.completions.calls]
+    assert users == ["usr\n\nPINNED CLOCK"] * 2
 
 
 def test_a_non_bad_request_error_does_not_advance_the_ladder():
