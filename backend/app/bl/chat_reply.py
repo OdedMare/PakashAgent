@@ -166,7 +166,10 @@ class ManagerChatReply:
                 state.results.extend(exc.results)
             except RejectedPlan as exc:
                 if final or state.repairs >= _REPAIRS:
-                    raise
+                    raise AgentError(
+                        "לא הצלחתי להכין תוכנית תקינה: %s. לא בוצע שינוי בסידור; "
+                        "אפשר לנסח את הבקשה מחדש או לפצל אותה" % str(exc).rstrip(".")
+                    ) from exc
                 state.repairs += 1
                 state.results.append({"tool": "plan_check", "ok": False, "error": str(exc)})
                 state.steps.append({"tool": "plan_check", "ok": False})

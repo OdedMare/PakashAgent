@@ -11,45 +11,100 @@ from app.bl.simulate.hypothetical import schedule_rows
 from app.bl.tools.values import iso
 
 
+# Words a model writes for "the whole day"; setup and the audit spell it "".
+_WHOLE_DAY = frozenset({"כל היום", "יום שלם", "כל המשמרות", "הכל", "all", "all day", "*"})
+
+
 def normalize_constraints(offered, profile, saved):
+    """Validated constraint edits. A refusal names the row and the value, so
+    the model can repair the one row instead of resending the same plan."""
     if not isinstance(offered, list) or len(offered) > 126:
         raise RejectedPlan("אפשר לעדכן עד 126 אילוצים בתוכנית אחת")
-    names = {row["name"] for row in profile.get("employees") or []}
-    shifts = {row["name"] for row in profile.get("shifts") or []} | {""}
+    names = [row["name"] for row in profile.get("employees") or []]
+    shifts = [row["name"] for row in profile.get("shifts") or []]
     by_id = {row["id"]: row for row in saved}
-    result, seen = [], set()
-    for row in offered:
+    result, seen = [], {}
+    for number, row in enumerate(offered, 1):
         if not isinstance(row, dict) or row.get("action", "set") not in ("set", "remove"):
-            raise RejectedPlan("פעולת האילוץ אינה תקינה")
+            raise RejectedPlan("אילוץ %d: הפעולה חייבת להיות set או remove" % number)
         if row.get("action") == "remove":
-            before = by_id.get(row.get("id"))
-            if not before:
-                raise RejectedPlan("האילוץ להסרה לא נמצא בצוות. קראו constraints_report והשתמשו במזהה שנשמר")
-            item = dict(action="remove", id=before["id"], employee=before["employee"],
-                        date=iso(before["constraint_date"]), shift=before.get("shift_name") or "",
-                        available=bool(before.get("available")), is_hard=before.get("is_hard", True),
-                        start_time=before.get("start_time") or "", end_time=before.get("end_time") or "",
-                        reason=before.get("reason") or "")
+            item = _removal(number, row, by_id)
         else:
-            if row.get("employee") not in names or row.get("shift", "") not in shifts:
-                raise RejectedPlan("האילוץ חייב להתייחס לעובד ולמשמרת מוכרים")
-            try:
-                date = datetime.date.fromisoformat(row.get("date") or "").isoformat()
-                times = {key: datetime.time.fromisoformat(row[key]).strftime("%H:%M") if row.get(key) else ""
-                         for key in ("start_time", "end_time")}
-            except (ValueError, TypeError):
-                raise RejectedPlan("תאריך או שעת האילוץ אינם תקינים")
-            if any(key in row and not isinstance(row[key], bool) for key in ("available", "is_hard")):
-                raise RejectedPlan("זמינות ועדיפות האילוץ חייבות להיות ערכים בוליאניים")
-            item = dict(action="set", employee=row["employee"], date=date, shift=row.get("shift") or "",
-                        available=row.get("available", False), is_hard=row.get("is_hard", True),
-                        reason=row.get("reason") or "", **times)
+            item = _setting(number, row, names, shifts)
         key = (item["employee"], item["date"], item["shift"])
         if key in seen:
-            raise RejectedPlan("התוכנית מכילה יותר מעדכון אחד לאותו אילוץ")
-        seen.add(key)
+            if seen[key] == item:
+                continue
+            raise RejectedPlan(
+                "אילוץ %d: כבר יש בתוכנית עדכון אחר ל-%s בתאריך %s%s. יש להשאיר עדכון אחד"
+                % (number, item["employee"], item["date"],
+                   " במשמרת " + item["shift"] if item["shift"] else " (כל היום)")
+            )
+        seen[key] = item
         result.append(item)
     return result
+
+
+def _removal(number, row, by_id):
+    before = by_id.get(row.get("id"))
+    if not before:
+        raise RejectedPlan(
+            "אילוץ %d: האילוץ להסרה (מזהה \"%s\") לא נמצא בצוות. קראו constraints_report "
+            "והשתמשו במזהה שנשמר" % (number, row.get("id") or "")
+        )
+    return dict(action="remove", id=before["id"], employee=before["employee"],
+                date=iso(before["constraint_date"]), shift=before.get("shift_name") or "",
+                available=bool(before.get("available")), is_hard=before.get("is_hard", True),
+                start_time=before.get("start_time") or "", end_time=before.get("end_time") or "",
+                reason=before.get("reason") or "")
+
+
+def _setting(number, row, names, shifts):
+    employee = (row.get("employee") or "").strip()
+    if employee not in names:
+        raise RejectedPlan(
+            "אילוץ %d: העובד \"%s\" לא נמצא בצוות. יש להשתמש בשם המדויק מתוך: %s"
+            % (number, employee, ", ".join(names))
+        )
+    shift = (row.get("shift") or "").strip()
+    shift = "" if shift.lower() in _WHOLE_DAY else shift
+    if shift not in shifts and shift:
+        raise RejectedPlan(
+            "אילוץ %d: המשמרת \"%s\" לא מוכרת. יש להשתמש בשם מדויק מתוך: %s, "
+            "או במחרוזת ריקה לכל היום" % (number, shift, ", ".join(shifts))
+        )
+    try:
+        date = datetime.date.fromisoformat((row.get("date") or "").strip()).isoformat()
+    except (ValueError, TypeError):
+        raise RejectedPlan(
+            "אילוץ %d: התאריך \"%s\" אינו תקין. יש לכתוב תאריך מלא בפורמט YYYY-MM-DD"
+            % (number, row.get("date") or "")
+        )
+    times = {key: _clock(number, row.get(key)) for key in ("start_time", "end_time")}
+    if any(key in row and not isinstance(row[key], bool) for key in ("available", "is_hard")):
+        raise RejectedPlan(
+            "אילוץ %d: available ו-is_hard חייבים להיות true או false" % number
+        )
+    return dict(action="set", employee=employee, date=date, shift=shift,
+                available=row.get("available", False), is_hard=row.get("is_hard", True),
+                reason=row.get("reason") or "", **times)
+
+
+def _clock(number, value):
+    """"8", "8:00" and "08:00:00" are the same hour; anything else is refused."""
+    if not value:
+        return ""
+    text = str(value).strip()
+    if text.isdigit() and len(text) <= 2:
+        text += ":00"
+    try:
+        hours, minutes = text.split(":")[:2]
+        return datetime.time(int(hours), int(minutes)).strftime("%H:%M")
+    except (ValueError, TypeError):
+        raise RejectedPlan(
+            "אילוץ %d: השעה \"%s\" אינה תקינה. יש לכתוב HH:MM, או להשאיר ריק ליום שלם"
+            % (number, value)
+        )
 
 
 def edited_availability(saved, offered):

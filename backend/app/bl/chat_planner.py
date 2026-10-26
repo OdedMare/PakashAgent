@@ -1,6 +1,8 @@
 """Build and validate manager-chat plans without writing them."""
 
 from app.bl.changes.proposal import build_proposal
+from app.bl.changes.questions import report_dropped
+from app.bl.changes.targets import bound_operations
 from app.bl.chat_constraints import affected_periods, constraint_impact, normalize_constraints
 from app.bl.chat_contract import (
     NeedsManager, RejectedPlan, add_coverage, audit_plan, changed_rows,
@@ -100,9 +102,10 @@ class ChatPlanBuilder:
         )
         if mismatched:
             raise RejectedPlan(
-                "סוג התשובה אינו תואם לפעולות. הוראת שיבוץ דורשת kind=changes; "
-                "התייעצות דורשת kind=answer בלי פעולות; עריכת צוות דורשת "
-                "kind=profile ו-profile_patch_json"
+                "סוג התשובה אינו תואם לפעולות. הוראת שיבוץ ואילוץ לתאריך דורשים "
+                "kind=changes עם operations/constraints; אילוץ קבוע (למשל כל יום "
+                "שלישי) דורש kind=profile ו-recurring_constraints בתוך "
+                "profile_patch_json בלי constraints; התייעצות דורשת kind=answer בלי פעולות"
             )
 
     def _schedule_id(self, team_id, kind, turn, focused_id):
@@ -194,7 +197,11 @@ class ChatPlanBuilder:
         if proposal["needs_input"] or proposal["needs_reason"]:
             raise NeedsManager(proposal["reply"] or "נדרשים פרטים נוספים לפני שינוי")
         if len(proposal["operations"]) != len(turn.get("operations") or []):
-            raise RejectedPlan("חלק מהשינויים לא תואמים לסידור. יש לבקש תוכנית מעודכנת")
+            _, dropped = bound_operations(turn.get("operations"), schedule)
+            raise RejectedPlan(
+                (report_dropped(dropped) if dropped else "חלק מהשינויים לא תואמים לסידור")
+                + " יש לתקן או להסיר את הפעולה הזו ולהחזיר את שאר התוכנית"
+            )
         plan["operations"] = proposal["operations"]
         plan["constraints"] = normalize_constraints(
             turn.get("constraints") or [], profile, state["availability"],
