@@ -221,13 +221,8 @@ PostgreSQL הוא המצב המשותף היחיד (D35):
 
 ---
 
-## 9. Copilot: תיבת "הסוכן שם לב" ⚙️
-1. ה-worker, בכל `PAKASH_COPILOT_SCAN_SECONDS` (ברירת מחדל 30 דקות), מכניס job מסוג `scan` **לכל צוות**.
-2. `CopilotService.scan()` מוצא פערים בפרופיל, פרופיל שלא עודכן 90 יום, ואזהרות בסידור הנוכחי. אין LLM.
-3. נוצרים פריטים בתיבה עם fingerprint נגד כפילויות. `CopilotInbox.tsx` מציג אותם.
-4. אישור, ביטול ושחזור (`/api/copilot/items/{id}/approve|dismiss|rollback`) **משנים רק סטטוס**. אין להם שום תופעת לוואי על הסידור (`check: "no_side_effect"`). `POST /api/copilot/run` מריץ סריקה ידנית, ו-`PATCH /permissions/{type}` קובע אם סוג פריט הוא תצפית או הצעה.
-
-> **מועמד לפישוט:** מנגנון ההרשאות, האישור וה-rollback לא מבצע כלום בפועל. אפשר לצמצם לתצפיות שנסגרות, או לחבר את "אשר" לפתיחת צ'אט עם ה-suggestion.
+## 9. Copilot — הוסר
+התיבה "הסוכן שם לב", הסריקות, ההרשאות וה-audit הוסרו. אישור ו-rollback לא ביצעו כלום, ומה שהן מצאו כבר מופיע בלוח ובצ'אט. התור (`copilot_jobs`) נשאר: הוא מריץ בניות, תורות צ'אט ותרגומים. job מסוג `scan` שנשאר בבסיס נתונים קיים מסתיים בלי לעשות כלום.
 
 ---
 
@@ -306,7 +301,6 @@ PostgreSQL הוא המצב המשותף היחיד (D35):
 Briefing, Ask, Simulate ו-Tool כבר הוסרו, וגם `Scheduler.generate()` הישן ו-`ChunkedRun`. הפירוט המלא, כולל מה חייב להישאר ואילו טסטים מושפעים, נמצא בסעיף 14.
 
 ### לבדוק או לפשט
-- **Copilot:** אישור ו-rollback בלי תופעת לוואי. לפשט, או לחבר לצ'אט.
 - **ה-worker:** כבר מפוצל ל-lanes ול-job לכל span, ו-SSE ו-throttle משותפים דרך Postgres. ההגדרות עדיין בקובץ, ותהליך שלא חולק את ה-volume לא יראה שמירה מהפאנל.
 
 ---
@@ -330,9 +324,8 @@ Briefing, Ask, Simulate ו-Tool כבר הוסרו, וגם `Scheduler.generate()`
 |---|---|---|---|
 | **Propose / apply** (`/schedule/propose`, `/schedule/apply`) | שני ה-routes, `proposeChange`, `applyChange`, `ChangeService.propose`, `prompts/changes.md` והמחלקה `ChangeAgent` | `changes/proposal.py`, `schema.py`, `values.py`, `targets.py`, `questions.py`, `profile_ops.py` והקבועים `OP_*` (הצ'אט, ההחלפות, `simulate`). `chat_reply.py` מייבא את `_closures_for_model` ו-`_schedule_for_model` מ-`changes/agent.py`, אז קודם מעבירים אותן ל-`changes/values.py`, ורק אחר כך מוחקים את `agent.py`. `ChangeService.apply` נשאר, כי אישור החלפה משתמש בו | `test_change_operations.py`, `test_clarification.py`, ומבחני ה-change agent ב-`test_scheduler.py` (החלק "the change agent") |
 | **Reads לא בשימוש** (`/constraints/list`, `/history/list`, `/current`, `/requests`, `/identities`, `/swaps`, `/employee/swaps/incoming`) | רק ה-routes | מתודות ה-repository, אם routes אחרים קוראים להן | לבדוק את `test_schedule_api.py`, `test_employee_api.py` ו-`test_swap_api.py` |
-| **Copilot** (אם מצמצמים לתצפיות) | `approve`, `rollback`, `PATCH /permissions/{type}` ו-`CopilotPermissionUpdate` | `scan`, הפריטים בתיבה ו-`dismiss` | `test_copilot.py` |
 
 ### סדר מומלץ
 Briefing, Ask, Simulate / tool ו-`Scheduler.generate` כבר הוסרו. נשאר:
 1. **Propose:** קודם מעבירים את `_closures_for_model` ו-`_schedule_for_model` מ-`changes/agent.py` ל-`changes/values.py`, ואז מוחקים. מבחני שערי הסיבה (`test_clarification.py`, `test_scheduler.py`) עוברים לבדוק את `changes/proposal.py` ישירות.
-2. **Reads לא בשימוש** ו-**Copilot**, לפי הצורך.
+2. **Reads לא בשימוש**, לפי הצורך.

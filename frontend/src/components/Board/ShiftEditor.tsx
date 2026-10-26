@@ -9,6 +9,15 @@ import type { Assignment, PlacementCheck, Schedule, Slot } from "@/types";
 
 import { PlacementVerdict } from "./ConfirmDrop";
 
+const EXIT_PATTERN_FILTERS = [
+  ["all", "הכול"],
+  ["round", "סבב"],
+  ["triplet", "תלתון"],
+  ["hamshushim", "חמשוש"],
+  ["shushim", "שוש"],
+] as const;
+type ExitPatternFilter = (typeof EXIT_PATTERN_FILTERS)[number][0];
+
 /** What the editor was opened on.
  *
  *  Creating and editing are one panel because they are one question — "who
@@ -103,6 +112,7 @@ export function ShiftEditor({
   );
   const [reason, setReason] = useState("");
   const [duplicateDate, setDuplicateDate] = useState("");
+  const [exitPatternFilter, setExitPatternFilter] = useState<ExitPatternFilter>("all");
 
   // The vocabulary and the dates come from the stored grid, never from a
   // literal: shift names are the workplace's own (D9) and the dates are the
@@ -156,6 +166,9 @@ export function ShiftEditor({
 
   const active = !inactiveFrom[employee] || slotDate < inactiveFrom[employee];
   const canSave = Boolean(employee && shiftName && slotDate && slot && !busy && active);
+  const visibleCandidates = check?.candidates.filter((candidate) =>
+    exitPatternFilter === "all" || candidate.exit_pattern === exitPatternFilter
+  ) ?? [];
 
   const save = () => {
     if (!canSave) return;
@@ -281,25 +294,41 @@ export function ShiftEditor({
                 <strong>מי פנוי למשמרת</strong>
                 <span>{check.candidates.filter((candidate) => candidate.available).length} מתוך {check.candidates.length} ללא התראה</span>
               </div>
+              <div className="board-candidate-filters" aria-label="סינון לפי מבנה יציאות">
+                {EXIT_PATTERN_FILTERS.map(([value, label]) => (
+                  <button
+                    type="button"
+                    key={value}
+                    className={exitPatternFilter === value ? "is-active" : undefined}
+                    aria-pressed={exitPatternFilter === value}
+                    onClick={() => setExitPatternFilter(value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div className="board-candidate-list">
-                {check.candidates.map((candidate) => (
+                {visibleCandidates.map((candidate) => (
                   <button
                     type="button"
                     key={candidate.employee}
-                    className={`board-candidate${candidate.employee === employee ? " is-selected" : ""}${candidate.available ? " is-available" : " is-unavailable"}`}
+                    className={`board-candidate${candidate.employee === employee ? " is-selected" : ""}${candidate.available ? " is-available" : " is-unavailable"}${candidate.is_overlap ? " is-overlap" : ""}`}
                     onClick={() => setEmployee(candidate.employee)}
                     aria-pressed={candidate.employee === employee}
+                    aria-label={candidateDetail(candidate)}
+                    data-tooltip={candidateDetail(candidate)}
                   >
                     {candidate.available ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
                     <span className="board-candidate-copy">
                       <strong>{candidate.employee}</strong>
-                      <small>{candidate.available ? `פנוי/ה · ${formatHours(candidate.hours)} בתקופה` : candidate.reasons.join(" ")}</small>
                     </span>
                     {candidate.closing ? <span className="board-candidate-badge is-closing"><Repeat2 size={12} /> {candidate.rotation || "בסגירה"}</span> : null}
                     {candidate.is_shift_manager ? <span className="board-candidate-badge"><ShieldCheck size={12} /> מפקד/ת</span> : null}
-                    {candidate.can_train ? <span className="board-candidate-badge"><GraduationCap size={12} /> חופף/ת</span> : null}
+                    {candidate.can_train ? <span className="board-candidate-badge"><GraduationCap size={12} /> מוסמך/ת לחפוף</span> : null}
+                    {candidate.is_overlap ? <span className="board-candidate-badge is-overlap"><AlertTriangle size={12} /> נחפף/ת</span> : null}
                   </button>
                 ))}
+                {visibleCandidates.length ? null : <span className="board-candidate-empty">אין חיילים בסינון הזה</span>}
               </div>
               <small className="board-availability-note">אפשר לבחור גם חייל/ת עם התראה; הסיבה נשארת גלויה וההחלטה בידיך.</small>
             </div>
@@ -447,4 +476,13 @@ function candidateOption(name: string, role: string, check: PlacementCheck | nul
 
 function formatHours(hours: number): string {
   return `${Number.isInteger(hours) ? hours : hours.toFixed(1)} שעות`;
+}
+
+function candidateDetail(candidate: PlacementCheck["candidates"][number]): string {
+  const status = candidate.available
+    ? `פנוי/ה · ${formatHours(candidate.hours)} בתקופה`
+    : candidate.reasons.join(" ");
+  return [candidate.employee, status, candidate.rotation, candidate.is_overlap ? "נחפף/ת — לרוב לא נספר/ת בתקן" : ""]
+    .filter(Boolean)
+    .join(" · ");
 }

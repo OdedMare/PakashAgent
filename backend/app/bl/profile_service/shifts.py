@@ -2,7 +2,7 @@
 
 from typing import Any, List
 
-from app.bl.profile_service.validation import named_rows, text, valid_time
+from app.bl.profile_service.validation import named_rows, text, text_list, valid_time
 from app.common.errors import AgentError
 
 _SHIFT_TYPES = ("regular", "overlap", "on_call")
@@ -29,6 +29,8 @@ def _shift(row: dict) -> dict:
         "purpose": text(row.get("purpose")),
         "is_on_call": shift_type == "on_call",
         "requires_shift_manager": bool(row.get("requires_shift_manager")),
+        # The roles qualified to stand this shift; empty restricts nobody.
+        "allowed_roles": list(dict.fromkeys(text_list(row.get("allowed_roles") or []))),
     })
     return row
 

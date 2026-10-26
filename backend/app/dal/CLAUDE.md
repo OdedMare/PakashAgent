@@ -90,8 +90,7 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | `swap_requests` | An employee's proposed swap, the colleague's answer, and the manager's ruling |
 | `agent_preferences` | What the agent remembers (D21): `suggested`, `active` or `archived`, all visible and editable |
 | `manager_chats`, `manager_chat_messages` | One manager's conversations and their turns, with the plan a turn prepared and the receipt of its approval |
-| `copilot_jobs` | The durable job queue: chat turns, generation spans, scans, `compile_sources` — claimed once, retried with backoff |
-| `copilot_items`, `copilot_permissions`, `copilot_audit` | The copilot inbox, per-action permissions, and its append-only audit trail (D23) |
+| `copilot_jobs` | The durable job queue: chat turns, generation spans, `compile_sources` (named for the copilot that is gone) — claimed once, retried with backoff |
 | `login_attempts` | Wrong guesses and lockouts per account (D35). The one table without `team_id`: the account key already names the team, and the operator and settings accounts belong to none |
 
 The workplace profile — the mission, the **shift vocabulary** (names, times,

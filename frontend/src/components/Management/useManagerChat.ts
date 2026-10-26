@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { applyManagerPlan, createManagerChat, deleteManagerChat, dismissManagerPlan,
-  listManagerChats, readManagerChat, sendManagerMessage, stopManagerReply } from "@/services/api";
+import { applyManagerPlan, createManagerChat, deleteManagerChat, dismissManagerPlan, listManagerChats,
+  managerEvents, readManagerChat, regenerateManagerReply, sendManagerMessage, stopManagerReply } from "@/services/api";
 import type { ChatPlan, ManagerChatSummary, ManagerConversation } from "@/types";
 
 // `crypto.randomUUID` exists only in secure contexts (HTTPS/localhost), so a
@@ -12,6 +12,11 @@ function requestId() {
   if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
 }
+
+// Code-answered turns arrive finished in the send response and never poll;
+// what remains is model work, which starts within a moment.
+const FIRST_POLL_MS = 400;
+const FALLBACK_POLL_MS = 1000;
 
 // A poll reads only the running message onward: nothing before it can change
 // while it runs, and re-reading every earlier plan grows with the thread.
@@ -50,26 +55,36 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
   useEffect(() => {
     if (!chatId || !workingId) return;
     let cancelled = false;
+    let reading = false;
+    let again = false;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
+      // A signal landing mid-read asks for one more read after it, never a
+      // second read alongside it.
+      if (reading) { again = true; return; }
+      reading = true; clearTimeout(timer);
+      let finished = false;
       try {
         const next = await readManagerChat(chatId, workingId);
         if (cancelled) return;
         setChat((previous) => withTail(previous, next, workingId));
         setError(null);
-        if (!next.messages.some((message) => message.status === "working")) {
-          setChats(await listManagerChats());
-          return;
-        }
+        finished = !next.messages.some((message) => message.status === "working");
+        if (finished) setChats(await listManagerChats());
       } catch (reason) {
         if (!cancelled) setError(reason instanceof Error ? reason.message : "החיבור נותק; מנסה שוב…");
-      }
-      if (!cancelled) timer = setTimeout(() => void poll(), 1200);
+      } finally { reading = false; }
+      if (cancelled || finished) return;
+      if (again) { again = false; void poll(); return; }
+      timer = setTimeout(() => void poll(), FALLBACK_POLL_MS);
     };
-    // Code-answered turns arrive finished in the send response and never
-    // poll; what remains is model work, so the first look can come sooner.
-    timer = setTimeout(() => void poll(), 700);
-    return () => { cancelled = true; clearTimeout(timer); };
+    // The server signals every check, every few words of the reply and the
+    // end of the turn; each signal re-reads at once. The timer underneath
+    // covers a stream a proxy buffers or drops.
+    const source = typeof EventSource === "undefined" ? null : managerEvents();
+    source?.addEventListener("chat", () => void poll());
+    timer = setTimeout(() => void poll(), FIRST_POLL_MS);
+    return () => { cancelled = true; clearTimeout(timer); source?.close(); };
   }, [chatId, workingId]);
 
   const run = useCallback(async (action: () => Promise<ManagerConversation>) => {
@@ -103,28 +118,40 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
     }
   }, [onApplied]);
 
-  const send = useCallback(async (content: string) => {
+  // The manager's message, shown the moment it is sent rather than when the
+  // server answers; cleared once the thread itself carries it.
+  const [outgoing, setOutgoing] = useState<{ content: string; requestId: string } | null>(null);
+  const send = useCallback(async (content: string, replaces?: string) => {
     if (!chatId || working || !content.trim()) return false;
-    // An id survives a lost response, so re-fetching recovers the accepted turn.
-    return run(async () => {
-      const id = requestId();
-      const latest = chat?.messages[chat.messages.length - 1];
-      let next: ManagerConversation;
-      try {
-        next = await sendManagerMessage(chatId, { content: content.trim(), request_id: id,
-          schedule_id: scheduleId || undefined, visible_week: visibleWeek, focus_date: focusDate || undefined,
-          displayed_plan_id: latest?.status === "pending" ? latest.id : undefined });
-      } catch (reason) {
-        const recovered = await readManagerChat(chatId).catch(() => null);
-        if (recovered?.messages.some((message) => message.status === "working" || message.request_id === id)) next = recovered;
-        else throw reason;
-      }
-      if (mounted.current) setChat(next);
-      if (latest?.status === "pending" && next.messages.find((message) => message.id === latest.id)?.status === "applied")
-        await syncBoard(latest.payload.plan!);
-      return next;
-    });
+    // An id survives a lost response, so re-fetching recovers the accepted
+    // turn; it also tells the screen when the thread itself carries the message.
+    const id = requestId();
+    setOutgoing({ content: content.trim(), requestId: id });
+    try {
+      return await run(async () => {
+        const latest = chat?.messages[chat.messages.length - 1];
+        let next: ManagerConversation;
+        try {
+          next = await sendManagerMessage(chatId, { content: content.trim(), request_id: id,
+            schedule_id: scheduleId || undefined, visible_week: visibleWeek, focus_date: focusDate || undefined,
+            displayed_plan_id: !replaces && latest?.status === "pending" ? latest.id : undefined,
+            replaces_message_id: replaces });
+        } catch (reason) {
+          const recovered = await readManagerChat(chatId).catch(() => null);
+          if (recovered?.messages.some((message) => message.status === "working" || message.request_id === id)) next = recovered;
+          else throw reason;
+        }
+        if (mounted.current) setChat(next);
+        if (latest?.status === "pending" && next.messages.find((message) => message.id === latest.id)?.status === "applied")
+          await syncBoard(latest.payload.plan!);
+        return next;
+      });
+    } finally { if (mounted.current) setOutgoing(null); }
   }, [chat, chatId, working, scheduleId, visibleWeek, focusDate, run, syncBoard]);
+
+  const regenerate = useCallback(() => chatId && !working ? run(() => regenerateManagerReply(chatId, {
+    request_id: requestId(), schedule_id: scheduleId || undefined, visible_week: visibleWeek, focus_date: focusDate || undefined,
+  })) : Promise.resolve(false), [chatId, working, scheduleId, visibleWeek, focusDate, run]);
 
   const apply = useCallback(async (messageId: string, exceptions: boolean) => {
     if (!chatId || working) return;
@@ -152,7 +179,7 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
   }, [chatId, working, run, syncBoard]);
 
   return {
-    chat, chats, busy, working, loading, error, send, apply, refreshPending,
+    chat, chats, busy, working, loading, error, send, apply, refreshPending, outgoing, regenerate,
     retryRefresh: () => chat && refreshPending ? run(async () => {
       await syncBoard(refreshPending);
       return chat;

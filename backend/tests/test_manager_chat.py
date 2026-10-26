@@ -48,12 +48,19 @@ class ChatRepo(_FakeScheduleRepo):
         return [dict(id=row["id"], title=row["title"]) for row in self.chats.values()
                 if (row["team_id"], row["manager_id"]) == (team_id, manager_id)]
 
-    def start_chat_turn(self, team_id, manager_id, chat_id, content, request_id, payload):
+    def start_chat_turn(self, team_id, manager_id, chat_id, content, request_id, payload,
+                        replace_from=None):
         chat = self.get_chat(team_id, manager_id, chat_id)
         if any(row.get("request_id") == request_id for row in chat["messages"]):
             return None
         if any(row["status"] == "working" for row in chat["messages"]):
             raise ConflictError("עדיין עובד")
+        if replace_from:
+            rows = self.chats[chat_id]["messages"]
+            index = next(i for i, row in enumerate(rows) if row["id"] == replace_from)
+            if any(row["status"] == "applied" or row["payload"].get("receipt") for row in rows[index:]):
+                raise ConflictError("כבר אושר")
+            del rows[index:]
         for row in self.chats[chat_id]["messages"]:
             if row["status"] == "pending":
                 row["status"] = "superseded"
@@ -68,6 +75,12 @@ class ChatRepo(_FakeScheduleRepo):
         for row in self.chats[chat_id]["messages"]:
             if row["id"] == message_id and row["status"] == "working":
                 row.update(content=content, status=status, payload=payload)
+
+    def chat_turn_draft(self, chat_id, message_id, draft):
+        self.drafts = getattr(self, "drafts", []) + [draft]
+        for row in self.chats[chat_id]["messages"]:
+            if row["id"] == message_id and row["status"] == "working":
+                row["payload"] = dict(row["payload"], draft=draft)
 
     def chat_turn_progress(self, chat_id, message_id, payload):
         self.progress.append(copy.deepcopy(payload))

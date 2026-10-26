@@ -54,6 +54,7 @@ export function ShiftCard({
   onDragStart,
   onDragEnd,
   onPick,
+  onRemove,
   onOpen,
 }: {
   assignment: Assignment;
@@ -85,6 +86,8 @@ export function ShiftCard({
   onDragEnd: () => void;
   /** Start a move without a mouse. Absent on a read-only board. */
   onPick?: () => void;
+  /** Remove the focused card with Delete/Backspace. */
+  onRemove?: () => void;
   onOpen?: () => void;
 }) {
   const alarming = blocked || warnings.some((row) => row.severity === "warning");
@@ -127,6 +130,15 @@ export function ShiftCard({
         // The card is a div because it is also a drag source; a button
         // inside a draggable is fought over by both behaviours. Keyboard
         // access is given back explicitly rather than lost.
+        if (
+          onRemove &&
+          event.target === event.currentTarget &&
+          (event.key === "Delete" || event.key === "Backspace")
+        ) {
+          event.preventDefault();
+          onRemove();
+          return;
+        }
         if (onOpen && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault();
           onOpen();
@@ -144,11 +156,12 @@ export function ShiftCard({
       }}
       role={onOpen ? "button" : undefined}
       tabIndex={onOpen ? 0 : undefined}
+      aria-keyshortcuts={onRemove ? "Delete Backspace" : undefined}
       // A screen reader gets the same identity a sighted manager reads off
       // the card, not just the name: the role and rotation are the point.
       aria-label={
         onOpen
-          ? `${ariaWho(assignment, person)}, ${slot.shift_name}. עריכה`
+          ? `${ariaWho(assignment, person)}, ${slot.shift_name}. עריכה${onRemove ? ", Delete להסרה" : ""}`
           : undefined
       }
       aria-grabbed={onPick ? picked : undefined}

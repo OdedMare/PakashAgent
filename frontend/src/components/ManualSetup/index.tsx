@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { TimeInput } from "@/components/TimeInput";
 import { updateProfile } from "@/services/api";
 import type { RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
 
@@ -117,6 +118,11 @@ export function ManualSetup({
     () => shifts.map((shift) => text(shift.name)).filter(Boolean),
     [shifts],
   );
+  // The roles a shift can be limited to are the ones typed on the roster.
+  const roleNames = useMemo(
+    () => [...new Set(employees.filter(named).map((person) => text(person.role)).filter(Boolean))].sort(),
+    [employees],
+  );
   const originalEmployees = useMemo(
     () => new Set(rows(profile.employees).map((row) => text(row.name))),
     [profile.employees],
@@ -199,6 +205,7 @@ export function ManualSetup({
           days: strings(shift.days),
           headcount: number(shift.headcount, headcount(shift)),
           requires_shift_manager: Boolean(shift.requires_shift_manager),
+          allowed_roles: strings(shift.allowed_roles),
         })),
         rules: rules
           .filter((rule) => text(rule.text))
@@ -297,8 +304,8 @@ export function ManualSetup({
                 <CheckboxGrid label="ימים שבהם סבב א׳ אינו זמין" values={DAYS} selected={strings(rule.days)} onChange={(value) => edit(setRotationAUnavailability, index, "days", value)} />
                 {shiftNames.length ? <CheckboxGrid label="משמרות (ללא בחירה = כל המשמרות)" values={shiftNames} selected={strings(rule.shifts)} onChange={(value) => edit(setRotationAUnavailability, index, "shifts", value)} /> : null}
                 <div className="manual-grid three">
-                  <Field label="משעה (רשות)"><input type="time" step={300} value={inputText(rule.start_time)} onChange={(event) => edit(setRotationAUnavailability, index, "start_time", event.target.value)} /></Field>
-                  <Field label="עד שעה (רשות)"><input type="time" step={300} value={inputText(rule.end_time)} onChange={(event) => edit(setRotationAUnavailability, index, "end_time", event.target.value)} /></Field>
+                  <Field label="משעה (רשות)"><TimeInput value={inputText(rule.start_time)} onChange={(time) => edit(setRotationAUnavailability, index, "start_time", time)} /></Field>
+                  <Field label="עד שעה (רשות)"><TimeInput value={inputText(rule.end_time)} onChange={(time) => edit(setRotationAUnavailability, index, "end_time", time)} /></Field>
                   <Field label="סיבה / תיאור"><input value={inputText(rule.reason)} onChange={(event) => edit(setRotationAUnavailability, index, "reason", event.target.value)} placeholder="לדוגמה: יציאה קבועה" /></Field>
                 </div>
               </article>
@@ -352,13 +359,14 @@ export function ManualSetup({
                 <div className="manual-grid shift-grid">
                   <Field label="שם המשמרת *"><input value={inputText(shift.name)} readOnly={originalShifts.has(text(shift.name))} onChange={(e) => edit(setShifts, index, "name", e.target.value)} /></Field>
                   <Field label="סוג"><select value={text(shift.shift_type) || (shift.is_on_call ? "on_call" : "regular")} onChange={(e) => edit(setShifts, index, "shift_type", e.target.value)}>{Object.entries(SHIFT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
-                  <Field label="התחלה"><input type="time" step={300} value={text(shift.start_time)} onChange={(e) => edit(setShifts, index, "start_time", e.target.value)} /></Field>
-                  <Field label="סיום"><input type="time" step={300} value={text(shift.end_time)} onChange={(e) => edit(setShifts, index, "end_time", e.target.value)} /></Field>
+                  <Field label="התחלה"><TimeInput value={text(shift.start_time)} onChange={(time) => edit(setShifts, index, "start_time", time)} /></Field>
+                  <Field label="סיום"><TimeInput value={text(shift.end_time)} onChange={(time) => edit(setShifts, index, "end_time", time)} /></Field>
                   <Field label="תקן"><input type="number" min={1} max={100} value={number(shift.headcount, headcount(shift))} onChange={(e) => edit(setShifts, index, "headcount", Number(e.target.value) || 1)} /></Field>
                   <Field label="ייעוד"><input value={inputText(shift.purpose)} onChange={(e) => edit(setShifts, index, "purpose", e.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></Field>
                 </div>
                 <label className="manual-check"><input type="checkbox" checked={Boolean(shift.requires_shift_manager)} onChange={(e) => edit(setShifts, index, "requires_shift_manager", e.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
                 <CheckboxGrid label="ימים" values={DAYS} selected={strings(shift.days)} onChange={(value) => edit(setShifts, index, "days", value)} />
+                <RoleOptions roles={roleNames} selected={strings(shift.allowed_roles)} onChange={(value) => edit(setShifts, index, "allowed_roles", value)} />
                 <button type="button" className="icon-button subtle manual-delete" aria-label="מחיקת סוג משמרת" disabled={originalShifts.has(text(shift.name))} onClick={() => setShifts((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
               </article>
             ))}
@@ -402,6 +410,16 @@ export function ManualSetup({
 
 function SetupSection({ icon, title, hint, children }: { icon: React.ReactNode; title: string; hint: string; children: React.ReactNode }) {
   return <section className="manual-section"><header><span>{icon}</span><div><h2>{title}</h2><p>{hint}</p></div></header><div className="manual-section-body">{children}</div></section>;
+}
+
+/** Which roles may stand a shift. A role no longer on the roster stays
+ *  listed while selected, so it can still be cleared. */
+function RoleOptions({ roles, selected, onChange }: { roles: string[]; selected: string[]; onChange: (value: string[]) => void }) {
+  const values = [...new Set([...roles, ...selected])];
+  if (!values.length) {
+    return <fieldset className="manual-checkboxes"><legend>תפקידים מוסמכים</legend><small>הגדירו תפקיד לאנשי הצוות כדי להגביל את המשמרת לתפקידים מסוימים.</small></fieldset>;
+  }
+  return <fieldset className="manual-checkboxes"><legend>תפקידים מוסמכים</legend>{values.map((value) => <label key={value}><input type="checkbox" checked={selected.includes(value)} onChange={(event) => onChange(event.target.checked ? [...selected, value] : selected.filter((item) => item !== value))} /><span>{value}</span></label>)}<small>{selected.length ? "רק בעלי התפקידים שסומנו ישובצו במשמרת הזו." : "לא סומן תפקיד — כל אנשי הצוות מוסמכים."}</small></fieldset>;
 }
 
 function PatternOptions({ selected, locked, onChange }: { selected: string[]; locked: Set<string>; onChange: (value: string[]) => void }) {

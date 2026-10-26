@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   currentWorkspace,
   employeeSignIn,
+  errorStatus,
   loginTeam,
   logout as logoutRequest,
+  onSessionLost,
   openMemberLink,
   rotateMemberLink,
 } from "@/services/api";
@@ -125,6 +127,25 @@ export function useWorkspace(): WorkspaceState {
       cancelled = true;
     };
   }, []);
+
+  // A read refused for want of a session means the cookie died under an open
+  // screen. Asking `/me` again is what decides it: only its own 401 clears
+  // the workspace, so a network blip or a 401 from a guard the visitor's
+  // role simply does not pass leaves them where they are. Clearing it
+  // unmounts the area, and with it every poller that was still asking.
+  // Several pollers fail at once, so one check stands in for all of them.
+  const checking = useRef(false);
+  useEffect(() => onSessionLost(() => {
+    if (checking.current) return;
+    checking.current = true;
+    currentWorkspace()
+      .then(() => undefined, (reason) => {
+        if (errorStatus(reason) === 401) setWorkspace(null);
+      })
+      .finally(() => {
+        checking.current = false;
+      });
+  }), []);
 
   return {
     workspace,

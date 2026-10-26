@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { EMPLOYEE_DRAG_TYPE } from "@/components/Board/dragData";
 import { DateInput, displayDate } from "@/components/DateInput";
+import { TimeInput } from "@/components/TimeInput";
 import type { Departure } from "@/services/api";
 import type { Constraint, ShiftStats } from "@/types";
 
@@ -344,7 +345,7 @@ export function TeamPanel({
           )
         ) : null}
         <p className="roster-help">
-          שינוי סוג משמרת משפיע על סידורים חדשים; לוחות קיימים נשמרים כפי שנבנו.
+          משמרת חדשה נכנסת גם לטיוטות מהיום והלאה, בלי לשנות את השיבוץ הקיים. שינוי במשמרת קיימת חל על בנייה הבאה.
         </p>
       </section>
 
@@ -467,7 +468,7 @@ export function TeamPanel({
   );
 }
 
-function EmployeeForm({
+export function EmployeeForm({
   initial,
   shiftNames,
   defaultExitPattern,
@@ -550,7 +551,7 @@ function EmployeeForm({
   );
 }
 
-function ShiftForm({
+export function ShiftForm({
   initial,
   onCancel,
   onSubmit,
@@ -586,8 +587,8 @@ function ShiftForm({
       <fieldset className="profile-time-card">
         <legend>שעות המשמרת</legend>
         <div className="constraint-time-grid">
-          <label><span>שעת התחלה</span><input type="time" step={300} value={start} onChange={(event) => setStart(event.target.value)} /></label>
-          <label><span>שעת סיום</span><input type="time" step={300} value={end} onChange={(event) => setEnd(event.target.value)} /></label>
+          <label><span>שעת התחלה</span><TimeInput value={start} onChange={setStart} /></label>
+          <label><span>שעת סיום</span><TimeInput value={end} onChange={setEnd} /></label>
         </div>
         <small>אפשר להקליד שעה ישירות. סיום מוקדם מההתחלה מסמן משמרת שחוצה חצות.</small>
       </fieldset>
@@ -762,18 +763,16 @@ function ConstraintForm({
         <div className="constraint-time-grid">
           <label>
             <span>יכול/ה להתחיל מ־</span>
-            <input
-              type="time"
+            <TimeInput
               value={startTime}
-              onChange={(event) => setStartTime(event.target.value)}
+              onChange={setStartTime}
             />
           </label>
           <label>
             <span>חייב/ת לסיים עד</span>
-            <input
-              type="time"
+            <TimeInput
               value={endTime}
-              onChange={(event) => setEndTime(event.target.value)}
+              onChange={setEndTime}
             />
           </label>
           <small>אפשר למלא רק אחד מהגבולות. למשל 16:00 בלבד.</small>

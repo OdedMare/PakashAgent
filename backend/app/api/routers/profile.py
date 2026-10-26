@@ -1,11 +1,15 @@
 """Boss-only manual editing of employees and shift types."""
 
+import logging
+
 from fastapi import APIRouter, Depends
 
 from app.api.contracts import ProfileUpdate
 
+_log = logging.getLogger("pakash.profile")
 
-def build_router(service, guards) -> APIRouter:
+
+def build_router(service, guards, schedules=None) -> APIRouter:
     router = APIRouter(prefix="/api/profile", tags=["profile"])
     boss = guards.boss()
 
@@ -17,8 +21,21 @@ def build_router(service, guards) -> APIRouter:
 
     @router.put("")
     def update(request: ProfileUpdate, session: dict = Depends(boss)) -> dict:
-        return service.update(
-            session["team_id"], **request.model_dump(exclude_unset=True)
-        )
+        """Save the profile. A new soldier or shift is then absorbed into
+        every draft ahead of today (`absorbed`), moving as few rows as it
+        needs; published weeks are listed, never touched."""
+        team_id = session["team_id"]
+        before = service.current(team_id)
+        saved = service.update(team_id, **request.model_dump(exclude_unset=True))
+        if schedules is None:
+            return saved
+        try:
+            absorbed = schedules.absorb_profile_change(team_id, before, saved)
+        except Exception:
+            # The profile is saved either way; a refit that could not start
+            # leaves the drafts as they were and the manager can rebuild.
+            _log.exception("absorbing a profile change failed")
+            absorbed = None
+        return dict(saved, absorbed=absorbed)
 
     return router
