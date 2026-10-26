@@ -28,10 +28,17 @@ class CrossRotationCheck(AuditCheck):
             if status is False:
                 warnings.append(warning(
                     CROSS_ROTATION, SEVERITY_WARNING,
-                    "%s (%s) משובץ ל%s בתאריך %s מחוץ לזמני הנוכחות של קבוצתו."
-                    % (name, label(exit_pattern(data.profile, person), person.get("rotation_group")), shift, date),
+                    _message(data.profile, person, name, shift, date),
                     employee=name, date=date, shift=shift,
                     details=dict(rotation_group=text(person.get("rotation_group")),
                                  exit_pattern=exit_pattern(data.profile, person)),
                 ))
         return warnings
+
+
+def _message(profile: dict, person: dict, name: str, shift: str, date: str) -> str:
+    group = text(person.get("rotation_group"))
+    if not group:
+        return "%s משובץ ל%s בתאריך %s, בסופ״ש שבו הוא/היא בבית." % (name, shift, date)
+    return "%s (%s) משובץ ל%s בתאריך %s מחוץ לזמני הנוכחות של קבוצתו." % (
+        name, label(exit_pattern(profile, person), group), shift, date)

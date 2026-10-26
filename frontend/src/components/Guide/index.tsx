@@ -12,6 +12,10 @@ import {
   useState,
 } from "react";
 
+import { randomGuard } from "@/components/Crew";
+import { Guard } from "@/components/Crew/Guard";
+import type { Who } from "@/components/Crew/Guard";
+
 import { TOURS } from "./content";
 import type { Surface } from "./content";
 import { HelpPanel } from "./HelpPanel";
@@ -295,10 +299,13 @@ function WelcomePrompt({
   onDismiss: () => void;
 }) {
   const copy = WELCOME_COPY[surface];
+  // Mounted only once the browser has said the tour is unseen, so a random
+  // pick here never meets server-rendered markup.
+  const [guide] = useState<Who>(randomGuard);
   return (
     <section className="guide-welcome" role="status" aria-live="polite" aria-labelledby="guide-welcome-title">
-      <span className="guide-welcome-mark" aria-hidden="true">
-        <CircleHelp size={18} />
+      <span className="guide-guard guide-welcome-guard" aria-hidden="true">
+        <Guard who={guide} />
       </span>
       <div>
         <h2 id="guide-welcome-title">{copy.title}</h2>

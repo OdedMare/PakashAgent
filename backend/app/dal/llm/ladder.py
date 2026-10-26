@@ -19,6 +19,7 @@ from app.common.errors import AgentError, ModelOutputError
 from app.dal.llm.completion_retry import create_with_retry
 from app.dal.llm.message_merger import merge_system_into_user
 from app.dal.llm.model_slots import ModelBusy
+from app.dal.llm.streaming import stream_completion
 from app.dal.llm.strict_schema import to_strict
 
 _log = logging.getLogger("pakash.llm")
@@ -61,9 +62,12 @@ def is_context_overflow(error) -> bool:
 
 def complete(
     client, model, messages, max_tokens, schema, penalty, reservation,
-    total_budget_seconds=None, first_rung=0,
+    total_budget_seconds=None, first_rung=0, stream=None,
 ):
     """One completion down the ladder. Returns `(content, usage, rung)`.
+
+    `stream` (a `streaming.TextStream`) reads the answer as it arrives; a
+    server refusing the stream is asked the same rung again without one.
 
     `first_rung` skips rungs the same endpoint already refused for the same
     model and schema; each refusal is a full round-trip, paid on every call
@@ -83,7 +87,7 @@ def complete(
             first_rung = min(max(first_rung, 0), len(rungs) - 1)
             for rung, kwargs in enumerate(rungs[first_rung:], first_rung):
                 try:
-                    response = create_with_retry(client, model, kwargs, deadline=deadline)
+                    content, usage = _one(client, model, kwargs, deadline, stream)
                 except BadRequestError as exc:
                     if is_context_overflow(exc):
                         raise ModelOutputError(_TOO_LONG) from exc
@@ -94,11 +98,23 @@ def complete(
                 except Exception as exc:
                     _log.warning("model call failed: %s", _with_cause(exc))
                     raise AgentError("שגיאת מודל: " + _with_cause(exc))
-                content, usage = response_data(response)
                 return content, usage, rung
     except ModelBusy:
         raise AgentError("המודל תפוס כרגע בעבודה אחרת. נסו שוב בעוד רגע.")
     raise AgentError("שגיאת מודל: " + str(last_bad_request))
+
+
+def _one(client, model, kwargs, deadline, stream):
+    """`(content, usage)` of one rung, streamed when the caller asked."""
+    if stream is not None and not stream.refused:
+        try:
+            return stream_completion(client, model, kwargs, deadline, stream.on_text)
+        except BadRequestError as exc:
+            if is_context_overflow(exc):
+                raise
+            _log.info("streaming refused; asking the same rung without it")
+            stream.refused = True
+    return response_data(create_with_retry(client, model, kwargs, deadline=deadline))
 
 
 def attempts(messages, max_tokens, schema, penalty=NEUTRAL_PENALTY) -> List[dict]:

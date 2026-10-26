@@ -652,6 +652,12 @@ question to the agent first. **It still writes nothing and fills no gap**
 
 ## D23 — The copilot is durable, permissioned, and reversible
 
+> **Partly withdrawn.** The copilot itself — its scans, inbox, permissions
+> and audit — was removed: its approve and rollback changed only a status,
+> and everything it noticed the board and the chat already say. What stays
+> is the durable queue below, which carries builds, chat turns and
+> translations.
+
 The proactive agent now runs in a separate backend process. PostgreSQL owns
 its queue: jobs are deduplicated, claimed with row locking, retried, and
 recovered when a worker dies. Closing the browser therefore stops neither the
@@ -1183,6 +1189,37 @@ to the conversation, where approval is the one write (D12/D19).
 **Answered in the request.** `start_turn` runs the code paths inline, so a
 code-answered turn comes back finished in the send response with no worker
 pickup and no poll. The queued job still runs and finds the turn finished.
+
+---
+
+## D37 — A new soldier or a new shift is absorbed into the drafts already built *(amends "a saved change applies to the next build")*
+
+A client asked that adding a person or a shift fit them into the board
+already built while keeping almost everything where it was. Until now a
+profile save applied only to the next build, and rebuilding a range
+replaced every generated row on it: one new soldier reshuffled 21 of 28
+rows in a test week.
+
+**The solver keeps what stands** (`solver/stability.py`). A rebuild handed
+`keep` rewards each existing row for staying where it is, priced at half
+of what moving that shift from somebody above the even share to somebody
+below it gains in evenness. So a shift moves from an overloaded person to
+an underloaded one (the newcomer), and never from somebody already at
+their share. In the same test week the newcomer took exactly four shifts,
+one from each of the four people carrying five, and nothing else moved; a
+new night shift on a roster able to staff it moved nothing at all.
+Coverage is still settled first (D34), so a kept row never holds a seat
+empty, and a kept row keeps the reason it was placed with (D8).
+
+**Saving the profile starts it.** A save that adds an active person or a
+shift opens a `keep_existing` range job on every draft from today (or its
+first day) to its end; the shift's slots are added to the stored grid
+first. A published week is never touched, only listed as skipped, since
+changing what the team was shown needs the manager to unpublish it; a
+draft with nothing on it is left alone. The same happens after a profile
+plan is approved in the chat. A refit that cannot start never fails the
+save. The build dialog offers the same refit by hand ("שמירה על השיבוץ
+הקיים").
 
 ---
 

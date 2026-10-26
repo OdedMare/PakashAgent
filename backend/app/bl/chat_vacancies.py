@@ -2,8 +2,8 @@
 
 The model names who leaves a shift; it never picks who replaces them. A
 `changes` plan whose removals leave a slot with fewer people than it had is
-handed to the solver over the dates it touched: every other row on those
-dates is a pin, the rest of the period stands as it is, and the person who
+handed to the solver over the dates and shifts it touched: every other row
+on those is a pin, the rest of the period stands as it is, and the person who
 left (and anyone the plan marks unavailable) is a hard `avoid` there. Only
 rows the solver places on a vacated slot become new `assign` operations, so
 the plan still changes nothing the manager did not ask about. Writes nothing.
@@ -40,15 +40,16 @@ def fill_vacancies(scheduler, history, cache, team_id, turn, plan, state, rows):
     if turn.get("leave_vacant") or not vacant:
         return rows
     first, last = min(day for _, day in vacant), max(day for _, day in vacant)
+    shifts = sorted({shift for shift, _ in vacant})
+    solved = [row for row in rows if first <= row["date"] <= last and row["shift"] in shifts]
     try:
         generated = scheduler.generate_span(
             state["profile"], first, last, availability=state["availability"],
             history=history.before(team_id, iso(schedule["starts_on"])),
             instructions=turn.get("instructions") or "",
             preferences=state["preferences"], translation_cache=cache,
-            required_assignments=[row for row in rows if first <= row["date"] <= last],
-            already_scheduled=[model_assignment(row) for row in rows
-                               if not first <= row["date"] <= last],
+            required_assignments=solved, shift_names=shifts,
+            already_scheduled=[model_assignment(row) for row in rows if row not in solved],
             requests=_avoid(plan, vacant),
         )
     except AgentError as exc:

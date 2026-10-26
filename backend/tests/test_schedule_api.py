@@ -11,6 +11,7 @@ Three things here are the point of the feature and are asserted directly:
 """
 
 from types import SimpleNamespace
+import copy
 import json
 import threading
 
@@ -140,6 +141,15 @@ class _FakeScheduleRepo:
         ]
         return self.slots[schedule_id]
 
+    def add_slots(self, schedule_id, team_id, slots):
+        self.get_schedule(schedule_id, team_id)
+        stored = {(slot["shift_name"], slot["slot_date"]) for slot in self.slots[schedule_id]}
+        self.slots[schedule_id] += [
+            dict(slot, id=self._id("slot"), team_id=team_id) for slot in slots
+            if (slot["shift_name"], slot["slot_date"]) not in stored
+        ]
+        return self.slots[schedule_id]
+
     def find_slot(self, schedule_id, team_id, shift_name, slot_date):
         self.get_schedule(schedule_id, team_id)
         for slot in self.slots.get(schedule_id, []):
@@ -177,7 +187,7 @@ class _FakeScheduleRepo:
         return self.assignments(schedule_id, team_id)
 
     def replace_span_assignments(self, schedule_id, team_id, dates,
-                                 assignments):
+                                 assignments, shifts=None):
         # Rows on other dates keep their identity, exactly as the real
         # DELETE ... WHERE slot_date = ANY(...) leaves them alone. Tests that
         # hold an assignment id across a checkpoint depend on that.
@@ -189,6 +199,8 @@ class _FakeScheduleRepo:
         kept = [
             row for row in self.assignment_rows.get(schedule_id, [])
             if slots.get(row["slot_id"], {}).get("slot_date") not in wanted
+            or (shifts and slots.get(row["slot_id"], {}).get("shift_name")
+                not in shifts)
         ]
         self.assignment_rows[schedule_id] = kept + [
             {"id": self._id("asg"), "slot_id": item["slot_id"],
@@ -319,7 +331,7 @@ class _ScriptedLlm:
         self._answers = list(answers or [])
         self.calls = []
 
-    def complete_json(self, system, user, schema=None, flow="", time_context=""):
+    def complete_json(self, system, user, schema=None, flow="", time_context="", on_text=None):
         self.calls.append({"system": system, "user": user, "schema": schema,
                            "time_context": time_context})
         if not self._answers:
@@ -630,6 +642,85 @@ def test_a_run_of_days_is_refused_on_a_published_period_and_off_its_dates():
     assert outside.status_code == 502
     assert backwards.status_code == 502
     assert published.status_code == 502
+
+
+def _two_shift_profile():
+    profile = copy.deepcopy(PROFILE)
+    profile["shifts"].append({
+        "name": EVENING, "start_time": "15:00", "end_time": "23:00",
+        "days": [], "is_on_call": False, "hour_weight": 1.0,
+        "staffing": [{"days": [], "headcount": 1, "required_roles": []}],
+    })
+    return profile
+
+
+def test_a_run_of_days_can_be_built_for_one_shift_only():
+    """"Only the evenings, this week": the other shift is left as it stands.
+
+    The agent's mornings on those dates are not replaced, and the evenings
+    are the only rows the build writes.
+    """
+    app, repo = _build_app()
+    profile = _two_shift_profile()
+    profile["employees"][1]["eligible_shifts"] = [EVENING]
+    repo.profiles[TEAM] = profile
+    client = _client(app)
+    opened = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+    }).json()
+    path = "/api/schedule/generate/%s" % opened["id"]
+    client.post(path + "/range/start", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-17",
+        "shifts": [MORNING],
+    })
+    mornings = client.post(path + "/next").json()
+    kept = {row["id"] for row in mornings["assignments"]}
+    assert {row["shift"] for row in mornings["assignments"]} == {MORNING}
+
+    prepared = client.post(path + "/range/start", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-17",
+        "shifts": [EVENING],
+    }).json()
+    built = client.post(path + "/next").json()
+
+    assert prepared["generation"]["shifts"] == [EVENING]
+    assert built["generation"]["status"] == "complete"
+    assert kept <= {row["id"] for row in built["assignments"]}
+    evenings = [row for row in built["assignments"] if row["shift"] == EVENING]
+    assert sorted(row["date"] for row in evenings) == ["2026-08-16", "2026-08-17"]
+    assert {row["employee"] for row in evenings} == {"יוסי"}
+
+
+def test_a_new_period_can_be_built_for_one_shift_only():
+    app, repo = _build_app()
+    repo.profiles[TEAM] = _two_shift_profile()
+    client = _client(app)
+
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+        "shifts": [MORNING],
+    }).json()
+    built = client.post("/api/schedule/generate/%s/next" % started["id"]).json()
+
+    assert {slot["shift_name"] for slot in built["slots"]} == {MORNING, EVENING}
+    assert {row["shift"] for row in built["assignments"]} == {MORNING}
+    assert len(built["assignments"]) == 7
+
+
+def test_a_build_for_a_shift_the_period_lacks_is_refused():
+    app, _ = _build_app()
+    client = _client(app)
+    opened = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+    }).json()
+
+    refused = client.post(
+        "/api/schedule/generate/%s/range/start" % opened["id"],
+        json={"starts_on": "2026-08-16", "ends_on": "2026-08-22",
+              "shifts": ["אין כזאת"]},
+    )
+
+    assert refused.status_code == 502
 
 
 def test_a_new_period_can_be_built_from_a_day_inside_its_week():
@@ -1912,7 +2003,9 @@ def test_checking_a_placement_calls_no_model():
         "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-17",
     })
     assert response.status_code == 200
-    assert response.json()["ok"] is True
+    body = response.json()
+    assert body["ok"] is True
+    assert {"exit_pattern", "is_overlap"} <= set(body["candidates"][0])
 
 
 def test_a_check_that_warns_still_returns_200_and_never_blocks():

@@ -1,5 +1,5 @@
-"""The workplace's own rules: seats, roles, the shift manager, rest, runs
-of days and weekly hours.
+"""The workplace's own rules: seats, roles, the shift manager, נחפפים,
+rest, runs of days and weekly hours.
 
 These are the audit's blocking checks (`bl/audit/`) stated as constraints,
 read from the same `policy()` thresholds, so a solved schedule is clean by
@@ -12,12 +12,13 @@ reported, never refused.
 """
 
 import datetime
+import math
 from typing import Callable, Iterator, List, Optional, Tuple
 
 from app.bl.audit import counts_toward_staffing
 from app.bl.audit.roster import iso_week
 from app.bl.audit.values import number
-from app.bl.solver.model import HOUR_SCALE, MISSING_ROLE, UNFILLED, Model
+from app.bl.solver.model import HOUR_SCALE, MISSING_ROLE, SHADOW, UNFILLED, Model
 from app.bl.solver.rows import roles
 
 # Two shifts further apart than this cannot be short of any rest we model.
@@ -29,7 +30,8 @@ def apply_rules(model: Model) -> None:
     for index in range(len(problem.slots)):
         _seats(model, index)
         _roles(model, index)
-    for name in problem.staff:
+    _shadows(model)
+    for name in problem.people:
         for first, second in rest_pairs(problem, model, name, problem.policy["min_rest_hours"]):
             _forbid_pair(model, first, second)
         for variables, fixed in day_windows(problem, model, name, problem.policy["max_consecutive_days"]):
@@ -42,7 +44,7 @@ def _seats(model: Model, index: int) -> None:
     fixed = sum(counts_toward_staffing(problem.people.get(row["employee"]), problem.profile)
                 for row in problem.fixed_on(index))
     open_seats = max(0, int(slot.get("headcount") or 0) - fixed)
-    placed = model.on_slot(index)
+    placed = model.on_slot(index, problem.staff)
     model.at_most(placed, open_seats)
     if open_seats:
         model.price(UNFILLED, open_seats - sum(placed),
@@ -66,6 +68,55 @@ def _roles(model: Model, index: int) -> None:
         managers = model.on_slot(index, problem.holders(index, lambda p: bool(p.get("is_shift_manager"))))
         covered = model.bool_or(managers, "manager_%d" % index)
         model.price(MISSING_ROLE, 1 - covered, "", kind="manager")
+
+
+# -- נחפפים ----------------------------------------------------------------
+
+
+def _shadows(model: Model) -> None:
+    """A נחפף/ת fills no seat, so only a reward places them: always beside
+    one of their trainers, never more of them than counted people on the
+    shift, and up to a regular share of the shifts (or the training
+    policy's `shadow_shifts_per_week`)."""
+    problem = model.problem
+    if not problem.shadows:
+        return
+    for index in range(len(problem.slots)):
+        shadows = model.on_slot(index, problem.shadows)
+        if not shadows:
+            continue
+        fixed = problem.fixed_on(index)
+        counted = sum(counts_toward_staffing(problem.people.get(row["employee"]), problem.profile)
+                      for row in fixed)
+        on_shift = {row["employee"] for row in fixed}
+        model.cp.Add(sum(shadows) + sum(1 for row in fixed if row["employee"] in problem.shadows)
+                     <= sum(model.on_slot(index, problem.staff)) + counted)
+        for name in problem.shadows:
+            var = model.placed(name, index)
+            trainers = problem.trainers_of(name)
+            if var is not None and not on_shift.intersection(trainers):
+                model.cp.Add(var <= sum(model.on_slot(index, trainers)))
+    training = problem.profile.get("training_policy")
+    weekly = number(training.get("shadow_shifts_per_week"), 0.0) if isinstance(training, dict) else 0.0
+    seats = sum(max(0, int(slot.get("headcount") or 0)) for slot in problem.slots)
+    share = math.ceil(seats / len(problem.staff)) if problem.staff else 0
+    for name in problem.shadows:
+        placed = model.of_person(name)
+        for var in placed.values():
+            model.price(-SHADOW, var, kind="shadow")
+        if weekly:
+            weeks = {}
+            for index, var in placed.items():
+                week = iso_week(datetime.date.fromisoformat(problem.slots[index]["slot_date"]))
+                weeks.setdefault(week, []).append(var)
+            for week, variables in weeks.items():
+                fixed = sum(1 for row in problem.fixed if row["employee"] == name and not row["past"]
+                            and iso_week(datetime.date.fromisoformat(row["date"])) == week)
+                model.at_most(variables, int(weekly) - fixed)
+        else:
+            fixed = sum(1 for row in problem.fixed if row["employee"] == name and not row["past"]
+                        and row["date"] in problem.dates)
+            model.at_most(list(placed.values()), share - fixed)
 
 
 # -- rest ------------------------------------------------------------------

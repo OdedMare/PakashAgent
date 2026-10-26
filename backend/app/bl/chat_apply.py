@@ -1,5 +1,7 @@
 """Apply a manager-approved chat plan atomically."""
 
+import logging
+
 from app.bl.chat_constraints import affected_periods
 from app.bl.chat_contract import exception_warnings, fingerprint
 from app.bl.chat_lifecycle import future_schedules
@@ -8,6 +10,8 @@ from app.bl.profile_service import ProfileService
 from app.bl.schedule_service.operations import OperationApplier
 from app.bl.shared import iso
 from app.common.errors import AgentError, ConflictError
+
+_log = logging.getLogger("pakash.chat")
 
 
 class ChatPlanApplier:
@@ -21,12 +25,15 @@ class ChatPlanApplier:
         self, team_id, manager_id, chat_id, message_id,
         accept_exceptions=False, confirmation=None,
     ):
+        before = None
         with self._repo.chat_approval(team_id, manager_id, chat_id, message_id) as message:
             if message["status"] == "applied":
                 return self._repo.get_chat(team_id, manager_id, chat_id)
             payload = message["payload"]
             plan = payload.get("plan") or {}
             self._validate(team_id, plan, accept_exceptions)
+            if plan.get("kind") == "profile":
+                before = self._repo.team_profile(team_id)
             reason, agent_reason = self._reasons(plan, message["content"])
             schedule_id = self._apply_plan(team_id, plan, reason, agent_reason)
             self._repo.append_change(
@@ -44,7 +51,20 @@ class ChatPlanApplier:
                     chat_id, confirmation["content"], confirmation["request_id"],
                     payload["receipt"],
                 )
+        if before is not None:
+            self._absorb(team_id, before)
         return self._repo.get_chat(team_id, manager_id, chat_id)
+
+    def _absorb(self, team_id, before):
+        """After the profile is committed: a new soldier or shift is fit into
+        the drafts ahead of today. The approval already stands either way."""
+        absorb = getattr(self._schedules, "absorb_profile_change", None)
+        if absorb is None:
+            return
+        try:
+            absorb(team_id, before, self._repo.team_profile(team_id))
+        except Exception:
+            _log.exception("absorbing a profile change failed")
 
     def _validate(self, team_id, plan, accept_exceptions):
         state = self._context.snapshot(team_id, plan.get("schedule_id") or "")
