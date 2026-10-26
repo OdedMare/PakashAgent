@@ -18,13 +18,20 @@ UNFILLED = 1_000_000
 MISSING_ROLE = 100_000
 CLOSER = 2_000
 WISH = 1_000
-NIGHT_SPREAD = 100
+# Evenness is priced per unit of load (`fairness.py`) and does not grow with
+# the team: moving one shift of up to twelve hours, night included, from the
+# heaviest to the lightest saves less than one soft wish, and more than a
+# back-to-back day. So a wish is never broken for one shift of evenness.
+NIGHT_SPREAD = 15
+NIGHT_PEAK = 15
 HOUR_SPREAD = 1
+HOUR_PEAK = 1
 BACK_TO_BACK = 50
 # The terms phase one of a solve settles before anything else is weighed.
 COVERAGE = ("unfilled", "role", "manager")
-# Hours are integers in the model: tenths of an hour.
+# Hours are integers in the model: tenths of an hour; nights likewise.
 HOUR_SCALE = 10
+NIGHT_SCALE = 10
 
 
 class Term:

@@ -77,9 +77,14 @@ and the build still completes.
 - `requests.py` turns each structured request into a constraint (hard) or
   a priced term (soft), and prices soft availability.
 - `fairness.py` rewards closers on their own closure, spreads hours and
-  nights towards an even share of the demand (a constant computed before
-  solving — a target that moved with the answer made optimality unprovable),
-  and charges back-to-back days.
+  nights towards a target per person — the demand poured evenly, but never
+  below what someone already carries nor above what they can take
+  (`water_fill`), so a part-timer is not counted at a share they cannot
+  reach — and charges back-to-back days. Each target is a constant computed
+  before solving (a target that moved with the answer made optimality
+  unprovable). Both the distance from the target and the largest overload
+  are priced, per unit of load and independent of team size: one shift of
+  evenness (a shift up to twelve hours) is cheaper than a soft wish (`model.py`).
 - `solve.py` solves in two phases: coverage (unfilled seats, missing roles,
   the shift manager) first; then, with coverage fixed as a ceiling and the
   first answer as a hint, everything else. It writes a reason on every row,

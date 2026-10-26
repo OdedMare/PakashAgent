@@ -269,3 +269,57 @@ def test_rows_outside_the_rebuilt_shifts_stay_and_count():
     result = generate_day(profile, "2026-08-31", shift_names=[SHIFT], already_scheduled=[night])
 
     assert [row["employee"] for row in result["assignments"]] == ["בני"]
+
+
+def _dates(first, count):
+    import datetime
+    start = datetime.date.fromisoformat(first)
+    return [(start + datetime.timedelta(days=step)).isoformat() for step in range(count)]
+
+
+def test_a_soft_wish_is_not_broken_for_one_shift_of_evenness():
+    """Eight people, eight days, one seat: אבי asked softly for the week off.
+    Someone else working twice is cheaper than breaking the wish, however
+    large the team."""
+    names = ["אבי", "בני", "גדי", "דני", "הדר", "ורד", "זיו", "חן"]
+    days = _dates("2026-08-30", 8)
+    wish = [{"employee": "אבי", "date": day, "available": False, "is_hard": False,
+             "reason": "חופשה"} for day in days]
+
+    result = generate_span(_plain([{"name": name} for name in names]), days[0], days[-1],
+                           availability=wish)
+
+    assert "אבי" not in _counts(result["assignments"])
+    assert len(result["assignments"]) == 8
+    assert result["notes"] == []
+
+
+def test_the_excess_over_part_timers_is_shared_not_handed_to_a_small_wish():
+    """Two part-timers can take one shift a week; the rest falls on two
+    people above an even share. A slight preference must not hand it all to
+    one of them."""
+    people = [{"name": "אבי"}, {"name": "בני"},
+              {"name": "גדי", "max_weekly_hours": 8}, {"name": "דני", "max_weekly_hours": 8}]
+    profile = _plain(people, headcount=2,
+                     audit_policy={"max_consecutive_days": 30, "max_weekly_hours": 80})
+    days = _dates("2026-08-31", 14)
+    slight = [{"kind": "prefer", "employees": ["אבי"], "weight": 0.05,
+               "reason": "מבקש עוד משמרות"}]
+
+    result = generate_span(profile, days[0], days[-1], requests=slight)
+
+    counts = _counts(result["assignments"])
+    assert counts["אבי"] == counts["בני"] == 12
+    assert counts["גדי"] == counts["דני"] == 2
+
+
+def test_water_fill_targets_respect_what_people_carry_and_can_take():
+    from app.bl.solver.fairness import water_fill
+
+    targets = water_fill({"א": 0, "ב": 0, "ג": 0, "ד": 50}, {"א": 100, "ב": 100, "ג": 10, "ד": 100}, 150)
+
+    assert targets["ג"] == 10
+    assert targets["ד"] == 50
+    assert targets["א"] + targets["ב"] == 90
+    assert abs(targets["א"] - targets["ב"]) <= 1
+    assert sum(targets.values()) == 150
