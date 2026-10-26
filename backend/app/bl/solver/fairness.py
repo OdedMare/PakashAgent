@@ -39,7 +39,7 @@ def apply_fairness(model: Model) -> None:
     _spread(model, hours, HOUR_SPREAD, HOUR_PEAK, "hours", _weekly_limit(model.problem))
     nights = lambda times: NIGHT_SCALE * int(bool(times["night"]))
     _spread(model, nights, NIGHT_SPREAD, NIGHT_PEAK, "nights")
-    for name in model.problem.staff:
+    for name in model.problem.people:
         _back_to_back(model, name)
 
 

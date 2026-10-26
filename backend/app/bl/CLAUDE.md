@@ -15,9 +15,8 @@ Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
 | `workspace_service/` | Workspace rules: entering a team, roles, the share link |
 | `admin_service/` | **The צוות משמרות זהב console** (D28): operator sign-in, opening, re-capping, suspending and deleting teams |
 | `scheduler/` | Building a span: the grid, translating the manager's words, then the solver |
-| `solver/` | **The OR-Tools CP-SAT constraint solver that assigns every schedule** (D34). No model |
+| `solver/` | **The OR-Tools CP-SAT constraint solver that assigns every schedule** (D34), and holds the existing board when a change is absorbed (D37). No model |
 | `changes/` | Conversational edits and the change log |
-| `copilot/` | The durable observation loop the worker drives |
 | `schedule_service/` | Persistence and orchestration around all three: propose, confirm, apply |
 | `audit/` | **Pure-Python advisory checks. No LLM.** Also the fairness arithmetic the scheduler and the employee area read |
 | `export/` | **A period out as `.xlsx`.** Pure functions, no model, no repository |
@@ -95,9 +94,15 @@ and the build still completes.
 solved in such blocks, each seeing the rows of the ones before it as fixed.
 Progress is still counted in dates.
 
-**A rebuild can keep what it had.** `keep=` turns existing rows into soft
-`prefer` requests, so a change of shift vocabulary moves as few people as it
-can.
+**A rebuild can keep what it had** (D37). `keep=` rewards each existing
+row for staying put (`solver/stability.py`), priced at half of what moving it
+from an overloaded person to an underloaded one gains in evenness — so a new
+soldier takes shifts only from whoever is above their share, and a new shift
+is filled around the rows already there. A range job with `keep_existing`
+does this per span and first adds the shift's slots to the stored grid;
+`schedule_service/generation/absorb.py` opens one on every draft ahead of
+today when a profile save adds a person or a shift. A draft with nothing on
+it is not solved, but a new shift still gets its empty rows there.
 
 **Interactive generation is a durable job.** `start_generation` stores the
 grid and the spans; the worker solves one span per job, checkpoints it, and
@@ -113,12 +118,14 @@ The one place the manager talks to the agent; see
 `manager_chat` job: `chat_reply.py` first tries the zero-model fast path
 (`chat_tools.replacement_lookup`, over `intent/` and `tools/`), then up to
 seven model rounds that may call read-only tools, then `chat_planner.py`
-validates and audits the plan the model proposes — changes, a generation
+validates and audits the plan the model proposes — changes (a seat a
+removal leaves empty is filled by the solver, `chat_vacancies.py`), a generation
 preview (the solver, through `chat_generation.py`), a vocabulary rebuild
 (`chat_lifecycle.py`, keeping existing rows where they fit), profile or
 constraint edits, management actions. Nothing is written until the manager
 approves; `chat_apply.py` then applies the stored plan in one transaction,
-after checking the state it was prepared against has not moved.
+after checking the state it was prepared against has not moved. `chat_state.py` gathers
+what a turn starts from; `chat_draft.py` saves the reply as it streams.
 
 ## `changes/`
 

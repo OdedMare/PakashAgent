@@ -74,14 +74,20 @@ class GenerationJob:
         total_days: int,
         instructions: str,
         required: List[dict],
+        shifts: Optional[List[str]] = None,
+        keep_existing: bool = False,
     ) -> "GenerationJob":
         """A fresh job, running, with every span pending.
+
+        `keep_existing` asks each span to absorb the change into the rows
+        already there rather than rebuild them (`solver/stability.py`).
 
         Progress is counted in dates, never in spans: the bar means "days of
         the period", and a week-wide job whose counter moved by seven at a
         time would read as a bar that jumps rather than fills. The heartbeat
         is stamped now so the browser has something to compare against
-        before the first worker beat lands.
+        before the first worker beat lands. `shifts` narrows the job to those
+        shift types; empty means every shift.
         """
         return cls({
             "status": GENERATION_RUNNING,
@@ -91,6 +97,8 @@ class GenerationJob:
             "failed_days": 0,
             "instructions": text(instructions)[:INSTRUCTIONS_LIMIT],
             "required_assignments": required or [],
+            "shifts": list(shifts or []),
+            "keep_existing": bool(keep_existing),
             "notes": [],
             "summaries": [],
             "heartbeat": now_stamp(),
@@ -103,6 +111,11 @@ class GenerationJob:
 
     def get(self, key: str, default=None):
         return self._document.get(key, default)
+
+    @property
+    def shifts(self) -> List[str]:
+        """The shift types this job builds; empty for every shift."""
+        return [text(name) for name in self._document.get("shifts") or [] if text(name)]
 
     @property
     def status(self) -> str:

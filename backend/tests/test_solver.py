@@ -323,3 +323,52 @@ def test_water_fill_targets_respect_what_people_carry_and_can_take():
     assert targets["א"] + targets["ב"] == 90
     assert abs(targets["א"] - targets["ב"]) <= 1
     assert sum(targets.values()) == 150
+
+
+# -- נחפפים ------------------------------------------------------------------
+
+
+def _shadow_profile(**training):
+    return {
+        "workplace": {"name": "יחידה"},
+        "employees": [
+            {"name": "א"}, {"name": "חונכת", "can_train": True}, {"name": "ג"},
+            {"name": "נחפף", "is_trainee": True, "counts_toward_staffing": False},
+        ],
+        "shifts": [{
+            "name": SHIFT, "start_time": "07:00", "end_time": "15:00", "days": [],
+            "staffing": [{"days": [], "headcount": 2, "required_roles": []}],
+        }],
+        "training_policy": training,
+    }
+
+
+def _shadowed(result):
+    return [row for row in result["assignments"] if row["employee"] == "נחפף"]
+
+
+def test_a_trainee_is_placed_beside_a_trainer_without_taking_a_seat():
+    result = generate_span(_shadow_profile(), "2026-08-16", "2026-08-22")
+    shadowed = _shadowed(result)
+
+    assert len(shadowed) == 5  # an even share: 14 seats over three counted people
+    for row in shadowed:
+        on_shift = {other["employee"] for other in result["assignments"]
+                    if other["shift"] == row["shift"] and other["date"] == row["date"]}
+        assert "חונכת" in on_shift
+        assert len(on_shift - {"נחפף"}) == 2
+        assert "חונכת" in row["reason"]
+    assert result["warnings"] == []
+
+
+def test_a_trainee_is_not_placed_when_no_trainer_can_be_there():
+    absent = [{"employee": "חונכת", "date": "2026-08-17", "is_hard": True, "reason": "חופשה"}]
+    result = generate_span(_shadow_profile(), "2026-08-17", "2026-08-17", availability=absent)
+
+    assert _shadowed(result) == []
+
+
+def test_the_training_policy_sets_how_many_shadow_shifts_a_week():
+    result = generate_span(_shadow_profile(shadow_shifts_per_week=2), "2026-08-17", "2026-08-23")
+
+    assert len(_shadowed(result)) == 2

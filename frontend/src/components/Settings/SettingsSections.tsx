@@ -2,6 +2,7 @@ import { Bot, CalendarRange, Database, RefreshCw } from "lucide-react";
 
 import {
   SettingsField as Field,
+  SettingsSelect as Select,
   SettingsToggle as Toggle,
 } from "./SettingsField";
 import type { SettingsController, SettingsSection } from "./useSettings";
@@ -88,6 +89,19 @@ function AgentSettings({ settings }: { settings: SettingsController }) {
         placeholder="http://localhost:11434/v1"
       />
       <ModelField settings={settings} />
+      <Select
+        settings={settings}
+        name="llm_reasoning_effort"
+        label="זמן חשיבה של המודל"
+        options={[
+          { value: "", label: "לא לשלוח (ברירת מחדל של השרת)" },
+          { value: "off", label: "כבוי — הכי מהיר" },
+          { value: "low", label: "נמוך" },
+          { value: "medium", label: "בינוני" },
+          { value: "high", label: "גבוה" },
+        ]}
+        hint="רוב זמן ההמתנה הוא החשיבה של המודל. ב-Qwen3 'כבוי' ו'נמוך' מכבים את החשיבה; ב-gpt-oss 'כבוי' שווה ל'נמוך'. השאירו ריק אם המודל לא תומך"
+      />
       <Toggle
         settings={settings}
         name="llm_diet_mode"
@@ -110,9 +124,9 @@ function AgentSettings({ settings }: { settings: SettingsController }) {
         name="llm_timeout_seconds"
         label="זמן מרבי לתשובת המודל"
         type="number"
-        min="1"
-        optional="שניות"
-        placeholder="120"
+        min="0"
+        optional="שניות; 0 = ברירת המחדל (5 דקות). בקשה תקועה נכשלת ומשחררת את התור"
+        placeholder="0"
       />
       <Field
         settings={settings}

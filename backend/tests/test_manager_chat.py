@@ -48,12 +48,19 @@ class ChatRepo(_FakeScheduleRepo):
         return [dict(id=row["id"], title=row["title"]) for row in self.chats.values()
                 if (row["team_id"], row["manager_id"]) == (team_id, manager_id)]
 
-    def start_chat_turn(self, team_id, manager_id, chat_id, content, request_id, payload):
+    def start_chat_turn(self, team_id, manager_id, chat_id, content, request_id, payload,
+                        replace_from=None):
         chat = self.get_chat(team_id, manager_id, chat_id)
         if any(row.get("request_id") == request_id for row in chat["messages"]):
             return None
         if any(row["status"] == "working" for row in chat["messages"]):
             raise ConflictError("עדיין עובד")
+        if replace_from:
+            rows = self.chats[chat_id]["messages"]
+            index = next(i for i, row in enumerate(rows) if row["id"] == replace_from)
+            if any(row["status"] == "applied" or row["payload"].get("receipt") for row in rows[index:]):
+                raise ConflictError("כבר אושר")
+            del rows[index:]
         for row in self.chats[chat_id]["messages"]:
             if row["status"] == "pending":
                 row["status"] = "superseded"
@@ -68,6 +75,12 @@ class ChatRepo(_FakeScheduleRepo):
         for row in self.chats[chat_id]["messages"]:
             if row["id"] == message_id and row["status"] == "working":
                 row.update(content=content, status=status, payload=payload)
+
+    def chat_turn_draft(self, chat_id, message_id, draft):
+        self.drafts = getattr(self, "drafts", []) + [draft]
+        for row in self.chats[chat_id]["messages"]:
+            if row["id"] == message_id and row["status"] == "working":
+                row["payload"] = dict(row["payload"], draft=draft)
 
     def chat_turn_progress(self, chat_id, message_id, payload):
         self.progress.append(copy.deepcopy(payload))
@@ -527,8 +540,10 @@ def test_combined_conflicts_reach_agent_and_corrected_plan_keeps_absence():
     review = json.loads(llm.calls[1]["user"])["results"][-1]
     assert review["tool"] == "plan_review"
     assert any(row["code"] == "unavailable" for row in review["plan"]["warnings"])
-    assert message["status"] == "complete" and "plan" not in message["payload"]
-    assert message["payload"]["results"][-1]["candidates"][0]["employee"] == "מאיה"
+    # The model's own pick for the seat it vacated is the solver's to make.
+    assert message["status"] == "pending"
+    assert [(row["action"], row["employee"]) for row in message["payload"]["plan"]["operations"]] \
+        == [("remove", "דנה"), ("assign", "מאיה")]
     llm._answers.append(fixed)
     message = converse(service, repo, chat_id, schedule_id, "מאיה תחליף את דנה ביום שני", "selected-maya")
     plan = message["payload"]["plan"]
@@ -604,6 +619,19 @@ def test_rounds_share_one_prompt_prefix_up_to_what_the_round_adds():
     assert second["user"][:fixed] == first["user"][:fixed]
     assert json.loads(second["user"])["results"]
     assert first["time_context"] and second["time_context"] == first["time_context"]
+
+
+def test_turns_share_the_team_context_as_a_prompt_prefix():
+    # The conversation grows every turn; the profile and the schedule do not.
+    # They must come first, or each turn recomputes them on the server.
+    repo, llm, service, chat_id, schedule_id = setup([turn(), turn()])
+    converse(service, repo, chat_id, schedule_id, "מה יש?")
+    converse(service, repo, chat_id, schedule_id, "ומה עוד?", request_id="request-2")
+    first, second = llm.calls[0]["user"], llm.calls[1]["user"]
+    fixed = first.index('"conversation"')
+    assert first.index('"profile"') < first.index('"schedule"') < fixed
+    assert second[:fixed] == first[:fixed]
+    assert "clock" not in json.loads(first)
 
 
 def test_the_model_reads_recent_and_future_availability_without_storage_fields():

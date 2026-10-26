@@ -1,4 +1,4 @@
-"""Always-running durable copilot worker.
+"""Always-running durable job worker: chat turns, builds, translations.
 
 Run with ``python -m app.worker``. PostgreSQL owns claiming and deduplication,
 so restarting this process or running two copies cannot execute one job twice.
@@ -12,9 +12,10 @@ import time
 
 from app.bl.compiled_sources import SourceCompiler
 from app.bl.compiled_sources.compiler import JOB_KIND as COMPILE_SOURCES
-from app.bl.copilot import CopilotService
 from app.bl.schedule_service import ScheduleService
 from app.bl.manager_chat import ManagerChatService
+from app.common.events import TeamEvents
+from app.dal.notify import PostgresSignals
 from app.common.activity import track_activity
 from app.common.errors import NotFoundError
 from app.common.config import Settings
@@ -24,35 +25,21 @@ from app.dal.llm.openai_client import OpenAIJsonClient
 from app.dal.llm.team_context import model_team
 from app.dal.repository import Repository
 
-_log = logging.getLogger("pakash.copilot.worker")
-_SCAN_SECONDS = max(60, int(os.getenv("PAKASH_COPILOT_SCAN_SECONDS", "1800")))
+_log = logging.getLogger("pakash.worker")
 _POLL_SECONDS = max(1, int(os.getenv("PAKASH_COPILOT_POLL_SECONDS", "1")))
-_WORKER_CONCURRENCY = max(1, int(os.getenv("PAKASH_WORKER_CONCURRENCY", "4")))
-_CHAT_WORKERS = max(1, int(os.getenv("PAKASH_CHAT_WORKERS", "1")))
+# Chat turns get their own lanes so a build never delays an answer; several
+# of them so one slow (or stuck) turn does not hold every other manager's.
+_WORKER_CONCURRENCY = max(1, int(os.getenv("PAKASH_WORKER_CONCURRENCY", "6")))
+_CHAT_WORKERS = max(1, int(os.getenv("PAKASH_CHAT_WORKERS", "3")))
 
 
-class CopilotWorker:
-    def __init__(self, repository, service, scan_seconds: int = _SCAN_SECONDS,
-                 schedules=None, chat=None, compiler=None):
+class JobWorker:
+    def __init__(self, repository, schedules=None, chat=None, compiler=None):
         self._repository = repository
-        self._service = service
-        self._scan_seconds = scan_seconds
         self._schedules, self._chat = schedules, chat
         self._compiler = compiler
 
-    def enqueue_due(self, now: float = None) -> int:
-        stamp = int(now if now is not None else time.time())
-        bucket = stamp // self._scan_seconds
-        count = 0
-        for team in self._repository.list_teams():
-            if self._repository.enqueue_copilot_job(
-                team["id"], "scan:%s" % bucket
-            ):
-                count += 1
-        return count
-
     def run_once(self, lane="any") -> int:
-        self.enqueue_due()
         processed = 0
         while True:
             with self._repository.claim_copilot_job(lane=lane) as job:
@@ -100,7 +87,9 @@ class CopilotWorker:
                 # running. Reconcile the durable queue after every checkpoint.
                 self._repository.queue_generation_job(team_id, payload["schedule_id"])
         elif job["kind"] == "scan":
-            self._service.scan(team_id, job["id"])
+            # The copilot that queued these is gone; one still waiting in an
+            # existing database is finished without doing anything.
+            pass
         elif job["kind"] == COMPILE_SOURCES:
             # Setup was saved: translate its rules, policies and notes for
             # the code scheduler now, so the first build need not (D32).
@@ -109,18 +98,13 @@ class CopilotWorker:
             raise ValueError("Unknown job kind: %s" % job["kind"])
 
     def _fail(self, job):
-        if job["kind"] == COMPILE_SOURCES:
-            return  # Nothing is lost: the next build translates what is missing.
+        # A build's failure is on its span, where the banner reads it, and a
+        # translation's next build retries what is missing. Only a chat turn
+        # would otherwise be left "working" forever.
         if job["kind"] == "manager_chat":
             payload = job["payload"]
             self._repository.finish_chat_turn(payload["chat_id"], payload["message_id"],
                 "לא הצלחנו להשלים את הבקשה. אפשר לשלוח אותה שוב", "error", {})
-        else:
-            self._repository.create_copilot_item(
-                job["team_id"], "failure:%s" % job["id"], "failure", "system_health",
-                "העבודה לא הושלמה", "אפשר לנסות שוב. ההתקדמות שנשמרה נשארה במערכת.",
-                {"job_id": job["id"]}, job["id"],
-            )
 
 
 def _build():
@@ -129,9 +113,13 @@ def _build():
     repository = Repository(store)
     llm = OpenAIJsonClient(store)
     schedules = ScheduleService(repository, llm, settings=store)
-    return repository, CopilotWorker(
-        repository, CopilotService(repository, schedules),
-        schedules=schedules, chat=ManagerChatService(repository, llm, schedules),
+    return repository, JobWorker(
+        repository, schedules=schedules, chat=ManagerChatService(
+            repository, llm, schedules,
+            # A turn answered here wakes the manager's screen in the API.
+            events=TeamEvents(bus=PostgresSignals(store)),
+            settings=store,
+        ),
         compiler=SourceCompiler(repository, llm),
     )
 
@@ -157,13 +145,13 @@ def start(worker, stopped: threading.Event) -> list:
     if count == 1:
         lanes = ["any"]
     threads = [
-        threading.Thread(target=work, args=(lane,), name="copilot-%s" % lane,
+        threading.Thread(target=work, args=(lane,), name="worker-%s" % lane,
                          daemon=True)
         for lane in lanes
     ]
     for thread in threads:
         thread.start()
-    _log.info("copilot worker started threads=%d chat_threads=%d", count, chat_count)
+    _log.info("job worker started threads=%d chat_threads=%d", count, chat_count)
     return threads
 
 
@@ -188,7 +176,7 @@ def main() -> None:
     while not stopped.wait(_POLL_SECONDS):
         pass
     stop(threads, stopped)
-    _log.info("copilot worker stopped")
+    _log.info("job worker stopped")
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ from typing import List
 
 from app.bl import rotation
 from app.bl.audit import fairness
+from app.bl.shared import allowed_roles
 from app.bl.tools.reads import ToolReads, hours_for
 from app.bl.tools.roster import find_person
 from app.bl.tools.values import (
@@ -40,7 +41,8 @@ class TeamOverview(Tool):
             {"name": text(row.get("name")),
              "start_time": text(row.get("start_time")),
              "end_time": text(row.get("end_time")),
-             "is_on_call": bool(row.get("is_on_call"))}
+             "is_on_call": bool(row.get("is_on_call")),
+             "allowed_roles": allowed_roles(row)}
             for row in shifts(profile) if text(row.get("name"))
         ]
         return {

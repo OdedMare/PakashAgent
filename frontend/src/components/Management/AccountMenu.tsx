@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, LogOut, Settings2, UserCircle } from "lucide-react";
+import { ChevronDown, LogOut, UserCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 /** The manager's account menu at the end of the top bar.
@@ -10,11 +10,9 @@ import { useEffect, useRef, useState } from "react";
  *  Escape and on any pointer outside it, like the help panel. */
 export function AccountMenu({
   name,
-  onOpenSettings,
   onLogout,
 }: {
   name: string;
-  onOpenSettings: () => void;
   onLogout?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -67,10 +65,6 @@ export function AccountMenu({
             <strong>{name}</strong>
             <span>מנהל/ת</span>
           </div>
-          <button type="button" role="menuitem" onClick={choose(onOpenSettings)}>
-            <Settings2 size={15} />
-            הגדרות
-          </button>
           {onLogout ? (
             <button
               type="button"

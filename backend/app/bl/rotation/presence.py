@@ -79,7 +79,7 @@ def closure_status(profile, person, slot):
     pattern = exit_pattern(profile, person)
     group = text(person.get("rotation_group"))
     if not group:
-        return None
+        return _weekly_exit_status(profile, person, slot)
     lookup = pattern if groups_for(pattern) else cycle_of_group(profile, group)
     day = parse_date(slot["slot_date"])
     if day is None:
@@ -92,3 +92,20 @@ def closure_status(profile, person, slot):
                 continue
             claims.append(owner == group and holds(profile, person, day, slot["shift_name"]))
     return all(claims) if claims else None
+
+
+def _weekly_exit_status(profile, person, slot):
+    """An ungrouped חמשושים/שושים person is home every weekend.
+
+    Their closure days are the stretch they are *out* -- Thursday (Friday on
+    שושים) through the Sunday handover -- so a slot inside it is refused.
+    """
+    if groups_for(exit_pattern(profile, person)):
+        return None
+    day = parse_date(slot["slot_date"])
+    if day is None:
+        return None
+    rows = closure_days(profile, person, day, day)
+    if any(not row["until_handover"] or slot["shift_name"] in row["shifts"] for row in rows):
+        return False
+    return None

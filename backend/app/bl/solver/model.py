@@ -18,6 +18,7 @@ UNFILLED = 1_000_000
 MISSING_ROLE = 100_000
 CLOSER = 2_000
 WISH = 1_000
+SHADOW = 500
 # Evenness is priced per unit of load (`fairness.py`) and does not grow with
 # the team: moving one shift of up to twelve hours, night included, from the
 # heaviest to the lightest saves less than one soft wish, and more than a

@@ -31,10 +31,10 @@ def agent_time_context(
 ) -> str:
     """Machine-readable clock plus the rules every model invocation follows.
 
-    Minute precision on purpose: this text sits early in every prompt, and a
-    clock that ticks every second makes consecutive calls differ there, so an
-    inference server cannot reuse the prompt prefix it just computed. No
-    scheduling decision turns on seconds.
+    Minute precision on purpose: a clock that ticks every second makes
+    consecutive calls differ, so an inference server cannot reuse the prompt
+    it just computed. It closes the prompt (`complete_json`) for the same
+    reason. No scheduling decision turns on seconds.
     """
     local = israel_datetime(now).replace(second=0, microsecond=0)
     return """Current date and time:

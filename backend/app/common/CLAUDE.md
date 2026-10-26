@@ -31,7 +31,8 @@ AiSummryIO.
   (`solver_time_limit_seconds`, `solver_workers`) and the database
   credentials — which is why it stays a file rather than a table.
 - `time_context.py` — Israel-local time, and the minute-precision clock line
-  appended to every system prompt.
+  that closes every prompt's user turn (after the context, so it does not cut
+  the server's prefix cache).
 - `activity.py` — the progress line a running job reports, without model
   code knowing about storage.
 
@@ -45,7 +46,8 @@ AiSummryIO.
 | `PAKASH_LLM_BASE_URL_<ROLE>` | Optional endpoint for that role; falls back to the general URL |
 | `PAKASH_LLM_API_KEY_<ROLE>` | Optional API key for that role's endpoint; falls back to `OPENAI_API_KEY`. A role on another provider is authenticated by another credential |
 | `PAKASH_LLM_DIET_MODE` | Compact prompts and bounded completions |
-| `PAKASH_LLM_TIMEOUT_SECONDS` | Wall time for one HTTP completion; 0 = no limit |
+| `PAKASH_LLM_REASONING_EFFORT` | `off`/`low`/`medium`/`high`: how long a reasoning model thinks (gpt-oss, Qwen3); empty sends nothing. Live-editable in the panel |
+| `PAKASH_LLM_TIMEOUT_SECONDS` | Wall time for one HTTP completion; 0 = the built-in ceiling (300s, builds 900s). A stuck call fails and frees its slot (D38) |
 | `PAKASH_LLM_QUEUE_SECONDS` | How long interactive work may wait for a model slot; 0 = no limit |
 | `PAKASH_LLM_VERIFY_SSL` | Verify the model server's certificate (default on) |
 | `OPENAI_API_KEY` | Read unprefixed, as the SDK expects |
@@ -56,9 +58,10 @@ AiSummryIO.
 | `PAKASH_ADMIN_PASSWORD` | The operator console's password; empty = the settings password (D28) |
 | `PAKASH_OPEN_SIGNUP` | Self-service team creation from the login page (default off) |
 | `PAKASH_EMBEDDED_WORKER` | Run the job worker inside the API process (default on; compose turns it off because it runs `app.worker` separately) |
-| `PAKASH_WORKER_CONCURRENCY` / `PAKASH_CHAT_WORKERS` | Worker threads (default 4) and how many of them only take manager-chat turns (default 1) |
+| `PAKASH_WORKER_CONCURRENCY` / `PAKASH_CHAT_WORKERS` | Worker threads (default 6) and how many of them only take manager-chat turns (default 3) |
 | `PAKASH_SOLVER_TIME_LIMIT_SECONDS` / `PAKASH_SOLVER_WORKERS` | The constraint solver's wall time per solve (default 10s) and parallel workers (default 8). Live-editable in the panel |
-| `PAKASH_LLM_MAX_CONCURRENCY` | Model calls in flight across every process (default 4; 1 for a local Ollama). One per team regardless |
+| `PAKASH_LLM_MAX_CONCURRENCY` | Model calls in flight across every process (default 4; 1 for a local Ollama) |
+| `PAKASH_LLM_TEAM_CONCURRENCY` | How many of those one team may hold; 0 (default) = all of them |
 
 ## Rules
 

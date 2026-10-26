@@ -102,6 +102,12 @@ _SCHEDULER_BUDGET_MULTIPLIER = 1.5
 # one, every chat timed out and every build queued behind it, and the worker
 # threads waiting in that queue left none free for the code-built ones.
 _SCHEDULER_READ_CEILING_SECONDS = 900
+# Every other flow's read ceiling when `llm_timeout_seconds` is 0. "No limit"
+# used to mean exactly that, and a chat call the server never answered then
+# held its worker and its model slot until the process restarted: every
+# later message sat on "ממתין למודל…" behind it. A chat answer that takes
+# longer than this is not slow, it is stuck, and the manager is better told.
+_DEFAULT_READ_CEILING_SECONDS = 300
 
 
 def read_timeout_for(settings, flow: str) -> int:
@@ -131,33 +137,27 @@ def read_timeout_for(settings, flow: str) -> int:
     setting, if larger): a call that never ends holds the model slot that
     every other call in the deployment waits for.
 
+    Every other flow reads `llm_timeout_seconds`, and 0 there means
+    `_DEFAULT_READ_CEILING_SECONDS`, not "forever": a call that never ends
+    must fail and give its slot back.
+
     Connecting stays bounded for every flow — see `httpx_timeout`. An
     unreachable server is not a slow one.
     """
+    configured = getattr(settings, "llm_timeout_seconds", 0) or 0
     if flow == "scheduler":
-        configured = getattr(settings, "llm_timeout_seconds", 0) or 0
         return max(_SCHEDULER_READ_CEILING_SECONDS, configured)
-    return getattr(settings, "llm_timeout_seconds", 0) or 0
+    return configured if configured > 0 else _DEFAULT_READ_CEILING_SECONDS
 
 
-def budget_seconds(settings, flow: str):
-    """The ceiling on one logical call, in seconds — or `None` for no ceiling.
+def budget_seconds(settings, flow: str) -> float:
+    """The ceiling on one logical call, in seconds.
 
     Always strictly greater than the flow's read timeout, so one HTTP attempt
-    can always complete inside it. `getattr` with a default because a
-    settings object predating the field — a saved file from an older version
-    or a test double — must resolve rather than raise.
-
-    A read timeout of 0 means the server is given as long as it needs, and
-    the budget above it goes away with it: a deadline over an unbounded call
-    could only ever fire mid-generation, throwing away an answer the server
-    was still producing, which is the failure the whole setting exists to
-    avoid. The scheduler's read is always bounded by its own ceiling, so it
-    always has a budget, sized to let that one attempt finish.
+    can always complete inside it. Every flow's read is bounded
+    (`read_timeout_for`), so every flow has a budget.
     """
     timeout = read_timeout_for(settings, flow)
-    if timeout <= 0:
-        return None
     if flow == "scheduler":
         return max(timeout * _SCHEDULER_BUDGET_MULTIPLIER, timeout + 60)
     return max(timeout * _BUDGET_MULTIPLIER, _MIN_TOTAL_BUDGET_SECONDS)

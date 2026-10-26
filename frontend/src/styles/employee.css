@@ -119,6 +119,22 @@
   padding: 20px 16px 48px;
 }
 
+/* The full-board tab spans the window; the alerts and tabs above it keep
+   the reading column so they do not stretch into thin bars. */
+.employee-main.is-wide {
+  max-width: none;
+}
+
+.employee-main.is-wide > :not(.employee-tab-panel) {
+  width: 100%;
+  max-width: 1080px;
+  margin-inline: auto;
+}
+
+.employee-board {
+  padding: 12px;
+}
+
 .employee-tabs {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
