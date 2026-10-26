@@ -20,6 +20,7 @@ from app.bl.schedule_service.answering import Simulator
 from app.bl.schedule_service.changing import ChangeService
 from app.bl.schedule_service.constraints import ConstraintService
 from app.bl.schedule_service.context import ScheduleContext
+from app.bl.schedule_service.generation.absorb import ChangeAbsorber
 from app.bl.schedule_service.generation.builder import PeriodBuilder
 from app.bl.schedule_service.generation.history import AssignmentHistory
 from app.bl.schedule_service.generation.range import RangeBuilder
@@ -52,6 +53,7 @@ class ScheduleService:
         self._range = RangeBuilder(context, gate)
         self._stepper = stepper
         self._runner = GenerationRunner(context, stepper, launch, sleep)
+        self._absorber = ChangeAbsorber(context, self._range, self._runner)
         profiles = ProfileService(repository)
         self._manual = ManualEditor(context, profiles)
         self._changes = ChangeService(context, ChangeAgent(llm), profiles)
@@ -104,6 +106,9 @@ class ScheduleService:
 
     def start_range_generation(self, *args, **kwargs):
         return self._range.start_range_generation(*args, **kwargs)
+
+    def absorb_profile_change(self, *args, **kwargs):
+        return self._absorber.absorb(*args, **kwargs)
 
     def generate_next(self, *args, **kwargs):
         return self._stepper.generate_next(*args, **kwargs)

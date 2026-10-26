@@ -53,6 +53,10 @@ class ProfileService:
         compiled_sources.queue(self._repository, team_id)
         return saved
 
+    def current(self, team_id: str) -> Optional[dict]:
+        """The saved profile, or None before the first save. A read."""
+        return self._repository.team_profile(team_id)
+
     def delete_shift(self, team_id: str, name: str) -> dict:
         """Archive a shift type; existing schedules keep their rows."""
         current = self._repository.team_profile(team_id)

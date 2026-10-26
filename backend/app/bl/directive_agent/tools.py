@@ -38,8 +38,9 @@ class TranslationTools:
             if isinstance(row, dict) and text(row.get("name"))
         }
         self.standing = {row["id"] for row in sources if row.get("persistent")}
-        self.shifts = {text(row.get("name")) for row in (profile or {}).get("shifts") or []
-                       if isinstance(row, dict)}
+        self.definitions = {text(row.get("name")): row for row in (profile or {}).get("shifts") or []
+                            if isinstance(row, dict)}
+        self.shifts = set(self.definitions)
 
     def run(self, tool: str, arguments: Dict[str, Any]) -> dict:
         handler = getattr(self, "_" + tool, None) if tool in _TOOLS else None
@@ -132,7 +133,8 @@ class TranslationTools:
         source_ids = {row["id"] for row in self.sources}
         slots = {(slot["shift_name"], slot["slot_date"]) for slot in self.slots}
         for index, row in enumerate(_rows(arguments.get("directives")), start=1):
-            read = translated_row(row, source_ids, self.people, slots, self.standing, self.shifts)
+            read = translated_row(row, source_ids, self.people, slots, self.standing, self.shifts,
+                                  self.definitions)
             if read is None:
                 problems.append("directive %d: %s" % (index, _directive_problem(
                     row, source_ids, self.people, slots, self.standing)))
@@ -164,7 +166,7 @@ def _directive_problem(row: Any, source_ids: set, people: dict, slots: set,
         return "no slot %s on %s in this period" % (shift or "(empty)", date or "(empty)")
     if not text(row.get("reason")):
         return "missing reason"
-    return "%s is not eligible for %s" % (employee, shift)
+    return "%s is not eligible for %s (shift list or role)" % (employee, shift)
 
 
 def _rows(value: Any) -> List[dict]:

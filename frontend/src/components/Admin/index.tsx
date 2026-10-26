@@ -3,6 +3,7 @@
 import { Building2, Crown, LogOut, Moon, RefreshCw, Server, Sun } from "lucide-react";
 import { useState } from "react";
 
+import { CrewLoading } from "@/components/Crew";
 import { useTheme } from "@/hooks/useTheme";
 
 import { AdminLogin } from "./AdminLogin";
@@ -25,7 +26,7 @@ export function AdminConsole() {
   const [tab, setTab] = useState<Tab>("teams");
 
   if (state.signedIn === undefined) {
-    return <div className="adm adm-gate" aria-busy="true" />;
+    return <CrewLoading className="adm adm-gate" />;
   }
   if (!state.signedIn) {
     return <AdminLogin busy={state.busy} error={state.error} onLogin={state.login} />;

@@ -63,6 +63,8 @@ class PlacementCandidate(BaseModel):
     hours: float = 0.0
     is_shift_manager: bool = False
     can_train: bool = False
+    is_overlap: bool = False
+    exit_pattern: str = ""
     rotation: str = ""
     closing: bool = False
 

@@ -97,11 +97,24 @@
 .conversation-thinking small { color: var(--text-muted); font-size: 12px; }
 .conversation-message.is-error .conversation-text, .conversation-error { color: var(--danger); }
 .conversation-thinking, .conversation-loading { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); padding: 10px 0; }
-.conversation-thinking svg, .conversation-loading svg, .conversation-send svg.lucide-loader-circle { animation: chat-spin 1.4s linear infinite; }
+.conversation-thinking svg.lucide-loader-circle, .conversation-loading svg.lucide-loader-circle, .conversation-send svg.lucide-loader-circle { animation: chat-spin 1.4s linear infinite; }
 @keyframes chat-spin { to { transform: rotate(360deg); } }
 .conversation-options { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
 .conversation-options button { display: flex; align-items: center; justify-content: flex-start; gap: 7px; text-align: start; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); min-height: 44px; font-size: 13px; }
 .conversation-options button:first-child { border-color: var(--primary); color: var(--primary); }
+/* The reply while it is still being written; the caret says it is not done. */
+.conversation-draft { font-size: 14px; line-height: 1.9; }
+.conversation-draft .is-rich > p:last-child::after { content: ""; display: inline-block; width: 2px; height: 1em; margin-inline-start: 3px; vertical-align: text-bottom; background: var(--primary); animation: chat-caret 1s steps(1) infinite; }
+@keyframes chat-caret { 50% { opacity: 0; } }
+.conversation-message.is-sending { opacity: .75; }
+.conversation-suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.conversation-suggestions button { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; min-height: 44px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-size: 13px; text-align: start; }
+.conversation-suggestions button:hover:not(:disabled) { border-color: var(--primary); background: var(--primary-soft); }
+.conversation-suggestions svg { color: var(--primary); flex: none; }
+.conversation-feedback { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); font-size: 13px; }
+.conversation-feedback > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-muted); }
+.conversation-feedback .conversation-suggestions { margin-top: 8px; }
+@media (prefers-reduced-motion: reduce) { .conversation-draft .is-rich > p:last-child::after { animation: none; } }
 .conversation-checks { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
 .conversation-checks summary { display: flex; gap: 5px; align-items: center; min-height: 32px; cursor: pointer; }
 .conversation-checks ul { padding-inline-start: 18px; line-height: 1.8; }
@@ -162,7 +175,7 @@ body:has(.management-workspace.has-drawer) .tutorial-fab { left: auto; right: 20
 
 /* The replacement tab: who is out, when, and the fairest covers. */
 .replacement-panel { display: grid; gap: 14px; padding: 4px 2px 20px; }
-.replacement-panel > header h2 { margin: 0; font-size: 17px; }
+.replacement-panel > header h3 { margin: 0; font-size: 15px; }
 .replacement-panel > header p { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.6; }
 .replacement-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .replacement-fields label { display: grid; gap: 6px; font-size: 12px; color: var(--text-soft); }
@@ -175,3 +188,16 @@ body:has(.management-workspace.has-drawer) .tutorial-fab { left: auto; right: 20
 .replacement-prepare { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border: 0; border-radius: 12px; background: var(--primary-fill); color: #fff; font: inherit; font-weight: 600; }
 .replacement-prepare:disabled { opacity: 0.5; }
 @media (max-width: 420px) { .replacement-fields { grid-template-columns: 1fr; } }
+
+/* The changes tab: replace a shift, add a soldier, add a shift. */
+.changes-panel { display: grid; gap: 14px; padding: 4px 2px 20px; }
+.changes-panel > header h2 { margin: 0; font-size: 17px; }
+.changes-panel > header p { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.6; }
+.changes-panel .replacement-panel { padding: 0; }
+.changes-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 3px; border-radius: 12px; background: var(--surface-muted, color-mix(in srgb, var(--text) 6%, transparent)); }
+.changes-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 6px 8px; border: 0; border-radius: 9px; background: transparent; color: var(--text-soft); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.changes-actions button.is-active { background: var(--surface); color: var(--primary); box-shadow: 0 1px 2px color-mix(in srgb, #000 12%, transparent); }
+.changes-actions button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.changes-done { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.6; color: var(--success); background: color-mix(in srgb, var(--success) 10%, transparent); }
+.changes-done svg { flex: none; margin-top: 3px; }
+@media (max-width: 420px) { .changes-actions span { font-size: 12px; } }

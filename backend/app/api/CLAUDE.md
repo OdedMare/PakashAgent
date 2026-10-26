@@ -12,7 +12,6 @@ the result.
 | `profile.py` | Boss-only structured unit setup, profile updates, `DELETE /shifts/{name}` — archiving a shift type (stored schedules keep their rows) — and `/compiled`, what code made of each rule and note (D32) |
 | `manager_chat.py` | `/api/agent/chats` — the manager's conversations: send a message (queued as a job), poll, stop, apply or dismiss a pending plan |
 | `schedules/` | `/api/schedule` — the management area. `reading.py`: the overview, one period, a span (`/between`, capped at 62 days), stats, audit. `generation.py`: solve a period now (`/generate`), or open a resumable job (`/generate/start`, `build_from`/`build_through`), run, poll `progress`, cancel, dismiss, one day (`/day/start`) or a run of days in a draft (`/range/start`). `manual.py`: blank period, assign, unassign, check, departure (D18). `periods.py`: publish, unpublish, clear, delete, export. `agent.py`: propose, apply, move (D8/D12). Constraints, history, learning and preferences (D21) |
-| `copilot.py` | `/api/copilot` — the copilot inbox, its permissions, and a manual scan |
 | `settings.py` | `/api/settings` and `/api/models` — the process-wide settings and the model-list probe |
 | `health.py` | Liveness and database reachability |
 | `employee/` | The employee's own area: claim an identity, read your own shifts, submit a constraint request or swap — plus the boss-guarded routers that rule on them and `GET /api/schedule/requests/events`, the manager's SSE stream that says an inbox moved (D29, across processes over LISTEN/NOTIFY, D35) |

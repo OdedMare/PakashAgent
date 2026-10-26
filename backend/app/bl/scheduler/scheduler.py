@@ -16,7 +16,6 @@ from app.bl import solver
 from app.bl.scheduler.directives import semantic_sources
 from app.bl.scheduler.slots import plan_spans
 from app.bl.scheduler.quality import combine_metrics, quality
-from app.bl.shared import text
 from app.common.errors import AgentError
 
 _UNREACHABLE = "לא ניתן היה לתרגם את ההנחיות (המודל לא זמין)"
@@ -46,11 +45,15 @@ class Scheduler:
         preferences: Optional[List[dict]] = None,
         translation_cache=None,
         keep: Optional[List[dict]] = None,
+        shift_names: Optional[List[str]] = None,
     ) -> dict:
         """Assign every slot from `starts_on` through `ends_on`.
 
-        `keep` are rows to hold where they still fit — a rebuild after the
-        shift vocabulary changed should move as few people as it can.
+        `shift_names` narrows it to those shifts; rows on the others stand.
+
+        `keep` are rows to hold where they still fit — a rebuild after a
+        new person or a changed shift vocabulary should move as few people
+        as it can (`solver/stability.py`).
         `translation_cache` is the team's kept translations
         (`bl/compiled_sources/`); without one every source is translated."""
         translated = self._translate(
@@ -63,7 +66,9 @@ class Scheduler:
             history=history,
             required_assignments=list(required_assignments or []) + translated["required_assignments"],
             already_scheduled=already_scheduled,
-            requests=translated["requests"] + _kept(profile, keep),
+            requests=translated["requests"],
+            keep=keep,
+            shift_names=shift_names,
             **self._limits(),
         )
         if translated["sources"]:
@@ -130,20 +135,6 @@ class Scheduler:
             empty["unresolved"] = [dict(row, reason=_UNREACHABLE) for row in sources]
             return empty
         return dict(empty, **translated)
-
-
-def _kept(profile: dict, rows: Optional[List[dict]]) -> List[dict]:
-    """Each row to keep as a `prefer` the solver weighs; rows naming a person
-    or a shift the profile no longer has are dropped, not refused."""
-    people = {text(row.get("name")) for row in profile.get("employees") or [] if isinstance(row, dict)}
-    shifts = {text(row.get("name")) for row in profile.get("shifts") or [] if isinstance(row, dict)}
-    return [
-        {"kind": "prefer", "employees": [row["employee"]], "shifts": [row["shift"]],
-         "dates": [row["date"]], "weight": 0.5, "reason": "שמירה על השיבוץ הקודם"}
-        for row in rows or []
-        if isinstance(row, dict) and row.get("employee") in people and row.get("shift") in shifts
-        and row.get("date")
-    ]
 
 
 def _report(result: dict, translated: dict) -> None:
