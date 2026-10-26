@@ -59,14 +59,22 @@ def _two_phases(model: Model, time_limit: float, workers: int):
     Phase one prices only unfilled seats, missing roles and the shift
     manager; its answer becomes a hint and its coverage a ceiling for phase
     two, which weighs wishes and fairness. Lexicographic in fact, not only
-    in the weights, so a hard week never trades a seat for evenness."""
+    in the weights, so a hard week never trades a seat for evenness.
+
+    A rebuild that keeps a board starts phase one from that board: blind to
+    it, phase one hands phase two an arbitrary answer, and on a large team
+    phase two runs out of time before it walks back to the rows it keeps."""
     coverage = model.cost(COVERAGE)
+    if model.problem.keep:
+        for key, var in model.x.items():
+            model.cp.AddHint(var, key in model.problem.keep)
     first = _solver(time_limit * 0.3, workers)
     model.cp.Minimize(coverage)
     found = first.Solve(model.cp)
     if found not in _STATUS:
         raise AgentError("פותר האילוצים לא הצליח לבנות סידור (%s)" % first.StatusName(found))
     model.cp.Add(coverage <= int(round(first.ObjectiveValue())))
+    model.cp.ClearHints()
     for var in model.x.values():
         model.cp.AddHint(var, first.Value(var))
     model.cp.Minimize(model.cost())
