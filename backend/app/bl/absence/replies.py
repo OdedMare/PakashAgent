@@ -24,6 +24,13 @@ def dates_label(dates: List[str]) -> str:
     return ", ".join(day_label(value) for value in dates)
 
 
+def _span_label(dates: List[str]) -> str:
+    first, last = (datetime.date.fromisoformat(value) for value in (dates[0], dates[-1]))
+    if first == last:
+        return day_label(dates[0])
+    return "בין %d.%d ל-%d.%d" % (first.day, first.month, last.day, last.month)
+
+
 def _in(label: str) -> str:
     """Hebrew's attached "ב", hyphenated before a number: "ב-1.11", "ביום"."""
     return ("ב-" if label[:1].isdigit() else "ב") + label
@@ -63,11 +70,18 @@ def plan_reply(employee: str, dates: List[str], found: dict) -> tuple:
             lines.append("- %s: **%s** במקום %s (%s)" % (where, slot["pick"], employee, how))
         else:
             lines.append("- %s: לא נמצא מחליף שעומד בכל הכללים — המשמרת תישאר חסרה" % where)
-    if found["free_dates"]:
-        lines.append("%s אין ל%s משמרות; נשמר אילוץ היעדרות בלבד." % (
-            _in(dates_label(found["free_dates"])), employee))
+    free = found["free_dates"]
+    if free:
+        # A long absence leaves a scatter of free days; listing them all is noise.
+        where = "בשאר הימים" if len(free) > 5 and len(free) < len(dates) else _in(dates_label(free))
+        lines.append("%s אין ל%s משמרות; נשמר אילוץ היעדרות בלבד." % (where, employee))
     if found["slots"]:
         lines.append("אפשר לבחור מחליף אחר מהרשימה שמתחת לתוכנית.")
+    if found.get("elsewhere"):
+        lines.append("ל%s יש עוד %d משמרות בתקופות מאוחרות יותר (%s). האילוץ נשמר גם להן; "
+                     "אחרי האישור שלחו שוב את אותה בקשה ואכין את ההחלפות שם." % (
+                         employee, len(found["elsewhere"]),
+                         _span_label(sorted(row["date"] for row in found["elsewhere"]))))
     reason = (
         "בכל משמרת נבחר/ה, מבין מי שעומדים בכל הכללים, מי שהשעות, המשמרות והלילות "
         "שלו/ה בתקופה הנמוכים ביותר — כולל ההחלפות האחרות בתוכנית — כדי שהעומס יתחלק שווה."

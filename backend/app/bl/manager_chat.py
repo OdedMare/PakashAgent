@@ -20,7 +20,7 @@ from app.common.errors import AgentError, AppError, ConflictError
 
 
 # A replacement search past a month is a departure, which is `retire`.
-_MAX_ABSENCE_DAYS = 31
+_MAX_ABSENCE_DAYS = 120
 
 
 def _iso_or_blank(value):

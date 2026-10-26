@@ -41,18 +41,22 @@ class AbsenceOptions:
         """The affected shifts, their ranked candidates and a fair pick each.
 
         `chosen` are the manager's own picks; they win over the fair one.
-        `error` is set, and nothing else is, when the absence cannot be one
-        plan (its shifts sit in more than one stored period).
+        One plan edits one stored period, so when the shifts sit in several
+        the earliest is planned and the rest are listed in `elsewhere` --
+        the absence itself is still saved for every date.
         """
         profile = self._context.profile(team_id)
         found = dict(employee=employee, dates=list(dates), schedule_id="",
-                     slots=[], free_dates=list(dates), results=[], error="")
+                     slots=[], free_dates=list(dates), results=[], error="", elsewhere=[])
         periods = self._periods_with_shifts(team_id, employee, dates)
-        if len(periods) > 1:
-            return dict(found, error="ההיעדרות חוצה כמה תקופות שמורות. בחרו טווח בתוך תקופה אחת")
         if not periods:
             return found
         schedule = periods[0]
+        found["elsewhere"] = [
+            dict(date=iso(row["date"]), shift=row["shift"], schedule_id=period["id"])
+            for period in periods[1:] for row in period.get("assignments") or []
+            if row["employee"] == employee and iso(row["date"]) in dates
+        ]
         own = sorted(
             (row for row in schedule.get("assignments") or []
              if row["employee"] == employee and iso(row["date"]) in dates),
@@ -74,7 +78,7 @@ class AbsenceOptions:
             found["slots"].append(slot)
             # The chat's candidate cards show the same fair order as the plan.
             found["results"].append(dict(result, candidates=slot["candidates"]))
-        busy = {slot["date"] for slot in found["slots"]}
+        busy = {slot["date"] for slot in found["slots"]} | {row["date"] for row in found["elsewhere"]}
         return dict(found, schedule_id=schedule["id"],
                     free_dates=[date for date in dates if date not in busy])
 
@@ -88,7 +92,7 @@ class AbsenceOptions:
             if any(item["employee"] == employee and iso(item["date"]) in dates
                    for item in period.get("assignments") or []):
                 periods.append(period)
-        return periods
+        return sorted(periods, key=lambda period: iso(period["starts_on"]))
 
 
 class _Fill:

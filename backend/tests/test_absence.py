@@ -20,9 +20,18 @@ ROSTER = ["עודד", "ירין עמלקית", "יוסי", "דנה"]
     ("עודד חולה ב-2026-10-27", ["2026-10-27"]),
     ("עודד חולה כבר שבוע", []),
     ("עודד טס לחו\"ל", []),
+    ("עודד חולה עד 26.10", ["2026-10-23", "2026-10-24", "2026-10-25", "2026-10-26"]),
+    ("עודד חולה ממחר עד ה-26.10", ["2026-10-24", "2026-10-25", "2026-10-26"]),
+    ("עודד חולה עד יום שני", ["2026-10-23", "2026-10-24", "2026-10-25", "2026-10-26"]),
 ])
 def test_every_date_a_sentence_names_is_read(sentence, expected):
     assert dates_in(sentence, TODAY, WEEK) == expected
+
+
+def test_an_absence_until_the_end_of_the_year_is_every_day_from_today():
+    days = dates_in("רותי חולה עד 31.12", "2026-10-26")
+    assert (days[0], days[-1], len(days)) == ("2026-10-26", "2026-12-31", 67)
+    assert dates_in("רותי חולה מ-26.10 עד 31.12", "2026-10-26") == days
 
 
 @pytest.mark.parametrize("sentence, scope", [
@@ -91,6 +100,23 @@ def test_covers_are_spread_so_one_person_does_not_take_the_whole_absence():
     assert sorted(covers) == ["יוסי", "רון"]
     assert not message["payload"]["plan"]["warnings"]
     assert not llm.calls
+
+
+def test_an_absence_across_periods_plans_the_first_and_saves_every_date(monkeypatch):
+    import datetime
+    monkeypatch.setattr("app.bl.absence.fast_path.israel_today", lambda: datetime.date(2026, 10, 4))
+    repo, llm, service, chat_id, schedule_id = setup([])
+    later = repo.create_schedule(TEAM, "2026-10-11", "2026-10-17")
+    slots = repo.replace_slots(later["id"], TEAM, [
+        {"shift_name": MORNING, "slot_date": "2026-10-12", "headcount": 1}])
+    repo.add_assignment(later["id"], TEAM, slots[0]["id"], "דנה", "שיבוץ קיים")
+    message = converse(service, repo, chat_id, schedule_id, "דנה חולה עד 12.10")
+    plan = message["payload"]["plan"]
+    assert [row["date"] for row in plan["constraints"]][::8] == ["2026-10-04", "2026-10-12"]
+    assert [(row["action"], row["date"]) for row in plan["operations"]] == [
+        ("remove", "2026-10-05"), ("assign", "2026-10-05")]
+    assert "בתקופות מאוחרות" in message["content"]
+    assert not llm.calls and not repo.changes
 
 
 def test_a_hypothetical_is_never_turned_into_a_plan():

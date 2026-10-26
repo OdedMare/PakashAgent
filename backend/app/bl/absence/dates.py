@@ -12,9 +12,11 @@ from typing import List, Optional
 from app.bl.intent.dates import parse
 from app.common.time_context import israel_today
 
-# Past a month a sentence is describing a departure or a long leave, which is
-# a different plan (`retire`, or the manager's own reading of it).
-MAX_DAYS = 31
+# Past this a sentence is describing a departure rather than an absence, a
+# different plan (`retire`, or the manager's own reading of it). Long enough
+# for "חולה עד 31.12" said in October, and inside the 126 constraints one
+# plan may carry, since every day becomes one.
+MAX_DAYS = 120
 
 _WEEKDAY_NAMES = ("ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת")
 # A weekday as a whole word, allowing Hebrew's attached prefixes: בשני,
@@ -35,6 +37,12 @@ _WEEKDAY_RANGE = re.compile(
     % ("|".join(_WEEKDAY_NAMES), _RANGE_JOIN, "|".join(_WEEKDAY_NAMES))
 )
 _RELATIVE = (("מחרתיים", 2), ("מחר", 1), ("היום", 0))
+# "עד 31.12" with no start of its own: the absence runs from the earliest
+# other day the sentence names, or from today.
+_UNTIL_DATE = re.compile(r"(?<![א-ת])ו?עד\s*(?:ה|ל)?-?\s*(?:יום\s+)?" + _DATE)
+_UNTIL_WEEKDAY = re.compile(
+    r"(?<![א-ת])ו?עד\s*(?:ה|ל)?-?\s*(?:יום\s+)?(%s)(?![א-ת])" % "|".join(_WEEKDAY_NAMES)
+)
 
 
 def week_of(day: datetime.date) -> List[datetime.date]:
@@ -54,9 +62,12 @@ def dates_in(text: str, today: Optional[str] = None, week_start: str = "") -> Li
     found = set(_explicit(text, anchor))
     found |= set(_weekdays(text, anchor, week))
     for word, offset in _RELATIVE:
-        if re.search(r"(?<![א-ת])[ול]?%s(?![א-ת])" % word, text):
+        if re.search(r"(?<![א-ת])[ולמ]?%s(?![א-ת])" % word, text):
             found.add(anchor + datetime.timedelta(days=offset))
     found |= set(_weeks(text, anchor, week))
+    for last in _open_ends(text, anchor, week):
+        first = min((day for day in found if day < last), default=anchor)
+        found |= set(_span(first, last)) if first <= last else set()
     days = sorted(found)
     if days and (days[-1] - days[0]).days >= MAX_DAYS:
         return []
@@ -87,6 +98,21 @@ def _explicit(text: str, anchor: datetime.date) -> List[datetime.date]:
         if day:
             days.append(day)
     return days
+
+
+def _open_ends(text, anchor, week) -> List[datetime.date]:
+    """The end of every "עד X" that is not already the far end of a range."""
+    closed = [match.span() for regex in (_DATE_RANGE, _WEEKDAY_RANGE)
+              for match in regex.finditer(text)]
+    ends = []
+    for regex, read in ((_UNTIL_DATE, _date), (_UNTIL_WEEKDAY, lambda name, _: _weekday(name, anchor, week))):
+        for match in regex.finditer(text):
+            if any(start <= match.start() < stop for start, stop in closed):
+                continue
+            day = read(match.group(1), anchor)
+            if day:
+                ends.append(day)
+    return ends
 
 
 def _weekdays(text, anchor, week) -> List[datetime.date]:
