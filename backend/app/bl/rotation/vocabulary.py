@@ -113,13 +113,23 @@ def exit_pattern(profile: dict, person: dict) -> str:
     return text(workplace.get("rotation_mode")) or "round"
 
 
-def label(cycle: str, group: str) -> str:
+def label(cycle: str, group: str, profile: Optional[dict] = None) -> str:
     """One closing group named the way the manager says it: `סבב א`.
 
     The internal pattern name never leaves this package, so the vocabulary
-    cannot drift between the screens that show the same closure.
+    cannot drift between the screens that show the same closure. A day cycle
+    (`cycle:<id>`) is named by the manager, so it is read off the profile.
     """
     group = text(group)
     if not group:
         return ""
-    return "%s %s" % (CYCLE_LABELS.get(text(cycle), "סבב"), group)
+    return "%s %s" % (_cycle_name(text(cycle), profile), group)
+
+
+def _cycle_name(cycle: str, profile: Optional[dict]) -> str:
+    if not cycle.startswith("cycle:"):
+        return CYCLE_LABELS.get(cycle, "סבב")
+    for row in ((profile or {}).get("workplace") or {}).get("day_cycles") or []:
+        if isinstance(row, dict) and text(row.get("id")) == cycle[len("cycle:"):]:
+            return text(row.get("name")) or "מחזור"
+    return "מחזור"

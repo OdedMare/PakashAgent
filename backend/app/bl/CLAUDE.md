@@ -25,7 +25,7 @@ Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
 | `intent/` | **Reading a Hebrew sentence with no model.** Seven shapes; never guesses |
 | `absence/` | **An absence read and planned in code** (D36): dates, one question when needed, the fairest cover per shift; no model, no write |
 | `simulate/` | **What a change would do.** No model, no repository, persists nothing |
-| `rotation/` | **Whose closure a date is.** Pure arithmetic off separate round/triplet anchors; no model |
+| `rotation/` | **Whose closure a date is, and who is home on a day cycle.** Pure arithmetic off separate anchors; no model |
 | `placement/` | **What a placement would cost, and what else the manager could do.** No model |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
 | `shared/` | Small helpers several packages read: `clarification.py`, `hebrew_calendar.py` |
@@ -75,15 +75,18 @@ and the build still completes.
   feasible and the solver never answers "no schedule".
 - `requests.py` turns each structured request into a constraint (hard) or
   a priced term (soft), and prices soft availability.
-- `fairness.py` rewards closers on their own closure, spreads hours and
-  nights towards a target per person — the demand poured evenly, but never
-  below what someone already carries nor above what they can take
-  (`water_fill`), so a part-timer is not counted at a share they cannot
-  reach — and charges back-to-back days. Each target is a constant computed
-  before solving (a target that moved with the answer made optimality
-  unprovable). Both the distance from the target and the largest overload
-  are priced, per unit of load and independent of team size: one shift of
-  evenness (a shift up to twelve hours) is cheaper than a soft wish (`model.py`).
+- `fairness.py` rewards closers on their own closure, spreads shifts (not
+  hours: on base nobody is on the clock) and nights towards a target per
+  person — the demand poured evenly, but never below what someone already
+  carries nor above what they can take (`water_fill`), so a part-timer is
+  not counted at a share they cannot reach — and prices every pair of one
+  person's shifts per hour their gap falls short of 48 (`SPACING_HOURS`),
+  so the longest rest wins (back-to-back days are charged instead only when
+  shifts carry no clock). Each target is a constant computed before solving
+  (a target that moved with the answer made optimality unprovable). Both
+  the distance from the target and the largest overload are priced, per
+  unit of load and independent of team size: one shift of evenness is
+  cheaper than a soft wish (`model.py`) and dearer than any one gap.
 - `solve.py` solves in two phases: coverage (unfilled seats, missing roles,
   the shift manager) first; then, with coverage fixed as a ceiling and the
   first answer as a hint, everything else. It writes a reason on every row,
@@ -211,6 +214,18 @@ it — the shape setup uses when group ב leaves at a different
 hour. `rotation_presence` is deliberately **not** derived: "ב is out on
 Tuesdays" says nothing about א.
 
+**Day cycles are the other kind** (`rotation/day_cycles.py`): 11/3, 12/2,
+שבוע־שבוע — N days on base, M home, from one anchor day, with each group
+starting a stated number of days after it (spread evenly by default). They
+live in `workplace.day_cycles`, several side by side, and a person joins one
+with `exit_pattern = "cycle:<id>"`. Their weekends fall out of the arithmetic
+rather than anchoring it. Hours come in three layers that each state only
+what they change — the cycle's own departure and return (a day shift of up
+to three days either way, plus a time), `group_times[group]`, then dated
+`time_changes` matched on the nominal departure day. A home stretch is hard
+unavailability (`closure_status` returns it), so the solver, the audit and
+the picker all read it through the same gate as a closure.
+
 Read by four callers, which is the point of it being one module:
 `scheduler/` turns it into hard availability rows and the solver never
 places a row that contradicts them, `audit.py` warns about a schedule that
@@ -309,7 +324,7 @@ data. Neither decides anything.
 shifts count, as do shifts crossing midnight or starting from 22:00 through
 05:59. Effective slot hours take precedence over vocabulary hours. Names are
 never matched: the editor records times without requiring a night flag. The
-solver spreads nights with the same `is_night`, priced above hours.
+solver spreads nights with the same `is_night`, beside an even count of shifts.
 
 **Pass `slots` when you have them.** `audit()` takes the schedule's slot grid as
 well as the assignments. A slot with nobody on it leaves no row among the

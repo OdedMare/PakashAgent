@@ -16,10 +16,13 @@ import {
 import { useMemo, useState } from "react";
 
 import { TimeInput } from "@/components/TimeInput";
+import { HelpButton, useGuideSurface } from "@/components/Guide";
 import { deleteShiftType, updateProfile } from "@/services/api";
-import type { RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
+import { cyclePattern, isDayCycle } from "@/lib/dayCycles";
+import type { DayCycle, RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
 
 import { CompiledSources } from "./CompiledSources";
+import { DayCycleSetup } from "./DayCycleSetup";
 import { CheckboxGrid, Field } from "./fields";
 import { CYCLES, CycleSetup, firstGroupAnchor } from "./RotationSetup";
 import type { Cycle } from "./RotationSetup";
@@ -94,13 +97,22 @@ export function ManualSetup({
   const [generalExitSchedule, setGeneralExitSchedule] = useState(
     inputText(initialWorkplace.general_exit_schedule),
   );
+  const [dayCycles, setDayCycles] = useState<DayCycle[]>(() =>
+    (profile.workplace?.day_cycles ?? []).map((cycle) => ({
+      ...cycle,
+      groups: strings(cycle.groups),
+      offsets: { ...(cycle.offsets ?? {}) },
+      group_times: { ...(cycle.group_times ?? {}) },
+      time_changes: [...(cycle.time_changes ?? [])],
+    })),
+  );
   const [employees, setEmployees] = useState<Row[]>(rows(profile.employees));
   const [shifts, setShifts] = useState<Row[]>(rows(profile.shifts));
   const [enabledExitPatterns, setEnabledExitPatterns] = useState<string[]>(() => {
     const configured = strings(initialWorkplace.enabled_exit_patterns);
     const used = rows(profile.employees)
       .map((person) => exitPattern(person, rotationMode))
-      .filter((pattern) => pattern !== "round");
+      .filter((pattern) => pattern !== "round" && !isDayCycle(pattern));
     return [...new Set([...configured, ...used])];
   });
   const [rotationAUnavailability, setRotationAUnavailability] = useState<Row[]>(
@@ -135,9 +147,14 @@ export function ManualSetup({
     [profile.shifts],
   );
   const usedExitPatterns = useMemo(
-    () => new Set(employees.map((person) => exitPattern(person, rotationMode)).filter((pattern) => pattern !== "round")),
+    () => new Set(employees.map((person) => exitPattern(person, rotationMode)).filter((pattern) => pattern !== "round" && !isDayCycle(pattern))),
     [employees, rotationMode],
   );
+  const usedDayCycles = useMemo(
+    () => new Set(employees.map((person) => exitPattern(person, rotationMode)).filter(isDayCycle).map((pattern) => pattern.slice("cycle:".length))),
+    [employees, rotationMode],
+  );
+  const groupsOf = (pattern: string) => rotationGroups(pattern, dayCycles);
   const availableExitPatterns = useMemo(
     () => new Set(["round", ...enabledExitPatterns, ...usedExitPatterns]),
     [enabledExitPatterns, usedExitPatterns],
@@ -149,6 +166,8 @@ export function ManualSetup({
     && !(pattern === "round" && rotationAUnavailability.length > 0
       && !closureWindows.some((row) => row.pattern === "round"));
   const ready = Boolean(unitName.trim() && employees.some(named) && shifts.some(named));
+
+  useGuideSurface("setup");
 
   const save = async () => {
     if (!ready || busy) return;
@@ -173,6 +192,7 @@ export function ManualSetup({
           triplet_first_closure_date: anchors.triplet,
           rotation_closure_windows: closureWindows,
           rotation_presence: rotationPresence,
+          day_cycles: dayCycles,
           general_exit_schedule: generalExitSchedule.trim(),
           enabled_exit_patterns: enabledExitPatterns,
           rotation_a_unavailability: rotationAUnavailability.map((rule) => ({
@@ -188,9 +208,9 @@ export function ManualSetup({
           name: text(person.name),
           role: text(person.role),
           exit_pattern: exitPattern(person, rotationMode),
-          rotation_group: rotationGroups(exitPattern(person, rotationMode)).includes(text(person.rotation_group))
+          rotation_group: groupsOf(exitPattern(person, rotationMode)).includes(text(person.rotation_group))
             ? text(person.rotation_group)
-            : rotationGroups(exitPattern(person, rotationMode))[0] ?? "",
+            : groupsOf(exitPattern(person, rotationMode))[0] ?? "",
           service_type: text(person.service_type) || "standard",
           counts_toward_staffing: person.counts_toward_staffing !== false,
           eligible_shifts: strings(person.eligible_shifts),
@@ -249,6 +269,7 @@ export function ManualSetup({
           <p>כל מה שמוגדר כאן נכנס ישירות לפרופיל שממנו נבנים הסידורים.</p>
         </div>
         <div className="manual-header-actions">
+          <HelpButton />
           {onCancel ? (
             <button type="button" className="ghost-button" onClick={onCancel} disabled={busy}>
               <X size={16} /> ביטול
@@ -263,7 +284,7 @@ export function ManualSetup({
       {error ? <div className="manual-error" role="alert">{error}</div> : null}
 
       <main id="main-content" className="manual-sections">
-        <SetupSection icon={<CalendarClock />} title="היחידה והיציאות הכלליות" hint="מתארים כאן את תמונת היציאות של הצוות; את המבנה האישי מגדירים לכל חייל/ת בנפרד.">
+        <SetupSection tour="setup-workplace" icon={<CalendarClock />} title="היחידה והיציאות הכלליות" hint="מתארים כאן את תמונת היציאות של הצוות; את המבנה האישי מגדירים לכל חייל/ת בנפרד.">
           <div className="manual-grid three">
             <Field label="שם היחידה *">
               <input value={unitName} onChange={(event) => setUnitName(event.target.value)} maxLength={120} required />
@@ -280,7 +301,7 @@ export function ManualSetup({
           <CheckboxGrid label="ימי פעילות" values={DAYS} selected={operatingDays} onChange={setOperatingDays} />
         </SetupSection>
 
-        <SetupSection icon={<Repeat2 />} title="סבבים ותלתונים" hint="מגדירים עוגן ושעות סגירה לקבוצה א׳ בלבד, בסבב ובתלתון; הקבוצות האחרות נגזרות ממנה. ההגדרות חלות על השיבוץ הבא — סידור קיים לא נבנה מחדש.">
+        <SetupSection tour="setup-rotations" icon={<Repeat2 />} title="סבבים, תלתונים ומחזורי ימים" hint="מגדירים עוגן ושעות סגירה לקבוצה א׳ בלבד, בסבב ובתלתון; הקבוצות האחרות נגזרות ממנה. מחזור ימים (11/3, 12/2, שבוע־שבוע…) מוגדר בימים בבסיס ובבית. ההגדרות חלות על השיבוץ הבא — סידור קיים לא נבנה מחדש.">
           <PatternOptions selected={enabledExitPatterns} locked={usedExitPatterns} onChange={setEnabledExitPatterns} />
 
           <div className="rotation-cycles" aria-label="מחזורי הסגירה">
@@ -299,6 +320,8 @@ export function ManualSetup({
               />
             ))}
           </div>
+
+          <DayCycleSetup cycles={dayCycles} onChange={setDayCycles} used={usedDayCycles} />
 
           <div className="rotation-pair" aria-label="הקשר בין סבב א לסבב ב">
             <div><strong>סבב א׳</strong><span>אתם מגדירים את זמני אי־הזמינות.</span></div>
@@ -327,7 +350,7 @@ export function ManualSetup({
           {rotationAUnavailability.length === 0 ? <p className="rotation-empty">לא הוגדרו זמני אי־זמינות נוספים. לוח הסגירות עדיין מחושב מעוגני הסבב והתלתון.</p> : <p className="rotation-derived-note">סבב ב׳ יהיה זמין בדיוק בזמנים שסבב א׳ אינו זמין, ולא זמין בשאר מועדי הפעילות. החישוב מתבצע בשירות השיבוץ.</p>}
         </SetupSection>
 
-        <SetupSection icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">
+        <SetupSection tour="setup-people" icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">
           <div className="manual-list">
             {employees.map((person, index) => (
               <article className="manual-row" key={`employee-${index}`}>
@@ -337,10 +360,12 @@ export function ManualSetup({
                   <Field label="מבנה יציאות">
                     <select value={exitPattern(person, rotationMode)} onChange={(e) => {
                       edit(setEmployees, index, "exit_pattern", e.target.value);
-                      edit(setEmployees, index, "rotation_group", rotationGroups(e.target.value)[0] ?? "");
-                    }}>{Object.entries(EXIT_PATTERNS).filter(([value]) => availableExitPatterns.has(value)).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+                      edit(setEmployees, index, "rotation_group", groupsOf(e.target.value)[0] ?? "");
+                    }}>{Object.entries(EXIT_PATTERNS).filter(([value]) => availableExitPatterns.has(value)).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      {dayCycles.map((cycle) => <option key={cycle.id} value={cyclePattern(cycle)}>{cycle.name || "מחזור"} · {cycle.groups.join(" / ")}</option>)}
+                    </select>
                   </Field>
-                  {rotationGroups(exitPattern(person, rotationMode)).length ? <Field label="קבוצה"><select value={text(person.rotation_group) || rotationGroups(exitPattern(person, rotationMode))[0]} onChange={(e) => edit(setEmployees, index, "rotation_group", e.target.value)}>{rotationGroups(exitPattern(person, rotationMode)).map((group) => <option key={group}>{group}</option>)}</select></Field> : null}
+                  {groupsOf(exitPattern(person, rotationMode)).length ? <Field label="קבוצה"><select value={text(person.rotation_group) || groupsOf(exitPattern(person, rotationMode))[0]} onChange={(e) => edit(setEmployees, index, "rotation_group", e.target.value)}>{groupsOf(exitPattern(person, rotationMode)).map((group) => <option key={group}>{group}</option>)}</select></Field> : null}
                   <Field label="מעמד">
                     <select value={text(person.service_type) || "standard"} onChange={(e) => {
                       edit(setEmployees, index, "service_type", e.target.value);
@@ -364,7 +389,7 @@ export function ManualSetup({
           <button type="button" className="ghost-button" onClick={() => setEmployees((current) => [...current, { name: "", role: "", exit_pattern: rotationMode, rotation_group: "א", service_type: "standard", counts_toward_staffing: true, eligible_shifts: [], is_shift_manager: false, can_train: false, notes: "" }])}><Plus size={16} /> הוספת איש/אשת צוות</button>
         </SetupSection>
 
-        <SetupSection icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה.">
+        <SetupSection tour="setup-shifts" icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה.">
           <div className="manual-list">
             {shifts.map((shift, index) => (
               <article className="manual-row" key={`shift-${index}`}>
@@ -393,7 +418,7 @@ export function ManualSetup({
           <button type="button" className="ghost-button" onClick={() => setShifts((current) => [...current, { name: "", shift_type: "regular", start_time: "", end_time: "", headcount: 1, purpose: "", days: DAYS }])}><Plus size={16} /> הוספת סוג משמרת</button>
         </SetupSection>
 
-        <SetupSection icon={<ShieldCheck />} title="כללים קבועים" hint="כלל קשיח הוא חובה; כלל רך הוא העדפה שהמערכת מנסה לכבד.">
+        <SetupSection tour="setup-rules" icon={<ShieldCheck />} title="כללים קבועים" hint="כלל קשיח הוא חובה; כלל רך הוא העדפה שהמערכת מנסה לכבד.">
           <div className="manual-list compact">
             {rules.map((rule, index) => (
               <div className="manual-rule" key={index}>
@@ -406,7 +431,7 @@ export function ManualSetup({
           <button type="button" className="ghost-button" onClick={() => setRules((current) => [...current, { text: "", priority: "hard" }])}><Plus size={16} /> הוספת כלל קבוע</button>
         </SetupSection>
 
-        <SetupSection icon={<Scale />} title="גבולות עומס ומנוחה" hint="בדיקות אלה מציפות חריגות ומסייעות לשיבוץ; הן אינן חוסמות החלטת מפקד.">
+        <SetupSection tour="setup-limits" icon={<Scale />} title="גבולות עומס ומנוחה" hint="בדיקות אלה מציפות חריגות ומסייעות לשיבוץ; הן אינן חוסמות החלטת מפקד.">
           <div className="manual-grid three">
             <Field label="מקסימום שעות בשבוע"><input type="number" min={1} value={maxWeeklyHours} onChange={(e) => setMaxWeeklyHours(Number(e.target.value) || 1)} /></Field>
             <Field label="מקסימום ימים רצופים"><input type="number" min={1} value={maxConsecutiveDays} onChange={(e) => setMaxConsecutiveDays(Number(e.target.value) || 1)} /></Field>
@@ -419,7 +444,7 @@ export function ManualSetup({
         </SetupSection>
       </main>
 
-      <footer className="manual-savebar">
+      <footer className="manual-savebar" data-tour="setup-save">
         <span>{employees.filter(named).length} אנשי צוות · {shifts.filter(named).length} סוגי משמרות · {rules.filter((rule) => text(rule.text)).length} כללים</span>
         <button type="button" className="primary-button" onClick={() => void save()} disabled={!ready || busy}><Save size={16} /> {busy ? "שומר…" : "שמירה ומעבר ללוח"}</button>
       </footer>
@@ -427,8 +452,8 @@ export function ManualSetup({
   );
 }
 
-function SetupSection({ icon, title, hint, children }: { icon: React.ReactNode; title: string; hint: string; children: React.ReactNode }) {
-  return <section className="manual-section"><header><span>{icon}</span><div><h2>{title}</h2><p>{hint}</p></div></header><div className="manual-section-body">{children}</div></section>;
+function SetupSection({ tour, icon, title, hint, children }: { tour?: string; icon: React.ReactNode; title: string; hint: string; children: React.ReactNode }) {
+  return <section className="manual-section"><header><span>{icon}</span><div data-tour={tour}><h2>{title}</h2><p>{hint}</p></div></header><div className="manual-section-body">{children}</div></section>;
 }
 
 /** Which roles may stand a shift. A role no longer on the roster stays
@@ -461,14 +486,16 @@ function rows(value: unknown): Row[] { return Array.isArray(value) ? value.filte
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : []; }
 function text(value: unknown): string { return typeof value === "string" ? value.trim() : ""; }
 function inputText(value: unknown): string { return typeof value === "string" ? value : ""; }
-function exitPattern(row: Row, fallback: "round" | "triplet" = "round"): keyof typeof EXIT_PATTERNS {
+function exitPattern(row: Row, fallback: "round" | "triplet" = "round"): string {
   const value = text(row.exit_pattern);
-  return value in EXIT_PATTERNS ? value as keyof typeof EXIT_PATTERNS : fallback;
+  // A day cycle is checked against the workplace's cycles on save.
+  if (isDayCycle(value)) return value;
+  return value in EXIT_PATTERNS ? value : fallback;
 }
-function rotationGroups(pattern: string): string[] {
+function rotationGroups(pattern: string, cycles: DayCycle[]): string[] {
   if (pattern === "triplet") return ["א", "ב", "ג"];
   if (pattern === "round") return ["א", "ב"];
-  return [];
+  return cycles.find((cycle) => cyclePattern(cycle) === pattern)?.groups ?? [];
 }
 function number(value: unknown, fallback: number): number { return typeof value === "number" && Number.isFinite(value) ? value : fallback; }
 function named(row: Row): boolean { return Boolean(text(row.name)); }

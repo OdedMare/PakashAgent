@@ -125,13 +125,13 @@ class _Fill:
     def _ranked(self, candidates: List[dict]) -> List[dict]:
         load = self._load()
         ranked = [dict(item, **load.get(item["employee"], {})) for item in candidates]
+        # Fairness is the number of shifts and nights, not hours (`solver/fairness.py`).
         ranked.sort(key=lambda item: (
-            item.get("hours", 0.0), item.get("shifts", 0), item.get("nights", 0),
-            item["employee"],
+            item.get("shifts", 0), item.get("nights", 0), item["employee"],
         ))
         for item in ranked:
-            item["why"] = "%s שעות · %d משמרות · %d לילות בתקופה" % (
-                _pretty(item.get("hours", 0.0)), item.get("shifts", 0), item.get("nights", 0))
+            item["why"] = "%d משמרות · %d לילות בתקופה" % (
+                item.get("shifts", 0), item.get("nights", 0))
         return ranked
 
     def _accept(self, employee: str, shift: str, date: str, force: bool = False) -> bool:
@@ -175,5 +175,3 @@ def _start(schedule: dict, row: dict) -> str:
     return _slot_times(schedule, row["shift"], iso(row["date"]))["start_time"]
 
 
-def _pretty(hours: float) -> str:
-    return "%g" % round(float(hours or 0), 1)

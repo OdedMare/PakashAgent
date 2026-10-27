@@ -1,5 +1,12 @@
-"""How the load is shared: closers on their own closure, even hours, even
-nights, and a day off between shifts where the roster allows one.
+"""How the load is shared: closers on their own closure, an even number of
+shifts and of nights, and as long a rest between shifts as the roster allows.
+
+Load is counted in shifts, not hours. On base nobody is on the clock — a
+soldier is in from Thursday to Sunday and closes the weekend — so what is
+owed evenly is the number of shifts, and what is worth winning beyond that
+is the gap between them: every pair of one person's shifts closer than
+`SPACING_HOURS` pays per hour it is short, which is the sleep the second
+shift takes away.
 
 Each person's load is driven towards a target of their own: the demand
 poured evenly over the team, but no one is asked for less than they
@@ -25,22 +32,25 @@ placement and nothing fixed take no part.
 import datetime
 from typing import Dict, List
 
-from app.bl.audit.roster import iso_week
-from app.bl.audit.values import number
 from app.bl.solver.model import (
-    BACK_TO_BACK, CLOSER, HOUR_PEAK, HOUR_SCALE, HOUR_SPREAD, NIGHT_PEAK, NIGHT_SCALE,
-    NIGHT_SPREAD, Model,
+    BACK_TO_BACK, CLOSER, NIGHT_PEAK, NIGHT_SCALE, NIGHT_SPREAD, SHIFT_PEAK, SHIFT_SCALE,
+    SHIFT_SPREAD, SPACING, SPACING_HOURS, Model,
 )
+from app.bl.solver.rules import timed_pairs
 
 
 def apply_fairness(model: Model) -> None:
     _closers(model)
-    hours = lambda times: int(round(times["hours"] * HOUR_SCALE))
-    _spread(model, hours, HOUR_SPREAD, HOUR_PEAK, "hours", _weekly_limit(model.problem))
+    shifts = lambda times: SHIFT_SCALE
+    _spread(model, shifts, SHIFT_SPREAD, SHIFT_PEAK, "shifts")
     nights = lambda times: NIGHT_SCALE * int(bool(times["night"]))
     _spread(model, nights, NIGHT_SPREAD, NIGHT_PEAK, "nights")
+    clocked = any(times["begins"] is not None for times in model.problem.times)
     for name in model.problem.people:
-        _back_to_back(model, name)
+        if clocked:
+            _spacing(model, name)
+        else:
+            _back_to_back(model, name)
 
 
 def _closers(model: Model) -> None:
@@ -50,7 +60,7 @@ def _closers(model: Model) -> None:
             model.price(-CLOSER, var, kind="closer")
 
 
-def _spread(model: Model, measure, weight: int, peak: int, label: str, weekly=None) -> None:
+def _spread(model: Model, measure, weight: int, peak: int, label: str) -> None:
     problem = model.problem
     loads = {}
     for name in problem.staff:
@@ -63,7 +73,7 @@ def _spread(model: Model, measure, weight: int, peak: int, label: str, weekly=No
     demand = sum(measure(times) * max(0, int(slot.get("headcount") or 0))
                  for times, slot in zip(problem.times, problem.slots))
     demand += sum(fixed for _, fixed in loads.values())
-    room = {name: _capacity(problem, name, placed, measure, weekly)
+    room = {name: _capacity(problem, name, placed, measure)
             for name, (placed, _) in loads.items()}
     targets = water_fill({name: fixed for name, (_, fixed) in loads.items()}, room, demand)
     top = demand + max(fixed for _, fixed in loads.values()) + 1
@@ -78,32 +88,15 @@ def _spread(model: Model, measure, weight: int, peak: int, label: str, weekly=No
     model.price(peak, worst, kind=label)
 
 
-def _capacity(problem, name: str, placed, measure, weekly) -> int:
+def _capacity(problem, name: str, placed, measure) -> int:
     """About the most this person can still take: the heaviest legal slot
-    of each day (rest rarely allows two), held under the weekly limit when
-    one is given. An estimate, not a promise; the rules decide the rest."""
+    of each day (rest rarely allows two). An estimate, not a promise; the
+    rules decide the rest."""
     days: Dict[str, int] = {}
     for index in placed:
         day = problem.slots[index]["slot_date"]
         days[day] = max(days.get(day, 0), measure(problem.times[index]))
-    if weekly is None:
-        return sum(days.values())
-    weeks: Dict[tuple, int] = {}
-    for day, amount in days.items():
-        week = iso_week(datetime.date.fromisoformat(day))
-        weeks[week] = weeks.get(week, 0) + amount
-    return sum(min(amount, max(0, weekly(name, week))) for week, amount in weeks.items())
-
-
-def _weekly_limit(problem):
-    """Tenths of an hour `name` may still work in `week`, as `rules.py` caps it."""
-    def left(name: str, week: tuple) -> int:
-        limit = number(problem.people[name].get("max_weekly_hours"), 0.0) \
-            or problem.policy["max_weekly_hours"]
-        fixed = sum(row["hours"] for row in problem.fixed if row["employee"] == name
-                    and iso_week(datetime.date.fromisoformat(row["date"])) == week)
-        return int(round((limit - fixed) * HOUR_SCALE))
-    return left
+    return sum(days.values())
 
 
 def water_fill(floors: Dict[str, int], room: Dict[str, int], demand: int) -> Dict[str, int]:
@@ -138,6 +131,23 @@ def water_fill(floors: Dict[str, int], room: Dict[str, int], demand: int) -> Dic
             targets[name] += 1
             short -= 1
     return targets
+
+
+def _spacing(model: Model, name: str) -> None:
+    """Pay per hour by which two of this person's shifts fall short of
+    `SPACING_HOURS` apart. A pair closer than the minimum rest is already
+    forbidden (`rules.py`); this ranks the legal ones, longest rest first."""
+    horizon = datetime.timedelta(hours=SPACING_HOURS)
+    for _, first, _, second, gap in timed_pairs(model.problem, model, name, horizon):
+        short = int(round(SPACING_HOURS - max(0.0, gap)))
+        if short <= 0:
+            continue
+        if first is None or second is None:
+            both = second if first is None else first
+        else:
+            both = model.cp.NewBoolVar("close")
+            model.cp.Add(both >= first + second - 1)
+        model.price(SPACING * short, both, kind="spacing")
 
 
 def _back_to_back(model: Model, name: str) -> None:

@@ -36,7 +36,8 @@ employees, and publish to the team.
 **A constraint solver builds the schedule; the model only translates.**
 OR-Tools CP-SAT assigns a whole span (up to four weeks) at once: every
 availability, rotation, rest, run-of-days, weekly-hours and staffing rule,
-every structured request, and an even share of hours and nights. The model
+every structured request, an even share of shifts and nights, and the
+longest rest between one person's shifts. The model
 turns the manager's free-text rules and instructions into those structured
 requests; anything it cannot translate is named in the build's notes
 rather than silently dropped
@@ -177,9 +178,25 @@ manager's live inbox (LISTEN/NOTIFY) and the model-call limit
 (`PAKASH_LLM_MAX_CONCURRENCY`, default 4; set 1 for a local Ollama) all go
 through it ([D35](docs/DECISIONS.md)). There is no Redis.
 
-**Set `PAKASH_SESSION_SECRET` in any real deployment.** Left unset it is
-generated per process, so sessions do not survive a restart and break across
-workers.
+**Several replicas need nothing extra** ([D39](docs/DECISIONS.md)). Run
+as many API pods as you like behind one Service, and as many frontend pods
+(each built with `BACKEND_URL` pointing at that Service; it is baked in at
+build time). What they must agree on goes through PostgreSQL:
+
+- **The session key.** `PAKASH_SESSION_SECRET` when set; otherwise one key
+  is generated and kept in the database, so every pod and every restart
+  signs with it. Setting it yourself is still the cleaner choice.
+- **Panel settings.** A save on one pod reaches every other within seconds,
+  without a shared volume. The database connection itself stays in each
+  pod's environment.
+- **Jobs.** Each API pod runs the job worker in-process by default (six
+  lanes, each build using `PAKASH_SOLVER_WORKERS` threads); a job is claimed
+  once whichever pod picks it up. Size CPU limits for that, or set
+  `PAKASH_EMBEDDED_WORKER=false` and run `python -m app.worker` as its own
+  Deployment.
+
+Give the ingress a read timeout of at least ten minutes: a model-backed
+request may take five, and the frontend proxy allows ten.
 
 The model defaults to a local Ollama endpoint; set `PAKASH_LLM_BASE_URL` and
 `PAKASH_LLM_MODEL` (and `OPENAI_API_KEY`) to point at a hosted API. Structured

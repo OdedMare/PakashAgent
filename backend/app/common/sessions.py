@@ -16,8 +16,9 @@ import hashlib
 import hmac
 import json
 import secrets
+import threading
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 # Role names as they travel in the cookie.
 #
@@ -156,11 +157,35 @@ def read_admin(secret: str, cookie: Optional[str]) -> Optional[dict]:
     return payload
 
 
-def _sign(secret: str, body: str) -> str:
+def _sign(secret, body: str) -> str:
+    # A callable is a key looked up on first use (`SharedSecret`).
+    key = secret() if callable(secret) else secret
     return _b64(hmac.new(
-        secret.encode("utf-8"), body.encode("utf-8"), hashlib.sha256
+        key.encode("utf-8"), body.encode("utf-8"), hashlib.sha256
     ).digest())
 
 
 def generate_secret() -> str:
     return secrets.token_urlsafe(32)
+
+
+class SharedSecret:
+    """A signing key every replica reads from one place (D39).
+
+    `load` is asked on first use rather than at import, so a process that
+    starts before its database does still starts; once it answers, the key
+    is kept for the life of the process. Passed wherever a secret string
+    goes -- `issue`, `read` and friends call it when they sign.
+    """
+
+    def __init__(self, load: Callable[[], str]):
+        self._load = load
+        self._value: Optional[str] = None
+        self._lock = threading.Lock()
+
+    def __call__(self) -> str:
+        if self._value is None:
+            with self._lock:
+                if self._value is None:
+                    self._value = self._load()
+        return self._value
