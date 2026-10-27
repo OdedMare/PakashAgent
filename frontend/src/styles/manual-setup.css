@@ -129,14 +129,16 @@
 @media (max-width: 620px) {
   .manual-setup-header { align-items: flex-start; flex-direction: column; }
   .manual-header-actions { width: 100%; }
-  .manual-header-actions button { flex: 1; justify-content: center; }
+  .manual-header-actions button { min-height: 44px; flex: 1; justify-content: center; }
+  .manual-header-actions .header-help { width: auto; }
+  .manual-header-actions .header-help > span { display: inline; }
   .manual-grid.three, .employee-grid, .shift-grid, .manual-rule { grid-template-columns: 1fr; }
   .manual-row-foot { align-items: flex-start; flex-direction: column; }
   .rotation-pair { grid-template-columns: 1fr; }
   .rotation-pair > svg { transform: rotate(90deg); }
   .rotation-anchor, .rotation-window-grid { grid-template-columns: 1fr; }
   .manual-savebar span { display: none; }
-  .manual-savebar button { width: 100%; justify-content: center; }
+  .manual-savebar button { width: 100%; min-height: 44px; justify-content: center; }
 }
 
 /* What the code scheduler understood (D32). */
