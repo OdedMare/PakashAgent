@@ -63,6 +63,7 @@ AiSummryIO.
 | `PAKASH_OPEN_SIGNUP` | Self-service team creation from the login page (default off) |
 | `PAKASH_EMBEDDED_WORKER` | Run the job worker inside the API process (default on; compose turns it off because it runs `app.worker` separately) |
 | `PAKASH_WORKER_CONCURRENCY` / `PAKASH_CHAT_WORKERS` | Worker threads (default 6) and how many of them only take manager-chat turns (default 3) |
+| `PAKASH_JOB_RETENTION_DAYS` | Finished jobs are deleted after this many days (default 30), checked hourly by every worker process |
 | `PAKASH_SOLVER_TIME_LIMIT_SECONDS` / `PAKASH_SOLVER_WORKERS` | The constraint solver's wall time per solve (default 10s) and parallel workers (default 8). Live-editable in the panel |
 | `PAKASH_LLM_MAX_CONCURRENCY` | Model calls in flight across every process (default 4; 1 for a local Ollama) |
 | `PAKASH_LLM_TEAM_CONCURRENCY` | How many of those one team may hold; 0 (default) = all of them |
