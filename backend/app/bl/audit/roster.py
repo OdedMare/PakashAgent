@@ -16,9 +16,12 @@ from app.bl.shared import parse_date
 
 # Defaults used only when the workplace profile does not say otherwise. They
 # exist so a schedule can be audited before the profile is complete, not to
-# encode a policy about what a working week looks like.
-_DEFAULT_MAX_WEEKLY_HOURS = 45.0
-_DEFAULT_MAX_CONSECUTIVE_DAYS = 6
+# encode a policy about what a working week looks like. They are a base's:
+# load is evened in shifts, not hours (`solver/fairness.py`), so the weekly
+# hours cap is the whole week and binds nothing until a manager sets one;
+# eleven days on base in a row, and eight hours' rest between shifts.
+_DEFAULT_MAX_WEEKLY_HOURS = 168.0
+_DEFAULT_MAX_CONSECUTIVE_DAYS = 11
 _DEFAULT_MIN_REST_HOURS = 8.0
 
 

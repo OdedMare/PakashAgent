@@ -1396,9 +1396,10 @@ def test_a_manual_schedule_still_carries_its_warnings():
     app, _ = _build_app([])
     client = _client(app)
     client.post("/api/schedule/blank", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-24",
+        "starts_on": "2026-08-17", "ends_on": "2026-08-28",
     })
-    for day in range(17, 25):
+    # Twelve days in a row: one past the default eleven.
+    for day in range(17, 29):
         client.post("/api/schedule/assign", json={
             "shift_name": MORNING, "slot_date": "2026-08-%02d" % day,
             "employee": "דנה",
@@ -1409,7 +1410,7 @@ def test_a_manual_schedule_still_carries_its_warnings():
     codes = {warning["code"] for warning in schedule["warnings"]}
     assert "consecutive" in codes
     # Reported, never withheld.
-    assert len(schedule["assignments"]) == 8
+    assert len(schedule["assignments"]) == 12
 
 
 def test_unassigning_removes_the_row_and_logs_it():

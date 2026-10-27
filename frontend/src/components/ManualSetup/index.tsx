@@ -109,8 +109,8 @@ export function ManualSetup({
   );
   const [rules, setRules] = useState<Row[]>(rows(profile.rules));
   const audit = record(profile.audit_policy);
-  const [maxWeeklyHours, setMaxWeeklyHours] = useState(number(audit.max_weekly_hours, 45));
-  const [maxConsecutiveDays, setMaxConsecutiveDays] = useState(number(audit.max_consecutive_days, 6));
+  const [maxWeeklyHours, setMaxWeeklyHours] = useState(number(audit.max_weekly_hours, 168));
+  const [maxConsecutiveDays, setMaxConsecutiveDays] = useState(number(audit.max_consecutive_days, 11));
   const [minRestHours, setMinRestHours] = useState(number(audit.min_rest_hours, 8));
   // Saved shift types the manager deleted here. They are archived by their
   // own call after the save, which also cleans them out of the roster.
