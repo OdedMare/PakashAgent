@@ -75,15 +75,18 @@ and the build still completes.
   feasible and the solver never answers "no schedule".
 - `requests.py` turns each structured request into a constraint (hard) or
   a priced term (soft), and prices soft availability.
-- `fairness.py` rewards closers on their own closure, spreads hours and
-  nights towards a target per person — the demand poured evenly, but never
-  below what someone already carries nor above what they can take
-  (`water_fill`), so a part-timer is not counted at a share they cannot
-  reach — and charges back-to-back days. Each target is a constant computed
-  before solving (a target that moved with the answer made optimality
-  unprovable). Both the distance from the target and the largest overload
-  are priced, per unit of load and independent of team size: one shift of
-  evenness (a shift up to twelve hours) is cheaper than a soft wish (`model.py`).
+- `fairness.py` rewards closers on their own closure, spreads shifts (not
+  hours: on base nobody is on the clock) and nights towards a target per
+  person — the demand poured evenly, but never below what someone already
+  carries nor above what they can take (`water_fill`), so a part-timer is
+  not counted at a share they cannot reach — and prices every pair of one
+  person's shifts per hour their gap falls short of 48 (`SPACING_HOURS`),
+  so the longest rest wins (back-to-back days are charged instead only when
+  shifts carry no clock). Each target is a constant computed before solving
+  (a target that moved with the answer made optimality unprovable). Both
+  the distance from the target and the largest overload are priced, per
+  unit of load and independent of team size: one shift of evenness is
+  cheaper than a soft wish (`model.py`) and dearer than any one gap.
 - `solve.py` solves in two phases: coverage (unfilled seats, missing roles,
   the shift manager) first; then, with coverage fixed as a ceiling and the
   first answer as a hint, everything else. It writes a reason on every row,
@@ -309,7 +312,7 @@ data. Neither decides anything.
 shifts count, as do shifts crossing midnight or starting from 22:00 through
 05:59. Effective slot hours take precedence over vocabulary hours. Names are
 never matched: the editor records times without requiring a night flag. The
-solver spreads nights with the same `is_night`, priced above hours.
+solver spreads nights with the same `is_night`, beside an even count of shifts.
 
 **Pass `slots` when you have them.** `audit()` takes the schedule's slot grid as
 well as the assignments. A slot with nobody on it leaves no row among the
