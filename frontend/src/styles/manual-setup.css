@@ -39,6 +39,7 @@
 
 .manual-section > header { display: flex; gap: 0.8rem; padding: 1.15rem; background: var(--surface-2); border-inline-end: 1px solid var(--border); }
 .manual-section > header > span { display: grid; width: 2.15rem; height: 2.15rem; flex: none; place-items: center; color: var(--primary); background: var(--primary-soft); border-radius: var(--radius-sm); }
+.manual-section > header > div { align-self: flex-start; }
 .manual-section > header svg { width: 1rem; }
 .manual-section h2 { margin: 0; font-size: 1rem; }
 .manual-section header p { margin: 0.3rem 0 0; color: var(--text-muted); font-size: 0.78rem; line-height: 1.55; }

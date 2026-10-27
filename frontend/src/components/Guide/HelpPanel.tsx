@@ -37,6 +37,8 @@ type View = "home" | "shortcuts" | "glossary";
 
 /** What the two guards say about the system when the panel opens. */
 const INTRO: Record<Surface, string> = {
+  setup:
+    "היי, אנחנו כאן לעזור בהקמה. מתחילים בפרטי היחידה, מוסיפים אנשים ומשמרות, ורק אז שומרים ועוברים ללוח.",
   manager:
     "היי, אנחנו כאן להסביר. מגדירים את הצוות פעם אחת, הסוכן בונה סידור, אתם בודקים את האזהרות ומפרסמים — וכל שינוי מחכה לאישור שלכם.",
   employee:
@@ -46,6 +48,7 @@ const INTRO: Record<Surface, string> = {
 };
 
 const SURFACE_LABEL: Record<Surface, string> = {
+  setup: "הגדרת היחידה",
   manager: "אזור הניהול",
   employee: "האזור האישי",
   member: "תצוגת הצוות",
