@@ -56,6 +56,7 @@ AiSummryIO.
 | `PAKASH_LLM_VERIFY_SSL` | Ignored: the model server's certificate is never verified |
 | `OPENAI_API_KEY` | Read unprefixed, as the SDK expects |
 | `PAKASH_DATABASE_*` | URL plus optional explicit overrides |
+| `PAKASH_DATABASE_POOL_SIZE` | Pooled connections per process (default 16). With several replicas, replicas × (this + 1 + model calls in flight) must stay under Postgres's `max_connections` |
 | `PAKASH_SESSION_SECRET` | Signs the workspace session cookie. Unset, one key is generated and kept in the database for every replica (D39); only with no database is it per process. Changing it logs every boss out. |
 | `PAKASH_SETTINGS_PASSWORD` | Unlocks the settings panel on top of the boss login, sent as the `X-Settings-Password` header. Defaults to `010802` (committed); **override it in any real deployment**. Set to empty, the panel stays locked. The settings are shared by every workspace, and anyone can open a workspace and be its boss |
 | `PAKASH_SESSION_DAYS` | How long a boss stays logged in (default 30) |
