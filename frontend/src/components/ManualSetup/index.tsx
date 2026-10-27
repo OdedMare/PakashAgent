@@ -226,6 +226,7 @@ export function ManualSetup({
           min_rest_hours: minRestHours,
         },
         summary: "יחידה צבאית עם מבנה יציאות אישי לכל חייל/ת",
+        expected_revision: workspace.profile_revision,
       });
       for (const name of removedShifts) {
         await deleteShiftType(name);

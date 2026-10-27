@@ -62,6 +62,12 @@ class ConflictError(AppError):
     status_code = 409
 
 
+# A save edited from a profile somebody else has saved over since.
+PROFILE_CHANGED = "ההגדרות נשמרו בינתיים ממקום אחר. רעננו את הדף ונסו שוב"
+# A drag confirmed after somebody else moved or removed the same shift.
+ASSIGNMENT_MOVED = "המשמרת הוזזה בינתיים ממקום אחר. רעננו את הלוח ונסו שוב"
+
+
 class AuthError(AppError):
     status_code = 401
 

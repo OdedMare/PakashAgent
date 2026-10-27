@@ -96,6 +96,7 @@ class ChangeService:
         reason: str,
         agent_reason: str = "",
         schedule_id: Optional[str] = None,
+        from_slot_id: str = "",
     ) -> dict:
         """Move one assignment — what a confirmed drag resolves to.
 
@@ -116,6 +117,9 @@ class ChangeService:
         previous = find_assignment(schedule, assignment_id)
         moved = self._repository.move_assignment(
             assignment_id, team_id, slot["id"], reason=agent_reason or reason,
+            # Where the manager saw it: a shift somebody else moved in the
+            # meantime is refused rather than moved again (409).
+            expected_slot_id=from_slot_id or None,
         )
         self._repository.append_change(
             team_id, ACTION_MOVED, schedule_id=schedule["id"],

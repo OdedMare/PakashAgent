@@ -23,7 +23,10 @@ from fastapi.testclient import TestClient
 from app.api.dependencies import Guards
 from app.api.routers import schedules
 from app.bl.schedule_service import ScheduleService
-from app.common.errors import AgentError, AppError, NotFoundError, error_payload
+from app.common.errors import (
+    ASSIGNMENT_MOVED, AgentError, AppError, ConflictError, NotFoundError,
+    error_payload,
+)
 from app.common.time_context import israel_today
 from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 
@@ -70,7 +73,10 @@ class _FakeScheduleRepo:
     def team_profile(self, team_id):
         return self.profiles.get(team_id)
 
-    def update_team_profile(self, team_id, profile):
+    def team_profile_revision(self, team_id):
+        return 0 if team_id in self.profiles else None
+
+    def update_team_profile(self, team_id, profile, expected_revision=None):
         self.profiles[team_id] = profile
         return profile
 
@@ -240,13 +246,15 @@ class _FakeScheduleRepo:
             ]
 
     def move_assignment(self, assignment_id, team_id, slot_id, reason,
-                        employee=None):
+                        employee=None, expected_slot_id=None):
         assert reason.strip(), "reason is required (D8)"
         for schedule_id, rows in self.assignment_rows.items():
             if self.schedules[schedule_id]["team_id"] != team_id:
                 continue
             for row in rows:
                 if row["id"] == assignment_id:
+                    if expected_slot_id and row["slot_id"] != expected_slot_id:
+                        raise ConflictError(ASSIGNMENT_MOVED)
                     row["slot_id"] = slot_id
                     row["reason"] = reason
                     if employee:
@@ -1836,6 +1844,35 @@ def test_a_confirmed_drag_moves_the_assignment_and_logs_the_reason():
     assert moved["date"] == "2026-08-18"
     entry = next(row for row in repo.changes if row["action"] == "moved")
     assert entry["reason"] == "דנה ביקשה להחליף יום"
+
+
+def test_a_drag_somebody_else_already_moved_is_refused():
+    """Two managers drag the same shift. The second confirmation names the
+    slot its manager saw it on, which it has since left, so it is refused
+    rather than moving the shift again from wherever it went."""
+    app, repo = _build_app([
+        _generation([{"employee": "דנה", "shift": MORNING,
+                      "date": "2026-08-17", "reason": "מוסמכת"}]),
+    ])
+    client = _client(app)
+    created = client.post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    assignment = created["assignments"][0]
+    drag = {
+        "assignment_id": assignment["id"], "shift_name": MORNING,
+        "slot_date": "2026-08-18", "reason": "החלפת יום",
+        "from_slot_id": assignment["slot_id"],
+    }
+    assert client.post("/api/schedule/move", json=drag).status_code == 200
+
+    stale = client.post("/api/schedule/move", json=dict(
+        drag, slot_date="2026-08-17", reason="החזרה",
+    ))
+    assert stale.status_code == 409
+    assert stale.json()["detail"] == ASSIGNMENT_MOVED
+    moves = [row for row in repo.changes if row["action"] == "moved"]
+    assert len(moves) == 1
 
 
 def test_a_drag_without_a_reason_is_rejected():

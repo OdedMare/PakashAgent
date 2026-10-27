@@ -235,6 +235,8 @@ export interface Workspace {
 /** A workspace plus its saved profile. */
 export interface TeamView extends Workspace {
   profile: WorkplaceProfile | null;
+  /** What a profile save sends back as `expected_revision`. */
+  profile_revision?: number | null;
 }
 
 /** One advisory finding from `bl/audit.py`.
@@ -666,6 +668,8 @@ export interface ShiftStats {
 export interface ManagementOverview {
   today?: string;
   profile: WorkplaceProfile | null;
+  /** What a profile save sends back as `expected_revision`. */
+  profile_revision?: number | null;
   employees: Record<string, unknown>[];
   shifts: Record<string, unknown>[];
   schedule: Schedule | null;

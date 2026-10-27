@@ -163,6 +163,8 @@ class ManagementOverview(BaseModel):
     # the server about which day "today" is.
     today: str = ""
     profile: Optional[Dict[str, Any]] = None
+    # What a profile save names as `expected_revision` (see ProfileUpdate).
+    profile_revision: Optional[int] = None
     employees: List[Dict[str, Any]] = []
     shifts: List[Dict[str, Any]] = []
     schedule: Optional[Schedule] = None

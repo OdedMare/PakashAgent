@@ -168,6 +168,7 @@ export function Board({
     slot_date: string;
     reason: string;
     schedule_id?: string;
+    from_slot_id?: string;
   }) => Promise<void> | void;
   /** Empty a day's shifts, or the whole week's. The grid stays behind, so
    *  the week can be filled in again without rebuilding its slots. */
@@ -891,6 +892,7 @@ export function Board({
               slot_date: pendingMove.slot_date,
               reason,
               schedule_id: schedule?.id,
+              from_slot_id: pendingMove.assignment.slot_id,
             });
             closeDialogs();
           }}
