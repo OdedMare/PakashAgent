@@ -111,6 +111,10 @@ def _build():
     env = Settings()
     store = RuntimeSettingsStore(env)
     repository = Repository(store)
+    # Panel saves made on any replica apply here too (D39), from the first
+    # job on: a database not ready yet is simply asked again by `get()`.
+    store.share_through(repository)
+    store.pull_shared()
     llm = OpenAIJsonClient(store)
     schedules = ScheduleService(repository, llm, settings=store)
     return repository, JobWorker(

@@ -13,7 +13,10 @@ Fetches and sends. Makes no decisions — those live in `bl/`.
 **PostgreSQL is the only shared state** (D35): data, the job queue
 (`jobs.py`, `FOR UPDATE SKIP LOCKED`), the login throttle
 (`throttle.py`), live signals (`notify.py`) and the model-call limit
-(advisory locks, `llm/model_slots.py`). There is no Redis.
+(advisory locks, `llm/model_slots.py`), and what every replica must agree
+on — the generated session key and the panel's settings
+(`deployment.py`, D39). There is no Redis. `initialize()` creates the
+tables under an advisory lock, so replicas starting together do not race.
 
 ## Connection pooling
 
@@ -91,7 +94,8 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | `agent_preferences` | What the agent remembers (D21): `suggested`, `active` or `archived`, all visible and editable |
 | `manager_chats`, `manager_chat_messages` | One manager's conversations and their turns, with the plan a turn prepared and the receipt of its approval |
 | `copilot_jobs` | The durable job queue: chat turns, generation spans, `compile_sources` (named for the copilot that is gone) — claimed once, retried with backoff |
-| `login_attempts` | Wrong guesses and lockouts per account (D35). The one table without `team_id`: the account key already names the team, and the operator and settings accounts belong to none |
+| `login_attempts` | Wrong guesses and lockouts per account (D35). Without `team_id`: the account key already names the team, and the operator and settings accounts belong to none |
+| `deployment_state` | Values every process of the deployment shares (D39): the generated session key, the panel's settings. Keyed by name with a `version` to poll; no `team_id`, since it belongs to no team |
 
 The workplace profile — the mission, the **shift vocabulary** (names, times,
 on-call flags and weighting), the employees, and the rules — lives as JSON on
