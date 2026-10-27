@@ -80,8 +80,8 @@ and the build still completes.
   person — the demand poured evenly, but never below what someone already
   carries nor above what they can take (`water_fill`), so a part-timer is
   not counted at a share they cannot reach — and prices every pair of one
-  person's shifts per hour their gap falls short of 48 (`SPACING_HOURS`),
-  so the longest rest wins (back-to-back days are charged instead only when
+  person's shifts by the square of the hours their gap falls short of 48
+  (`SPACING_HOURS`), so the longest and most even rest wins (back-to-back days are charged instead only when
   shifts carry no clock). Each target is a constant computed before solving
   (a target that moved with the answer made optimality unprovable). Both
   the distance from the target and the largest overload are priced, per

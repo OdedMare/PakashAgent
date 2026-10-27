@@ -29,12 +29,15 @@ SHIFT_SPREAD = 10
 SHIFT_PEAK = 10
 NIGHT_SPREAD = 15
 NIGHT_PEAK = 15
-# Rest between two shifts of one person is priced per hour short of
-# SPACING_HOURS, so among even schedules the one with the longest gaps (the
-# most sleep) wins. A day off between shifts is charged per day only when
-# the shifts carry no clock to measure a gap with.
+# Rest between two shifts of one person is priced by how far short of
+# SPACING_HOURS it falls, squared: SPACING * short² / SPACING_HOURS. So among
+# even schedules the one with the most rest wins, and a quick turnaround
+# (the night's sleep it takes) costs more than two middling gaps — 8 hours
+# and 40 cost 138, 24 and 24 cost 96. At most SPACING * SPACING_HOURS a pair,
+# below one shift of evenness. A day off between shifts is charged per day
+# only when the shifts carry no clock to measure a gap with.
 SPACING_HOURS = 48
-SPACING = 2
+SPACING = 4
 BACK_TO_BACK = 50
 # The terms phase one of a solve settles before anything else is weighed.
 COVERAGE = ("unfilled", "role", "manager")

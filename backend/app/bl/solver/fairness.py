@@ -134,20 +134,22 @@ def water_fill(floors: Dict[str, int], room: Dict[str, int], demand: int) -> Dic
 
 
 def _spacing(model: Model, name: str) -> None:
-    """Pay per hour by which two of this person's shifts fall short of
-    `SPACING_HOURS` apart. A pair closer than the minimum rest is already
-    forbidden (`rules.py`); this ranks the legal ones, longest rest first."""
+    """Pay for every two of this person's shifts closer than `SPACING_HOURS`,
+    by the square of the hours short (`model.py`). A pair closer than the
+    minimum rest is already forbidden (`rules.py`); this ranks the legal
+    ones, longest and most even rest first."""
     horizon = datetime.timedelta(hours=SPACING_HOURS)
     for _, first, _, second, gap in timed_pairs(model.problem, model, name, horizon):
-        short = int(round(SPACING_HOURS - max(0.0, gap)))
-        if short <= 0:
+        short = SPACING_HOURS - max(0.0, gap)
+        cost = int(round(SPACING * short * short / SPACING_HOURS))
+        if cost <= 0:
             continue
         if first is None or second is None:
             both = second if first is None else first
         else:
             both = model.cp.NewBoolVar("close")
             model.cp.Add(both >= first + second - 1)
-        model.price(SPACING * short, both, kind="spacing")
+        model.price(cost, both, kind="spacing")
 
 
 def _back_to_back(model: Model, name: str) -> None:
