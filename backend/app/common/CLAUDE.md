@@ -49,7 +49,7 @@ AiSummryIO.
 | `PAKASH_LLM_REASONING_EFFORT` | `off`/`low`/`medium`/`high`: how long a reasoning model thinks (gpt-oss, Qwen3); empty sends nothing. Live-editable in the panel |
 | `PAKASH_LLM_TIMEOUT_SECONDS` | Wall time for one HTTP completion; 0 = the built-in ceiling (300s, builds 900s). A stuck call fails and frees its slot (D38) |
 | `PAKASH_LLM_QUEUE_SECONDS` | How long interactive work may wait for a model slot; 0 = no limit |
-| `PAKASH_LLM_VERIFY_SSL` | Verify the model server's certificate (default on) |
+| `PAKASH_LLM_VERIFY_SSL` | Ignored: the model server's certificate is never verified |
 | `OPENAI_API_KEY` | Read unprefixed, as the SDK expects |
 | `PAKASH_DATABASE_*` | URL plus optional explicit overrides |
 | `PAKASH_SESSION_SECRET` | Signs the workspace session cookie. **Set this in production** — unset, it is generated per process, so sessions die on restart and break across workers. Changing it logs every boss out. |

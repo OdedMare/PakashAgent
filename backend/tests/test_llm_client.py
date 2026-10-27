@@ -723,25 +723,22 @@ def test_a_settings_object_without_the_field_still_resolves():
     assert _budget_seconds(object(), "changes") > 300
 
 
-def test_ssl_verification_is_on_unless_turned_off(monkeypatch):
-    """Off, the SDK is handed an httpx client that accepts any certificate;
-    flipping the switch builds a new client rather than reusing the old."""
+def test_ssl_verification_is_always_off(monkeypatch):
+    """The SDK is always handed an httpx client that accepts any
+    certificate, even when the setting says to verify."""
     import app.dal.llm.openai_client as module
 
     built = []
     monkeypatch.setattr(module, "OpenAI", lambda **kwargs: built.append(kwargs) or object())
-    settings = _Settings()
+    settings = _Settings(llm_verify_ssl=True)
     llm = OpenAIJsonClient(_Store(settings))
 
     llm._client_for("", "http://local/v1", 0)
-    settings.llm_verify_ssl = False
-    llm._client_for("", "http://local/v1", 0)
 
-    assert "http_client" not in built[0]
-    assert "http_client" in built[1]
+    assert "http_client" in built[0]
 
 
-def test_the_models_probe_honours_the_ssl_switch(monkeypatch):
+def test_the_models_probe_never_verifies_ssl(monkeypatch):
     import app.dal.llm.openai_client as module
 
     seen = []
@@ -757,13 +754,13 @@ def test_the_models_probe_honours_the_ssl_switch(monkeypatch):
         module.httpx, "get",
         lambda url, **kwargs: seen.append(kwargs["verify"]) or _Reply(),
     )
-    settings = _Settings(llm_verify_ssl=False)
+    settings = _Settings(llm_verify_ssl=True)
     llm = OpenAIJsonClient(_Store(settings))
 
     llm.list_models()
     llm.list_models(verify_ssl_override=True)
 
-    assert seen == [False, True]
+    assert seen == [False, False]
 
 
 # --- the server tripping over its own output, and how long it thinks -------

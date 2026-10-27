@@ -16,6 +16,7 @@ import {
 import { useMemo, useState } from "react";
 
 import { TimeInput } from "@/components/TimeInput";
+import { HelpButton, useGuideSurface } from "@/components/Guide";
 import { deleteShiftType, updateProfile } from "@/services/api";
 import { cyclePattern, isDayCycle } from "@/lib/dayCycles";
 import type { DayCycle, RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
@@ -166,6 +167,8 @@ export function ManualSetup({
       && !closureWindows.some((row) => row.pattern === "round"));
   const ready = Boolean(unitName.trim() && employees.some(named) && shifts.some(named));
 
+  useGuideSurface("setup");
+
   const save = async () => {
     if (!ready || busy) return;
     setBusy(true);
@@ -265,6 +268,7 @@ export function ManualSetup({
           <p>כל מה שמוגדר כאן נכנס ישירות לפרופיל שממנו נבנים הסידורים.</p>
         </div>
         <div className="manual-header-actions">
+          <HelpButton />
           {onCancel ? (
             <button type="button" className="ghost-button" onClick={onCancel} disabled={busy}>
               <X size={16} /> ביטול
@@ -279,7 +283,7 @@ export function ManualSetup({
       {error ? <div className="manual-error" role="alert">{error}</div> : null}
 
       <main id="main-content" className="manual-sections">
-        <SetupSection icon={<CalendarClock />} title="היחידה והיציאות הכלליות" hint="מתארים כאן את תמונת היציאות של הצוות; את המבנה האישי מגדירים לכל חייל/ת בנפרד.">
+        <SetupSection tour="setup-workplace" icon={<CalendarClock />} title="היחידה והיציאות הכלליות" hint="מתארים כאן את תמונת היציאות של הצוות; את המבנה האישי מגדירים לכל חייל/ת בנפרד.">
           <div className="manual-grid three">
             <Field label="שם היחידה *">
               <input value={unitName} onChange={(event) => setUnitName(event.target.value)} maxLength={120} required />
@@ -296,7 +300,7 @@ export function ManualSetup({
           <CheckboxGrid label="ימי פעילות" values={DAYS} selected={operatingDays} onChange={setOperatingDays} />
         </SetupSection>
 
-        <SetupSection icon={<Repeat2 />} title="סבבים, תלתונים ומחזורי ימים" hint="מגדירים עוגן ושעות סגירה לקבוצה א׳ בלבד, בסבב ובתלתון; הקבוצות האחרות נגזרות ממנה. מחזור ימים (11/3, 12/2, שבוע־שבוע…) מוגדר בימים בבסיס ובבית. ההגדרות חלות על השיבוץ הבא — סידור קיים לא נבנה מחדש.">
+        <SetupSection tour="setup-rotations" icon={<Repeat2 />} title="סבבים, תלתונים ומחזורי ימים" hint="מגדירים עוגן ושעות סגירה לקבוצה א׳ בלבד, בסבב ובתלתון; הקבוצות האחרות נגזרות ממנה. מחזור ימים (11/3, 12/2, שבוע־שבוע…) מוגדר בימים בבסיס ובבית. ההגדרות חלות על השיבוץ הבא — סידור קיים לא נבנה מחדש.">
           <PatternOptions selected={enabledExitPatterns} locked={usedExitPatterns} onChange={setEnabledExitPatterns} />
 
           <div className="rotation-cycles" aria-label="מחזורי הסגירה">
@@ -345,7 +349,7 @@ export function ManualSetup({
           {rotationAUnavailability.length === 0 ? <p className="rotation-empty">לא הוגדרו זמני אי־זמינות נוספים. לוח הסגירות עדיין מחושב מעוגני הסבב והתלתון.</p> : <p className="rotation-derived-note">סבב ב׳ יהיה זמין בדיוק בזמנים שסבב א׳ אינו זמין, ולא זמין בשאר מועדי הפעילות. החישוב מתבצע בשירות השיבוץ.</p>}
         </SetupSection>
 
-        <SetupSection icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">
+        <SetupSection tour="setup-people" icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">
           <div className="manual-list">
             {employees.map((person, index) => (
               <article className="manual-row" key={`employee-${index}`}>
@@ -384,7 +388,7 @@ export function ManualSetup({
           <button type="button" className="ghost-button" onClick={() => setEmployees((current) => [...current, { name: "", role: "", exit_pattern: rotationMode, rotation_group: "א", service_type: "standard", counts_toward_staffing: true, eligible_shifts: [], is_shift_manager: false, can_train: false, notes: "" }])}><Plus size={16} /> הוספת איש/אשת צוות</button>
         </SetupSection>
 
-        <SetupSection icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה.">
+        <SetupSection tour="setup-shifts" icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה.">
           <div className="manual-list">
             {shifts.map((shift, index) => (
               <article className="manual-row" key={`shift-${index}`}>
@@ -413,7 +417,7 @@ export function ManualSetup({
           <button type="button" className="ghost-button" onClick={() => setShifts((current) => [...current, { name: "", shift_type: "regular", start_time: "", end_time: "", headcount: 1, purpose: "", days: DAYS }])}><Plus size={16} /> הוספת סוג משמרת</button>
         </SetupSection>
 
-        <SetupSection icon={<ShieldCheck />} title="כללים קבועים" hint="כלל קשיח הוא חובה; כלל רך הוא העדפה שהמערכת מנסה לכבד.">
+        <SetupSection tour="setup-rules" icon={<ShieldCheck />} title="כללים קבועים" hint="כלל קשיח הוא חובה; כלל רך הוא העדפה שהמערכת מנסה לכבד.">
           <div className="manual-list compact">
             {rules.map((rule, index) => (
               <div className="manual-rule" key={index}>
@@ -426,7 +430,7 @@ export function ManualSetup({
           <button type="button" className="ghost-button" onClick={() => setRules((current) => [...current, { text: "", priority: "hard" }])}><Plus size={16} /> הוספת כלל קבוע</button>
         </SetupSection>
 
-        <SetupSection icon={<Scale />} title="גבולות עומס ומנוחה" hint="בדיקות אלה מציפות חריגות ומסייעות לשיבוץ; הן אינן חוסמות החלטת מפקד.">
+        <SetupSection tour="setup-limits" icon={<Scale />} title="גבולות עומס ומנוחה" hint="בדיקות אלה מציפות חריגות ומסייעות לשיבוץ; הן אינן חוסמות החלטת מפקד.">
           <div className="manual-grid three">
             <Field label="מקסימום שעות בשבוע"><input type="number" min={1} value={maxWeeklyHours} onChange={(e) => setMaxWeeklyHours(Number(e.target.value) || 1)} /></Field>
             <Field label="מקסימום ימים רצופים"><input type="number" min={1} value={maxConsecutiveDays} onChange={(e) => setMaxConsecutiveDays(Number(e.target.value) || 1)} /></Field>
@@ -439,7 +443,7 @@ export function ManualSetup({
         </SetupSection>
       </main>
 
-      <footer className="manual-savebar">
+      <footer className="manual-savebar" data-tour="setup-save">
         <span>{employees.filter(named).length} אנשי צוות · {shifts.filter(named).length} סוגי משמרות · {rules.filter((rule) => text(rule.text)).length} כללים</span>
         <button type="button" className="primary-button" onClick={() => void save()} disabled={!ready || busy}><Save size={16} /> {busy ? "שומר…" : "שמירה ומעבר ללוח"}</button>
       </footer>
@@ -447,8 +451,8 @@ export function ManualSetup({
   );
 }
 
-function SetupSection({ icon, title, hint, children }: { icon: React.ReactNode; title: string; hint: string; children: React.ReactNode }) {
-  return <section className="manual-section"><header><span>{icon}</span><div><h2>{title}</h2><p>{hint}</p></div></header><div className="manual-section-body">{children}</div></section>;
+function SetupSection({ tour, icon, title, hint, children }: { tour?: string; icon: React.ReactNode; title: string; hint: string; children: React.ReactNode }) {
+  return <section className="manual-section"><header><span>{icon}</span><div data-tour={tour}><h2>{title}</h2><p>{hint}</p></div></header><div className="manual-section-body">{children}</div></section>;
 }
 
 /** Which roles may stand a shift. A role no longer on the roster stays
