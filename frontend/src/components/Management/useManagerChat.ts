@@ -17,6 +17,9 @@ function requestId() {
 // what remains is model work, which starts within a moment.
 const FIRST_POLL_MS = 400;
 const FALLBACK_POLL_MS = 1000;
+// While the stream is connected every change arrives as a signal, so the
+// timer is only a safety net and need not hit the server every second.
+const STREAMING_POLL_MS = 5000;
 
 // A poll reads only the running message onward: nothing before it can change
 // while it runs, and re-reading every earlier plan grows with the thread.
@@ -57,6 +60,7 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
     let cancelled = false;
     let reading = false;
     let again = false;
+    let streaming = false;
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       // A signal landing mid-read asks for one more read after it, never a
@@ -76,12 +80,18 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
       } finally { reading = false; }
       if (cancelled || finished) return;
       if (again) { again = false; void poll(); return; }
-      timer = setTimeout(() => void poll(), FALLBACK_POLL_MS);
+      timer = setTimeout(() => void poll(), streaming ? STREAMING_POLL_MS : FALLBACK_POLL_MS);
     };
     // The server signals every check, every few words of the reply and the
     // end of the turn; each signal re-reads at once. The timer underneath
     // covers a stream a proxy buffers or drops.
     const source = typeof EventSource === "undefined" ? null : managerEvents();
+    source?.addEventListener("open", () => {
+      streaming = true;
+      // Anything signalled while the line was down produced no event to hear.
+      void poll();
+    });
+    source?.addEventListener("error", () => { streaming = false; });
     source?.addEventListener("chat", () => void poll());
     timer = setTimeout(() => void poll(), FIRST_POLL_MS);
     return () => { cancelled = true; clearTimeout(timer); source?.close(); };
