@@ -57,7 +57,7 @@ export default function TutorialPage() {
 
         <div className="tutorial-route-map" aria-label="מסלול העבודה במערכת">
           <span className="route-time">07:00</span>
-          <div className="route-stop is-active"><b>כניסה</b><small>הצוות והזהות שלכם</small></div>
+          <div className="route-stop is-active"><b>כניסה והגדרה</b><small>הצוות, הזהות ושיטת השיבוץ</small></div>
           <span className="route-time">15:00</span>
           <div className="route-stop"><b>בנייה ובדיקה</b><small>סידור, שיחה ואזהרות</small></div>
           <span className="route-time">23:00</span>
@@ -96,7 +96,20 @@ export default function TutorialPage() {
           אני אסביר את צד המנהל: בונים שבוע עם הסוכן או ידנית, בודקים את האזהרות, ורק אז מפרסמים לצוות.
         </Narrator>
 
-        <TutorialChapter number="01" title="לקרוא את הלוח" icon={<CalendarCheck size={19} />}>
+        <TutorialChapter number="01" title="להגדיר את היחידה פעם אחת" icon={<Users size={19} />}>
+          <p>לפני שבונים סידור, ממלאים את העובדות שהמערכת צריכה להכיר. אפשר להתחיל במינימום — שם יחידה, איש צוות אחד וסוג משמרת אחד — ולחזור אחר כך להשלמת הפרטים מאייקון המחוונים באזור הניהול.</p>
+          <FeatureGrid items={[
+            ["פרטי היחידה", "שם, אורך הסידור, ימי הפעילות ותיאור יציאות שמשותף לכל הצוות."],
+            ["סבבים ותלתונים", "מגדירים עוגן ושעות לקבוצה א׳; המערכת מחשבת ממנו את שאר הקבוצות."],
+            ["כוח אדם", "שם ותפקיד, יציאות אישיות, קבוצה, הסמכות והמשמרות שכל אדם יכול לבצע."],
+            ["משמרות ותקינה", "שם המשמרת, שעות, ימים, כמה אנשים נדרשים ואילו תפקידים מוסמכים אליה."],
+            ["כללים קבועים", "דרישה קשיחה או העדפה שחוזרת בכל סידור. אילוץ חד־פעמי מוסיפים אחר כך."],
+            ["עומס ומנוחה", "גבולות שמפעילים אזהרה על שעות, ימים רצופים ומנוחה — ואינם חוסמים החלטה."],
+          ]} />
+          <div className="tutorial-note"><HelpCircle size={16} /> במסך ההגדרה עצמו לחצו על ‘עזרה’ כדי לפתוח סיור שמצביע על כל חלק בטופס.</div>
+        </TutorialChapter>
+
+        <TutorialChapter number="02" title="לקרוא את הלוח" icon={<CalendarCheck size={19} />}>
           <p>מסילת השבוע מציגה מיד מה מוכן ומה דורש טיפול. הכרטיסים מסכמים איוש, חוסרים, התנגשויות ושעות; לחיצה על התנגשות מסננת את הלוח למקומות הרלוונטיים.</p>
           <Screenshot
             src="/tutorial/manager-board.png"
@@ -115,7 +128,7 @@ export default function TutorialPage() {
           ]} />
         </TutorialChapter>
 
-        <TutorialChapter number="02" title="לדבר עם הסוכן — בלי לתת לו לכתוב לבד" icon={<Bot size={19} />}>
+        <TutorialChapter number="03" title="לדבר עם הסוכן — בלי לתת לו לכתוב לבד" icon={<Bot size={19} />}>
           <p>פתחו ‘ניהול’ או ‘הסוכן’. זכוכית המגדלת שואלת שאלה לקריאה בלבד; כפתור השליחה מבקש שינוי. הצעה, סימולציה או גרירה תמיד מחכות לאישור ולסיבה.</p>
           <Screenshot
             src="/tutorial/manager-agent.png"
@@ -138,7 +151,7 @@ export default function TutorialPage() {
           ]} />
         </TutorialChapter>
 
-        <TutorialChapter number="03" title="לבדוק את התמונה הרחבה" icon={<BarChart3 size={19} />}>
+        <TutorialChapter number="04" title="לבדוק את התמונה הרחבה" icon={<BarChart3 size={19} />}>
           <p>מסך ‘סקירה’ מתרגם את אותו לוח לכיסוי, שעות ועומס, ומרכז גם את פעילות הסוכן. המספרים מסבירים את הלוח — הם לא נותנים לו ציון.</p>
           <Screenshot
             src="/tutorial/manager-analytics.png"
@@ -149,7 +162,7 @@ export default function TutorialPage() {
           />
         </TutorialChapter>
 
-        <TutorialChapter number="04" title="לשתף ולהוציא קובץ" icon={<FileDown size={19} />}>
+        <TutorialChapter number="05" title="לשתף ולהוציא קובץ" icon={<FileDown size={19} />}>
           <div className="tutorial-action-list">
             <div><FileDown size={18} /><strong>Excel</strong><p>כפתור ‘אקסל’ מוריד את התקופה הנוכחית כקובץ, בלי לשנות את הלוח.</p></div>
             <div><Users size={18} /><strong>קישור לצוות</strong><p>אייקון השיתוף מציג קישור צפייה. החלפת הקישור מבטלת את הקודם.</p></div>

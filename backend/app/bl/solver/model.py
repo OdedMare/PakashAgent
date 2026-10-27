@@ -20,18 +20,28 @@ CLOSER = 2_000
 WISH = 1_000
 SHADOW = 500
 # Evenness is priced per unit of load (`fairness.py`) and does not grow with
-# the team: moving one shift of up to twelve hours, night included, from the
-# heaviest to the lightest saves less than one soft wish, and more than a
-# back-to-back day. So a wish is never broken for one shift of evenness.
+# the team. Load is counted in shifts, not hours: a soldier on base from
+# Thursday to Sunday is not on the clock, and what is fair is an even number
+# of shifts. Moving one shift, night included, from the heaviest to the
+# lightest saves less than one soft wish, so a wish is never broken for one
+# shift of evenness, and more than any one gap between shifts costs.
+SHIFT_SPREAD = 10
+SHIFT_PEAK = 10
 NIGHT_SPREAD = 15
 NIGHT_PEAK = 15
-HOUR_SPREAD = 1
-HOUR_PEAK = 1
+# Rest between two shifts of one person is priced per hour short of
+# SPACING_HOURS, so among even schedules the one with the longest gaps (the
+# most sleep) wins. A day off between shifts is charged per day only when
+# the shifts carry no clock to measure a gap with.
+SPACING_HOURS = 48
+SPACING = 2
 BACK_TO_BACK = 50
 # The terms phase one of a solve settles before anything else is weighed.
 COVERAGE = ("unfilled", "role", "manager")
-# Hours are integers in the model: tenths of an hour; nights likewise.
+# Hours are integers in the model: tenths of an hour (the weekly-hours rule);
+# shifts and nights count ten to a unit likewise.
 HOUR_SCALE = 10
+SHIFT_SCALE = 10
 NIGHT_SCALE = 10
 
 

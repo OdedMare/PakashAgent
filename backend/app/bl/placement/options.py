@@ -88,7 +88,7 @@ def _option(context, person, shift_name, slot_date, day, load) -> dict:
         "can_train": bool(person.get("can_train")),
         "is_overlap": values.text(person.get("service_type")) == "overlap",
         "exit_pattern": exit_pattern,
-        "rotation": rotation.label(_cycle_of(context.profile, person), rotation_group)
+        "rotation": rotation.label(_cycle_of(context.profile, person), rotation_group, context.profile)
         or _PATTERN_LABELS.get(exit_pattern, ""),
         "closing": bool(
             day is not None
@@ -103,7 +103,7 @@ def _cycle_of(profile: dict, person: dict) -> str:
     """Which cycle a person turns on -- ג can only be a תלתון, so the label
     needs the cycle, not just the letter."""
     pattern = rotation.exit_pattern(profile, person)
-    if pattern in ("round", "triplet", "hamshushim", "shushim"):
+    if pattern in ("round", "triplet", "hamshushim", "shushim") or rotation.is_day_cycle(pattern):
         return pattern
     if values.text(person.get("rotation_group")) == "ג":
         return "triplet"

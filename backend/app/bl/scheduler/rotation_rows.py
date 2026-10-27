@@ -157,8 +157,10 @@ def closure_availability(
 def _blocked_reason(profile: dict, person: dict, slot: dict, source: str) -> str:
     pattern = rotation_cycle.exit_pattern(profile, person)
     group = bounded(person.get("rotation_group"))
+    if rotation_cycle.is_day_cycle(pattern):
+        return "%s בבית במועד זה לפי מחזור היציאות" % rotation_cycle.label(pattern, group, profile)
     if source == "rotation":
-        return "%s אינו נוכח במועד זה לפי הגדרות הסבבים והסגירה" % rotation_cycle.label(pattern, group)
+        return "%s אינו נוכח במועד זה לפי הגדרות הסבבים והסגירה" % rotation_cycle.label(pattern, group, profile)
     if not group:
         return "%s יוצא/ת הביתה בכל סופ״ש" % bounded(person.get("name"))
     day = datetime.date.fromisoformat(slot["slot_date"])

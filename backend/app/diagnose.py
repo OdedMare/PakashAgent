@@ -127,7 +127,7 @@ def _model_server(settings) -> None:
     _section("model server")
     print("SSL_CERT_FILE=%s verify_ssl=%s" % (
         os.getenv("SSL_CERT_FILE") or "-",
-        getattr(settings, "llm_verify_ssl", True)))
+        False))
     seen = set()
     for role in (FAST, DEFAULT, ADVANCED):
         url = resolve_base_url(settings, role)

@@ -8,7 +8,7 @@
  *  Steps point at `data-tour` attributes on real elements rather than at
  *  class names, so restyling a screen cannot silently detach the tour. */
 
-export type Surface = "manager" | "employee" | "member";
+export type Surface = "setup" | "manager" | "employee" | "member";
 
 export interface TourStep {
   /** The `data-tour` value of the element to spotlight. */
@@ -26,6 +26,48 @@ export interface TourStep {
 }
 
 export const TOURS: Partial<Record<Surface, TourStep[]>> = {
+  setup: [
+    {
+      target: "setup-workplace",
+      title: "מתחילים בתמונה הכללית",
+      body: "כתבו את שם היחידה, בחרו את אורך הסידור ואת ימי הפעילות. בתיאור היציאות הכללי מוסיפים רק מידע שמשותף לכל הצוות; את המבנה האישי מגדירים בהמשך לכל אדם.",
+    },
+    {
+      target: "setup-rotations",
+      title: "מגדירים סבב רק אם צריך",
+      body: "אם הצוות עובד בסבבים או בתלתונים, בוחרים את המבנה ומגדירים את העוגן והשעות של קבוצה א׳. המערכת מחשבת ממנו את שאר הקבוצות. למחזור ימים כמו 11/3, 12/2 או שבוע־שבוע מוסיפים מחזור ימים, ומגדירים ימים בבסיס ובבית, עוגן ושעות יציאה וחזרה. אם אין אצלכם מבנה כזה, אפשר להשאיר את האפשרויות הנוספות כבויות.",
+    },
+    {
+      target: "setup-people",
+      title: "מוסיפים את אנשי הצוות",
+      body: "לכל אדם ממלאים שם ותפקיד, מבנה יציאות וקבוצה. כאן גם מסמנים מי מפקד/ת משמרת, מי יכול/ה לחפוף ולאילו משמרות האדם מתאים.",
+    },
+    {
+      target: "setup-shifts",
+      title: "מתארים כל סוג משמרת",
+      body: "הוסיפו שם, שעות ותקן נדרש לכל משמרת. הימים, התפקידים המוסמכים והצורך במפקד/ת משמרת אומרים למערכת את מי מותר לשבץ ואיפה.",
+    },
+    {
+      target: "setup-rules",
+      title: "מוסיפים רק כללים קבועים",
+      body: "כלל קשיח הוא דרישה חזקה וכלל רך הוא העדפה. כתבו כאן כללים שחוזרים בכל סידור; אילוץ חד־פעמי לתאריך מסוים מוסיפים אחר כך באזור הניהול.",
+    },
+    {
+      target: "setup-limits",
+      title: "קובעים גבולות לבדיקה",
+      body: "מקסימום שעות וימים רצופים ומינימום מנוחה עוזרים למערכת להתריע על עומס. הם מציפים חריגות לבדיקה ואינם חוסמים החלטה שלכם.",
+    },
+    {
+      target: "setup-save",
+      title: "שומרים ועוברים ללוח",
+      body: "כדי להמשיך צריך שם יחידה, לפחות איש צוות אחד ולפחות סוג משמרת אחד. השמירה יוצרת את פרופיל היחידה; תמיד אפשר לחזור ולעדכן אותו מאזור הניהול.",
+    },
+    {
+      target: "help",
+      title: "אפשר לחזור להסבר בכל רגע",
+      body: "כפתור ‘עזרה’ מחזיר לסיור הזה, למילון המונחים ולמדריך המלא. אפשר גם ללחוץ ? כשלא מקלידים בשדה.",
+    },
+  ],
   manager: [
     {
       target: "nav",
@@ -277,7 +319,7 @@ export const GLOSSARY: GlossaryEntry[] = [
 
 export function glossaryFor(surface: Surface | null): GlossaryEntry[] {
   // Nobody signed in yet: show everything, the visitor may be either.
-  if (surface === null || surface === "manager") {
+  if (surface === null || surface === "setup" || surface === "manager") {
     return GLOSSARY;
   }
   return GLOSSARY.filter((entry) => entry.audience.includes("team"));

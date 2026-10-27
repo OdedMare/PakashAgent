@@ -599,6 +599,7 @@ export function Management({
                 stats={overview.stats}
                 dark={theme === "dark"}
                 rotationMode={overview.profile?.workplace?.rotation_mode}
+                dayCycles={overview.profile?.workplace?.day_cycles}
                 onAdd={state.addConstraint}
                 onRemove={state.removeConstraint}
                 onSaveProfile={state.saveProfile}
@@ -759,6 +760,7 @@ export function Management({
             shifts={overview?.shifts ?? []}
             today={overview?.today ?? ""}
             rotationMode={overview?.profile?.workplace?.rotation_mode}
+            dayCycles={overview?.profile?.workplace?.day_cycles}
             disabled={agent.busy || agent.working}
             onSaveProfile={state.saveProfile}
             onPrepare={(message) => {
@@ -800,6 +802,7 @@ export function Management({
             stats={overview?.stats}
             dark={theme === "dark"}
             rotationMode={overview?.profile?.workplace?.rotation_mode}
+            dayCycles={overview?.profile?.workplace?.day_cycles}
             draggable={schedule?.status === "draft" && !state.busy}
             onAdd={state.addConstraint}
             onRemove={state.removeConstraint}

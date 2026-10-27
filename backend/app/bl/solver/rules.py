@@ -127,16 +127,26 @@ def rest_pairs(problem, model: Model, name: str, minimum: float,
     """Pairs of this person's shifts closer than `minimum` hours. Each side
     is a placement variable or None for a fixed row; two fixed rows are
     already history and are skipped."""
+    for earlier, first, later, second, gap in timed_pairs(problem, model, name):
+        if gap < minimum and (test is None or test(earlier, later)):
+            yield first, second
+
+
+def timed_pairs(problem, model: Model, name: str,
+                horizon: datetime.timedelta = _REST_HORIZON) -> Iterator[Tuple]:
+    """Every pair of this person's clocked shifts starting within `horizon`
+    of each other, with the hours of rest between them: (earlier row, its
+    variable, later row, its variable, gap). A fixed row's variable is None;
+    two fixed rows are history and are skipped."""
     items = _timed(problem, model, name)
     for position, (earlier, first) in enumerate(items):
         for later, second in items[position + 1:]:
-            if later["begins"] - earlier["begins"] > _REST_HORIZON:
+            if later["begins"] - earlier["begins"] > horizon:
                 break
             if first is None and second is None:
                 continue
             gap = (later["begins"] - earlier["ends"]).total_seconds() / 3600.0
-            if gap < minimum and (test is None or test(earlier, later)):
-                yield first, second
+            yield earlier, first, later, second, gap
 
 
 def _timed(problem, model: Model, name: str) -> List[Tuple[dict, object]]:
@@ -216,4 +226,4 @@ def _tenths(hours: float) -> int:
     return int(round(float(hours or 0.0) * HOUR_SCALE))
 
 
-__all__ = ["apply_rules", "day_windows", "rest_pairs"]
+__all__ = ["apply_rules", "day_windows", "rest_pairs", "timed_pairs"]

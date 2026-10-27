@@ -105,7 +105,7 @@ def _reason(problem, name: str, index: int, row: dict) -> str:
     if person.get("rotation_group") and problem.closes(name, index):
         return "%s סוגר/ת במועד הזה; השיבוץ עומד במחזור המחייב." % (
             rotation.label(rotation.exit_pattern(problem.profile, person),
-                           person.get("rotation_group")) or "קבוצת הסגירה")
+                           person.get("rotation_group"), problem.profile) or "קבוצת הסגירה")
     wished = [request["reason"] for request in problem.requests
               if request["kind"] == "prefer" and name in request["employees"]
               and covers(request, row["shift"], row["date"])]

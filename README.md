@@ -36,7 +36,8 @@ employees, and publish to the team.
 **A constraint solver builds the schedule; the model only translates.**
 OR-Tools CP-SAT assigns a whole span (up to four weeks) at once: every
 availability, rotation, rest, run-of-days, weekly-hours and staffing rule,
-every structured request, and an even share of hours and nights. The model
+every structured request, an even share of shifts and nights, and the
+longest rest between one person's shifts. The model
 turns the manager's free-text rules and instructions into those structured
 requests; anything it cannot translate is named in the build's notes
 rather than silently dropped
