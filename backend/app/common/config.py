@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     llm_diet_mode: bool = False
     """Use compact prompts and bounded completion output."""
 
-    llm_verify_ssl: bool = True
+    llm_verify_ssl: bool = False
     """Verify the model server's TLS certificate. Applies to every LLM
     connection — completions and the `/models` probe alike.
 
