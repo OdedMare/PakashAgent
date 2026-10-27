@@ -1242,6 +1242,36 @@ and a call waiting in its queue counts against the same ceiling.
 
 ---
 
+## D39 — Replicas agree through PostgreSQL, not a shared disk or a variable *(completes D35)*
+
+Running four API pods and three frontend pods showed what D35 left per
+process. Two things broke without an error:
+
+- **The session key.** Unset, each process generated its own, so a cookie
+  issued by one pod was refused by the next and bosses were logged out at
+  random. The start-up guard only counted workers inside one process
+  (`WEB_CONCURRENCY`), so four pods of one worker each passed it.
+- **Panel settings.** They were a JSON file on a volume. Pods rarely share a
+  disk, so a save applied on the pod that took it and nowhere else.
+
+Both now live in a `deployment_state` table. The session key, when
+`PAKASH_SESSION_SECRET` is unset, is generated once and claimed with an
+insert the first process wins; every other reads it back on first use, not
+at import, so a pod may start before its database. A panel save is written
+there with a version, and every process polls it on the file's existing
+three-second cadence. The `database_*` fields stay in the file and the
+environment: they are what the poll connects with. A file saved before
+this seeds an empty table once.
+
+`initialize()` also runs under an advisory lock now: replicas starting
+together raced through the same `CREATE ... IF NOT EXISTS`, and Postgres
+answers the loser with a unique violation.
+
+What this gives up: the session key sits in the database in the clear, next
+to everything it protects; an operator who wants it elsewhere sets the
+variable. A process with no database still generates its own key, and is
+refused with more than one worker.
+
 ---
 
 ## Open

@@ -9,7 +9,9 @@ from app.bl.profile_service import shifts as shift_rules
 from app.bl.profile_service import workplace as workplace_rules
 from app.bl.profile_service.retire import retire_shift
 from app.bl.profile_service.validation import keep_existing_names, text, text_list
-from app.common.errors import AgentError, NotFoundError
+from app.common.errors import (
+    PROFILE_CHANGED, AgentError, ConflictError, NotFoundError,
+)
 
 _TEXT_SECTIONS = (
     "availability_process", "constraint_deadline", "casual_worker_policy",
@@ -33,15 +35,30 @@ class ProfileService:
         workplace: Optional[dict] = None,
         rules: Optional[List[dict]] = None,
         dependencies: Optional[List[str]] = None,
+        expected_revision: Optional[int] = None,
         **sections: Any
     ) -> dict:
+        """Merge a patch into the saved profile.
+
+        `expected_revision` is the revision the manager's form was loaded
+        at; a save from a form somebody else has saved over since is refused
+        rather than quietly undoing their edit.
+        """
+        revision = self._repository.team_profile_revision(team_id)
+        if expected_revision is not None and revision is not None \
+                and expected_revision != revision:
+            raise ConflictError(PROFILE_CHANGED)
         current = self._repository.team_profile(team_id)
         creating = current is None
         current = current or {}
         updated = _prepare_profile(current, employees, shifts, workplace, rules,
                                    dependencies, sections)
         if not creating:
-            saved = self._repository.update_team_profile(team_id, updated)
+            # The revision read above, not the client's: the merge was made
+            # from the profile read after it, and nothing may land between.
+            saved = self._repository.update_team_profile(
+                team_id, updated, expected_revision=revision,
+            )
         else:
             roster.validate_first_profile(updated)
             updated["completeness"] = {
@@ -53,17 +70,24 @@ class ProfileService:
         compiled_sources.queue(self._repository, team_id)
         return saved
 
+    def revision(self, team_id: str) -> Optional[int]:
+        """What a save names to refuse a stale edit. A read."""
+        return self._repository.team_profile_revision(team_id)
+
     def current(self, team_id: str) -> Optional[dict]:
         """The saved profile, or None before the first save. A read."""
         return self._repository.team_profile(team_id)
 
     def delete_shift(self, team_id: str, name: str) -> dict:
         """Archive a shift type; existing schedules keep their rows."""
+        revision = self._repository.team_profile_revision(team_id)
         current = self._repository.team_profile(team_id)
         if current is None:
             raise NotFoundError("פרופיל הצוות לא נמצא")
         updated = retire_shift(current, name)
-        saved = self._repository.update_team_profile(team_id, updated)
+        saved = self._repository.update_team_profile(
+            team_id, updated, expected_revision=revision,
+        )
         compiled_sources.queue(self._repository, team_id)
         return saved
 
@@ -106,6 +130,7 @@ class ProfileService:
 
     def apply_operations(self, team_id: str, operations: List[dict]) -> dict:
         """Apply confirmed agent operations through the same validation path."""
+        revision = self._repository.team_profile_revision(team_id)
         profile = self._repository.team_profile(team_id)
         if profile is None:
             raise NotFoundError("פרופיל הצוות לא נמצא")
@@ -116,6 +141,7 @@ class ProfileService:
             team_id,
             employees=edit.employees if edit.employees_changed else None,
             shifts=edit.shifts if edit.shifts_changed else None,
+            expected_revision=revision,
         )
 
 

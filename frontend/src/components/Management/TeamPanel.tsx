@@ -6,8 +6,9 @@ import { useMemo, useState } from "react";
 import { EMPLOYEE_DRAG_TYPE } from "@/components/Board/dragData";
 import { DateInput, displayDate } from "@/components/DateInput";
 import { TimeInput } from "@/components/TimeInput";
+import { cycleName, cycleOf, cyclePattern, isDayCycle } from "@/lib/dayCycles";
 import type { Departure } from "@/services/api";
-import type { Constraint, ShiftStats } from "@/types";
+import type { Constraint, DayCycle, ShiftStats } from "@/types";
 
 import { ConfirmDeparture } from "./ConfirmDeparture";
 import { buildPalette, colorStyle } from "./palette";
@@ -32,6 +33,7 @@ export function TeamPanel({
   draggable = false,
   readOnly = false,
   rotationMode = "round",
+  dayCycles = [],
   today = "",
   onAdd,
   onRemove,
@@ -49,6 +51,7 @@ export function TeamPanel({
   draggable?: boolean;
   readOnly?: boolean;
   rotationMode?: "round" | "triplet";
+  dayCycles?: DayCycle[];
   today?: string;
   onAdd?: (input: {
     employee: string;
@@ -153,7 +156,7 @@ export function TeamPanel({
                   <span className="roster-name">{name}</span>
                   <span className="roster-role">
                     {text(person?.role) || "ללא תפקיד מוגדר"}
-                    {person ? ` · ${exitPatternLabel(person)}` : ""}
+                    {person ? ` · ${exitPatternLabel(person, dayCycles)}` : ""}
                     {text(person?.rotation_group) ? ` ${text(person?.rotation_group)}` : ""}
                     {text(person?.service_type) ? ` · ${SERVICE_TYPE_LABELS[text(person?.service_type)] ?? text(person?.service_type)}` : ""}
                   </span>
@@ -250,6 +253,7 @@ export function TeamPanel({
                 : undefined}
               shiftNames={shiftNames}
               defaultExitPattern={rotationMode}
+              dayCycles={dayCycles}
               onCancel={() => {
                 setAddingEmployee(false);
                 setEditingEmployee(null);
@@ -514,12 +518,14 @@ export function EmployeeForm({
   initial,
   shiftNames,
   defaultExitPattern,
+  dayCycles = [],
   onCancel,
   onSubmit,
 }: {
   initial?: Record<string, unknown>;
   shiftNames: string[];
   defaultExitPattern: "round" | "triplet";
+  dayCycles?: DayCycle[];
   onCancel: () => void;
   onSubmit: (employee: Record<string, unknown>) => void;
 }) {
@@ -528,7 +534,7 @@ export function EmployeeForm({
   const [exitPattern, setExitPattern] = useState(
     text(initial?.exit_pattern) || defaultExitPattern,
   );
-  const groups = exitPattern === "triplet" ? ["א", "ב", "ג"] : exitPattern === "round" ? ["א", "ב"] : [];
+  const groups = patternGroups(exitPattern, dayCycles);
   const [rotationGroup, setRotationGroup] = useState(text(initial?.rotation_group) || groups[0] || "");
   const [serviceType, setServiceType] = useState(text(initial?.service_type) || "standard");
   const [countsTowardStaffing, setCountsTowardStaffing] = useState(initial?.counts_toward_staffing !== false);
@@ -559,8 +565,11 @@ export function EmployeeForm({
         <label><span>מבנה יציאות</span><select value={exitPattern} onChange={(event) => {
           const pattern = event.target.value;
           setExitPattern(pattern);
-          setRotationGroup(pattern === "triplet" || pattern === "round" ? "א" : "");
-        }}>{Object.entries(EXIT_PATTERN_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          setRotationGroup(patternGroups(pattern, dayCycles)[0] ?? "");
+        }}>{Object.entries(EXIT_PATTERN_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          {dayCycles.map((cycle) => <option key={cycle.id} value={cyclePattern(cycle)}>{cycle.name} {cycle.groups.join(" / ")}</option>)}
+          {isDayCycle(exitPattern) && !cycleOf(dayCycles, exitPattern) ? <option value={exitPattern}>מחזור שהוסר</option> : null}
+        </select></label>
         {groups.length ? <label><span>קבוצה</span><select value={rotationGroup} onChange={(event) => setRotationGroup(event.target.value)}>{groups.map((group) => <option key={group}>{group}</option>)}</select></label> : null}
         <label><span>מעמד</span><select value={serviceType} onChange={(event) => {
           setServiceType(event.target.value);
@@ -915,8 +924,15 @@ function rawText(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-function exitPatternLabel(person: Record<string, unknown>): string {
+function patternGroups(pattern: string, cycles: DayCycle[]): string[] {
+  if (pattern === "triplet") return ["א", "ב", "ג"];
+  if (pattern === "round") return ["א", "ב"];
+  return cycleOf(cycles, pattern)?.groups ?? [];
+}
+
+function exitPatternLabel(person: Record<string, unknown>, cycles: DayCycle[]): string {
   const pattern = text(person.exit_pattern);
+  if (isDayCycle(pattern)) return cycleName(cycles, pattern);
   if (EXIT_PATTERN_LABELS[pattern]) return EXIT_PATTERN_LABELS[pattern];
   return text(person.rotation_group) === "ג" ? EXIT_PATTERN_LABELS.triplet : EXIT_PATTERN_LABELS.round;
 }

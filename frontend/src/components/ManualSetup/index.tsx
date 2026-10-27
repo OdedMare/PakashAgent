@@ -18,9 +18,11 @@ import { useMemo, useState } from "react";
 import { TimeInput } from "@/components/TimeInput";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import { deleteShiftType, updateProfile } from "@/services/api";
-import type { RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
+import { cyclePattern, isDayCycle } from "@/lib/dayCycles";
+import type { DayCycle, RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
 
 import { CompiledSources } from "./CompiledSources";
+import { DayCycleSetup } from "./DayCycleSetup";
 import { CheckboxGrid, Field } from "./fields";
 import { CYCLES, CycleSetup, firstGroupAnchor } from "./RotationSetup";
 import type { Cycle } from "./RotationSetup";
@@ -95,13 +97,22 @@ export function ManualSetup({
   const [generalExitSchedule, setGeneralExitSchedule] = useState(
     inputText(initialWorkplace.general_exit_schedule),
   );
+  const [dayCycles, setDayCycles] = useState<DayCycle[]>(() =>
+    (profile.workplace?.day_cycles ?? []).map((cycle) => ({
+      ...cycle,
+      groups: strings(cycle.groups),
+      offsets: { ...(cycle.offsets ?? {}) },
+      group_times: { ...(cycle.group_times ?? {}) },
+      time_changes: [...(cycle.time_changes ?? [])],
+    })),
+  );
   const [employees, setEmployees] = useState<Row[]>(rows(profile.employees));
   const [shifts, setShifts] = useState<Row[]>(rows(profile.shifts));
   const [enabledExitPatterns, setEnabledExitPatterns] = useState<string[]>(() => {
     const configured = strings(initialWorkplace.enabled_exit_patterns);
     const used = rows(profile.employees)
       .map((person) => exitPattern(person, rotationMode))
-      .filter((pattern) => pattern !== "round");
+      .filter((pattern) => pattern !== "round" && !isDayCycle(pattern));
     return [...new Set([...configured, ...used])];
   });
   const [rotationAUnavailability, setRotationAUnavailability] = useState<Row[]>(
@@ -136,9 +147,14 @@ export function ManualSetup({
     [profile.shifts],
   );
   const usedExitPatterns = useMemo(
-    () => new Set(employees.map((person) => exitPattern(person, rotationMode)).filter((pattern) => pattern !== "round")),
+    () => new Set(employees.map((person) => exitPattern(person, rotationMode)).filter((pattern) => pattern !== "round" && !isDayCycle(pattern))),
     [employees, rotationMode],
   );
+  const usedDayCycles = useMemo(
+    () => new Set(employees.map((person) => exitPattern(person, rotationMode)).filter(isDayCycle).map((pattern) => pattern.slice("cycle:".length))),
+    [employees, rotationMode],
+  );
+  const groupsOf = (pattern: string) => rotationGroups(pattern, dayCycles);
   const availableExitPatterns = useMemo(
     () => new Set(["round", ...enabledExitPatterns, ...usedExitPatterns]),
     [enabledExitPatterns, usedExitPatterns],
@@ -176,6 +192,7 @@ export function ManualSetup({
           triplet_first_closure_date: anchors.triplet,
           rotation_closure_windows: closureWindows,
           rotation_presence: rotationPresence,
+          day_cycles: dayCycles,
           general_exit_schedule: generalExitSchedule.trim(),
           enabled_exit_patterns: enabledExitPatterns,
           rotation_a_unavailability: rotationAUnavailability.map((rule) => ({
@@ -191,9 +208,9 @@ export function ManualSetup({
           name: text(person.name),
           role: text(person.role),
           exit_pattern: exitPattern(person, rotationMode),
-          rotation_group: rotationGroups(exitPattern(person, rotationMode)).includes(text(person.rotation_group))
+          rotation_group: groupsOf(exitPattern(person, rotationMode)).includes(text(person.rotation_group))
             ? text(person.rotation_group)
-            : rotationGroups(exitPattern(person, rotationMode))[0] ?? "",
+            : groupsOf(exitPattern(person, rotationMode))[0] ?? "",
           service_type: text(person.service_type) || "standard",
           counts_toward_staffing: person.counts_toward_staffing !== false,
           eligible_shifts: strings(person.eligible_shifts),
@@ -229,6 +246,7 @@ export function ManualSetup({
           min_rest_hours: minRestHours,
         },
         summary: "יחידה צבאית עם מבנה יציאות אישי לכל חייל/ת",
+        expected_revision: workspace.profile_revision,
       });
       for (const name of removedShifts) {
         await deleteShiftType(name);
@@ -283,7 +301,7 @@ export function ManualSetup({
           <CheckboxGrid label="ימי פעילות" values={DAYS} selected={operatingDays} onChange={setOperatingDays} />
         </SetupSection>
 
-        <SetupSection tour="setup-rotations" icon={<Repeat2 />} title="סבבים ותלתונים" hint="מגדירים עוגן ושעות סגירה לקבוצה א׳ בלבד, בסבב ובתלתון; הקבוצות האחרות נגזרות ממנה. ההגדרות חלות על השיבוץ הבא — סידור קיים לא נבנה מחדש.">
+        <SetupSection tour="setup-rotations" icon={<Repeat2 />} title="סבבים, תלתונים ומחזורי ימים" hint="מגדירים עוגן ושעות סגירה לקבוצה א׳ בלבד, בסבב ובתלתון; הקבוצות האחרות נגזרות ממנה. מחזור ימים (11/3, 12/2, שבוע־שבוע…) מוגדר בימים בבסיס ובבית. ההגדרות חלות על השיבוץ הבא — סידור קיים לא נבנה מחדש.">
           <PatternOptions selected={enabledExitPatterns} locked={usedExitPatterns} onChange={setEnabledExitPatterns} />
 
           <div className="rotation-cycles" aria-label="מחזורי הסגירה">
@@ -302,6 +320,8 @@ export function ManualSetup({
               />
             ))}
           </div>
+
+          <DayCycleSetup cycles={dayCycles} onChange={setDayCycles} used={usedDayCycles} />
 
           <div className="rotation-pair" aria-label="הקשר בין סבב א לסבב ב">
             <div><strong>סבב א׳</strong><span>אתם מגדירים את זמני אי־הזמינות.</span></div>
@@ -340,10 +360,12 @@ export function ManualSetup({
                   <Field label="מבנה יציאות">
                     <select value={exitPattern(person, rotationMode)} onChange={(e) => {
                       edit(setEmployees, index, "exit_pattern", e.target.value);
-                      edit(setEmployees, index, "rotation_group", rotationGroups(e.target.value)[0] ?? "");
-                    }}>{Object.entries(EXIT_PATTERNS).filter(([value]) => availableExitPatterns.has(value)).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+                      edit(setEmployees, index, "rotation_group", groupsOf(e.target.value)[0] ?? "");
+                    }}>{Object.entries(EXIT_PATTERNS).filter(([value]) => availableExitPatterns.has(value)).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      {dayCycles.map((cycle) => <option key={cycle.id} value={cyclePattern(cycle)}>{cycle.name || "מחזור"} · {cycle.groups.join(" / ")}</option>)}
+                    </select>
                   </Field>
-                  {rotationGroups(exitPattern(person, rotationMode)).length ? <Field label="קבוצה"><select value={text(person.rotation_group) || rotationGroups(exitPattern(person, rotationMode))[0]} onChange={(e) => edit(setEmployees, index, "rotation_group", e.target.value)}>{rotationGroups(exitPattern(person, rotationMode)).map((group) => <option key={group}>{group}</option>)}</select></Field> : null}
+                  {groupsOf(exitPattern(person, rotationMode)).length ? <Field label="קבוצה"><select value={text(person.rotation_group) || groupsOf(exitPattern(person, rotationMode))[0]} onChange={(e) => edit(setEmployees, index, "rotation_group", e.target.value)}>{groupsOf(exitPattern(person, rotationMode)).map((group) => <option key={group}>{group}</option>)}</select></Field> : null}
                   <Field label="מעמד">
                     <select value={text(person.service_type) || "standard"} onChange={(e) => {
                       edit(setEmployees, index, "service_type", e.target.value);
@@ -464,14 +486,16 @@ function rows(value: unknown): Row[] { return Array.isArray(value) ? value.filte
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : []; }
 function text(value: unknown): string { return typeof value === "string" ? value.trim() : ""; }
 function inputText(value: unknown): string { return typeof value === "string" ? value : ""; }
-function exitPattern(row: Row, fallback: "round" | "triplet" = "round"): keyof typeof EXIT_PATTERNS {
+function exitPattern(row: Row, fallback: "round" | "triplet" = "round"): string {
   const value = text(row.exit_pattern);
-  return value in EXIT_PATTERNS ? value as keyof typeof EXIT_PATTERNS : fallback;
+  // A day cycle is checked against the workplace's cycles on save.
+  if (isDayCycle(value)) return value;
+  return value in EXIT_PATTERNS ? value : fallback;
 }
-function rotationGroups(pattern: string): string[] {
+function rotationGroups(pattern: string, cycles: DayCycle[]): string[] {
   if (pattern === "triplet") return ["א", "ב", "ג"];
   if (pattern === "round") return ["א", "ב"];
-  return [];
+  return cycles.find((cycle) => cyclePattern(cycle) === pattern)?.groups ?? [];
 }
 function number(value: unknown, fallback: number): number { return typeof value === "number" && Number.isFinite(value) ? value : fallback; }
 function named(row: Row): boolean { return Boolean(text(row.name)); }

@@ -25,7 +25,7 @@ Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
 | `intent/` | **Reading a Hebrew sentence with no model.** Seven shapes; never guesses |
 | `absence/` | **An absence read and planned in code** (D36): dates, one question when needed, the fairest cover per shift; no model, no write |
 | `simulate/` | **What a change would do.** No model, no repository, persists nothing |
-| `rotation/` | **Whose closure a date is.** Pure arithmetic off separate round/triplet anchors; no model |
+| `rotation/` | **Whose closure a date is, and who is home on a day cycle.** Pure arithmetic off separate anchors; no model |
 | `placement/` | **What a placement would cost, and what else the manager could do.** No model |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
 | `shared/` | Small helpers several packages read: `clarification.py`, `hebrew_calendar.py` |
@@ -213,6 +213,18 @@ cycle. A row naming another group is that group's own exception and wins for
 it — the shape setup uses when group ב leaves at a different
 hour. `rotation_presence` is deliberately **not** derived: "ב is out on
 Tuesdays" says nothing about א.
+
+**Day cycles are the other kind** (`rotation/day_cycles.py`): 11/3, 12/2,
+שבוע־שבוע — N days on base, M home, from one anchor day, with each group
+starting a stated number of days after it (spread evenly by default). They
+live in `workplace.day_cycles`, several side by side, and a person joins one
+with `exit_pattern = "cycle:<id>"`. Their weekends fall out of the arithmetic
+rather than anchoring it. Hours come in three layers that each state only
+what they change — the cycle's own departure and return (a day shift of up
+to three days either way, plus a time), `group_times[group]`, then dated
+`time_changes` matched on the nominal departure day. A home stretch is hard
+unavailability (`closure_status` returns it), so the solver, the audit and
+the picker all read it through the same gate as a closure.
 
 Read by four callers, which is the point of it being one module:
 `scheduler/` turns it into hard availability rows and the solver never

@@ -88,6 +88,14 @@ CREATE INDEX IF NOT EXISTS copilot_jobs_ready_idx
 
 COMMIT;
 
+-- What a claim scans: only the open jobs, however many finished ones the
+-- table holds.
+CREATE INDEX IF NOT EXISTS copilot_jobs_open_idx
+    ON copilot_jobs (run_after, created_at)
+    WHERE status IN ('queued','running');
+
+COMMIT;
+
 -- What code made of a standing source: a rule, a policy, an employee's note,
 -- a preference (D32). A *derivative* of the manager's sentence, never a
 -- replacement for it -- the sentence stays where it is, and the row is

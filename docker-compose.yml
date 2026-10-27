@@ -25,9 +25,8 @@ services:
       # The API runs the job worker in-process by default; here the
       # `worker` service below is the worker, so the API leaves it to it.
       PAKASH_EMBEDDED_WORKER: ${PAKASH_EMBEDDED_WORKER:-false}
-      # Signs the workspace session cookie. Unset, the backend generates one
-      # per process — fine for a single-container dev run, but sessions then
-      # die on every restart. Set it in .env for anything long-lived.
+      # Signs the workspace session cookie. Unset, one is generated and kept
+      # in the database, shared by every replica and restart (D39).
       PAKASH_SESSION_SECRET: ${PAKASH_SESSION_SECRET:-}
       # Unlocks the settings panel, on top of the boss login. Falls back to
       # the committed default (same as settings.py) -- an empty value here

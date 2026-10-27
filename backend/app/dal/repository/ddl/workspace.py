@@ -67,4 +67,12 @@ ALTER TABLE teams ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT '';
 
 COMMIT;
 
+-- `revision`: bumped on every profile save, and a save may name the revision
+-- it was edited from. Two managers editing setup at once otherwise lose
+-- whichever save lands first, silently, because a save replaces the whole
+-- profile.
+ALTER TABLE team_profiles ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 0;
+
+COMMIT;
+
 """

@@ -19,6 +19,7 @@ schedules the pick may differ from one build to the next.
 | `fairness.py` | Closers, shifts and nights spread to per-person targets, the longest rest between shifts |
 | `stability.py` | Absorbing a change into an existing board: moving as few rows as it needs |
 | `solve.py` | Solving, reasons, notes, warnings and metrics |
+| `cpu_budget.py` | How many solver threads the process runs at once; a solve waits for its share |
 | `rows.py` | Row and roster helpers |
 """
 

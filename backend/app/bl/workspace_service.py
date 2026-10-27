@@ -73,6 +73,7 @@ class WorkspaceService:
         """
         team = self._repository.get_team(team_id)
         view = _public(team, role=role, include_token=(role == ROLE_BOSS))
+        view["profile_revision"] = self._repository.team_profile_revision(team_id)
         view["profile"] = self._repository.team_profile(team_id)
         return view
 

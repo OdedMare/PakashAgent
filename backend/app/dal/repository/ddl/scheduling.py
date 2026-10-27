@@ -181,4 +181,11 @@ CREATE INDEX IF NOT EXISTS change_log_team_idx
 
 COMMIT;
 
+-- Who was acting (`common/actor.py`): `boss:<manager_id>`, `employee:<name>`,
+-- `admin`, or empty for the system. Guarded after its own COMMIT because an
+-- existing `change_log` never sees columns added to its CREATE statement.
+ALTER TABLE change_log ADD COLUMN IF NOT EXISTS actor TEXT NOT NULL DEFAULT '';
+
+COMMIT;
+
 """

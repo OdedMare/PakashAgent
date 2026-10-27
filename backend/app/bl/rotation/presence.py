@@ -2,6 +2,7 @@
 
 import datetime
 
+from app.bl.rotation import day_cycles
 from app.bl.rotation.closures import closure_days, holds, shift_interval
 from app.bl.rotation.vocabulary import (
     cycle_of_group, exit_pattern, groups_for, minutes, parse_date, text,
@@ -14,7 +15,8 @@ _DAY = datetime.timedelta(days=1)
 def _rules_on(profile, person, day, shift):
     pattern = exit_pattern(profile, person)
     group = text(person.get("rotation_group"))
-    pattern = pattern if groups_for(pattern) else cycle_of_group(profile, group)
+    if not (groups_for(pattern) or day_cycles.is_day_cycle(pattern)):
+        pattern = cycle_of_group(profile, group)
     date = day.isoformat()
     matches = [rule for rule in (profile.get("workplace") or {}).get("rotation_presence") or []
                if rule.get("pattern") == pattern and rule.get("group") == group
@@ -77,6 +79,8 @@ def presence_status(profile, person, slot):
 def closure_status(profile, person, slot):
     """Each cycle owns its own windows, even when no owner is rostered."""
     pattern = exit_pattern(profile, person)
+    if day_cycles.is_day_cycle(pattern):
+        return day_cycles.status(profile, person, slot)
     group = text(person.get("rotation_group"))
     if not group:
         return _weekly_exit_status(profile, person, slot)
