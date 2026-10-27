@@ -16,6 +16,7 @@ import psycopg
 import pytest
 from psycopg import sql
 
+from app.common.actor import acting_as
 from app.common.config import Settings
 from app.common.errors import ASSIGNMENT_MOVED, PROFILE_CHANGED, ConflictError
 from app.dal import database as postgres
@@ -88,3 +89,20 @@ def test_a_move_from_a_slot_the_row_already_left_is_refused(repo):
     assert str(refused.value) == ASSIGNMENT_MOVED
     [stored] = repo.assignments(schedule["id"], team["id"])
     assert stored["slot_id"] == tuesday["id"]
+
+
+def test_the_change_log_names_who_was_acting(repo):
+    team = repo.create_team("משמרת א", "sod-gadol")
+    with acting_as("boss:m1"):
+        row = repo.append_change(team["id"], "moved", reason="החלפה")
+    system = repo.append_change(team["id"], "moved", reason="בנייה")
+
+    assert row["actor"] == "boss:m1"
+    assert system["actor"] == ""
+
+
+def test_a_queued_job_carries_who_queued_it(repo):
+    team = repo.create_team("משמרת א", "sod-gadol")
+    with acting_as("boss:m1"):
+        job = repo.enqueue_copilot_job(team["id"], "key", "scan", {})
+    assert job["payload"]["actor"] == "boss:m1"

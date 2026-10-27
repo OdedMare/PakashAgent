@@ -8,6 +8,7 @@ from contextlib import contextmanager
 
 from psycopg.types.json import Jsonb
 
+from app.common.actor import current_actor
 from app.common.errors import NotFoundError
 from app.dal.database import bind_job_connection, connect
 from app.dal.repository.base import RepositoryBase, new_id
@@ -17,6 +18,10 @@ _COMPLETE = "complete"
 
 
 def enqueue(connection, team_id, key, kind, payload):
+    # Whoever queued it acts when it runs: the worker restores this, so a
+    # build's change-log rows name the manager who started it.
+    if current_actor() and "actor" not in payload:
+        payload = dict(payload, actor=current_actor())
     return connection.execute("""
         INSERT INTO copilot_jobs (id, team_id, dedupe_key, kind, payload)
         VALUES (%s,%s,%s,%s,%s)

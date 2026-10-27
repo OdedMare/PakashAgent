@@ -44,6 +44,9 @@ class ChangeEntry(BaseModel):
     shift_name: str = ""
     reason: str = ""
     agent_reason: str = ""
+    # Who was acting: `boss:<manager_id>`, `employee:<name>`, `admin`, or
+    # empty for the system (and for rows older than the column).
+    actor: str = ""
     created_at: Optional[str] = None
 
 

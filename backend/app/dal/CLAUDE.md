@@ -85,7 +85,7 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | `shift_slots` | One shift on one date — the thing an assignment points into |
 | `assignments` | person → slot, **with the agent's reason** (`NOT NULL`). `source` records whether the agent generated the row, the manager placed it by hand, or it was imported ([D18](../../../docs/DECISIONS.md#d18--the-boss-can-place-a-shift-without-the-agent-️-completes-d6)) |
 | `availability` | Known unavailability. `source` records where it came from — the manager, the agent, or the manager writing down what an employee reported ([D13](../../../docs/DECISIONS.md#d13--constraints-are-recorded-by-the-manager-with-their-source-marked)) |
-| `change_log` | **Append-only**: what changed, both reasons, when |
+| `change_log` | **Append-only**: what changed, both reasons, when, and `actor` — who was acting, read from `common/actor.py` (set per request from the signed cookies, and per job from the request that queued it) |
 | `employee_identities` | A claimed roster name plus its scrypt passcode hash — one claim per name per team ([D14](../../../docs/DECISIONS.md)). Also holds `acknowledged_at`, the mark behind "what changed for me" ([D16](../../../docs/DECISIONS.md#d16--an-employee-is-told-what-changed-and-acknowledging-is-what-marks-it-read)) |
 | `constraint_requests` | An employee's submission awaiting the manager. **Not** `availability`: pending rows are invisible to `audit.py`, and approval is what promotes one |
 | `compiled_sources` | What code made of a standing sentence (D32), keyed on its words, the roster and the compiler. A derivative of the sentence, never a replacement; `unresolved` rows are kept negatives |

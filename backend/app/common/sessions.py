@@ -39,6 +39,9 @@ ROLE_MEMBER = "member"
 ROLE_EMPLOYEE = "employee"
 
 COOKIE_NAME = "pakash_session"
+# Which manager's browser this is (`guards.manager()`): their conversations,
+# and the actor the change log records for them.
+MANAGER_COOKIE_NAME = "pakash_manager"
 
 # The system operator -- the "צוות משמרות זהב" console (D28). A separate cookie
 # rather than a fourth role on `pakash_session`, for two reasons. An operator

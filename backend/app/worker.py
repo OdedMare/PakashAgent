@@ -17,6 +17,7 @@ from app.bl.manager_chat import ManagerChatService
 from app.common.events import TeamEvents
 from app.dal.notify import PostgresSignals
 from app.common.activity import track_activity
+from app.common.actor import acting_as
 from app.common.errors import NotFoundError
 from app.common.config import Settings
 from app.common.logging_setup import configure_logging
@@ -53,7 +54,8 @@ class JobWorker:
         _log.info("job started id=%s kind=%s team=%s attempt=%s",
                   job["id"], job["kind"], job["team_id"], job.get("attempts"))
         try:
-            with model_team(job["team_id"]):
+            with model_team(job["team_id"]), \
+                    acting_as((job.get("payload") or {}).get("actor", "")):
                 self._execute(job)
             self._repository.finish_copilot_job(job["id"])
             _log.info("job finished id=%s kind=%s seconds=%.1f",

@@ -27,7 +27,10 @@ from app.common.config import Settings
 from app.common.errors import AppError, error_payload
 from app.common.events import TeamEvents
 from app.common.logging_setup import QUIET_401_METHODS, configure_logging
-from app.common.sessions import COOKIE_NAME, read
+from app.common.actor import acting_as, actor_of
+from app.common.sessions import (
+    ADMIN_COOKIE_NAME, COOKIE_NAME, MANAGER_COOKIE_NAME, read, read_admin,
+)
 from app.common.throttle import LoginThrottle
 from app.dal.notify import PostgresSignals
 from app.common.runtime_settings.runtime_settings_store import (
@@ -150,14 +153,20 @@ app = FastAPI(
 
 @app.middleware("http")
 async def bind_model_team(request: Request, call_next):
-    """Carry the signed workspace into the cross-process LLM quota."""
+    """Carry the signed workspace into the cross-process LLM quota, and who
+    is acting into the change log (`common/actor.py`)."""
     try:
         session = read(session_secret, request.cookies.get(COOKIE_NAME)) or {}
+        manager = read(session_secret, request.cookies.get(MANAGER_COOKIE_NAME))
+        actor = actor_of(session, manager) if session else (
+            "admin" if read_admin(session_secret, request.cookies.get(ADMIN_COOKIE_NAME))
+            else ""
+        )
     except Exception:
         # The shared key is read from the database on first use; with the
         # database down, `/api/health` must still answer and say so.
-        session = {}
-    with model_team(session.get("team_id", "")):
+        session, actor = {}, ""
+    with model_team(session.get("team_id", "")), acting_as(actor):
         return await call_next(request)
 
 app.include_router(health.build_router(repository))
