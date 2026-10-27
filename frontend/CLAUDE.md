@@ -101,7 +101,12 @@ cycle, for the weekend group א closes and for group א's closure hours; the
 other groups' turns and hours are derived by the server. The dates shown
 beside the anchor are a preview of that one typed fact, and an anchor stored
 for another group is shown as א's next turn in the same cycle. Presence rules
-stay per group. The whole screen saves in one `updateProfile`. A save that
+stay per group. Day cycles (11/3, 12/2, שבוע־שבוע…) are typed in
+`ManualSetup/DayCycleSetup.tsx`: days on base and at home, the day group א
+starts on base, when each other group starts, and hours in three layers
+(cycle, group, dated change). Its four-week strip is a preview of the nominal
+days only; who is home on a date is answered by the server. The whole screen
+saves in one `updateProfile`. A save that
 adds a soldier or a shift refits every draft ahead of today, keeping its
 rows (D37); anything else applies to the next build.
 
