@@ -156,3 +156,5 @@
   .manual-compiled li { grid-template-columns: minmax(0, 1fr); }
   .manual-compiled-question { grid-column: auto; }
 }
+.rotation-types { align-items: center; }
+.rotation-types > span { color: var(--text-muted); font-size: 0.74rem; font-weight: 650; margin-inline-end: 0.25rem; }

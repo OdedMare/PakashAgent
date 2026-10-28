@@ -158,6 +158,13 @@ export function ManualSetup({
     [employees, rotationMode],
   );
   const groupsOf = (pattern: string) => rotationGroups(pattern, dayCycles);
+  // A closure runs to the end of Sunday's first shift by the clock — the
+  // handover the server's default closure ends on.
+  const handoverEnd = useMemo(() => {
+    const timed = shifts.filter((shift) => text(shift.start_time) && text(shift.end_time));
+    timed.sort((a, b) => text(a.start_time).localeCompare(text(b.start_time)));
+    return timed.length ? text(timed[0].end_time) : "";
+  }, [shifts]);
   const availableExitPatterns = useMemo(
     () => new Set(["round", ...enabledExitPatterns, ...usedExitPatterns]),
     [enabledExitPatterns, usedExitPatterns],
@@ -326,6 +333,7 @@ export function ManualSetup({
                 presence={rotationPresence}
                 onPresence={setRotationPresence}
                 shiftNames={shiftNames}
+                handoverEnd={handoverEnd}
               />
             ))}
           </div>
@@ -556,7 +564,8 @@ function closureDays(shift: Row, window: ClosureBounds): string[] {
     if (offset === window.end_day && offset > 0 && !(timed && start < window.end_time)) continue;
     days.push(DAYS[(offset + 13) % 7]);
   }
-  return days;
+  // A closure opening on Sunday (שבוע־שבוע) meets the last one's handover.
+  return [...new Set(days)];
 }
 
 function headcount(shift: Row): number {

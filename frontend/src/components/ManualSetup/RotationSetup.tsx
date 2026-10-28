@@ -18,6 +18,16 @@ const DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", 
 // Closure days are stored as offsets from the closing Saturday: a closure
 // may open as early as the Sunday before it (-6) and end as late as the
 // Friday after it (6).
+// The round's types, by the day its closure opens: the group not closing is
+// home from then until the Sunday handover, so the opening day sets how many
+// days each group is on base in its two weeks.
+const TYPES = [
+  { start_day: -2, label: "11/3" },
+  { start_day: -1, label: "12/2" },
+  { start_day: -3, label: "10/4" },
+  { start_day: -6, label: "שבוע־שבוע" },
+];
+const DEFAULT_START_DAY = -2;
 const END_DAYS = ["שבת", "ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי"];
 
 type Rows<T> = React.Dispatch<React.SetStateAction<T[]>>;
@@ -39,6 +49,7 @@ export function CycleSetup({
   presence,
   onPresence,
   shiftNames,
+  handoverEnd,
 }: {
   pattern: Cycle;
   anchor: string;
@@ -49,6 +60,8 @@ export function CycleSetup({
   presence: RotationPresenceRule[];
   onPresence: Rows<RotationPresenceRule>;
   shiftNames: string[];
+  /** When Sunday's first shift ends — where a closure set here stops. */
+  handoverEnd: string;
 }) {
   const { label, groups, span } = CYCLES[pattern];
   const [first, ...derived] = groups;
@@ -60,11 +73,33 @@ export function CycleSetup({
   const hasWindow = windows.some((row) => row.pattern === pattern && row.group === first);
   const hasPresence = presence.some((row) => row.pattern === pattern);
   const editWindow = (index: number, patch: Partial<RotationClosureWindow>) => onWindows((rows) => rows.map((row, i) => i === index ? { ...row, ...patch } : row));
+  // The type is group א's regular closure row; with no row the server's
+  // default applies, which opens on Thursday (11/3). A week-long closure
+  // opens at the handover, so it never overlaps the one it follows.
+  const regular = windows.findIndex((row) => row.pattern === pattern && row.group === first && !row.starts_on && !row.ends_on);
+  const startDay = regular >= 0 ? windows[regular].start_day : DEFAULT_START_DAY;
+  const setType = (day: number) => {
+    const start_time = day === -6 ? handoverEnd || "00:00" : "00:00";
+    if (regular >= 0) editWindow(regular, { start_day: day, start_time });
+    else if (day !== DEFAULT_START_DAY) onWindows((rows) => [...rows, { pattern, group: first, start_day: day, start_time, end_day: 1, end_time: handoverEnd || "00:00", starts_on: "", ends_on: "" }]);
+  };
   const editPresence = (index: number, patch: Partial<RotationPresenceRule>) => onPresence((rows) => rows.map((row, i) => i === index ? { ...row, ...patch } : row));
 
   return (
     <article className={`rotation-cycle-card${pattern === "triplet" ? " is-triplet" : ""}`}>
       <header><strong>{label} {groups.join(" / ")}</strong><span>{span}</span></header>
+
+      {pattern === "round" ? (
+        <div className="rotation-types day-cycle-presets" role="group" aria-label="סוג הסבב">
+          <span>סוג הסבב</span>
+          {TYPES.map((type) => (
+            <button type="button" key={type.label} className={`chip-button${type.start_day === startDay ? " is-selected" : ""}`}
+              title={`הקבוצה שלא סוגרת יוצאת הביתה ב${DAYS[type.start_day + 6]}`} onClick={() => setType(type.start_day)}>
+              {type.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <div className="rotation-anchor">
         <Field label={`הסופ״ש שבו ${label} ${first}׳ סוגר`}>

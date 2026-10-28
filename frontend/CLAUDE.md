@@ -131,8 +131,10 @@ rows (D37); anything else applies to the next build. A shift can list
 `allowed_roles` there — empty restricts nobody; otherwise only people holding
 one of those roles are placed on it. A shift can also ask for a different
 headcount on the weekend, and "weekend" means the round's closure — the days
-one group is home, from the days on base chosen above to the Sunday
-handover — not a fixed Friday and Saturday. It is saved as a staffing group
+one group is home, until the Sunday handover — not a fixed Friday and
+Saturday. The round's type (11/3, 12/2, 10/4, שבוע־שבוע) is chosen on its
+card and sets the day group א's regular closure opens (Thursday, Friday,
+Wednesday, or Sunday at the handover); no row means the server's Thursday. It is saved as a staffing group
 marked `closure: true` whose days are worked out per shift at save time
 (the first day only for a shift still running when the closure opens, the
 Sunday only for one starting before the handover).
