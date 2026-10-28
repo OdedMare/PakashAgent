@@ -302,7 +302,7 @@ export function TeamPanel({
                     {shift.requires_shift_manager ? " · נדרש מפקד/ת" : ""}
                   </span>
                 </span>
-                <span className="roster-load">תקן {shiftHeadcount(shift)}</span>
+                <span className="roster-load">תקן {shiftHeadcount(shift)}{weekendHeadcount(shift) ? ` · סופ״ש ${weekendHeadcount(shift)}` : ""}</span>
                 {onSaveProfile ? (
                   <button
                     type="button"
@@ -673,6 +673,14 @@ function shiftHeadcount(shift?: Record<string, unknown>): number {
     return !Array.isArray(days) || days.length === 0;
   }) as { headcount?: unknown } | undefined;
   return typeof fallback?.headcount === "number" ? fallback.headcount : 1;
+}
+
+/** Friday and Saturday's own headcount, when setup gave the weekend one. */
+function weekendHeadcount(shift: Record<string, unknown>): number | null {
+  const staffing = Array.isArray(shift.staffing) ? shift.staffing as Array<{ days?: unknown; headcount?: unknown }> : [];
+  const group = staffing.find((row) => Array.isArray(row?.days)
+    && row.days.length === 2 && row.days.includes("שישי") && row.days.includes("שבת"));
+  return typeof group?.headcount === "number" ? group.headcount : null;
 }
 
 function formatHours(hours: number): string {
