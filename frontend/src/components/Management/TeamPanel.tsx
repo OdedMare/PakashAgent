@@ -675,11 +675,12 @@ function shiftHeadcount(shift?: Record<string, unknown>): number {
   return typeof fallback?.headcount === "number" ? fallback.headcount : 1;
 }
 
-/** Friday and Saturday's own headcount, when setup gave the weekend one. */
+/** The weekend's own headcount, when setup gave it one: the staffing group
+ *  marked as the closure's, or an older one naming Friday and Saturday. */
 function weekendHeadcount(shift: Record<string, unknown>): number | null {
-  const staffing = Array.isArray(shift.staffing) ? shift.staffing as Array<{ days?: unknown; headcount?: unknown }> : [];
-  const group = staffing.find((row) => Array.isArray(row?.days)
-    && row.days.length === 2 && row.days.includes("שישי") && row.days.includes("שבת"));
+  const staffing = Array.isArray(shift.staffing) ? shift.staffing as Array<{ days?: unknown; headcount?: unknown; closure?: unknown }> : [];
+  const group = staffing.find((row) => row?.closure === true || (Array.isArray(row?.days)
+    && row.days.length === 2 && row.days.includes("שישי") && row.days.includes("שבת")));
   return typeof group?.headcount === "number" ? group.headcount : null;
 }
 
