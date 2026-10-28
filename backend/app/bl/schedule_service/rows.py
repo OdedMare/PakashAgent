@@ -86,6 +86,7 @@ def availability_fact(row: dict, with_reason: bool = True) -> dict:
         "start_time": row.get("start_time") or "",
         "end_time": row.get("end_time") or "",
         "is_hard": row.get("is_hard", True),
+        "constraint_type": row.get("constraint_type") or "availability",
     }
     if with_reason:
         fact["reason"] = row.get("reason") or ""

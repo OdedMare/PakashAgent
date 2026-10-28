@@ -200,6 +200,7 @@ PostgreSQL הוא המצב המשותף היחיד (D35):
 | פעולה | Endpoint | מה קורה | LLM |
 |---|---|---|---|
 | אילוץ ידני של המנהל | `POST /constraints`, `DELETE /constraints/{id}` | שורת `availability` | ⚙️ |
+| תורנות חוסמת | `POST /constraints` עם `constraint_type=duty` | שורת `duties`; מסוננת במחולל וחוסמת שיבוץ/העברה ידניים שחופפים | ⚙️ |
 | העדפות הסוכן | `/preferences` (list, create, patch, delete) | `Preferences.tsx`. הצעה של הסוכן נכנסת כ-`suggested` ולא פעילה עד אישור | ⚙️ |
 | למידה משינויים | `GET /history/learn` | `LearnedFromChanges.tsx`: ספירת תיקונים חוזרים, ואז ניסוח כללים | 🤖 1 |
 | היסטוריה | `History.tsx` | יומן השינויים | ⚙️ |

@@ -533,10 +533,9 @@ export interface Alternatives {
  *  lets the board validate a drag, explain it in Hebrew, and offer a way out
  *  while the agent is slow or unavailable.
  *
- *  `blocking` is always false and the field exists to say so: the audit
- *  advises and never gates (D3). A manager may place somebody this reports
- *  on, and the write that follows will store it — checking first only moves
- *  the warning to before the click, where it is cheaper to act on. */
+ *  Ordinary audit findings stay advisory (D3). `blocking` is true only for
+ *  an operational duty overlap; every write path refuses that physical
+ *  conflict as well. */
 export interface PlacementCheck {
   ok: boolean;
   blocking: boolean;
@@ -606,6 +605,7 @@ export interface Constraint {
   is_hard: boolean;
   reason: string;
   source: "manager" | "agent" | "employee_reported" | "setup";
+  constraint_type: "availability" | "duty";
 }
 
 /** One append-only change-log row. Both reasons are present because they
@@ -1094,7 +1094,7 @@ export interface ChatPlan {
   agent_reason: string;
   reason: string;
   operations: Operation[];
-  constraints: { employee: string; date: string; shift?: string; reason?: string; available: boolean }[];
+  constraints: { employee: string; date: string; shift?: string; reason?: string; available: boolean; constraint_type?: "availability" | "duty"; start_time?: string; end_time?: string }[];
   warnings: { message: string; code?: string; employee?: string; date?: string; severity?: string }[];
   exceptions: string[];
   employee?: string;

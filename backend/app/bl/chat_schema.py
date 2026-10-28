@@ -57,6 +57,7 @@ props["constraints"]["items"]["properties"].update({
     "id": {"type": "string"},
     "start_time": {"type": "string"}, "end_time": {"type": "string"},
     "is_hard": {"type": "boolean"},
+    "constraint_type": {"type": "string", "enum": ["availability", "duty"]},
 })
 props["constraints"]["maxItems"] = 126
 CHAT_SCHEMA["required"] = list(props)

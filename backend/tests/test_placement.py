@@ -130,13 +130,8 @@ def test_a_free_slot_and_a_qualified_person_is_ok():
     assert result["alternatives"] == {"employees": [], "slots": []}
 
 
-def test_nothing_ever_blocks():
-    """Whatever it finds, it advises (D3).
-
-    Run against the worst placement the fixtures can produce — an ineligible
-    person, double-booked, against a constraint — because if anything were
-    ever going to gate, it would be this.
-    """
+def test_ordinary_findings_remain_advisory():
+    """D3 still applies to every finding except an operational duty."""
     schedule = _schedule([_assignment("a1", DANA, MORNING, "2026-08-17")])
     result = check(
         schedule, PROFILE, DANA, MORNING, "2026-08-17",
@@ -147,6 +142,20 @@ def test_nothing_ever_blocks():
     )
     assert result["ok"] is False
     assert result["blocking"] is False
+
+
+def test_an_operational_duty_blocks_the_placement():
+    result = check(
+        _schedule(), PROFILE, YOSSI, MORNING, "2026-08-17",
+        availability=[{
+            "employee": YOSSI, "date": "2026-08-17", "shift": "",
+            "available": False, "start_time": "06:00", "end_time": "09:00",
+            "is_hard": True, "constraint_type": "duty", "reason": "תורנות מטבח",
+        }],
+    )
+    assert result["ok"] is False
+    assert result["blocking"] is True
+    assert any("תורנות חוסמת" in reason for reason in result["reasons"])
 
 
 # -- what it catches -------------------------------------------------------

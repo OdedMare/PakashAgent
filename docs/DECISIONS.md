@@ -1144,6 +1144,13 @@ with a reason per row (D8), every hand placement is a pin, and a seat
 nobody can legally fill is reported rather than refused. The chat, the
 change agent and the reason gates are unchanged.
 
+**Operational-duty exception.** A separately recorded duty is occupied time,
+not a preference the manager may knowingly override. The same interval
+arithmetic is shown by the placement check, but assignment and move endpoints
+also reject an overlap directly. This does not give the audit a veto: the
+write precondition is enforced outside `bl/audit/`, while the audit continues
+to report any older schedule that already contains the conflict.
+
 **What changes.** "Hard" now means hard for generation: the solver will not
 place a row that breaks a hard rule it can represent. Engines and call
 widths (`ai`/`code`/`auto`, `day`/`week`) are gone; the panel holds the

@@ -11,6 +11,7 @@ the plan still changes nothing the manager did not ask about. Writes nothing.
 
 from collections import Counter
 
+from app.bl.audit import constraint_conflicts
 from app.bl.schedule_service.generation.pins import model_assignment
 from app.bl.shared import iso
 from app.bl.simulate.hypothetical import schedule_rows
@@ -50,7 +51,7 @@ def fill_vacancies(scheduler, history, cache, team_id, turn, plan, state, rows):
             preferences=state["preferences"], translation_cache=cache,
             required_assignments=solved, shift_names=shifts,
             already_scheduled=[model_assignment(row) for row in rows if row not in solved],
-            requests=_avoid(plan, vacant),
+            requests=_avoid(plan, vacant, state["profile"]),
         )
     except AgentError as exc:
         plan["solver_note"] = _FAILED % exc
@@ -69,7 +70,7 @@ def fill_vacancies(scheduler, history, cache, team_id, turn, plan, state, rows):
                    for row in picks]
 
 
-def _avoid(plan, vacant):
+def _avoid(plan, vacant, profile):
     """Hard avoids: whoever left a vacated slot, and every absence the plan sets."""
     requests = [
         {"kind": "avoid", "employees": [row["employee"]], "shifts": [row["shift"]],
@@ -83,7 +84,27 @@ def _avoid(plan, vacant):
          "is_hard": True, "reason": row.get("reason") or "לא זמין/ה"}
         for row in plan["constraints"]
         if row.get("action") != "remove" and not row.get("available", False)
+        and row.get("constraint_type") != "duty"
     ]
+    shifts = {
+        row.get("name"): row for row in profile.get("shifts") or []
+        if isinstance(row, dict) and row.get("name")
+    }
+    for duty in (row for row in plan["constraints"]
+                 if row.get("action") != "remove"
+                 and row.get("constraint_type") == "duty"):
+        for shift, date in vacant:
+            definition = shifts.get(shift) or {}
+            if constraint_conflicts({
+                "employee": duty["employee"], "shift": shift, "date": date,
+                "start_time": definition.get("start_time") or "",
+                "end_time": definition.get("end_time") or "",
+            }, duty):
+                requests.append({
+                    "kind": "avoid", "employees": [duty["employee"]],
+                    "shifts": [shift], "dates": [date], "is_hard": True,
+                    "reason": duty.get("reason") or "תורנות חוסמת",
+                })
     return requests
 
 

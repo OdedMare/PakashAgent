@@ -188,6 +188,11 @@ package's `__init__` docstring carries a table of which module owns what.
   rule it cannot represent is reported in the build's notes, never sent to
   a model to assign around. On a hand-made schedule hard rules remain a
   loud warning, not a gate (D1/D3).
+- **An operational duty is occupied time, not an advisory rule.** Dated duties
+  and recurring duties are hard intervals. The solver omits overlapping
+  placements, the picker marks them `blocking`, and manual/chat assignment and
+  move paths refuse them too. This is a write precondition outside `bl/audit/`;
+  the audit still only reports a schedule that already drifted.
 - **How full a slot is has exactly one answer, and `bl/audit/` owns it.**
   `required_headcount()` says how many people it asks for — reading the stored
   grid first, since that is what the week was generated into — and

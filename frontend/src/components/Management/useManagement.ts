@@ -170,6 +170,7 @@ interface ManagementState {
     is_hard?: boolean;
     reason?: string;
     source?: string;
+    constraint_type?: "availability" | "duty";
   }) => Promise<void>;
   removeConstraint: (rowId: string) => Promise<void>;
   saveProfile: (input: {
@@ -607,6 +608,7 @@ export function useManagement(): ManagementState {
       is_hard?: boolean;
       reason?: string;
       source?: string;
+      constraint_type?: "availability" | "duty";
     }) => {
       await run(() => setConstraint(input));
     },

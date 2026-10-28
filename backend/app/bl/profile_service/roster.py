@@ -58,7 +58,7 @@ def _employee(row: dict, default_exit_pattern: str) -> dict:
 
 def _validate_recurring(rows: list) -> None:
     weekdays = {weekday_key(day) for day in HEBREW_WEEKDAYS}
-    fields = {"days", "shifts", "available", "is_hard", "start_time", "end_time", "reason", "source"}
+    fields = {"days", "shifts", "available", "is_hard", "start_time", "end_time", "reason", "source", "constraint_type"}
     for rule in rows:
         if isinstance(rule, str):
             # Older free-text profile prose is preserved; only structured rules expand.
@@ -76,6 +76,14 @@ def _validate_recurring(rows: list) -> None:
         if any(rule.get(key) and (not isinstance(rule[key], str) or not valid_time(rule[key]))
                for key in ("start_time", "end_time")):
             raise AgentError("שעות האילוץ הקבוע חייבות להיות בפורמט HH:MM")
+        constraint_type = rule.get("constraint_type") or "availability"
+        if constraint_type not in ("availability", "duty"):
+            raise AgentError("סוג האילוץ הקבוע אינו תקין")
+        if constraint_type == "duty" and (
+            rule["available"] or rule.get("is_hard", True) is False
+            or rule["shifts"] or not rule.get("start_time") or not rule.get("end_time")
+        ):
+            raise AgentError("תורנות קבועה חייבת להיות קשיחה, עם שעת התחלה וסיום וללא משמרת מסוימת")
 
 
 def employee_item(item: dict) -> dict:

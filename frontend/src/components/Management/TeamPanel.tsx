@@ -63,6 +63,7 @@ export function TeamPanel({
     is_hard?: boolean;
     reason?: string;
     source?: string;
+    constraint_type?: "availability" | "duty";
   }) => void;
   onRemove?: (rowId: string) => void;
   onSaveProfile?: (input: {
@@ -398,7 +399,7 @@ export function TeamPanel({
       <section className="panel-section">
         <h3>
           <CalendarOff size={15} />
-          אילוצים
+          אילוצים ותורנויות
           <span className="panel-count">{constraints.length + recurringConstraints.length}</span>
         </h3>
 
@@ -409,8 +410,9 @@ export function TeamPanel({
               <div className="constraint-main">
                 <span className="constraint-who">{employee}</span>
                 <span className="constraint-when">
-                  קבוע · {strings(rule.days).length ? strings(rule.days).join(", ") : "כל יום"}
+                  {text(rule.constraint_type) === "duty" ? "תורנות קבועה" : "קבוע"} · {strings(rule.days).length ? strings(rule.days).join(", ") : "כל יום"}
                   {strings(rule.shifts).length ? ` · ${strings(rule.shifts).join(", ")}` : " · כל המשמרות"}
+                  {text(rule.constraint_type) === "duty" && (text(rule.start_time) || text(rule.end_time)) ? ` · ${text(rule.start_time)}–${text(rule.end_time)}` : ""}
                 </span>
               </div>
               {text(rule.reason) ? <span className="constraint-reason">{text(rule.reason)}</span> : null}
@@ -433,7 +435,9 @@ export function TeamPanel({
                 <span className="constraint-who">{row.employee}</span>
                 <span className="constraint-when">
                   {displayDate(row.constraint_date)}
-                  {row.shift_name ? ` · ${row.shift_name}` : " · כל היום"}
+                  {row.constraint_type === "duty"
+                    ? " · תורנות חוסמת"
+                    : row.shift_name ? ` · ${row.shift_name}` : " · כל היום"}
                   {formatWindow(row) ? ` · ${formatWindow(row)}` : ""}
                 </span>
               </div>
@@ -487,6 +491,7 @@ export function TeamPanel({
                         is_hard: input.is_hard,
                         reason: input.reason,
                         source: "manager",
+                        constraint_type: input.constraint_type,
                       }],
                     };
                   });
@@ -712,6 +717,7 @@ function ConstraintForm({
     is_hard?: boolean;
     reason?: string;
     source?: string;
+    constraint_type?: "availability" | "duty";
     duration: "temporary" | "permanent";
     weekdays: string[];
   }) => void;
@@ -719,7 +725,7 @@ function ConstraintForm({
   const [employee, setEmployee] = useState(names[0] ?? "");
   const [date, setDate] = useState("");
   const [shift, setShift] = useState("");
-  const [kind, setKind] = useState<"unavailable" | "window">("unavailable");
+  const [kind, setKind] = useState<"unavailable" | "window" | "duty">("unavailable");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [isHard, setIsHard] = useState(true);
@@ -731,7 +737,8 @@ function ConstraintForm({
   const ready =
     employee.trim() !== "" &&
     (duration === "permanent" ? weekdays.length > 0 : date !== "") &&
-    (kind === "unavailable" || startTime !== "" || endTime !== "");
+    (kind === "unavailable" || kind === "window" && (startTime !== "" || endTime !== "")
+      || kind === "duty" && startTime !== "" && endTime !== "");
 
   return (
     <form
@@ -744,11 +751,12 @@ function ConstraintForm({
           constraint_date: date,
           shift_name: shift,
           available: kind === "window",
-          start_time: kind === "window" ? startTime : "",
-          end_time: kind === "window" ? endTime : "",
-          is_hard: isHard,
+          start_time: kind === "window" || kind === "duty" ? startTime : "",
+          end_time: kind === "window" || kind === "duty" ? endTime : "",
+          is_hard: kind === "duty" ? true : isHard,
           reason: reason.trim(),
           source,
+          constraint_type: kind === "duty" ? "duty" : "availability",
           duration,
           weekdays,
         });
@@ -793,7 +801,7 @@ function ConstraintForm({
         />
       </label> : <fieldset className="profile-checkboxes"><legend>ימים קבועים</legend>{WEEKDAYS.map((day) => <label key={day}><input type="checkbox" checked={weekdays.includes(day)} onChange={(event) => setWeekdays(event.target.checked ? [...weekdays, day] : weekdays.filter((value) => value !== day))} /><span>{day}</span></label>)}</fieldset>}
 
-      <label>
+      {kind !== "duty" ? <label>
         <span>משמרת</span>
         <select
           value={shift}
@@ -808,42 +816,45 @@ function ConstraintForm({
             </option>
           ))}
         </select>
-      </label>
+      </label> : null}
 
       <label>
-        <span>סוג זמינות</span>
+        <span>סוג רישום</span>
         <select
           value={kind}
-          onChange={(event) =>
-            setKind(event.target.value as "unavailable" | "window")
-          }
+          onChange={(event) => {
+            const next = event.target.value as "unavailable" | "window" | "duty";
+            setKind(next);
+            if (next === "duty") setShift("");
+          }}
         >
           <option value="unavailable">לא זמין/ה</option>
           <option value="window">זמין/ה רק בחלון שעות</option>
+          <option value="duty">תורנות חוסמת</option>
         </select>
       </label>
 
-      {kind === "window" ? (
+      {kind === "window" || kind === "duty" ? (
         <div className="constraint-time-grid">
           <label>
-            <span>יכול/ה להתחיל מ־</span>
+            <span>{kind === "duty" ? "תחילת התורנות" : "יכול/ה להתחיל מ־"}</span>
             <TimeInput
               value={startTime}
               onChange={setStartTime}
             />
           </label>
           <label>
-            <span>חייב/ת לסיים עד</span>
+            <span>{kind === "duty" ? "סיום התורנות" : "חייב/ת לסיים עד"}</span>
             <TimeInput
               value={endTime}
               onChange={setEndTime}
             />
           </label>
-          <small>אפשר למלא רק אחד מהגבולות. למשל 16:00 בלבד.</small>
+          <small>{kind === "duty" ? "סיום מוקדם משעת ההתחלה נחשב לתורנות שחוצה חצות." : "אפשר למלא רק אחד מהגבולות. למשל 16:00 בלבד."}</small>
         </div>
       ) : null}
 
-      <label>
+      {kind !== "duty" ? <label>
         <span>עוצמת האילוץ</span>
         <select
           value={isHard ? "hard" : "soft"}
@@ -852,7 +863,7 @@ function ConstraintForm({
           <option value="hard">קשיח — אין לשבץ בניגוד אליו</option>
           <option value="soft">העדפה — אפשר לחרוג כשצריך</option>
         </select>
-      </label>
+      </label> : null}
 
       <label>
         <span>סיבה</span>
@@ -861,7 +872,7 @@ function ConstraintForm({
           value={reason}
           maxLength={200}
           onChange={(event) => setReason(event.target.value)}
-          placeholder="מחלה, לימודים, מילואים…"
+          placeholder={kind === "duty" ? "מטבח, שמירה, תורנות חמ״ל…" : "מחלה, לימודים, מילואים…"}
         />
       </label>
 
