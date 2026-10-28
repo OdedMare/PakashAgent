@@ -117,9 +117,13 @@ that morning and out for the rest of the day.
 sliders icon). The server-wide model, solver and database settings are not
 on the team screen at all: they live in the operator console's "מערכת" tab. `ManualSetup/RotationSetup.tsx` asks, per
 cycle, for the weekend group א closes and for group א's closure hours; the
-other groups' turns and hours are derived by the server. The dates shown
-beside the anchor are a preview of that one typed fact, and an anchor stored
-for another group is shown as א's next turn in the same cycle. Presence rules
+other groups' turns and hours are derived by the server. The anchor is
+picked on a month calendar (`ManualSetup/RotationCalendar.tsx`): clicking any
+day says group א closes that week's weekend, and every weekend is painted
+with its group as a preview of that one fact. Beside it, days on base / at
+home (11/3, 12/2…) set the day group א's regular closure opens, since the
+group not closing is home from then until the Sunday handover. An anchor
+stored for another group is shown as א's next turn in the same cycle. Presence rules
 stay per group. Day cycles (11/3, 12/2, שבוע־שבוע…) are typed in
 `ManualSetup/DayCycleSetup.tsx`: days on base and at home, the day group א
 starts on base, when each other group starts, and hours in three layers

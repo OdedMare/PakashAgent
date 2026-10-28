@@ -47,7 +47,7 @@
 .manual-grid { display: grid; gap: 0.75rem; }
 .manual-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .employee-grid { grid-template-columns: minmax(8rem, 1.3fr) minmax(8rem, 1fr) minmax(8rem, 1fr) 6rem 8rem; }
-.shift-grid { grid-template-columns: minmax(9rem, 1.2fr) 8rem repeat(3, 7rem) minmax(9rem, 1fr); }
+.shift-grid { grid-template-columns: minmax(9rem, 1.2fr) 8rem repeat(4, 7rem) minmax(9rem, 1fr); }
 
 .manual-field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
 .manual-field > span, .manual-checkboxes legend { color: var(--text-muted); font-size: 0.74rem; font-weight: 650; }
@@ -91,14 +91,32 @@
 .rotation-cycle-card > header strong { font-size: 0.92rem; }
 .rotation-block > header strong { font-size: 0.84rem; }
 .rotation-cycle-card > header span, .rotation-block > header span { color: var(--text-muted); font-size: 0.73rem; line-height: 1.45; }
-/* The one typed fact beside what the server derives from it. A dashed edge
-   means "derived" everywhere in this section. */
-.rotation-anchor { display: grid; grid-template-columns: minmax(11rem, 15rem) minmax(0, 1fr); align-items: end; gap: 0.75rem; }
-.rotation-derived { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0; padding: 0; list-style: none; }
-.rotation-derived li { display: grid; gap: 0.1rem; min-width: 6.5rem; min-height: 44px; padding: 0.4rem 0.75rem; background: var(--primary-soft); border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border)); border-radius: var(--radius-sm); }
-.rotation-derived li.is-derived { background: var(--surface-2); border-style: dashed; }
-.rotation-derived strong { font-size: 0.8rem; }
-.rotation-derived span { color: var(--text-muted); font-size: 0.74rem; font-variant-numeric: tabular-nums; }
+/* The one weekend clicked beside what the server derives from it. Each
+   group owns a hue; the Sunday handover reads lighter, as on the board. */
+.rotation-days { align-items: center; }
+.rotation-days > span { color: var(--text-muted); font-size: 0.74rem; font-weight: 650; margin-inline-end: 0.25rem; }
+.rotation-calendar { --group-0: var(--primary); --group-0-soft: var(--primary-soft); --group-1: #8944ab; --group-1-soft: #f4e9f9; --group-2: #0f7c86; --group-2-soft: #e1f3f4; display: grid; gap: 0.5rem; max-width: 26rem; }
+:root[data-theme="dark"] .rotation-calendar { --group-1: #cf9cf0; --group-1-soft: #33213f; --group-2: #5fd0d8; --group-2-soft: #11312f; }
+.rotation-calendar-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.rotation-calendar-head strong { font-size: 0.88rem; }
+.rotation-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.rotation-calendar-weekday { padding-bottom: 0.15rem; color: var(--text-muted); font-size: 0.7rem; font-weight: 650; text-align: center; }
+.rotation-calendar-day { position: relative; display: grid; min-height: 44px; place-items: center; align-content: center; gap: 0; padding: 0.15rem; color: var(--text); background: var(--surface-2); border: 1px solid transparent; border-radius: var(--radius-sm); font: inherit; font-size: 0.8rem; font-variant-numeric: tabular-nums; cursor: pointer; }
+.rotation-calendar-day:hover { border-color: var(--border-strong); }
+.rotation-calendar-day:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.rotation-calendar-day small { font-size: 0.66rem; font-weight: 700; line-height: 1; }
+.rotation-calendar-day.is-today { border-color: var(--text-muted); }
+.rotation-calendar-day.is-group-0 { color: var(--group-0); background: var(--group-0-soft); font-weight: 650; }
+.rotation-calendar-day.is-group-1 { color: var(--group-1); background: var(--group-1-soft); font-weight: 650; }
+.rotation-calendar-day.is-group-2 { color: var(--group-2); background: var(--group-2-soft); font-weight: 650; }
+.rotation-calendar-day.is-handover { background: transparent; border: 1px dashed currentColor; font-weight: 400; }
+.rotation-calendar-legend { display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; color: var(--text-muted); font-size: 0.72rem; }
+.rotation-calendar-legend span { display: inline-flex; align-items: center; gap: 0.3rem; }
+.rotation-calendar-legend i { width: 0.8rem; height: 0.8rem; border-radius: 3px; }
+.rotation-calendar-legend i.is-group-0 { background: var(--group-0); }
+.rotation-calendar-legend i.is-group-1 { background: var(--group-1); }
+.rotation-calendar-legend i.is-group-2 { background: var(--group-2); }
+.rotation-calendar-legend i.is-handover { border: 1px dashed var(--text-muted); }
 .rotation-hint { margin: 0; color: var(--text-muted); font-size: 0.76rem; line-height: 1.55; }
 .rotation-block { display: grid; gap: 0.65rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
 .rotation-block > .ghost-button { justify-self: start; }
@@ -131,7 +149,7 @@
   .manual-header-actions .header-help > span { display: inline; }
   .manual-grid.three, .employee-grid, .shift-grid, .manual-rule { grid-template-columns: 1fr; }
   .manual-row-foot { align-items: flex-start; flex-direction: column; }
-  .rotation-anchor, .rotation-window-grid { grid-template-columns: 1fr; }
+  .rotation-window-grid { grid-template-columns: 1fr; }
   .manual-savebar span { display: none; }
   .manual-savebar button { width: 100%; min-height: 44px; justify-content: center; }
 }
