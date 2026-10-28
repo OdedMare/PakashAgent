@@ -133,7 +133,13 @@ saves in one `updateProfile`. A save that
 adds a soldier or a shift refits every draft ahead of today, keeping its
 rows (D37); anything else applies to the next build. A shift can list
 `allowed_roles` there — empty restricts nobody; otherwise only people holding
-one of those roles are placed on it.
+one of those roles are placed on it. A shift can also ask for a different
+headcount on the weekend, and "weekend" means the round's closure — the days
+one group is home, from the days on base chosen above to the Sunday
+handover — not a fixed Friday and Saturday. It is saved as a staffing group
+marked `closure: true` whose days are worked out per shift at save time
+(the first day only for a shift still running when the closure opens, the
+Sunday only for one starting before the handover).
 
 **Taking a week back is two different acts.** *ניקוי* empties the
 assignments and keeps the shift rows, so the week can be filled in again

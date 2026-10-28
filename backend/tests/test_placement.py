@@ -234,6 +234,17 @@ def test_an_unrestricted_employee_is_eligible_everywhere():
     assert result["eligible"] is True
 
 
+def test_a_trainee_with_no_team_is_eligible_for_a_role_restricted_shift():
+    """A נחפף/ת fills no seat, so a shift's roles do not shut them out."""
+    shifts = [dict(row, allowed_roles=["פריצה"]) for row in PROFILE["shifts"]]
+    trainee = {"name": DANA, "role": "נחפף", "counts_toward_staffing": False}
+    profile = dict(PROFILE, shifts=shifts, employees=[trainee])
+    assert check(_schedule(), profile, DANA, EVENING, "2026-08-17")["eligible"] is True
+
+    counted = dict(profile, employees=[dict(trainee, counts_toward_staffing=True)])
+    assert check(_schedule(), counted, DANA, EVENING, "2026-08-17")["eligible"] is False
+
+
 # -- what it does *not* report ---------------------------------------------
 
 
