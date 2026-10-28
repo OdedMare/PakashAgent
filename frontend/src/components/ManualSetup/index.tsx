@@ -28,6 +28,7 @@ import { CYCLES, CycleSetup, firstGroupAnchor } from "./RotationSetup";
 import type { Cycle } from "./RotationSetup";
 
 const DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+const WEEKEND = ["שישי", "שבת"];
 const SERVICE_TYPES = {
   standard: "תקן",
   overlap: "נחפף/ת",
@@ -107,7 +108,9 @@ export function ManualSetup({
     })),
   );
   const [employees, setEmployees] = useState<Row[]>(rows(profile.employees));
-  const [shifts, setShifts] = useState<Row[]>(rows(profile.shifts));
+  const [shifts, setShifts] = useState<Row[]>(() =>
+    rows(profile.shifts).map((shift) => ({ ...shift, weekend_headcount: weekendHeadcount(shift) })),
+  );
   const [enabledExitPatterns, setEnabledExitPatterns] = useState<string[]>(() => {
     const configured = strings(initialWorkplace.enabled_exit_patterns);
     const used = rows(profile.employees)
@@ -222,7 +225,7 @@ export function ManualSetup({
         // the profile save refuses to drop, so it leaves through
         // `deleteShiftType` below.
         shifts: [...shifts, ...rows(profile.shifts).filter((row) => removedShifts.includes(text(row.name)))]
-          .filter(named).map((shift) => ({
+          .filter(named).map(({ weekend_headcount: weekend, ...shift }) => ({
           ...shift,
           name: text(shift.name),
           purpose: text(shift.purpose),
@@ -231,6 +234,7 @@ export function ManualSetup({
           end_time: text(shift.end_time),
           days: strings(shift.days),
           headcount: number(shift.headcount, headcount(shift)),
+          staffing: staffingFor(shift, weekend),
           requires_shift_manager: Boolean(shift.requires_shift_manager),
           allowed_roles: strings(shift.allowed_roles),
         })),
@@ -398,7 +402,8 @@ export function ManualSetup({
                   <Field label="סוג"><select value={text(shift.shift_type) || (shift.is_on_call ? "on_call" : "regular")} onChange={(e) => edit(setShifts, index, "shift_type", e.target.value)}>{Object.entries(SHIFT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
                   <Field label="התחלה"><TimeInput value={text(shift.start_time)} onChange={(time) => edit(setShifts, index, "start_time", time)} /></Field>
                   <Field label="סיום"><TimeInput value={text(shift.end_time)} onChange={(time) => edit(setShifts, index, "end_time", time)} /></Field>
-                  <Field label="תקן"><input type="number" min={1} max={100} value={number(shift.headcount, headcount(shift))} onChange={(e) => edit(setShifts, index, "headcount", Number(e.target.value) || 1)} /></Field>
+                  <Field label="תקן א׳–ה׳"><input type="number" min={1} max={100} value={number(shift.headcount, headcount(shift))} onChange={(e) => edit(setShifts, index, "headcount", Number(e.target.value) || 1)} /></Field>
+                  <Field label="תקן סופ״ש"><input type="number" min={1} max={100} value={shift.weekend_headcount === "" || shift.weekend_headcount === undefined ? "" : String(shift.weekend_headcount)} placeholder="כמו באמצע השבוע" onChange={(e) => edit(setShifts, index, "weekend_headcount", e.target.value === "" ? "" : Math.max(1, Number(e.target.value) || 1))} /></Field>
                   <Field label="ייעוד"><input value={inputText(shift.purpose)} onChange={(e) => edit(setShifts, index, "purpose", e.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></Field>
                 </div>
                 <label className="manual-check"><input type="checkbox" checked={Boolean(shift.requires_shift_manager)} onChange={(e) => edit(setShifts, index, "requires_shift_manager", e.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
@@ -499,6 +504,34 @@ function rotationGroups(pattern: string, cycles: DayCycle[]): string[] {
 }
 function number(value: unknown, fallback: number): number { return typeof value === "number" && Number.isFinite(value) ? value : fallback; }
 function named(row: Row): boolean { return Boolean(text(row.name)); }
+/** Friday and Saturday's own headcount, or "" when the weekend takes the
+ *  weekday number. Read off the staffing group naming exactly those days. */
+function weekendHeadcount(shift: Row): number | "" {
+  const group = rows(shift.staffing).find(isWeekendGroup);
+  return typeof group?.headcount === "number" ? group.headcount : "";
+}
+
+function isWeekendGroup(group: Row): boolean {
+  const days = strings(group.days);
+  return days.length === WEEKEND.length && WEEKEND.every((day) => days.includes(day));
+}
+
+/** The staffing groups to save: the weekday default, any other per-day
+ *  groups already stored, and the weekend's when one is set. The weekend
+ *  group carries the default's required roles, since it replaces it on
+ *  those days (`scheduler/slots.staffing_requirements`). */
+function staffingFor(shift: Row, weekend: unknown): Row[] {
+  const groups = rows(shift.staffing);
+  const base = groups.find((group) => strings(group.days).length === 0);
+  const roles = Array.isArray(base?.required_roles) ? base.required_roles : [];
+  const others = groups.filter((group) => strings(group.days).length > 0 && !isWeekendGroup(group));
+  return [
+    { days: [], headcount: number(shift.headcount, headcount(shift)), required_roles: roles },
+    ...others,
+    ...(typeof weekend === "number" ? [{ days: WEEKEND, headcount: weekend, required_roles: roles }] : []),
+  ];
+}
+
 function headcount(shift: Row): number {
   const staffing = rows(shift.staffing);
   const base = staffing.find((group) => strings(group.days).length === 0);
