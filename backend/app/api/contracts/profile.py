@@ -24,3 +24,12 @@ class ProfileUpdate(BaseModel):
     conflict_policy: Optional[str] = None
     existing_schedule_source: Optional[str] = None
     summary: Optional[str] = None
+
+
+class RotationPreviewRequest(BaseModel):
+    """The setup screen's unsaved rotation, to preview its coming weekends."""
+
+    workplace: Dict[str, Any]
+    shifts: List[Dict[str, Any]] = []
+    start: Optional[str] = None
+    weeks: int = 8

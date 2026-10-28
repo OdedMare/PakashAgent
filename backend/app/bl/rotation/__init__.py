@@ -32,11 +32,11 @@ the one thing that stays per group.
 
 from app.bl.rotation.closures import closure_days, handover_shifts, holds
 from app.bl.rotation.cycle import closing_group, configuration_errors, cycle
-from app.bl.rotation.views import by_date, schedule_for_model
+from app.bl.rotation.views import by_date, schedule_for_model, weekend_preview
 from app.bl.rotation.vocabulary import exit_pattern, label
 
 __all__ = [
     "by_date", "closing_group", "closure_days", "configuration_errors",
     "cycle", "exit_pattern", "handover_shifts", "holds", "label",
-    "schedule_for_model",
+    "schedule_for_model", "weekend_preview",
 ]

@@ -21,8 +21,10 @@ import type { RotationClosureWindow, RotationPresenceRule, TeamView } from "@/ty
 
 import { CompiledSources } from "./CompiledSources";
 import { CheckboxGrid, Field } from "./fields";
+import { clockOf } from "./closureShapes";
 import { CYCLES, CycleSetup, firstGroupAnchor } from "./RotationSetup";
 import type { Cycle } from "./RotationSetup";
+import { useRotationPreview } from "./useRotationPreview";
 
 const DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 const SERVICE_TYPES = {
@@ -149,6 +151,22 @@ export function ManualSetup({
     && !(pattern === "round" && rotationAUnavailability.length > 0
       && !closureWindows.some((row) => row.pattern === "round"));
   const ready = Boolean(unitName.trim() && employees.some(named) && shifts.some(named));
+  // Every anchor is saved as group א's weekend; the server derives the other
+  // groups' turns from it. The old pair stays readable by older deployments
+  // while the two cycles keep independent anchors.
+  const rotation = {
+    rotation_mode: rotationMode,
+    first_closure_group: "א",
+    first_closure_date: anchors[rotationMode],
+    round_first_closure_group: "א",
+    round_first_closure_date: anchors.round,
+    triplet_first_closure_group: "א",
+    triplet_first_closure_date: anchors.triplet,
+    rotation_closure_windows: closureWindows,
+  };
+  const timedShifts = shifts.filter(named).map((shift) => ({ name: text(shift.name), start_time: text(shift.start_time), end_time: text(shift.end_time) }));
+  const clock = clockOf(timedShifts);
+  const preview = useRotationPreview(rotation, timedShifts);
 
   const save = async () => {
     if (!ready || busy) return;
@@ -161,17 +179,7 @@ export function ManualSetup({
           name: unitName.trim(),
           planning_horizon: planningHorizon.trim() || "שבוע",
           operating_days: operatingDays,
-          rotation_mode: rotationMode,
-          // Every anchor is saved as group א's weekend; the server derives
-          // the other groups' turns from it. The old pair stays readable by
-          // older deployments while the two cycles keep independent anchors.
-          first_closure_group: "א",
-          first_closure_date: anchors[rotationMode],
-          round_first_closure_group: "א",
-          round_first_closure_date: anchors.round,
-          triplet_first_closure_group: "א",
-          triplet_first_closure_date: anchors.triplet,
-          rotation_closure_windows: closureWindows,
+          ...rotation,
           rotation_presence: rotationPresence,
           general_exit_schedule: generalExitSchedule.trim(),
           enabled_exit_patterns: enabledExitPatterns,
@@ -279,9 +287,10 @@ export function ManualSetup({
           <CheckboxGrid label="ימי פעילות" values={DAYS} selected={operatingDays} onChange={setOperatingDays} />
         </SetupSection>
 
-        <SetupSection icon={<Repeat2 />} title="סבבים ותלתונים" hint="מגדירים עוגן ושעות סגירה לקבוצה א׳ בלבד, בסבב ובתלתון; הקבוצות האחרות נגזרות ממנה. ההגדרות חלות על השיבוץ הבא — סידור קיים לא נבנה מחדש.">
+        <SetupSection icon={<Repeat2 />} title="סבבים ותלתונים" hint="שלוש שאלות לכל מחזור: מתי קבוצה א׳ סוגרת, כמה זמן נמשכת סגירה, ואילו סופ״שים חריגים. את שאר הקבוצות המערכת מחשבת לבד. ההגדרות חלות על השיבוץ הבא — סידור קיים לא נבנה מחדש.">
           <PatternOptions selected={enabledExitPatterns} locked={usedExitPatterns} onChange={setEnabledExitPatterns} />
 
+          {preview.error ? <p className="rotation-derived-note is-warning" role="status">{preview.error}</p> : null}
           <div className="rotation-cycles" aria-label="מחזורי הסגירה">
             {(Object.keys(CYCLES) as Cycle[]).filter((pattern) => availableExitPatterns.has(pattern)).map((pattern) => (
               <CycleSetup
@@ -295,35 +304,44 @@ export function ManualSetup({
                 presence={rotationPresence}
                 onPresence={setRotationPresence}
                 shiftNames={shiftNames}
+                clock={clock}
+                preview={preview.cycles[pattern]}
+                previewLoading={preview.loading}
               />
             ))}
           </div>
 
-          <div className="rotation-pair" aria-label="הקשר בין סבב א לסבב ב">
-            <div><strong>סבב א׳</strong><span>אתם מגדירים את זמני אי־הזמינות.</span></div>
-            <Repeat2 aria-hidden="true" />
-            <div className="is-derived"><strong>סבב ב׳</strong><span>מחושב בשרת ואינו ניתן לעריכה נפרדת.</span></div>
-          </div>
+          {/* The older fixed א/ב presence schedule: shown only to a unit that
+              still has one, so a new manager meets one way to say "absent". */}
+          {rotationAUnavailability.length ? (
+            <>
+              <div className="rotation-pair" aria-label="הקשר בין סבב א לסבב ב">
+                <div><strong>סבב א׳</strong><span>אתם מגדירים את זמני אי־הזמינות.</span></div>
+                <Repeat2 aria-hidden="true" />
+                <div className="is-derived"><strong>סבב ב׳</strong><span>מחושב בשרת ואינו ניתן לעריכה נפרדת.</span></div>
+              </div>
 
-          <div className="manual-list">
-            {rotationAUnavailability.map((rule, index) => (
-              <article className="manual-row rotation-rule" key={`rotation-a-${index}`}>
-                <div className="rotation-rule-head">
-                  <div><strong>תקופת אי־זמינות {index + 1}</strong><span>השארת ימים או משמרות ללא בחירה תחיל את הכלל על כולם.</span></div>
-                  <button type="button" className="icon-button subtle" aria-label={`מחיקת תקופת אי־זמינות ${index + 1}`} onClick={() => setRotationAUnavailability((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
-                </div>
-                <CheckboxGrid label="ימים שבהם סבב א׳ אינו זמין" values={DAYS} selected={strings(rule.days)} onChange={(value) => edit(setRotationAUnavailability, index, "days", value)} />
-                {shiftNames.length ? <CheckboxGrid label="משמרות (ללא בחירה = כל המשמרות)" values={shiftNames} selected={strings(rule.shifts)} onChange={(value) => edit(setRotationAUnavailability, index, "shifts", value)} /> : null}
-                <div className="manual-grid three">
-                  <Field label="משעה (רשות)"><TimeInput value={inputText(rule.start_time)} onChange={(time) => edit(setRotationAUnavailability, index, "start_time", time)} /></Field>
-                  <Field label="עד שעה (רשות)"><TimeInput value={inputText(rule.end_time)} onChange={(time) => edit(setRotationAUnavailability, index, "end_time", time)} /></Field>
-                  <Field label="סיבה / תיאור"><input value={inputText(rule.reason)} onChange={(event) => edit(setRotationAUnavailability, index, "reason", event.target.value)} placeholder="לדוגמה: יציאה קבועה" /></Field>
-                </div>
-              </article>
-            ))}
-          </div>
-          <button type="button" className="ghost-button" onClick={() => setRotationAUnavailability((current) => [...current, { days: [], shifts: [], start_time: "", end_time: "", reason: "" }])}><Plus size={16} /> הוספת זמן שבו סבב א׳ אינו זמין</button>
-          {rotationAUnavailability.length === 0 ? <p className="rotation-empty">לא הוגדרו זמני אי־זמינות נוספים. לוח הסגירות עדיין מחושב מעוגני הסבב והתלתון.</p> : <p className="rotation-derived-note">סבב ב׳ יהיה זמין בדיוק בזמנים שסבב א׳ אינו זמין, ולא זמין בשאר מועדי הפעילות. החישוב מתבצע בשירות השיבוץ.</p>}
+              <div className="manual-list">
+                {rotationAUnavailability.map((rule, index) => (
+                  <article className="manual-row rotation-rule" key={`rotation-a-${index}`}>
+                    <div className="rotation-rule-head">
+                      <div><strong>תקופת אי־זמינות {index + 1}</strong><span>השארת ימים או משמרות ללא בחירה תחיל את הכלל על כולם.</span></div>
+                      <button type="button" className="icon-button subtle" aria-label={`מחיקת תקופת אי־זמינות ${index + 1}`} onClick={() => setRotationAUnavailability((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
+                    </div>
+                    <CheckboxGrid label="ימים שבהם סבב א׳ אינו זמין" values={DAYS} selected={strings(rule.days)} onChange={(value) => edit(setRotationAUnavailability, index, "days", value)} />
+                    {shiftNames.length ? <CheckboxGrid label="משמרות (ללא בחירה = כל המשמרות)" values={shiftNames} selected={strings(rule.shifts)} onChange={(value) => edit(setRotationAUnavailability, index, "shifts", value)} /> : null}
+                    <div className="manual-grid three">
+                      <Field label="משעה (רשות)"><TimeInput value={inputText(rule.start_time)} onChange={(time) => edit(setRotationAUnavailability, index, "start_time", time)} /></Field>
+                      <Field label="עד שעה (רשות)"><TimeInput value={inputText(rule.end_time)} onChange={(time) => edit(setRotationAUnavailability, index, "end_time", time)} /></Field>
+                      <Field label="סיבה / תיאור"><input value={inputText(rule.reason)} onChange={(event) => edit(setRotationAUnavailability, index, "reason", event.target.value)} placeholder="לדוגמה: יציאה קבועה" /></Field>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              <button type="button" className="ghost-button" onClick={() => setRotationAUnavailability((current) => [...current, { days: [], shifts: [], start_time: "", end_time: "", reason: "" }])}><Plus size={16} /> הוספת זמן שבו סבב א׳ אינו זמין</button>
+              <p className="rotation-derived-note">הגדרה ישנה: סבב ב׳ זמין בדיוק בזמנים שסבב א׳ אינו זמין. מחיקת כל התקופות תחזיר את הסבב לחישוב לפי העוגן והשעות שלמעלה.</p>
+            </>
+          ) : null}
         </SetupSection>
 
         <SetupSection icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">

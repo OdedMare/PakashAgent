@@ -96,12 +96,20 @@ that morning and out for the rest of the day.
 
 **A cycle is typed once, in the team setup screen** (`ManualSetup/`, the
 sliders icon — not the settings modal, which holds only the server-wide
-model, solver and database settings). `ManualSetup/RotationSetup.tsx` asks, per
-cycle, for the weekend group א closes and for group א's closure hours; the
-other groups' turns and hours are derived by the server. The dates shown
-beside the anchor are a preview of that one typed fact, and an anchor stored
-for another group is shown as א's next turn in the same cycle. Presence rules
-stay per group. The whole screen saves in one `updateProfile`. A save that
+model, solver and database settings). `ManualSetup/RotationSetup.tsx` asks
+three numbered questions per cycle, for group א only: which weekend it
+closes (the anchor), how long a closure runs — a shape from
+`closureShapes.ts` (Thursday–Sunday is the default and stores no row;
+Friday–Sunday, a whole week Sunday to Sunday, or typed days and times are
+one undated window row) — and which weekends differ (dated window rows,
+one weekend or a range, with an optional `note`). The other groups' turns
+and hours are derived by the server. Under the questions,
+`RotationPreview` shows the coming weekends as **the server** computes
+them from the unsaved rows (`POST /api/profile/rotation-preview`), so the
+setup screen cannot disagree with the board. An anchor stored for another
+group is shown as א's next turn in the same cycle. Presence rules stay per
+group, under "מתקדם"; the older fixed א/ב unavailability block shows only
+to a unit that still has rows in it. The whole screen saves in one `updateProfile`. A save that
 adds a soldier or a shift refits every draft ahead of today, keeping its
 rows (D37); anything else applies to the next build.
 

@@ -386,6 +386,17 @@ export interface CompiledSource {
   items: number;
 }
 
+/** The coming weekends of each cycle, computed by the server from the setup
+ *  screen's unsaved rotation. Writes nothing; `error` names a row that would
+ *  not save. */
+export const rotationPreview = (
+  body: { workplace: Record<string, unknown>; shifts: Record<string, unknown>[]; weeks?: number },
+  signal?: AbortSignal,
+) => request<{ error: string; cycles: Partial<Record<"round" | "triplet", import("@/types").RotationWeekend[]>> }>(
+  "/api/profile/rotation-preview",
+  { method: "POST", body: JSON.stringify(body), signal },
+);
+
 export const compiledSources = () =>
   request<{ sources: CompiledSource[] }>("/api/profile/compiled").then((body) => body.sources);
 
