@@ -41,6 +41,10 @@ class ToolReads:
             return None
         return self._repository.current_schedule(team_id)
 
+    def periods(self, team_id: str) -> List[dict]:
+        """Every stored period's identity and bounds, without its rows."""
+        return list(self._repository.list_schedules(team_id) or [])
+
     def availability(self, team_id: str, period: tuple) -> List[dict]:
         """Constraints over a period, in the shape `audit.py` reads."""
         return [

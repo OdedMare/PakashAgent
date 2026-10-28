@@ -5,7 +5,7 @@ import datetime
 from app.bl.audit import constraint_conflicts
 from app.bl.audit.roster import index_shifts, rows_of
 from app.bl.chat_contract import RejectedPlan, audit_plan
-from app.bl.shared import warning_key
+from app.bl.shared import person_roles, warning_key
 from app.bl.scheduler.availability import effective_availability
 from app.bl.simulate.hypothetical import schedule_rows
 from app.bl.tools.values import iso
@@ -13,6 +13,8 @@ from app.bl.tools.values import iso
 
 # Words a model writes for "the whole day"; setup and the audit spell it "".
 _WHOLE_DAY = frozenset({"כל היום", "יום שלם", "כל המשמרות", "הכל", "all", "all day", "*"})
+# How many rows one plan may hold once a `role` row is expanded to its holders.
+_MAX_EXPANDED = 1500
 
 
 def normalize_constraints(offered, profile, saved):
@@ -20,6 +22,7 @@ def normalize_constraints(offered, profile, saved):
     the model can repair the one row instead of resending the same plan."""
     if not isinstance(offered, list) or len(offered) > 126:
         raise RejectedPlan("אפשר לעדכן עד 126 אילוצים בתוכנית אחת")
+    offered = _by_role(offered, profile)
     names = [row["name"] for row in profile.get("employees") or []]
     shifts = [row["name"] for row in profile.get("shifts") or []]
     by_id = {row["id"]: row for row in saved}
@@ -42,6 +45,36 @@ def normalize_constraints(offered, profile, saved):
             )
         seen[key] = item
         result.append(item)
+    return result
+
+
+def _by_role(offered, profile):
+    """A row naming a `role` instead of an employee, as one row per holder.
+
+    "חופש בשני לכל המפתחים" is one sentence; spelling it out person by person
+    is how a model on a hundred-person roster misses somebody. The role is
+    matched against the roster's own roles, and an unknown one is refused
+    with the real ones named, so the next round can repair it.
+    """
+    people = profile.get("employees") or []
+    result = []
+    for number, row in enumerate(offered, 1):
+        role = (row.get("role") or "").strip() if isinstance(row, dict) else ""
+        if not role or (row.get("employee") or "").strip() or row.get("action") == "remove":
+            result.append(row)
+            continue
+        holders = [person["name"] for person in people if role in person_roles(person)
+                   and not (person.get("inactive_from")
+                            and (row.get("date") or "") >= person["inactive_from"])]
+        if not holders:
+            roles = sorted({item for person in people for item in person_roles(person)})
+            raise RejectedPlan(
+                "אילוץ %d: אין בצוות אנשים בתפקיד \"%s\". התפקידים הקיימים: %s"
+                % (number, role, ", ".join(roles))
+            )
+        result += [dict(row, employee=name, role="") for name in holders]
+    if len(result) > _MAX_EXPANDED:
+        raise RejectedPlan("אפשר לעדכן עד %d אילוצים בתוכנית אחת" % _MAX_EXPANDED)
     return result
 
 

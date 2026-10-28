@@ -82,16 +82,16 @@ def test_the_reply_so_far_is_saved_while_the_model_writes():
 
 def test_an_edited_request_replaces_the_old_exchange():
     repo, llm, service, chat_id, schedule_id = setup([turn(), said("תשובה חדשה")])
-    converse(service, repo, chat_id, schedule_id, content="מי עובד בשני?")
+    converse(service, repo, chat_id, schedule_id, content="מה המצב ביום שני?")
     asked = repo.get_chat(TEAM, "manager-a", chat_id)["messages"][0]
 
     message_id = service.start_turn(TEAM, "manager-a", chat_id, dict(
-        content="מי עובד בשלישי?", request_id="request-2", schedule_id=schedule_id,
+        content="מה המצב ביום שלישי?", request_id="request-2", schedule_id=schedule_id,
         replaces_message_id=asked["id"]))
     service.reply(TEAM, "manager-a", chat_id, message_id)
 
     messages = repo.get_chat(TEAM, "manager-a", chat_id)["messages"]
-    assert [row["content"] for row in messages] == ["מי עובד בשלישי?", "תשובה חדשה"]
+    assert [row["content"] for row in messages] == ["מה המצב ביום שלישי?", "תשובה חדשה"]
 
 
 def test_an_edit_never_reads_as_approval_of_the_showing_plan():

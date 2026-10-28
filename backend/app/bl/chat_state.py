@@ -56,6 +56,29 @@ class ReplyState:
     turn: dict = None
 
 
+def schedule_for_chat(schedule):
+    """The period as the chat model reads it: per date and shift, how many
+    the slot needs and who is on it.
+
+    The projection the change agent reads carries every row's reason, which
+    on a hundred-person month is most of the turn's input -- 156K characters
+    against 18K here -- and is re-sent on every round. A reason is one
+    `employee_state` call away when a question needs it. Code that reads the
+    payload (`absence/`, the fast paths) still gets the full projection: this
+    is applied only where the payload is written out for the model.
+    """
+    if not isinstance(schedule, dict) or not (schedule.get("slots") or schedule.get("assignments")):
+        return schedule
+    days = {}
+    for slot in schedule.get("slots") or []:
+        days.setdefault(slot["date"], {})[slot["shift"]] = {"need": slot.get("headcount", 1), "on": []}
+    for row in schedule.get("assignments") or []:
+        cell = days.setdefault(row["date"], {}).setdefault(row["shift"], {"need": 0, "on": []})
+        cell["on"].append(row["employee"])
+    return {"starts_on": schedule.get("starts_on"), "ends_on": schedule.get("ends_on"),
+            "days": {date: days[date] for date in sorted(days)}}
+
+
 def _availability_since(schedule):
     recent = (israel_today() - datetime.timedelta(
         days=_AVAILABILITY_LOOKBACK_DAYS,

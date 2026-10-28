@@ -193,3 +193,36 @@ def test_an_impossible_date_is_dropped_rather_than_invented():
 def test_a_very_long_sentence_is_bounded():
     answer = read("א" * 5000, ROSTER, SHIFTS, today=TODAY)
     assert len(answer["request"]) <= 500
+
+
+# -- team questions nobody is named in ---------------------------------------
+
+from app.bl.intent import INTENT_AWAY, INTENT_WHO_WORKS, INTENT_WORKLOAD, week_in
+
+
+@pytest.mark.parametrize("sentence, intent", [
+    ("מי עובד היום", INTENT_WHO_WORKS),
+    ("מי במשמרת בוקר מחר", INTENT_WHO_WORKS),
+    ("מי עבד הכי הרבה השבוע", INTENT_WORKLOAD),
+    ("איזה מפקד תפס הכי הרבה משמרות", INTENT_WORKLOAD),
+    ("מי עשה הכי מעט לילות", INTENT_WORKLOAD),
+    ("מי חולה היום", INTENT_AWAY),
+    ("מי לא נמצא השבוע", INTENT_AWAY),
+    ("מי בבית בשבת", INTENT_AWAY),
+])
+def test_team_questions_are_read_without_a_name(sentence, intent):
+    assert read(sentence, ROSTER, SHIFTS)["intent"] == intent
+
+
+def test_a_named_absence_is_still_an_absence_not_a_list():
+    assert read("דנה חולה היום", ROSTER, SHIFTS)["intent"] == INTENT_ABSENCE
+
+
+@pytest.mark.parametrize("sentence, week", [
+    ("מי עובד השבוע", ("2026-11-08", "2026-11-14")),
+    ("מי עובד בשבוע הבא", ("2026-11-15", "2026-11-21")),
+    ("מי עבד הכי הרבה בשבוע שעבר", ("2026-11-01", "2026-11-07")),
+    ("מי עובד היום", ("", "")),
+])
+def test_a_named_week_runs_sunday_to_saturday(sentence, week):
+    assert week_in(sentence, today="2026-11-10") == week

@@ -1,8 +1,9 @@
 """The manager-chat turns code answers without a model round.
 
-Two shapes, tried in order: an absence (`bl/absence/`, read and planned in
-code) and a plain candidate lookup for one named person on one day. Each
-either finishes the turn or leaves it untouched for the model loop.
+Three shapes, tried in order: an absence (`bl/absence/`, read and planned in
+code), a team question nobody is named in -- who works, who did the most,
+who is away -- and a plain candidate lookup for one named person on one
+day. Each either finishes the turn or leaves it untouched for the model loop.
 """
 
 import logging
@@ -20,13 +21,20 @@ class ChatFastAnswers:
         self._absence = AbsenceFastPath(repository, context, planner)
 
     def handle(self, state) -> bool:
-        return self._absence.handle(state) or self._replacements(state)
+        return self._absence.handle(state) or self._team(state) or self._replacements(state)
+
+    def _team(self, state) -> bool:
+        return self._finish(state, self._tools.team_question(
+            state.team_id, state.request, state.profile, state.payload["schedule"] or None,
+        ))
 
     def _replacements(self, state) -> bool:
-        found = self._tools.replacement_lookup(
+        return self._finish(state, self._tools.replacement_lookup(
             state.team_id, state.request, state.context,
             state.payload["schedule"] or None, state.profile,
-        )
+        ))
+
+    def _finish(self, state, found) -> bool:
         if not found:
             return False
         reply, output = found

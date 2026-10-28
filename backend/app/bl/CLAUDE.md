@@ -23,7 +23,7 @@ tables which module owns what. Importing schedules from files was removed.
 | `schedule_service/` | Persistence and orchestration around all three: propose, confirm, apply |
 | `audit/` | **Pure-Python advisory checks. No LLM.** Also the fairness arithmetic the stats and the employee area read |
 | `export.py` | **A period out as `.xlsx`.** Pure functions, no model, no repository |
-| `tools/` | **The named questions the agent may ask. Pure Python, no LLM, no write** — including `profile_gaps`, what setup still lacks |
+| `tools/` | **The named questions the agent may ask. Pure Python, no LLM, no write** — including `profile_gaps`, what setup still lacks, and the range questions (`who_works`, `workload_ranking`, `who_is_away`, `shadow_partners`) |
 | `planner/` | The chat's question/tool-call schema and the deterministic no-model answers |
 | `intent/` | **Reading a Hebrew sentence with no model.** Seven shapes; never guesses |
 | `absence/` | **An absence read and planned in code** (D36): dates, one question when needed, the fairest cover per shift; no model, no write |
@@ -138,7 +138,9 @@ request for callers that want the schedule back rather than a job.
 The one place the manager talks to the agent; see
 [`docs/MANAGER_CHAT.md`](../../../docs/MANAGER_CHAT.md). A turn runs as a
 `manager_chat` job: `chat_reply.py` first tries the zero-model fast path
-(`chat_tools.replacement_lookup`, over `intent/` and `tools/`), then up to
+(`chat_tools.team_question` for who works / who did the most / who is away
+when no one is named and the time is, and `chat_tools.replacement_lookup`,
+over `intent/` and `tools/`), then up to
 seven model rounds that may call read-only tools, then `chat_planner.py`
 validates and audits the plan the model proposes — changes (a seat a
 removal leaves empty is filled by the solver over the touched dates (D40),
@@ -151,7 +153,9 @@ preview (the solver, through `chat_generation.py`), a vocabulary rebuild
 constraint edits (`chat_constraints.py`: up to 126 per plan; a refusal names
 the row, the offending value and the valid names or shifts so the model can
 repair that one row; whole-day words read as an empty shift, "8" as 08:00,
-an exact repeated row once), management actions. Before the model loop,
+an exact repeated row once; a row naming a `role` instead of an employee is one
+row per holder), management actions. A profile patch names only the employees
+or shifts it adds or changes; the rest stay as they are. Before the model loop,
 `bl/absence/` answers an absence in code (D36): a bare "עד X" runs from the
 earliest other day named, or today; spans up to 120 days; shifts in several
 stored periods plan the earliest and list the rest. Nothing is written until the manager
@@ -159,7 +163,8 @@ approves; `chat_apply.py` then applies the stored plan in one transaction,
 after checking the state it was prepared against has not moved. `chat_state.py` gathers
 what a turn starts from — its payload is serialised slowest-changing first
 (profile, schedule … conversation, request) so the server's prefix cache
-survives a new turn; `chat_draft.py` saves the reply as it streams.
+survives a new turn, and the schedule in it is written out for the model as
+`schedule_for_chat` (per date and shift: seats and names, no reasons); `chat_draft.py` saves the reply as it streams.
 
 ## `changes/`
 
