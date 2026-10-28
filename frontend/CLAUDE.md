@@ -117,13 +117,9 @@ that morning and out for the rest of the day.
 sliders icon). The server-wide model, solver and database settings are not
 on the team screen at all: they live in the operator console's "מערכת" tab. `ManualSetup/RotationSetup.tsx` asks, per
 cycle, for the weekend group א closes and for group א's closure hours; the
-other groups' turns and hours are derived by the server. The anchor is
-picked on a month calendar (`ManualSetup/RotationCalendar.tsx`): clicking any
-day says group א closes that week's weekend, and every weekend is painted
-with its group as a preview of that one fact. Beside it, days on base / at
-home (11/3, 12/2…) set the day group א's regular closure opens, since the
-group not closing is home from then until the Sunday handover. An anchor
-stored for another group is shown as א's next turn in the same cycle. Presence rules
+other groups' turns and hours are derived by the server. The dates shown
+beside the anchor are a preview of that one typed fact, and an anchor stored
+for another group is shown as א's next turn in the same cycle. Presence rules
 stay per group. Day cycles (11/3, 12/2, שבוע־שבוע…) are typed in
 `ManualSetup/DayCycleSetup.tsx`: days on base and at home, the day group א
 starts on base, when each other group starts, and hours in three layers
@@ -133,13 +129,7 @@ saves in one `updateProfile`. A save that
 adds a soldier or a shift refits every draft ahead of today, keeping its
 rows (D37); anything else applies to the next build. A shift can list
 `allowed_roles` there — empty restricts nobody; otherwise only people holding
-one of those roles are placed on it. A shift can also ask for a different
-headcount on the weekend, and "weekend" means the round's closure — the days
-one group is home, from the days on base chosen above to the Sunday
-handover — not a fixed Friday and Saturday. It is saved as a staffing group
-marked `closure: true` whose days are worked out per shift at save time
-(the first day only for a shift still running when the closure opens, the
-Sunday only for one starting before the handover).
+one of those roles are placed on it.
 
 **Taking a week back is two different acts.** *ניקוי* empties the
 assignments and keeps the shift rows, so the week can be filled in again
