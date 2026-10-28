@@ -168,6 +168,11 @@ export function ManualSetup({
     employees.some((person) => named(person) && exitPattern(person, rotationMode) === pattern)
     && !(pattern === "round" && rotationAUnavailability.length > 0
       && !closureWindows.some((row) => row.pattern === "round"));
+  // The weekend a shift's weekend headcount applies to is the round's
+  // closure — the days one group is home — so it follows the days on base
+  // chosen above rather than a fixed Friday and Saturday.
+  const closure: ClosureBounds = closureWindows.find((row) => row.pattern === "round" && row.group === "א" && !row.starts_on && !row.ends_on)
+    ?? { start_day: -2, start_time: "00:00", end_day: 1, end_time: handoverEnd || "00:00" };
   const ready = Boolean(unitName.trim() && employees.some(named) && shifts.some(named));
 
   useGuideSurface("setup");
@@ -234,7 +239,7 @@ export function ManualSetup({
           end_time: text(shift.end_time),
           days: strings(shift.days),
           headcount: number(shift.headcount, headcount(shift)),
-          staffing: staffingFor(shift, weekend),
+          staffing: staffingFor(shift, weekend, closureDays(shift, closure)),
           requires_shift_manager: Boolean(shift.requires_shift_manager),
           allowed_roles: strings(shift.allowed_roles),
         })),
@@ -393,7 +398,7 @@ export function ManualSetup({
           <button type="button" className="ghost-button" onClick={() => setEmployees((current) => [...current, { name: "", role: "", exit_pattern: rotationMode, rotation_group: "א", service_type: "standard", counts_toward_staffing: true, eligible_shifts: [], is_shift_manager: false, can_train: false, notes: "" }])}><Plus size={16} /> הוספת איש/אשת צוות</button>
         </SetupSection>
 
-        <SetupSection tour="setup-shifts" icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה.">
+        <SetupSection tour="setup-shifts" icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה. תקן סופ״ש חל כשאחד הסבבים בבית — לפי ימים בבסיס/בבית בסעיף הסבבים.">
           <div className="manual-list">
             {shifts.map((shift, index) => (
               <article className="manual-row" key={`shift-${index}`}>
@@ -403,7 +408,7 @@ export function ManualSetup({
                   <Field label="התחלה"><TimeInput value={text(shift.start_time)} onChange={(time) => edit(setShifts, index, "start_time", time)} /></Field>
                   <Field label="סיום"><TimeInput value={text(shift.end_time)} onChange={(time) => edit(setShifts, index, "end_time", time)} /></Field>
                   <Field label="תקן א׳–ה׳"><input type="number" min={1} max={100} value={number(shift.headcount, headcount(shift))} onChange={(e) => edit(setShifts, index, "headcount", Number(e.target.value) || 1)} /></Field>
-                  <Field label="תקן סופ״ש"><input type="number" min={1} max={100} value={shift.weekend_headcount === "" || shift.weekend_headcount === undefined ? "" : String(shift.weekend_headcount)} placeholder="כמו באמצע השבוע" onChange={(e) => edit(setShifts, index, "weekend_headcount", e.target.value === "" ? "" : Math.max(1, Number(e.target.value) || 1))} /></Field>
+                  <Field label="תקן סופ״ש"><input title={`חל על: ${closureDays(shift, closure).join(", ")}`} type="number" min={1} max={100} value={shift.weekend_headcount === "" || shift.weekend_headcount === undefined ? "" : String(shift.weekend_headcount)} placeholder="כמו באמצע השבוע" onChange={(e) => edit(setShifts, index, "weekend_headcount", e.target.value === "" ? "" : Math.max(1, Number(e.target.value) || 1))} /></Field>
                   <Field label="ייעוד"><input value={inputText(shift.purpose)} onChange={(e) => edit(setShifts, index, "purpose", e.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></Field>
                 </div>
                 <label className="manual-check"><input type="checkbox" checked={Boolean(shift.requires_shift_manager)} onChange={(e) => edit(setShifts, index, "requires_shift_manager", e.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
@@ -504,14 +509,16 @@ function rotationGroups(pattern: string, cycles: DayCycle[]): string[] {
 }
 function number(value: unknown, fallback: number): number { return typeof value === "number" && Number.isFinite(value) ? value : fallback; }
 function named(row: Row): boolean { return Boolean(text(row.name)); }
-/** Friday and Saturday's own headcount, or "" when the weekend takes the
- *  weekday number. Read off the staffing group naming exactly those days. */
+/** The weekend's own headcount, or "" when it takes the weekday number.
+ *  Read off the staffing group marked as the closure's, or an older one
+ *  naming exactly Friday and Saturday. */
 function weekendHeadcount(shift: Row): number | "" {
   const group = rows(shift.staffing).find(isWeekendGroup);
   return typeof group?.headcount === "number" ? group.headcount : "";
 }
 
 function isWeekendGroup(group: Row): boolean {
+  if (group.closure === true) return true;
   const days = strings(group.days);
   return days.length === WEEKEND.length && WEEKEND.every((day) => days.includes(day));
 }
@@ -520,7 +527,7 @@ function isWeekendGroup(group: Row): boolean {
  *  groups already stored, and the weekend's when one is set. The weekend
  *  group carries the default's required roles, since it replaces it on
  *  those days (`scheduler/slots.staffing_requirements`). */
-function staffingFor(shift: Row, weekend: unknown): Row[] {
+function staffingFor(shift: Row, weekend: unknown, weekendDays: string[]): Row[] {
   const groups = rows(shift.staffing);
   const base = groups.find((group) => strings(group.days).length === 0);
   const roles = Array.isArray(base?.required_roles) ? base.required_roles : [];
@@ -528,8 +535,28 @@ function staffingFor(shift: Row, weekend: unknown): Row[] {
   return [
     { days: [], headcount: number(shift.headcount, headcount(shift)), required_roles: roles },
     ...others,
-    ...(typeof weekend === "number" ? [{ days: WEEKEND, headcount: weekend, required_roles: roles }] : []),
+    ...(typeof weekend === "number" ? [{ days: weekendDays, headcount: weekend, required_roles: roles, closure: true }] : []),
   ];
+}
+
+type ClosureBounds = Pick<RotationClosureWindow, "start_day" | "start_time" | "end_day" | "end_time">;
+
+/** The weekdays `shift` falls inside the weekend closure, when one group is
+ *  home. Mirrors `rotation/closures`: the closure opens on `start_day` at
+ *  `start_time` and ends at the handover, so the first day counts only for a
+ *  shift still running at the opening and the last only for one starting
+ *  before the handover. Offsets are from Saturday. */
+function closureDays(shift: Row, window: ClosureBounds): string[] {
+  const start = text(shift.start_time);
+  const end = text(shift.end_time);
+  const timed = Boolean(start && end);
+  const days: string[] = [];
+  for (let offset = window.start_day; offset <= window.end_day; offset += 1) {
+    if (timed && offset === window.start_day && end > start && end <= window.start_time) continue;
+    if (offset === window.end_day && offset > 0 && !(timed && start < window.end_time)) continue;
+    days.push(DAYS[(offset + 13) % 7]);
+  }
+  return days;
 }
 
 function headcount(shift: Row): number {
