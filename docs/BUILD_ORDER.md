@@ -1,6 +1,13 @@
 # Build order
 
-**Start here in a new session.**
+> **Historical record.** This is the order the product was first built in,
+> kept for its reasoning. Much of what it names has since been replaced or
+> removed: the intro interview, the briefing (D15), the importer, Opik
+> tracing (D30), the AI scheduler (superseded by the CP-SAT solver, D34),
+> and single files that became packages (`bl/audit/`, `bl/scheduler/`,
+> `bl/changes/`, `bl/rotation/`…). **For the system as it is now, start
+> with [`../README.md`](../README.md), [`SYSTEM_MAP.md`](SYSTEM_MAP.md) and
+> [`../backend/CLAUDE.md`](../backend/CLAUDE.md).**
 
 Done so far: step 1 (scaffold and port), step 2 (all tables and their
 repositories), **step 3 (`bl/audit.py` and its table-driven tests)**, step 4

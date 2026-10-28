@@ -17,7 +17,7 @@ Fetches and sends. Makes no decisions — those live in `bl/`.
 
 ## Connection pooling
 
-Connections are pooled (`psycopg_pool`). They were not originally: every query
+Connections are pooled (`psycopg_pool`, up to 16 — enough for six worker lanes beside the API, D38). They were not originally: every query
 opened a fresh `psycopg.connect()`, paying a TCP handshake, authentication and
 a `SET search_path` round-trip before running any SQL — and one page load
 issues several queries. Measured against a local Postgres, that was 1.97ms per
@@ -84,7 +84,7 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | `availability` | Known unavailability. `source` records where it came from — the manager, the agent, or the manager writing down what an employee reported ([D13](../../../docs/DECISIONS.md#d13--constraints-are-recorded-by-the-manager-with-their-source-marked)) |
 | `change_log` | **Append-only**: what changed, both reasons, when |
 | `employee_identities` | A claimed roster name plus its scrypt passcode hash — one claim per name per team ([D14](../../../docs/DECISIONS.md)). Also holds `acknowledged_at`, the mark behind "what changed for me" ([D16](../../../docs/DECISIONS.md#d16--an-employee-is-told-what-changed-and-acknowledging-is-what-marks-it-read)) |
-| `constraint_requests` | An employee's submission awaiting the manager. **Not** `availability`: pending rows are invisible to `audit.py`, and approval is what promotes one |
+| `constraint_requests` | An employee's submission awaiting the manager. **Not** `availability`: pending rows are invisible to `bl/audit/`, and approval is what promotes one |
 | `compiled_sources` | What code made of a standing sentence (D32), keyed on its words, the roster and the compiler. A derivative of the sentence, never a replacement; `unresolved` rows are kept negatives |
 | `source_anchors` | The day each standing sentence was first seen, which relative time ("3 ימים") counts from |
 | `swap_requests` | An employee's proposed swap, the colleague's answer, and the manager's ruling |

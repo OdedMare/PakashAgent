@@ -5,14 +5,19 @@ AiSummryIO.
 
 - `config.py` — env-derived defaults, prefix **`PAKASH_`**, read from
   `.env`. These are *defaults*; the runtime store overrides them.
-- `runtime_settings/` — the live override store. Settings saved in the UI beat env
+- `runtime_settings/` — the live override store. Settings saved in the system
+  settings (the operator console's "מערכת" tab; the team screen has no
+  settings entry, D40) beat env
   values **without a restart**, because `dal/llm/` reads the store on every call.
   Secrets are masked on the way out; a masked value coming back means "unchanged",
   so the stored secret is kept.
 - `sessions.py` — signed workspace session cookies: `issue()` and `read()`,
   HMAC-SHA256 over a compact payload. Not a JWT and not trying to be — no
   algorithm field, no library, a format this file fully controls.
-- `logging_setup.py` — standard-library logging configuration.
+- `logging_setup.py` — standard-library logging configuration, level from
+  `PAKASH_LOG_LEVEL`. A refused (401) read — a poller whose session died —
+  logs at DEBUG and is dropped from uvicorn's access log unless the level is
+  DEBUG; a refused POST (a wrong password) still warns.
 - `errors.py` — `AgentError`, the Hebrew-facing error type everything raises.
 - `throttle.py` — `LoginThrottle`: every password check (boss login,
   employee login, change password, settings password) runs through
@@ -46,20 +51,22 @@ AiSummryIO.
 | `PAKASH_LLM_BASE_URL_<ROLE>` | Optional endpoint for that role; falls back to the general URL |
 | `PAKASH_LLM_API_KEY_<ROLE>` | Optional API key for that role's endpoint; falls back to `OPENAI_API_KEY`. A role on another provider is authenticated by another credential |
 | `PAKASH_LLM_DIET_MODE` | Compact prompts and bounded completions |
-| `PAKASH_LLM_REASONING_EFFORT` | `off`/`low`/`medium`/`high`: how long a reasoning model thinks (gpt-oss, Qwen3); empty sends nothing. Live-editable in the panel |
+| `PAKASH_LLM_REASONING_EFFORT` | `off`/`low`/`medium`/`high`: how long a reasoning model thinks (gpt-oss, Qwen3); empty sends nothing. Live-editable |
 | `PAKASH_LLM_TIMEOUT_SECONDS` | Wall time for one HTTP completion; 0 = the built-in ceiling (300s, builds 900s). A stuck call fails and frees its slot (D38) |
 | `PAKASH_LLM_QUEUE_SECONDS` | How long interactive work may wait for a model slot; 0 = no limit |
 | `PAKASH_LLM_VERIFY_SSL` | Verify the model server's certificate (default on) |
 | `OPENAI_API_KEY` | Read unprefixed, as the SDK expects |
+| `PAKASH_LOG_LEVEL` | `INFO` by default; `DEBUG` also logs refused reads |
+| `PAKASH_ADMIN_SESSION_HOURS` | How long an operator stays signed in (default 12) |
 | `PAKASH_DATABASE_*` | URL plus optional explicit overrides |
 | `PAKASH_SESSION_SECRET` | Signs the workspace session cookie. **Set this in production** — unset, it is generated per process, so sessions die on restart and break across workers. Changing it logs every boss out. |
-| `PAKASH_SETTINGS_PASSWORD` | Unlocks the settings panel on top of the boss login, sent as the `X-Settings-Password` header. Defaults to `010802` (committed); **override it in any real deployment**. Set to empty, the panel stays locked. The settings are shared by every workspace, and anyone can open a workspace and be its boss |
+| `PAKASH_SETTINGS_PASSWORD` | Lets a boss session reach `/api/settings` when sent as the `X-Settings-Password` header (the operator console needs only its own session). Defaults to `010802` (committed); **override it in any real deployment**. Set to empty, that path stays locked. The settings are shared by every workspace |
 | `PAKASH_SESSION_DAYS` | How long a boss stays logged in (default 30) |
 | `PAKASH_ADMIN_PASSWORD` | The operator console's password; empty = the settings password (D28) |
 | `PAKASH_OPEN_SIGNUP` | Self-service team creation from the login page (default off) |
 | `PAKASH_EMBEDDED_WORKER` | Run the job worker inside the API process (default on; compose turns it off because it runs `app.worker` separately) |
 | `PAKASH_WORKER_CONCURRENCY` / `PAKASH_CHAT_WORKERS` | Worker threads (default 6) and how many of them only take manager-chat turns (default 3) |
-| `PAKASH_SOLVER_TIME_LIMIT_SECONDS` / `PAKASH_SOLVER_WORKERS` | The constraint solver's wall time per solve (default 10s) and parallel workers (default 8). Live-editable in the panel |
+| `PAKASH_SOLVER_TIME_LIMIT_SECONDS` / `PAKASH_SOLVER_WORKERS` | The constraint solver's wall time per solve (default 10s) and parallel workers (default 8). Live-editable; chat builds read them too |
 | `PAKASH_LLM_MAX_CONCURRENCY` | Model calls in flight across every process (default 4; 1 for a local Ollama) |
 | `PAKASH_LLM_TEAM_CONCURRENCY` | How many of those one team may hold; 0 (default) = all of them |
 

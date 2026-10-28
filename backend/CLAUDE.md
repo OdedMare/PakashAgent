@@ -15,7 +15,9 @@ conversation — explaining every decision and recording every reason.
 
 ## Runtime and commands
 
-Python is **3.11** (it was 3.8.10 until [D30](../docs/DECISIONS.md#d30--model-calls-are-traced-to-opik-prompts-and-replies-included)).
+Python is **3.11** (it was 3.8.10 until [D30](../docs/DECISIONS.md#d30--model-calls-are-traced-to-opik-prompts-and-replies-included);
+the Opik tracing D30 added has since been removed — the deployment is
+air-gapped and nothing calls out but the model server).
 The code still writes `Optional`, `List`, `Dict`; match the file you are in.
 
 ```bash
@@ -27,7 +29,9 @@ uvicorn app.main:app --reload
 ## Architecture
 
 - `common/` — env defaults (`PAKASH_` prefix) plus the live runtime-settings
-  override store. Saved settings override env without restart; secrets masked.
+  override store. Saved settings override env without restart; secrets
+  masked. They are edited from the operator console (`/admin`, "מערכת"); the
+  team screen has no settings entry.
 - `dal/database.py` — connection; verifies the schema exists.
 - `dal/llm/` — the OpenAI-compatible JSON client and its degradation ladder
   (strict structured outputs first). Model/base URL/API key stay live per
@@ -59,9 +63,12 @@ uvicorn app.main:app --reload
   manager's sentences translated by `bl/directive_agent/`, then the solver.
 - `bl/solver/` — **the OR-Tools CP-SAT constraint solver that assigns every
   schedule** ([D34](../docs/DECISIONS.md)). One boolean per legal (person,
-  slot); the audit's blocking checks and every hard request are
-  constraints; coverage is solved first, then wishes and fairness. Every
-  row carries a reason. No model call.
+  slot) — a shift's `allowed_roles` and the rotation (an ungrouped
+  חמשושים/שושים soldier is home every weekend) decide legality; the audit's
+  blocking checks and every hard request are constraints; coverage is
+  solved first, then wishes and fairness (per-person load targets, priced
+  below a soft wish). נחפפים are placed beside a trainer and fill no seat.
+  Every row carries a reason. No model call.
 - `bl/directive_agent/` + `bl/compiled_sources/` — the model's one job in a
   build: translating rules, policies, notes, preferences and the build's
   instruction into structured requests (`bl/schedule_requests.py`), kept
@@ -71,7 +78,8 @@ uvicorn app.main:app --reload
   conversation per manager: questions answered with read-only tools,
   replacement plans, generation previews, profile and constraint changes.
   A turn prepares a plan and writes nothing; `chat_apply.py` applies it on
-  the manager's approval, atomically, after checking nothing moved.
+  the manager's approval, atomically, after checking nothing moved. A seat
+  a planned removal vacates is filled by the solver (`chat_vacancies.py`).
 - `bl/changes/` — conversational edits; asks for the boss's reason, proposes a
   replacement with justification, applies on confirmation. Proposes only — it is
   handed no repository, so it cannot write.
@@ -81,8 +89,9 @@ uvicorn app.main:app --reload
   process by default** (`PAKASH_EMBEDDED_WORKER=0` turns it off) and can also
   run on its own as `python -m app.worker`. Generation is queued as one job
   per span; manager-chat turns and `compile_sources` are jobs too.
-  Several lanes, with at least one reserved for manager chat so a long build
-  cannot occupy every worker.
+  Six lanes by default (`PAKASH_WORKER_CONCURRENCY`), three of them only
+  for manager chat (`PAKASH_CHAT_WORKERS`), so a long build cannot occupy
+  every worker (D38).
 - `bl/schedule_service/` — persistence and ordering around the solver, the
   change agent and the audit: open, build, propose, confirm, apply, publish,
   clear, constraints, history, preferences, simulations, export.
@@ -109,7 +118,7 @@ uvicorn app.main:app --reload
   replacing it (D37), and `absorb.py` opens such a job on every draft ahead
   of today when a profile save adds a soldier or a shift; published weeks
   are listed, never touched.
-- `bl/schedule_service.create_blank/assign/unassign` — the manual path (D18).
+- `bl/schedule_service/manual.py` (`create_blank`/`assign`/`unassign`) — the manual path (D18).
   Writes with no model and no solver on them.
 - `bl/export.py` — a period out as `.xlsx`. Pure functions, no model, no
   repository. Laid out shift-major like `FILE_FORMATS.md` Sample A.
@@ -135,7 +144,8 @@ uvicorn app.main:app --reload
 - `bl/absence/` — **an absence, from sentence to plan, with no model** (D36).
   Reads one person and every date ("בשני ושלישי", "מ-1.11 עד 5.11"), asks once
   when dates or scope are missing, ranks clean covers so the load spreads
-  evenly, and hands `ChatPlanBuilder.prepare` a model-shaped turn — so the plan
+  evenly (a bare "עד 31.12" runs from today; spans up to 120 days), and hands
+  `ChatPlanBuilder.prepare` a model-shaped turn — so the plan
   meets every check a model plan does. Run inline by `start_turn` before the
   model loop (`bl/chat_fast.py`); anything it cannot read goes to the model.
   Also behind the read-only replacement tab, `GET /api/agent/replacements`.
@@ -211,7 +221,7 @@ package's `__init__` docstring carries a table of which module owns what.
 - **The rotation is enforced where a shift is assigned, and only ever
   advisory afterwards.** `bl/rotation/` is the single definition of whose
   closure a date is; the solver never creates a variable for a placement
-  contradicting it, `placement.py` says so before the click, and `audit.py`
+  contradicting it, `bl/placement/` says so before the click, and `bl/audit/`
   warns about a schedule that already drifted. Not placing a *generated* row
   is not the audit gaining a veto (D3): it is the same class of bound as "a
   person nobody declared", because the cycle was arithmetic this code
@@ -324,7 +334,7 @@ package's `__init__` docstring carries a table of which module owns what.
   publish (D3).
 - **A simulation persists nothing, structurally.** `bl/simulate/` is
   handed no repository at all ([D20](../docs/DECISIONS.md#d20--a-simulation-is-not-a-proposal)),
-  like `changes.py`. Approving one is an ordinary
+  like `bl/changes/`. Approving one is an ordinary
   `apply()` with the manager's reason — there is no dedicated endpoint for
   it, because a second write path is how a confirmation step gets routed
   around.

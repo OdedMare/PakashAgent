@@ -286,6 +286,11 @@ uses when someone leaves.
 
 ## D15 — The agent speaks first, but still never writes
 
+> **Removed.** The automatic briefings (`bl/briefing.py`,
+> `Management/Briefing.tsx`) and the `/brief` route are gone; the agent
+> speaks only in the manager chat, when spoken to. Kept as the record of
+> what was decided at the time.
+
 The agent no longer waits to be addressed. It reads the current state on its
 own and **opens the conversation**: when the manager enters the management
 area, after anything changes, before a period is published, and periodically
@@ -918,6 +923,11 @@ repoint the database; the console can now also delete teams. Set
 
 ## D29 — The manager hears a submission as it happens
 
+> **Update:** the per-process limitation below is resolved by D35 — signals
+> cross processes over PostgreSQL `LISTEN/NOTIFY` (`dal/notify.py`). The same
+> SSE line now also carries a bare `chat` signal, so a streaming manager-chat
+> reply is re-read at once.
+
 When an employee submits or withdraws a constraint request, or answers or
 withdraws a swap, the manager's open screen re-reads that inbox within a
 second, and the existing pop-up announces it. Before this, the screen polled
@@ -956,6 +966,12 @@ backend ever runs several workers, Postgres `LISTEN/NOTIFY` is the upgrade.
 ---
 
 ## D30 — Model calls are traced to Opik, prompts and replies included
+
+> **Removed.** Opik tracing (`dal/llm/tracing.py`, the `opik` dependency, its
+> settings and compose variables) was taken out: the deployment runs on an
+> air-gapped network, and nothing but the model server may be called. The
+> `pakash.llm` log line (counts and timings only) remains. The move to
+> Python 3.11 stays.
 
 With `OPIK_API_KEY` set, every `complete_json` is one trace in Opik, named by
 its flow, with each HTTP completion under it as an LLM span: messages, reply,
@@ -1240,7 +1256,35 @@ answer now fails, and `llm_timeout_seconds` must be raised for it. A
 server that serves one request at a time queues concurrent calls itself,
 and a call waiting in its queue counts against the same ceiling.
 
----
+## D39 — A seat a chat change vacates is filled by the solver *(amends the chat's "the manager chooses" rule, extends D34)*
+
+A `changes` plan that takes somebody off a shift used to leave the seat
+empty unless the model named a replacement, and the model was told to wait
+for the manager's pick — so a constraint chat could loop asking "who will
+replace her?" while the absence itself was never planned.
+
+**The model names who leaves; the solver picks who comes in.** When a plan's
+removals leave a slot with fewer people than it had, `bl/chat_vacancies.py`
+hands the touched dates to the solver: every other row there is a pin, the
+person who left (and anyone the plan marks unavailable) is a hard `avoid`,
+and only the solver's picks on vacated slots join the plan as `assign`
+operations, listed under the reply. A model-picked cover for a seat the
+same plan vacates is dropped in favour of the solver's; a pick that replaces
+nobody is still asked about. `leave_vacant` keeps a seat empty on request.
+Chat builds use the saved solver settings, like the board's.
+
+**Still one write path.** It is a plan like any other: shown, audited, and
+applied only on the manager's approval (D8/D19). A seat nobody can legally
+fill is reported in the reply, never filled against a rule.
+
+## D40 — The system settings live only in the operator console *(amends D28)*
+
+The settings gear and the account-menu entry are gone from the team screen;
+the model, solver and database settings are edited only from the צוות
+משמרות זהב console's "מערכת" tab, on the operator session. They are shared
+by every team, and a team manager editing them moved the ground under
+everyone else. `/api/settings` still admits a boss session that sends the
+settings password, for scripts; no team UI uses it.
 
 ---
 
