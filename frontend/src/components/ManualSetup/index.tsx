@@ -323,31 +323,22 @@ export function ManualSetup({
 
           <DayCycleSetup cycles={dayCycles} onChange={setDayCycles} used={usedDayCycles} />
 
-          <div className="rotation-pair" aria-label="הקשר בין סבב א לסבב ב">
-            <div><strong>סבב א׳</strong><span>אתם מגדירים את זמני אי־הזמינות.</span></div>
-            <Repeat2 aria-hidden="true" />
-            <div className="is-derived"><strong>סבב ב׳</strong><span>מחושב בשרת ואינו ניתן לעריכה נפרדת.</span></div>
-          </div>
-
-          <div className="manual-list">
+          <section className="rotation-block">
+            <header><strong>זמני אי־זמינות של סבב א׳</strong><span>רשות. סבב ב׳ זמין בדיוק כשסבב א׳ אינו זמין. ימים או משמרות שלא נבחרו — הכלל חל על כולם.</span></header>
             {rotationAUnavailability.map((rule, index) => (
               <article className="manual-row rotation-rule" key={`rotation-a-${index}`}>
-                <div className="rotation-rule-head">
-                  <div><strong>תקופת אי־זמינות {index + 1}</strong><span>השארת ימים או משמרות ללא בחירה תחיל את הכלל על כולם.</span></div>
-                  <button type="button" className="icon-button subtle" aria-label={`מחיקת תקופת אי־זמינות ${index + 1}`} onClick={() => setRotationAUnavailability((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
-                </div>
-                <CheckboxGrid label="ימים שבהם סבב א׳ אינו זמין" values={DAYS} selected={strings(rule.days)} onChange={(value) => edit(setRotationAUnavailability, index, "days", value)} />
-                {shiftNames.length ? <CheckboxGrid label="משמרות (ללא בחירה = כל המשמרות)" values={shiftNames} selected={strings(rule.shifts)} onChange={(value) => edit(setRotationAUnavailability, index, "shifts", value)} /> : null}
+                <CheckboxGrid label="ימים" values={DAYS} selected={strings(rule.days)} onChange={(value) => edit(setRotationAUnavailability, index, "days", value)} />
+                {shiftNames.length ? <CheckboxGrid label="משמרות" values={shiftNames} selected={strings(rule.shifts)} onChange={(value) => edit(setRotationAUnavailability, index, "shifts", value)} /> : null}
                 <div className="manual-grid three">
-                  <Field label="משעה (רשות)"><TimeInput value={inputText(rule.start_time)} onChange={(time) => edit(setRotationAUnavailability, index, "start_time", time)} /></Field>
-                  <Field label="עד שעה (רשות)"><TimeInput value={inputText(rule.end_time)} onChange={(time) => edit(setRotationAUnavailability, index, "end_time", time)} /></Field>
-                  <Field label="סיבה / תיאור"><input value={inputText(rule.reason)} onChange={(event) => edit(setRotationAUnavailability, index, "reason", event.target.value)} placeholder="לדוגמה: יציאה קבועה" /></Field>
+                  <Field label="משעה"><TimeInput value={inputText(rule.start_time)} onChange={(time) => edit(setRotationAUnavailability, index, "start_time", time)} /></Field>
+                  <Field label="עד שעה"><TimeInput value={inputText(rule.end_time)} onChange={(time) => edit(setRotationAUnavailability, index, "end_time", time)} /></Field>
+                  <Field label="סיבה"><input value={inputText(rule.reason)} onChange={(event) => edit(setRotationAUnavailability, index, "reason", event.target.value)} placeholder="לדוגמה: יציאה קבועה" /></Field>
                 </div>
+                <button type="button" className="icon-button subtle manual-delete" aria-label="מחיקת זמן אי־זמינות" onClick={() => setRotationAUnavailability((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
               </article>
             ))}
-          </div>
-          <button type="button" className="ghost-button" onClick={() => setRotationAUnavailability((current) => [...current, { days: [], shifts: [], start_time: "", end_time: "", reason: "" }])}><Plus size={16} /> הוספת זמן שבו סבב א׳ אינו זמין</button>
-          {rotationAUnavailability.length === 0 ? <p className="rotation-empty">לא הוגדרו זמני אי־זמינות נוספים. לוח הסגירות עדיין מחושב מעוגני הסבב והתלתון.</p> : <p className="rotation-derived-note">סבב ב׳ יהיה זמין בדיוק בזמנים שסבב א׳ אינו זמין, ולא זמין בשאר מועדי הפעילות. החישוב מתבצע בשירות השיבוץ.</p>}
+            <button type="button" className="ghost-button" onClick={() => setRotationAUnavailability((current) => [...current, { days: [], shifts: [], start_time: "", end_time: "", reason: "" }])}><Plus size={16} /> הוספת זמן שבו סבב א׳ אינו זמין</button>
+          </section>
         </SetupSection>
 
         <SetupSection tour="setup-people" icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">
