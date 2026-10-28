@@ -421,3 +421,40 @@ def test_the_training_policy_sets_how_many_shadow_shifts_a_week():
     result = generate_span(_shadow_profile(shadow_shifts_per_week=2), "2026-08-17", "2026-08-23")
 
     assert len(_shadowed(result)) == 2
+
+
+def _team_profile(trainee_role):
+    """Two shifts each open to one team's role, and a trainee who counts for none."""
+    def shift(name, role):
+        return {"name": name, "start_time": "07:00", "end_time": "15:00", "days": [],
+                "allowed_roles": [role],
+                "staffing": [{"days": [], "headcount": 1, "required_roles": []}]}
+    return {
+        "workplace": {"name": "יחידה"},
+        "employees": [
+            {"name": "פורצת", "role": "פריצה"}, {"name": "מבקיע", "role": "הבקעות"},
+            {"name": "נחפף", "role": trainee_role, "counts_toward_staffing": False},
+        ],
+        "shifts": [shift("פריצה יום", "פריצה"), shift("מרכבה יום", "הבקעות")],
+    }
+
+
+def test_a_trainee_with_no_team_is_placed_although_no_shift_names_their_role():
+    result = generate_span(_team_profile("נחפף"), "2026-08-16", "2026-08-22")
+
+    assert _shadowed(result)
+    assert {row["shift"] for row in _shadowed(result)} <= {"פריצה יום", "מרכבה יום"}
+
+
+def test_a_trainee_with_a_team_keeps_to_that_teams_shifts():
+    result = generate_span(_team_profile("הבקעות"), "2026-08-16", "2026-08-22")
+
+    assert _shadowed(result)
+    assert {row["shift"] for row in _shadowed(result)} == {"מרכבה יום"}
+
+
+def test_a_counted_member_whose_role_no_shift_names_is_still_not_placed():
+    profile = _team_profile("נחפף")
+    profile["employees"][2]["counts_toward_staffing"] = True
+
+    assert _shadowed(generate_span(profile, "2026-08-16", "2026-08-22")) == []
