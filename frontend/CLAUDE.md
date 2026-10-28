@@ -115,12 +115,21 @@ that morning and out for the rest of the day.
 
 **A cycle is typed once, in the team setup screen** (`ManualSetup/`, the
 sliders icon). The server-wide model, solver and database settings are not
-on the team screen at all: they live in the operator console's "מערכת" tab. `ManualSetup/RotationSetup.tsx` asks, per
-cycle, for the weekend group א closes and for group א's closure hours; the
-other groups' turns and hours are derived by the server. The dates shown
-beside the anchor are a preview of that one typed fact, and an anchor stored
-for another group is shown as א's next turn in the same cycle. Presence rules
-stay per group. Day cycles (11/3, 12/2, שבוע־שבוע…) are typed in
+on the team screen at all: they live in the operator console's "מערכת" tab.
+`ManualSetup/RotationSetup.tsx` asks three numbered questions per round and
+triplet, for group א only: which weekend it closes (the anchor), which round
+type — a shape from `closureShapes.ts`, named by the day the closure opens
+(11/3 Thursday is the server default and stores no row; 12/2 Friday, 10/4
+Wednesday, שבוע־שבוע from the Sunday handover, or typed days and times are
+one undated window row) — and which weekends differ (dated window rows, one
+weekend or a range, with an optional `note`). The other groups' turns and
+hours are derived by the server. Under the questions, `RotationPreview`
+shows the coming weekends as **the server** computes them from the unsaved
+rows (`POST /api/profile/rotation-preview`), so the setup screen cannot
+disagree with the board. An anchor stored for another group is shown as
+א's next turn in the same cycle. Presence rules stay per group, under
+"מתקדם"; the older fixed א/ב unavailability block shows only to a unit that
+still has rows in it. Day cycles (11/3, 12/2, שבוע־שבוע…) are typed in
 `ManualSetup/DayCycleSetup.tsx`: days on base and at home, the day group א
 starts on base, when each other group starts, and hours in three layers
 (cycle, group, dated change). Its four-week strip is a preview of the nominal

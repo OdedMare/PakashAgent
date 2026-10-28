@@ -78,7 +78,17 @@ def closure_days(
 
 
 def configured_window(profile, pattern, group, saturday):
-    """The hours `group` holds its closure on `saturday`, or None for the default.
+    """The hours `group` holds its closure on `saturday`, or None for the default."""
+    row = window_rule(profile, pattern, group, saturday)
+    if row is None:
+        return None
+    return tuple(datetime.datetime.combine(saturday + datetime.timedelta(days=row[key + "_day"]),
+                                           datetime.time.fromisoformat(row[key + "_time"]))
+                 for key in ("start", "end"))
+
+
+def window_rule(profile, pattern, group, saturday):
+    """The closure-window row in force for `group` on `saturday`, or None.
 
     **A cycle's hours are stated once, for its first group.** Every other
     group inherits them on its own weekend, the way its turn is derived from
@@ -95,10 +105,7 @@ def configured_window(profile, pattern, group, saturday):
     if not matching:
         return None
     # Dated changes take precedence over the group's regular window.
-    row = max(enumerate(matching), key=lambda item: (bool(item[1].get("starts_on") or item[1].get("ends_on")), item[0]))[1]
-    return tuple(datetime.datetime.combine(saturday + datetime.timedelta(days=row[key + "_day"]),
-                                           datetime.time.fromisoformat(row[key + "_time"]))
-                 for key in ("start", "end"))
+    return max(enumerate(matching), key=lambda item: (bool(item[1].get("starts_on") or item[1].get("ends_on")), item[0]))[1]
 
 
 def shift_interval(day, shift):

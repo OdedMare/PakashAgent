@@ -16,6 +16,7 @@ import {
   Inbox,
   MessageSquareText,
   MousePointer2,
+  Repeat2,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -113,7 +114,39 @@ export default function TutorialPage() {
           אני אסביר את צד המנהל: בונים שבוע עם הסוכן או ידנית, בודקים את האזהרות, ורק אז מפרסמים לצוות.
         </Narrator>
 
-        <TutorialChapter number="01" title="לקרוא את הלוח" icon={<CalendarCheck size={19} />}>
+        <TutorialChapter number="01" title="להגדיר סבבים ותלתונים" icon={<Repeat2 size={19} />}>
+          <p>בכרטיס של כל סבב ותלתון עונים על שלוש שאלות, רק עבור קבוצה א׳. המערכת מחשבת מהן את התור של כל קבוצה אחרת, ומתחת לשאלות מראה את שמונת הסופ״שים הקרובים — עוד לפני השמירה.</p>
+          <Screenshot
+            src="/tutorial/rotation-setup.png"
+            alt="כרטיס הסבב במסך הגדרת היחידה: תאריך העוגן, בחירת סוג הסבב ושעות הכניסה והיציאה"
+            caption="הגדרת סבב — שלבים 1 ו־2"
+            note="בוחרים את סוג הסבב בלחיצה. השעות שמתחת מתמלאות לבד — החילוף בסוף המשמרת הראשונה של יום ראשון — ואפשר לשנות אותן."
+            callouts={[{ n: 1, label: "תאריך מסופ״ש של א׳", x: "29%", y: "32%" }, { n: 2, label: "סוג הסבב", x: "29%", y: "49%" }, { n: 3, label: "שעות כניסה ויציאה", x: "29%", y: "66%" }]}
+          />
+          <div className="tutorial-two-column">
+            <div><CalendarCheck size={18} /><h3>1. מתי קבוצה א׳ סוגרת?</h3><p>בוחרים תאריך כלשהו מסופ״ש אחד שבו א׳ בבסיס — השבת, החמישי או השישי של אותו סופ״ש. לא צריך תאריך לכל קבוצה: ב׳ (ובתלתון גם ג׳) מקבלות את התור שלהן מכאן.</p></div>
+            <div><Repeat2 size={18} /><h3>2. איזה סוג סבב?</h3><p>ימים בבסיס / ימים בבית, בשבועיים של הסבב: <b>11/3</b> (ברירת המחדל — הבית מחמישי), <b>12/2</b> (מחמישי עבודה רגילה, הבית משישי), <b>10/4</b> (הבית מרביעי), <b>שבוע־שבוע</b> — או ״ימים ושעות אחרים״. הבחירה חלה על כל הקבוצות, כל אחת בתורה.</p></div>
+          </div>
+          <Screenshot
+            src="/tutorial/rotation-exceptions.png"
+            alt="סופ״ש חריג בשם חג עם תאריך וסוג משלו, ומתחתיו רצועת הסופ״שים הקרובים"
+            caption="סופ״שים חריגים ותצוגה מקדימה"
+            note="סופ״ש חריג משנה רק את אותו סופ״ש. הסבב עצמו לא זז — ברצועה הסופ״ש החריג מסומן בצבע ובשם שנתתם לו."
+            callouts={[{ n: 1, label: "תאריך הסופ״ש", x: "30%", y: "22%" }, { n: 2, label: "הסוג בסופ״ש הזה", x: "30%", y: "41%" }, { n: 3, label: "בדיקה לפני שמירה", x: "29%", y: "83%" }]}
+          />
+          <p>3. <strong>סופ״שים חריגים.</strong> לחג או לאירוע: לוחצים ״הוספת סופ״ש חריג״, בוחרים תאריך כלשהו באותו סופ״ש, נותנים שם (רשות) ובוחרים לו סוג משלו. ״להחיל על כמה סופ״שים ברצף״ הופך אותו לטווח — למשל לכל תקופת החגים.</p>
+          <FeatureGrid items={[
+            ["סבב 11/3", "שלב 2: משאירים ״11/3״. אין צורך להזין שעות."],
+            ["סבב 12/2", "שלב 2: ״12/2״. הסגירה מתחילה בשישי, וחמישי הוא יום עבודה רגיל לכולם."],
+            ["סבב 10/4", "שלב 2: ״10/4״. הקבוצה שלא סוגרת יוצאת כבר ברביעי."],
+            ["שבוע בבסיס, שבוע בבית", "שלב 2: ״שבוע־שבוע״. החילוף ביום ראשון, בשעה שמתחת."],
+            ["חג שמאריך את היציאה", "שלב 3: סופ״ש חריג בשם החג, תאריך מתוך אותו סופ״ש, וסוג אחר — למשל ״10/4״ או ״ימים ושעות אחרים״."],
+            ["לפני ששומרים", "בודקים ברצועה ״כך ייראו הסופ״שים הקרובים״ שהקבוצה והשעות נכונות בכל סופ״ש."],
+          ]} />
+          <p>קבוצה שלא נמצאת ביום קבוע (למשל ״סבב ב׳ לא נמצאת בשלישי״) מוגדרת בתחתית הכרטיס, תחת ״מתקדם״. מחזור שלא בנוי על סופ״שים — ימים בבסיס וימים בבית לפי לוח משלו — מוגדר מתחת לכרטיסים, ב״מחזורי ימים״.</p>
+        </TutorialChapter>
+
+        <TutorialChapter number="02" title="לקרוא את הלוח" icon={<CalendarCheck size={19} />}>
           <p>בוחרים כמה רואים: יום, שבוע, שבועיים או חודש. ביום ובשבוע משבצים ועורכים; שבועיים וחודש הם מבט־על לקריאה — לחיצה על יום או שבוע פותחת אותו. מסילת השבוע והאריחים מסכמים איוש, משמרות פתוחות, התנגשויות ושעות, ולחיצה על אריח מסננת את הלוח.</p>
           <Screenshot
             src="/tutorial/manager-board.png"
@@ -132,7 +165,7 @@ export default function TutorialPage() {
           ]} />
         </TutorialChapter>
 
-        <TutorialChapter number="02" title="לבנות סידור — כולו או רק חלק" icon={<Sparkles size={19} />}>
+        <TutorialChapter number="03" title="לבנות סידור — כולו או רק חלק" icon={<Sparkles size={19} />}>
           <p>‘בניית הסידור לשבוע’ בשבוע ריק, או ‘בנייה מכאן’ בראש עמודה, פותחים את חלון הבנייה. בוחרים מתאריך ועד תאריך, אילו סוגי משמרות לשבץ, ומוסיפים הנחיות לתקופה אם צריך.</p>
           <Screenshot
             src="/tutorial/manager-generate.png"
@@ -149,7 +182,7 @@ export default function TutorialPage() {
           </div>
         </TutorialChapter>
 
-        <TutorialChapter number="03" title="לדבר עם הסוכן — בלי לתת לו לכתוב לבד" icon={<Bot size={19} />}>
+        <TutorialChapter number="04" title="לדבר עם הסוכן — בלי לתת לו לכתוב לבד" icon={<Bot size={19} />}>
           <p>‘סוכן הסידור’ פותח שיחה לצד הלוח. כותבים שאלה או בקשה במילים שלכם, באותה תיבה. שאלה מקבלת תשובה ולא משנה דבר; בקשה לשינוי חוזרת כתוכנית, ושום דבר לא נשמר עד ‘החלת התוכנית’.</p>
           <Screenshot
             src="/tutorial/manager-agent.png"
@@ -169,7 +202,7 @@ export default function TutorialPage() {
           ]} />
         </TutorialChapter>
 
-        <TutorialChapter number="04" title="שינויים: החלפה, חייל חדש, משמרת חדשה" icon={<ArrowLeftRight size={19} />}>
+        <TutorialChapter number="05" title="שינויים: החלפה, חייל חדש, משמרת חדשה" icon={<ArrowLeftRight size={19} />}>
           <p>לשונית ‘שינויים’ במגירה מרכזת את שלושת השינויים השכיחים, ושומרת על הסידור הקיים ככל האפשר.</p>
           <Screenshot
             src="/tutorial/manager-changes.png"
@@ -185,7 +218,7 @@ export default function TutorialPage() {
           ]} />
         </TutorialChapter>
 
-        <TutorialChapter number="05" title="בקשות, החלפות והעדפות" icon={<Inbox size={19} />}>
+        <TutorialChapter number="06" title="בקשות, החלפות והעדפות" icon={<Inbox size={19} />}>
           <p>לשונית ‘בקשות’ מציגה אילוצים שעובדים שלחו והחלפות ששני העובדים כבר הסכימו עליהן. בקשה חדשה קופצת גם כהודעה בזמן אמת.</p>
           <Screenshot
             src="/tutorial/manager-requests.png"
@@ -201,7 +234,7 @@ export default function TutorialPage() {
           ]} />
         </TutorialChapter>
 
-        <TutorialChapter number="06" title="כוח אדם" icon={<Users size={19} />}>
+        <TutorialChapter number="07" title="כוח אדם" icon={<Users size={19} />}>
           <p>מסך ‘כוח אדם’ מרכז את אנשי הצוות, סוגי המשמרות והאילוצים, עם מספר המשמרות והשעות של כל אחד.</p>
           <Screenshot
             src="/tutorial/manager-team.png"
@@ -217,7 +250,7 @@ export default function TutorialPage() {
           ]} />
         </TutorialChapter>
 
-        <TutorialChapter number="07" title="לבדוק את התמונה הרחבה" icon={<BarChart3 size={19} />}>
+        <TutorialChapter number="08" title="לבדוק את התמונה הרחבה" icon={<BarChart3 size={19} />}>
           <p>מסך ‘סקירה’ מתרגם את הלוח למספרים: איוש, משמרות, לילות לכל חייל/ת, התנגשויות ואילוצים. המספרים מסבירים את הלוח — הם לא נותנים לו ציון.</p>
           <Screenshot
             src="/tutorial/manager-analytics.png"
@@ -233,7 +266,7 @@ export default function TutorialPage() {
           ]} />
         </TutorialChapter>
 
-        <TutorialChapter number="08" title="לשתף, להוציא קובץ ולקבל עזרה" icon={<FileDown size={19} />}>
+        <TutorialChapter number="09" title="לשתף, להוציא קובץ ולקבל עזרה" icon={<FileDown size={19} />}>
           <div className="tutorial-action-list">
             <div><FileDown size={18} /><strong>Excel</strong><p>כפתור ‘אקסל’ מוריד את השבוע כקובץ, בלי לשנות את הלוח.</p></div>
             <div><Users size={18} /><strong>קישור לצוות</strong><p>אייקון השיתוף מציג קישור צפייה. החלפת הקישור מבטלת את הקודם לכולם.</p></div>

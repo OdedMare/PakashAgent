@@ -99,6 +99,25 @@ export interface DayCycle extends DayCycleTiming {
 export interface RotationClosureWindow extends RotationGroupRule {
   start_day: number;
   end_day: number;
+  /** An exception's name, like "פסח". Shown in setup only. */
+  note?: string;
+}
+
+/** One coming closure of a cycle, as the server will build it. `kind` says
+ *  where its hours come from: the default Thursday-to-Sunday, the cycle's
+ *  own hours, or a dated exception. Default rows carry no clock; they run
+ *  until `handover_shifts` on the Sunday. */
+export interface RotationWeekend {
+  saturday: string;
+  group: string;
+  label: string;
+  kind: "default" | "regular" | "exception";
+  start_date: string;
+  start_time: string;
+  end_date: string;
+  end_time: string;
+  handover_shifts: string[];
+  note?: string;
 }
 
 export interface RotationPresenceRule extends RotationGroupRule {

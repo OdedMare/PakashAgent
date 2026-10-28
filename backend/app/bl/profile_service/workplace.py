@@ -93,6 +93,8 @@ def _group_rules(value: Any, field: str, known: dict) -> List[dict]:
                 raise AgentError("יש להגדיר שעות התחלה וסיום לסגירה")
             if (row["start_day"], row["start_time"]) >= (row["end_day"], row["end_time"]):
                 raise AgentError("סיום הסגירה חייב להיות אחרי תחילתה")
+            # An exception's name ("פסח"), shown beside it in setup.
+            row["note"] = text(row.get("note"))
         else:
             if type(row.get("available")) is not bool:
                 raise AgentError("יש לבחור נוכחות או אי־נוכחות")
