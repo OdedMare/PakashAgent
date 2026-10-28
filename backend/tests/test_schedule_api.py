@@ -12,6 +12,7 @@ Three things here are the point of the feature and are asserted directly:
 
 from types import SimpleNamespace
 import copy
+import datetime
 import json
 import threading
 
@@ -272,6 +273,7 @@ class _FakeScheduleRepo:
             "available": available, "start_time": start_time,
             "end_time": end_time, "is_hard": is_hard,
             "reason": reason, "source": source,
+            "constraint_type": "availability",
         }
         self.availability_rows = [
             existing for existing in self.availability_rows
@@ -283,6 +285,18 @@ class _FakeScheduleRepo:
         self.availability_rows.append(row)
         return row
 
+    def set_duty(self, team_id, employee, duty_date, start_time, end_time,
+                 reason="", source="manager"):
+        row = {
+            "id": self._id("duty"), "team_id": team_id, "employee": employee,
+            "constraint_date": duty_date, "shift_name": "",
+            "available": False, "start_time": start_time,
+            "end_time": end_time, "is_hard": True,
+            "reason": reason, "source": source, "constraint_type": "duty",
+        }
+        self.availability_rows.append(row)
+        return row
+
     def availability(self, team_id, starts_on=None, ends_on=None,
                      employee=None):
         rows = [
@@ -290,7 +304,10 @@ class _FakeScheduleRepo:
             if row["team_id"] == team_id
         ]
         if starts_on:
-            rows = [r for r in rows if r["constraint_date"] >= starts_on]
+            previous = (datetime.date.fromisoformat(starts_on) - datetime.timedelta(days=1)).isoformat()
+            rows = [r for r in rows if r["constraint_date"] >= (
+                previous if r.get("constraint_type") == "duty" else starts_on
+            )]
         if ends_on:
             rows = [r for r in rows if r["constraint_date"] <= ends_on]
         if employee:
@@ -1913,6 +1930,45 @@ def test_a_timed_soft_constraint_is_recorded():
     assert response.status_code == 200
     assert response.json()["start_time"] == "16:00"
     assert response.json()["is_hard"] is False
+
+
+def test_a_duty_is_recorded_and_blocks_manual_placement_even_across_midnight():
+    app, _ = _build_app([])
+    client = _client(app)
+    schedule = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+
+    duty = client.post("/api/schedule/constraints", json={
+        "employee": "דנה", "constraint_date": "2026-08-17",
+        "constraint_type": "duty", "start_time": "22:00", "end_time": "08:00",
+        "reason": "תורנות חמ״ל",
+    })
+    assert duty.status_code == 200
+    assert duty.json()["constraint_type"] == "duty"
+
+    check = client.post("/api/schedule/check", json={
+        "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-18",
+        "schedule_id": schedule["id"],
+    })
+    assert check.status_code == 200
+    assert check.json()["blocking"] is True
+
+    assigned = client.post("/api/schedule/assign", json={
+        "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-18",
+        "schedule_id": schedule["id"],
+    })
+    assert assigned.status_code == 409
+    assert "תורנות חוסמת" in assigned.json()["detail"]
+
+
+def test_a_duty_requires_both_clock_bounds():
+    app, _ = _build_app([])
+    response = _client(app).post("/api/schedule/constraints", json={
+        "employee": "דנה", "constraint_date": "2026-08-17",
+        "constraint_type": "duty", "start_time": "22:00",
+    })
+    assert response.status_code == 422
 
 
 def test_an_invalid_constraint_time_is_rejected():

@@ -128,3 +128,14 @@ def test_a_range_needs_a_date_and_an_ambiguous_name_is_named_back(tools):
     assert tools.run(TEAM, TOOL_WHO_WORKS, {})["ok"] is False
     omers = tools.run(TEAM, TOOL_SHADOW_PARTNERS, {"employee": "עומר ע"})
     assert omers["found"] and omers["employee"] == "עומר עזורי"
+
+
+def test_who_is_away_names_a_duty_apart_from_an_absence():
+    tools = ScheduleTools(_Repo(_saved("unit_619.json"), ROWS, [{
+        "employee": "דין", "constraint_date": "2026-11-10", "shift_name": "",
+        "available": False, "is_hard": True, "reason": "תורנות מטבח",
+        "constraint_type": "duty",
+    }]))
+    answer = tools.run(TEAM, TOOL_WHO_IS_AWAY, {"day": "2026-11-10"})
+    assert answer["days"][0]["away"][0]["kind"] == "duty"
+    assert answer["days"][0]["away"][0]["reasons"] == ["תורנות מטבח"]

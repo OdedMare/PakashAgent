@@ -147,6 +147,29 @@ CREATE INDEX IF NOT EXISTS availability_team_date_idx
 
 COMMIT;
 
+-- Operational duties are not ordinary availability notes: several may fall
+-- on the same day, and a hard duty cannot be overridden by a manual placement.
+-- Times are local wall-clock values, like shift times; an end not later than
+-- the start means the duty crosses midnight.
+CREATE TABLE IF NOT EXISTS duties (
+    id TEXT PRIMARY KEY,
+    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    employee TEXT NOT NULL,
+    duty_date DATE NOT NULL,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT 'manager'
+        CHECK (source IN ('manager','agent','employee_reported','setup')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (start_time <> '' AND end_time <> '')
+);
+
+CREATE INDEX IF NOT EXISTS duties_team_date_idx
+    ON duties (team_id, duty_date);
+
+COMMIT;
+
 -- Guarded migration for availability windows and soft constraints.
 ALTER TABLE availability
     ADD COLUMN IF NOT EXISTS start_time TEXT NOT NULL DEFAULT '',

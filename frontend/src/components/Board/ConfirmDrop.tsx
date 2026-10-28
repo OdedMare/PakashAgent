@@ -21,12 +21,9 @@ import type { Assignment, PlacementCheck } from "@/types";
  *  never has to phrase anything to an AI to find out that דנה has a
  *  constraint that day.
  *
- *  **It explains; it does not refuse.** The confirm button is live whatever
- *  the check found, because the audit advises and never gates
- *  ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)) —
- *  a manager who knows about the constraint and wants the move anyway is
- *  making a decision, not a mistake. Only the reason gates, and it gates for
- *  a different purpose entirely.
+ *  Ordinary findings remain advisory (D3). An operational duty is a physical
+ *  overlap, so the same check marks it blocking and the server also refuses
+ *  the write.
  */
 export function ConfirmDrop({
   assignment,
@@ -70,7 +67,7 @@ export function ConfirmDrop({
     return () => window.removeEventListener("keydown", onKey);
   }, [onCancel]);
 
-  const ready = reason.trim().length > 0 && !busy;
+  const ready = reason.trim().length > 0 && !busy && !check?.blocking;
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onCancel}>
@@ -269,7 +266,9 @@ export function PlacementVerdict({
           confirm button is otherwise ambiguous about which of the two it
           means — and under D3 it means both. */}
       <p className="board-verdict-foot">
-        אפשר להמשיך בכל מקרה — ההתראות מיידעות ולא חוסמות.
+        {check.blocking
+          ? "לא ניתן להמשיך: התורנות חופפת למשמרת. יש לבחור חייל/ת או משמרת אחרת."
+          : "אפשר להמשיך — ההתראות הרגילות מיידעות ולא חוסמות."}
       </p>
     </div>
   );

@@ -212,7 +212,11 @@ re-ask answered questions or invent a person's return-to-work date.
   include question options such as “שבץ את דנה במקום עודד בבוקר ב-2026-10-06”.
   Each option is a full request in context, so clicking can prepare a concrete plan.
 - `changes`: `operations` use assign/remove/swap and exact employee, shift and ISO
-  date names. `constraints` record employee/date/shift/reason/available (false for
+  date names. `constraints` record employee/date/shift/reason/available and
+  `constraint_type` (`availability` by default, `duty` for a blocking operational
+  duty). A duty requires exact start_time and end_time, an empty shift,
+  available=false and is_hard=true; it blocks every overlapping shift, including
+  across midnight. Ordinary availability uses false for
   illness, true when manager explicitly marks availability). Supply the manager's
   stated reason if provided and your separate, specific `agent_reason`. A clear
   instruction supplies its own intent. Leave profile operations empty.

@@ -684,8 +684,8 @@ export function assignEmployee(body: {
  *  drag is validated, explained in Hebrew, and offered deterministic
  *  alternatives without a token being generated.
  *
- *  It advises and never gates. The caller is free to write anyway, and the
- *  board does exactly that when the manager confirms (D3). */
+ *  Ordinary findings advise and never gate (D3). A duty overlap returns
+ *  `blocking: true`, and the write endpoint independently enforces it. */
 export function checkPlacement(body: {
   employee: string;
   shift_name: string;
@@ -892,6 +892,7 @@ export function setConstraint(body: {
   is_hard?: boolean;
   reason?: string;
   source?: string;
+  constraint_type?: "availability" | "duty";
 }): Promise<Constraint> {
   return request<Constraint>("/api/schedule/constraints", {
     method: "POST",

@@ -273,6 +273,25 @@ def _two_shift_repo():
     return repo
 
 
+def test_a_recurring_duty_is_kept_only_with_a_complete_blocking_interval():
+    repo = _Repo()
+    duty = {
+        "days": ["ראשון"], "shifts": [], "available": False,
+        "is_hard": True, "start_time": "22:00", "end_time": "06:00",
+        "reason": "תורנות חמ״ל", "source": "manager",
+        "constraint_type": "duty",
+    }
+    result = ProfileService(repo).update("team", employees=[{
+        "name": "דנה", "recurring_constraints": [duty],
+    }])
+    assert result["employees"][0]["recurring_constraints"] == [duty]
+
+    with pytest.raises(AgentError, match="תורנות קבועה"):
+        ProfileService(repo).update("team", employees=[{
+            "name": "דנה", "recurring_constraints": [dict(duty, end_time="")],
+        }])
+
+
 def test_deleting_a_shift_archives_it_and_cleans_the_roster():
     repo = _two_shift_repo()
     result = ProfileService(repo).delete_shift("team", "ערב")

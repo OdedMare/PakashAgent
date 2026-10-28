@@ -10,12 +10,51 @@ in a long method.
 from typing import Callable, Dict, List, Optional
 
 from app.bl.changes import OP_ASSIGN, OP_REMOVE, OP_SWAP
+from app.bl.audit import constraint_conflicts
+from app.bl.scheduler.availability import effective_availability
 from app.bl.schedule_service.constants import (
     ACTION_ASSIGNED,
     ACTION_REMOVED,
     ACTION_SWAPPED,
 )
-from app.bl.schedule_service.rows import assignment_facts, iso
+from app.bl.schedule_service.rows import (
+    assignment_facts, availability_fact, iso, window,
+)
+from app.common.errors import ConflictError
+
+
+def assert_no_blocking_duty(
+    repository, team_id: str, schedule: dict, employee: str, slot: dict,
+) -> None:
+    """Refuse a placement that overlaps a hard operational duty."""
+    starts_on, ends_on = window(schedule)
+    profile = repository.team_profile(team_id) or {}
+    availability = effective_availability(
+        profile,
+        [availability_fact(row) for row in repository.availability(
+            team_id, starts_on, ends_on, employee,
+        )],
+        starts_on, ends_on,
+    )
+    candidate = {
+        "employee": employee,
+        "date": iso(slot.get("slot_date")),
+        "shift": slot.get("shift_name") or "",
+        "start_time": slot.get("start_time") or "",
+        "end_time": slot.get("end_time") or "",
+    }
+    duty = next((
+        row for row in availability
+        if row.get("constraint_type") == "duty"
+        and constraint_conflicts(candidate, row)
+    ), None)
+    if duty is not None:
+        reason = (duty.get("reason") or "").strip()
+        raise ConflictError(
+            "%s בתורנות חוסמת בשעות %s–%s%s ולכן לא ניתן לשבץ אותו/ה למשמרת."
+            % (employee, duty.get("start_time") or "?", duty.get("end_time") or "?",
+               " (%s)" % reason if reason else "")
+        )
 
 
 class Operation:
@@ -95,6 +134,9 @@ class OperationApplier:
         )
         if slot is None:
             return 0
+        assert_no_blocking_duty(
+            self._repository, team_id, schedule, op.employee, slot,
+        )
         self._repository.add_assignment(
             schedule["id"], team_id, slot["id"], op.employee,
             op.own_reason or reason,
@@ -109,6 +151,20 @@ class OperationApplier:
         second = match(schedule, op.other, op.other_shift, op.other_date)
         if first is None or second is None:
             return 0
+        second_slot = self._repository.find_slot(
+            schedule["id"], team_id, op.other_shift, op.other_date,
+        )
+        first_slot = self._repository.find_slot(
+            schedule["id"], team_id, op.shift, op.date,
+        )
+        if first_slot is None or second_slot is None:
+            return 0
+        assert_no_blocking_duty(
+            self._repository, team_id, schedule, op.employee, second_slot,
+        )
+        assert_no_blocking_duty(
+            self._repository, team_id, schedule, op.other, first_slot,
+        )
         stored_reason = op.own_reason or reason
         self._repository.move_assignment(
             first["id"], team_id, second["slot_id"], reason=stored_reason,

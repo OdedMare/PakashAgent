@@ -119,7 +119,7 @@ class ManagerChatTools:
             role=first_named(request, roles) if read["intent"] == intent_reader.INTENT_WORKLOAD else "",
             commanders_only=any(word in request for word in ("מפקד", "רשצ", "רש\"צ", "רש״צ")),
             fewest=any(word in request for word in ("הכי מעט", "הכי פחות")),
-            away_focus="sick" if "חול" in request else (
+            away_focus="sick" if "חול" in request else "duty" if "תורנ" in request else (
                 "home" if any(word in request for word in ("בבית", "ביציאה", "יוצא")) else ""),
         )
         reply, steps, results, _ = handlers[read["intent"]](team_id, read)

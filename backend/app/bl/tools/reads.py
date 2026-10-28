@@ -58,6 +58,7 @@ class ToolReads:
                 "is_hard": row.get("is_hard", True),
                 "reason": text(row.get("reason")),
                 "source": text(row.get("source")),
+                "constraint_type": text(row.get("constraint_type")) or "availability",
             }
             for row in self._repository.availability(team_id, period[0], period[1])
         ]

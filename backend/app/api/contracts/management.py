@@ -1,6 +1,6 @@
 """The management area's overview: constraints, history, statistics."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -26,6 +26,7 @@ class Constraint(BaseModel):
     is_hard: bool = True
     reason: str = ""
     source: str = "manager"
+    constraint_type: Literal["availability", "duty"] = "availability"
 
 
 class ChangeEntry(BaseModel):

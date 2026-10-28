@@ -151,9 +151,10 @@ class WorkloadRanking(_RangeTool):
 class WhoIsAway(_RangeTool):
     """Who is not available on each date, and why.
 
-    Two kinds, kept apart because the manager reacts to them differently: a
-    group home on its cycle is the plan working, a constraint (sick, leave,
-    a recorded absence) is news. Read off `effective_availability`, the same
+    Three kinds, kept apart because the manager reacts to them differently: a
+    group home on its cycle is the plan working, a duty (תורנות) is somebody
+    busy elsewhere on base, and a constraint (sick, leave, a recorded
+    absence) is news. Read off `effective_availability`, the same
     rows the solver and the audit use, so this list cannot disagree with
     the board about who could have been placed.
     """
@@ -179,7 +180,8 @@ class WhoIsAway(_RangeTool):
                 "whole_day": False, "reasons": [],
             })
             cycle = text(row.get("source")) in _CYCLE_SOURCES or bool(row.get("derived_from"))
-            entry["kinds"].add("cycle" if cycle else "constraint")
+            duty = text(row.get("constraint_type")) == "duty"
+            entry["kinds"].add("duty" if duty else "cycle" if cycle else "constraint")
             shift = text(row.get("shift"))
             if shift:
                 entry["shifts"].add(shift)
@@ -195,7 +197,7 @@ class WhoIsAway(_RangeTool):
                 # A recorded absence is news even on a day the cycle also
                 # sends them home, so it names the day when both apply.
                 "employee": name, "whole_day": whole,
-                "kind": "constraint" if "constraint" in entry["kinds"] else "cycle",
+                "kind": next(kind for kind in ("constraint", "duty", "cycle") if kind in entry["kinds"]),
                 "shifts": [] if whole else sorted(entry["shifts"]),
                 "reasons": entry["reasons"],
             })

@@ -430,6 +430,9 @@ Warnings render as **non-blocking inline banners** on the schedule. They never
 gate a save, never block confirmation, and never present as errors. A schedule
 with warnings is a valid schedule the boss may knowingly accept
 ([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+An overlapping operational duty is not an advisory warning: the placement
+check marks it `blocking`, the confirmation action is disabled, and the server
+also refuses the write.
 
 ## Rules
 

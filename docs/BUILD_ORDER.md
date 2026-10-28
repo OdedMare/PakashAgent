@@ -136,8 +136,9 @@ End-to-end against a local Ollama:
 
 1. Run the intro interview; confirm the shift vocabulary is stored.
 2. Generate a week; check each assignment carries a reason.
-3. Deliberately break a rule; confirm a warning appears **and the schedule still
-   renders** — a blocked save means D3 was reversed.
+3. Deliberately break an ordinary rule; confirm a warning appears **and the
+   schedule still renders**. Then add an operational duty and confirm only an
+   overlapping placement is blocked.
 4. Import a sample sheet; confirm the interpretation screen appears and nothing
    persists until approved.
 5. Say "Dana's sick Thursday"; confirm the agent asks for a reason, justifies its

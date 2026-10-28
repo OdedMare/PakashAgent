@@ -94,8 +94,8 @@ class TeamAnswers:
             if focus == "sick":
                 rows = [row for row in rows if row["kind"] == "constraint"
                         and any("חול" in reason for reason in row["reasons"])]
-            elif focus == "home":
-                rows = [row for row in rows if row["kind"] == "cycle"]
+            elif focus in ("home", "duty"):
+                rows = [row for row in rows if row["kind"] == ("cycle" if focus == "home" else "duty")]
             if not rows:
                 continue
             if found["starts_on"] != found["ends_on"]:
@@ -103,12 +103,14 @@ class TeamAnswers:
             home = [row["employee"] for row in rows if row["kind"] == "cycle"]
             if home:
                 lines.append("· בבית לפי המחזור (%d): %s" % (len(home), ", ".join(home)))
-            lines += ["· %s — %s%s" % (
-                row["employee"], ", ".join(row["reasons"]) or "אילוץ",
+            lines += ["· %s%s — %s%s" % (
+                "בתורנות: " if row["kind"] == "duty" else "", row["employee"],
+                ", ".join(row["reasons"]) or ("תורנות" if row["kind"] == "duty" else "אילוץ"),
                 "" if row["whole_day"] else " (%s)" % ", ".join(row["shifts"]))
-                for row in rows if row["kind"] == "constraint"]
+                for row in rows if row["kind"] in ("constraint", "duty")]
         if not lines:
-            nobody = {"sick": "לא נרשם אף חולה", "home": "אף אחד לא בבית לפי המחזור"}
+            nobody = {"sick": "לא נרשם אף חולה", "home": "אף אחד לא בבית לפי המחזור",
+                      "duty": "אף אחד לא בתורנות"}
             return trace.reply("%s %s." % (nobody.get(focus, "לא רשום שמישהו חסר"), when))
         return trace.reply("\n".join(["מי לא נמצא %s:" % when] + _bounded(lines)))
 

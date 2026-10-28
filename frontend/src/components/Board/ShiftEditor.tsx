@@ -157,7 +157,9 @@ export function ShiftEditor({
       editing.employee !== employee);
 
   const active = !inactiveFrom[employee] || slotDate < inactiveFrom[employee];
-  const canSave = Boolean(employee && shiftName && slotDate && slot && !busy && active);
+  const canSave = Boolean(
+    employee && shiftName && slotDate && slot && !busy && active && !check?.blocking,
+  );
   const visibleCandidates = check?.candidates.filter((candidate) =>
     matchesFilter(candidate, filter, roles)
   ) ?? [];
@@ -317,7 +319,7 @@ export function ShiftEditor({
                 ))}
                 {visibleCandidates.length ? null : <span className="board-candidate-empty">אין חיילים בסינון הזה</span>}
               </div>
-              <small className="board-availability-note">אפשר לבחור גם חייל/ת עם התראה; הסיבה נשארת גלויה וההחלטה בידיך.</small>
+              <small className="board-availability-note">אפשר לבחור חייל/ת עם התראה רגילה; תורנות חוסמת אינה ניתנת לעקיפה.</small>
             </div>
           ) : checking ? <p className="board-availability-loading" role="status">בודק מי פנוי למשמרת…</p> : null}
 

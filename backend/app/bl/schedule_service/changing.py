@@ -6,6 +6,7 @@ from app.bl.schedule_service.constants import ACTION_MOVED, RECENT_CHANGES
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.operations import (
     OperationApplier,
+    assert_no_blocking_duty,
     moved_from,
     nothing_applied,
     preview,
@@ -115,6 +116,11 @@ class ChangeService:
         if slot is None:
             raise NotFoundError("המשמרת לא נמצאה בסידור")
         previous = find_assignment(schedule, assignment_id)
+        if previous is None:
+            raise NotFoundError("השיבוץ לא נמצא")
+        assert_no_blocking_duty(
+            self._repository, team_id, schedule, previous["employee"], slot,
+        )
         moved = self._repository.move_assignment(
             assignment_id, team_id, slot["id"], reason=agent_reason or reason,
             # Where the manager saw it: a shift somebody else moved in the

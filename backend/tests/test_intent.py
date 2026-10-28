@@ -209,6 +209,7 @@ from app.bl.intent import INTENT_AWAY, INTENT_WHO_WORKS, INTENT_WORKLOAD, week_i
     ("מי חולה היום", INTENT_AWAY),
     ("מי לא נמצא השבוע", INTENT_AWAY),
     ("מי בבית בשבת", INTENT_AWAY),
+    ("מי החיילים בתורנויות היום", INTENT_AWAY),
 ])
 def test_team_questions_are_read_without_a_name(sentence, intent):
     assert read(sentence, ROSTER, SHIFTS)["intent"] == intent
