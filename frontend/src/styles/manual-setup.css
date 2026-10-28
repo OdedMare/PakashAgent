@@ -71,6 +71,8 @@
 .manual-row { position: relative; display: grid; gap: 0.7rem; padding: 0.8rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .manual-row-foot { display: flex; align-items: center; gap: 0.75rem; }
 .manual-check { display: inline-flex; min-height: 44px; align-items: center; gap: 0.4rem; white-space: nowrap; font-size: 0.8rem; }
+.manual-weekend { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.75rem; }
+.manual-weekend .manual-field { width: 8rem; }
 .manual-shift-picks { display: flex; flex: 1; flex-wrap: wrap; gap: 0.35rem; }
 .manual-delete { position: absolute; inset-block-end: 0.65rem; inset-inline-end: 0.65rem; }
 .icon-button:disabled { opacity: 0.35; cursor: not-allowed; }

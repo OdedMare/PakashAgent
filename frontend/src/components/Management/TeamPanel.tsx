@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { EMPLOYEE_DRAG_TYPE } from "@/components/Board/dragData";
 import { DateInput } from "@/components/DateInput";
+import { weekendHeadcount, withWeekendHeadcount } from "@/lib/staffing";
 import type { Constraint, ShiftStats } from "@/types";
 
 import { formatDate } from "./Calendar";
@@ -226,7 +227,10 @@ export function TeamPanel({
                     {shift.requires_shift_manager ? " · נדרש מפקד/ת" : ""}
                   </span>
                 </span>
-                <span className="roster-load">תקן {shiftHeadcount(shift)}</span>
+                <span className="roster-load">
+                  תקן {shiftHeadcount(shift)}
+                  {weekendHeadcount(shift) !== null ? ` · סופ״ש ${weekendHeadcount(shift)}` : ""}
+                </span>
                 {onSaveProfile ? (
                   <button
                     type="button"
@@ -496,6 +500,12 @@ function ShiftForm({
   const [start, setStart] = useState(text(initial?.start_time));
   const [end, setEnd] = useState(text(initial?.end_time));
   const [headcount, setHeadcount] = useState(shiftHeadcount(initial));
+  const initialWeekend = weekendHeadcount(initial);
+  const [weekendOn, setWeekendOn] = useState(initialWeekend !== null);
+  const [weekend, setWeekend] = useState(initialWeekend ?? shiftHeadcount(initial));
+  // Staffing is rewritten only when the weekend fields were touched, so
+  // editing the hours never collapses per-day groups the interview recorded.
+  const [weekendTouched, setWeekendTouched] = useState(false);
   const [onCall, setOnCall] = useState(Boolean(initial?.is_on_call));
   const [shiftType, setShiftType] = useState(text(initial?.shift_type) || (onCall ? "on_call" : "regular"));
   const [purpose, setPurpose] = useState(text(initial?.purpose));
@@ -509,6 +519,9 @@ function ShiftForm({
         name: name.trim(), start_time: start, end_time: end,
         headcount, shift_type: shiftType, is_on_call: shiftType === "on_call", purpose,
         requires_shift_manager: requiresManager,
+        ...(weekendTouched
+          ? { staffing: withWeekendHeadcount(initial?.staffing, weekendOn ? weekend : null) }
+          : {}),
       });
     }}>
       <label>
@@ -526,7 +539,11 @@ function ShiftForm({
       </fieldset>
       <label><span>סוג משמרת</span><select value={shiftType} onChange={(event) => { setShiftType(event.target.value); setOnCall(event.target.value === "on_call"); }}><option value="regular">רגילה</option><option value="overlap">חפיפה</option><option value="on_call">כוננות</option></select></label>
       <label><span>ייעוד</span><input value={purpose} maxLength={120} onChange={(event) => setPurpose(event.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></label>
-      <label><span>תקן בסיסי</span><input type="number" min={1} max={100} value={headcount} onChange={(event) => setHeadcount(Number(event.target.value) || 1)} /></label>
+      <label><span>{weekendOn ? "תקן באמצע שבוע" : "תקן בסיסי"}</span><input type="number" min={1} max={100} value={headcount} onChange={(event) => setHeadcount(Number(event.target.value) || 1)} /></label>
+      <label className="profile-check"><input type="checkbox" checked={weekendOn} onChange={(event) => { setWeekendOn(event.target.checked); setWeekendTouched(true); }} /><span>תקן שונה בסופ״ש (שישי–שבת)</span></label>
+      {weekendOn ? (
+        <label><span>תקן בסופ״ש</span><input type="number" min={1} max={100} value={weekend} onChange={(event) => { setWeekend(Number(event.target.value) || 1); setWeekendTouched(true); }} /></label>
+      ) : null}
       <label className="profile-check"><input type="checkbox" checked={requiresManager} onChange={(event) => setRequiresManager(event.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
       <FormActions onCancel={onCancel} ready={Boolean(name.trim())} />
     </form>

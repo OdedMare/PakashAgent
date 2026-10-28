@@ -226,3 +226,32 @@ def test_rotation_configuration_rejects_unknown_patterns_and_bad_times():
         ProfileService(repo).update("team", workplace={
             "rotation_a_unavailability": [{"start_time": "29:00"}],
         })
+
+
+def test_weekend_staffing_group_survives_a_headcount_edit_and_drives_slots():
+    from app.bl.audit import required_headcount
+    from app.bl.scheduler import build_slots
+    import datetime
+
+    repo = _Repo()
+    result = ProfileService(repo).update("team", shifts=[{
+        "name": "בוקר", "start_time": "07:00", "end_time": "15:00",
+        "headcount": 4,
+        "staffing": [
+            {"days": [], "headcount": 2},
+            {"days": ["שישי", "שבת"], "headcount": 2, "required_roles": []},
+        ],
+    }])
+    staffing = result["shifts"][0]["staffing"]
+    assert staffing[0]["days"] == [] and staffing[0]["headcount"] == 4
+    assert staffing[1]["days"] == ["שישי", "שבת"]
+
+    # 2026-10-29 is a Thursday; Friday and Saturday follow it.
+    slots = build_slots(result, "2026-10-29", "2026-10-31")
+    assert [slot["headcount"] for slot in slots] == [4, 2, 2]
+    assert required_headcount(
+        result["shifts"], "בוקר", datetime.date(2026, 10, 31),
+    ) == 2
+    assert required_headcount(
+        result["shifts"], "בוקר", datetime.date(2026, 10, 29),
+    ) == 4

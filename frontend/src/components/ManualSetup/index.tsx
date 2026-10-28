@@ -15,6 +15,7 @@ import {
 import { useMemo, useState } from "react";
 
 import { DateInput } from "@/components/DateInput";
+import { weekendHeadcount, withWeekendHeadcount } from "@/lib/staffing";
 import { updateProfile } from "@/services/api";
 import type { TeamView, WorkplaceProfile } from "@/types";
 
@@ -353,6 +354,7 @@ export function ManualSetup({
                   <Field label="ייעוד"><input value={inputText(shift.purpose)} onChange={(e) => edit(setShifts, index, "purpose", e.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></Field>
                 </div>
                 <label className="manual-check"><input type="checkbox" checked={Boolean(shift.requires_shift_manager)} onChange={(e) => edit(setShifts, index, "requires_shift_manager", e.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
+                <WeekendStaffing shift={shift} onChange={(staffing) => edit(setShifts, index, "staffing", staffing)} />
                 <CheckboxGrid label="ימים" values={DAYS} selected={strings(shift.days)} onChange={(value) => edit(setShifts, index, "days", value)} />
                 <button type="button" className="icon-button subtle manual-delete" aria-label="מחיקת סוג משמרת" disabled={originalShifts.has(text(shift.name))} onClick={() => setShifts((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
               </article>
@@ -413,6 +415,21 @@ function PatternOptions({ selected, locked, onChange }: { selected: string[]; lo
     const required = locked.has(value);
     return <label key={value} title={required ? "המבנה משויך כרגע לאיש צוות" : undefined}><input type="checkbox" checked={selected.includes(value)} disabled={required} onChange={(event) => onChange(event.target.checked ? [...selected, value] : selected.filter((item) => item !== value))} /><span>{label}{required ? " · בשימוש" : ""}</span></label>;
   })}<small>רשות — אפשר להשאיר את כל האפשרויות כבויות.</small></fieldset>;
+}
+
+/** A weekend headcount that differs from the weekday one — e.g. four on a
+ *  weekday, two on שישי and שבת. Stored as a staffing group naming those days. */
+function WeekendStaffing({ shift, onChange }: { shift: Row; onChange: (staffing: Row[]) => void }) {
+  const weekend = weekendHeadcount(shift);
+  const base = number(shift.headcount, headcount(shift));
+  return (
+    <div className="manual-weekend">
+      <label className="manual-check"><input type="checkbox" checked={weekend !== null} onChange={(e) => onChange(withWeekendHeadcount(shift.staffing, e.target.checked ? base : null))} /><span>תקן שונה בסופ״ש (שישי–שבת)</span></label>
+      {weekend !== null ? (
+        <Field label="תקן בסופ״ש"><input type="number" min={1} max={100} value={weekend} onChange={(e) => onChange(withWeekendHeadcount(shift.staffing, Number(e.target.value) || 1))} /></Field>
+      ) : null}
+    </div>
+  );
 }
 
 function edit(setter: React.Dispatch<React.SetStateAction<Row[]>>, index: number, key: string, value: unknown) {
