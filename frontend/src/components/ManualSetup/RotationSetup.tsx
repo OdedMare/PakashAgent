@@ -2,11 +2,12 @@
 
 import { Plus, Trash2 } from "lucide-react";
 
-import { DateInput, shortDate } from "@/components/DateInput";
+import { DateInput } from "@/components/DateInput";
 import { TimeInput } from "@/components/TimeInput";
 import type { RotationClosureWindow, RotationPresenceRule } from "@/types";
 
 import { CheckboxGrid, Field } from "./fields";
+import { RotationCalendar } from "./RotationCalendar";
 
 export const CYCLES = {
   round: { label: "סבב", groups: ["א", "ב"], span: "מחזור של שני סופי־שבוע" },
@@ -18,6 +19,8 @@ const DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", 
 // Closure days are stored as offsets from the closing Saturday: a closure
 // may open as early as the Sunday before it (-6) and end as late as the
 // Friday after it (6).
+const START_DAYS = [-3, -2, -1, 0];
+const DEFAULT_START_DAY = -2;
 const END_DAYS = ["שבת", "ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי"];
 
 type Rows<T> = React.Dispatch<React.SetStateAction<T[]>>;
@@ -26,8 +29,8 @@ type Rows<T> = React.Dispatch<React.SetStateAction<T[]>>;
  *
  *  The manager anchors and times group א only. Whose weekend it is, and the
  *  hours every other group closes on, are derived from that by the server
- *  (`bl/rotation`); the dates shown beside the anchor are a preview of the
- *  one fact typed here, not a second cycle. Presence rules are the exception
+ *  (`bl/rotation`); the calendar is a preview of the one weekend clicked
+ *  into it, not a second cycle. Presence rules are the exception
  *  and stay per group — "ב is out on Tuesdays" says nothing about א. */
 export function CycleSetup({
   pattern,
@@ -39,6 +42,7 @@ export function CycleSetup({
   presence,
   onPresence,
   shiftNames,
+  handoverEnd,
 }: {
   pattern: Cycle;
   anchor: string;
@@ -49,10 +53,11 @@ export function CycleSetup({
   presence: RotationPresenceRule[];
   onPresence: Rows<RotationPresenceRule>;
   shiftNames: string[];
+  /** When the Sunday handover shift ends — where a new closure row stops. */
+  handoverEnd: string;
 }) {
   const { label, groups, span } = CYCLES[pattern];
   const [first, ...derived] = groups;
-  const saturday = saturdayOf(anchor);
   const others = derived.map((group) => `${group}׳`).join(" ו");
   const overridden = [...new Set(
     windows.filter((row) => row.pattern === pattern && row.group !== first).map((row) => row.group),
@@ -60,28 +65,37 @@ export function CycleSetup({
   const hasWindow = windows.some((row) => row.pattern === pattern && row.group === first);
   const hasPresence = presence.some((row) => row.pattern === pattern);
   const editWindow = (index: number, patch: Partial<RotationClosureWindow>) => onWindows((rows) => rows.map((row, i) => i === index ? { ...row, ...patch } : row));
+  // Days on base are set by the day the closure opens: the group not closing
+  // is home from then until the Sunday handover. Without a row the server's
+  // default applies, which opens on Thursday.
+  const regular = windows.findIndex((row) => row.pattern === pattern && row.group === first && !row.starts_on && !row.ends_on);
+  const startDay = regular >= 0 ? windows[regular].start_day : DEFAULT_START_DAY;
+  const setStartDay = (day: number) => {
+    if (regular >= 0) editWindow(regular, { start_day: day });
+    else if (day !== DEFAULT_START_DAY) onWindows((rows) => [...rows, { pattern, group: first, start_day: day, start_time: "00:00", end_day: 1, end_time: handoverEnd || "00:00", starts_on: "", ends_on: "" }]);
+  };
   const editPresence = (index: number, patch: Partial<RotationPresenceRule>) => onPresence((rows) => rows.map((row, i) => i === index ? { ...row, ...patch } : row));
 
   return (
     <article className={`rotation-cycle-card${pattern === "triplet" ? " is-triplet" : ""}`}>
       <header><strong>{label} {groups.join(" / ")}</strong><span>{span}</span></header>
 
-      <div className="rotation-anchor">
-        <Field label={`הסופ״ש שבו ${label} ${first}׳ סוגר`}>
-          <DateInput value={anchor} onChange={onAnchor} />
-        </Field>
-        <ol className="rotation-derived" aria-label={`הסגירות של ${label} לפי העוגן`}>
-          {groups.map((group, index) => (
-            <li key={group} className={index ? "is-derived" : undefined}>
-              <strong>{label} {group}׳</strong>
-              <span>{saturday ? `שבת ${shortDate(addDays(saturday, 7 * index))}` : index ? `${index === 1 ? "שבוע" : "שבועיים"} אחרי ${first}׳` : "העוגן"}</span>
-            </li>
-          ))}
-        </ol>
+      <div className="rotation-days day-cycle-presets" role="group" aria-label="ימים בבסיס ובבית">
+        <span>ימים בבסיס / בבית</span>
+        {START_DAYS.map((day) => {
+          const base = 7 * groups.length - (groups.length - 1) * (1 - day);
+          return (
+            <button type="button" key={day} className={`chip-button${day === startDay ? " is-selected" : ""}`}
+              title={`הקבוצה שלא סוגרת יוצאת הביתה ב${DAYS[day + 6]}`} onClick={() => setStartDay(day)}>
+              {base}/{7 * groups.length - base}
+            </button>
+          );
+        })}
       </div>
+      <RotationCalendar label={label} groups={groups} anchor={anchor} startDay={startDay} onAnchor={onAnchor} />
       {needsAnchor && !anchor
-        ? <p className="rotation-derived-note is-warning" role="status">יש אנשי צוות ב{label}, ובלי עוגן אי אפשר לבנות להם סידור.</p>
-        : <p className="rotation-hint">מגדירים רק את {first}׳ — {others} נגזר{derived.length > 1 ? "ות" : "ת"} ממנה, וחוזר חלילה כל {groups.length} שבועות.</p>}
+        ? <p className="rotation-derived-note is-warning" role="status">יש אנשי צוות ב{label}, ובלי עוגן אי אפשר לבנות להם סידור. לחצו על סופ״ש שבו {label} {first}׳ סוגר.</p>
+        : <p className="rotation-hint">{anchor ? `לחיצה על סופ״ש אחר מעבירה אליו את ${first}׳; ${others} נגזר${derived.length > 1 ? "ות" : "ת"} לבד.` : `לחצו על סופ״ש שבו ${label} ${first}׳ סוגר — השאר נצבע לבד.`}</p>}
 
       <section className="rotation-block">
         <header><strong>שעות הסגירה</strong><span>מגדירים פעם אחת, ל{label} {first}׳. {others} סוגר{derived.length > 1 ? "ות" : "ת"} באותן שעות, בסופ״ש שלה{derived.length > 1 ? "ן" : ""}.</span></header>
@@ -167,11 +181,4 @@ function addDays(iso: string, days: number): string {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   if (!match) return "";
   return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + days)).toISOString().slice(0, 10);
-}
-
-/** The Saturday closing the Sunday-to-Saturday week `iso` falls in — the
- *  same normalisation the server applies to a typed anchor. */
-function saturdayOf(iso: string): string {
-  const day = new Date(`${iso}T00:00:00Z`).getUTCDay();
-  return Number.isNaN(day) ? "" : addDays(iso, 6 - day);
 }

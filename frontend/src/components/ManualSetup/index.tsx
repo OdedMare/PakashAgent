@@ -155,6 +155,13 @@ export function ManualSetup({
     [employees, rotationMode],
   );
   const groupsOf = (pattern: string) => rotationGroups(pattern, dayCycles);
+  // A closure set from the calendar runs to the end of Sunday's first shift
+  // by the clock — the handover the server's default closure ends on.
+  const handoverEnd = useMemo(() => {
+    const timed = shifts.filter((shift) => text(shift.start_time) && text(shift.end_time));
+    timed.sort((a, b) => text(a.start_time).localeCompare(text(b.start_time)));
+    return timed.length ? text(timed[0].end_time) : "";
+  }, [shifts]);
   const availableExitPatterns = useMemo(
     () => new Set(["round", ...enabledExitPatterns, ...usedExitPatterns]),
     [enabledExitPatterns, usedExitPatterns],
@@ -317,6 +324,7 @@ export function ManualSetup({
                 presence={rotationPresence}
                 onPresence={setRotationPresence}
                 shiftNames={shiftNames}
+                handoverEnd={handoverEnd}
               />
             ))}
           </div>
