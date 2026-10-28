@@ -241,66 +241,30 @@ export function ManualSetup({
           <PatternOptions selected={enabledExitPatterns} locked={usedExitPatterns} onChange={setEnabledExitPatterns} />
         </SetupSection>
 
-        <SetupSection icon={<Repeat2 />} title="סבבים ותלתונים" hint="קודם מגדירים מי סוגר בסופ״ש עוגן בכל מחזור; אחר כך אפשר להוסיף זמני אי־זמינות קבועים לסבב א׳.">
-          <div className="rotation-pair" aria-label="הקשר בין סבב א לסבב ב">
-            <div><strong>סבב א׳</strong><span>אתם מגדירים את זמני אי־הזמינות.</span></div>
-            <Repeat2 aria-hidden="true" />
-            <div className="is-derived"><strong>סבב ב׳</strong><span>מחושב בשרת ואינו ניתן לעריכה נפרדת.</span></div>
-          </div>
-
-          <PatternOptions selected={enabledExitPatterns} locked={usedExitPatterns} onChange={setEnabledExitPatterns} />
-
-          <div className="rotation-anchors" aria-label="נקודות ההתחלה של מחזורי הסגירה">
-            <article className="rotation-anchor-card">
-              <header><strong>סבב א / ב</strong><span>מחזור של שני סופי־שבוע</span></header>
-              <div className="manual-grid three">
-                <Field label="מי סוגר בסופ״ש העוגן">
-                  <select value={roundFirstClosureGroup} onChange={(event) => setRoundFirstClosureGroup(event.target.value)}>
-                    {["א", "ב"].map((group) => <option key={group} value={group}>סבב {group}</option>)}
-                  </select>
-                </Field>
-                <Field label="סופ״ש עוגן (רשות)">
-                  <DateInput value={roundFirstClosureDate} onChange={setRoundFirstClosureDate} />
-                </Field>
-              </div>
-            </article>
-
+        <SetupSection icon={<Repeat2 />} title="סבבים ותלתונים" hint="סופ״ש העוגן קובע מי סוגר בכל מחזור. סבב ב׳ מחושב אוטומטית: זמין בדיוק כשסבב א׳ אינו זמין.">
+          <div className="rotation-anchors">
+            <ClosureAnchor unit="סבב" groups={["א", "ב"]} group={roundFirstClosureGroup} date={roundFirstClosureDate} onGroup={setRoundFirstClosureGroup} onDate={setRoundFirstClosureDate} />
             {availableExitPatterns.has("triplet") ? (
-              <article className="rotation-anchor-card is-triplet">
-                <header><strong>תלתון א / ב / ג</strong><span>מחזור של שלושה סופי־שבוע, בנפרד מהסבב</span></header>
-                <div className="manual-grid three">
-                  <Field label="מי סוגר בסופ״ש העוגן">
-                    <select value={tripletFirstClosureGroup} onChange={(event) => setTripletFirstClosureGroup(event.target.value)}>
-                      {["א", "ב", "ג"].map((group) => <option key={group} value={group}>תלתון {group}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="סופ״ש עוגן (רשות)">
-                    <DateInput value={tripletFirstClosureDate} onChange={setTripletFirstClosureDate} />
-                  </Field>
-                </div>
-              </article>
+              <ClosureAnchor unit="תלתון" groups={["א", "ב", "ג"]} group={tripletFirstClosureGroup} date={tripletFirstClosureDate} onGroup={setTripletFirstClosureGroup} onDate={setTripletFirstClosureDate} />
             ) : null}
           </div>
 
+          <p className="rotation-note">מתי סבב א׳ אינו זמין (רשות). ימים או משמרות שלא נבחרו — הכלל חל על כולם.</p>
           <div className="manual-list">
             {rotationAUnavailability.map((rule, index) => (
               <article className="manual-row rotation-rule" key={`rotation-a-${index}`}>
-                <div className="rotation-rule-head">
-                  <div><strong>תקופת אי־זמינות {index + 1}</strong><span>השארת ימים או משמרות ללא בחירה תחיל את הכלל על כולם.</span></div>
-                  <button type="button" className="icon-button subtle" aria-label={`מחיקת תקופת אי־זמינות ${index + 1}`} onClick={() => setRotationAUnavailability((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
-                </div>
-                <CheckboxGrid label="ימים שבהם סבב א׳ אינו זמין" values={DAYS} selected={strings(rule.days)} onChange={(value) => edit(setRotationAUnavailability, index, "days", value)} />
-                {shiftNames.length ? <CheckboxGrid label="משמרות (ללא בחירה = כל המשמרות)" values={shiftNames} selected={strings(rule.shifts)} onChange={(value) => edit(setRotationAUnavailability, index, "shifts", value)} /> : null}
+                <CheckboxGrid label="ימים" values={DAYS} selected={strings(rule.days)} onChange={(value) => edit(setRotationAUnavailability, index, "days", value)} />
+                {shiftNames.length ? <CheckboxGrid label="משמרות" values={shiftNames} selected={strings(rule.shifts)} onChange={(value) => edit(setRotationAUnavailability, index, "shifts", value)} /> : null}
                 <div className="manual-grid three">
-                  <Field label="משעה (רשות)"><input type="time" step={300} value={inputText(rule.start_time)} onChange={(event) => edit(setRotationAUnavailability, index, "start_time", event.target.value)} /></Field>
-                  <Field label="עד שעה (רשות)"><input type="time" step={300} value={inputText(rule.end_time)} onChange={(event) => edit(setRotationAUnavailability, index, "end_time", event.target.value)} /></Field>
-                  <Field label="סיבה / תיאור"><input value={inputText(rule.reason)} onChange={(event) => edit(setRotationAUnavailability, index, "reason", event.target.value)} placeholder="לדוגמה: יציאה קבועה" /></Field>
+                  <Field label="משעה"><input type="time" step={300} value={inputText(rule.start_time)} onChange={(event) => edit(setRotationAUnavailability, index, "start_time", event.target.value)} /></Field>
+                  <Field label="עד שעה"><input type="time" step={300} value={inputText(rule.end_time)} onChange={(event) => edit(setRotationAUnavailability, index, "end_time", event.target.value)} /></Field>
+                  <Field label="סיבה"><input value={inputText(rule.reason)} onChange={(event) => edit(setRotationAUnavailability, index, "reason", event.target.value)} placeholder="לדוגמה: יציאה קבועה" /></Field>
                 </div>
+                <button type="button" className="icon-button subtle manual-delete" aria-label="מחיקת זמן אי־זמינות" onClick={() => setRotationAUnavailability((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
               </article>
             ))}
           </div>
           <button type="button" className="ghost-button" onClick={() => setRotationAUnavailability((current) => [...current, { days: [], shifts: [], start_time: "", end_time: "", reason: "" }])}><Plus size={16} /> הוספת זמן שבו סבב א׳ אינו זמין</button>
-          {rotationAUnavailability.length === 0 ? <p className="rotation-empty">לא הוגדרו זמני אי־זמינות נוספים. לוח הסגירות עדיין מחושב מעוגני הסבב והתלתון.</p> : <p className="rotation-derived-note">סבב ב׳ יהיה זמין בדיוק בזמנים שסבב א׳ אינו זמין, ולא זמין בשאר מועדי הפעילות. החישוב מתבצע בשירות השיבוץ.</p>}
         </SetupSection>
 
         <SetupSection icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">
@@ -406,6 +370,22 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function CheckboxGrid({ label, values, selected, onChange }: { label: string; values: string[]; selected: string[]; onChange: (value: string[]) => void }) {
   return <fieldset className="manual-checkboxes"><legend>{label}</legend>{values.map((value) => <label key={value}><input type="checkbox" checked={selected.includes(value)} onChange={(event) => onChange(event.target.checked ? [...selected, value] : selected.filter((item) => item !== value))} /><span>{value}</span></label>)}</fieldset>;
+}
+
+function ClosureAnchor({ unit, groups, group, date, onGroup, onDate }: { unit: string; groups: string[]; group: string; date: string; onGroup: (value: string) => void; onDate: (value: string) => void }) {
+  return (
+    <article className="rotation-anchor-card">
+      <strong>{unit} {groups.join(" / ")}</strong>
+      <div className="manual-grid">
+        <Field label="מי סוגר בסופ״ש העוגן">
+          <select value={group} onChange={(event) => onGroup(event.target.value)}>
+            {groups.map((value) => <option key={value} value={value}>{unit} {value}</option>)}
+          </select>
+        </Field>
+        <Field label="תאריך העוגן (רשות)"><DateInput value={date} onChange={onDate} /></Field>
+      </div>
+    </article>
+  );
 }
 
 function PatternOptions({ selected, locked, onChange }: { selected: string[]; locked: Set<string>; onChange: (value: string[]) => void }) {
