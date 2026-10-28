@@ -200,6 +200,20 @@ def test_manual_picker_exposes_exit_pattern_and_overlap_status():
     assert candidate["is_overlap"] is True
 
 
+def test_manual_picker_lists_the_shift_types_each_person_can_work():
+    """The picker filters on "who can do this shift type" without parsing
+    Hebrew, so each candidate carries the roster's answer for every shift."""
+    profile = dict(PROFILE, employees=PROFILE["employees"] + [
+        {"name": "מיכל", "rotation_group": "א"},
+    ])
+    result = check(_schedule(), profile, "", MORNING, "2026-08-17")
+    by_name = {row["employee"]: row for row in result["candidates"]}
+    assert by_name[DANA]["eligible_shifts"] == [MORNING]
+    assert by_name[YOSSI]["eligible_shifts"] == [MORNING, EVENING]
+    assert by_name["מיכל"]["eligible_shifts"] == [MORNING, EVENING]
+    assert by_name["מיכל"]["rotation_group"] == "א"
+
+
 def test_an_ineligible_shift_is_reported_first():
     """Eligibility is not an audit warning, and is reported anyway.
 
@@ -218,6 +232,17 @@ def test_an_unrestricted_employee_is_eligible_everywhere():
     profile = dict(PROFILE, employees=[{"name": DANA}])
     result = check(_schedule(), profile, DANA, EVENING, "2026-08-17")
     assert result["eligible"] is True
+
+
+def test_a_trainee_with_no_team_is_eligible_for_a_role_restricted_shift():
+    """A נחפף/ת fills no seat, so a shift's roles do not shut them out."""
+    shifts = [dict(row, allowed_roles=["פריצה"]) for row in PROFILE["shifts"]]
+    trainee = {"name": DANA, "role": "נחפף", "counts_toward_staffing": False}
+    profile = dict(PROFILE, shifts=shifts, employees=[trainee])
+    assert check(_schedule(), profile, DANA, EVENING, "2026-08-17")["eligible"] is True
+
+    counted = dict(profile, employees=[dict(trainee, counts_toward_staffing=True)])
+    assert check(_schedule(), counted, DANA, EVENING, "2026-08-17")["eligible"] is False
 
 
 # -- what it does *not* report ---------------------------------------------

@@ -178,6 +178,10 @@ class MoveRequest(BaseModel):
     # Empty still means "the current period", which is what an older client
     # sends.
     schedule_id: str = ""
+    # Where the shift stood when it was dragged. A drag confirmed after
+    # somebody else already moved it is refused (409) instead of moving it
+    # again from wherever it went; empty skips the check (an older client).
+    from_slot_id: str = ""
 
 
 class ConstraintRequest(BaseModel):

@@ -32,9 +32,11 @@ that name no date as being about that day.
 
 The full initial profile, current availability (from a week ago, or the focused
 period's start if earlier), recurring constraints, rotations, standing
-preferences and recent changes accompany the conversation. Every round of one
-reply re-sends that context with the same clock and the round's tool results
-last, so the model server can reuse the part it already computed. Arbitrary
+preferences and recent changes accompany the conversation. The payload is
+serialised slowest-changing first — profile, schedule … conversation, this
+turn's request — and the minute clock closes the user turn, so a new turn
+reuses the prefix the model server cached for the last one, and every round
+of one reply re-sends the same context with the round's tool results last. Arbitrary
 written policies are interpreted by the model; supported countable rules are
 also checked by the existing deterministic audit. Suggestions prefer compliant
 candidates. Exceptions are shown and require a separate checkbox, and do not
@@ -57,7 +59,11 @@ A plain absence report for one named employee ("עודד חולה בשני וש�
 when dates are missing or when a bare weekday could mean "every week", and
 prepares one plan: the person off every affected shift, the fairest clean
 cover on each (hours, then shifts, then nights, recounted after every pick)
-and an absence constraint for every date. The alternatives are shown under the
+and an absence constraint for every date. A bare end date ("רותי חולה עד
+31.12") runs from the earliest other day the sentence names, or from today;
+a span may run up to 120 days. When the shifts sit in several stored periods,
+the earliest period is planned, the constraint is saved for every date, and
+the shifts left in later periods are listed. The alternatives are shown under the
 plan; choosing one rebuilds it in code. The plan goes through the same
 `ChatPlanBuilder.prepare` checks and the same approval. The replacement tab
 (`GET /api/agent/replacements`, read-only) shows the same ranking and sends
@@ -69,7 +75,13 @@ total tokens plus the number of model rounds in `payload._usage`.
 A plan the server refuses, such as an unknown slot, a period that is already
 published, or a range outside the period, is handed back to the model as a
 `plan_check` result. The model gets two chances to correct it before the turn
-fails. A clear manager instruction needs no separate justification (D26).
+fails, and a turn that still fails tells the manager nothing was changed. A
+refused constraint names its row, the offending value and the valid names or
+shifts, so the model repairs that one row rather than resending the plan;
+code reads the forms that need no guessing (whole-day words as an empty
+shift, "8" as 08:00, an exact repeated row once). A model-picked cover for a
+seat the same plan vacates is dropped and the solver fills it; only a pick
+that replaces nobody is asked about. A clear manager instruction needs no separate justification (D26).
 When no reason was supplied, the actual request is recorded as the audit reason;
 the agent explains its choices separately. A request for an unnecessary reason
 is handed back to the model for correction. Essential missing targets or dates
@@ -98,7 +110,9 @@ the JSON as it is written and saves it on the working message as
 `payload.draft` a few times a second. Every saved check, draft and finished
 turn also publishes a bare `chat` signal on the manager's existing SSE line
 (`common/events.py`, D29), and the browser re-reads the turn at once; the
-one-second poll stays underneath for a stream a proxy buffers. A draft is
+poll stays underneath — every 5 seconds while the stream is connected, every
+second after a stream error, and a (re)connect re-reads once for anything
+missed. A draft is
 shown only on a `working` message and is replaced by the finished content —
 the plan, the checks and the server's corrections still decide what the turn
 says. A server that refuses `stream` is asked the same ladder rung again
@@ -155,8 +169,9 @@ The conversation supports one plan kind per approval. A request to add an
 employee and then schedule a week proceeds in two approvals. Ordinary changes
 have the existing 40-operation ceiling; generation previews can cover up to
 63 days. Existing published schedules must return to draft before editing.
-The autonomous copilot console has been removed. Invisible automatic
-briefings are disabled for this surface.
+The autonomous copilot console and the automatic briefings have been removed.
+Builds the chat prepares use the saved solver settings and the translation
+cache, like a build started from the board.
 
 ## Code and verification
 
@@ -264,6 +279,13 @@ paths, so reproduce and verify the defect on both relevant entry points.
 
 ### Verified implementation gaps
 
+> **Status:** recorded at the interview; several are since closed. Departure
+> is an effective `inactive_from` date (`retire` plans, the roster's
+> "הוצאה מהסגל"); shift restructuring is the chat's vocabulary rebuild
+> (`bl/chat_lifecycle.py`); deleting a shift type archives it; the full-period
+> `Scheduler.generate` is gone, and every build goes through the solver
+> (D34). The remaining bullets are kept as written.
+
 - `profile_service.validation.keep_existing_names` rejects removal of employee
   and shift names. Departures and replacement of a shift vocabulary need explicit
   lifecycle/migration operations, rather than dropping the identity guard on
@@ -271,8 +293,8 @@ paths, so reproduce and verify the defect on both relevant entry points.
 - `CHAT_SCHEMA`, `ChatPlan` and `ManagerChatService.apply` support one plan kind
   at a time. Retirement and shift restructuring require a profile change plus
   schedule changes in the same approval transaction.
-- Existing generation retains saved slot definitions. `_prepare_generation`
-  refuses assignments with new shift names outside the saved grid, while
+- Existing generation retains saved slot definitions. Generation preparation
+  refused assignments with new shift names outside the saved grid, while
   `_commit_generation` replaces slots only for a newly created period. Updating
   the profile alone cannot migrate an existing draft to the new shift structure.
 - `start_chat_turn` supersedes pending proposals when any message is sent.

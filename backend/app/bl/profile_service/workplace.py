@@ -3,6 +3,7 @@
 import datetime
 from typing import Any, List
 
+from app.bl.profile_service import day_cycles as day_cycle_rules
 from app.bl.profile_service.validation import text, text_list, valid_time
 from app.common.errors import AgentError
 from app.bl.shared import weekday_key
@@ -51,13 +52,15 @@ def workplace(value: Any) -> dict:
     })
     for pattern, groups in _GROUPS.items():
         _pattern_anchor(result, pattern, groups)
+    result["day_cycles"] = day_cycle_rules.day_cycles(result.get("day_cycles") or [])
+    known = dict(_GROUPS, **day_cycle_rules.groups_by_pattern(result["day_cycles"]))
     for field in ("rotation_closure_windows", "rotation_presence"):
         if field in result:
-            result[field] = _group_rules(result[field], field)
+            result[field] = _group_rules(result[field], field, known)
     return result
 
 
-def _group_rules(value: Any, field: str) -> List[dict]:
+def _group_rules(value: Any, field: str, known: dict) -> List[dict]:
     if not isinstance(value, list):
         raise AgentError("הגדרות הנוכחות של הסבבים אינן תקינות")
     result = []
@@ -66,8 +69,10 @@ def _group_rules(value: Any, field: str) -> List[dict]:
             raise AgentError("הגדרת קבוצה אינה תקינה")
         row = dict(raw)
         pattern, group = text(row.get("pattern")), text(row.get("group"))
-        if group not in _GROUPS.get(pattern, ()):
+        if group not in known.get(pattern, ()):
             raise AgentError("הקבוצה אינה מתאימה לסבב או לתלתון")
+        if field == "rotation_closure_windows" and pattern not in _GROUPS:
+            raise AgentError("שעות סגירה מוגדרות רק לסבב ולתלתון")
         row.update(pattern=pattern, group=group)
         for key in ("starts_on", "ends_on"):
             row[key] = text(row.get(key))

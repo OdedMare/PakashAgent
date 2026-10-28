@@ -15,8 +15,8 @@ from typing import Callable, Optional
 
 from app.common.errors import AuthError, ForbiddenError
 from app.common.sessions import (
-    ADMIN_COOKIE_NAME, COOKIE_NAME, ROLE_BOSS, ROLE_EMPLOYEE, issue, read,
-    read_admin,
+    ADMIN_COOKIE_NAME, COOKIE_NAME, MANAGER_COOKIE_NAME, ROLE_BOSS,
+    ROLE_EMPLOYEE, issue, read, read_admin,
 )
 
 # How long a team's active/suspended answer is trusted before it is asked
@@ -179,7 +179,7 @@ class Guards:
                     or not owner.get("manager_id"):
                 owner = dict(session, manager_id=secrets.token_urlsafe(24))
                 response.set_cookie(
-                    "pakash_manager",
+                    MANAGER_COOKIE_NAME,
                     issue(self._secret, session["team_id"], ROLE_BOSS, 365,
                           manager_id=owner["manager_id"]),
                     httponly=True, samesite="lax", max_age=365 * 86400,

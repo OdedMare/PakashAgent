@@ -84,7 +84,13 @@ function BossSurface({
       busy={state.busy}
       onLogout={state.logout}
       onRotateLink={state.rotateLink}
-      onOpenManualSetup={() => setEditingSetup(true)}
+      onOpenManualSetup={async () => {
+        // The profile and its revision were read at sign-in; the board,
+        // the chat and the roster have saved over it since. Setup reads its
+        // form from them once, on mount, and names the revision on save.
+        await state.refresh();
+        setEditingSetup(true);
+      }}
     />
   );
 }

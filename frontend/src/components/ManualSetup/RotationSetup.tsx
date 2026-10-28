@@ -9,7 +9,7 @@ import type { RotationClosureWindow, RotationPresenceRule, RotationWeekend } fro
 
 import { ShapePicker, WindowFields } from "./ClosureShape";
 import { addDays, saturdayOf, shapeOf, shapeRow, windowSentence } from "./closureShapes";
-import type { Clock, Shape } from "./closureShapes";
+import type { Shape } from "./closureShapes";
 import { CheckboxGrid, Field } from "./fields";
 import { RotationPreview } from "./RotationPreview";
 
@@ -36,7 +36,7 @@ type Rows<T> = React.Dispatch<React.SetStateAction<T[]>>;
  *  group and sit under "מתקדם". */
 export function CycleSetup({
   pattern, anchor, onAnchor, needsAnchor, windows, onWindows, presence, onPresence,
-  shiftNames, clock, preview, previewLoading,
+  shiftNames, handoverEnd, preview, previewLoading,
 }: {
   pattern: Cycle;
   anchor: string;
@@ -47,7 +47,8 @@ export function CycleSetup({
   presence: RotationPresenceRule[];
   onPresence: Rows<RotationPresenceRule>;
   shiftNames: string[];
-  clock: Clock;
+  /** When Sunday's first shift ends — where a closure set here stops. */
+  handoverEnd: string;
   preview: RotationWeekend[] | undefined;
   previewLoading: boolean;
 }) {
@@ -60,19 +61,19 @@ export function CycleSetup({
   const regular = regularIndex >= 0 ? windows[regularIndex] : undefined;
   // "ימים ושעות אחרים" stays chosen even while its values match a shape.
   const [custom, setCustom] = useState(false);
-  const shape = custom && regular ? "custom" : shapeOf(regular, clock);
+  const shape = custom && regular ? "custom" : shapeOf(regular, handoverEnd);
   const overridden = [...new Set(windows.filter((row) => row.pattern === pattern && row.group !== first).map((row) => row.group))];
   const base = { pattern, group: first, starts_on: "", ends_on: "" } as const;
 
   const setShape = (next: Shape) => { setCustom(next === "custom"); onWindows((rows) => {
-    const row = shapeRow(next, clock, regular && next === "custom" ? regular : base);
+    const row = shapeRow(next, handoverEnd, regular && next === "custom" ? regular : base);
     const kept = rows.filter((item) => !(mine(item) && !dated(item)));
     return row ? [...kept, row as RotationClosureWindow] : kept;
   }); };
   const editRow = (index: number, patch: Partial<RotationClosureWindow>) => onWindows((rows) => rows.map((row, i) => i === index ? { ...row, ...patch } : row));
   const addException = () => {
     const next = preview?.find((weekend) => weekend.saturday >= todayIso())?.saturday ?? saturdayOf(todayIso());
-    onWindows((rows) => [...rows, { ...(shapeRow("friday", clock, base) as RotationClosureWindow), starts_on: next, ends_on: next, note: "" }]);
+    onWindows((rows) => [...rows, { ...(shapeRow("friday", handoverEnd, base) as RotationClosureWindow), starts_on: next, ends_on: next, note: "" }]);
   };
 
   return (
@@ -86,14 +87,14 @@ export function CycleSetup({
       </section>
 
       <section className="rotation-step">
-        <header><b>2</b><div><strong>כמה זמן נמשכת סגירה רגילה?</strong><span>חל על כל הקבוצות, כל אחת בסופ״ש שלה.</span></div></header>
+        <header><b>2</b><div><strong>{pattern === "round" ? "איזה סוג סבב?" : "כמה זמן נמשכת סגירה רגילה?"}</strong><span>ימים בבסיס / ימים בבית. חל על כל הקבוצות, כל אחת בתורה.</span></div></header>
         <ShapePicker name={`shape-${pattern}`} value={shape} groups={groups.length} onChange={setShape} />
         {regular ? (
           <>
             <p className="rotation-sentence">{label} {first}׳ (וכל קבוצה בתורה) בבסיס <b>{windowSentence(regular)}</b>.</p>
             <WindowFields row={regular} showDays={shape === "custom"} onChange={(patch) => editRow(regularIndex, patch)} />
           </>
-        ) : <p className="rotation-sentence">מחמישי בבוקר עד אחרי המשמרת הראשונה של יום ראשון — ברירת המחדל.</p>}
+        ) : <p className="rotation-sentence">ברירת המחדל: הסגירה מחמישי עד אחרי המשמרת הראשונה של יום ראשון.</p>}
         {overridden.length ? (
           <p className="rotation-derived-note">
             ל{label} {overridden.map((group) => `${group}׳`).join(" ו")} נשמרו בעבר שעות נפרדות, והן גוברות על השעות של {first}׳.{" "}
@@ -105,7 +106,7 @@ export function CycleSetup({
       <section className="rotation-step">
         <header><b>3</b><div><strong>סופ״שים חריגים</strong><span>חג, אירוע או סופ״ש שבו יוצאים בשעה אחרת. הסבב לא זז — רק השעות של אותו סופ״ש משתנות.</span></div></header>
         {windows.map((row, index) => mine(row) && dated(row)
-          ? <ExceptionRow key={index} row={row} clock={clock} groups={groups.length} preview={preview} onChange={(patch) => editRow(index, patch)} onRemove={() => onWindows((rows) => rows.filter((_, i) => i !== index))} />
+          ? <ExceptionRow key={index} row={row} handoverEnd={handoverEnd} groups={groups.length} preview={preview} onChange={(patch) => editRow(index, patch)} onRemove={() => onWindows((rows) => rows.filter((_, i) => i !== index))} />
           : null)}
         <button type="button" className="ghost-button" onClick={addException}><CalendarPlus size={16} /> הוספת סופ״ש חריג</button>
       </section>
@@ -120,13 +121,13 @@ export function CycleSetup({
   );
 }
 
-function ExceptionRow({ row, clock, groups, preview, onChange, onRemove }: {
-  row: RotationClosureWindow; clock: Clock; groups: number; preview: RotationWeekend[] | undefined;
+function ExceptionRow({ row, handoverEnd, groups, preview, onChange, onRemove }: {
+  row: RotationClosureWindow; handoverEnd: string; groups: number; preview: RotationWeekend[] | undefined;
   onChange: (patch: Partial<RotationClosureWindow>) => void; onRemove: () => void;
 }) {
   const single = row.starts_on === row.ends_on;
   const [custom, setCustom] = useState(false);
-  const shape = custom ? "custom" : shapeOf(row, clock);
+  const shape = custom ? "custom" : shapeOf(row, handoverEnd);
   const owner = single ? preview?.find((weekend) => weekend.saturday === row.starts_on) : undefined;
   return (
     <article className="manual-row rotation-rule">
@@ -149,7 +150,7 @@ function ExceptionRow({ row, clock, groups, preview, onChange, onRemove }: {
       <button type="button" className="rotation-link" onClick={() => onChange(single ? { ends_on: row.starts_on ? addDays(row.starts_on, 14) : "" } : { ends_on: row.starts_on })}>
         {single ? "להחיל על כמה סופ״שים ברצף" : "רק סופ״ש אחד"}
       </button>
-      <ShapePicker name={`exception-${row.starts_on}-${row.note}`} value={shape} groups={groups} onChange={(next) => { setCustom(next === "custom"); onChange(shapeRow(next, clock, row, true) ?? {}); }} />
+      <ShapePicker name={`exception-${row.starts_on}-${row.note}`} value={shape} groups={groups} onChange={(next) => { setCustom(next === "custom"); onChange(shapeRow(next, handoverEnd, row, true) ?? {}); }} />
       <WindowFields row={row} showDays={shape === "custom"} onChange={onChange} />
     </article>
   );

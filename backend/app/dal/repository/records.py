@@ -2,6 +2,7 @@
 
 from typing import List, Optional
 
+from app.common.actor import current_actor
 from app.common.errors import AgentError, NotFoundError
 from app.dal.repository.base import RepositoryBase, new_id
 from app.dal.repository.schedule_vocabulary import (
@@ -170,15 +171,18 @@ class ChangeLogRepository(RepositoryBase):
         reason: str = "", agent_reason: str = "",
     ) -> dict:
         """Append one entry. Both reasons are stored because they answer
-        different questions (D8)."""
+        different questions (D8); `actor` is who was acting, from
+        `common/actor.py` rather than from every caller."""
         row_id = new_id()
         self._execute("""
             INSERT INTO change_log (
                 id, team_id, schedule_id, action, employee,
-                replaced_employee, slot_date, shift_name, reason, agent_reason
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                replaced_employee, slot_date, shift_name, reason, agent_reason,
+                actor
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, (row_id, team_id, schedule_id, action, employee,
-              replaced_employee, slot_date, shift_name, reason, agent_reason))
+              replaced_employee, slot_date, shift_name, reason, agent_reason,
+              current_actor()))
         return self._one(
             "SELECT * FROM change_log WHERE id=%s AND team_id=%s", (row_id, team_id),
         )

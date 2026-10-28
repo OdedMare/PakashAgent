@@ -70,14 +70,25 @@ def allowed_roles(shift: Optional[dict]) -> list[str]:
     return [text(role) for role in rows if text(role)] if isinstance(rows, list) else []
 
 
-def role_qualified(person: dict, shift: Optional[dict]) -> bool:
+def role_qualified(person: dict, shift: Optional[dict],
+                   declared: Optional[list] = None, shadow: bool = False) -> bool:
     """Whether the person's role lets them work this shift at all.
 
     A shift naming no `allowed_roles` restricts nobody, the same way an
     empty `eligible_shifts` does on the person's side.
+
+    `allowed_roles` says who may fill a shift's seats, and a נחפף/ת fills
+    none. One whose role names a team keeps to that team's shifts; one with
+    no team yet -- whose roles qualify for none of the `declared` shifts,
+    "נחפף" being the usual case -- may stand any shift, beside a trainer
+    who is qualified for it (`solver.rules._shadows`). Without this they
+    could never be placed anywhere.
     """
     allowed = allowed_roles(shift)
-    return not allowed or bool(person_roles(person) & set(allowed))
+    if not allowed or person_roles(person) & set(allowed):
+        return True
+    return shadow and declared is not None and not any(
+        role_qualified(person, row) for row in declared)
 
 
 def warning_key(warning: dict) -> tuple:

@@ -3,21 +3,20 @@
 import { TimeInput } from "@/components/TimeInput";
 import type { RotationClosureWindow } from "@/types";
 
-import { DAY_NAMES, shapeLabel } from "./closureShapes";
+import { DAY_NAMES, SHAPES, shapeLabel } from "./closureShapes";
 import type { Shape } from "./closureShapes";
 import { Field } from "./fields";
 
-const SHAPES: Shape[] = ["thursday", "friday", "week", "custom"];
 // Closure days are stored as offsets from the closing Saturday: a closure
 // may open as early as the Sunday before it (-6) and end as late as the
 // Friday after it (6).
 const START_DAYS = DAY_NAMES.map((day, index) => ({ value: index - 6, label: day }));
 const END_DAYS = [{ value: 0, label: "שבת" }, ...DAY_NAMES.slice(0, 6).map((day, index) => ({ value: index + 1, label: `${day} שאחרי` }))];
 
-/** Four large choices instead of four bare fields: how long a closure runs. */
+/** The round types as large choices instead of four bare fields. */
 export function ShapePicker({ name, value, groups, onChange }: { name: string; value: Shape; groups: number; onChange: (shape: Shape) => void }) {
   return (
-    <div className="closure-shapes" role="radiogroup" aria-label="משך הסגירה">
+    <div className="closure-shapes" role="radiogroup" aria-label="סוג הסבב">
       {SHAPES.map((shape) => {
         const { title, detail } = shapeLabel(shape, groups);
         return (

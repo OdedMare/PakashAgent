@@ -64,8 +64,12 @@ def employee_options(
     )
     load = values.hours_by_employee(schedule, profile)
     day = parse_date(slot_date)
+    shift_names = [
+        values.text(row.get("name")) for row in values.shifts(profile)
+        if values.text(row.get("name"))
+    ]
     options = [
-        _option(context, person, shift_name, slot_date, day, load)
+        _option(context, person, shift_name, slot_date, day, load, shift_names)
         for person in context.employees if values.text(person.get("name"))
     ]
     options.sort(key=lambda item: (
@@ -74,7 +78,7 @@ def employee_options(
     return options
 
 
-def _option(context, person, shift_name, slot_date, day, load) -> dict:
+def _option(context, person, shift_name, slot_date, day, load, shift_names) -> dict:
     name = values.text(person.get("name"))
     exit_pattern = rotation.exit_pattern(context.profile, person)
     rotation_group = values.text(person.get("rotation_group"))
@@ -88,7 +92,14 @@ def _option(context, person, shift_name, slot_date, day, load) -> dict:
         "can_train": bool(person.get("can_train")),
         "is_overlap": values.text(person.get("service_type")) == "overlap",
         "exit_pattern": exit_pattern,
-        "rotation": rotation.label(_cycle_of(context.profile, person), rotation_group)
+        # The shift types the roster lets this person work, so the picker
+        # can narrow to "who can do nights" without a second round trip.
+        "eligible_shifts": [
+            item for item in shift_names
+            if values.is_eligible(context.profile, name, item)
+        ],
+        "rotation_group": rotation_group,
+        "rotation": rotation.label(_cycle_of(context.profile, person), rotation_group, context.profile)
         or _PATTERN_LABELS.get(exit_pattern, ""),
         "closing": bool(
             day is not None
@@ -103,7 +114,7 @@ def _cycle_of(profile: dict, person: dict) -> str:
     """Which cycle a person turns on -- ג can only be a תלתון, so the label
     needs the cycle, not just the letter."""
     pattern = rotation.exit_pattern(profile, person)
-    if pattern in ("round", "triplet", "hamshushim", "shushim"):
+    if pattern in ("round", "triplet", "hamshushim", "shushim") or rotation.is_day_cycle(pattern):
         return pattern
     if values.text(person.get("rotation_group")) == "ג":
         return "triplet"

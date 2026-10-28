@@ -140,11 +140,15 @@ class ScheduleReader:
         lists are read straight from the repository rather than through
         `view`.
         """
+        # Read before the profile, so a save landing between the two reads
+        # makes the form stale rather than its revision newer than its data.
+        revision = self._repository.team_profile_revision(team_id)
         profile = self._context.profile(team_id)
         schedule = self.current(team_id, role)
         return {
             "today": israel_today().isoformat(),
             "profile": profile,
+            "profile_revision": revision,
             "employees": rows.employees(profile),
             "shifts": rows.shifts(profile),
             "schedule": schedule,

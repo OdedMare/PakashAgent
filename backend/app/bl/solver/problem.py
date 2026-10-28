@@ -70,7 +70,7 @@ class Problem:
     def _check_pin(self, row: dict) -> None:
         if row["employee"] not in self.people:
             raise AgentError("עובד/ת בשיבוץ החובה לא נמצא/ה בצוות")
-        if not eligible(self.people[row["employee"]], row["shift"], self.shifts.get(row["shift"])):
+        if not self._eligible(row["employee"], row["shift"]):
             raise AgentError("%s אינו/ה כשיר/ה למשמרת %s" % (row["employee"], row["shift"]))
         if self._blocked(row["employee"], self.keys[(row["shift"], row["date"])]):
             raise AgentError("שיבוץ החובה של %s ב-%s סותר אילוץ קשיח, נוכחות קבוצה, סבב או תלתון"
@@ -110,9 +110,13 @@ class Problem:
 
     # -- legality -----------------------------------------------------------
 
+    def _eligible(self, name: str, shift: str) -> bool:
+        return eligible(self.people[name], shift, self.shifts.get(shift),
+                        list(self.shifts.values()), name in self.shadows)
+
     def _legal(self, name: str, index: int) -> bool:
         slot = self.slots[index]
-        if not eligible(self.people[name], slot["shift_name"], self.shifts.get(slot["shift_name"])):
+        if not self._eligible(name, slot["shift_name"]):
             return False
         if any(row["employee"] == name for row in self.fixed_on(index)):
             return False

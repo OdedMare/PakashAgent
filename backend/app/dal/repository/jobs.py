@@ -8,15 +8,25 @@ from contextlib import contextmanager
 
 from psycopg.types.json import Jsonb
 
+from app.common.actor import current_actor
 from app.common.errors import NotFoundError
 from app.dal.database import bind_job_connection, connect
 from app.dal.repository.base import RepositoryBase, new_id
 
 
 _COMPLETE = "complete"
+# How many candidates one claim looks at. Running jobs a live worker holds
+# are skipped by their advisory lock, so this only has to exceed how many
+# can be running at once; without a bound every poll locked the whole queue,
+# and a second worker polling meanwhile skipped all of it and found nothing.
+_CLAIM_WINDOW = 50
 
 
 def enqueue(connection, team_id, key, kind, payload):
+    # Whoever queued it acts when it runs: the worker restores this, so a
+    # build's change-log rows name the manager who started it.
+    if current_actor() and "actor" not in payload:
+        payload = dict(payload, actor=current_actor())
     return connection.execute("""
         INSERT INTO copilot_jobs (id, team_id, dedupe_key, kind, payload)
         VALUES (%s,%s,%s,%s,%s)
@@ -112,14 +122,18 @@ class JobsRepository(RepositoryBase):
         }.get(lane)
         if lane_sql is None:
             raise ValueError("Unknown worker lane: %s" % lane)
+        # Queued before running: a running row is claimable only when its
+        # worker died, and live ones would otherwise fill the window first.
         candidates = connection.execute("""
             SELECT id, kind, payload FROM copilot_jobs
             WHERE status IN ('queued','running') AND run_after <= NOW()
             %s
-            ORDER BY CASE kind WHEN 'manager_chat' THEN 0 WHEN 'generation' THEN 1 ELSE 2 END,
+            ORDER BY status='running',
+                CASE kind WHEN 'manager_chat' THEN 0 WHEN 'generation' THEN 1 ELSE 2 END,
                 run_after, created_at
+            LIMIT %d
             FOR UPDATE SKIP LOCKED
-        """ % lane_sql).fetchall()
+        """ % (lane_sql, _CLAIM_WINDOW)).fetchall()
         for candidate in candidates:
             locked = connection.execute(
                 "SELECT pg_try_advisory_lock(hashtextextended(current_schema() || %s, 0)) AS locked",
@@ -175,6 +189,19 @@ class JobsRepository(RepositoryBase):
             WHERE id=%s
         """, ("queued" if retry else "failed" if error else "complete",
               error[:2000], retry, retry, job_id))
+
+    def purge_finished_jobs(self, older_than_days=30):
+        """Delete finished jobs past `older_than_days`; every chat turn is a
+        job, so the table otherwise only grows. A build's progress lives on
+        its schedule and a turn's on its message, so nothing reads these."""
+        with connect(self._store) as connection:
+            deleted = connection.execute("""
+                DELETE FROM copilot_jobs
+                WHERE status IN ('complete','failed')
+                    AND finished_at < NOW() - make_interval(days => %s)
+            """, (int(older_than_days),)).rowcount
+            connection.commit()
+        return deleted
 
     def generation_activity(self, schedule_id, team_id, activity):
         self._execute("""

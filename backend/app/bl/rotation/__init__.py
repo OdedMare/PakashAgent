@@ -27,16 +27,18 @@ the one thing that stays per group.
 | `closures.py` | One person's closure days; the handover; `holds` |
 | `views.py` | Per-date and per-weekend views |
 | `presence.py` | Group presence and per-slot closure eligibility |
+| `day_cycles.py` | Day-based cycles (11/3, 12/2, שבוע־שבוע…): home stretches per group |
 | `vocabulary.py` | Groups, labels, patterns, date helpers |
 """
 
 from app.bl.rotation.closures import closure_days, handover_shifts, holds
 from app.bl.rotation.cycle import closing_group, configuration_errors, cycle
+from app.bl.rotation.day_cycles import is_day_cycle
 from app.bl.rotation.views import by_date, schedule_for_model, weekend_preview
 from app.bl.rotation.vocabulary import exit_pattern, label
 
 __all__ = [
     "by_date", "closing_group", "closure_days", "configuration_errors",
-    "cycle", "exit_pattern", "handover_shifts", "holds", "label",
+    "cycle", "exit_pattern", "is_day_cycle", "handover_shifts", "holds", "label",
     "schedule_for_model", "weekend_preview",
 ]

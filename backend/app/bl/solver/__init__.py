@@ -16,9 +16,10 @@ schedules the pick may differ from one build to the next.
 | `model.py` | `Model`: the CP-SAT model, its variables and priced terms; the weights |
 | `rules.py` | Seats, roles, the shift manager, נחפפים beside a trainer, rest, runs of days, weekly hours |
 | `requests.py` | Structured requests (`bl/schedule_requests.py`) and soft availability |
-| `fairness.py` | Closers, hours and nights spread to per-person targets, a day off between shifts |
+| `fairness.py` | Closers, shifts and nights spread to per-person targets, the longest rest between shifts |
 | `stability.py` | Absorbing a change into an existing board: moving as few rows as it needs |
 | `solve.py` | Solving, reasons, notes, warnings and metrics |
+| `cpu_budget.py` | How many solver threads the process runs at once; a solve waits for its share |
 | `rows.py` | Row and roster helpers |
 """
 
