@@ -3569,3 +3569,88 @@ button.week-rail-day:focus-visible {
     animation: none;
   }
 }
+
+/* The manual picker's filters: a name search, the exit-pattern chips, a row
+   of selects (group, shift type a person may work, role) and yes/no chips.
+   All of it narrows the list the check already returned. */
+.board-candidate-filtering {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.board-candidate-search {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0 0.6rem;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.board-candidate-search:focus-within {
+  border-color: var(--primary);
+  box-shadow: var(--focus);
+}
+
+.board-candidate-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  outline: none;
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.board-candidate-selects {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.45rem;
+}
+
+.board-candidate-selects label {
+  display: grid;
+  gap: 0.2rem;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.board-candidate-selects select {
+  min-height: 44px;
+  padding: 0.3rem 0.5rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+.board-candidate-selects select:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: var(--focus);
+}
+
+.board-candidate-filter-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.board-candidate-filter-summary .ghost-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 44px;
+  font-size: 0.72rem;
+}

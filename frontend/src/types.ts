@@ -541,6 +541,11 @@ export interface PlacementCandidate {
   is_overlap: boolean;
   /** Raw roster value, used to filter the manual picker without parsing Hebrew labels. */
   exit_pattern: "round" | "triplet" | "hamshushim" | "shushim" | string;
+  /** The shift types the roster lets this person work. Absent from an
+   *  older server, which the picker reads as "every shift". */
+  eligible_shifts?: string[];
+  /** Raw rotation letter ("א", "ב", "ג"), empty when ungrouped. */
+  rotation_group?: string;
   /** "סבב א" / "תלתון ג", written by the backend so the two screens that
    *  show a rotation cannot word it differently. Empty when the person is
    *  not in one. */

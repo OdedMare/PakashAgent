@@ -173,7 +173,10 @@ and the grid is read every day.
 **The placement dialog ranks people, not just lists them**
 (`Board/ShiftEditor.tsx`, fed by `POST /api/schedule/check`). Each
 candidate shows availability, rotation and an overlap badge, and the list
-filters by exit pattern. Moving without a mouse (touch, keyboard) is
+filters (`Board/CandidateFilters.tsx`) by name, exit pattern, rotation group,
+the shift types a person may work (`eligible_shifts`, from the roster), role,
+and free / closing / commander / trainer / no-overlap. The filters narrow
+what the check returned; they never re-check anything. Moving without a mouse (touch, keyboard) is
 `useMoveMode` / `useBoardKeys` — the same drop, the same confirmation.
 `FilterBar` hides rows and never changes them; `CoverageBar` keeps reporting
 the whole week from the overview's own audit figures, never a browser count.
