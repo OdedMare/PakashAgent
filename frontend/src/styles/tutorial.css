@@ -131,6 +131,7 @@
 .tutorial-first-steps article > span { color: var(--guide-amber); font: 700 .72rem/1 ui-monospace, monospace; }
 .tutorial-first-steps h3 { margin: 16px 0 8px; font-size: 1rem; }
 .tutorial-first-steps p { margin: 0; color: var(--text-muted); font-size: .8rem; line-height: 1.7; }
+.tutorial-note { max-width: 800px; margin: 24px 0 0; color: var(--text-muted); line-height: 1.8; }
 
 .tutorial-rail { position: absolute; top: 118px; bottom: 100px; inset-inline-start: 0; width: 34px; border-inline-end: 1px solid var(--border); }
 .tutorial-rail::before { content: ""; position: absolute; top: 0; inset-inline-end: -6px; width: 11px; height: 11px; background: var(--guide-cobalt); border-radius: 50%; box-shadow: 0 0 0 6px rgba(111,143,244,.12); }
