@@ -28,7 +28,7 @@ tables which module owns what. Importing schedules from files was removed.
 | `intent/` | **Reading a Hebrew sentence with no model.** Seven shapes; never guesses |
 | `absence/` | **An absence read and planned in code** (D36): dates, one question when needed, the fairest cover per shift; no model, no write |
 | `simulate/` | **What a change would do.** No model, no repository, persists nothing |
-| `rotation/` | **Whose closure a date is.** Pure arithmetic off separate round/triplet anchors; no model |
+| `rotation/` | **Whose closure a date is, and who is home on a day cycle.** Pure arithmetic off separate anchors; no model |
 | `placement/` | **What a placement would cost, and what else the manager could do.** No model |
 | `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
 | `shared.py` | Small helpers several packages read: text and date coercion, Hebrew weekdays, `role_qualified`/`allowed_roles`, `resume` (a clarification joined to its request) |
@@ -89,15 +89,18 @@ and the build still completes.
   them; their row's reason names whom they shadow.
 - `requests.py` turns each structured request into a constraint (hard) or
   a priced term (soft), and prices soft availability.
-- `fairness.py` rewards closers on their own closure, spreads hours and
-  nights towards a target per person — the demand poured evenly, but never
-  below what someone already carries nor above what they can take
-  (`water_fill`), so a part-timer is not counted at a share they cannot
-  reach — and charges back-to-back days. Each target is a constant computed
-  before solving (a target that moved with the answer made optimality
-  unprovable). Both the distance from the target and the largest overload
-  are priced, per unit of load and independent of team size: one shift of
-  evenness (a shift up to twelve hours) is cheaper than a soft wish (`model.py`).
+- `fairness.py` rewards closers on their own closure, spreads shifts (not
+  hours: on base nobody is on the clock) and nights towards a target per
+  person — the demand poured evenly, but never below what someone already
+  carries nor above what they can take (`water_fill`), so a part-timer is
+  not counted at a share they cannot reach — and prices every pair of one
+  person's shifts by the square of the hours their gap falls short of 48
+  (`SPACING_HOURS`), so the longest and most even rest wins (back-to-back days are charged instead only when
+  shifts carry no clock). Each target is a constant computed before solving
+  (a target that moved with the answer made optimality unprovable). Both
+  the distance from the target and the largest overload are priced, per
+  unit of load and independent of team size: one shift of evenness is
+  cheaper than a soft wish (`model.py`) and dearer than any one gap.
 - `solve.py` solves in two phases: coverage (unfilled seats, missing roles,
   the shift manager) first — started from the kept board when a rebuild
   keeps one (D37) — then, with coverage fixed as a ceiling and the first
@@ -138,7 +141,7 @@ The one place the manager talks to the agent; see
 (`chat_tools.replacement_lookup`, over `intent/` and `tools/`), then up to
 seven model rounds that may call read-only tools, then `chat_planner.py`
 validates and audits the plan the model proposes — changes (a seat a
-removal leaves empty is filled by the solver over the touched dates (D39),
+removal leaves empty is filled by the solver over the touched dates (D40),
 `chat_vacancies.py`: the other rows are pins, whoever left is a hard
 `avoid`, and only picks on vacated slots join the plan; `leave_vacant`
 keeps a seat empty on request; a model-picked cover for a seat the same
@@ -247,6 +250,18 @@ Tuesdays" says nothing about א.
 refuses their Thursday (Friday on שושים)–Sunday-handover slots outright;
 the audit warns about one already placed there.
 
+**Day cycles are the other kind** (`rotation/day_cycles.py`): 11/3, 12/2,
+שבוע־שבוע — N days on base, M home, from one anchor day, with each group
+starting a stated number of days after it (spread evenly by default). They
+live in `workplace.day_cycles`, several side by side, and a person joins one
+with `exit_pattern = "cycle:<id>"`. Their weekends fall out of the arithmetic
+rather than anchoring it. Hours come in three layers that each state only
+what they change — the cycle's own departure and return (a day shift of up
+to three days either way, plus a time), `group_times[group]`, then dated
+`time_changes` matched on the nominal departure day. A home stretch is hard
+unavailability (`closure_status` returns it), so the solver, the audit and
+the picker all read it through the same gate as a closure.
+
 Read by four callers, which is the point of it being one module:
 `scheduler/` turns it into hard availability rows and the solver never
 places a row that contradicts them, `audit/` warns about a schedule that
@@ -329,7 +344,10 @@ The codes live in `audit/codes.py`; each check is a module under
 
 Returns a list of warnings. It does **not** mutate a schedule, reject one, or
 override the manager. The solver is built from the same thresholds
-(`roster.policy()`), so a solved schedule is clean by this measure; a
+(`roster.policy()`; a profile that states no policy gets a base's week —
+eleven consecutive days, eight hours' rest, and a weekly hours ceiling of the
+whole week, so hours bind nothing until the manager sets a limit and load is
+evened in shifts), so a solved schedule is clean by this measure; a
 hand-edited one may not be, and that is the manager's call. If you find
 yourself giving the audit veto power, re-read
 [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-) and D34.
@@ -349,7 +367,7 @@ data. Neither decides anything.
 shifts count, as do shifts crossing midnight or starting from 22:00 through
 05:59. Effective slot hours take precedence over vocabulary hours. Names are
 never matched: the editor records times without requiring a night flag. The
-solver spreads nights with the same `is_night`, priced above hours.
+solver spreads nights with the same `is_night`, beside an even count of shifts.
 
 **Pass `slots` when you have them.** `audit()` takes the schedule's slot grid as
 well as the assignments. A slot with nobody on it leaves no row among the

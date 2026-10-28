@@ -13,11 +13,14 @@ Fetches and sends. Makes no decisions — those live in `bl/`.
 **PostgreSQL is the only shared state** (D35): data, the job queue
 (`jobs.py`, `FOR UPDATE SKIP LOCKED`), the login throttle
 (`throttle.py`), live signals (`notify.py`) and the model-call limit
-(advisory locks, `llm/model_slots.py`). There is no Redis.
+(advisory locks, `llm/model_slots.py`), and what every replica must agree
+on — the generated session key and the panel's settings
+(`deployment.py`, D39). There is no Redis. `initialize()` creates the
+tables under an advisory lock, so replicas starting together do not race.
 
 ## Connection pooling
 
-Connections are pooled (`psycopg_pool`, up to 16 — enough for six worker lanes beside the API, D38). They were not originally: every query
+Connections are pooled (`psycopg_pool`, up to `PAKASH_DATABASE_POOL_SIZE` per process, default 16 — enough for six worker lanes beside the API, D38). They were not originally: every query
 opened a fresh `psycopg.connect()`, paying a TCP handshake, authentication and
 a `SET search_path` round-trip before running any SQL — and one page load
 issues several queries. Measured against a local Postgres, that was 1.97ms per
@@ -77,12 +80,12 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | Table | Holds |
 |---|---|
 | `teams` | One workspace: name, the boss's password hash, the member share token — plus the operator's controls (D28): `active` (FALSE = suspended) and `notes` |
-| `team_profiles` | One structured workplace profile per team |
+| `team_profiles` | One structured workplace profile per team, with a `revision` bumped on every save: a save naming an older one is refused (409) instead of silently undoing another manager's edit |
 | `schedules` | One living schedule per period, `draft` or `published` |
 | `shift_slots` | One shift on one date — the thing an assignment points into |
 | `assignments` | person → slot, **with the agent's reason** (`NOT NULL`). `source` records whether the agent generated the row, the manager placed it by hand, or it was imported ([D18](../../../docs/DECISIONS.md#d18--the-boss-can-place-a-shift-without-the-agent-️-completes-d6)) |
 | `availability` | Known unavailability. `source` records where it came from — the manager, the agent, or the manager writing down what an employee reported ([D13](../../../docs/DECISIONS.md#d13--constraints-are-recorded-by-the-manager-with-their-source-marked)) |
-| `change_log` | **Append-only**: what changed, both reasons, when |
+| `change_log` | **Append-only**: what changed, both reasons, when, and `actor` — who was acting, read from `common/actor.py` (set per request from the signed cookies, and per job from the request that queued it) |
 | `employee_identities` | A claimed roster name plus its scrypt passcode hash — one claim per name per team ([D14](../../../docs/DECISIONS.md)). Also holds `acknowledged_at`, the mark behind "what changed for me" ([D16](../../../docs/DECISIONS.md#d16--an-employee-is-told-what-changed-and-acknowledging-is-what-marks-it-read)) |
 | `constraint_requests` | An employee's submission awaiting the manager. **Not** `availability`: pending rows are invisible to `bl/audit/`, and approval is what promotes one |
 | `compiled_sources` | What code made of a standing sentence (D32), keyed on its words, the roster and the compiler. A derivative of the sentence, never a replacement; `unresolved` rows are kept negatives |
@@ -91,7 +94,8 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | `agent_preferences` | What the agent remembers (D21): `suggested`, `active` or `archived`, all visible and editable |
 | `manager_chats`, `manager_chat_messages` | One manager's conversations and their turns, with the plan a turn prepared and the receipt of its approval |
 | `copilot_jobs` | The durable job queue: chat turns, generation spans, `compile_sources` (named for the copilot that is gone) — claimed once, retried with backoff |
-| `login_attempts` | Wrong guesses and lockouts per account (D35). The one table without `team_id`: the account key already names the team, and the operator and settings accounts belong to none |
+| `login_attempts` | Wrong guesses and lockouts per account (D35). Without `team_id`: the account key already names the team, and the operator and settings accounts belong to none |
+| `deployment_state` | Values every process of the deployment shares (D39): the generated session key, the panel's settings. Keyed by name with a `version` to poll; no `team_id`, since it belongs to no team |
 
 The workplace profile — the mission, the **shift vocabulary** (names, times,
 on-call flags and weighting), the employees, and the rules — lives as JSON on

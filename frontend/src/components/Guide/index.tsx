@@ -275,6 +275,10 @@ function helpLabel(remaining: number) {
 }
 
 const WELCOME_COPY: Record<Surface, { title: string; body: string }> = {
+  setup: {
+    title: "בואו נגדיר את היחידה",
+    body: "סיור קצר יסביר מה ממלאים בכל חלק, מה חובה כדי להמשיך ומה אפשר להשאיר לאחר כך.",
+  },
   manager: {
     title: "ברוכים הבאים לאזור הניהול",
     body: "סיור של דקה יראה לכם איפה הלוח, הסוכן והכלים — על המסך האמיתי, בלי לשנות שום דבר.",

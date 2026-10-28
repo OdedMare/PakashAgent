@@ -159,6 +159,7 @@ uvicorn app.main:app --reload
   Shared fragments compose via `<!-- include: shared/name.md -->`.
 - `api/` — Pydantic HTTP contracts and routers.
 - `main.py` — FastAPI routes, the composition root, and the embedded worker.
+  `session_key.py` decides which key signs cookies (D39).
 - `diagnose.py` — `python -m app.diagnose`: settings, the job queue, model
   slots and a real completion, printed for a terminal on a closed network.
 
@@ -280,8 +281,10 @@ package's `__init__` docstring carries a table of which module owns what.
   team cookie and neither reader accepts the other's role.
 - **The operator never decides headcount.** Opening a team takes a name and
   a password; the roster, and how many people are on it, is the manager's.
-- **`PAKASH_SESSION_SECRET` must be set in any real deployment.** Unset, each
-  worker signs with its own key and rejects the others' cookies.
+- **Every process signs cookies with one key** (D39). `PAKASH_SESSION_SECRET`
+  when set; unset, one key generated and kept in `deployment_state`, read
+  on first use by every replica (`app/session_key.py`). Only a process with
+  no database generates its own, and that is refused with several workers.
 - **A partial profile reports its gaps; it never blocks.** `completeness` is
   read by `profile_gaps`. The solver runs on a thin
   profile and returns a thin schedule — only a profile with no shift

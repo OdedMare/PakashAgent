@@ -239,9 +239,9 @@ PostgreSQL הוא המצב המשותף היחיד (D35):
 
 ## 10. הגדרות מערכת ואבחון ⚙️
 - ההגדרות נערכות רק מהלשונית "מערכת" בקונסולת המפעיל (`Admin/SystemView.tsx` ← `Settings/`), על ה-session של המפעיל. במסך הצוות אין כניסה להגדרות. ה-API עדיין מקבל גם session של מנהל עם סיסמת ההגדרות בכותרת `X-Settings-Password`. קורא ל-`GET` ו-`PUT /api/settings`.
-- ההגדרות נשמרות **בקובץ JSON אחד גלובלי** (`runtime-settings.json`): מודלים לכל role, URL ומפתח, timeout, `llm_reasoning_effort` (כמה המודל חושב: off/low/medium/high), אימות SSL (`llm_verify_ssl`), מקביליות (`llm_max_concurrency`, `llm_team_concurrency`), מגבלות פותר האילוצים, ו-diet mode. כל תהליך קולט שמירה של תהליך אחר תוך כמה שניות.
-- `GET` ו-`POST /api/models`: בדיקת שרת מודלים ורשימת המודלים שלו. הבדיקה מקבלת גם `llm_verify_ssl` שלא נשמר עדיין, כדי לבדוק שרת פנימי עם תעודה בחתימה עצמית לפני השמירה.
-- `llm_verify_ssl` דלוק כברירת מחדל. כיבוי שלו חושף את החיבור, כולל מפתח ה-API, ליירוט, ולכן הוא מיועד רק לשרת פנימי.
+- ההגדרות גלובליות לכל הצוותים. כל שמירה נכתבת לטבלת `deployment_state` עם גרסה, וכל תהליך דוגם אותה כל כמה שניות, כך שגם replicas בלי דיסק משותף מסכימים (D39); רק שדות `database_*` נשארים בקובץ (`runtime-settings.json`) וב-env, כי דרכם מתחברים. ההגדרות כוללות: מודלים לכל role, URL ומפתח, timeout, `llm_reasoning_effort` (כמה המודל חושב: off/low/medium/high), מקביליות (`llm_max_concurrency`, `llm_team_concurrency`), מגבלות פותר האילוצים, ו-diet mode.
+- `GET` ו-`POST /api/models`: בדיקת שרת מודלים ורשימת המודלים שלו.
+- אימות SSL מול שרת המודל כבוי תמיד (`llm_verify_ssl` הוא תמיד false ואינו ניתן לשינוי). החיבור, כולל מפתח ה-API, חשוף ליירוט.
 - `llm_max_concurrency` נאכף על ה-API וה-workers יחד, ונקרא מחדש בכל רכישת slot. צוות יכול להחזיק את כל ה-slots אלא אם `llm_team_concurrency` מגביל (פירוט בסעיף 11).
 - `llm_timeout_seconds` של 0 הוא תקרה מובנית (300 שניות, ובתרגום של בנייה 900), לא "בלי גבול": קריאה תקועה נכשלת ומשחררת את ה-slot, ו-read timeout לא מנוסה שוב (D38).
 - `solver_time_limit_seconds` (ברירת מחדל 10) ו-`solver_workers` (ברירת מחדל 8) נקראים בכל בנייה. הפותר מחזיר את הפתרון הטוב ביותר שמצא עד הגבול; ב-metrics של כל span נרשם `solver_status` (`optimal` או `feasible`).
@@ -285,14 +285,14 @@ PostgreSQL הוא המצב המשותף היחיד (D35):
 
 | בעיה | איפה | השפעה | כיוון פתרון |
 |---|---|---|---|
-| הגדרות גלובליות בקובץ | `common/runtime_settings/` | כל הצוותים על אותו מודל ואותן מגבלות פותר. תהליכים אחרים קוראים את הקובץ מחדש כל כמה שניות, אבל זה עובד רק כשהם חולקים volume | להעביר את הגדרות המודל והפותר ל-DB (פרטי החיבור למסד עצמו חייבים להישאר מחוצה לו) |
+| הגדרות גלובליות | `common/runtime_settings/` | כל הצוותים על אותו מודל ואותן מגבלות פותר (השמירה כבר משותפת בין replicas דרך `deployment_state`, D39) | הגדרות מודל ופותר לכל צוות, אם יידרש |
 | אין תקציב LLM לכל צוות | – | אפשר להגביל קריאות במקביל לצוות (`llm_team_concurrency`, כברירת מחדל לא מוגבל), אבל אין מכסת טוקנים, וצוות אחד יכול לצרוך הרבה | מונה ומכסה לכל צוות |
 | audit מלא בכל קריאת לוח | `context.view()` | CPU שגדל עם המשתמשים | cache לפי גרסת הסידור |
-| `PAKASH_SESSION_SECRET` ריק כברירת מחדל ב-compose | `docker-compose.yml` | ה-sessions לא תקפים בין תהליכים | חובה להגדיר |
+| `PAKASH_SESSION_SECRET` ריק כברירת מחדל ב-compose | `docker-compose.yml` | נפתר חלקית: מפתח אחד נוצר ונשמר ב-`deployment_state` לכל ה-replicas (D39), אבל הוא שמור במסד בטקסט גלוי | עדיף להגדיר |
 
 נפתר: יצירה מחולקת ל-job לכל span; ה-worker מפעיל כמה lanes ושומר lane לצ'אט;
 מכסת המודל משותפת לכל התהליכים (advisory locks של Postgres) עם quota אופציונלית לצוות; קריאה תקועה נכשלת ומשחררת את ה-slot (D38);
-ה-throttle והאירועים של SSE משותפים דרך Postgres (D35).
+ה-throttle והאירועים של SSE משותפים דרך Postgres (D35); מפתח ה-session וההגדרות משותפים בין replicas (D39).
 
 ---
 
@@ -314,7 +314,7 @@ PostgreSQL הוא המצב המשותף היחיד (D35):
 Briefing, Ask, Simulate ו-Tool כבר הוסרו, וגם `Scheduler.generate()` הישן ו-`ChunkedRun`, ה-copilot, צ'אט העוזר של העובד ו-tracing ל-Opik. הפירוט המלא, כולל מה חייב להישאר ואילו טסטים מושפעים, נמצא בסעיף 14.
 
 ### לבדוק או לפשט
-- **ה-worker:** כבר מפוצל ל-lanes ול-job לכל span, ו-SSE ו-throttle משותפים דרך Postgres. ההגדרות עדיין בקובץ, ותהליך שלא חולק את ה-volume לא יראה שמירה מהקונסולה.
+- **ה-worker:** כבר מפוצל ל-lanes ול-job לכל span, ו-SSE ו-throttle משותפים דרך Postgres. גם ההגדרות ומפתח ה-session משותפים דרך Postgres (D39).
 
 ---
 

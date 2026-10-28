@@ -110,7 +110,9 @@ the JSON as it is written and saves it on the working message as
 `payload.draft` a few times a second. Every saved check, draft and finished
 turn also publishes a bare `chat` signal on the manager's existing SSE line
 (`common/events.py`, D29), and the browser re-reads the turn at once; the
-one-second poll stays underneath for a stream a proxy buffers. A draft is
+poll stays underneath — every 5 seconds while the stream is connected, every
+second after a stream error, and a (re)connect re-reads once for anything
+missed. A draft is
 shown only on a `working` message and is replaced by the finished content —
 the plan, the checks and the server's corrections still decide what the turn
 says. A server that refuses `stream` is asked the same ladder rung again
