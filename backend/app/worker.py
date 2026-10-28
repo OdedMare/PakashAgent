@@ -17,6 +17,7 @@ from app.bl.manager_chat import ManagerChatService
 from app.common.events import TeamEvents
 from app.dal.notify import PostgresSignals
 from app.common.activity import track_activity
+from app.common.actor import acting_as
 from app.common.errors import NotFoundError
 from app.common.config import Settings
 from app.common.logging_setup import configure_logging
@@ -31,6 +32,9 @@ _POLL_SECONDS = max(1, int(os.getenv("PAKASH_COPILOT_POLL_SECONDS", "1")))
 # of them so one slow (or stuck) turn does not hold every other manager's.
 _WORKER_CONCURRENCY = max(1, int(os.getenv("PAKASH_WORKER_CONCURRENCY", "6")))
 _CHAT_WORKERS = max(1, int(os.getenv("PAKASH_CHAT_WORKERS", "3")))
+# Finished jobs are deleted after this many days, checked once an hour.
+_RETENTION_DAYS = max(1, int(os.getenv("PAKASH_JOB_RETENTION_DAYS", "30")))
+_PURGE_SECONDS = 3600
 
 
 class JobWorker:
@@ -38,6 +42,10 @@ class JobWorker:
         self._repository = repository
         self._schedules, self._chat = schedules, chat
         self._compiler = compiler
+
+    def purge_finished_jobs(self, older_than_days) -> int:
+        purge = getattr(self._repository, "purge_finished_jobs", None)
+        return purge(older_than_days) if purge else 0
 
     def run_once(self, lane="any") -> int:
         processed = 0
@@ -53,7 +61,8 @@ class JobWorker:
         _log.info("job started id=%s kind=%s team=%s attempt=%s",
                   job["id"], job["kind"], job["team_id"], job.get("attempts"))
         try:
-            with model_team(job["team_id"]):
+            with model_team(job["team_id"]), \
+                    acting_as((job.get("payload") or {}).get("actor", "")):
                 self._execute(job)
             self._repository.finish_copilot_job(job["id"])
             _log.info("job finished id=%s kind=%s seconds=%.1f",
@@ -111,6 +120,10 @@ def _build():
     env = Settings()
     store = RuntimeSettingsStore(env)
     repository = Repository(store)
+    # Panel saves made on any replica apply here too (D39), from the first
+    # job on: a database not ready yet is simply asked again by `get()`.
+    store.share_through(repository)
+    store.pull_shared()
     llm = OpenAIJsonClient(store)
     schedules = ScheduleService(repository, llm, settings=store)
     return repository, JobWorker(
@@ -148,11 +161,25 @@ def start(worker, stopped: threading.Event) -> list:
         threading.Thread(target=work, args=(lane,), name="worker-%s" % lane,
                          daemon=True)
         for lane in lanes
-    ]
+    ] + [threading.Thread(target=_purge, args=(worker, stopped),
+                          name="worker-purge", daemon=True)]
     for thread in threads:
         thread.start()
     _log.info("job worker started threads=%d chat_threads=%d", count, chat_count)
     return threads
+
+
+def _purge(worker, stopped: threading.Event) -> None:
+    """Delete old finished jobs now and then. Every process does it; the
+    DELETE is idempotent, so a second copy only finds nothing left."""
+    while not stopped.is_set():
+        try:
+            deleted = worker.purge_finished_jobs(_RETENTION_DAYS)
+            if deleted:
+                _log.info("purged finished jobs count=%d", deleted)
+        except Exception:
+            _log.exception("purging finished jobs failed")
+        stopped.wait(_PURGE_SECONDS)
 
 
 def stop(threads: list, stopped: threading.Event) -> None:

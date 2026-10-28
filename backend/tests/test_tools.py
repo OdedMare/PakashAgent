@@ -85,6 +85,9 @@ class _Repo:
     def team_profile(self, team_id):
         return self.profiles.get(team_id)
 
+    def team_profile_revision(self, team_id):
+        return 0 if team_id in self.profiles else None
+
     def get_schedule(self, schedule_id, team_id):
         row = self.schedules.get(schedule_id)
         if row is None or row["team_id"] != team_id:

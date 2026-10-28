@@ -1,7 +1,7 @@
 import pytest
 
 from app.bl.profile_service import ProfileService
-from app.common.errors import AgentError
+from app.common.errors import PROFILE_CHANGED, AgentError, ConflictError
 
 
 class _Repo:
@@ -18,8 +18,15 @@ class _Repo:
     def team_profile(self, team_id):
         return self.profile
 
-    def update_team_profile(self, team_id, profile):
+    def team_profile_revision(self, team_id):
+        return None if self.profile is None else getattr(self, "revision", 0)
+
+    def update_team_profile(self, team_id, profile, expected_revision=None):
+        current = getattr(self, "revision", 0)
+        if expected_revision is not None and expected_revision != current:
+            raise ConflictError(PROFILE_CHANGED)
         self.profile = profile
+        self.revision = current + 1
         return profile
 
     def create_team_profile(self, team_id, profile):
@@ -297,3 +304,29 @@ def test_deleting_someones_only_shift_is_refused_and_writes_nothing():
         ProfileService(repo).delete_shift("team", "ערב")
     assert [row["name"] for row in repo.profile["shifts"]] == ["בוקר", "ערב"]
     assert repo.profile["employees"][0]["eligible_shifts"] == ["בוקר", "ערב"]
+
+
+def test_a_save_from_a_stale_form_is_refused_and_writes_nothing():
+    """Two managers open setup at the same revision. The first save lands;
+    the second was edited from a profile that no longer exists, and
+    replacing the whole profile would silently undo the first."""
+    repo = _Repo()
+    service = ProfileService(repo)
+    opened_at = service.revision("team")
+
+    service.update("team", rules=[{"text": "כלל ראשון"}],
+                   expected_revision=opened_at)
+    with pytest.raises(ConflictError) as refused:
+        service.update("team", rules=[{"text": "כלל שני"}],
+                       expected_revision=opened_at)
+
+    assert str(refused.value) == PROFILE_CHANGED
+    assert [row["text"] for row in repo.profile["rules"]] == ["כלל ראשון"]
+    assert service.revision("team") == opened_at + 1
+
+
+def test_a_save_without_a_revision_still_saves():
+    """An older client sends none; its save is not checked against a form."""
+    repo = _Repo()
+    ProfileService(repo).update("team", rules=[{"text": "כלל"}])
+    assert [row["text"] for row in repo.profile["rules"]] == ["כלל"]

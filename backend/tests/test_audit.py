@@ -175,13 +175,18 @@ def test_a_soft_time_window_is_a_notice_not_a_hard_warning():
     assert "העדפה" in conflict["message"]
 
 
+# The defaults are a base's (no weekly hours cap, eleven days in a row);
+# these checks are exercised against an office week's thresholds.
+OFFICE = {"audit_policy": {"max_weekly_hours": 45, "max_consecutive_days": 6}}
+
+
 def test_weekly_hours_over_the_ceiling_are_reported():
-    """Six morning shifts is 48 hours, past the 45-hour default."""
+    """Six morning shifts is 48 hours, past a 45-hour week."""
     assignments = [
         _assign("דנה", MORNING, "2026-08-%02d" % day)
         for day in range(17, 23)
     ]
-    warnings = audit(assignments, SHIFTS, EMPLOYEES)
+    warnings = audit(assignments, SHIFTS, EMPLOYEES, profile=OFFICE)
     over = _by_code(warnings, OVER_HOURS)
     assert len(over) == 1
     assert over[0]["details"]["hours"] == pytest.approx(48.0)
@@ -222,7 +227,7 @@ def test_seven_consecutive_days_is_reported():
         _assign("יוסי", EVENING, "2026-08-%02d" % day)
         for day in range(17, 24)
     ]
-    warnings = audit(assignments, SHIFTS, EMPLOYEES)
+    warnings = audit(assignments, SHIFTS, EMPLOYEES, profile=OFFICE)
     runs = _by_code(warnings, CONSECUTIVE)
     assert len(runs) == 1
     assert runs[0]["details"]["days"] == 7
@@ -373,7 +378,7 @@ def test_an_unknown_shift_name_contributes_no_invented_hours():
          "date": "2026-08-%02d" % day}
         for day in range(17, 24)
     ]
-    warnings = audit(assignments, SHIFTS, EMPLOYEES)
+    warnings = audit(assignments, SHIFTS, EMPLOYEES, profile=OFFICE)
     assert _by_code(warnings, OVER_HOURS) == []
     # It is still seven consecutive days of work.
     assert len(_by_code(warnings, CONSECUTIVE)) == 1
@@ -435,7 +440,8 @@ def test_the_audit_never_blocks_and_never_mutates():
         "available": False,
     }]
 
-    warnings = audit(assignments, SHIFTS, EMPLOYEES, availability=availability)
+    warnings = audit(assignments, SHIFTS, EMPLOYEES, availability=availability,
+                     profile=OFFICE)
 
     # Every category fired...
     assert {OVER_HOURS, CONSECUTIVE, DOUBLE_BOOKED, UNAVAILABLE} <= set(
@@ -610,3 +616,12 @@ def test_load_history_survives_junk_rows():
     )
     assert {row["employee"] for row in rows} == {"רון", "דנה", "יוסי"}
     assert all(row["shifts"] == 0 for row in rows)
+
+
+def test_the_default_thresholds_are_a_bases():
+    """Unstated, the week is a base's: eight hours' rest between shifts,
+    eleven days in a row, and no weekly hours cap that binds."""
+    from app.bl.audit.roster import policy
+
+    assert policy({}) == {"max_weekly_hours": 168.0, "max_consecutive_days": 11,
+                          "min_rest_hours": 8.0}

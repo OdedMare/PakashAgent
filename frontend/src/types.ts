@@ -35,6 +35,7 @@ export interface WorkplaceProfile {
     enabled_exit_patterns?: Array<"triplet" | "hamshushim" | "shushim">;
     rotation_closure_windows?: RotationClosureWindow[];
     rotation_presence?: RotationPresenceRule[];
+    day_cycles?: DayCycle[];
     rotation_a_unavailability?: Array<{
       days: string[];
       shifts: string[];
@@ -59,6 +60,40 @@ export interface RotationGroupRule {
   ends_on: string;
   start_time: string;
   end_time: string;
+}
+
+/** When a group leaves and comes back. `*_day` moves the nominal day
+ *  (first home day / first base day) by up to three days either way; a
+ *  blank time is the start of that day. A layer states only what it changes. */
+export interface DayCycleTiming {
+  leave_day?: number;
+  leave_time?: string;
+  return_day?: number;
+  return_time?: string;
+}
+
+/** A dated change to one departure, matched on its nominal leave day.
+ *  An empty `group` applies to every group of the cycle. */
+export interface DayCycleTimeChange extends DayCycleTiming {
+  group: string;
+  starts_on: string;
+  ends_on: string;
+}
+
+/** A day-based cycle — 11/3, 12/2, שבוע־שבוע. A person joins it with
+ *  `exit_pattern = "cycle:<id>"`; the server owns the arithmetic. */
+export interface DayCycle extends DayCycleTiming {
+  id: string;
+  name: string;
+  base_days: number;
+  home_days: number;
+  /** The day the first group starts its stretch on base. */
+  anchor_date: string;
+  groups: string[];
+  /** Days after the anchor each group starts; missing = spread evenly. */
+  offsets: Record<string, number>;
+  group_times: Record<string, DayCycleTiming>;
+  time_changes: DayCycleTimeChange[];
 }
 
 export interface RotationClosureWindow extends RotationGroupRule {
@@ -235,6 +270,8 @@ export interface Workspace {
 /** A workspace plus its saved profile. */
 export interface TeamView extends Workspace {
   profile: WorkplaceProfile | null;
+  /** What a profile save sends back as `expected_revision`. */
+  profile_revision?: number | null;
 }
 
 /** One advisory finding from `bl/audit.py`.
@@ -666,6 +703,8 @@ export interface ShiftStats {
 export interface ManagementOverview {
   today?: string;
   profile: WorkplaceProfile | null;
+  /** What a profile save sends back as `expected_revision`. */
+  profile_revision?: number | null;
   employees: Record<string, unknown>[];
   shifts: Record<string, unknown>[];
   schedule: Schedule | null;

@@ -60,7 +60,7 @@ export default function TutorialPage() {
 
         <div className="tutorial-route-map" aria-label="מסלול העבודה במערכת">
           <span className="route-time">07:00</span>
-          <div className="route-stop is-active"><b>כניסה</b><small>הצוות והזהות שלכם</small></div>
+          <div className="route-stop is-active"><b>כניסה והגדרה</b><small>הצוות, הזהות ושיטת השיבוץ</small></div>
           <span className="route-time">15:00</span>
           <div className="route-stop"><b>בנייה ובדיקה</b><small>בנייה, שיחה עם הסוכן ואזהרות</small></div>
           <span className="route-time">23:00</span>
@@ -98,6 +98,7 @@ export default function TutorialPage() {
           ["סוגי משמרות ותקינה", "שעות, ימים, כמה אנשים בכל משמרת ואילו תפקידים מוסמכים לעמוד בה."],
           ["גבולות וכללים", "עומס, מנוחה וכללים קבועים במילים שלכם. ‘מה הקוד הבין’ מראה איך כל משפט תורגם."],
         ]} />
+        <div className="tutorial-note"><HelpCircle size={16} /> במסך ההגדרה עצמו לחצו על ‘עזרה’ כדי לפתוח סיור שמצביע על כל חלק בטופס. מחזור ימים כמו 11/3, 12/2 או שבוע־שבוע מוגדר שם באותו אופן: ימים בבסיס ובבית, עוגן לקבוצה א׳ ושעות.</div>
         <p className="tutorial-note">שמירה שמוסיפה חייל או משמרת משלבת אותם בכל טיוטה מהיום והלאה, בלי לערבב את מה שכבר שובץ. כל שינוי אחר חל על הבנייה הבאה. אפשר לחזור לטופס בכל עת מאייקון המחוונים בסרגל העליון.</p>
       </section>
 

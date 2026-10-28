@@ -354,6 +354,9 @@ export function updateProfile(body: {
   conflict_policy?: string;
   existing_schedule_source?: string;
   summary?: string;
+  /** The `profile_revision` the form was loaded at: a save over somebody
+   *  else's newer one is refused (409) instead of silently undoing it. */
+  expected_revision?: number | null;
 }): Promise<import("@/types").WorkplaceProfile & { absorbed?: ProfileAbsorption | null }> {
   return request("/api/profile", {
     method: "PUT",
@@ -855,6 +858,9 @@ export function moveAssignment(body: {
   /** The period the drag happened on. Omitted means the one covering today,
    *  which is only ever right by coincidence. */
   schedule_id?: string;
+  /** The slot the shift was dragged from: a shift somebody else moved in
+   *  the meantime is refused (409) instead of being moved again. */
+  from_slot_id?: string;
 }): Promise<Schedule> {
   return request<Schedule>("/api/schedule/move", {
     method: "POST",

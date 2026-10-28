@@ -47,7 +47,10 @@ class _Repository:
     def team_profile(self, team_id):
         return self.profile
 
-    def update_team_profile(self, team_id, profile):
+    def team_profile_revision(self, team_id):
+        return None if self.profile is None else 0
+
+    def update_team_profile(self, team_id, profile, expected_revision=None):
         self.profile = profile
         return profile
 

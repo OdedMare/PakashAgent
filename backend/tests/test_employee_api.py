@@ -248,6 +248,9 @@ class _FakeIdentities:
     def team_profile(self, team_id):
         return PROFILE if team_id in (TEAM, OTHER_TEAM) else None
 
+    def team_profile_revision(self, team_id):
+        return 0 if team_id in (TEAM, OTHER_TEAM) else None
+
     def availability(self, team_id, starts_on=None, ends_on=None,
                      employee=None):
         """Same signature as `ScheduleRepository.availability`."""

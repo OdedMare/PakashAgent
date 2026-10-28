@@ -1,6 +1,7 @@
 """Validating the roster: service types, exit patterns, rotation groups."""
 
 import datetime
+import re
 from typing import Any, List
 
 from app.bl.profile_service.validation import named_rows, text, text_list, valid_time
@@ -10,6 +11,9 @@ from app.common.errors import AgentError
 _SERVICE_TYPES = ("standard", "overlap", "reserve")
 _EXIT_PATTERNS = ("round", "triplet", "hamshushim", "shushim")
 _GROUPED = ("round", "triplet")
+# A day cycle is named by its id; whether that id exists is checked against
+# the workplace in `validate_rotation_groups`, once both halves are merged.
+_DAY_CYCLE = re.compile(r"^cycle:[A-Za-z0-9_-]{1,32}$")
 
 
 def employees(rows: Any, default_exit_pattern: str = "round") -> List[dict]:
@@ -26,7 +30,7 @@ def _employee(row: dict, default_exit_pattern: str) -> dict:
     if service_type not in _SERVICE_TYPES:
         raise AgentError("סוג כוח האדם אינו תקין")
     exit_pattern = text(row.get("exit_pattern")) or default_exit_pattern
-    if exit_pattern not in _EXIT_PATTERNS:
+    if exit_pattern not in _EXIT_PATTERNS and not _DAY_CYCLE.match(exit_pattern):
         raise AgentError("מבנה היציאות של איש הצוות אינו תקין")
     recurring = row.get("recurring_constraints") or []
     if not isinstance(recurring, list):
@@ -94,9 +98,17 @@ def validate_rotation_groups(profile: dict) -> None:
     חמשושים and שושים say how long a closure runs, not how many groups take
     turns, so their group is checked against the unit's own cycle.
     """
-    mode = text((profile.get("workplace") or {}).get("rotation_mode")) or "round"
+    workplace = profile.get("workplace") or {}
+    mode = text(workplace.get("rotation_mode")) or "round"
+    cycles = {
+        "cycle:%s" % text(row.get("id")): row for row in workplace.get("day_cycles") or []
+        if isinstance(row, dict)
+    }
     for person in profile.get("employees") or []:
         pattern = text(person.get("exit_pattern")) or mode
+        if pattern.startswith("cycle:"):
+            _check_day_cycle(person, cycles.get(pattern))
+            continue
         cycle = pattern if pattern in _GROUPED else mode
         groups = {"א", "ב", "ג"} if cycle == "triplet" else {"א", "ב"}
         group = text(person.get("rotation_group"))
@@ -104,6 +116,14 @@ def validate_rotation_groups(profile: dict) -> None:
             raise AgentError("קבוצת הסבב של %s אינה מתאימה למבנה היחידה" % (
                 text(person.get("name")) or "איש הצוות"
             ))
+
+
+def _check_day_cycle(person: dict, cycle) -> None:
+    name = text(person.get("name")) or "איש הצוות"
+    if cycle is None:
+        raise AgentError("מחזור היציאות של %s אינו מוגדר ביחידה" % name)
+    if text(person.get("rotation_group")) not in (cycle.get("groups") or []):
+        raise AgentError("יש לבחור ל%s קבוצה מתוך %s" % (name, text(cycle.get("name")) or "המחזור"))
 
 
 def validate_first_profile(profile: dict) -> None:
