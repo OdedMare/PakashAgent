@@ -104,3 +104,18 @@ docker compose -p pakash-sandbox -f devsandbox/docker-compose.sandbox.yml \
   container itself, and they take precedence over `PAKASH_DATABASE_URL`.
 - `BACKEND_URL` is a **build** arg for the frontend, not just a runtime
   variable: `next.config.ts` bakes the rewrite target into the build output.
+
+## Scenarios
+
+`scenarios/` holds ready-made teams for exercising edge cases. Each is a
+profile JSON plus a Hebrew guide of what to try. Load one into a running
+stack (it opens a new team and never touches an existing one):
+
+```bash
+python devsandbox/seed_scenario.py devsandbox/scenarios/unit_619.json \
+    --url http://localhost:8100 --admin-password 010802 --team-password 619619
+```
+
+`backend/tests/test_scenarios.py` saves every scenario through the profile
+validators, so one the schema has outgrown fails in CI rather than on the
+evening someone sits down to use it.
