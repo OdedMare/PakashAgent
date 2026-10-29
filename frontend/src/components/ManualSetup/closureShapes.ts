@@ -23,11 +23,11 @@ const OPENS: Record<Exclude<Shape, "custom">, number> = { thursday: -2, friday: 
 const SPLITS: Record<Exclude<Shape, "custom">, string> = { thursday: "11/3", friday: "12/2", wednesday: "10/4", week: "שבוע־שבוע" };
 
 /** How a type reads on its button. The day split is a round's (two weeks);
- *  a triplet's three weeks would split differently, so it reads by days. */
+ *  a triplet's or a רבעון's weeks would split differently, so they read by days. */
 export function shapeLabel(shape: Shape, groups: number): { title: string; detail: string } {
   if (shape === "custom") return { title: "ימים ושעות אחרים", detail: "בוחרים בעצמכם יום ושעה לכניסה וליציאה." };
   const span = shape === "week" ? "מראשון עד ראשון" : `מ${DAY_NAMES[OPENS[shape] + 6]} עד ראשון`;
-  if (groups > 2) return { title: shape === "week" ? "שבוע בבסיס, שבועיים בבית" : span, detail: shape === "week" ? "חילוף ביום ראשון." : "הסגירה בסופ״ש." };
+  if (groups > 2) return { title: shape === "week" ? `שבוע בבסיס, ${groups === 3 ? "שבועיים" : `${groups - 1} שבועות`} בבית` : span, detail: shape === "week" ? "חילוף ביום ראשון." : "הסגירה בסופ״ש." };
   const [base, home] = SPLITS[shape].split("/");
   return {
     title: SPLITS[shape],

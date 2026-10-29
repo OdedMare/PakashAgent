@@ -8,8 +8,9 @@ The cycle is anchored, not inferred. `round` and `triplet` may each name their
 own Saturday and first group; the legacy `first_closure_*` pair is a fallback.
 Without an anchor there is no cycle, and nothing is guessed.
 
-Four patterns: `round` (א, ב), `triplet` (תלתון: א, ב, ג), `hamshushim`
-(from Thursday) and `shushim` (from Friday). Round and triplet set *who*
+Five patterns: `round` (א, ב), `triplet` (תלתון: א, ב, ג), `quad` (רבעון:
+א, ב, ג, ד — one weekend in four), `hamshushim` (from Thursday) and
+`shushim` (from Friday). Round, triplet and quad set *who*
 closes; the other two set *how long*. **A closure weekend runs Thursday to
 Sunday morning** — the Sunday tail covers the day's first shift by the clock,
 found from declared start times rather than a Hebrew name (D9). This is the
@@ -35,10 +36,10 @@ from app.bl.rotation.closures import closure_days, handover_shifts, holds
 from app.bl.rotation.cycle import closing_group, configuration_errors, cycle
 from app.bl.rotation.day_cycles import is_day_cycle
 from app.bl.rotation.views import by_date, schedule_for_model, weekend_preview
-from app.bl.rotation.vocabulary import exit_pattern, label
+from app.bl.rotation.vocabulary import cycle_of_group, exit_pattern, label
 
 __all__ = [
-    "by_date", "closing_group", "closure_days", "configuration_errors",
+    "by_date", "closing_group", "closure_days", "configuration_errors", "cycle_of_group",
     "cycle", "exit_pattern", "is_day_cycle", "handover_shifts", "holds", "label",
     "schedule_for_model", "weekend_preview",
 ]

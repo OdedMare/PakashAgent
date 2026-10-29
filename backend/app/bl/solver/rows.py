@@ -2,6 +2,7 @@
 
 from typing import Any, List, Optional
 
+from app.bl.rotation.vocabulary import cycle_of_group
 from app.bl.shared import iso as date_of, person_roles, role_qualified, text
 
 
@@ -48,10 +49,7 @@ def roles(person: dict) -> set:
 
 def cycle_of(profile: dict, group: str) -> str:
     """Which cycle a rotation group runs when the person states none."""
-    if group == "ג":
-        return "triplet"
-    mode = text(((profile or {}).get("workplace") or {}).get("rotation_mode"))
-    return mode if mode in ("round", "triplet") else "round"
+    return cycle_of_group(profile, group)
 
 
 def employees(profile: dict) -> List[dict]:

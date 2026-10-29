@@ -9,20 +9,22 @@ from app.bl.shared import text
 # setup collects them and `profile_service` validates them.
 ROUND_GROUPS = ("א", "ב")
 TRIPLET_GROUPS = ("א", "ב", "ג")
+# A רבעון: four groups, each closing one weekend in four.
+QUAD_GROUPS = ("א", "ב", "ג", "ד")
 
 # How each cycle is named to a person reading it. The keys are the internal
 # pattern names, which no manager should ever be shown.
-CYCLE_LABELS = {"round": "סבב", "triplet": "תלתון"}
+CYCLE_LABELS = {"round": "סבב", "triplet": "תלתון", "quad": "רבעון"}
 
 # Patterns that place a person in a lettered group. `hamshushim` and
 # `shushim` describe a closure's span, not its owner, so a person on one of
 # them may be ungrouped and still close.
-GROUPED_PATTERNS = frozenset({"round", "triplet"})
+GROUPED_PATTERNS = frozenset({"round", "triplet", "quad"})
 
 # How many days before Saturday each pattern's closure begins. Thursday is 2
-# days before Saturday, Friday is 1. `round` and `triplet` lead by two like a
+# days before Saturday, Friday is 1. The lettered cycles lead by two like a
 # חמשוש: a closure weekend in an Israeli unit runs Thursday to Sunday morning.
-CLOSURE_LEAD_DAYS = {"round": 2, "triplet": 2, "hamshushim": 2, "shushim": 1}
+CLOSURE_LEAD_DAYS = {"round": 2, "triplet": 2, "quad": 2, "hamshushim": 2, "shushim": 1}
 
 # How many days past Saturday a closure runs. One, and only until that day's
 # handover. Shared by every pattern: they differ in when the stretch begins,
@@ -81,6 +83,8 @@ def groups_for(pattern: str) -> Optional[tuple]:
 
     Strictly per pattern: a round pair does not close one weekend in three.
     """
+    if pattern == "quad":
+        return QUAD_GROUPS
     if pattern == "triplet":
         return TRIPLET_GROUPS
     if pattern == "round":
@@ -91,12 +95,15 @@ def groups_for(pattern: str) -> Optional[tuple]:
 def cycle_of_group(profile: dict, group: str) -> str:
     """Which cycle a span pattern's group belongs to.
 
-    `ג` can only be a תלתון group; otherwise the unit's own `rotation_mode`
-    decides, because that is the cycle the manager set the unit to.
+    `ד` can only be a רבעון group and `ג` a תלתון one, unless the unit runs
+    a רבעון; otherwise the unit's own `rotation_mode` decides, because that
+    is the cycle the manager set the unit to.
     """
-    if group == "ג":
-        return "triplet"
     mode = text(((profile or {}).get("workplace") or {}).get("rotation_mode"))
+    if group == "ד":
+        return "quad"
+    if group == "ג":
+        return "quad" if mode == "quad" else "triplet"
     return mode if mode in GROUPED_PATTERNS else "round"
 
 

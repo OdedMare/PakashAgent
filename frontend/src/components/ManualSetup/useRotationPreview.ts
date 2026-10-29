@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { rotationPreview } from "@/services/api";
 import type { RotationWeekend } from "@/types";
 
-type Cycles = Partial<Record<"round" | "triplet", RotationWeekend[]>>;
+type Cycles = Partial<Record<"round" | "triplet" | "quad", RotationWeekend[]>>;
 
 /** The server's view of the coming weekends for the rotation on screen.
  *

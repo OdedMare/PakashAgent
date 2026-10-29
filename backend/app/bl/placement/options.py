@@ -111,12 +111,9 @@ def _option(context, person, shift_name, slot_date, day, load, shift_names) -> d
 
 
 def _cycle_of(profile: dict, person: dict) -> str:
-    """Which cycle a person turns on -- ג can only be a תלתון, so the label
-    needs the cycle, not just the letter."""
+    """Which cycle a person turns on -- ג and ד name a תלתון or a רבעון, so
+    the label needs the cycle, not just the letter."""
     pattern = rotation.exit_pattern(profile, person)
-    if pattern in ("round", "triplet", "hamshushim", "shushim") or rotation.is_day_cycle(pattern):
+    if pattern in ("round", "triplet", "quad", "hamshushim", "shushim") or rotation.is_day_cycle(pattern):
         return pattern
-    if values.text(person.get("rotation_group")) == "ג":
-        return "triplet"
-    mode = values.text(((profile or {}).get("workplace") or {}).get("rotation_mode"))
-    return mode if mode in ("round", "triplet") else "round"
+    return rotation.cycle_of_group(profile, values.text(person.get("rotation_group")))

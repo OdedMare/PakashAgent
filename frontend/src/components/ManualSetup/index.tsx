@@ -43,6 +43,7 @@ const SHIFT_TYPES = {
 const EXIT_PATTERNS = {
   round: "סבב א / ב",
   triplet: "תלתון א / ב / ג",
+  quad: "רבעון א / ב / ג / ד — שבת אחת מכל ארבע",
   hamshushim: "חמשושים",
   shushim: "שושים",
 } as const;
@@ -81,7 +82,7 @@ export function ManualSetup({
       text(initialWorkplace[`${pattern}_first_closure_group`])
         || (rotationMode === pattern ? text(initialWorkplace.first_closure_group) : ""),
     );
-    return { round: stored("round"), triplet: stored("triplet") };
+    return { round: stored("round"), triplet: stored("triplet"), quad: stored("quad") };
   });
   const [closureWindows, setClosureWindows] = useState<RotationClosureWindow[]>(
     profile.workplace?.rotation_closure_windows ?? [],
@@ -193,6 +194,8 @@ export function ManualSetup({
     round_first_closure_date: anchors.round,
     triplet_first_closure_group: "א",
     triplet_first_closure_date: anchors.triplet,
+    quad_first_closure_group: "א",
+    quad_first_closure_date: anchors.quad,
     rotation_closure_windows: closureWindows,
   };
   const timedShifts = shifts.filter(named).map((shift) => ({ name: text(shift.name), start_time: text(shift.start_time), end_time: text(shift.end_time) }));
@@ -526,8 +529,7 @@ function exitPattern(row: Row, fallback: "round" | "triplet" = "round"): string 
   return value in EXIT_PATTERNS ? value : fallback;
 }
 function rotationGroups(pattern: string, cycles: DayCycle[]): string[] {
-  if (pattern === "triplet") return ["א", "ב", "ג"];
-  if (pattern === "round") return ["א", "ב"];
+  if (pattern in CYCLES) return [...CYCLES[pattern as Cycle].groups];
   return cycles.find((cycle) => cyclePattern(cycle) === pattern)?.groups ?? [];
 }
 function number(value: unknown, fallback: number): number { return typeof value === "number" && Number.isFinite(value) ? value : fallback; }

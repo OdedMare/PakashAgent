@@ -31,8 +31,10 @@ export interface WorkplaceProfile {
     round_first_closure_date?: string;
     triplet_first_closure_group?: string;
     triplet_first_closure_date?: string;
+    quad_first_closure_group?: string;
+    quad_first_closure_date?: string;
     general_exit_schedule?: string;
-    enabled_exit_patterns?: Array<"triplet" | "hamshushim" | "shushim">;
+    enabled_exit_patterns?: Array<"triplet" | "quad" | "hamshushim" | "shushim">;
     rotation_closure_windows?: RotationClosureWindow[];
     rotation_presence?: RotationPresenceRule[];
     day_cycles?: DayCycle[];
@@ -54,7 +56,7 @@ export interface WorkplaceProfile {
 }
 
 export interface RotationGroupRule {
-  pattern: "round" | "triplet";
+  pattern: "round" | "triplet" | "quad";
   group: string;
   starts_on: string;
   ends_on: string;
@@ -558,7 +560,7 @@ export interface PlacementCandidate {
   can_train: boolean;
   is_overlap: boolean;
   /** Raw roster value, used to filter the manual picker without parsing Hebrew labels. */
-  exit_pattern: "round" | "triplet" | "hamshushim" | "shushim" | string;
+  exit_pattern: "round" | "triplet" | "quad" | "hamshushim" | "shushim" | string;
   /** The shift types the roster lets this person work. Absent from an
    *  older server, which the picker reads as "every shift". */
   eligible_shifts?: string[];

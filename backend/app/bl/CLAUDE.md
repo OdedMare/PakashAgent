@@ -236,8 +236,8 @@ vocabulary is per workplace (D9). A workplace whose shifts carry no times has
 no clock to read, so its closures honestly end on Saturday rather than
 blocking a Sunday on a guess.
 
-**Each cycle is anchored, not inferred.** Round and triplet may use separate
-anchor dates and first groups. Legacy profiles fall back to
+**Each cycle is anchored, not inferred.** Round, triplet and רבעון (`quad`:
+א–ד, one weekend in four) may use separate anchor dates and first groups. Legacy profiles fall back to
 `first_closure_*`; with no anchor for a pattern every function returns nothing
 rather than guess a phase that puts the wrong group in.
 

@@ -16,6 +16,7 @@ import { RotationPreview } from "./RotationPreview";
 export const CYCLES = {
   round: { label: "סבב", groups: ["א", "ב"], span: "שתי קבוצות שסוגרות לסירוגין — כל קבוצה פעם בשבועיים." },
   triplet: { label: "תלתון", groups: ["א", "ב", "ג"], span: "שלוש קבוצות שסוגרות בתורן — כל קבוצה פעם בשלושה שבועות, בנפרד מהסבב." },
+  quad: { label: "רבעון", groups: ["א", "ב", "ג", "ד"], span: "ארבע קבוצות שסוגרות בתורן — כל קבוצה שבת אחת מכל ארבע (1/4), בנפרד מהסבב." },
 } as const;
 export type Cycle = keyof typeof CYCLES;
 
