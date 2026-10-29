@@ -170,6 +170,7 @@ export function Board({
     slot_date: string;
     reason: string;
     schedule_id?: string;
+    from_slot_id?: string;
   }) => Promise<void> | void;
   /** Empty a day's shifts, or the whole week's. The grid stays behind, so
    *  the week can be filled in again without rebuilding its slots. */
@@ -329,14 +330,14 @@ export function Board({
       if (!name) continue;
       map[name] = {
         role: typeof row.role === "string" ? row.role.trim() : "",
-        rotation: rotationLabel(row.exit_pattern, row.rotation_group),
+        rotation: rotationLabel(row.exit_pattern, row.rotation_group, overview?.profile?.workplace?.day_cycles),
         is_shift_manager: Boolean(row.is_shift_manager),
         is_overlap: row.service_type === "overlap",
         counts_toward_staffing: fillsASeat(row),
       };
     }
     return map;
-  }, [overview?.employees]);
+  }, [overview?.employees, overview?.profile?.workplace?.day_cycles]);
 
   // The filter's shift list reads in the same order the board's rows do —
   // by the clock. A dropdown that disagrees with the grid beside it is the
@@ -908,6 +909,7 @@ export function Board({
               slot_date: pendingMove.slot_date,
               reason,
               schedule_id: schedule?.id,
+              from_slot_id: pendingMove.assignment.slot_id,
             });
             closeDialogs();
           }}

@@ -14,7 +14,7 @@ ACTION_CONSTRAINT = "constraint"
 # in D6 happened, and both producing a schedule is exactly what makes them
 # worth telling apart later.
 ACTION_OPENED = "opened"
-# A period read out of the workplace's own file (D7/D39).
+# A period read out of the workplace's own file (D7/D42).
 ACTION_IMPORTED = "imported"
 
 # How far back `learn_from_changes` reads. Generous, because a rule the

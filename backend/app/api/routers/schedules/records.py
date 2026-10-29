@@ -40,6 +40,7 @@ class ConstraintRoutes(RouteGroup):
                 is_hard=request.is_hard,
                 reason=request.reason,
                 source=request.source,
+                constraint_type=request.constraint_type,
             )
 
         @router.delete("/constraints/{row_id}")

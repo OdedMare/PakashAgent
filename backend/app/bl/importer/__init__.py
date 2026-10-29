@@ -1,6 +1,6 @@
 """Reading a schedule the workplace already had, in whatever shape it has.
 
-There is no template (D7), and since D39 there is no class per shape
+There is no template (D7), and since D42 there is no class per shape
 either. A sheet's shape is a `Layout` -- which way time runs, which line
 holds the dates, whether shifts are nested under them, what a lane is --
 and one reader reads any sheet given one. Detection tries every plausible

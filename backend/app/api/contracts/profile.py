@@ -24,3 +24,16 @@ class ProfileUpdate(BaseModel):
     conflict_policy: Optional[str] = None
     existing_schedule_source: Optional[str] = None
     summary: Optional[str] = None
+    # The `profile_revision` the form was loaded at. A save from a form that
+    # somebody else has saved over since is refused (409) instead of undoing
+    # their edit; omitted, the save is not checked against the form.
+    expected_revision: Optional[int] = None
+
+
+class RotationPreviewRequest(BaseModel):
+    """The setup screen's unsaved rotation, to preview its coming weekends."""
+
+    workplace: Dict[str, Any]
+    shifts: List[Dict[str, Any]] = []
+    start: Optional[str] = None
+    weeks: int = 8

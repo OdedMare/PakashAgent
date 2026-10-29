@@ -55,8 +55,11 @@ def _explicit_rows(rows: Any, start, end) -> List[dict]:
         if not date:
             continue
         parsed = parse_date(date)
+        constraint_type = bounded(row.get("constraint_type")) or "availability"
+        earliest = start - datetime.timedelta(days=1) \
+            if start is not None and constraint_type == "duty" else start
         if start is not None and end is not None and (
-            parsed is None or parsed < start or parsed > end
+            parsed is None or parsed < earliest or parsed > end
         ):
             continue
         explicit.append({
@@ -69,6 +72,7 @@ def _explicit_rows(rows: Any, start, end) -> List[dict]:
             "is_hard": row.get("is_hard", True) is not False,
             "reason": bounded(row.get("reason")),
             "source": bounded(row.get("source")),
+            "constraint_type": constraint_type,
         })
     return explicit
 
@@ -126,6 +130,7 @@ def _expand_rule(
                 "is_hard": rule.get("is_hard", True) is not False,
                 "reason": bounded(rule.get("reason")),
                 "source": bounded(rule.get("source")) or "setup",
+                "constraint_type": bounded(rule.get("constraint_type")) or "availability",
             })
     return rows
 

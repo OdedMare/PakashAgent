@@ -23,6 +23,7 @@ values**: an unknown employee is `found: False` in Hebrew, not an exception.
 | `coverage_tools.py` | `coverage_gaps`, `publish_readiness` |
 | `placement_tools.py` | `validate_placement`, `find_replacements` |
 | `profile_tools.py` | `profile_gaps` |
+| `team_tools.py` | `who_works`, `workload_ranking`, `who_is_away`, `shadow_partners`: counts and filters over a date range |
 | `roster.py` | `resolve_employee`: one person, several, or none |
 | `reads.py` | The shared repository reads |
 """
@@ -38,6 +39,10 @@ from app.bl.tools.names import (
     TOOL_READ_PERIOD,
     TOOL_TEAM_OVERVIEW,
     TOOL_VALIDATE_PLACEMENT,
+    TOOL_SHADOW_PARTNERS,
+    TOOL_WHO_IS_AWAY,
+    TOOL_WHO_WORKS,
+    TOOL_WORKLOAD_RANKING,
 )
 from app.bl.tools.roster import resolve_employee
 from app.bl.tools.schedule_tools import ScheduleTools
@@ -46,5 +51,6 @@ __all__ = [
     "ScheduleTools", "resolve_employee", "TOOL_NAMES", "TOOL_DESCRIPTIONS",
     "TOOL_READ_PERIOD", "TOOL_TEAM_OVERVIEW", "TOOL_EMPLOYEE_STATE",
     "TOOL_COVERAGE_GAPS", "TOOL_VALIDATE_PLACEMENT", "TOOL_FIND_REPLACEMENTS",
-    "TOOL_PUBLISH_READINESS", "TOOL_PROFILE_GAPS",
+    "TOOL_PUBLISH_READINESS", "TOOL_PROFILE_GAPS", "TOOL_WHO_WORKS",
+    "TOOL_WORKLOAD_RANKING", "TOOL_WHO_IS_AWAY", "TOOL_SHADOW_PARTNERS",
 ]

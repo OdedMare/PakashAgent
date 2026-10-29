@@ -16,11 +16,8 @@ empty.
 
 from typing import List
 
-from app.bl.solver.model import HOUR_SCALE, HOUR_SPREAD, NIGHT_SCALE, NIGHT_SPREAD, Model
+from app.bl.solver.model import NIGHT_SCALE, NIGHT_SPREAD, SHIFT_SCALE, SHIFT_SPREAD, Model
 
-# The least a kept row is worth, so a shift with no clock (no hours to even
-# out) is still not traded away for nothing: an hour of evenness.
-_FLOOR = HOUR_SCALE * HOUR_SPREAD
 _KEPT = "שובץ/ה כבר בסידור הקיים; השיבוץ נשמר."
 _ABSORBED = "השינוי הוטמע בסידור הקיים: %d שיבוצים נשמרו, %d הוזזו או התפנו."
 
@@ -35,12 +32,11 @@ def apply_stability(model: Model) -> None:
 
 def _worth(problem, index: int) -> int:
     """Half of what moving this shift from an overloaded person to an
-    underloaded one gains in evenness (hours, and nights for a night)."""
-    times = problem.times[index]
-    worth = int(round(times["hours"] * HOUR_SCALE)) * HOUR_SPREAD
-    if times["night"]:
+    underloaded one gains in evenness (a shift, and a night for a night)."""
+    worth = SHIFT_SCALE * SHIFT_SPREAD
+    if problem.times[index]["night"]:
         worth += NIGHT_SCALE * NIGHT_SPREAD
-    return max(_FLOOR, worth)
+    return worth
 
 
 def kept_reason(problem, name: str, index: int) -> str:

@@ -2,7 +2,7 @@
 
 > These samples define the layout `bl/export.py` writes (Sample A) and are
 > the importer's first fixtures (`tests/test_importer.py`). Since
-> [D39](DECISIONS.md) the importer is not limited to them: any shape is a
+> [D42](DECISIONS.md) the importer is not limited to them: any shape is a
 > `Layout` (`bl/importer/layout.py`) — both samples turned on their side,
 > people down the side with shift names in the cells, weekday templates,
 > weeks stacked on one sheet.

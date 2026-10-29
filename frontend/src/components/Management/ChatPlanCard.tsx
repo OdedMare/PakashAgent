@@ -45,7 +45,7 @@ export function ChatPlanCard({ message, employees, disabled, onApply, onDismiss,
       </li>)}</ul>
     </details> : null}
     {plan.constraints.length ? <div className="conversation-plan-constraints"><strong>עדכון זמינות</strong>
-      {plan.constraints.map((row, index) => <p key={index}>{row.employee} · {formatDate(row.date)}{row.shift ? ` · ${row.shift}` : " · כל היום"} · {row.available ? "זמין/ה" : "לא זמין/ה"}</p>)}</div> : null}
+      {plan.constraints.map((row, index) => <p key={index}>{row.employee} · {formatDate(row.date)}{row.constraint_type === "duty" ? ` · תורנות ${row.start_time}–${row.end_time}` : row.shift ? ` · ${row.shift}` : " · כל היום"} · {row.constraint_type === "duty" ? "חוסמת" : row.available ? "זמין/ה" : "לא זמין/ה"}</p>)}</div> : null}
     {plan.profile_after ? <ProfileChanges plan={plan} /> : null}
     {conflicts.length ? <div className="conversation-plan-conflicts"><strong>חריגות שדורשות אישור</strong><ul>{conflicts.map((conflict) => <li key={conflict}>{conflict}</li>)}</ul>
       {pending ? <label><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} disabled={disabled} />אני מאשר/ת את החריגות לשינוי הזה. הכללים השמורים לא ישתנו.</label> : null}

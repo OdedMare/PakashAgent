@@ -27,7 +27,8 @@ import {
   updateProfile,
   deleteShiftType,
 } from "@/services/api";
-import type { Departure } from "@/services/api";
+import { displayDate } from "@/components/DateInput";
+import type { Departure, DepartureCover } from "@/services/api";
 import type {
   GenerationProgress,
   ManagementOverview,
@@ -149,6 +150,7 @@ interface ManagementState {
     slot_date: string;
     reason: string;
     schedule_id?: string;
+    from_slot_id?: string;
   }) => Promise<void>;
   /** Tell the hook which period the manager is looking at.
    *
@@ -169,6 +171,7 @@ interface ManagementState {
     is_hard?: boolean;
     reason?: string;
     source?: string;
+    constraint_type?: "availability" | "duty";
   }) => Promise<void>;
   removeConstraint: (rowId: string) => Promise<void>;
   saveProfile: (input: {
@@ -177,7 +180,14 @@ interface ManagementState {
   }) => Promise<boolean>;
   deleteShift: (name: string) => Promise<void>;
   previewDeparture: (input: { employee: string; effective_date?: string }) => Promise<Departure>;
-  depart: (input: { employee: string; effective_date?: string; reason?: string }) => Promise<boolean>;
+  /** Take somebody off the roster, then place each cover the manager chose
+   *  on a shift the departure vacated. */
+  depart: (input: {
+    employee: string;
+    effective_date?: string;
+    reason?: string;
+    covers?: DepartureCover[];
+  }) => Promise<boolean>;
   clearError: () => void;
 }
 
@@ -548,7 +558,10 @@ export function useManagement(): ManagementState {
     employees?: Record<string, unknown>[];
     shifts?: Record<string, unknown>[];
   }) => {
-    const saved = await run(() => updateProfile(input));
+    const saved = await run(() => updateProfile({
+      ...input,
+      expected_revision: overview?.profile_revision,
+    }));
     const absorbed = saved?.absorbed;
     if (!absorbed) return saved !== null;
     // The week on screen first: watching only today's period left a board
@@ -559,7 +572,7 @@ export function useManagement(): ManagementState {
     if (onScreen) void resumeGeneration(onScreen.schedule_id);
     if (absorbed.skipped.length) setError(skippedMessage(absorbed.skipped));
     return true;
-  }, [run, focused, overview?.schedule?.id, resumeGeneration]);
+  }, [run, focused, overview?.schedule?.id, overview?.profile_revision, resumeGeneration]);
 
   const deleteShift = useCallback(async (name: string) => {
     await run(() => deleteShiftType(name));
@@ -572,9 +585,38 @@ export function useManagement(): ManagementState {
     [],
   );
 
+  /** One write per cover after the departure, inside the same `run`, so the
+   *  board re-reads once. A cover the server refuses (a duty overlap, say)
+   *  leaves its shift vacant and is named in the banner; the departure and
+   *  the other covers stand. */
   const depart = useCallback(
-    async (input: { employee: string; effective_date?: string; reason?: string }) =>
-      (await run(() => departEmployee(input))) !== null,
+    async ({ covers = [], ...input }: {
+      employee: string;
+      effective_date?: string;
+      reason?: string;
+      covers?: DepartureCover[];
+    }) => {
+      const missed: string[] = [];
+      const done = await run(async () => {
+        const result = await departEmployee(input);
+        for (const cover of covers) {
+          try {
+            await assignEmployee({
+              ...cover,
+              reason: `מחליף/ה את ${input.employee} שיצא/ה מהסידור`,
+            });
+          } catch (reason) {
+            const why = reason instanceof Error ? reason.message : "";
+            missed.push(`${cover.employee} ל${cover.shift_name} ב-${displayDate(cover.slot_date)}${why ? ` (${why})` : ""}`);
+          }
+        }
+        return result;
+      });
+      if (done !== null && missed.length) {
+        setError(`${input.employee} הוצא/ה מהסידור, אבל לא ניתן היה לשבץ: ${missed.join("; ")}. המשמרות האלה נשארו פנויות.`);
+      }
+      return done !== null;
+    },
     [run],
   );
 
@@ -585,6 +627,7 @@ export function useManagement(): ManagementState {
       slot_date: string;
       reason: string;
       schedule_id?: string;
+      from_slot_id?: string;
     }) => {
       await run(() => moveAssignment(withPeriod(input)));
     },
@@ -602,6 +645,7 @@ export function useManagement(): ManagementState {
       is_hard?: boolean;
       reason?: string;
       source?: string;
+      constraint_type?: "availability" | "duty";
     }) => {
       await run(() => setConstraint(input));
     },

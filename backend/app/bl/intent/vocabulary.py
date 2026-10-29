@@ -10,6 +10,9 @@ INTENT_EMPLOYEE = "employee"
 INTENT_PUBLISH = "publish_readiness"
 INTENT_PERIOD = "period"
 INTENT_TEAM = "team"
+INTENT_WHO_WORKS = "who_works"
+INTENT_WORKLOAD = "workload"
+INTENT_AWAY = "away"
 INTENT_UNKNOWN = "unknown"
 
 # Hebrew weekdays as the product writes them everywhere else -- setup
@@ -69,6 +72,23 @@ TEAM_WORDS = (
     "איזה עובדים בצוות", "איזה עובדות בצוות", "מידע על הצוות",
     "ספר לי על הצוות", "מה אתה יודע על הצוות", "מה ידוע על הצוות",
     "התפקיד של כל אחד", "מה הכללים", "אילו כללים", "כללי הצוות",
+)
+
+# Phrases asking who is on the schedule -- a date or a week, nobody named.
+WHO_WORKS_WORDS = (
+    "מי עובד", "מי עובדת", "מי עובדים", "מי במשמרת", "מי משובץ", "מי משובצת",
+    "מי משובצים", "מי בסידור",
+)
+
+# Phrases asking who carried the most (or the least).
+WORKLOAD_WORDS = ("הכי הרבה", "הכי מעט", "הכי פחות")
+
+# Phrases asking who is not here. Asked about the team, so no name: "דנה
+# חולה" is an absence to plan for, "מי חולה" is a list to read.
+AWAY_WORDS = (
+    "מי לא נמצא", "מי לא נמצאת", "מי לא נמצאים", "מי חולה", "מי חולים",
+    "מי בבית", "מי בחופש", "מי לא בבסיס", "מי נעדר", "מי לא מגיע",
+    "מי ביציאה", "מי יוצא", "בתורנות", "בתורנויות",
 )
 
 MAX_TEXT_CHARS = 500

@@ -33,12 +33,13 @@ def same_slot(row: dict, slot: dict) -> bool:
     )
 
 
-def eligible(person: dict, shift: str, definition: Optional[dict] = None) -> bool:
+def eligible(person: dict, shift: str, definition: Optional[dict] = None,
+             declared: Optional[list] = None, shadow: bool = False) -> bool:
     """The person's own `eligible_shifts`, then the shift's `allowed_roles`."""
     allowed = person.get("eligible_shifts")
     if isinstance(allowed, list) and allowed and shift not in allowed:
         return False
-    return role_qualified(person, definition)
+    return role_qualified(person, definition, declared, shadow)
 
 
 def roles(person: dict) -> set:

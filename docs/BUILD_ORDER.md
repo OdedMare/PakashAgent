@@ -1,6 +1,13 @@
 # Build order
 
-**Start here in a new session.**
+> **Historical record.** This is the order the product was first built in,
+> kept for its reasoning. Much of what it names has since been replaced or
+> removed: the intro interview, the briefing (D15), the importer, Opik
+> tracing (D30), the AI scheduler (superseded by the CP-SAT solver, D34),
+> and single files that became packages (`bl/audit/`, `bl/scheduler/`,
+> `bl/changes/`, `bl/rotation/`…). **For the system as it is now, start
+> with [`../README.md`](../README.md), [`SYSTEM_MAP.md`](SYSTEM_MAP.md) and
+> [`../backend/CLAUDE.md`](../backend/CLAUDE.md).**
 
 Done so far: step 1 (scaffold and port), step 2 (all tables and their
 repositories), **step 3 (`bl/audit.py` and its table-driven tests)**, step 4
@@ -37,7 +44,7 @@ order below. **`export.py` is worth reading before step 6:** it already
 writes the Sample A layout the importer must parse, so the two are the same
 shape seen from opposite ends.
 
-**Step 6, the importer, was built, removed, and rebuilt as D39** (the text below is history; the current importer reads a `Layout` rather than one class per shape) — `bl/importer.py` (layout inference)
+**Step 6, the importer, was built, removed, and rebuilt as D42** (the text below is history; the current importer reads a `Layout` rather than one class per shape) — `bl/importer.py` (layout inference)
 and `bl/learn.py` (what a stack of past files says about the workplace), with
 both `FILE_FORMATS.md` samples as fixtures under `tests/fixtures/build.py`.
 One inference reads both, which is the regression the two samples exist for.
@@ -98,7 +105,7 @@ including on-call weighting — the importer and the audit both depend on it.
 **5. Schedule generation.**
 Assignments carry reasons. Same representation as imported schedules.
 
-**6. Importer.** *(removed for a while, then rebuilt as [D39](DECISIONS.md): `bl/importer/`, one reader for any `Layout`)*
+**6. Importer.** *(removed for a while, then rebuilt as [D42](DECISIONS.md): `bl/importer/`, one reader for any `Layout`)*
 Both fixtures from [`FILE_FORMATS.md`](FILE_FORMATS.md) are built in
 `tests/fixtures/build.py` and one inference passes both — they are
 structurally different on purpose, and that is the whole test.
@@ -129,8 +136,9 @@ End-to-end against a local Ollama:
 
 1. Run the intro interview; confirm the shift vocabulary is stored.
 2. Generate a week; check each assignment carries a reason.
-3. Deliberately break a rule; confirm a warning appears **and the schedule still
-   renders** — a blocked save means D3 was reversed.
+3. Deliberately break an ordinary rule; confirm a warning appears **and the
+   schedule still renders**. Then add an operational duty and confirm only an
+   overlapping placement is blocked.
 4. Import a sample sheet; confirm the interpretation screen appears and nothing
    persists until approved.
 5. Say "Dana's sick Thursday"; confirm the agent asks for a reason, justifies its

@@ -603,6 +603,7 @@ export function Management({
                 stats={overview.stats}
                 dark={theme === "dark"}
                 rotationMode={overview.profile?.workplace?.rotation_mode}
+                dayCycles={overview.profile?.workplace?.day_cycles}
                 onAdd={state.addConstraint}
                 onRemove={state.removeConstraint}
                 onSaveProfile={state.saveProfile}
@@ -765,8 +766,11 @@ export function Management({
             shifts={overview?.shifts ?? []}
             today={overview?.today ?? ""}
             rotationMode={overview?.profile?.workplace?.rotation_mode}
+            dayCycles={overview?.profile?.workplace?.day_cycles}
             disabled={agent.busy || agent.working}
             onSaveProfile={state.saveProfile}
+            onPreviewDeparture={state.previewDeparture}
+            onDepart={state.depart}
             onPrepare={(message) => {
               // The picks become a plan in the conversation, where approving
               // it is the one write path (D12); the server reads this wording
@@ -806,6 +810,7 @@ export function Management({
             stats={overview?.stats}
             dark={theme === "dark"}
             rotationMode={overview?.profile?.workplace?.rotation_mode}
+            dayCycles={overview?.profile?.workplace?.day_cycles}
             draggable={schedule?.status === "draft" && !state.busy}
             onAdd={state.addConstraint}
             onRemove={state.removeConstraint}

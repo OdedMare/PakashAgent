@@ -5,22 +5,28 @@ from typing import List, Optional
 from app.bl.intent.dates import date_in
 from app.bl.shared import text as _text
 from app.bl.intent.vocabulary import (
-    ABSENCE_WORDS, EMPLOYEE_WORDS, GAP_WORDS, INTENT_ABSENCE, INTENT_EMPLOYEE,
-    INTENT_GAPS, INTENT_PERIOD, INTENT_PUBLISH, INTENT_REPLACEMENTS,
-    INTENT_TEAM, INTENT_UNKNOWN, MAX_TEXT_CHARS, PERIOD_WORDS, PUBLISH_WORDS,
-    REPLACEMENT_WORDS, TEAM_WORDS,
+    ABSENCE_WORDS, AWAY_WORDS, EMPLOYEE_WORDS, GAP_WORDS, INTENT_ABSENCE, INTENT_AWAY,
+    INTENT_EMPLOYEE, INTENT_GAPS, INTENT_PERIOD, INTENT_PUBLISH, INTENT_REPLACEMENTS,
+    INTENT_TEAM, INTENT_UNKNOWN, INTENT_WHO_WORKS, INTENT_WORKLOAD, MAX_TEXT_CHARS,
+    PERIOD_WORDS, PUBLISH_WORDS, REPLACEMENT_WORDS, TEAM_WORDS, WHO_WORKS_WORDS,
+    WORKLOAD_WORDS,
 )
 
 # (intent, phrases, needs a named employee). **Order is the decision.**
 # Publish before gaps: "מה חסר לפני פרסום" contains "מה חסר", and a bare gap
 # search would drop the pending requests and warnings. Absence before
 # replacement: "דנה חולה, מי יכול להחליף" is both, and the absence reading
-# carries the extra fact that somebody is unavailable.
+# carries the extra fact that somebody is unavailable. Workload and away
+# before absence: "מי חולה" asks for a list, while "דנה חולה" (a name, no
+# "מי") still reads as an absence.
 _RULES = (
     (INTENT_PUBLISH, PUBLISH_WORDS, False),
+    (INTENT_WORKLOAD, WORKLOAD_WORDS, False),
+    (INTENT_AWAY, AWAY_WORDS, False),
     (INTENT_ABSENCE, ABSENCE_WORDS, True),
     (INTENT_REPLACEMENTS, REPLACEMENT_WORDS, False),
     (INTENT_GAPS, GAP_WORDS, False),
+    (INTENT_WHO_WORKS, WHO_WORKS_WORDS, False),
     (INTENT_EMPLOYEE, EMPLOYEE_WORDS, True),
     (INTENT_TEAM, TEAM_WORDS, False),
     (INTENT_PERIOD, PERIOD_WORDS, False),

@@ -1,4 +1,4 @@
-"""A period leaving as a file (D17), and the workplace's own files coming in (D7/D39)."""
+"""A period leaving as a file (D17), and the workplace's own files coming in (D7/D42)."""
 
 import json
 
@@ -38,7 +38,7 @@ class TransferRoutes(RouteGroup):
             )
 
     def _register_import(self, router: APIRouter) -> None:
-        """A file coming in: preview, then confirm (D7/D39)."""
+        """A file coming in: preview, then confirm (D7/D42)."""
         service, boss = self.service, self.boss
 
         @router.post("/import/preview", response_model=ImportPreview)

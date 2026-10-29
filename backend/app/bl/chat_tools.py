@@ -1,15 +1,18 @@
 """Read-only tools and conversation context for manager chat."""
 
+import datetime
 import json
 
 from app.bl import intent as intent_reader
+from app.bl.intent.reader import first_named
 from app.bl.audit import shift_stats
 from app.bl.changes.proposal import build_proposal
 from app.bl.chat_constraints import constraints_report, normalize_constraints
 from app.bl.chat_contract import RejectedPlan, audit_plan, changed_rows, plan_for_model
 from app.bl.planner.fallback_answers import FallbackAnswers
+from app.bl.planner.team_answers import TeamAnswers
 from app.bl.prompts import load
-from app.bl.shared import warning_key
+from app.bl.shared import person_roles, warning_key
 from app.bl.simulate.hypothetical import schedule_rows
 from app.bl.tools import ScheduleTools, TOOL_DESCRIPTIONS
 from app.bl.tools.schedule_tools import _invalid_date_argument
@@ -18,6 +21,7 @@ from app.common.errors import AgentError
 from app.common.time_context import israel_today
 
 _FULL_RESULTS = 2
+_RANGE_TOOLS = ("who_works", "workload_ranking", "who_is_away")
 _EXTRA_DESCRIPTIONS = {
     "list_periods": "כל הסידורים השמורים של הצוות ותאריכיהם",
     "workload_report": "השוואת שעות, מספר משמרות וכוננויות בכל טווח תאריכים",
@@ -36,6 +40,7 @@ class ManagerChatTools:
         self._context = context
         self._tools = ScheduleTools(repository)
         self._fallback = FallbackAnswers(self._tools)
+        self._team = TeamAnswers(self._tools)
 
     @property
     def descriptions(self):
@@ -83,10 +88,54 @@ class ManagerChatTools:
             }
         return reply, output
 
+    def team_question(self, team_id, request, profile, period=None):
+        """Answer "who works / who did the most / who is away" without a
+        model round, or return None to leave the turn to the model.
+
+        Only when no person is named -- "מי עובד עם דנה" is a different
+        question -- and only when the sentence names its time: a bare "מי
+        עובד?" may mean the week on screen, and that is the model's to read
+        from the conversation. A weekday resolves inside the focused period.
+        """
+        people = [row.get("name") or "" for row in profile.get("employees") or []]
+        shifts = [row.get("name") or "" for row in profile.get("shifts") or []]
+        today = israel_today().isoformat()
+        read = intent_reader.read(request, people, shifts, today=today, period=period)
+        handlers = {
+            intent_reader.INTENT_WHO_WORKS: self._team.who_works,
+            intent_reader.INTENT_WORKLOAD: self._team.workload,
+            intent_reader.INTENT_AWAY: self._team.away,
+        }
+        if read["intent"] not in handlers or read["employee"]:
+            return None
+        first, last = intent_reader.week_in(request, today)
+        if not first:
+            if not read["date"]:
+                return None
+            first = last = read["date"]
+        roles = sorted({role for row in profile.get("employees") or [] for role in person_roles(row)})
+        read.update(
+            starts_on=first, ends_on=last,
+            role=first_named(request, roles) if read["intent"] == intent_reader.INTENT_WORKLOAD else "",
+            commanders_only=any(word in request for word in ("מפקד", "רשצ", "רש\"צ", "רש״צ")),
+            fewest=any(word in request for word in ("הכי מעט", "הכי פחות")),
+            away_focus="sick" if "חול" in request else "duty" if "תורנ" in request else (
+                "home" if any(word in request for word in ("בבית", "ביציאה", "יוצא")) else ""),
+        )
+        reply, steps, results, _ = handlers[read["intent"]](team_id, read)
+        return reply, {"steps": steps, "results": results, "question": None}
+
     @staticmethod
     def focus_arguments(name, arguments, schedule_id, context):
         """Aim a dateless read at the week on screen."""
-        has_date = arguments.get("day") or arguments.get("slot_date")
+        has_date = arguments.get("day") or arguments.get("slot_date") or arguments.get("starts_on")
+        if name in _RANGE_TOOLS and not has_date:
+            # These read a date range, never a period id: the week on screen.
+            week = context.get("visible_week")
+            if not week:
+                return None
+            last = (datetime.date.fromisoformat(week) + datetime.timedelta(days=6)).isoformat()
+            return dict(arguments, starts_on=week, ends_on=last)
         if (name not in TOOL_DESCRIPTIONS and name != "simulate_changes") \
                 or arguments.get("schedule_id") or has_date:
             return arguments

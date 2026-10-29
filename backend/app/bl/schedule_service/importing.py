@@ -1,4 +1,4 @@
-"""Importing the workplace's own spreadsheets (D7/D39): preview, then commit.
+"""Importing the workplace's own spreadsheets (D7/D42): preview, then commit.
 
 `ImportPreview` reads a file and says what it holds; it writes nothing.
 `ImportCommitter` stores exactly the rows the manager approved -- taken

@@ -38,6 +38,9 @@ to blame is worse than one that asks.
 - **employee** — *"מה יש ל-X"*, *"כמה שעות יש ל-X"*
 - **publish readiness** — *"מה חסר לפני פרסום"*, *"אפשר לפרסם"*
 - **period** — *"מה יש השבוע"*, *"תראה לי את השבוע"*
+- **who works** — *"מי עובד היום"*, *"מי במשמרת פריצה לילה מחר"*
+- **workload** — *"מי עבד הכי הרבה השבוע"*, *"איזה מפקד תפס הכי הרבה משמרות"*
+- **away** — *"מי לא נמצא היום"*, *"מי חולה"*, *"מי בבית השבוע"*
 
 Names come from the roster, never from the sentence's own shape: a token is
 an employee because the workplace declared it, which is what stops a
@@ -56,10 +59,14 @@ from app.bl.intent.vocabulary import (
     INTENT_REPLACEMENTS,
     INTENT_TEAM,
     INTENT_UNKNOWN,
+    INTENT_AWAY,
+    INTENT_WHO_WORKS,
+    INTENT_WORKLOAD,
 )
+from app.bl.intent.dates import week_in
 
 __all__ = [
     "read", "INTENT_REPLACEMENTS", "INTENT_ABSENCE", "INTENT_GAPS",
     "INTENT_EMPLOYEE", "INTENT_PUBLISH", "INTENT_PERIOD", "INTENT_TEAM",
-    "INTENT_UNKNOWN",
+    "INTENT_UNKNOWN", "INTENT_AWAY", "INTENT_WHO_WORKS", "INTENT_WORKLOAD", "week_in",
 ]

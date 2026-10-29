@@ -21,7 +21,9 @@ from typing import List, Optional
 
 from psycopg.types.json import Jsonb
 
-from app.common.errors import AuthError, NotFoundError
+from app.common.errors import (
+    PROFILE_CHANGED, AuthError, ConflictError, NotFoundError,
+)
 from app.dal.repository.base import RepositoryBase, new_id
 
 # scrypt's cost parameters. n=2**14 with r=8 lands around 16MB and a few tens
@@ -158,21 +160,48 @@ class TeamRepository(RepositoryBase):
         )
         return rows[0]["profile"] if rows else None
 
-    def update_team_profile(self, team_id: str, profile: dict) -> dict:
-        """Replace the team's working profile."""
+    def team_profile_revision(self, team_id: str) -> Optional[int]:
+        """The profile's revision, which a save may name to refuse a stale
+        edit; None before the first save."""
+        rows = self._all(
+            "SELECT revision FROM team_profiles WHERE team_id=%s", (team_id,)
+        )
+        return rows[0]["revision"] if rows else None
+
+    def update_team_profile(
+        self, team_id: str, profile: dict,
+        expected_revision: Optional[int] = None,
+    ) -> dict:
+        """Replace the team's working profile.
+
+        With `expected_revision`, only if nobody saved since that revision
+        was read: the check and the write are one statement, so two saves
+        racing each other cannot both pass it.
+        """
         rows = self._all("""
-            UPDATE team_profiles SET profile=%s, updated_at=NOW()
-            WHERE team_id=%s RETURNING team_id
-        """, (Jsonb(profile), team_id))
-        if not rows:
-            raise NotFoundError("פרופיל הצוות לא נמצא")
-        return profile
+            UPDATE team_profiles SET profile=%s, updated_at=NOW(),
+                revision=revision + 1
+            WHERE team_id=%s AND (%s::int IS NULL OR revision=%s::int)
+            RETURNING team_id
+        """, (Jsonb(profile), team_id, expected_revision, expected_revision))
+        if rows:
+            return profile
+        if expected_revision is not None and self.team_profile(team_id) is not None:
+            raise ConflictError(PROFILE_CHANGED)
+        raise NotFoundError("פרופיל הצוות לא נמצא")
 
     def create_team_profile(self, team_id: str, profile: dict) -> dict:
-        """Create the team's first manually configured profile."""
-        self._execute("""
+        """Create the team's first manually configured profile.
+
+        Two first saves racing each other: the second is refused as stale
+        rather than failing on the primary key.
+        """
+        rows = self._all("""
             INSERT INTO team_profiles (team_id, profile) VALUES (%s,%s)
+            ON CONFLICT (team_id) DO NOTHING RETURNING team_id
         """, (team_id, Jsonb(profile)))
+        if not rows:
+            raise ConflictError(PROFILE_CHANGED)
         return profile
 
 

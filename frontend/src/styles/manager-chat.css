@@ -194,10 +194,13 @@ body:has(.management-workspace.has-drawer) .tutorial-fab { left: auto; right: 20
 .changes-panel > header h2 { margin: 0; font-size: 17px; }
 .changes-panel > header p { margin: 4px 0 0; color: var(--text-muted); font-size: 13px; line-height: 1.6; }
 .changes-panel .replacement-panel { padding: 0; }
-.changes-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 3px; border-radius: 12px; background: var(--surface-muted, color-mix(in srgb, var(--text) 6%, transparent)); }
+.changes-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 3px; border-radius: 12px; background: var(--surface-muted, color-mix(in srgb, var(--text) 6%, transparent)); }
 .changes-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 6px 8px; border: 0; border-radius: 9px; background: transparent; color: var(--text-soft); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .changes-actions button.is-active { background: var(--surface); color: var(--primary); box-shadow: 0 1px 2px color-mix(in srgb, #000 12%, transparent); }
 .changes-actions button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .changes-done { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.6; color: var(--success); background: color-mix(in srgb, var(--success) 10%, transparent); }
 .changes-done svg { flex: none; margin-top: 3px; }
-@media (max-width: 420px) { .changes-actions span { font-size: 12px; } }
+.changes-remove { display: grid; gap: 12px; }
+.changes-remove select { width: 100%; }
+.departure-covers { display: grid; gap: 10px; margin-bottom: 12px; }
+@media (max-width: 420px) { .changes-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } .changes-actions span { font-size: 12px; } }

@@ -15,7 +15,11 @@ From the **repository root** — the build contexts are relative to that:
 docker compose -p pakash-sandbox -f devsandbox/docker-compose.sandbox.yml up --build
 ```
 
-Then open <http://localhost:3200>.
+Then open <http://localhost:3200/admin>, sign in to the operator console
+(the committed default password is `010802` unless `PAKASH_ADMIN_PASSWORD` or
+`PAKASH_SETTINGS_PASSWORD` is set) and open a team; then sign in to it from
+<http://localhost:3200>. There is no separate worker service here: the job
+worker runs inside the backend process (`PAKASH_EMBEDDED_WORKER` defaults on).
 
 Tear it down, volumes included:
 
@@ -73,7 +77,8 @@ PAKASH_LLM_BASE_URL=http://pghost:11434/v1 \
   docker compose -p pakash-sandbox -f devsandbox/docker-compose.sandbox.yml up
 ```
 
-Or change it at runtime in the UI's **הגדרות מערכת** panel — saved settings
+Or change it at runtime in the operator console's **מערכת ← הגדרות המערכת**
+(`/admin`) — saved settings
 override the environment without a restart, and they persist on the
 `sandbox-settings` volume across container rebuilds.
 
@@ -92,10 +97,25 @@ docker compose -p pakash-sandbox -f devsandbox/docker-compose.sandbox.yml \
 - `settings-permissions` is a one-shot `chown` that runs before the backend
   and exits. Docker creates the settings volume owned by root, but the
   backend runs as uid 999 and must write `runtime-settings.json` there; without
-  it, saving from the Settings panel fails. The uid appears in both that
+  it, saving the system settings fails. The uid appears in both that
   service and `backend.sandbox.Dockerfile` — change them together.
 - The per-field `PAKASH_DATABASE_*` overrides are deliberately blanked. They
   default to `localhost`, which inside the backend container means the
   container itself, and they take precedence over `PAKASH_DATABASE_URL`.
 - `BACKEND_URL` is a **build** arg for the frontend, not just a runtime
   variable: `next.config.ts` bakes the rewrite target into the build output.
+
+## Scenarios
+
+`scenarios/` holds ready-made teams for exercising edge cases. Each is a
+profile JSON plus a Hebrew guide of what to try. Load one into a running
+stack (it opens a new team and never touches an existing one):
+
+```bash
+python devsandbox/seed_scenario.py devsandbox/scenarios/unit_619.json \
+    --url http://localhost:8100 --admin-password 010802 --team-password 619619
+```
+
+`backend/tests/test_scenarios.py` saves every scenario through the profile
+validators, so one the schema has outgrown fails in CI rather than on the
+evening someone sits down to use it.

@@ -158,7 +158,7 @@ class ScheduleService:
     def delete(self, *args, **kwargs):
         return self._manual.delete(*args, **kwargs)
 
-    # -- importing the workplace's own files (D7/D39) ------------------------
+    # -- importing the workplace's own files (D7/D42) ------------------------
 
     def preview_import(self, *args, **kwargs):
         return self._import_preview.preview(*args, **kwargs)

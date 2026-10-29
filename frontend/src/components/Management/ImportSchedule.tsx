@@ -25,7 +25,7 @@ const SOURCE_LABEL: Record<ImportPreview["layout_source"], string> = {
  *  file back to be re-read, and only the confirm button stores. There is no
  *  template: the server finds the layout itself, asks the agent when it is
  *  unsure, and the manager can fix it in a few fields or pick another
- *  reading in one click (D39). */
+ *  reading in one click (D42). */
 export function ImportSchedule({ employees, shiftNames, onImported, onClose }: {
   /** The roster, offered for names the file writes differently. */
   employees: string[];

@@ -6,6 +6,8 @@
 
 ## סטטוס: מומש (D32)
 
+> **הערה:** התוכנית נכתבה לפני פותר האילוצים (D34). מאז `deterministic_scheduler/` ומסלול ה-AI המלא הוסרו: הבקשות נאכפות ב-`bl/solver/` (`requests.py`, `rules.py`), ומקור שלא תורגם מדווח ב-notes של הבנייה ולא נשלח לשיבוץ AI. שמות כמו `PlanningAgent`, `_translate_directives` ו-`compiled_misses` למטה הם היסטוריים.
+
 הקוד ב־`backend/app/bl/compiled_sources/`. מה שונה מהתוכנית בזמן המימוש:
 
 - **טבלה:** עמודת `translation` אחת מסוג JSONB (availability, pins, requests) במקום `requests`/`pins` נפרדים.
@@ -16,7 +18,7 @@
 
 ## שלב 2: מומש
 
-ארבעה סוגי בקשות חדשים ב־`bl/schedule_requests.py`, שנאכפים ב־`deterministic_scheduler/limits.py`:
+ארבעה סוגי בקשות חדשים ב־`bl/schedule_requests.py`, שנאכפים היום ב־`bl/solver/requests.py` (במקור ב־`deterministic_scheduler/limits.py`, שהוסר):
 
 | סוג | משמעות | דוגמה |
 |---|---|---|

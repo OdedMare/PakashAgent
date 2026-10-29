@@ -6,8 +6,9 @@ import { useMemo, useState } from "react";
 import { EMPLOYEE_DRAG_TYPE } from "@/components/Board/dragData";
 import { DateInput, displayDate } from "@/components/DateInput";
 import { TimeInput } from "@/components/TimeInput";
+import { cycleName, cycleOf, cyclePattern, isDayCycle } from "@/lib/dayCycles";
 import type { Departure } from "@/services/api";
-import type { Constraint, ShiftStats } from "@/types";
+import type { Constraint, DayCycle, ShiftStats } from "@/types";
 
 import { ConfirmDeparture } from "./ConfirmDeparture";
 import { buildPalette, colorStyle } from "./palette";
@@ -32,6 +33,7 @@ export function TeamPanel({
   draggable = false,
   readOnly = false,
   rotationMode = "round",
+  dayCycles = [],
   today = "",
   onAdd,
   onRemove,
@@ -49,6 +51,7 @@ export function TeamPanel({
   draggable?: boolean;
   readOnly?: boolean;
   rotationMode?: "round" | "triplet";
+  dayCycles?: DayCycle[];
   today?: string;
   onAdd?: (input: {
     employee: string;
@@ -60,6 +63,7 @@ export function TeamPanel({
     is_hard?: boolean;
     reason?: string;
     source?: string;
+    constraint_type?: "availability" | "duty";
   }) => void;
   onRemove?: (rowId: string) => void;
   onSaveProfile?: (input: {
@@ -153,7 +157,7 @@ export function TeamPanel({
                   <span className="roster-name">{name}</span>
                   <span className="roster-role">
                     {text(person?.role) || "ללא תפקיד מוגדר"}
-                    {person ? ` · ${exitPatternLabel(person)}` : ""}
+                    {person ? ` · ${exitPatternLabel(person, dayCycles)}` : ""}
                     {text(person?.rotation_group) ? ` ${text(person?.rotation_group)}` : ""}
                     {text(person?.service_type) ? ` · ${SERVICE_TYPE_LABELS[text(person?.service_type)] ?? text(person?.service_type)}` : ""}
                   </span>
@@ -250,6 +254,7 @@ export function TeamPanel({
                 : undefined}
               shiftNames={shiftNames}
               defaultExitPattern={rotationMode}
+              dayCycles={dayCycles}
               onCancel={() => {
                 setAddingEmployee(false);
                 setEditingEmployee(null);
@@ -298,7 +303,7 @@ export function TeamPanel({
                     {shift.requires_shift_manager ? " · נדרש מפקד/ת" : ""}
                   </span>
                 </span>
-                <span className="roster-load">תקן {shiftHeadcount(shift)}</span>
+                <span className="roster-load">תקן {shiftHeadcount(shift)}{weekendHeadcount(shift) ? ` · סופ״ש ${weekendHeadcount(shift)}` : ""}</span>
                 {onSaveProfile ? (
                   <button
                     type="button"
@@ -394,7 +399,7 @@ export function TeamPanel({
       <section className="panel-section">
         <h3>
           <CalendarOff size={15} />
-          אילוצים
+          אילוצים ותורנויות
           <span className="panel-count">{constraints.length + recurringConstraints.length}</span>
         </h3>
 
@@ -405,8 +410,9 @@ export function TeamPanel({
               <div className="constraint-main">
                 <span className="constraint-who">{employee}</span>
                 <span className="constraint-when">
-                  קבוע · {strings(rule.days).length ? strings(rule.days).join(", ") : "כל יום"}
+                  {text(rule.constraint_type) === "duty" ? "תורנות קבועה" : "קבוע"} · {strings(rule.days).length ? strings(rule.days).join(", ") : "כל יום"}
                   {strings(rule.shifts).length ? ` · ${strings(rule.shifts).join(", ")}` : " · כל המשמרות"}
+                  {text(rule.constraint_type) === "duty" && (text(rule.start_time) || text(rule.end_time)) ? ` · ${text(rule.start_time)}–${text(rule.end_time)}` : ""}
                 </span>
               </div>
               {text(rule.reason) ? <span className="constraint-reason">{text(rule.reason)}</span> : null}
@@ -429,7 +435,9 @@ export function TeamPanel({
                 <span className="constraint-who">{row.employee}</span>
                 <span className="constraint-when">
                   {displayDate(row.constraint_date)}
-                  {row.shift_name ? ` · ${row.shift_name}` : " · כל היום"}
+                  {row.constraint_type === "duty"
+                    ? " · תורנות חוסמת"
+                    : row.shift_name ? ` · ${row.shift_name}` : " · כל היום"}
                   {formatWindow(row) ? ` · ${formatWindow(row)}` : ""}
                 </span>
               </div>
@@ -483,6 +491,7 @@ export function TeamPanel({
                         is_hard: input.is_hard,
                         reason: input.reason,
                         source: "manager",
+                        constraint_type: input.constraint_type,
                       }],
                     };
                   });
@@ -514,12 +523,14 @@ export function EmployeeForm({
   initial,
   shiftNames,
   defaultExitPattern,
+  dayCycles = [],
   onCancel,
   onSubmit,
 }: {
   initial?: Record<string, unknown>;
   shiftNames: string[];
   defaultExitPattern: "round" | "triplet";
+  dayCycles?: DayCycle[];
   onCancel: () => void;
   onSubmit: (employee: Record<string, unknown>) => void;
 }) {
@@ -528,7 +539,7 @@ export function EmployeeForm({
   const [exitPattern, setExitPattern] = useState(
     text(initial?.exit_pattern) || defaultExitPattern,
   );
-  const groups = exitPattern === "triplet" ? ["א", "ב", "ג"] : exitPattern === "round" ? ["א", "ב"] : [];
+  const groups = patternGroups(exitPattern, dayCycles);
   const [rotationGroup, setRotationGroup] = useState(text(initial?.rotation_group) || groups[0] || "");
   const [serviceType, setServiceType] = useState(text(initial?.service_type) || "standard");
   const [countsTowardStaffing, setCountsTowardStaffing] = useState(initial?.counts_toward_staffing !== false);
@@ -559,8 +570,11 @@ export function EmployeeForm({
         <label><span>מבנה יציאות</span><select value={exitPattern} onChange={(event) => {
           const pattern = event.target.value;
           setExitPattern(pattern);
-          setRotationGroup(pattern === "triplet" || pattern === "round" ? "א" : "");
-        }}>{Object.entries(EXIT_PATTERN_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+          setRotationGroup(patternGroups(pattern, dayCycles)[0] ?? "");
+        }}>{Object.entries(EXIT_PATTERN_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          {dayCycles.map((cycle) => <option key={cycle.id} value={cyclePattern(cycle)}>{cycle.name} {cycle.groups.join(" / ")}</option>)}
+          {isDayCycle(exitPattern) && !cycleOf(dayCycles, exitPattern) ? <option value={exitPattern}>מחזור שהוסר</option> : null}
+        </select></label>
         {groups.length ? <label><span>קבוצה</span><select value={rotationGroup} onChange={(event) => setRotationGroup(event.target.value)}>{groups.map((group) => <option key={group}>{group}</option>)}</select></label> : null}
         <label><span>מעמד</span><select value={serviceType} onChange={(event) => {
           setServiceType(event.target.value);
@@ -666,6 +680,15 @@ function shiftHeadcount(shift?: Record<string, unknown>): number {
   return typeof fallback?.headcount === "number" ? fallback.headcount : 1;
 }
 
+/** The weekend's own headcount, when setup gave it one: the staffing group
+ *  marked as the closure's, or an older one naming Friday and Saturday. */
+function weekendHeadcount(shift: Record<string, unknown>): number | null {
+  const staffing = Array.isArray(shift.staffing) ? shift.staffing as Array<{ days?: unknown; headcount?: unknown; closure?: unknown }> : [];
+  const group = staffing.find((row) => row?.closure === true || (Array.isArray(row?.days)
+    && row.days.length === 2 && row.days.includes("שישי") && row.days.includes("שבת")));
+  return typeof group?.headcount === "number" ? group.headcount : null;
+}
+
 function formatHours(hours: number): string {
   return Number.isInteger(hours) ? `${hours} ש׳` : `${hours.toFixed(1)} ש׳`;
 }
@@ -694,6 +717,7 @@ function ConstraintForm({
     is_hard?: boolean;
     reason?: string;
     source?: string;
+    constraint_type?: "availability" | "duty";
     duration: "temporary" | "permanent";
     weekdays: string[];
   }) => void;
@@ -701,7 +725,7 @@ function ConstraintForm({
   const [employee, setEmployee] = useState(names[0] ?? "");
   const [date, setDate] = useState("");
   const [shift, setShift] = useState("");
-  const [kind, setKind] = useState<"unavailable" | "window">("unavailable");
+  const [kind, setKind] = useState<"unavailable" | "window" | "duty">("unavailable");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [isHard, setIsHard] = useState(true);
@@ -713,7 +737,8 @@ function ConstraintForm({
   const ready =
     employee.trim() !== "" &&
     (duration === "permanent" ? weekdays.length > 0 : date !== "") &&
-    (kind === "unavailable" || startTime !== "" || endTime !== "");
+    (kind === "unavailable" || kind === "window" && (startTime !== "" || endTime !== "")
+      || kind === "duty" && startTime !== "" && endTime !== "");
 
   return (
     <form
@@ -726,11 +751,12 @@ function ConstraintForm({
           constraint_date: date,
           shift_name: shift,
           available: kind === "window",
-          start_time: kind === "window" ? startTime : "",
-          end_time: kind === "window" ? endTime : "",
-          is_hard: isHard,
+          start_time: kind === "window" || kind === "duty" ? startTime : "",
+          end_time: kind === "window" || kind === "duty" ? endTime : "",
+          is_hard: kind === "duty" ? true : isHard,
           reason: reason.trim(),
           source,
+          constraint_type: kind === "duty" ? "duty" : "availability",
           duration,
           weekdays,
         });
@@ -775,7 +801,7 @@ function ConstraintForm({
         />
       </label> : <fieldset className="profile-checkboxes"><legend>ימים קבועים</legend>{WEEKDAYS.map((day) => <label key={day}><input type="checkbox" checked={weekdays.includes(day)} onChange={(event) => setWeekdays(event.target.checked ? [...weekdays, day] : weekdays.filter((value) => value !== day))} /><span>{day}</span></label>)}</fieldset>}
 
-      <label>
+      {kind !== "duty" ? <label>
         <span>משמרת</span>
         <select
           value={shift}
@@ -790,42 +816,45 @@ function ConstraintForm({
             </option>
           ))}
         </select>
-      </label>
+      </label> : null}
 
       <label>
-        <span>סוג זמינות</span>
+        <span>סוג רישום</span>
         <select
           value={kind}
-          onChange={(event) =>
-            setKind(event.target.value as "unavailable" | "window")
-          }
+          onChange={(event) => {
+            const next = event.target.value as "unavailable" | "window" | "duty";
+            setKind(next);
+            if (next === "duty") setShift("");
+          }}
         >
           <option value="unavailable">לא זמין/ה</option>
           <option value="window">זמין/ה רק בחלון שעות</option>
+          <option value="duty">תורנות חוסמת</option>
         </select>
       </label>
 
-      {kind === "window" ? (
+      {kind === "window" || kind === "duty" ? (
         <div className="constraint-time-grid">
           <label>
-            <span>יכול/ה להתחיל מ־</span>
+            <span>{kind === "duty" ? "תחילת התורנות" : "יכול/ה להתחיל מ־"}</span>
             <TimeInput
               value={startTime}
               onChange={setStartTime}
             />
           </label>
           <label>
-            <span>חייב/ת לסיים עד</span>
+            <span>{kind === "duty" ? "סיום התורנות" : "חייב/ת לסיים עד"}</span>
             <TimeInput
               value={endTime}
               onChange={setEndTime}
             />
           </label>
-          <small>אפשר למלא רק אחד מהגבולות. למשל 16:00 בלבד.</small>
+          <small>{kind === "duty" ? "סיום מוקדם משעת ההתחלה נחשב לתורנות שחוצה חצות." : "אפשר למלא רק אחד מהגבולות. למשל 16:00 בלבד."}</small>
         </div>
       ) : null}
 
-      <label>
+      {kind !== "duty" ? <label>
         <span>עוצמת האילוץ</span>
         <select
           value={isHard ? "hard" : "soft"}
@@ -834,7 +863,7 @@ function ConstraintForm({
           <option value="hard">קשיח — אין לשבץ בניגוד אליו</option>
           <option value="soft">העדפה — אפשר לחרוג כשצריך</option>
         </select>
-      </label>
+      </label> : null}
 
       <label>
         <span>סיבה</span>
@@ -843,7 +872,7 @@ function ConstraintForm({
           value={reason}
           maxLength={200}
           onChange={(event) => setReason(event.target.value)}
-          placeholder="מחלה, לימודים, מילואים…"
+          placeholder={kind === "duty" ? "מטבח, שמירה, תורנות חמ״ל…" : "מחלה, לימודים, מילואים…"}
         />
       </label>
 
@@ -915,8 +944,15 @@ function rawText(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-function exitPatternLabel(person: Record<string, unknown>): string {
+function patternGroups(pattern: string, cycles: DayCycle[]): string[] {
+  if (pattern === "triplet") return ["א", "ב", "ג"];
+  if (pattern === "round") return ["א", "ב"];
+  return cycleOf(cycles, pattern)?.groups ?? [];
+}
+
+function exitPatternLabel(person: Record<string, unknown>, cycles: DayCycle[]): string {
   const pattern = text(person.exit_pattern);
+  if (isDayCycle(pattern)) return cycleName(cycles, pattern);
   if (EXIT_PATTERN_LABELS[pattern]) return EXIT_PATTERN_LABELS[pattern];
   return text(person.rotation_group) === "ג" ? EXIT_PATTERN_LABELS.triplet : EXIT_PATTERN_LABELS.round;
 }

@@ -7,7 +7,9 @@ so every write path here refuses one.
 
 from typing import List, Optional
 
-from app.common.errors import AgentError, NotFoundError
+from app.common.errors import (
+    ASSIGNMENT_MOVED, AgentError, ConflictError, NotFoundError,
+)
 from app.dal.database import connect
 from app.dal.repository.base import RepositoryBase, new_id
 from app.dal.repository.schedule_vocabulary import (
@@ -114,7 +116,7 @@ class AssignmentRepository(RepositoryBase):
 
     def move_assignment(
         self, assignment_id: str, team_id: str, slot_id: str, reason: str,
-        employee: Optional[str] = None,
+        employee: Optional[str] = None, expected_slot_id: Optional[str] = None,
     ) -> dict:
         """Move one assignment to another slot, or hand it to someone else.
 
@@ -127,6 +129,10 @@ class AssignmentRepository(RepositoryBase):
             raise AgentError("העברת שיבוץ חייבת לשאת נימוק")
         with connect(self._store) as connection:
             row = _locked_row(connection, assignment_id, team_id, slot_id)
+            # Checked under the row lock, so two confirmed drags of the same
+            # shift cannot both see it where their manager left it.
+            if expected_slot_id and row["slot_id"] != expected_slot_id:
+                raise ConflictError(ASSIGNMENT_MOVED)
             connection.execute("""
                 UPDATE assignments
                 SET slot_id=%s, employee=%s, reason=%s
@@ -177,7 +183,7 @@ class AssignmentRepository(RepositoryBase):
 def _locked_row(connection, assignment_id: str, team_id: str, slot_id: str) -> dict:
     """The assignment being moved, after checking both ends exist."""
     row = connection.execute(
-        "SELECT * FROM assignments WHERE id=%s AND team_id=%s",
+        "SELECT * FROM assignments WHERE id=%s AND team_id=%s FOR UPDATE",
         (assignment_id, team_id),
     ).fetchone()
     if row is None:
