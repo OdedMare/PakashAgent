@@ -398,7 +398,7 @@ export interface CompiledSource {
 export const rotationPreview = (
   body: { workplace: Record<string, unknown>; shifts: Record<string, unknown>[]; weeks?: number },
   signal?: AbortSignal,
-) => request<{ error: string; cycles: Partial<Record<"round" | "triplet", import("@/types").RotationWeekend[]>> }>(
+) => request<{ error: string; cycles: Partial<Record<"round" | "triplet" | "quad", import("@/types").RotationWeekend[]>> }>(
   "/api/profile/rotation-preview",
   { method: "POST", body: JSON.stringify(body), signal },
 );

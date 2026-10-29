@@ -28,6 +28,7 @@ test("a type is named by its days on base and at home", () => {
   assert.equal(shapes.shapeLabel("friday", 2).title, "12/2");
   assert.equal(shapes.shapeLabel("wednesday", 2).title, "10/4");
   assert.equal(shapes.shapeLabel("week", 3).title, "שבוע בבסיס, שבועיים בבית");
+  assert.equal(shapes.shapeLabel("week", 4).title, "שבוע בבסיס, 3 שבועות בבית");
 });
 
 test("a week tiles Sunday to Sunday on the handover", () => {

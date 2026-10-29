@@ -5,12 +5,13 @@ import re
 from typing import Any, List
 
 from app.bl.profile_service.validation import named_rows, text, text_list, valid_time
+from app.bl.rotation.vocabulary import groups_for
 from app.bl.shared import HEBREW_WEEKDAYS, weekday_key
 from app.common.errors import AgentError
 
 _SERVICE_TYPES = ("standard", "overlap", "reserve")
-_EXIT_PATTERNS = ("round", "triplet", "hamshushim", "shushim")
-_GROUPED = ("round", "triplet")
+_EXIT_PATTERNS = ("round", "triplet", "quad", "hamshushim", "shushim")
+_GROUPED = ("round", "triplet", "quad")
 # A day cycle is named by its id; whether that id exists is checked against
 # the workplace in `validate_rotation_groups`, once both halves are merged.
 _DAY_CYCLE = re.compile(r"^cycle:[A-Za-z0-9_-]{1,32}$")
@@ -118,7 +119,7 @@ def validate_rotation_groups(profile: dict) -> None:
             _check_day_cycle(person, cycles.get(pattern))
             continue
         cycle = pattern if pattern in _GROUPED else mode
-        groups = {"א", "ב", "ג"} if cycle == "triplet" else {"א", "ב"}
+        groups = set(groups_for(cycle) or groups_for("round"))
         group = text(person.get("rotation_group"))
         if group and group not in groups:
             raise AgentError("קבוצת הסבב של %s אינה מתאימה למבנה היחידה" % (
@@ -143,6 +144,6 @@ def validate_first_profile(profile: dict) -> None:
         person.get("exit_pattern") in _GROUPED and not text(person.get("rotation_group"))
         for person in profile.get("employees") or []
     ):
-        raise AgentError("יש לבחור קבוצת סבב או תלתון לכל איש צוות מתאים")
+        raise AgentError("יש לבחור קבוצת סבב, תלתון או רבעון לכל איש צוות מתאים")
     if not profile.get("shifts"):
         raise AgentError("יש להוסיף לפחות סוג משמרת אחד")

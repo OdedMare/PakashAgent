@@ -8,8 +8,8 @@ from app.bl.profile_service.validation import text, text_list, valid_time
 from app.common.errors import AgentError
 from app.bl.shared import weekday_key
 
-_OPTIONAL_EXIT_PATTERNS = ("triplet", "hamshushim", "shushim")
-_GROUPS = {"round": ("א", "ב"), "triplet": ("א", "ב", "ג")}
+_OPTIONAL_EXIT_PATTERNS = ("triplet", "quad", "hamshushim", "shushim")
+_GROUPS = {"round": ("א", "ב"), "triplet": ("א", "ב", "ג"), "quad": ("א", "ב", "ג", "ד")}
 _AUDIT_FIELDS = (
     ("max_weekly_hours", "מקסימום שעות בשבוע", 0),
     ("max_consecutive_days", "מקסימום ימים רצופים", 1),
@@ -70,9 +70,9 @@ def _group_rules(value: Any, field: str, known: dict) -> List[dict]:
         row = dict(raw)
         pattern, group = text(row.get("pattern")), text(row.get("group"))
         if group not in known.get(pattern, ()):
-            raise AgentError("הקבוצה אינה מתאימה לסבב או לתלתון")
+            raise AgentError("הקבוצה אינה מתאימה לסבב, לתלתון או לרבעון")
         if field == "rotation_closure_windows" and pattern not in _GROUPS:
-            raise AgentError("שעות סגירה מוגדרות רק לסבב ולתלתון")
+            raise AgentError("שעות סגירה מוגדרות רק לסבב, לתלתון ולרבעון")
         row.update(pattern=pattern, group=group)
         for key in ("starts_on", "ends_on"):
             row[key] = text(row.get(key))

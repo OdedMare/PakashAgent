@@ -116,8 +116,8 @@ that morning and out for the rest of the day.
 **A cycle is typed once, in the team setup screen** (`ManualSetup/`, the
 sliders icon). The server-wide model, solver and database settings are not
 on the team screen at all: they live in the operator console's "מערכת" tab.
-`ManualSetup/RotationSetup.tsx` asks three numbered questions per round and
-triplet, for group א only: which weekend it closes (the anchor), which round
+`ManualSetup/RotationSetup.tsx` asks three numbered questions per round,
+triplet and רבעון (four groups, one Saturday in four), for group א only: which weekend it closes (the anchor), which round
 type — a shape from `closureShapes.ts`, named by the day the closure opens
 (11/3 Thursday is the server default and stores no row; 12/2 Friday, 10/4
 Wednesday, שבוע־שבוע from the Sunday handover, or typed days and times are
