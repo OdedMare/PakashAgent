@@ -31,13 +31,12 @@
 .manual-section {
   display: grid;
   grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr);
-  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
 
-.manual-section > header { display: flex; gap: 0.8rem; padding: 1.15rem; background: var(--surface-2); border-inline-end: 1px solid var(--border); }
+.manual-section > header { display: flex; gap: 0.8rem; padding: 1.15rem; background: var(--surface-2); border-inline-end: 1px solid var(--border); border-start-start-radius: var(--radius); border-end-start-radius: var(--radius); }
 .manual-section > header > span { display: grid; width: 2.15rem; height: 2.15rem; flex: none; place-items: center; color: var(--primary); background: var(--primary-soft); border-radius: var(--radius-sm); }
 .manual-section > header > div { align-self: flex-start; }
 .manual-section > header svg { width: 1rem; }
@@ -47,7 +46,9 @@
 .manual-grid { display: grid; gap: 0.75rem; }
 .manual-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .employee-grid { grid-template-columns: minmax(8rem, 1.3fr) minmax(8rem, 1fr) minmax(8rem, 1fr) 6rem 8rem; }
-.shift-grid { grid-template-columns: minmax(9rem, 1.2fr) 8rem repeat(4, 7rem) minmax(9rem, 1fr); }
+/* Wraps instead of holding six fixed columns: those needed ~51rem, more than
+   the section body has beside its header, and the row was cut off. */
+.shift-grid { grid-template-columns: repeat(auto-fill, minmax(min(9rem, 100%), 1fr)); }
 
 .manual-field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
 .manual-field > span, .manual-checkboxes legend { color: var(--text-muted); font-size: 0.74rem; font-weight: 650; }
@@ -146,8 +147,8 @@
 
 @media (max-width: 980px) {
   .manual-section { grid-template-columns: 1fr; }
-  .manual-section > header { border-inline-end: 0; border-bottom: 1px solid var(--border); }
-  .manual-grid.three, .employee-grid, .shift-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .manual-section > header { border-inline-end: 0; border-bottom: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0; }
+  .manual-grid.three, .employee-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .rotation-window-grid, .closure-clock.has-days { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -157,7 +158,7 @@
   .manual-header-actions button { min-height: 44px; flex: 1; justify-content: center; }
   .manual-header-actions .header-help { width: auto; }
   .manual-header-actions .header-help > span { display: inline; }
-  .manual-grid.three, .employee-grid, .shift-grid, .manual-rule { grid-template-columns: 1fr; }
+  .manual-grid.three, .employee-grid, .manual-rule { grid-template-columns: 1fr; }
   .manual-row-foot { align-items: flex-start; flex-direction: column; }
   .rotation-pair { grid-template-columns: 1fr; }
   .rotation-pair > svg { transform: rotate(90deg); }
