@@ -1,4 +1,6 @@
-"""Whether an assignment falls outside a recorded availability."""
+"""Whether an assignment overlaps unavailable time or an operational duty."""
+
+import datetime
 
 from app.bl.audit.values import MINUTES_PER_DAY, minutes, text
 
@@ -13,6 +15,8 @@ def constraint_conflicts(assignment: dict, constraint: dict) -> bool:
     """
     if not isinstance(assignment, dict) or not isinstance(constraint, dict):
         return False
+    if constraint.get("constraint_type") == "duty":
+        return _duty_overlaps(assignment, constraint)
     if not _same_occurrence(assignment, constraint):
         return False
     start_bound = minutes(constraint.get("start_time"))
@@ -31,6 +35,36 @@ def constraint_conflicts(assignment: dict, constraint: dict) -> bool:
     if constraint.get("available"):
         return _outside_window(shift_start, shift_end, start_bound, end_bound)
     return _overlaps_block(shift_start, shift_end, start_bound, end_bound)
+
+
+def _duty_overlaps(assignment: dict, duty: dict) -> bool:
+    if text(assignment.get("employee")) != text(duty.get("employee")):
+        return False
+    shift = _interval(
+        assignment.get("date"),
+        assignment.get("start") or assignment.get("start_time"),
+        assignment.get("end") or assignment.get("end_time"),
+    )
+    blocked = _interval(
+        duty.get("date") or duty.get("constraint_date"),
+        duty.get("start_time"), duty.get("end_time"),
+    )
+    return bool(shift and blocked and shift[0] < blocked[1] and blocked[0] < shift[1])
+
+
+def _interval(day, start, end):
+    try:
+        date = datetime.date.fromisoformat(text(day))
+    except ValueError:
+        return None
+    start_minutes, end_minutes = minutes(start), minutes(end)
+    if start_minutes is None or end_minutes is None:
+        return None
+    begins = datetime.datetime.combine(date, datetime.time()) + datetime.timedelta(minutes=start_minutes)
+    finishes = datetime.datetime.combine(date, datetime.time()) + datetime.timedelta(minutes=end_minutes)
+    if finishes <= begins:
+        finishes += datetime.timedelta(days=1)
+    return begins, finishes
 
 
 def _same_occurrence(assignment: dict, constraint: dict) -> bool:

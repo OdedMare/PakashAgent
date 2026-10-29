@@ -169,6 +169,12 @@ class ChatPlanApplier:
         for row in plan["constraints"]:
             if row.get("action") == "remove":
                 self._repo.delete_availability(row["id"], team_id)
+            elif row.get("constraint_type") == "duty":
+                self._repo.set_duty(
+                    team_id, row["employee"], row["date"],
+                    row["start_time"], row["end_time"],
+                    reason=row.get("reason") or reason, source="agent",
+                )
             else:
                 self._repo.set_availability(
                     team_id, row["employee"], row["date"],

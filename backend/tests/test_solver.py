@@ -313,6 +313,55 @@ def test_the_excess_over_part_timers_is_shared_not_handed_to_a_small_wish():
     assert counts["גדי"] == counts["דני"] == 2
 
 
+def _two_shifts(first, second, people=("אבי", "בני", "גדי")):
+    return {
+        "workplace": {"name": "יחידה"},
+        "employees": [{"name": name} for name in people],
+        "shifts": [
+            {"name": "בוקר", "start_time": first[0], "end_time": first[1], "days": [],
+             "staffing": [{"days": [], "headcount": 1, "required_roles": []}]},
+            {"name": "ערב", "start_time": second[0], "end_time": second[1], "days": [],
+             "staffing": [{"days": [], "headcount": 1, "required_roles": []}]},
+        ],
+        "audit_policy": {"max_consecutive_days": 30, "max_weekly_hours": 168},
+    }
+
+
+def test_the_load_is_even_in_shifts_not_in_hours():
+    """A twelve-hour shift and a four-hour one count the same: on base
+    nobody is on the clock. Evened in hours, one person took the long shift
+    and the other all three short ones."""
+    profile = _plain([{"name": "אבי"}, {"name": "בני"}])
+    profile["shifts"] = [
+        {"name": "ארוכה", "start_time": "07:00", "end_time": "19:00", "days": ["ראשון"],
+         "staffing": [{"days": [], "headcount": 1, "required_roles": []}]},
+        {"name": "קצרה", "start_time": "07:00", "end_time": "11:00",
+         "days": ["שלישי", "חמישי", "שבת"],
+         "staffing": [{"days": [], "headcount": 1, "required_roles": []}]},
+    ]
+
+    result = generate_span(profile, "2026-08-30", "2026-09-05")
+
+    assert len(result["assignments"]) == 4
+    assert _counts(result["assignments"]) == {"אבי": 2, "בני": 2}
+
+
+def test_shifts_are_spaced_for_the_longest_rest():
+    """An evening followed by the next morning is legal (eight hours of
+    rest) but the solver prefers the arrangement where nobody turns round
+    that fast."""
+    profile = _two_shifts(("07:00", "15:00"), ("15:00", "23:00"))
+    profile["audit_policy"]["min_rest_hours"] = 8
+    days = _dates("2026-08-30", 6)
+
+    result = generate_span(profile, days[0], days[-1])
+
+    placed = {(row["shift"], row["date"]): row["employee"] for row in result["assignments"]}
+    for today, tomorrow in zip(days, days[1:]):
+        assert placed[("ערב", today)] != placed[("בוקר", tomorrow)]
+    assert set(_counts(result["assignments"]).values()) == {4}
+
+
 def test_water_fill_targets_respect_what_people_carry_and_can_take():
     from app.bl.solver.fairness import water_fill
 
@@ -372,3 +421,40 @@ def test_the_training_policy_sets_how_many_shadow_shifts_a_week():
     result = generate_span(_shadow_profile(shadow_shifts_per_week=2), "2026-08-17", "2026-08-23")
 
     assert len(_shadowed(result)) == 2
+
+
+def _team_profile(trainee_role):
+    """Two shifts each open to one team's role, and a trainee who counts for none."""
+    def shift(name, role):
+        return {"name": name, "start_time": "07:00", "end_time": "15:00", "days": [],
+                "allowed_roles": [role],
+                "staffing": [{"days": [], "headcount": 1, "required_roles": []}]}
+    return {
+        "workplace": {"name": "יחידה"},
+        "employees": [
+            {"name": "פורצת", "role": "פריצה"}, {"name": "מבקיע", "role": "הבקעות"},
+            {"name": "נחפף", "role": trainee_role, "counts_toward_staffing": False},
+        ],
+        "shifts": [shift("פריצה יום", "פריצה"), shift("מרכבה יום", "הבקעות")],
+    }
+
+
+def test_a_trainee_with_no_team_is_placed_although_no_shift_names_their_role():
+    result = generate_span(_team_profile("נחפף"), "2026-08-16", "2026-08-22")
+
+    assert _shadowed(result)
+    assert {row["shift"] for row in _shadowed(result)} <= {"פריצה יום", "מרכבה יום"}
+
+
+def test_a_trainee_with_a_team_keeps_to_that_teams_shifts():
+    result = generate_span(_team_profile("הבקעות"), "2026-08-16", "2026-08-22")
+
+    assert _shadowed(result)
+    assert {row["shift"] for row in _shadowed(result)} == {"מרכבה יום"}
+
+
+def test_a_counted_member_whose_role_no_shift_names_is_still_not_placed():
+    profile = _team_profile("נחפף")
+    profile["employees"][2]["counts_toward_staffing"] = True
+
+    assert _shadowed(generate_span(profile, "2026-08-16", "2026-08-22")) == []

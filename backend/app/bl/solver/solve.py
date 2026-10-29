@@ -14,6 +14,7 @@ from ortools.sat.python import cp_model
 
 from app.bl.audit import audit
 from app.bl.schedule_requests import covers
+from app.bl.solver.cpu_budget import BUDGET
 from app.bl.solver.fairness import apply_fairness
 from app.bl.solver.model import COVERAGE, Model
 from app.bl.solver.requests import apply_requests
@@ -35,7 +36,10 @@ def solve(problem, time_limit: float = 10.0, workers: int = 8) -> dict:
     apply_requests(model)
     apply_fairness(model)
     apply_stability(model)
-    solver, status = _two_phases(model, max(0.2, float(time_limit)), max(1, int(workers)))
+    # Threads are taken from the process's budget, so concurrent solves
+    # queue instead of each getting a slice of the time it was promised.
+    with BUDGET.threads(max(1, int(workers))) as granted:
+        solver, status = _two_phases(model, max(0.2, float(time_limit)), granted)
     chosen = [_row(problem, name, index) for (name, index), var in sorted(model.x.items())
               if solver.Value(var)]
     _shadow_reasons(problem, chosen)
@@ -105,7 +109,7 @@ def _reason(problem, name: str, index: int, row: dict) -> str:
     if person.get("rotation_group") and problem.closes(name, index):
         return "%s סוגר/ת במועד הזה; השיבוץ עומד במחזור המחייב." % (
             rotation.label(rotation.exit_pattern(problem.profile, person),
-                           person.get("rotation_group")) or "קבוצת הסגירה")
+                           person.get("rotation_group"), problem.profile) or "קבוצת הסגירה")
     wished = [request["reason"] for request in problem.requests
               if request["kind"] == "prefer" and name in request["employees"]
               and covers(request, row["shift"], row["date"])]

@@ -137,12 +137,6 @@ function AgentSettings({ settings }: { settings: SettingsController }) {
         optional="שניות; 0 ללא הגבלה"
         placeholder="180"
       />
-      <Toggle
-        settings={settings}
-        name="llm_verify_ssl"
-        label="אימות תעודת SSL של שרת המודל"
-        optional="כבו רק מול שרת פנימי עם תעודה בחתימה עצמית — החיבור, כולל מפתח ה-API, יהיה חשוף ליירוט"
-      />
     </section>
   );
 }

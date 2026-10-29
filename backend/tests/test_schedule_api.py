@@ -12,6 +12,7 @@ Three things here are the point of the feature and are asserted directly:
 
 from types import SimpleNamespace
 import copy
+import datetime
 import json
 import threading
 
@@ -23,7 +24,10 @@ from fastapi.testclient import TestClient
 from app.api.dependencies import Guards
 from app.api.routers import schedules
 from app.bl.schedule_service import ScheduleService
-from app.common.errors import AgentError, AppError, NotFoundError, error_payload
+from app.common.errors import (
+    ASSIGNMENT_MOVED, AgentError, AppError, ConflictError, NotFoundError,
+    error_payload,
+)
 from app.common.time_context import israel_today
 from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 
@@ -70,7 +74,10 @@ class _FakeScheduleRepo:
     def team_profile(self, team_id):
         return self.profiles.get(team_id)
 
-    def update_team_profile(self, team_id, profile):
+    def team_profile_revision(self, team_id):
+        return 0 if team_id in self.profiles else None
+
+    def update_team_profile(self, team_id, profile, expected_revision=None):
         self.profiles[team_id] = profile
         return profile
 
@@ -240,13 +247,15 @@ class _FakeScheduleRepo:
             ]
 
     def move_assignment(self, assignment_id, team_id, slot_id, reason,
-                        employee=None):
+                        employee=None, expected_slot_id=None):
         assert reason.strip(), "reason is required (D8)"
         for schedule_id, rows in self.assignment_rows.items():
             if self.schedules[schedule_id]["team_id"] != team_id:
                 continue
             for row in rows:
                 if row["id"] == assignment_id:
+                    if expected_slot_id and row["slot_id"] != expected_slot_id:
+                        raise ConflictError(ASSIGNMENT_MOVED)
                     row["slot_id"] = slot_id
                     row["reason"] = reason
                     if employee:
@@ -264,6 +273,7 @@ class _FakeScheduleRepo:
             "available": available, "start_time": start_time,
             "end_time": end_time, "is_hard": is_hard,
             "reason": reason, "source": source,
+            "constraint_type": "availability",
         }
         self.availability_rows = [
             existing for existing in self.availability_rows
@@ -275,6 +285,18 @@ class _FakeScheduleRepo:
         self.availability_rows.append(row)
         return row
 
+    def set_duty(self, team_id, employee, duty_date, start_time, end_time,
+                 reason="", source="manager"):
+        row = {
+            "id": self._id("duty"), "team_id": team_id, "employee": employee,
+            "constraint_date": duty_date, "shift_name": "",
+            "available": False, "start_time": start_time,
+            "end_time": end_time, "is_hard": True,
+            "reason": reason, "source": source, "constraint_type": "duty",
+        }
+        self.availability_rows.append(row)
+        return row
+
     def availability(self, team_id, starts_on=None, ends_on=None,
                      employee=None):
         rows = [
@@ -282,7 +304,10 @@ class _FakeScheduleRepo:
             if row["team_id"] == team_id
         ]
         if starts_on:
-            rows = [r for r in rows if r["constraint_date"] >= starts_on]
+            previous = (datetime.date.fromisoformat(starts_on) - datetime.timedelta(days=1)).isoformat()
+            rows = [r for r in rows if r["constraint_date"] >= (
+                previous if r.get("constraint_type") == "duty" else starts_on
+            )]
         if ends_on:
             rows = [r for r in rows if r["constraint_date"] <= ends_on]
         if employee:
@@ -1396,9 +1421,10 @@ def test_a_manual_schedule_still_carries_its_warnings():
     app, _ = _build_app([])
     client = _client(app)
     client.post("/api/schedule/blank", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-24",
+        "starts_on": "2026-08-17", "ends_on": "2026-08-28",
     })
-    for day in range(17, 25):
+    # Twelve days in a row: one past the default eleven.
+    for day in range(17, 29):
         client.post("/api/schedule/assign", json={
             "shift_name": MORNING, "slot_date": "2026-08-%02d" % day,
             "employee": "דנה",
@@ -1409,7 +1435,7 @@ def test_a_manual_schedule_still_carries_its_warnings():
     codes = {warning["code"] for warning in schedule["warnings"]}
     assert "consecutive" in codes
     # Reported, never withheld.
-    assert len(schedule["assignments"]) == 8
+    assert len(schedule["assignments"]) == 12
 
 
 def test_unassigning_removes_the_row_and_logs_it():
@@ -1838,6 +1864,35 @@ def test_a_confirmed_drag_moves_the_assignment_and_logs_the_reason():
     assert entry["reason"] == "דנה ביקשה להחליף יום"
 
 
+def test_a_drag_somebody_else_already_moved_is_refused():
+    """Two managers drag the same shift. The second confirmation names the
+    slot its manager saw it on, which it has since left, so it is refused
+    rather than moving the shift again from wherever it went."""
+    app, repo = _build_app([
+        _generation([{"employee": "דנה", "shift": MORNING,
+                      "date": "2026-08-17", "reason": "מוסמכת"}]),
+    ])
+    client = _client(app)
+    created = client.post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    assignment = created["assignments"][0]
+    drag = {
+        "assignment_id": assignment["id"], "shift_name": MORNING,
+        "slot_date": "2026-08-18", "reason": "החלפת יום",
+        "from_slot_id": assignment["slot_id"],
+    }
+    assert client.post("/api/schedule/move", json=drag).status_code == 200
+
+    stale = client.post("/api/schedule/move", json=dict(
+        drag, slot_date="2026-08-17", reason="החזרה",
+    ))
+    assert stale.status_code == 409
+    assert stale.json()["detail"] == ASSIGNMENT_MOVED
+    moves = [row for row in repo.changes if row["action"] == "moved"]
+    assert len(moves) == 1
+
+
 def test_a_drag_without_a_reason_is_rejected():
     """The confirmation dialog is what collects it; an empty one never
     reaches the server."""
@@ -1875,6 +1930,45 @@ def test_a_timed_soft_constraint_is_recorded():
     assert response.status_code == 200
     assert response.json()["start_time"] == "16:00"
     assert response.json()["is_hard"] is False
+
+
+def test_a_duty_is_recorded_and_blocks_manual_placement_even_across_midnight():
+    app, _ = _build_app([])
+    client = _client(app)
+    schedule = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+
+    duty = client.post("/api/schedule/constraints", json={
+        "employee": "דנה", "constraint_date": "2026-08-17",
+        "constraint_type": "duty", "start_time": "22:00", "end_time": "08:00",
+        "reason": "תורנות חמ״ל",
+    })
+    assert duty.status_code == 200
+    assert duty.json()["constraint_type"] == "duty"
+
+    check = client.post("/api/schedule/check", json={
+        "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-18",
+        "schedule_id": schedule["id"],
+    })
+    assert check.status_code == 200
+    assert check.json()["blocking"] is True
+
+    assigned = client.post("/api/schedule/assign", json={
+        "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-18",
+        "schedule_id": schedule["id"],
+    })
+    assert assigned.status_code == 409
+    assert "תורנות חוסמת" in assigned.json()["detail"]
+
+
+def test_a_duty_requires_both_clock_bounds():
+    app, _ = _build_app([])
+    response = _client(app).post("/api/schedule/constraints", json={
+        "employee": "דנה", "constraint_date": "2026-08-17",
+        "constraint_type": "duty", "start_time": "22:00",
+    })
+    assert response.status_code == 422
 
 
 def test_an_invalid_constraint_time_is_rejected():

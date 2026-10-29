@@ -1,0 +1,359 @@
+{
+  "workplace": {
+    "name": "מדור 619 — סימולציה",
+    "day_cycles": [
+      {
+        "id": "619",
+        "name": "12/2",
+        "base_days": 12,
+        "home_days": 2,
+        "groups": [
+          "א",
+          "ב"
+        ],
+        "anchor_date": "2026-11-01",
+        "leave_time": "12:00",
+        "return_time": "12:00"
+      }
+    ]
+  },
+  "shifts": [
+    {
+      "name": "חנית",
+      "start_time": "08:00",
+      "end_time": "20:00",
+      "days": [
+        "יום שני",
+        "יום שלישי",
+        "יום רביעי",
+        "יום חמישי",
+        "יום שישי",
+        "שבת"
+      ],
+      "headcount": 2,
+      "allowed_roles": [
+        "חנית",
+        "רשצ חנית"
+      ],
+      "is_night": false,
+      "requires_shift_manager": false
+    },
+    {
+      "name": "מרכבה - יום",
+      "start_time": "08:00",
+      "end_time": "20:00",
+      "days": [
+        "יום ראשון",
+        "יום שני",
+        "יום שלישי",
+        "יום רביעי",
+        "יום חמישי",
+        "יום שישי",
+        "שבת"
+      ],
+      "headcount": 4,
+      "allowed_roles": [
+        "הבקעות",
+        "רשצ הבקעות"
+      ],
+      "is_night": false,
+      "requires_shift_manager": false
+    },
+    {
+      "name": "מרכבה לילה",
+      "start_time": "20:00",
+      "end_time": "08:00",
+      "days": [
+        "יום ראשון",
+        "יום שני",
+        "יום שלישי",
+        "יום רביעי",
+        "יום חמישי",
+        "יום שישי",
+        "שבת"
+      ],
+      "headcount": 2,
+      "allowed_roles": [
+        "הבקעות"
+      ],
+      "is_night": true,
+      "requires_shift_manager": false
+    },
+    {
+      "name": "סופה יום",
+      "start_time": "08:00",
+      "end_time": "20:00",
+      "days": [
+        "יום ראשון",
+        "יום שני",
+        "יום שלישי",
+        "יום רביעי",
+        "יום חמישי",
+        "יום שישי",
+        "שבת"
+      ],
+      "headcount": 3,
+      "allowed_roles": [
+        "פיצוח",
+        "רשצ פיצוח"
+      ],
+      "is_night": false,
+      "requires_shift_manager": false
+    },
+    {
+      "name": "סופה לילה",
+      "start_time": "08:00",
+      "end_time": "20:00",
+      "days": [
+        "יום ראשון",
+        "יום שני",
+        "יום שלישי",
+        "יום רביעי",
+        "יום חמישי",
+        "יום שישי",
+        "שבת"
+      ],
+      "headcount": 1,
+      "allowed_roles": [
+        "פיצוח",
+        "רשצ פיצוח"
+      ],
+      "is_night": false,
+      "requires_shift_manager": true
+    },
+    {
+      "name": "פריצה יום",
+      "start_time": "08:00",
+      "end_time": "20:00",
+      "days": [
+        "יום ראשון",
+        "יום שני",
+        "יום שלישי",
+        "יום רביעי",
+        "יום חמישי",
+        "יום שישי",
+        "שבת"
+      ],
+      "headcount": 3,
+      "allowed_roles": [
+        "פריצה",
+        "רשצ פריצה"
+      ],
+      "is_night": false,
+      "requires_shift_manager": false
+    },
+    {
+      "name": "פריצה לילה",
+      "start_time": "20:00",
+      "end_time": "08:00",
+      "days": [
+        "יום ראשון",
+        "יום שני",
+        "יום שלישי",
+        "יום רביעי",
+        "יום חמישי",
+        "יום שישי",
+        "שבת"
+      ],
+      "headcount": 2,
+      "allowed_roles": [
+        "פריצה"
+      ],
+      "is_night": true,
+      "requires_shift_manager": false
+    }
+  ],
+  "employees": [
+    {
+      "name": "עדו",
+      "role": "רשצ חנית",
+      "is_shift_manager": true,
+      "can_train": true,
+      "rotation_group": "א",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "עודד",
+      "role": "חנית",
+      "rotation_group": "ב",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "ענת",
+      "role": "חנית",
+      "rotation_group": "א",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "דניאל",
+      "role": "חנית",
+      "rotation_group": "ב",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "עומר עזורי",
+      "role": "חנית",
+      "rotation_group": "א",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "עומר קושניר",
+      "role": "חנית",
+      "rotation_group": "ב",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "עומר",
+      "role": "רשצ הבקעות",
+      "is_shift_manager": true,
+      "can_train": true,
+      "rotation_group": "א",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "אמילי",
+      "role": "הבקעות",
+      "rotation_group": "ב",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "טליה",
+      "role": "הבקעות",
+      "rotation_group": "א",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "אליה",
+      "role": "הבקעות",
+      "rotation_group": "ב",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "רוני",
+      "role": "הבקעות",
+      "rotation_group": "א",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "אילון",
+      "role": "רשצ פריצה",
+      "is_shift_manager": true,
+      "can_train": true,
+      "rotation_group": "א",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "עמית",
+      "role": "פריצה",
+      "rotation_group": "ב",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "שלומי",
+      "role": "פריצה",
+      "rotation_group": "א",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "פיני",
+      "role": "פריצה",
+      "rotation_group": "ב",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "מאיר",
+      "role": "פריצה",
+      "rotation_group": "א",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "עומרי",
+      "role": "פריצה",
+      "rotation_group": "ב",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "דני",
+      "role": "פריצה",
+      "rotation_group": "א",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "טל",
+      "role": "פריצה",
+      "rotation_group": "ב",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "אליענה",
+      "role": "פריצה",
+      "rotation_group": "א",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "אסיף",
+      "role": "פריצה",
+      "rotation_group": "ב",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "גוןגון",
+      "role": "רשצ פיצוח",
+      "is_shift_manager": true,
+      "can_train": true,
+      "rotation_group": "א",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "יונתן",
+      "role": "פיצוח",
+      "rotation_group": "ב",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "ליאם",
+      "role": "פיצוח",
+      "rotation_group": "א",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "דין",
+      "role": "פיצוח",
+      "rotation_group": "ב",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "ליאל",
+      "role": "פיצוח",
+      "rotation_group": "א",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "הראל",
+      "role": "הבקעות",
+      "service_type": "overlap",
+      "rotation_group": "ב",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "שירה",
+      "role": "נחפף",
+      "service_type": "overlap",
+      "rotation_group": "א",
+      "exit_pattern": "cycle:619"
+    },
+    {
+      "name": "אופיר",
+      "role": "נחפף",
+      "service_type": "overlap",
+      "rotation_group": "ב",
+      "exit_pattern": "cycle:619"
+    }
+  ],
+  "rules": [
+    {
+      "text": "רשצים עושים בעיקר משמרות יום",
+      "priority": "soft"
+    }
+  ]
+}

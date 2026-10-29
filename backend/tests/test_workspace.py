@@ -63,6 +63,9 @@ class _FakeTeams:
     def team_profile(self, team_id):
         return None
 
+    def team_profile_revision(self, team_id):
+        return None
+
 @pytest.fixture
 def service():
     return WorkspaceService(_FakeTeams())

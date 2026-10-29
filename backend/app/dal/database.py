@@ -15,6 +15,7 @@ UI would appear to do nothing: the pool would keep serving connections to the
 old host forever, which is a far more confusing failure than a slow query.
 """
 
+import os
 import threading
 from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
@@ -34,7 +35,10 @@ from app.common.runtime_settings.runtime_settings_store import (
 # is ever called. A running job does hold one for its whole run (its job lock
 # lives on it), so the six worker lanes come on top of the request threads.
 _MIN_POOL_SIZE = 1
-_MAX_POOL_SIZE = 16
+# Per process: every replica holds up to this many, plus one LISTEN
+# connection and one per model call in flight, so replicas x this must stay
+# under the server's `max_connections` (`PAKASH_DATABASE_POOL_SIZE`).
+_MAX_POOL_SIZE = max(2, int(os.getenv("PAKASH_DATABASE_POOL_SIZE", "16")))
 # A connection that cannot be had in this long means the pool is exhausted and
 # the caller should fail rather than queue indefinitely behind whatever is
 # holding them.

@@ -261,7 +261,9 @@ def test_workload_is_computed_by_tool_and_tool_results_feed_final_answer():
     calls = turn()
     calls["tool_calls"] = [dict(tool="workload_report", arguments={})]
     repo, llm, service, chat_id, schedule_id = setup([calls, turn()])
-    message = converse(service, repo, chat_id, schedule_id, "מי עובד הכי הרבה?")
+    # "מי עובד הכי הרבה" is answered in code now (`test_manager_chat_scale`);
+    # a comparison the fast path does not read still reaches the model.
+    message = converse(service, repo, chat_id, schedule_id, "תשווה לי את העומס בין העובדים")
     stats = message["payload"]["results"][0]["stats"]
     assert stats["by_employee"][0]["employee"] == "דנה"
     assert stats["by_employee"][0]["hours"] == 8

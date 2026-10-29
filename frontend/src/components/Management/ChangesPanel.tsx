@@ -4,6 +4,7 @@ import { ArrowLeftRight, CalendarPlus, CheckCircle2, UserMinus, UserPlus } from 
 import { useState } from "react";
 
 import type { Departure } from "@/services/api";
+import type { DayCycle } from "@/types";
 
 import { ConfirmDeparture } from "./ConfirmDeparture";
 import { ReplacementPanel } from "./ReplacementPanel";
@@ -33,6 +34,7 @@ export function ChangesPanel({
   shifts,
   today,
   rotationMode = "round",
+  dayCycles = [],
   disabled,
   onPrepare,
   onSaveProfile,
@@ -44,6 +46,7 @@ export function ChangesPanel({
   shifts: Record<string, unknown>[];
   today: string;
   rotationMode?: "round" | "triplet";
+  dayCycles?: DayCycle[];
   disabled: boolean;
   onPrepare: (message: string) => void;
   onSaveProfile: (input: {
@@ -137,6 +140,7 @@ export function ChangesPanel({
           key={`soldier-${formKey}`}
           shiftNames={shiftNames}
           defaultExitPattern={rotationMode}
+          dayCycles={dayCycles}
           onCancel={() => choose("replace")}
           onSubmit={(employee) => void save("employees", employees, employee, "החייל/ת")}
         />

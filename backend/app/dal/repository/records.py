@@ -2,6 +2,7 @@
 
 from typing import List, Optional
 
+from app.common.actor import current_actor
 from app.common.errors import AgentError, NotFoundError
 from app.dal.repository.base import RepositoryBase, new_id
 from app.dal.repository.schedule_vocabulary import (
@@ -67,20 +68,65 @@ class AvailabilityRepository(RepositoryBase):
         self, team_id: str, starts_on: Optional[str] = None,
         ends_on: Optional[str] = None, employee: Optional[str] = None,
     ) -> List[dict]:
-        """Constraints for a team, optionally windowed to a period."""
-        query, params = _filtered(
-            "SELECT * FROM availability WHERE team_id=%s", [team_id], [
-                ("constraint_date >= %s", starts_on),
-                ("constraint_date <= %s", ends_on),
-                ("employee=%s", employee),
-            ],
-        )
+        """Availability and blocking duties, in one scheduling shape."""
+        query = """
+            SELECT * FROM (
+                SELECT id, team_id, employee, constraint_date, shift_name,
+                       available, start_time, end_time, is_hard, reason,
+                       source, created_at, 'availability' AS constraint_type
+                FROM availability
+                UNION ALL
+                SELECT id, team_id, employee, duty_date AS constraint_date,
+                       '' AS shift_name, FALSE AS available,
+                       start_time, end_time, TRUE AS is_hard, reason,
+                       source, created_at, 'duty' AS constraint_type
+                FROM duties
+            ) AS scheduling_constraints
+            WHERE team_id=%s
+        """
+        params: List[object] = [team_id]
+        if starts_on:
+            # The previous day's overnight duty may overlap the first shift.
+            query += " AND constraint_date >= %s::date - CASE WHEN constraint_type='duty' THEN 1 ELSE 0 END"
+            params.append(starts_on)
+        if ends_on:
+            query += " AND constraint_date <= %s"
+            params.append(ends_on)
+        if employee:
+            query += " AND employee=%s"
+            params.append(employee)
         query += " ORDER BY constraint_date, employee, shift_name"
         return self._all(query, tuple(params))
+
+    def set_duty(
+        self, team_id: str, employee: str, duty_date: str,
+        start_time: str, end_time: str, reason: str = "",
+        source: str = SOURCE_MANAGER,
+    ) -> dict:
+        if source not in SOURCES:
+            raise AgentError("מקור התורנות אינו תקין")
+        row_id = new_id()
+        self._execute("""
+            INSERT INTO duties (
+                id, team_id, employee, duty_date, start_time, end_time,
+                reason, source
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+        """, (row_id, team_id, employee, duty_date, start_time, end_time,
+              reason or "", source))
+        return self._one("""
+            SELECT id, team_id, employee, duty_date AS constraint_date,
+                   '' AS shift_name, FALSE AS available,
+                   start_time, end_time, TRUE AS is_hard, reason, source,
+                   created_at, 'duty' AS constraint_type
+            FROM duties WHERE id=%s AND team_id=%s
+        """, (row_id, team_id))
 
     def delete_availability(self, row_id: str, team_id: str) -> None:
         self._execute(
             "DELETE FROM availability WHERE id=%s AND team_id=%s", (row_id, team_id),
+        )
+        self._execute(
+            "DELETE FROM duties WHERE id=%s AND team_id=%s", (row_id, team_id),
         )
 
 
@@ -170,15 +216,18 @@ class ChangeLogRepository(RepositoryBase):
         reason: str = "", agent_reason: str = "",
     ) -> dict:
         """Append one entry. Both reasons are stored because they answer
-        different questions (D8)."""
+        different questions (D8); `actor` is who was acting, from
+        `common/actor.py` rather than from every caller."""
         row_id = new_id()
         self._execute("""
             INSERT INTO change_log (
                 id, team_id, schedule_id, action, employee,
-                replaced_employee, slot_date, shift_name, reason, agent_reason
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                replaced_employee, slot_date, shift_name, reason, agent_reason,
+                actor
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, (row_id, team_id, schedule_id, action, employee,
-              replaced_employee, slot_date, shift_name, reason, agent_reason))
+              replaced_employee, slot_date, shift_name, reason, agent_reason,
+              current_actor()))
         return self._one(
             "SELECT * FROM change_log WHERE id=%s AND team_id=%s", (row_id, team_id),
         )

@@ -116,9 +116,9 @@ class ScheduleReader:
 
         **No model call.** This is `bl/placement.py` handed the stored
         schedule, and it is what makes the board work with the agent
-        unavailable. It does not gate the write that follows: the audit
-        advises and never blocks
-        ([D3](../../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+        unavailable. Ordinary audit findings do not gate the write that
+        follows (D3); an operational duty overlap is marked blocking and is
+        independently enforced by every write path.
         """
         schedule = self._context.require_schedule(team_id, schedule_id)
         return check_placement(
@@ -140,11 +140,15 @@ class ScheduleReader:
         lists are read straight from the repository rather than through
         `view`.
         """
+        # Read before the profile, so a save landing between the two reads
+        # makes the form stale rather than its revision newer than its data.
+        revision = self._repository.team_profile_revision(team_id)
         profile = self._context.profile(team_id)
         schedule = self.current(team_id, role)
         return {
             "today": israel_today().isoformat(),
             "profile": profile,
+            "profile_revision": revision,
             "employees": rows.employees(profile),
             "shifts": rows.shifts(profile),
             "schedule": schedule,

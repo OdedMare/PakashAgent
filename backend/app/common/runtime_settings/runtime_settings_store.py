@@ -21,6 +21,7 @@ from app.common.runtime_settings.normalizers import (
     normalize_llm_base_url,
 )
 from app.common.runtime_settings.runtime_settings import RuntimeSettings
+from app.common.runtime_settings.shared import SharedSettings, shareable
 
 _SECRET_FIELDS = {
     "database_password",
@@ -91,6 +92,7 @@ class RuntimeSettingsStore:
         )
         self._mtime = None
         self._checked = time.monotonic()
+        self._shared = None
         if self._path.exists():
             self._mtime = self._path.stat().st_mtime_ns
             self._apply(json.loads(self._path.read_text("utf-8")), False)
@@ -103,7 +105,23 @@ class RuntimeSettingsStore:
         if now - self._checked >= _RELOAD_SECONDS:
             self._checked = now
             self.reload_if_changed()
+            self.pull_shared()
         return self._settings
+
+    def share_through(self, shared) -> None:
+        """Carry saves between replicas through the database (D39). Polled
+        with the file; a saved file seeds an empty database once."""
+        seed = asdict(self._settings) if self._mtime is not None else None
+        self._shared = SharedSettings(shared, seed)
+
+    def pull_shared(self) -> None:
+        """Apply a save another replica made. Called at start-up, then by `get()`."""
+        # The poll's connection calls `get()`; `_checked` is fresh, so no loop.
+        patch = self._shared.pull() if self._shared is not None else None
+        if patch:
+            candidate = replace(self._settings)
+            self._apply(shareable(patch), False, candidate)
+            self._settings = candidate
 
     def public(self) -> dict:
         """The settings as the API may return them — secrets masked.
@@ -129,6 +147,8 @@ class RuntimeSettingsStore:
         self._apply(patch, True, candidate)
         self._settings = candidate
         self._persist()
+        if self._shared is not None:
+            self._shared.push(asdict(self._settings))
         return self._settings
 
     def reload_if_changed(self) -> bool:

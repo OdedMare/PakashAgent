@@ -39,6 +39,7 @@
 
 .manual-section > header { display: flex; gap: 0.8rem; padding: 1.15rem; background: var(--surface-2); border-inline-end: 1px solid var(--border); }
 .manual-section > header > span { display: grid; width: 2.15rem; height: 2.15rem; flex: none; place-items: center; color: var(--primary); background: var(--primary-soft); border-radius: var(--radius-sm); }
+.manual-section > header > div { align-self: flex-start; }
 .manual-section > header svg { width: 1rem; }
 .manual-section h2 { margin: 0; font-size: 1rem; }
 .manual-section header p { margin: 0.3rem 0 0; color: var(--text-muted); font-size: 0.78rem; line-height: 1.55; }
@@ -46,7 +47,7 @@
 .manual-grid { display: grid; gap: 0.75rem; }
 .manual-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .employee-grid { grid-template-columns: minmax(8rem, 1.3fr) minmax(8rem, 1fr) minmax(8rem, 1fr) 6rem 8rem; }
-.shift-grid { grid-template-columns: minmax(9rem, 1.2fr) 8rem repeat(3, 7rem) minmax(9rem, 1fr); }
+.shift-grid { grid-template-columns: minmax(9rem, 1.2fr) 8rem repeat(4, 7rem) minmax(9rem, 1fr); }
 
 .manual-field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
 .manual-field > span, .manual-checkboxes legend { color: var(--text-muted); font-size: 0.74rem; font-weight: 650; }
@@ -80,22 +81,27 @@
 .rotation-cycle-card { display: grid; gap: 0.75rem; min-width: 0; padding: 0.85rem; background: var(--surface); border: 1px solid var(--border-strong); border-inline-start: 3px solid var(--primary); border-radius: var(--radius-sm); }
 .rotation-cycle-card.is-triplet { border-inline-start-color: var(--accent); }
 .rotation-cycle-card > header, .rotation-block > header { display: flex; flex-direction: column; gap: 0.15rem; }
+.rotation-cycle-card.is-day-cycle { border-inline-start-color: var(--success); }
+/* Day cycles: preset chips and a four-week strip per group. */
+.day-cycle-presets { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.day-cycle-presets .chip-button { min-height: 44px; padding: 0.35rem 0.8rem; color: var(--text); background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 999px; font: inherit; font-size: 0.8rem; font-variant-numeric: tabular-nums; cursor: pointer; }
+.day-cycle-presets .chip-button.is-selected { color: var(--primary); background: var(--primary-soft); border-color: var(--primary); }
+.day-cycle-presets .chip-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.day-cycle-preview { display: grid; gap: 0.35rem; padding-top: 0.75rem; border-top: 1px solid var(--border); overflow-x: auto; }
+.day-cycle-preview-row { display: grid; grid-template-columns: 2rem minmax(0, 1fr); align-items: center; gap: 0.4rem; }
+.day-cycle-preview-row strong { font-size: 0.8rem; }
+.day-cycle-preview-row ol { display: grid; grid-template-columns: repeat(28, minmax(1.1rem, 1fr)); gap: 2px; margin: 0; padding: 0; list-style: none; }
+.day-cycle-preview-row li { display: grid; place-items: center; height: 1.6rem; color: var(--text-muted); background: var(--surface-2); border-radius: 3px; font-size: 0.66rem; }
+.day-cycle-preview-row li.is-home { color: var(--primary); background: var(--primary-soft); font-weight: 600; }
 .rotation-cycle-card > header strong { font-size: 0.92rem; }
 .rotation-block > header strong { font-size: 0.84rem; }
-.rotation-cycle-card > header span, .rotation-block > header span { color: var(--text-muted); font-size: 0.73rem; line-height: 1.45; }
-/* The one typed fact beside what the server derives from it. A dashed edge
-   means "derived" everywhere in this section, as on `.rotation-pair`. */
-.rotation-anchor { display: grid; grid-template-columns: minmax(11rem, 15rem) minmax(0, 1fr); align-items: end; gap: 0.75rem; }
-.rotation-derived { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0; padding: 0; list-style: none; }
-.rotation-derived li { display: grid; gap: 0.1rem; min-width: 6.5rem; min-height: 44px; padding: 0.4rem 0.75rem; background: var(--primary-soft); border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border)); border-radius: var(--radius-sm); }
-.rotation-derived li.is-derived { background: var(--surface-2); border-style: dashed; }
-.rotation-derived strong { font-size: 0.8rem; }
-.rotation-derived span { color: var(--text-muted); font-size: 0.74rem; font-variant-numeric: tabular-nums; }
-.rotation-hint { margin: 0; color: var(--text-muted); font-size: 0.76rem; line-height: 1.55; }
 .rotation-block { display: grid; gap: 0.65rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
 .rotation-block > .ghost-button { justify-self: start; }
+.rotation-cycle-card > header span, .rotation-block > header span { color: var(--text-muted); font-size: 0.73rem; line-height: 1.45; }
+.rotation-hint { margin: 0; color: var(--text-muted); font-size: 0.76rem; line-height: 1.55; }
 .rotation-window-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .rotation-link { padding: 0; color: var(--primary); background: none; border: 0; font: inherit; text-decoration: underline; cursor: pointer; }
+.rotation-rule > .rotation-link { justify-self: start; min-height: 44px; font-size: 0.8rem; }
 .rotation-rule { gap: 0.9rem; }
 .rotation-rule-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .rotation-rule-head > div { display: grid; gap: 0.15rem; }
@@ -106,24 +112,58 @@
 .manual-savebar { position: fixed; z-index: 8; inset: auto 0 0; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem clamp(1rem, 4vw, 3rem); background: color-mix(in srgb, var(--surface) 94%, transparent); border-top: 1px solid var(--border-strong); box-shadow: 0 -8px 30px rgba(16, 24, 40, 0.08); backdrop-filter: blur(10px); }
 .manual-savebar span { color: var(--text-muted); font-size: 0.8rem; }
 
+/* The cycle card asks three numbered questions, then shows the server's
+   answer for the coming weekends. */
+.rotation-step { display: grid; gap: 0.65rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+.rotation-step > header { display: flex; align-items: flex-start; gap: 0.6rem; }
+.rotation-step > header > b { display: grid; place-items: center; flex: none; width: 1.6rem; height: 1.6rem; color: var(--primary); background: var(--primary-soft); border-radius: 999px; font-size: 0.8rem; }
+.rotation-step > header > div { display: grid; gap: 0.15rem; }
+.rotation-step > header strong { font-size: 0.88rem; }
+.rotation-step > header span { color: var(--text-muted); font-size: 0.76rem; line-height: 1.5; }
+.rotation-step > .manual-field { max-width: 16rem; }
+.rotation-step > .ghost-button { justify-self: start; }
+.closure-shapes { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.5rem; }
+.closure-shape { position: relative; display: grid; align-content: start; gap: 0.2rem; min-height: 44px; padding: 0.7rem 0.75rem; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); cursor: pointer; }
+.closure-shape input { position: absolute; opacity: 0; pointer-events: none; }
+.closure-shape strong { font-size: 0.84rem; }
+.closure-shape span { color: var(--text-muted); font-size: 0.73rem; line-height: 1.45; }
+.closure-shape.is-selected { background: var(--primary-soft); border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+.closure-shape:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
+.closure-clock { grid-template-columns: repeat(2, minmax(0, 12rem)); }
+.closure-clock.has-days { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.rotation-sentence { margin: 0; font-size: 0.82rem; line-height: 1.55; }
+.rotation-preview { display: grid; grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr)); gap: 0.45rem; margin: 0; padding: 0; list-style: none; }
+.rotation-preview li { display: grid; gap: 0.1rem; padding: 0.5rem 0.7rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.rotation-preview li.is-exception { background: var(--warning-soft); border-color: color-mix(in srgb, var(--warning) 40%, var(--border)); }
+.rotation-preview-date { color: var(--text-muted); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+.rotation-preview strong { font-size: 0.86rem; }
+.rotation-preview-span { font-size: 0.74rem; font-variant-numeric: tabular-nums; }
+.rotation-preview em { justify-self: start; padding: 0.05rem 0.45rem; color: var(--warning); background: var(--surface); border-radius: 999px; font-size: 0.7rem; font-style: normal; }
+.rotation-advanced { display: grid; gap: 0.65rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+.rotation-advanced > summary { min-height: 44px; display: flex; align-items: center; color: var(--text-muted); font-size: 0.82rem; cursor: pointer; }
+.rotation-advanced[open] > summary { color: var(--text); }
+.rotation-advanced > .ghost-button { justify-self: start; }
+
 @media (max-width: 980px) {
   .manual-section { grid-template-columns: 1fr; }
   .manual-section > header { border-inline-end: 0; border-bottom: 1px solid var(--border); }
   .manual-grid.three, .employee-grid, .shift-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .rotation-window-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rotation-window-grid, .closure-clock.has-days { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 620px) {
   .manual-setup-header { align-items: flex-start; flex-direction: column; }
   .manual-header-actions { width: 100%; }
-  .manual-header-actions button { flex: 1; justify-content: center; }
+  .manual-header-actions button { min-height: 44px; flex: 1; justify-content: center; }
+  .manual-header-actions .header-help { width: auto; }
+  .manual-header-actions .header-help > span { display: inline; }
   .manual-grid.three, .employee-grid, .shift-grid, .manual-rule { grid-template-columns: 1fr; }
   .manual-row-foot { align-items: flex-start; flex-direction: column; }
   .rotation-pair { grid-template-columns: 1fr; }
   .rotation-pair > svg { transform: rotate(90deg); }
-  .rotation-anchor, .rotation-window-grid { grid-template-columns: 1fr; }
+  .rotation-window-grid, .closure-clock, .closure-clock.has-days { grid-template-columns: 1fr; }
   .manual-savebar span { display: none; }
-  .manual-savebar button { width: 100%; justify-content: center; }
+  .manual-savebar button { width: 100%; min-height: 44px; justify-content: center; }
 }
 
 /* What the code scheduler understood (D32). */

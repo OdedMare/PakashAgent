@@ -7,16 +7,8 @@ import { hebrewWeekday } from "@/components/Management/Calendar";
 import { displayDate } from "@/components/DateInput";
 import type { Assignment, PlacementCheck, Schedule, Slot } from "@/types";
 
+import { CandidateFilters, matchesFilter, NO_FILTER, type CandidateFilter } from "./CandidateFilters";
 import { PlacementVerdict } from "./ConfirmDrop";
-
-const EXIT_PATTERN_FILTERS = [
-  ["all", "הכול"],
-  ["round", "סבב"],
-  ["triplet", "תלתון"],
-  ["hamshushim", "חמשוש"],
-  ["shushim", "שוש"],
-] as const;
-type ExitPatternFilter = (typeof EXIT_PATTERN_FILTERS)[number][0];
 
 /** What the editor was opened on.
  *
@@ -112,7 +104,7 @@ export function ShiftEditor({
   );
   const [reason, setReason] = useState("");
   const [duplicateDate, setDuplicateDate] = useState("");
-  const [exitPatternFilter, setExitPatternFilter] = useState<ExitPatternFilter>("all");
+  const [filter, setFilter] = useState<CandidateFilter>(NO_FILTER);
 
   // The vocabulary and the dates come from the stored grid, never from a
   // literal: shift names are the workplace's own (D9) and the dates are the
@@ -165,9 +157,11 @@ export function ShiftEditor({
       editing.employee !== employee);
 
   const active = !inactiveFrom[employee] || slotDate < inactiveFrom[employee];
-  const canSave = Boolean(employee && shiftName && slotDate && slot && !busy && active);
+  const canSave = Boolean(
+    employee && shiftName && slotDate && slot && !busy && active && !check?.blocking,
+  );
   const visibleCandidates = check?.candidates.filter((candidate) =>
-    exitPatternFilter === "all" || candidate.exit_pattern === exitPatternFilter
+    matchesFilter(candidate, filter, roles)
   ) ?? [];
 
   const save = () => {
@@ -294,19 +288,14 @@ export function ShiftEditor({
                 <strong>מי פנוי למשמרת</strong>
                 <span>{check.candidates.filter((candidate) => candidate.available).length} מתוך {check.candidates.length} ללא התראה</span>
               </div>
-              <div className="board-candidate-filters" aria-label="סינון לפי מבנה יציאות">
-                {EXIT_PATTERN_FILTERS.map(([value, label]) => (
-                  <button
-                    type="button"
-                    key={value}
-                    className={exitPatternFilter === value ? "is-active" : undefined}
-                    aria-pressed={exitPatternFilter === value}
-                    onClick={() => setExitPatternFilter(value)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <CandidateFilters
+                candidates={check.candidates}
+                shifts={shifts}
+                roles={roles}
+                filter={filter}
+                shown={visibleCandidates.length}
+                onChange={setFilter}
+              />
               <div className="board-candidate-list">
                 {visibleCandidates.map((candidate) => (
                   <button
@@ -330,7 +319,7 @@ export function ShiftEditor({
                 ))}
                 {visibleCandidates.length ? null : <span className="board-candidate-empty">אין חיילים בסינון הזה</span>}
               </div>
-              <small className="board-availability-note">אפשר לבחור גם חייל/ת עם התראה; הסיבה נשארת גלויה וההחלטה בידיך.</small>
+              <small className="board-availability-note">אפשר לבחור חייל/ת עם התראה רגילה; תורנות חוסמת אינה ניתנת לעקיפה.</small>
             </div>
           ) : checking ? <p className="board-availability-loading" role="status">בודק מי פנוי למשמרת…</p> : null}
 

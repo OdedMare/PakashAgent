@@ -218,11 +218,12 @@ def add_coverage(plan, profile):
 
 
 def audit_plan(profile, schedule, rows, availability, constraints):
-    facts = {(row["employee"], iso(row["constraint_date"]), row.get("shift_name") or ""):
-             dict(row, date=iso(row["constraint_date"]), shift=row.get("shift_name") or "")
+    facts = {_constraint_key(dict(
+        row, date=iso(row["constraint_date"]), shift=row.get("shift_name") or "",
+    )): dict(row, date=iso(row["constraint_date"]), shift=row.get("shift_name") or "")
              for row in availability}
     for row in constraints:
-        key = (row["employee"], row["date"], row.get("shift") or "")
+        key = _constraint_key(row)
         if row.get("action") == "remove":
             facts.pop(key, None)
         else:
@@ -240,6 +241,14 @@ def audit_plan(profile, schedule, rows, availability, constraints):
                                  message="%s לא מוגדר/ת למשמרת %s בפרופיל הצוות" %
                                  (row["employee"], row["shift"])))
     return warnings
+
+
+def _constraint_key(row):
+    constraint_type = row.get("constraint_type") or "availability"
+    if constraint_type == "duty":
+        return (constraint_type, row["employee"], row["date"],
+                row.get("start_time") or "", row.get("end_time") or "")
+    return (constraint_type, row["employee"], row["date"], row.get("shift") or "")
 
 
 def changed_rows(schedule, operations):

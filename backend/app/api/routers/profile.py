@@ -1,10 +1,15 @@
 """Boss-only manual editing of employees and shift types."""
 
+import datetime
 import logging
 
 from fastapi import APIRouter, Depends
 
-from app.api.contracts import ProfileUpdate
+from app.api.contracts import ProfileUpdate, RotationPreviewRequest
+from app.bl.profile_service.workplace import workplace as checked_workplace
+from app.bl.rotation import weekend_preview
+from app.common.errors import AgentError
+from app.common.time_context import israel_today
 
 _log = logging.getLogger("pakash.profile")
 
@@ -37,6 +42,26 @@ def build_router(service, guards, schedules=None) -> APIRouter:
             _log.exception("absorbing a profile change failed")
             absorbed = None
         return dict(saved, absorbed=absorbed)
+
+    @router.post("/rotation-preview")
+    def rotation_preview(request: RotationPreviewRequest, session: dict = Depends(boss)) -> dict:
+        """The coming weekends of each cycle, from the setup screen's unsaved
+        rows. Writes nothing; a row that would not save is named in `error`
+        instead of failing the preview."""
+        try:
+            place = checked_workplace(request.workplace)
+        except AgentError as error:
+            return {"error": str(error), "cycles": {}}
+        try:
+            start = datetime.date.fromisoformat(request.start or "")
+        except ValueError:
+            start = israel_today()
+        profile = {"workplace": place, "shifts": request.shifts}
+        weeks = min(max(request.weeks, 1), 26)
+        return {"error": "", "cycles": {
+            pattern: weekend_preview(profile, pattern, start, weeks)
+            for pattern in ("round", "triplet")
+        }}
 
     @router.delete("/shifts/{name}")
     def delete_shift(name: str, session: dict = Depends(boss)) -> dict:

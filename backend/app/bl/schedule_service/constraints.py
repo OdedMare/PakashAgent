@@ -25,6 +25,7 @@ class ConstraintService:
         is_hard: bool = True,
         reason: str = "",
         source: str = SOURCE_MANAGER,
+        constraint_type: str = "availability",
     ) -> dict:
         """Record a constraint for an employee.
 
@@ -40,19 +41,31 @@ class ConstraintService:
             raise AgentError("צריך לציין תאריך")
         shift_name = (shift_name or "").strip()
         reason = (reason or "").strip()
-        row = self._repository.set_availability(
-            team_id, employee, constraint_date,
-            shift_name=shift_name,
-            available=available,
-            start_time=_constraint_time(start_time),
-            end_time=_constraint_time(end_time),
-            is_hard=is_hard, reason=reason, source=source,
-        )
+        start_time, end_time = _constraint_time(start_time), _constraint_time(end_time)
+        if constraint_type == "duty":
+            if shift_name:
+                raise AgentError("תורנות חוסמת לפי שעות ולא לפי שם משמרת")
+            if not start_time or not end_time:
+                raise AgentError("לתורנות חוסמת צריך לציין שעת התחלה ושעת סיום")
+            row = self._repository.set_duty(
+                team_id, employee, constraint_date, start_time, end_time,
+                reason=reason, source=source,
+            )
+        else:
+            row = self._repository.set_availability(
+                team_id, employee, constraint_date,
+                shift_name=shift_name,
+                available=available,
+                start_time=start_time,
+                end_time=end_time,
+                is_hard=is_hard, reason=reason, source=source,
+            )
         self._repository.append_change(
             team_id, ACTION_CONSTRAINT,
             employee=employee, slot_date=constraint_date,
             shift_name=shift_name, reason=reason,
-            agent_reason=_constraint_note(available, is_hard),
+            agent_reason="תורנות חוסמת נרשמה" if constraint_type == "duty"
+            else _constraint_note(available, is_hard),
         )
         return row
 
