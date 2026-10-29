@@ -1376,7 +1376,11 @@ since one copy of the same sheet writes `13/10/2024` and another
 (`חפיפה`) is a note on the row, not part of a name; a sheet up to 1,500
 columns wide is read, and one holding more than an import may store opens
 on the month covering today, with any other run of dates a field away; a
-workbook with a tab per month opens on the tab covering today.
+workbook with a tab per month opens on the tab covering today. Unit 619's
+own tab (Sample D) added dates as `01-מרץ` with the year chosen on screen,
+a personal-number column that labels nobody, legend and banner rows, and
+cells naming a place with the shift in brackets — read as headings the
+manager maps to a declared shift, to an absence, or to nothing.
 
 What this gives up: a layout is one shape per sheet. A sheet mixing two
 unrelated tables needs its data range narrowed (`first_line`/`last_line`)

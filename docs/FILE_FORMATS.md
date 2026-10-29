@@ -89,6 +89,35 @@ for one will fail on the other. This is why there is no template.
 
 ---
 
+## Sample D — unit 619's task-team tab: a place and a shift in each cell
+
+```
+          │   ד    │   ה    │   ו   │    ש    │        א          │ …
+ מ.א │ שבעתה │ 25-פבר │ 26-פבר │27-פבר │ 28-פבר  │      01-מרץ       │
+     │ מעוף  │        בהצלחה, אין עליכם!  (merged across the row)          │
+     │ בית   │  צמא   │  צמא   │  צמא  │  צמא    │       צמא         │
+2157712│אמילי ו׳│ שבעתה │  צמא   │  צמא  │ צמא (משמרת לילה) │ צמא (יוצא בערב) │
+2142901│אליה וובק│ שבעתה │ שבעתה │  xer  │  צמא    │ צמא (משמרת בוקר) │
+```
+
+- **Rows** = people: a personal number (מ.א) in one column, the name in the
+  next. The number labels nobody; the name does.
+- **Columns** = dates written as Excel shows them on a Hebrew locale,
+  `01-מרץ`, with no year, and a row of bare weekday letters (א…ש) above.
+- **On top**: a legend column (`שבעתה`, `מעוף`, `בית`) whose rows are not
+  people — a banner merged across the row, and a row of the place name.
+  A lane labelled with a marker (`בית`) is skipped; any other label that
+  names nobody on the roster is listed for the manager to leave out.
+- **Cells** say where the person is and, in brackets, the shift there:
+  `צמא (משמרת בוקר)`, `צמא (משמרת לילה)`, `ירקון (יוצא בערב)`; a place
+  alone (`צמא`) is presence with no shift; `שבעתה` another posting; `בית`
+  home. None of these is the unit's declared shift vocabulary (מרכבה, סופה,
+  פריצה…), so each distinct value is a heading on the confirm screen, mapped
+  by the manager to a declared shift, to **"לא זמין (אילוץ)"** (the rows
+  become absences, the value kept as the reason), or to nothing.
+
+---
+
 ## What the importer must therefore do
 
 1. **Infer axis semantics, not just orientation.** Which axis is time; whether

@@ -16,7 +16,8 @@ interpretation is what the manager approves, and only then does
 | Module | Owns |
 |---|---|
 | `files.py` | `.xlsx` / `.docx` / `.csv` into grids |
-| `cells.py` | Reading one cell: dates, weekdays, names, markers, hours |
+| `cells.py` | Reading one value: text, dates either way round, Hebrew months, weekdays, hours |
+| `marks.py` | What a value means for its person: an absence, a handover note, several names |
 | `vocabulary.py` | Matching headings against the declared shifts (D9) |
 | `layout.py` | `Layout`: a sheet's shape as data, and orienting the grid |
 | `headers.py` | Header lines: dates, weekday templates, lane labels |

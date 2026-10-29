@@ -1214,6 +1214,8 @@ export interface ImportOptions {
   /** Only these dates, for a sheet holding more than one import stores. */
   date_from?: string;
   date_to?: string;
+  /** The year of a sheet whose dates write none ("01-מרץ"). */
+  year?: number;
 }
 
 /** What a file holds (D7/D42). **Nothing is stored** until confirm. */
@@ -1243,6 +1245,8 @@ export interface ImportPreview {
   file_ends_on: string;
   window: string[];
   assumed_week: string;
+  /** The header's dates carry no year; the screen offers to set one. */
+  yearless: boolean;
   assignments: ImportedRow[];
   unavailability: ImportedRow[];
   overlaps: { id: string; starts_on: string; ends_on: string; status: string }[];

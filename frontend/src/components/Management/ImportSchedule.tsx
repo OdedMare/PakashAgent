@@ -11,6 +11,9 @@ const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const ROWS_SHOWN = 80;
 const AUTO = "__auto__";
 const SKIP = "__skip__";
+// A heading that means "not here that day" ("שבעתה", "יוצא בערב"): its rows
+// become the person's absences. The server's own word for it.
+const ABSENT = "!absent";
 
 const SOURCE_LABEL: Record<ImportPreview["layout_source"], string> = {
   detected: "זוהה אוטומטית",
@@ -167,6 +170,16 @@ export function ImportSchedule({ employees, shiftNames, onImported, onClose }: {
                     <DateInput value={preview.ends_on} min={preview.file_starts_on} max={preview.file_ends_on}
                       aria-label="עד תאריך" onChange={(value) => remap({ date_from: preview.starts_on, date_to: value })} />
                   </span>
+                ) : null}
+                {preview.yearless ? (
+                  <label className="import-inline">שנה
+                    <input type="number" min={2000} max={2100} className="import-year"
+                      defaultValue={options.year || Number(preview.starts_on.slice(0, 4)) || ""}
+                      onBlur={(event) => {
+                        const year = parseInt(event.target.value, 10);
+                        if (year >= 2000 && year !== Number(preview.starts_on.slice(0, 4))) remap({ year });
+                      }} />
+                  </label>
                 ) : null}
               </div>
               {preview.alternatives.length ? (
@@ -406,6 +419,7 @@ function ShiftTable({ preview, shiftNames, mapping, busy, onMap }: {
                   value={options(row)} onChange={(event) => onMap(row.name, event.target.value)}>
                   <option value={AUTO}>{row.declared ? `אוטומטי: ${row.shift}` : "להשאיר כמו בקובץ"}</option>
                   {shiftNames.map((name) => <option key={name} value={name}>{name}</option>)}
+                  <option value={ABSENT}>לא זמין (אילוץ)</option>
                   <option value={SKIP}>לא לייבא</option>
                 </select>
               </td>

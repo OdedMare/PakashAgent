@@ -5,10 +5,11 @@ Hebrew is data here: weekday names, availability markers and two date formats
 text to display.
 """
 
+import contextvars
 import datetime
 import functools
 import re
-from typing import Any, Iterable, List, Optional
+from typing import Any, Iterable, Optional
 
 from app.common.time_context import israel_today
 
@@ -19,18 +20,6 @@ HEBREW_WEEKDAYS = ("ראשון", "שני", "שלישי", "רביעי", "חמיש
 # The letter form a weekly template writes instead ("א׳", "ב'"), Sunday first.
 _WEEKDAY_LETTERS = ("א", "ב", "ג", "ד", "ה", "ו", "ש")
 _GERESH = "׳'`"
-
-# Availability markers living in the assignment grid (Sample B). Matched as
-# whole cell values after normalisation, never as substrings.
-_UNAVAILABLE = (
-    "לא זמין", "לא זמינה", "לא יכול", "לא יכולה", "חופש", "חופשה", "מחלה",
-    "חולה", "גימל", "אילוץ", "בית", "בבית",
-)
-
-# Words a cell adds to a person's name that say *how* they work the shift,
-# not who they are: "עיינה-חפיפה" is עיינה, on a handover shift. Kept as the
-# row's note rather than read as part of a name nobody on the roster has.
-_NOTE_WORDS = ("חפיפה", "חפיפות", "בחפיפה", "חניכה", "תצפית")
 
 # Day, month and year in either order: which one a file meant is settled
 # per header line (`month_first`), never per cell.
@@ -47,6 +36,19 @@ _DATE_PATTERNS = (
 )
 # `d.M` with no year at all (Sample B). The year must come from context.
 DAY_MONTH = re.compile(r"^(\d{1,2})[./](\d{1,2})$")
+
+# A day and a Hebrew month, as Excel on a Hebrew locale displays a date:
+# "01-מרץ", "28-פבר", "1 במרץ 2026". Months by their first three letters.
+_HEBREW_MONTHS = {
+    "ינו": 1, "פבר": 2, "מרץ": 3, "מרס": 3, "אפר": 4, "מאי": 5, "יונ": 6,
+    "יול": 7, "אוג": 8, "ספט": 9, "אוק": 10, "נוב": 11, "דצמ": 12,
+}
+_DAY_HEBREW_MONTH = re.compile(
+    r"^(\d{1,2})[\s\-./]*ב?([\u05d0-\u05ea]{3})[\u05d0-\u05ea]*(?:[\s\-./,]+(\d{2}|\d{4}))?$")
+
+# The year the manager says a yearless sheet is in, for one read. A context
+# variable rather than an argument threaded through every header helper.
+YEAR_HINT: contextvars.ContextVar = contextvars.ContextVar("import_year_hint", default=0)
 _EXCEL_EPOCH = datetime.date(1899, 12, 30)
 _EXCEL_SERIALS = (20000, 80000)
 _HOURS = re.compile(
@@ -147,7 +149,22 @@ def _parse_text(value: str, month_first: bool) -> str:
     match = DAY_MONTH.match(cleaned)
     if match:
         return "%s%d.%d" % (_YEARLESS, int(match.group(1)), int(match.group(2)))
-    return ""
+    return _hebrew_month_date(cleaned)
+
+
+def _hebrew_month_date(cleaned: str) -> str:
+    match = _DAY_HEBREW_MONTH.match(cleaned)
+    month = _HEBREW_MONTHS.get(match.group(2)) if match else None
+    if not month:
+        return ""
+    day, year = int(match.group(1)), match.group(3)
+    if not year:
+        return "%s%d.%d" % (_YEARLESS, day, month)
+    year_number = int(year) + (2000 if len(year) == 2 else 0)
+    try:
+        return datetime.date(year_number, month, day).isoformat()
+    except ValueError:
+        return ""
 
 
 _YEARLESS = "yearless:"
@@ -192,14 +209,6 @@ def _runs_on(values: Iterable[Any], swapped: bool) -> int:
     return sum(1 for before, after in zip(days, days[1:]) if 0 <= (after - before).days <= 7)
 
 
-def split_note(part: str):
-    """`(name, note)`: a person's name with any handover word taken off."""
-    words = re.split(r"[\s\-–—()]+", part or "")
-    notes = [word for word in words if word in _NOTE_WORDS]
-    name = " ".join(word for word in words if word and word not in _NOTE_WORDS)
-    return name.strip(), " ".join(notes)
-
-
 def _excel_serial(value: float) -> str:
     if not _EXCEL_SERIALS[0] <= value <= _EXCEL_SERIALS[1]:
         return ""
@@ -213,6 +222,12 @@ def _resolve_year(day: int, month: int) -> str:
     January is last year's, a January one read in December next year's.
     Surfaced as a warning rather than applied silently.
     """
+    hint = YEAR_HINT.get()
+    if hint:
+        try:
+            return datetime.date(hint, month, day).isoformat()
+        except ValueError:
+            return ""
     today = israel_today()
     found = []
     for year in (today.year - 1, today.year, today.year + 1):
@@ -226,7 +241,10 @@ def _resolve_year(day: int, month: int) -> str:
 
 
 def is_yearless(value: Any) -> bool:
-    return bool(DAY_MONTH.match(without_weekday(value)))
+    if not isinstance(value, str):
+        return False
+    return _parse_text(value, False).startswith(_YEARLESS) \
+        or _parse_text(value, True).startswith(_YEARLESS)
 
 
 def parse_hours(value: str) -> str:
@@ -242,32 +260,6 @@ def parse_hours(value: str) -> str:
     if start_h > 23 or end_h > 23 or start_m > 59 or end_m > 59:
         return ""
     return "%02d:%02d-%02d:%02d" % (start_h, start_m, end_h, end_m)
-
-
-def is_unavailable(value: str, extra: Iterable[str] = ()) -> bool:
-    """Whether a cell says somebody cannot work. `extra` is the sheet's own
-    markers ("X", "חופ"ש") -- named by the layout, since in one file an "X"
-    means away and in another it means on shift."""
-    cleaned = normalise(value)
-    markers = tuple(_UNAVAILABLE) + tuple(normalise(word) for word in extra if word)
-    return any(cleaned == marker or cleaned.startswith(marker) for marker in markers)
-
-
-def split_names(value: str) -> List[str]:
-    """One cell into the people it names.
-
-    `export.py` writes several people into a cell newline-separated, and the
-    manager's own files use commas or slashes. The unfilled marker it writes
-    is not a person.
-    """
-    from app.bl.export import UNFILLED
-
-    names = []
-    for part in re.split(r"[\n,/;]+", value or ""):
-        name = part.strip()
-        if name and name != UNFILLED and not name.startswith("—"):
-            names.append(name)
-    return names
 
 
 def human_date(iso: str) -> str:

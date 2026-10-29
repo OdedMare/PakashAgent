@@ -20,9 +20,8 @@ weeks stacked on one sheet -- restarts the dates where it appears.
 from typing import List, Optional, Tuple
 
 from app.bl.export import UNFILLED
-from app.bl.importer.cells import (
-    is_unavailable, is_yearless, normalise, split_names, split_note, text,
-)
+from app.bl.importer.cells import is_yearless, normalise, text
+from app.bl.importer.marks import is_unavailable, split_names, split_note
 from app.bl.importer.headers import (
     carried, header_dates, is_date_row, is_title, is_weekday_row, lane_from_cells,
     lane_label, line_dates,
@@ -53,6 +52,7 @@ class Reading(object):
         self.filled = 0
         self.explained = 0
         self.assumed_week = ""
+        self.yearless = False
 
     def dates(self) -> List[str]:
         return sorted({row["date"] for row in self.assignments + self.unavailability})
@@ -81,8 +81,9 @@ def _columns(grid, layout: Layout, vocabulary, week_start: str, reading: Reading
     dates, assumed = header_dates(grid[layout.header], week_start)
     reading.assumed_week = assumed
     if any(is_yearless(value) for value in grid[layout.header]):
+        reading.yearless = True
         reading.notes.append("בקובץ יש תאריכים ללא שנה; הונחה השנה הקרובה להיום — "
-                             "ודא אותה לפני האישור")
+                             "אפשר לבחור את השנה")
     if not dates:
         return []
     if not layout.nested:
@@ -150,7 +151,9 @@ class _Lanes(object):
     def _lane(self, row: List[str], columns: Columns) -> None:
         data = [column for column, _date, _shift in columns]
         lanes, label = self._layout.lanes, lane_label(row, data, self._layout.label)
-        if label and is_title(label):
+        # A caption, or a legend row labelled with a marker ("בית"), is not
+        # anybody's lane.
+        if label and (is_title(label) or is_unavailable(label, self._layout.unavailable)):
             return
         if lanes == LANES_SHIFTS:
             shift = self._vocabulary.match(label) if label else ""
@@ -178,7 +181,9 @@ class _Lanes(object):
     def _person(self, row, columns: Columns, owner: str) -> None:
         """One person's lane: a cell says what they work, or only that they do."""
         for column, date, shift in columns:
-            for part in self._parts(row, column):
+            # What a person's cell says is one thing -- "צמא (משמרת בוקר)",
+            # "בהצלחה, אין עליכם!" -- so only a new line splits it.
+            for part in self._parts(row, column, whole=True):
                 if is_unavailable(part, self._layout.unavailable):
                     self._absent(owner, date, shift, part)
                 elif shift:
@@ -188,12 +193,13 @@ class _Lanes(object):
                 else:
                     self._place(owner, date, self._vocabulary.match(part) or part)
 
-    def _parts(self, row, column: int) -> List[str]:
+    def _parts(self, row, column: int, whole: bool = False) -> List[str]:
         value = row[column] if column < len(row) else ""
         if not text(value):
             return []
         self._reading.filled += 1
-        parts = [part for part in split_names(value) if normalise(part) not in self._ignored]
+        found = [line.strip() for line in text(value).split("\n")] if whole else split_names(value)
+        parts = [part for part in found if part and normalise(part) not in self._ignored]
         if parts or normalise(value) in self._ignored:
             self._reading.explained += 1
         return parts

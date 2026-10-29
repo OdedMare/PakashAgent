@@ -3,9 +3,8 @@
 import datetime
 from typing import Dict, List, Optional, Tuple
 
-from app.bl.importer.cells import (
-    is_unavailable, month_first, normalise, parse_date, split_names, text, weekday_index,
-)
+from app.bl.importer.cells import month_first, normalise, parse_date, text, weekday_index
+from app.bl.importer.marks import is_unavailable, split_names
 from app.common.time_context import israel_today
 
 # How far from the top detection looks for a header. Real files carry a
@@ -113,9 +112,14 @@ def lane_label(row: List[str], data_columns: List[int], label: Optional[int]) ->
         return text(row[label]) if label < len(row) else ""
     claimed = set(data_columns)
     for column, value in enumerate(row):
-        if column not in claimed and text(value):
+        # A personal number beside the name (מ.א.) labels nobody's lane.
+        if column not in claimed and text(value) and not _number(text(value)):
             return text(value)
     return ""
+
+
+def _number(value: str) -> bool:
+    return value.replace(".0", "").isdigit()
 
 
 def lane_from_cells(row: List[str], data_columns: List[int], extra=()) -> str:

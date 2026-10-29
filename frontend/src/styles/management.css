@@ -2466,6 +2466,8 @@
   line-height: 1.6;
 }
 
+.import-year { width: 6rem; min-height: 36px; }
+
 .import-error {
   margin: 0.75rem 0 0;
   color: var(--danger);

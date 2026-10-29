@@ -17,6 +17,7 @@ a wrong guess is one click from the right one rather than a form to fill.
 
 from typing import Dict, List, Optional
 
+from app.bl.importer.cells import YEAR_HINT
 from app.bl.importer.detect import detect, evaluate
 from app.bl.importer.files import bounded
 from app.bl.importer.interpretation import describe, interpret
@@ -40,9 +41,19 @@ def infer(grid: List[List[str]], profile: Optional[dict] = None,
           layout: Optional[dict] = None, mapper=None, week_start: str = "",
           hint: str = "", names: Optional[Dict[str, str]] = None,
           shifts: Optional[Dict[str, str]] = None, date_from: str = "",
-          date_to: str = "") -> dict:
+          date_to: str = "", year: int = 0) -> dict:
     """The interpretation the confirm screen shows. Raises `AgentError` in
-    Hebrew when no layout explains the sheet at all."""
+    Hebrew when no layout explains the sheet at all. `year` is the one a
+    sheet that writes none is in; without it the nearest to today."""
+    token = YEAR_HINT.set(year or 0)
+    try:
+        return _infer(grid, profile, layout, mapper, week_start, hint, names, shifts,
+                      (date_from, date_to))
+    finally:
+        YEAR_HINT.reset(token)
+
+
+def _infer(grid, profile, layout, mapper, week_start, hint, names, shifts, window) -> dict:
     grid = bounded(grid)
     if not grid or not any(any(cell for cell in row) for row in grid):
         raise AgentError("הגיליון ריק")
@@ -55,7 +66,7 @@ def infer(grid: List[List[str]], profile: Optional[dict] = None,
         chosen = _best(grid, profile, vocabulary, ranked, mapper, hint, week_start)
         alternatives = _alternatives(ranked, chosen)
     reading = chosen["reading"]
-    result = interpret(reading, profile, vocabulary, names, shifts, (date_from, date_to))
+    result = interpret(reading, profile, vocabulary, names, shifts, window)
     result.update(
         layout=reading.layout.to_dict(),
         layout_source=chosen["source"],
@@ -64,7 +75,9 @@ def infer(grid: List[List[str]], profile: Optional[dict] = None,
         alternatives=alternatives,
         sheet=preview(grid),
     )
-    if chosen["confidence"] < 0.5:
+    # Undeclared headings are what pull a reading down; once the manager has
+    # mapped them, or set the layout, the doubt has been answered.
+    if chosen["confidence"] < 0.5 and not shifts and not layout:
         result["warnings"].insert(0, "לא בטוח שהמבנה זוהה נכון — בדוק את התצוגה או תקן את הפריסה")
     return result
 

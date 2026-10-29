@@ -365,3 +365,66 @@ def test_a_year_on_one_sheet_opens_on_one_month_and_a_window_picks_another():
     assert any("מוצגים רק" in warning for warning in shown["warnings"])
     chosen = infer(grid, PROFILE, date_from="2024-01-01", date_to="2024-01-02")
     assert [(row[0], row[1]) for row in _rows(chosen)] == UNIT_ROWS
+
+
+# -- unit 619's own tab: a personal number then the name, weekday letters
+# over "25-פבר" dates, a banner row and a legend row on top, and cells that
+# say where the person is and, in brackets, which shift they work there.
+
+U619 = {
+    "employees": [{"name": name} for name in ("אמילי", "אליה", "אילון", "דני")],
+    "shifts": [{"name": "פריצה יום", "start_time": "08:00", "end_time": "20:00"},
+               {"name": "פריצה לילה", "start_time": "20:00", "end_time": "08:00"}],
+}
+
+
+def _unit_619_tab():
+    dates = ["25-פבר", "26-פבר", "27-פבר", "28-פבר", "01-מרץ", "02-מרץ"]
+    banner = "בהצלחה, אין עליכם!"
+    return [
+        ["", "", "", "ד", "ה", "ו", "ש", "א", "ב"],
+        ["", "מ.א", "שבעתה", *dates],
+        ["", "", "מעוף", *([banner] * 6)],
+        ["", "", "בית", *(["צמא"] * 6)],
+        ["", "2157712", "אמילי ווישנבצקי", "שבעתה", "צמא", "צמא", "צמא (משמרת לילה)",
+         "צמא (משמרת לילה)", "צמא (יוצא בערב)"],
+        ["", "2142901", "אליה וובק", "שבעתה", "שבעתה", "xer", "צמא", "צמא (משמרת בוקר)", "בית"],
+        ["", "3226110", "אילון בראשי", "צמא", "צמא", "בית", "בית", "צמא (משמרת בוקר)",
+         "צמא (משמרת בוקר)"],
+    ]
+
+
+def test_unit_619s_tab_reads_names_not_personal_numbers_and_skips_legend_rows():
+    result = infer(_unit_619_tab(), U619, year=2026)
+    assert result["layout"]["lanes"] == "people" and result["layout"]["header"] == 1
+    names = {row["name"]: row["employee"] for row in result["people"]}
+    assert names["אמילי ווישנבצקי"] == "אמילי" and names["אילון בראשי"] == "אילון"
+    assert "בית" not in names and not any(name.isdigit() for name in names)
+    assert result["dates"][0] == "2026-02-25" and result["yearless"]
+    home = {(row["employee"], row["date"]) for row in result["unavailability"]}
+    assert ("אליה", "2026-03-02") in home and ("אילון", "2026-02-27") in home
+
+
+def test_the_managers_mapping_turns_places_into_shifts_absences_or_nothing():
+    shifts = {"צמא (משמרת לילה)": "פריצה לילה", "צמא (משמרת בוקר)": "פריצה יום",
+              "צמא": "", "צמא (יוצא בערב)": "", "xer": "", "שבעתה": "!absent",
+              "בהצלחה, אין עליכם!": ""}
+    result = infer(_unit_619_tab(), U619, year=2026, shifts=shifts, names={"מעוף": ""})
+    assert sorted((row["employee"], row["shift"], row["date"]) for row in result["assignments"]) == [
+        ("אילון", "פריצה יום", "2026-03-01"), ("אילון", "פריצה יום", "2026-03-02"),
+        ("אליה", "פריצה יום", "2026-03-01"),
+        ("אמילי", "פריצה לילה", "2026-02-28"), ("אמילי", "פריצה לילה", "2026-03-01"),
+    ]
+    away = [row for row in result["unavailability"] if row["reason"] == "שבעתה"]
+    assert {(row["employee"], row["date"]) for row in away} == {
+        ("אמילי", "2026-02-25"), ("אליה", "2026-02-25"), ("אליה", "2026-02-26")}
+    assert next(row for row in result["shifts"] if row["name"] == "שבעתה")["shift"] == "!absent"
+    assert not any("משמרות שאינן מוגדרות" in warning for warning in result["warnings"])
+
+
+def test_hebrew_month_dates_with_and_without_a_year():
+    from app.bl.importer.cells import parse_date
+
+    assert parse_date("1 במרץ 2026") == "2026-03-01"
+    assert parse_date("28-פבר-26") == "2026-02-28"
+    assert parse_date("15 בדצמבר") .endswith("-12-15")

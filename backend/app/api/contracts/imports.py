@@ -36,6 +36,8 @@ class ImportOptions(BaseModel):
     # Only these dates, when the sheet holds more than one import may store.
     date_from: str = Field(default="", max_length=10)
     date_to: str = Field(default="", max_length=10)
+    # The year of a sheet that writes dates without one ("01-מרץ"); 0 = nearest.
+    year: int = Field(default=0, ge=0, le=2100)
 
 
 class ImportedRow(BaseModel):
@@ -96,6 +98,7 @@ class ImportPreview(BaseModel):
     # The dates kept, when only part of the file is shown; empty for all.
     window: List[str] = []
     assumed_week: str = ""
+    yearless: bool = False
     assignments: List[ImportedRow] = []
     unavailability: List[ImportedRow] = []
     overlaps: List[ImportOverlap] = []

@@ -19,6 +19,9 @@ from app.bl.importer.roster import AMBIGUOUS, EXACT, MATCHED, UNKNOWN, match_peo
 from app.bl.importer.vocabulary import ShiftVocabulary
 from app.common.time_context import israel_today
 
+# What a shift heading may be mapped to when it means "not here that day".
+ABSENT = "!absent"
+
 # Longest run of days one import may store: the ceiling a calendar view reads.
 MAX_IMPORT_DAYS = 62
 
@@ -32,10 +35,15 @@ def interpret(reading: Reading, profile: Optional[dict], vocabulary: ShiftVocabu
     `window` keeps only the dates from its first to its last (either may be
     empty): a sheet holding a year is imported a month at a time."""
     names, shifts = names or {}, shifts or {}
+    # The table lists every heading as the file has it, an absence mapping
+    # included, so the manager can take it back; the rows then move.
+    # Rows of a name the manager left out are not counted under any heading.
+    kept = [row for row in reading.assignments if names.get(row["employee"], None) != ""]
+    shift_rows = _shifts(_headings(kept, reading), vocabulary, shifts, kept)
+    reading = _absences_by_mapping(reading, shifts)
     owners = [row["employee"] for row in reading.assignments + reading.unavailability]
     matches = match_people(owners, profile)
     people = _people(matches, owners, names)
-    shift_rows = _shifts(reading.shifts(), vocabulary, shifts, reading.assignments)
     person = {row["name"]: row["employee"] for row in people}
     shift = {row["name"]: row["shift"] for row in shift_rows}
     assignments = _unique(_mapped(reading.assignments, person, shift, keep_unowned=False),
@@ -57,6 +65,7 @@ def interpret(reading: Reading, profile: Optional[dict], vocabulary: ShiftVocabu
         "assignments": assignments,
         "unavailability": absences,
         "assumed_week": reading.assumed_week,
+        "yearless": reading.yearless,
         "window": list(window),
     }
     result["warnings"] = _warnings(reading, result)
@@ -76,6 +85,26 @@ def _default_window(dates: List[str]) -> Tuple[str, str]:
     first = month + "-01"
     following = (datetime.date.fromisoformat(first) + datetime.timedelta(days=32)).replace(day=1)
     return first, (following - datetime.timedelta(days=1)).isoformat()
+
+
+def _headings(kept: List[dict], reading: Reading) -> List[str]:
+    found = [row["shift"] for row in kept + reading.unavailability]
+    return list(dict.fromkeys(name for name in found if name))
+
+
+def _absences_by_mapping(reading: Reading, shifts: Dict[str, str]) -> Reading:
+    """A heading the manager mapped to `ABSENT` ("שבעתה", "יוצא בערב")
+    says the lane's person is not available that day: the rows move from
+    the placements to the absences, the file's word kept as the reason."""
+    absent = {name for name, value in shifts.items() if value == ABSENT}
+    if not absent:
+        return reading
+    moved = [row for row in reading.assignments if row["shift"] in absent]
+    reading.assignments = [row for row in reading.assignments if row["shift"] not in absent]
+    reading.unavailability = reading.unavailability + [
+        {"employee": row["employee"], "shift": "", "date": row["date"], "reason": row["shift"]}
+        for row in moved]
+    return reading
 
 
 def _within(rows: List[dict], window: Tuple[str, str]) -> List[dict]:
@@ -194,7 +223,8 @@ def _warnings(reading: Reading, result: dict) -> List[str]:
     # Rows that will be stored on a shift the workplace never declared, or
     # on none at all; a heading mapped to nothing is left out, not loose.
     loose = [row["name"] or "ללא משמרת" for row in result["shifts"]
-             if row["count"] and not row["declared"] and (row["shift"] or not row["name"])]
+             if row["count"] and not row["declared"] and row["shift"] != ABSENT
+             and (row["shift"] or not row["name"])]
     if loose:
         notes.append("משמרות שאינן מוגדרות בצוות: %s" % ", ".join(loose[:6]))
     if result["file_starts_on"] and (result["file_starts_on"], result["file_ends_on"]) \

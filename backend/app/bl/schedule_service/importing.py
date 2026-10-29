@@ -33,7 +33,7 @@ class ImportPreview:
                 sheet: str = "", layout: Optional[dict] = None, week_start: str = "",
                 hint: str = "", names: Optional[Dict[str, str]] = None,
                 shifts: Optional[Dict[str, str]] = None, use_model: bool = True,
-                date_from: str = "", date_to: str = "") -> dict:
+                date_from: str = "", date_to: str = "", year: int = 0) -> dict:
         """What the file holds, read as the manager last corrected it."""
         profile = self._context.profile(team_id)
         grids = read_grids(content, filename)
@@ -42,7 +42,7 @@ class ImportPreview:
         result = infer(grid, profile, layout=layout,
                        mapper=self._mapper if use_model else None,
                        week_start=week_start, hint=hint, names=names, shifts=shifts,
-                       date_from=date_from, date_to=date_to)
+                       date_from=date_from, date_to=date_to, year=year)
         result.update(filename=filename, sheets=titles, sheet_name=title,
                       overlaps=self._overlaps(team_id, result["starts_on"], result["ends_on"]))
         return result
