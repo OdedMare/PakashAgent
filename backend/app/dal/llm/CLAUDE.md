@@ -3,8 +3,8 @@
 Ported from AiSummryIO and extended. An OpenAI-compatible JSON-mode client.
 The default target is a local model through Ollama, but the same code works
 against OpenAI itself, vLLM, Groq, and other compatible gateways. It is used
-for language only — translating a build's sentences, the manager chat, the
-employee assistant, learning from corrections. **No schedule is assigned
+for language only — translating a build's sentences, the manager chat,
+the one-shot change agent, learning from corrections. **No schedule is assigned
 through it** (D34).
 
 Model, API key, and base URL are read from the runtime settings store on **every
@@ -16,6 +16,10 @@ three are per role, so different kinds of work can run on different providers.
 | File | Role |
 |---|---|
 | `openai_client.py` | `OpenAIJsonClient` — the only class callers use |
+| `ladder.py` | The degradation ladder, its rungs, `is_context_overflow`, the reasoning-effort fields |
+| `budgets.py` | Read ceiling, connect timeout and total budget per flow |
+| `team_context.py` | `model_team()` — the team the current call is charged to, for its team slot |
+| `telemetry.py` | The one `pakash.llm` log line per logical call |
 | `completion_retry.py` | Transient-failure retry with exponential backoff |
 | `json_response_parser.py` | `extract_json` — strips fences, finds the object |
 | `message_merger.py` | Folds the system prompt into the user turn |
@@ -74,7 +78,7 @@ costs only itself.
 **A context-overflow 400 does not advance it.** A prompt longer than the
 server's context window is also a `BadRequestError`, and no rung can shorten
 it — every remaining one sends the same oversized messages, fails identically,
-and buries the real cause behind whichever rung ran last. `_is_context_overflow`
+and buries the real cause behind whichever rung ran last. `ladder.is_context_overflow`
 matches it on the error text (vLLM, Ollama and llama.cpp all answer 400 with
 prose, none with a distinct code) and raises a Hebrew error naming the actual
 problem. This matters more than it looks: on vLLM the context window is fixed
@@ -128,7 +132,7 @@ retried (`completion_retry._read_timed_out`), and the SDK's own silent
 retries are off (`max_retries=0`), so a stuck call fails after one ceiling
 and gives its slot back.
 
-**3. The total budget** — `_TOTAL_BUDGET_SECONDS` bounds one logical
+**3. The total budget** — `budgets.budget_seconds()` bounds one logical
 `complete_json`. `llm_timeout_seconds` bounds a single HTTP round-trip, but
 the ladder can run four of them and each retries up to three times; multiplied
 out, one request could hold a worker for the better part of an hour. The
@@ -136,9 +140,9 @@ deadline is passed into `create_with_retry`, which starts no attempt (and
 takes no sleep) that would cross it.
 
 **The `scheduler` flow does not honour `llm_timeout_seconds`.**
-`read_timeout_for()` gives it its own ceiling instead —
+`budgets.read_timeout_for()` gives it its own ceiling instead —
 `_SCHEDULER_READ_CEILING_SECONDS` (15 minutes), or the setting if that is
-larger — and `_budget_seconds()` sizes its budget to let that one attempt
+larger — and `budget_seconds()` sizes its budget to let that one attempt
 finish.
 
 This is the one place a configured setting is deliberately not honoured.
@@ -151,7 +155,7 @@ manager's stop button does not interrupt an HTTP read. A translation that
 times out does not fail the build: the solver builds without it and the
 notes say so.
 
-Connecting stays bounded for *every* flow (`_CONNECT_TIMEOUT_SECONDS`): a
+Connecting stays bounded for *every* flow (`budgets._CONNECT_TIMEOUT_SECONDS`, 30s): a
 handshake that never completes is an unreachable server, not a slow one, and
 no amount of waiting fixes it.
 
@@ -202,7 +206,7 @@ reason `ladder.attempts` sends no `repetition_penalty` at 0 — a default here w
 be a hardcoded model name, and which models exist is the server's business.
 
 **The model is resolved per call**, immediately before the request, so a
-selection saved in the settings panel applies to the next call without a
+selection saved in the system settings applies to the next call without a
 restart — the property the base URL and key already had.
 
 **No automatic failover.** A timeout, a 5xx, or an invalid reply never
@@ -262,7 +266,7 @@ tell a misrouted flow from a misconfigured role, which is the question these
 lines get asked once more than one model is in play.
 
 `flow` is what the `flow=` argument on `complete_json` exists for —
-`scheduler`, `changes`, `learn`. Without it every measurement
+`scheduler`, `planner` (the manager chat), `changes`, `learn`. Without it every measurement
 reads "some model call", and the first question anyone asks of the numbers is
 which feature is the expensive one.
 
@@ -321,5 +325,5 @@ first one's client, silently billing and authenticating as the wrong account.
   per role in one place, and the client cache is keyed by the key as well as
   the URL so two roles on one provider with different keys stay separate.
 - **Never fail over to another model.** See the routing section.
-- **Nothing in `bl/audit.py` may call this.** The audit is arithmetic precisely so
+- **Nothing in `bl/audit/` may call this.** The audit is arithmetic precisely so
   it cannot be hallucinated ([D3](../../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).

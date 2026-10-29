@@ -1,4 +1,5 @@
-import type { CardPerson } from "@/types";
+import { cycleName, isDayCycle } from "@/lib/dayCycles";
+import type { CardPerson, DayCycle } from "@/types";
 
 /** How the roster's rotation fields read on a board card.
  *
@@ -26,8 +27,10 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-export function rotationLabel(pattern: unknown, group: unknown): string {
+export function rotationLabel(pattern: unknown, group: unknown, cycles?: DayCycle[]): string {
   const arm = text(group);
+  // A day cycle (11/3, שבוע־שבוע…) is named by the manager in setup.
+  if (isDayCycle(pattern)) return arm ? `${cycleName(cycles, pattern)} ${arm}` : cycleName(cycles, pattern);
   // Nothing recorded means nothing said. The fallback below reads a rotation
   // out of a partial row; it must not invent one out of an empty row, or
   // every person the roster is silent about would be labelled "סבב".

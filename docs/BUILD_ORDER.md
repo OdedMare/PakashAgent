@@ -1,6 +1,13 @@
 # Build order
 
-**Start here in a new session.**
+> **Historical record.** This is the order the product was first built in,
+> kept for its reasoning. Much of what it names has since been replaced or
+> removed: the intro interview, the briefing (D15), the importer, Opik
+> tracing (D30), the AI scheduler (superseded by the CP-SAT solver, D34),
+> and single files that became packages (`bl/audit/`, `bl/scheduler/`,
+> `bl/changes/`, `bl/rotation/`…). **For the system as it is now, start
+> with [`../README.md`](../README.md), [`SYSTEM_MAP.md`](SYSTEM_MAP.md) and
+> [`../backend/CLAUDE.md`](../backend/CLAUDE.md).**
 
 Done so far: step 1 (scaffold and port), step 2 (all tables and their
 repositories), **step 3 (`bl/audit.py` and its table-driven tests)**, step 4
@@ -129,8 +136,9 @@ End-to-end against a local Ollama:
 
 1. Run the intro interview; confirm the shift vocabulary is stored.
 2. Generate a week; check each assignment carries a reason.
-3. Deliberately break a rule; confirm a warning appears **and the schedule still
-   renders** — a blocked save means D3 was reversed.
+3. Deliberately break an ordinary rule; confirm a warning appears **and the
+   schedule still renders**. Then add an operational duty and confirm only an
+   overlapping placement is blocked.
 4. Import a sample sheet; confirm the interpretation screen appears and nothing
    persists until approved.
 5. Say "Dana's sick Thursday"; confirm the agent asks for a reason, justifies its

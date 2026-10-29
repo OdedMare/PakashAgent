@@ -43,16 +43,18 @@ class Settings(BaseSettings):
     and the fallback for every role that does not."""
 
     llm_model_fast: str = ""
-    """Model for short, lightweight work (the briefing). Empty = use
+    """Model for short, lightweight work. No flow is routed here since the
+    briefing was removed; kept so a saved setting still loads. Empty = use
     `llm_model`."""
 
     llm_model_default: str = ""
-    """Model for conversation-shaped work — changes, planner,
-    learn — and for any call naming no role. Empty = use `llm_model`."""
+    """Model for conversation-shaped work — the manager chat (`planner`),
+    `changes`, `learn` — and for any call naming no role. Empty = use
+    `llm_model`."""
 
     llm_model_advanced: str = ""
-    """Model for schedule generation and other heavy reasoning. Empty = use
-    `llm_model`."""
+    """Model for a build's translation of the manager's sentences (the
+    `scheduler` flow, `bl/directive_agent/`). Empty = use `llm_model`."""
 
     llm_base_url_fast: Optional[str] = None
     """Endpoint for the fast role. Empty = use `llm_base_url`."""
@@ -85,45 +87,31 @@ class Settings(BaseSettings):
     """Use compact prompts and bounded completion output."""
 
     llm_verify_ssl: bool = False
-    """Kept for old settings files and env only. The model server's TLS
-    certificate is never verified (`dal/llm/openai_client._verify_ssl`):
-    the servers this runs against are internal, with self-signed
-    certificates, so every LLM connection is made with `verify=False`."""
+    """Ignored: the model server's TLS certificate is never verified — the
+    client and the `/models` probe skip it whatever this says. Kept so a
+    saved setting still loads. The API key and every prompt therefore travel
+    over a connection anyone in the path can intercept."""
 
     llm_timeout_seconds: int = 0
     """Maximum wall time for ONE HTTP completion to the model.
     **0 — the default — means the built-in ceiling: 300s for chat and every
     other flow, 900s for a build's translation** (`dal/llm/budgets.py`).
 
-    It used to mean no limit at all, and the cost described under "What this
-    gave up" below is what happened: one call the server never answered held
+    It used to mean no limit at all, and then one call the server never answered held
     its worker and model slot until a restart, and every later chat message
     and build waited on "ממתין למודל…" behind it. A stuck call now fails with
     a Hebrew error and gives its slot back; a read timeout is not retried.
 
     Not a budget for the whole logical call: the degradation ladder and the
-    parse retry above it each get their own, derived from this one. Set to 0,
-    those go away with it.
+    parse retry above it each get their own, derived from this one.
 
-    **Why the default is no timeout.** Every finite value shipped here was
-    wrong for somebody. 120s was sized for a small local model answering in
-    seconds; against a large model on constrained hardware it failed every
-    call *while the server was still generating* — the answer arrived to a
-    client that had already hung up, so a merely slow model looked broken.
-    Raising it only moved the cliff, because the right number is a property
-    of the model and the hardware, which this code cannot know.
-
-    A ceiling below the real answer time is not a safety net; it is a
-    guarantee of failure. So the backend no longer guesses one: generation is
-    a background job checkpointed per day, the browser polls rather than
-    holding the connection open, and **giving up is the UI's decision** — it
-    is the only participant that knows whether anyone is still waiting.
-
-    **What this gave up.** A server that is genuinely hung — not slow — now
-    holds its worker thread until the process restarts, and with
-    `llm_max_concurrency` at 1 that blocks every other model call. Set a
-    positive value here if that ever happens; it should be comfortably above
-    the slowest real answer, not a round number that feels safe."""
+    **Why a ceiling rather than a guess.** Every finite value shipped here
+    was wrong for somebody: 120s failed a large model on constrained
+    hardware *while the server was still generating*. So the default is the
+    generous built-in ceiling, which only catches a server that is hung
+    rather than slow (D38). A model genuinely slower than five minutes per
+    chat answer needs this raised; set it comfortably above the slowest real
+    answer, not to a round number that feels safe."""
 
     llm_queue_seconds: int = 0
     """Maximum time interactive work may wait for a model slot.

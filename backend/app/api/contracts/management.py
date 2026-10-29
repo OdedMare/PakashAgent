@@ -1,6 +1,6 @@
 """The management area's overview: constraints, history, statistics."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel
 
@@ -26,6 +26,7 @@ class Constraint(BaseModel):
     is_hard: bool = True
     reason: str = ""
     source: str = "manager"
+    constraint_type: Literal["availability", "duty"] = "availability"
 
 
 class ChangeEntry(BaseModel):
@@ -44,6 +45,9 @@ class ChangeEntry(BaseModel):
     shift_name: str = ""
     reason: str = ""
     agent_reason: str = ""
+    # Who was acting: `boss:<manager_id>`, `employee:<name>`, `admin`, or
+    # empty for the system (and for rows older than the column).
+    actor: str = ""
     created_at: Optional[str] = None
 
 
@@ -163,6 +167,8 @@ class ManagementOverview(BaseModel):
     # the server about which day "today" is.
     today: str = ""
     profile: Optional[Dict[str, Any]] = None
+    # What a profile save names as `expected_revision` (see ProfileUpdate).
+    profile_revision: Optional[int] = None
     employees: List[Dict[str, Any]] = []
     shifts: List[Dict[str, Any]] = []
     schedule: Optional[Schedule] = None

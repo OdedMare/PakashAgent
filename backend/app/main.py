@@ -27,7 +27,10 @@ from app.common.config import Settings
 from app.common.errors import AppError, error_payload
 from app.common.events import TeamEvents
 from app.common.logging_setup import QUIET_401_METHODS, configure_logging
-from app.common.sessions import COOKIE_NAME, generate_secret, read
+from app.common.actor import acting_as, actor_of
+from app.common.sessions import (
+    ADMIN_COOKIE_NAME, COOKIE_NAME, MANAGER_COOKIE_NAME, read, read_admin,
+)
 from app.common.throttle import LoginThrottle
 from app.dal.notify import PostgresSignals
 from app.common.runtime_settings.runtime_settings_store import (
@@ -37,35 +40,20 @@ from app.dal.database import close_pool
 from app.dal.llm.openai_client import OpenAIJsonClient
 from app.dal.llm.team_context import model_team
 from app.dal.repository import Repository
+from app.session_key import session_key
 
 # Before anything else constructs a logger, so no start-up line is lost.
 configure_logging()
 _log = logging.getLogger("pakash.api")
-
-def _worker_count() -> int:
-    """How many workers this process is one of, as the server was told.
-
-    Read from the environment rather than from uvicorn: by the time this
-    module is imported the worker is already forked and has no handle on the
-    parent's arguments. Both spellings are checked because `WEB_CONCURRENCY`
-    is what uvicorn and gunicorn both honour, while `UVICORN_WORKERS` is what
-    a compose file is likely to say.
-    """
-    for name in ("WEB_CONCURRENCY", "UVICORN_WORKERS", "GUNICORN_WORKERS"):
-        try:
-            count = int(os.getenv(name, ""))
-        except ValueError:
-            continue
-        if count > 0:
-            return count
-    return 1
-
 
 env = Settings()
 store = RuntimeSettingsStore(env)
 # PostgreSQL is the one shared state: the throttle and the live signals go
 # through it, and the model queue holds its line with advisory locks.
 repository = Repository(store)
+# A save in the panel reaches every replica through the database, not only
+# the processes that mount the same settings file (D39).
+store.share_through(repository)
 llm = OpenAIJsonClient(store)
 workspace_service = WorkspaceService(repository)
 # Handed the settings store, not just the repository: the solver's time limit
@@ -85,31 +73,9 @@ manager_chat_service = ManagerChatService(
 # second implementation of the arithmetic the manager sees (D14).
 employee_service = EmployeeService(repository, schedule_service)
 
-# An unset secret is generated per process. Fine for a single-worker dev run,
-# wrong for a multi-worker deployment — each worker would sign with its own
-# key and reject the others' cookies, logging bosses out at random. Warned
-# about rather than defaulted to a constant, since a hardcoded fallback
-# secret is the version of this that fails silently and forever.
-session_secret = env.session_secret or generate_secret()
-if not env.session_secret:
-    # Refused rather than warned about when there is more than one worker.
-    # The symptom is bosses being logged out at random with every request
-    # that happens to land on a different worker — which reads as a session
-    # bug, not as a missing environment variable, and costs hours to trace
-    # back to here. A start-up that fails with the variable's name in the
-    # message costs seconds.
-    if _worker_count() > 1:
-        raise RuntimeError(
-            "PAKASH_SESSION_SECRET must be set when running more than one "
-            "worker: each worker would sign session cookies with its own "
-            "generated key and reject every cookie signed by the others. "
-            "Generate one with: "
-            "python -c \"import secrets; print(secrets.token_urlsafe(32))\""
-        )
-    _log.warning(
-        "PAKASH_SESSION_SECRET is not set; generated one for this process. "
-        "Sessions will not survive a restart and will break across workers."
-    )
+# Unset, the key is generated once and kept in the database, so every
+# replica and every restart signs with the same one (D39, `session_key.py`).
+session_secret = session_key(env, store, repository)
 # The guards ask the database whether a team is still active, so a team the
 # operator suspended or deleted stops working under cookies already issued
 # (D28). Cached briefly per team inside `Guards`.
@@ -136,6 +102,7 @@ def startup() -> None:
     """Initialize storage while leaving health checks available on failure."""
     try:
         repository.initialize()
+        store.pull_shared()
     except Exception as exc:
         _log.error("database initialization failed: %s", exc)
 
@@ -186,9 +153,20 @@ app = FastAPI(
 
 @app.middleware("http")
 async def bind_model_team(request: Request, call_next):
-    """Carry the signed workspace into the cross-process LLM quota."""
-    session = read(session_secret, request.cookies.get(COOKIE_NAME)) or {}
-    with model_team(session.get("team_id", "")):
+    """Carry the signed workspace into the cross-process LLM quota, and who
+    is acting into the change log (`common/actor.py`)."""
+    try:
+        session = read(session_secret, request.cookies.get(COOKIE_NAME)) or {}
+        manager = read(session_secret, request.cookies.get(MANAGER_COOKIE_NAME))
+        actor = actor_of(session, manager) if session else (
+            "admin" if read_admin(session_secret, request.cookies.get(ADMIN_COOKIE_NAME))
+            else ""
+        )
+    except Exception:
+        # The shared key is read from the database on first use; with the
+        # database down, `/api/health` must still answer and say so.
+        session, actor = {}, ""
+    with model_team(session.get("team_id", "")), acting_as(actor):
         return await call_next(request)
 
 app.include_router(health.build_router(repository))

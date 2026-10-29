@@ -3,9 +3,11 @@
 import datetime
 from typing import Dict, List
 
-from app.bl.rotation.closures import closure_days
+from app.bl.rotation.closures import closure_days, handover_shifts, window_rule
+from app.bl.rotation.cycle import cycle, group_for_saturday
 from app.bl.rotation.vocabulary import (
-    GROUPED_PATTERNS, exit_pattern, groups_for, label, people, text,
+    CLOSURE_LEAD_DAYS, GROUPED_PATTERNS, exit_pattern, groups_for, label,
+    people, saturday_of, text,
 )
 
 
@@ -120,3 +122,44 @@ def schedule_for_model(profile: dict, start: datetime.date, end: datetime.date) 
         }
         for weekend in sorted(weekends.values(), key=lambda item: item["weekend"])
     ]
+
+
+def weekend_preview(
+    profile: dict, pattern: str, start: datetime.date, weeks: int
+) -> List[dict]:
+    """The next `weeks` closures of one cycle, as the setup screen shows them.
+
+    Read by the same lookups the scheduler uses -- `group_for_saturday` and
+    `window_rule` -- so the preview cannot disagree with a build. `kind` says
+    where the hours came from: `default` (Thursday to the Sunday handover),
+    `regular` (the cycle's own hours) or `exception` (a dated row). Empty for
+    a cycle with no anchor.
+    """
+    state = cycle(profile, pattern)
+    if state is None:
+        return []
+    handover = handover_shifts(profile)
+    saturday = saturday_of(start)
+    result = []
+    for _ in range(max(0, weeks)):
+        group = group_for_saturday(state, saturday)
+        row = window_rule(profile, pattern, group, saturday)
+        item = {"saturday": saturday.isoformat(), "group": group,
+                "label": label(pattern, group)}
+        if row is None:
+            first = saturday - datetime.timedelta(days=CLOSURE_LEAD_DAYS[pattern])
+            item.update(kind="default", start_date=first.isoformat(), start_time="",
+                        end_date=(saturday + datetime.timedelta(days=1 if handover else 0)).isoformat(),
+                        end_time="", handover_shifts=list(handover))
+        else:
+            item.update(
+                kind="exception" if row.get("starts_on") or row.get("ends_on") else "regular",
+                start_date=(saturday + datetime.timedelta(days=row["start_day"])).isoformat(),
+                start_time=row["start_time"],
+                end_date=(saturday + datetime.timedelta(days=row["end_day"])).isoformat(),
+                end_time=row["end_time"], handover_shifts=[],
+                note=text(row.get("note")),
+            )
+        result.append(item)
+        saturday += datetime.timedelta(days=7)
+    return result

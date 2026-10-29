@@ -1,7 +1,9 @@
 # Real schedule file formats
 
 > Importing schedules from files was removed from the product. These samples
-> still define the layout `bl/export.py` writes (Sample A).
+> still define the layout `bl/export.py` writes (Sample A). The importer
+> notes below (layout inference, confirmation, fixtures) are kept as history
+> and describe no current code.
 
 Derived from two schedule files supplied by the boss. They are the evidence
 behind [D7](DECISIONS.md#d7--import-infers-layout-boss-confirms) and

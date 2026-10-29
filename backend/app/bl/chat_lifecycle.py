@@ -66,9 +66,13 @@ def prepare_profile(profiles, team_id, turn, plan, profile):
         existing = {row["name"]: row for row in profile.get(section) or []}
         if section == "employees":
             _validate_new_employees(patch[section], existing)
-        patch[section] = [
-            dict(existing.get(row.get("name"), {}), **row) for row in patch[section]
-        ]
+        changed = {row.get("name"): dict(existing.get(row.get("name"), {}), **row)
+                   for row in patch[section]}
+        # A patch names the rows it adds or changes; every other row stays as
+        # it is. Asking the model to resend a hundred-person roster to add one
+        # recurring constraint is slow and is how somebody else's field is lost.
+        patch[section] = [changed.pop(name, row) for name, row in existing.items()] \
+            + list(changed.values())
     try:
         updated = profiles.preview(team_id, **patch)
     except AppError as exc:

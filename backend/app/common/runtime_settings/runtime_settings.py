@@ -43,8 +43,8 @@ class RuntimeSettings:
     # "off" / "low" / "medium" / "high" for a reasoning model; empty sends
     # nothing. `ladder._add_reasoning` puts it in the model family's form.
     llm_reasoning_effort: str = ""
-    # Ignored: the model server's certificate is never verified. See
-    # `Settings.llm_verify_ssl`.
+    # False accepts any TLS certificate from the model server. See
+    # `Settings.llm_verify_ssl` for why this is a last resort.
     llm_verify_ssl: bool = False
     # The constraint solver (`bl/solver/`): wall time per solve and its
     # parallel workers. Read per build, so a saved change applies next time.

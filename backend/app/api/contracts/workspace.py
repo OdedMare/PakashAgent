@@ -40,3 +40,5 @@ class TeamView(Workspace):
     """A workspace plus its saved workplace profile."""
 
     profile: Optional[Dict[str, Any]] = None
+    # What a profile save names as `expected_revision` (see ProfileUpdate).
+    profile_revision: Optional[int] = None

@@ -8,12 +8,14 @@ from app.bl.tools.coverage_tools import CoverageGaps, PublishReadiness
 from app.bl.tools.names import (
     TOOL_COVERAGE_GAPS, TOOL_EMPLOYEE_STATE, TOOL_FIND_REPLACEMENTS,
     TOOL_PROFILE_GAPS, TOOL_PUBLISH_READINESS, TOOL_READ_PERIOD,
-    TOOL_TEAM_OVERVIEW, TOOL_VALIDATE_PLACEMENT,
+    TOOL_SHADOW_PARTNERS, TOOL_TEAM_OVERVIEW, TOOL_VALIDATE_PLACEMENT,
+    TOOL_WHO_IS_AWAY, TOOL_WHO_WORKS, TOOL_WORKLOAD_RANKING,
 )
 from app.bl.tools.period_tools import EmployeeState, ReadPeriod, TeamOverview
 from app.bl.tools.placement_tools import FindReplacements, ValidatePlacement
 from app.bl.tools.profile_tools import ProfileGaps
 from app.bl.tools.reads import ToolReads
+from app.bl.tools.team_tools import ShadowPartners, WhoIsAway, WhoWorks, WorkloadRanking
 from app.bl.tools.values import text
 from app.common.errors import AgentError
 
@@ -37,6 +39,10 @@ class ScheduleTools:
         self.find_replacements = FindReplacements(reads)
         self.publish_readiness = PublishReadiness(reads, self.coverage_gaps)
         self.profile_gaps = ProfileGaps(reads)
+        self.who_works = WhoWorks(reads)
+        self.workload_ranking = WorkloadRanking(reads)
+        self.who_is_away = WhoIsAway(reads)
+        self.shadow_partners = ShadowPartners(reads)
         self._menu: Dict[str, Callable] = {
             TOOL_READ_PERIOD: self.read_period,
             TOOL_TEAM_OVERVIEW: self.team_overview,
@@ -46,6 +52,10 @@ class ScheduleTools:
             TOOL_FIND_REPLACEMENTS: self.find_replacements,
             TOOL_PUBLISH_READINESS: self.publish_readiness,
             TOOL_PROFILE_GAPS: self.profile_gaps,
+            TOOL_WHO_WORKS: self.who_works,
+            TOOL_WORKLOAD_RANKING: self.workload_ranking,
+            TOOL_WHO_IS_AWAY: self.who_is_away,
+            TOOL_SHADOW_PARTNERS: self.shadow_partners,
         }
 
     def run(self, team_id: str, name: str, arguments: Optional[dict] = None) -> dict:

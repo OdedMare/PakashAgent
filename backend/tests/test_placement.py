@@ -130,13 +130,8 @@ def test_a_free_slot_and_a_qualified_person_is_ok():
     assert result["alternatives"] == {"employees": [], "slots": []}
 
 
-def test_nothing_ever_blocks():
-    """Whatever it finds, it advises (D3).
-
-    Run against the worst placement the fixtures can produce — an ineligible
-    person, double-booked, against a constraint — because if anything were
-    ever going to gate, it would be this.
-    """
+def test_ordinary_findings_remain_advisory():
+    """D3 still applies to every finding except an operational duty."""
     schedule = _schedule([_assignment("a1", DANA, MORNING, "2026-08-17")])
     result = check(
         schedule, PROFILE, DANA, MORNING, "2026-08-17",
@@ -147,6 +142,20 @@ def test_nothing_ever_blocks():
     )
     assert result["ok"] is False
     assert result["blocking"] is False
+
+
+def test_an_operational_duty_blocks_the_placement():
+    result = check(
+        _schedule(), PROFILE, YOSSI, MORNING, "2026-08-17",
+        availability=[{
+            "employee": YOSSI, "date": "2026-08-17", "shift": "",
+            "available": False, "start_time": "06:00", "end_time": "09:00",
+            "is_hard": True, "constraint_type": "duty", "reason": "תורנות מטבח",
+        }],
+    )
+    assert result["ok"] is False
+    assert result["blocking"] is True
+    assert any("תורנות חוסמת" in reason for reason in result["reasons"])
 
 
 # -- what it catches -------------------------------------------------------
@@ -200,6 +209,20 @@ def test_manual_picker_exposes_exit_pattern_and_overlap_status():
     assert candidate["is_overlap"] is True
 
 
+def test_manual_picker_lists_the_shift_types_each_person_can_work():
+    """The picker filters on "who can do this shift type" without parsing
+    Hebrew, so each candidate carries the roster's answer for every shift."""
+    profile = dict(PROFILE, employees=PROFILE["employees"] + [
+        {"name": "מיכל", "rotation_group": "א"},
+    ])
+    result = check(_schedule(), profile, "", MORNING, "2026-08-17")
+    by_name = {row["employee"]: row for row in result["candidates"]}
+    assert by_name[DANA]["eligible_shifts"] == [MORNING]
+    assert by_name[YOSSI]["eligible_shifts"] == [MORNING, EVENING]
+    assert by_name["מיכל"]["eligible_shifts"] == [MORNING, EVENING]
+    assert by_name["מיכל"]["rotation_group"] == "א"
+
+
 def test_an_ineligible_shift_is_reported_first():
     """Eligibility is not an audit warning, and is reported anyway.
 
@@ -218,6 +241,17 @@ def test_an_unrestricted_employee_is_eligible_everywhere():
     profile = dict(PROFILE, employees=[{"name": DANA}])
     result = check(_schedule(), profile, DANA, EVENING, "2026-08-17")
     assert result["eligible"] is True
+
+
+def test_a_trainee_with_no_team_is_eligible_for_a_role_restricted_shift():
+    """A נחפף/ת fills no seat, so a shift's roles do not shut them out."""
+    shifts = [dict(row, allowed_roles=["פריצה"]) for row in PROFILE["shifts"]]
+    trainee = {"name": DANA, "role": "נחפף", "counts_toward_staffing": False}
+    profile = dict(PROFILE, shifts=shifts, employees=[trainee])
+    assert check(_schedule(), profile, DANA, EVENING, "2026-08-17")["eligible"] is True
+
+    counted = dict(profile, employees=[dict(trainee, counts_toward_staffing=True)])
+    assert check(_schedule(), counted, DANA, EVENING, "2026-08-17")["eligible"] is False
 
 
 # -- what it does *not* report ---------------------------------------------

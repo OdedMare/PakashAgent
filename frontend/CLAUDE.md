@@ -18,6 +18,25 @@ warning, danger and success retain their scheduling meaning. The legacy
 not invitations to add decoration. Keep keyboard focus visible, touch controls
 at least 44px, and motion short with reduced-motion support.
 
+**The two guards are the product's characters** (`components/Crew/`, pure
+SVG + CSS in `styles/crew.css`; the drawing itself is the stateless
+`Crew/Guard.tsx` so the server-rendered guide page can use it). They wave on
+the entrance card, patrol whatever the app waits on (`CrewStage`: a build,
+the agent's working line, a screen still loading), narrate the help panel,
+the first-visit tour and the `/tutorial` guide, and one of them *is* the
+agent: it stands in the board's corner and opens the chat when pressed.
+Which one is rolled per conversation (`randomGuard`), again whenever it
+returns to the corner and every 25 seconds there, never while the chat is
+open, and the chat uses that guard as its avatar, greeting and working
+indicator. All motion stops under `prefers-reduced-motion`.
+
+**Every date and time field can be picked as well as typed.** `DateInput`
+adds a calendar button over the browser's own picker; `TimeInput` is typed
+24-hour `HH:MM` plus a clock button with an hour/minute list (`pickers.ts`,
+`styles/pickers.css`), because native time inputs have no picker in some
+browsers and show AM/PM in others. Use them rather than a bare `<input
+type="date|time">`.
+
 `next.config.ts` proxies `/api/*` to FastAPI, so the browser sees one origin
 and there is no CORS setup.
 
@@ -87,7 +106,7 @@ showing.
   build something.
 
 **A day column says whose closure it is.** `schedule.closures` arrives with
-the period, computed by `bl/rotation.py`, and the board renders it on the
+the period, computed by `bl/rotation/`, and the board renders it on the
 column head and in the placement dialog. It is not derived here on purpose:
 which group closes on 12/09 is arithmetic, and a browser-side cycle would be
 a second answer to a question that must have exactly one. The Sunday a
@@ -95,15 +114,39 @@ closure hands over on reads dimmer and says `חילוף` — the group is in for
 that morning and out for the rest of the day.
 
 **A cycle is typed once, in the team setup screen** (`ManualSetup/`, the
-sliders icon — not the settings modal, which holds only the server-wide
-model, solver and database settings). `ManualSetup/RotationSetup.tsx` asks, per
-cycle, for the weekend group א closes and for group א's closure hours; the
-other groups' turns and hours are derived by the server. The dates shown
-beside the anchor are a preview of that one typed fact, and an anchor stored
-for another group is shown as א's next turn in the same cycle. Presence rules
-stay per group. The whole screen saves in one `updateProfile`. A save that
+sliders icon). The server-wide model, solver and database settings are not
+on the team screen at all: they live in the operator console's "מערכת" tab.
+`ManualSetup/RotationSetup.tsx` asks three numbered questions per round and
+triplet, for group א only: which weekend it closes (the anchor), which round
+type — a shape from `closureShapes.ts`, named by the day the closure opens
+(11/3 Thursday is the server default and stores no row; 12/2 Friday, 10/4
+Wednesday, שבוע־שבוע from the Sunday handover, or typed days and times are
+one undated window row) — and which weekends differ (dated window rows, one
+weekend or a range, with an optional `note`). The other groups' turns and
+hours are derived by the server. Under the questions, `RotationPreview`
+shows the coming weekends as **the server** computes them from the unsaved
+rows (`POST /api/profile/rotation-preview`), so the setup screen cannot
+disagree with the board. An anchor stored for another group is shown as
+א's next turn in the same cycle. Presence rules stay per group, under
+"מתקדם"; the older fixed א/ב unavailability block shows only to a unit that
+still has rows in it. Day cycles (11/3, 12/2, שבוע־שבוע…) are typed in
+`ManualSetup/DayCycleSetup.tsx`: days on base and at home, the day group א
+starts on base, when each other group starts, and hours in three layers
+(cycle, group, dated change). Its four-week strip is a preview of the nominal
+days only; who is home on a date is answered by the server. The whole screen
+saves in one `updateProfile`. A save that
 adds a soldier or a shift refits every draft ahead of today, keeping its
-rows (D37); anything else applies to the next build.
+rows (D37); anything else applies to the next build. A shift can list
+`allowed_roles` there — empty restricts nobody; otherwise only people holding
+one of those roles are placed on it. A shift can also ask for a different
+headcount on the weekend, and "weekend" means the round's closure — the days
+one group is home, until the Sunday handover — not a fixed Friday and
+Saturday. The round's type (11/3, 12/2, 10/4, שבוע־שבוע) is chosen on its
+card and sets the day group א's regular closure opens (Thursday, Friday,
+Wednesday, or Sunday at the handover); no row means the server's Thursday. It is saved as a staffing group
+marked `closure: true` whose days are worked out per shift at save time
+(the first day only for a shift still running when the closure opens, the
+Sunday only for one starting before the handover).
 
 **Taking a week back is two different acts.** *ניקוי* empties the
 assignments and keeps the shift rows, so the week can be filled in again
@@ -128,7 +171,10 @@ colours, which mean something specific on this grid.
 **A board card says who is standing there, not why** (`Board/ShiftCard.tsx`).
 Name, role, rotation — `exit_pattern` and `rotation_group` rendered as one
 phrase by `Board/person.ts`, since a group is what makes somebody rotate at
-all — plus badges for **מפקד/ת** and **נחפף/ת**. The command badge reads off
+all — plus badges for **מפקד/ת** and **נחפף/ת**. An overlap (נחפף/ת) card drops
+the per-name hue for one shared violet with a thick inline-start bar,
+diagonal stripes and a solid badge, so a trainee never reads as a filled
+seat; alarm styling still wins. The command badge reads off
 the *person*, not `slot.requires_shift_manager`: whether anyone in a cell can
 run the shift is the question, and gating it on the slot hid the answer on
 exactly the shifts nobody had declared it needed. `assignment.reason` used to
@@ -137,6 +183,17 @@ hold the card's last line; it is still written on every path and still
 one hover away — but a justification is read once, when the placement is made,
 and the grid is read every day.
 
+**The placement dialog ranks people, not just lists them**
+(`Board/ShiftEditor.tsx`, fed by `POST /api/schedule/check`). Each
+candidate shows availability, rotation and an overlap badge, and the list
+filters (`Board/CandidateFilters.tsx`) by name, exit pattern, rotation group,
+the shift types a person may work (`eligible_shifts`, from the roster), role,
+and free / closing / commander / trainer / no-overlap. The filters narrow
+what the check returned; they never re-check anything. Moving without a mouse (touch, keyboard) is
+`useMoveMode` / `useBoardKeys` — the same drop, the same confirmation.
+`FilterBar` hides rows and never changes them; `CoverageBar` keeps reporting
+the whole week from the overview's own audit figures, never a browser count.
+
 Built: the workspace gate, unit setup, the management area, the operator
 console and the employee areas. There is no intro interview any more; the
 profile comes from the setup form.
@@ -144,13 +201,14 @@ profile comes from the setup form.
 | Surface | Purpose |
 |---|---|
 | Workspace gate | Pick the team, then the manager or worker door — `src/components/Workspace/`. No team creation here (D28) |
-| Operator console | `/admin` — צוות משמרות זהב: every team with its counts, open (name + password)/rename/suspend/delete, the system settings — `src/components/Admin/` |
+| Operator console | `/admin` — צוות משמרות זהב: every team with its counts, open (name + password)/rename/suspend/delete, and the system settings ("מערכת", the only place they are edited) — `src/components/Admin/` |
 | Member area | The employee's read-only surface — `MemberArea.tsx` |
 | Unit setup | The structured profile form — roster, shift vocabulary, staffing, rotations, rules — and what code made of each sentence (`CompiledSources.tsx`, D32) — `src/components/ManualSetup/` |
-| Guide | The first-run tour and the help panel — `src/components/Guide/` |
+| Guide | The first-run tour, the help panel and the `/tutorial` page, narrated by the two guards — `src/components/Guide/`, `src/app/tutorial/` |
+| Guards | The animated pair: entrance, waits, guide, and the agent's own face — `src/components/Crew/` |
 | Management | The manager's control room — `src/components/Management/` |
 | Schedule | The living grid for a period, RTL — `Management/Calendar.tsx` |
-| Manager chat | **The** agent: every instruction, question and plan, optionally focused on one day — `Management/AgentChat.tsx` |
+| Manager chat | **The** agent: every instruction, question and plan, optionally focused on one day; opened from the guard in the board's corner — `Management/AgentChat.tsx` |
 | Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `Board/ConfirmDrop.tsx` |
 | Changes tab | "שינויים" — `Management/ChangesPanel.tsx`, three actions. **החלפת משמרת**: who is out and when → covers ranked so the load spreads evenly; the picks go to the chat as a plan (D36) — `ReplacementPanel.tsx`, reads only; its wording is shared with the chat cards in `lib/replacement.ts` and read back by the server. **הוספת חייל** / **הוספת משמרת**: the roster's own `EmployeeForm`/`ShiftForm`, saved through `saveProfile`, after which the server fits the newcomer into every draft from today on, keeping the board (D37) |
 | Preferences | What the agent remembers, all of it visible — `Management/Preferences.tsx` |
@@ -325,6 +383,11 @@ ahead of today with as few moves as possible (D37). The management area
 picks the refit up as a running build on mount; `saveProfile` watches the
 one on screen and names any published week it left alone.
 
+- **A lost session returns to the gate, once.** A GET refused with 401
+  calls `onSessionLost` (`services/api.ts`); `useWorkspace` re-asks `/me`
+  and only on its own 401 drops to the login gate, which unmounts every
+  poller — otherwise they kept asking every few seconds after the cookie
+  died (a restart without a fixed session secret, a suspended team).
 - **The session is an HttpOnly cookie**, so this code cannot read it. "Am I
   logged in?" is answered by `GET /api/workspace/me`, never by local state
   that could disagree with the cookie the browser actually holds.
@@ -367,6 +430,9 @@ Warnings render as **non-blocking inline banners** on the schedule. They never
 gate a save, never block confirmation, and never present as errors. A schedule
 with warnings is a valid schedule the boss may knowingly accept
 ([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+An overlapping operational duty is not an advisory warning: the placement
+check marks it `blocking`, the confirmation action is disabled, and the server
+also refuses the write.
 
 ## Rules
 
@@ -388,9 +454,10 @@ with warnings is a valid schedule the boss may knowingly accept
   the copy says so — an employee who believes a submitted constraint is
   already in force is the failure mode this feature would otherwise create.
 - **The employee sees no team charts** (D27). Hours per colleague are the
-  manager's stats; the personal area has the assistant instead. A suggested
-  swap's button sends the ordinary `proposeSwap`, and its card says the
-  colleague and the manager still have to agree.
+  manager's stats. The employee assistant chat is gone; a swap is offered
+  only through the swap form ("בקשות והחלפות", `proposeSwap`), and its card
+  says the colleague and the manager still have to agree. The full-board
+  tab there widens to the whole window.
 - A change is two-step: proposal, then confirmation. Never auto-confirm it.
 - The agent's reasoning is shown before the boss confirms — it is the point, not a
   detail to hide behind a disclosure triangle ([D8](../docs/DECISIONS.md#d8--two-reasons-both-required)).

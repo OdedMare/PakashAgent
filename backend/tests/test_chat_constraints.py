@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from app.bl.chat_constraints import normalize_constraints
+from app.bl.chat_constraints import affected_periods, normalize_constraints
 from app.bl.chat_contract import RejectedPlan
 from app.bl.chat_fast import ChatFastAnswers
 from tests.test_manager_chat import MORNING, PROFILE, converse, setup, translation, turn
@@ -75,6 +75,38 @@ def test_each_refusal_says_which_value_to_fix(row, named):
 def test_two_different_updates_for_one_slot_are_still_refused():
     with pytest.raises(RejectedPlan, match="אילוץ 2"):
         normalize_constraints([constraint(), constraint(available=True)], PROFILE, [])
+
+
+def test_multiple_duties_on_one_day_are_kept_as_distinct_blocking_intervals():
+    rows = normalize_constraints([
+        constraint(constraint_type="duty", start_time="06:00", end_time="08:00"),
+        constraint(constraint_type="duty", start_time="18:00", end_time="20:00"),
+    ], PROFILE, [])
+    assert [(row["constraint_type"], row["start_time"], row["end_time"])
+            for row in rows] == [
+        ("duty", "06:00", "08:00"), ("duty", "18:00", "20:00"),
+    ]
+
+
+def test_a_duty_without_a_complete_interval_is_refused():
+    with pytest.raises(RejectedPlan, match="start_time וגם end_time"):
+        normalize_constraints([
+            constraint(constraint_type="duty", start_time="06:00"),
+        ], PROFILE, [])
+
+
+def test_an_overnight_duty_affects_a_period_that_starts_the_next_day():
+    class Repo:
+        def list_schedules(self, team_id):
+            return [{"id": "next", "starts_on": "2026-10-07", "ends_on": "2026-10-07"}]
+
+        def get_schedule(self, schedule_id, team_id):
+            return {"id": schedule_id}
+
+    periods = affected_periods(Repo(), "team", [
+        constraint(constraint_type="duty", start_time="22:00", end_time="06:00"),
+    ])
+    assert periods == [{"id": "next"}]
 
 
 def test_a_cover_the_model_picked_is_left_to_the_solver_instead_of_asked_again():

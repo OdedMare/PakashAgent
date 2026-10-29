@@ -725,7 +725,7 @@ def test_a_settings_object_without_the_field_still_resolves():
 
 def test_ssl_verification_is_always_off(monkeypatch):
     """The SDK is always handed an httpx client that accepts any
-    certificate, even when a saved setting still says to verify."""
+    certificate, even when the setting says to verify."""
     import app.dal.llm.openai_client as module
 
     built = []

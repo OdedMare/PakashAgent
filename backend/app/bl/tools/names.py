@@ -12,6 +12,10 @@ TOOL_VALIDATE_PLACEMENT = "validate_placement"
 TOOL_FIND_REPLACEMENTS = "find_replacements"
 TOOL_PUBLISH_READINESS = "publish_readiness"
 TOOL_PROFILE_GAPS = "profile_gaps"
+TOOL_WHO_WORKS = "who_works"
+TOOL_WORKLOAD_RANKING = "workload_ranking"
+TOOL_WHO_IS_AWAY = "who_is_away"
+TOOL_SHADOW_PARTNERS = "shadow_partners"
 
 TOOL_NAMES = (
     TOOL_READ_PERIOD,
@@ -22,6 +26,10 @@ TOOL_NAMES = (
     TOOL_FIND_REPLACEMENTS,
     TOOL_PUBLISH_READINESS,
     TOOL_PROFILE_GAPS,
+    TOOL_WHO_WORKS,
+    TOOL_WORKLOAD_RANKING,
+    TOOL_WHO_IS_AWAY,
+    TOOL_SHADOW_PARTNERS,
 )
 
 # What each tool is for, in the manager's language rather than the code's.
@@ -39,4 +47,11 @@ TOOL_DESCRIPTIONS = {
     ),
     TOOL_PUBLISH_READINESS: "מה חסר לפני פרסום התקופה לצוות",
     TOOL_PROFILE_GAPS: "מה הסוכן עדיין לא יודע על מקום העבודה",
+    TOOL_WHO_WORKS: "מי משובץ בתאריך או בטווח (day או starts_on+ends_on), לפי תאריך ומשמרת; shift_name מסנן משמרת",
+    TOOL_WORKLOAD_RANKING: (
+        "מי עשה הכי הרבה (או הכי מעט) משמרות בטווח, ממוין; אפשר לסנן לפי shift_name, "
+        "role, או commanders_only למפקדי משמרת; top קובע כמה להחזיר"
+    ),
+    TOOL_WHO_IS_AWAY: "מי לא נמצא בתאריך או בטווח ולמה: בבית לפי המחזור, בתורנות, או אילוץ שנרשם (חולה, חופש)",
+    TOOL_SHADOW_PARTNERS: "מי יכול לחפוף (להדריך) נחפף/ת מסוים/ת, או אילו נחפפים יכולים ללוות עובד/ת מסוים/ת",
 }

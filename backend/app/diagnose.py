@@ -22,6 +22,7 @@ from app.dal.llm.model_roles import (
     ADVANCED, DEFAULT, FAST, resolve_base_url, resolve_model,
 )
 from app.dal.llm.openai_client import OpenAIJsonClient
+from app.dal.repository import Repository
 
 _PROXY_VARS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY")
 
@@ -124,8 +125,9 @@ def _mask_url(url: str) -> str:
 
 def _model_server(settings) -> None:
     _section("model server")
-    print("SSL_CERT_FILE=%s verify_ssl=False (always)" % (
-        os.getenv("SSL_CERT_FILE") or "-",))
+    print("SSL_CERT_FILE=%s verify_ssl=%s" % (
+        os.getenv("SSL_CERT_FILE") or "-",
+        False))
     seen = set()
     for role in (FAST, DEFAULT, ADVANCED):
         url = resolve_base_url(settings, role)
@@ -133,8 +135,8 @@ def _model_server(settings) -> None:
             continue
         seen.add(url)
         target = url.rstrip("/") + "/models"
-        # Both ways, so a broken certificate is visible even though the
-        # model client never checks it.
+        # Certificate checked first: the model client checks it, and a
+        # probe that skips it reports a server it cannot actually use.
         for label, verify in (("cert checked", True), ("cert NOT checked", False)):
             started = time.monotonic()
             try:
@@ -163,6 +165,8 @@ def _completion(store) -> None:
 
 def main() -> None:
     store = RuntimeSettingsStore(Settings())
+    # What the panel saved on any replica, as the API and worker see it (D39).
+    store.share_through(Repository(store))
     settings = store.get()
     _settings(settings)
     _jobs(store)

@@ -35,6 +35,22 @@ def date_in(text: str, today: Optional[str] = None, period: Optional[dict] = Non
     return weekday_in(text, anchor, period)
 
 
+_WEEKS = (("שבוע הבא", 7), ("בשבוע שעבר", -7), ("שבוע שעבר", -7), ("השבוע", 0))
+
+
+def week_in(text: str, today: Optional[str] = None) -> tuple:
+    """The Sunday-to-Saturday week a sentence names, or `("", "")`.
+
+    "שבוע הבא" is tested before "השבוע": "השבוע הבא" contains both."""
+    anchor = parse(today) or israel_today()
+    sunday = anchor - datetime.timedelta(days=(anchor.weekday() + 1) % 7)
+    for word, offset in _WEEKS:
+        if word in text:
+            first = sunday + datetime.timedelta(days=offset)
+            return first.isoformat(), (first + datetime.timedelta(days=6)).isoformat()
+    return "", ""
+
+
 def weekday_in(text: str, anchor: datetime.date, period: Optional[dict]) -> str:
     """A Hebrew weekday, resolved against the open period where there is one.
 

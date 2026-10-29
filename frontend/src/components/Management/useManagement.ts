@@ -149,6 +149,7 @@ interface ManagementState {
     slot_date: string;
     reason: string;
     schedule_id?: string;
+    from_slot_id?: string;
   }) => Promise<void>;
   /** Tell the hook which period the manager is looking at.
    *
@@ -169,6 +170,7 @@ interface ManagementState {
     is_hard?: boolean;
     reason?: string;
     source?: string;
+    constraint_type?: "availability" | "duty";
   }) => Promise<void>;
   removeConstraint: (rowId: string) => Promise<void>;
   saveProfile: (input: {
@@ -548,7 +550,10 @@ export function useManagement(): ManagementState {
     employees?: Record<string, unknown>[];
     shifts?: Record<string, unknown>[];
   }) => {
-    const saved = await run(() => updateProfile(input));
+    const saved = await run(() => updateProfile({
+      ...input,
+      expected_revision: overview?.profile_revision,
+    }));
     const absorbed = saved?.absorbed;
     if (!absorbed) return saved !== null;
     // The week on screen first: watching only today's period left a board
@@ -559,7 +564,7 @@ export function useManagement(): ManagementState {
     if (onScreen) void resumeGeneration(onScreen.schedule_id);
     if (absorbed.skipped.length) setError(skippedMessage(absorbed.skipped));
     return true;
-  }, [run, focused, overview?.schedule?.id, resumeGeneration]);
+  }, [run, focused, overview?.schedule?.id, overview?.profile_revision, resumeGeneration]);
 
   const deleteShift = useCallback(async (name: string) => {
     await run(() => deleteShiftType(name));
@@ -585,6 +590,7 @@ export function useManagement(): ManagementState {
       slot_date: string;
       reason: string;
       schedule_id?: string;
+      from_slot_id?: string;
     }) => {
       await run(() => moveAssignment(withPeriod(input)));
     },
@@ -602,6 +608,7 @@ export function useManagement(): ManagementState {
       is_hard?: boolean;
       reason?: string;
       source?: string;
+      constraint_type?: "availability" | "duty";
     }) => {
       await run(() => setConstraint(input));
     },

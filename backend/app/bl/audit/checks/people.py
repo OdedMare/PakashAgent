@@ -56,13 +56,14 @@ class UnavailableCheck(AuditCheck):
     def _warning(row: dict, item: dict) -> dict:
         reason = text(item.get("reason"))
         hard = item.get("is_hard", True) is not False
+        duty = item.get("constraint_type") == "duty"
         window = constraint_window(item)
         return warning(
             UNAVAILABLE,
             SEVERITY_WARNING if hard else SEVERITY_NOTICE,
-            "%s משובץ ל%s בתאריך %s בניגוד ל%s%s%s."
+            "%s משובץ ל%s בתאריך %s בזמן %s%s%s."
             % (row["employee"], row["shift"], row["date"],
-               "אילוץ" if hard else "העדפה",
+               "תורנות חוסמת" if duty else "אילוץ" if hard else "העדפה",
                " (%s)" % window if window else "",
                " (%s)" % reason if reason else ""),
             employee=row["employee"], date=row["date"], shift=row["shift"],
@@ -70,6 +71,7 @@ class UnavailableCheck(AuditCheck):
                 "is_hard": hard,
                 "start_time": text(item.get("start_time")),
                 "end_time": text(item.get("end_time")),
+                "constraint_type": item.get("constraint_type") or "availability",
             },
         )
 

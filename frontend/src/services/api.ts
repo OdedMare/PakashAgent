@@ -354,6 +354,9 @@ export function updateProfile(body: {
   conflict_policy?: string;
   existing_schedule_source?: string;
   summary?: string;
+  /** The `profile_revision` the form was loaded at: a save over somebody
+   *  else's newer one is refused (409) instead of silently undoing it. */
+  expected_revision?: number | null;
 }): Promise<import("@/types").WorkplaceProfile & { absorbed?: ProfileAbsorption | null }> {
   return request("/api/profile", {
     method: "PUT",
@@ -385,6 +388,17 @@ export interface CompiledSource {
   expired: boolean;
   items: number;
 }
+
+/** The coming weekends of each cycle, computed by the server from the setup
+ *  screen's unsaved rotation. Writes nothing; `error` names a row that would
+ *  not save. */
+export const rotationPreview = (
+  body: { workplace: Record<string, unknown>; shifts: Record<string, unknown>[]; weeks?: number },
+  signal?: AbortSignal,
+) => request<{ error: string; cycles: Partial<Record<"round" | "triplet", import("@/types").RotationWeekend[]>> }>(
+  "/api/profile/rotation-preview",
+  { method: "POST", body: JSON.stringify(body), signal },
+);
 
 export const compiledSources = () =>
   request<{ sources: CompiledSource[] }>("/api/profile/compiled").then((body) => body.sources);
@@ -670,8 +684,8 @@ export function assignEmployee(body: {
  *  drag is validated, explained in Hebrew, and offered deterministic
  *  alternatives without a token being generated.
  *
- *  It advises and never gates. The caller is free to write anyway, and the
- *  board does exactly that when the manager confirms (D3). */
+ *  Ordinary findings advise and never gate (D3). A duty overlap returns
+ *  `blocking: true`, and the write endpoint independently enforces it. */
 export function checkPlacement(body: {
   employee: string;
   shift_name: string;
@@ -855,6 +869,9 @@ export function moveAssignment(body: {
   /** The period the drag happened on. Omitted means the one covering today,
    *  which is only ever right by coincidence. */
   schedule_id?: string;
+  /** The slot the shift was dragged from: a shift somebody else moved in
+   *  the meantime is refused (409) instead of being moved again. */
+  from_slot_id?: string;
 }): Promise<Schedule> {
   return request<Schedule>("/api/schedule/move", {
     method: "POST",
@@ -875,6 +892,7 @@ export function setConstraint(body: {
   is_hard?: boolean;
   reason?: string;
   source?: string;
+  constraint_type?: "availability" | "duty";
 }): Promise<Constraint> {
   return request<Constraint>("/api/schedule/constraints", {
     method: "POST",

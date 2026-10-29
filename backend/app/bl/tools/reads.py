@@ -41,6 +41,10 @@ class ToolReads:
             return None
         return self._repository.current_schedule(team_id)
 
+    def periods(self, team_id: str) -> List[dict]:
+        """Every stored period's identity and bounds, without its rows."""
+        return list(self._repository.list_schedules(team_id) or [])
+
     def availability(self, team_id: str, period: tuple) -> List[dict]:
         """Constraints over a period, in the shape `audit.py` reads."""
         return [
@@ -54,6 +58,7 @@ class ToolReads:
                 "is_hard": row.get("is_hard", True),
                 "reason": text(row.get("reason")),
                 "source": text(row.get("source")),
+                "constraint_type": text(row.get("constraint_type")) or "availability",
             }
             for row in self._repository.availability(team_id, period[0], period[1])
         ]

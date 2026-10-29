@@ -218,6 +218,8 @@ class OpenAIJsonClient:
         )
         if not key and not base:
             raise AgentError("לא הוגדר חיבור למודל")
+        # TLS verification is always off; the override is accepted and
+        # ignored so older callers keep working.
         verify = _verify_ssl(settings)
         try:
             response = httpx.get(
@@ -292,6 +294,6 @@ def _logged_slot(slots, flow: str, call, priority, timeout):
 
 
 def _verify_ssl(settings) -> bool:
-    """Always False: every model connection skips certificate checks,
-    whatever a saved setting says."""
+    """Always False: the model server's certificate is never verified,
+    whatever `llm_verify_ssl` holds."""
     return False

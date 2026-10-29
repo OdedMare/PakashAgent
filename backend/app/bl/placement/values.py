@@ -2,6 +2,7 @@
 
 from typing import Dict, List
 
+from app.bl.audit.staffing_rules import counts_toward_staffing
 from app.bl.audit.stats import shift_stats
 from app.bl.shared import employees, iso, role_qualified, shifts, text
 
@@ -53,7 +54,8 @@ def is_eligible(profile: dict, employee: str, shift_name: str, date: str = "") -
         declared = {text(row.get("name")): row for row in shifts(profile)}
         if shift_name not in declared and shift_name in (person.get("archived_eligible_shifts") or []):
             return True
-        if not role_qualified(person, declared.get(shift_name)):
+        if not role_qualified(person, declared.get(shift_name), list(declared.values()),
+                              not counts_toward_staffing(person, profile)):
             return False
         eligible = person.get("eligible_shifts")
         if not isinstance(eligible, list) or not eligible:
