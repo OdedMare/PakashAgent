@@ -84,15 +84,11 @@ class Settings(BaseSettings):
     llm_diet_mode: bool = False
     """Use compact prompts and bounded completion output."""
 
-    llm_verify_ssl: bool = True
-    """Verify the model server's TLS certificate. Applies to every LLM
-    connection — completions and the `/models` probe alike.
-
-    Turning it off is for an internal server whose certificate is self-signed
-    or issued by a CA the process does not trust. It silences the error by
-    accepting *any* certificate, so the API key and every prompt travel over
-    a connection anyone in the path can intercept. Pointing `SSL_CERT_FILE`
-    at the right CA bundle is the fix that keeps verification on."""
+    llm_verify_ssl: bool = False
+    """Kept for old settings files and env only. The model server's TLS
+    certificate is never verified (`dal/llm/openai_client._verify_ssl`):
+    the servers this runs against are internal, with self-signed
+    certificates, so every LLM connection is made with `verify=False`."""
 
     llm_timeout_seconds: int = 0
     """Maximum wall time for ONE HTTP completion to the model.

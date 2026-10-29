@@ -124,9 +124,8 @@ def _mask_url(url: str) -> str:
 
 def _model_server(settings) -> None:
     _section("model server")
-    print("SSL_CERT_FILE=%s verify_ssl=%s" % (
-        os.getenv("SSL_CERT_FILE") or "-",
-        getattr(settings, "llm_verify_ssl", True)))
+    print("SSL_CERT_FILE=%s verify_ssl=False (always)" % (
+        os.getenv("SSL_CERT_FILE") or "-",))
     seen = set()
     for role in (FAST, DEFAULT, ADVANCED):
         url = resolve_base_url(settings, role)
@@ -134,8 +133,8 @@ def _model_server(settings) -> None:
             continue
         seen.add(url)
         target = url.rstrip("/") + "/models"
-        # Certificate checked first: the model client checks it, and a
-        # probe that skips it reports a server it cannot actually use.
+        # Both ways, so a broken certificate is visible even though the
+        # model client never checks it.
         for label, verify in (("cert checked", True), ("cert NOT checked", False)):
             started = time.monotonic()
             try:

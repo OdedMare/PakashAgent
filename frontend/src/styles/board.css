@@ -801,6 +801,12 @@
   color: var(--warning);
 }
 
+/* More people than the slot asks for. A count, not an alarm. */
+.board-gap.is-surplus {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
 /* Appears on hover and on keyboard focus within the cell. Always reachable
    from the keyboard — a control that exists only under a pointer is a
    control half the product cannot use. */

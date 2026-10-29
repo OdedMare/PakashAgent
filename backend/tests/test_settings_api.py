@@ -321,8 +321,8 @@ def test_the_probe_carries_the_unsaved_ssl_switch(client, llm, monkeypatch):
     assert seen == [False, None]
 
 
-def test_the_ssl_switch_defaults_on_and_saves_off(client, store):
-    assert client.get("/api/settings").json()["llm_verify_ssl"] is True
+def test_the_ssl_switch_defaults_off(client, store):
+    assert client.get("/api/settings").json()["llm_verify_ssl"] is False
 
     body = client.put("/api/settings", json={"llm_verify_ssl": False}).json()
 

@@ -43,6 +43,9 @@ import type { BoardFilters } from "./useBoard";
 import type { MoveMode } from "./useMoveMode";
 import { useMoveMode } from "./useMoveMode";
 
+/** Audit codes about how many are on a cell, which its badge already counts. */
+const HEADCOUNT_CODES = new Set(["unfilled", "overstaffed"]);
+
 /** The week as a board: days across, shifts down, cards inside.
  *
  *  The same grid draws a single day: `dates` is one column then, and every
@@ -793,6 +796,15 @@ function BoardRow({
         const filled = slot ? index.filledSeats(shift, date) : 0;
         const missing = slot ? slot.headcount - filled : 0;
         const short = missing > 0;
+        const surplus = missing < 0 ? -missing : 0;
+        // A headcount finding belongs to the cell, not to the people on it:
+        // the badge below already says how many are missing or extra, so it
+        // must not paint every card in the cell as a warning too. Cards get
+        // only what names them; what names nobody stays on the cell.
+        const cellWarnings = warnings.filter(
+          (warning) =>
+            !warning.employee && !HEADCOUNT_CODES.has(warning.code),
+        );
         // What the agent has said about this cell, if anything. A cell may
         // be touched by more than one source at once -- a simulation and
         // the answer that led to it -- and the strongest wins the outline,
@@ -836,7 +848,7 @@ function BoardRow({
               "board-cell",
               short ? "is-short" : "",
               over === key ? "is-over" : "",
-              warnings.length ? "has-warning" : "",
+              cellWarnings.length ? "has-warning" : "",
               touch ? `is-touched is-touched-${touch.origin}` : "",
               isWeekend(date) ? "is-weekend" : "",
               date === today ? "is-today" : "",
@@ -899,8 +911,7 @@ function BoardRow({
                   constraints, row.employee, date, slot,
                 )}
                 warnings={warnings.filter(
-                  (warning) =>
-                    !warning.employee || warning.employee === row.employee,
+                  (warning) => warning.employee === row.employee,
                 )}
                 draggable={!readOnly}
                 touched={
@@ -938,9 +949,16 @@ function BoardRow({
             ) : null}
 
             {short ? (
-              <span className="board-gap">
+              <span
+                className="board-gap"
+                title={cellWarnings.map((w) => w.message).join("\n") || undefined}
+              >
                 <AlertTriangle size={11} />
                 חסרים {missing}
+              </span>
+            ) : surplus ? (
+              <span className="board-gap is-surplus">
+                עודפים {surplus}
               </span>
             ) : null}
 
