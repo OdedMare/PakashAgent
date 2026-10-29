@@ -54,6 +54,7 @@ class _OldSettings:
     ("changes", DEFAULT),
     ("planner", DEFAULT),
     ("learn", DEFAULT),
+    ("import", DEFAULT),
     ("briefing", FAST),
 ])
 def test_each_flow_maps_to_its_role(flow, expected):
@@ -184,5 +185,5 @@ def test_every_flow_the_backend_actually_passes_is_mapped():
 
 
 _MAPPED = {
-    "scheduler", "changes", "planner", "learn", "briefing",
+    "scheduler", "changes", "planner", "learn", "import", "briefing",
 }

@@ -14,6 +14,8 @@ ACTION_CONSTRAINT = "constraint"
 # in D6 happened, and both producing a schedule is exactly what makes them
 # worth telling apart later.
 ACTION_OPENED = "opened"
+# A period read out of the workplace's own file (D7/D39).
+ACTION_IMPORTED = "imported"
 
 # How far back `learn_from_changes` reads. Generous, because a rule the
 # manager keeps applying by hand shows up as a handful of corrections spread
@@ -96,6 +98,13 @@ HISTORY_CACHE_ENTRIES = 64
 # manufacturing a judgment the agent never made. It is the same honesty
 # `moved_from` applies to a dragged shift.
 MANUAL_REASON = "שובץ ידנית על ידי המנהל"
+
+# What an imported row says for itself. The agent made no judgment about it
+# -- it is a record of what the workplace already decided -- so claiming a
+# reason here would be inventing one. `assignments.reason` stays NOT NULL and
+# D8 is answered the way the manual path answers it: by saying plainly where
+# the row came from.
+IMPORTED_REASON = "יובא מקובץ סידור קיים"
 
 # Stored on a pinned row when a build opens with required assignments.
 PINNED_REASON = "שיבוץ חובה שנבחר על ידי המנהל בעת בניית הסידור"

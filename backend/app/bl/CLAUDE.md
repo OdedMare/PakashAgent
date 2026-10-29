@@ -7,7 +7,7 @@ with.
 
 Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
 `scheduler.py`, `solver/`, `changes.py`, `export.py`,
-`schedule_service.py`, `prompts/`. Importing schedules from files was removed.
+`schedule_service.py`, `prompts/`, `importer/` (D39).
 
 | File | Owns |
 |---|---|
@@ -20,6 +20,7 @@ Built so far: `profile_service.py`, `workspace_service.py`, `audit.py`,
 | `schedule_service/` | Persistence and orchestration around all three: propose, confirm, apply |
 | `audit/` | **Pure-Python advisory checks. No LLM.** Also the fairness arithmetic the scheduler and the employee area read |
 | `export/` | **A period out as `.xlsx`.** Pure functions, no model, no repository |
+| `importer/` | **A file in, in any shape** (D39). The shape is a `Layout`; detection reads it every plausible way and scores against the roster; the model only describes the layout when unsure, never the rows. No repository, no write |
 | `tools/` | **The named questions the agent may ask. Pure Python, no LLM, no write** — including `profile_gaps`, what setup still lacks |
 | `planner/` | The chat's question/tool-call schema and the deterministic no-model answers |
 | `intent/` | **Reading a Hebrew sentence with no model.** Seven shapes; never guesses |
@@ -383,6 +384,19 @@ does not exist.
 
 **A message for the team is not here.** That is the agent's job, answered in
 the manager chat as a reply with no operations.
+
+## `importer/` — reading the workplace's own files (D39)
+
+A sheet's shape is data: `Layout` names which way time runs, the header
+line, an optional nested shift line, what a lane is, and the sheet's own
+markers. `reader.py` reads any sheet against any layout; `detect.py` tries
+every plausible one and scores each by how many cells resolve to roster
+people on declared shifts; `mapper.py` asks the model (flow `import`) for a
+layout only when detection is unsure or the manager described the file —
+the model sees the sheet's corner and returns a layout, **never rows**, and
+its layout must out-score detection's to be used. `roster.py` matches names
+without guessing. Nothing here writes: `schedule_service/importing.py`
+stores what the manager confirmed.
 
 ## Rules
 

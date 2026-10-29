@@ -153,6 +153,7 @@ profile comes from the setup form.
 | Manager chat | **The** agent: every instruction, question and plan, optionally focused on one day — `Management/AgentChat.tsx` |
 | Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `Board/ConfirmDrop.tsx` |
 | Changes tab | "שינויים" — `Management/ChangesPanel.tsx`, three actions. **החלפת משמרת**: who is out and when → covers ranked so the load spreads evenly; the picks go to the chat as a plan (D36) — `ReplacementPanel.tsx`, reads only; its wording is shared with the chat cards in `lib/replacement.ts` and read back by the server. **הוספת חייל** / **הוספת משמרת**: the roster's own `EmployeeForm`/`ShiftForm`, saved through `saveProfile`, after which the server fits the newcomer into every draft from today on, keeping the board (D37) |
+| Import | A file in, in any shape (D39) — `Management/ImportSchedule.tsx`, opened from the board toolbar, an empty week, or the paperclip in the chat composer. Every correction (layout fields, an alternative reading, a name or shift mapping, a description for the agent) re-sends the file to be re-read; only its confirm stores |
 | Preferences | What the agent remembers, all of it visible — `Management/Preferences.tsx` |
 | Employee view | **Read-only** schedule — `MemberArea` renders the same `Calendar` with `readOnly` |
 | Personal area | One employee's own shifts, constraint requests and swaps — `src/components/Employee/` |

@@ -1113,3 +1113,66 @@ export interface ReplacementOptions {
   free_dates: string[];
   error: string;
 }
+
+/** A sheet's shape as the importer reads it (`bl/importer/layout.py`).
+ *  Indices are zero-based, in the sheet as oriented: with `dates_down`,
+ *  `header` is a column of the file and `label` a row. */
+export interface ImportLayout {
+  orientation: "dates_across" | "dates_down";
+  header: number;
+  shift_line: number | null;
+  label: number | null;
+  lanes: "shifts" | "people" | "none";
+  first_line: number | null;
+  last_line: number | null;
+  unavailable: string[];
+  ignore: string[];
+}
+
+export interface ImportedRow {
+  employee: string;
+  shift: string;
+  date: string;
+  reason?: string;
+}
+
+/** What the manager can send back with the file to have it re-read. */
+export interface ImportOptions {
+  sheet?: string;
+  layout?: ImportLayout | null;
+  week_start?: string;
+  hint?: string;
+  names?: Record<string, string>;
+  shifts?: Record<string, string>;
+  use_model?: boolean;
+}
+
+/** What a file holds (D7/D39). **Nothing is stored** until confirm. */
+export interface ImportPreview {
+  filename: string;
+  sheets: string[];
+  sheet_name: string;
+  layout: ImportLayout;
+  layout_source: "detected" | "model" | "manager";
+  explanation: string;
+  confidence: number;
+  alternatives: { layout: ImportLayout; confidence: number; explanation: string; rows: number }[];
+  sheet: string[][];
+  people: {
+    name: string;
+    employee: string;
+    status: "exact" | "matched" | "ambiguous" | "unknown" | "mapped" | "skipped";
+    candidates: string[];
+    count: number;
+  }[];
+  shifts: { name: string; shift: string; declared: boolean; count: number }[];
+  dates: string[];
+  starts_on: string;
+  ends_on: string;
+  assumed_week: string;
+  assignments: ImportedRow[];
+  unavailability: ImportedRow[];
+  overlaps: { id: string; starts_on: string; ends_on: string; status: string }[];
+  warnings: string[];
+  summary: string;
+}

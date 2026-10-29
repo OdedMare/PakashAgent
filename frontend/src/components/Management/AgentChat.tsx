@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, Copy, History, LoaderCircle, MessageSquare, Pencil, Plus, RotateCcw, Search, Sparkles, Square, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, Copy, History, LoaderCircle, MessageSquare, Paperclip, Pencil, Plus, RotateCcw, Search, Sparkles, Square, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Guard } from "@/components/Crew";
 import type { Who } from "@/components/Crew";
@@ -18,10 +18,12 @@ import { DismissFeedback, Suggestions, Thinking } from "./ChatLive";
  *  through this conversation. The board can open it focused on one day
  *  (`focusDate`); messages then carry that day, and the agent treats requests
  *  that name no date as being about it. */
-export function AgentChat({ who = "him", agent, visibleWeek, focusDate = "", focusKey, employees, starters, draft, draftKey, boardBusy, hidden = false, onClearFocus, onPreview, onOpenReceipt }: {
+export function AgentChat({ who = "him", agent, visibleWeek, focusDate = "", focusKey, employees, starters, draft, draftKey, boardBusy, hidden = false, onClearFocus, onPreview, onOpenReceipt, onImport }: {
   who?: Who; agent: ReturnType<typeof useManagerChat>; visibleWeek: string; focusDate?: string; focusKey?: number; employees: string[]; starters: string[];
   draft?: string; draftKey?: number; boardBusy: boolean; hidden?: boolean; onClearFocus?: () => void;
   onPreview: (proposal: Proposal | null) => void; onOpenReceipt: (date: string) => void;
+  /** Open the import screen; opening it writes nothing (D7). */
+  onImport?: () => void;
 }) {
   const [text, setText] = useState(() => readDraft(agent.chat?.id));
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -216,6 +218,7 @@ export function AgentChat({ who = "him", agent, visibleWeek, focusDate = "", foc
           if (event.key === "Escape" && editing) { event.preventDefault(); setEditing(null); setText(""); }
         }} />
       <div className="conversation-composer-footer">
+        {onImport ? <button type="button" className="icon-button" aria-label="ייבוא סידור מקובץ" title="ייבוא סידור מקובץ" onClick={onImport} disabled={boardBusy}><Paperclip size={18} /></button> : null}
         <small id="agent-composer-hint">{agent.working ? "אפשר להמשיך לכתוב — ההודעה תישלח כשהסוכן יסיים" : "Enter לשליחה · Shift+Enter לשורה חדשה"}</small>
         {agent.working ? <button type="button" className="conversation-send" aria-label="עצירת הבקשה" disabled={agent.busy} onClick={() => void agent.stop()}><Square size={16} /></button> :
           <button type="submit" className="conversation-send" aria-label="שליחת הודעה" disabled={agent.loading || agent.busy || !text.trim()}>{agent.busy ? <LoaderCircle size={17} /> : <ArrowUp size={19} />}</button>}

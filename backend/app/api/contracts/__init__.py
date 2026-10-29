@@ -88,6 +88,11 @@ from app.api.contracts.employee import (  # noqa: F401
     SwapAnswer,
     SwapProposal,
 )
+from app.api.contracts.imports import (  # noqa: F401
+    ImportConfirmRequest,
+    ImportOptions,
+    ImportPreview,
+)
 from app.api.contracts.preferences import (  # noqa: F401
     Preference,
     PreferenceRequest,

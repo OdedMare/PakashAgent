@@ -12,6 +12,7 @@ repository. Every method takes the team from the caller's signed session.
 """
 
 from app.bl.changes import ChangeAgent
+from app.bl.importer import LayoutMapper
 from app.bl.learn import RuleLearner
 from app.bl.profile_service import ProfileService
 from app.bl.scheduler import Scheduler
@@ -26,6 +27,7 @@ from app.bl.schedule_service.generation.history import AssignmentHistory
 from app.bl.schedule_service.generation.range import RangeBuilder
 from app.bl.schedule_service.generation.runner import GenerationRunner
 from app.bl.schedule_service.generation.stepper import GenerationStepper
+from app.bl.schedule_service.importing import ImportCommitter, ImportPreview
 from app.bl.schedule_service.learning import CorrectionLearning
 from app.bl.schedule_service.manual import ManualEditor
 from app.bl.schedule_service.preferences import PreferenceService
@@ -62,6 +64,8 @@ class ScheduleService:
         self._simulator = Simulator(context)
         self._preferences = PreferenceService(repository)
         self._exporter = WorkbookExporter(context)
+        self._import_preview = ImportPreview(context, LayoutMapper(llm))
+        self._import_commit = ImportCommitter(context)
         self._context = context
 
     # -- reading -------------------------------------------------------------
@@ -153,6 +157,14 @@ class ScheduleService:
 
     def delete(self, *args, **kwargs):
         return self._manual.delete(*args, **kwargs)
+
+    # -- importing the workplace's own files (D7/D39) ------------------------
+
+    def preview_import(self, *args, **kwargs):
+        return self._import_preview.preview(*args, **kwargs)
+
+    def commit_import(self, *args, **kwargs):
+        return self._import_commit.commit(*args, **kwargs)
 
     # -- changing (D8/D12) ---------------------------------------------------
 

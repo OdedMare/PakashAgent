@@ -37,6 +37,7 @@ import { chatStarters } from "./chatStarters";
 import { useChatSplit } from "./useChatSplit";
 import { ProfileGapsNotice } from "./ProfileGapsNotice";
 import { LearnedFromChanges } from "./LearnedFromChanges";
+import { ImportSchedule } from "./ImportSchedule";
 import { Preferences } from "./Preferences";
 import { RequestInbox } from "./RequestInbox";
 import { ChangesPanel } from "./ChangesPanel";
@@ -157,6 +158,9 @@ export function Management({
     dismissArrivals();
   }, [dismissArrivals]);
   const [shareOpen, setShareOpen] = useState(false);
+  // The import flow. Opening it writes nothing; its own confirm is what
+  // persists (D7).
+  const [importOpen, setImportOpen] = useState(false);
   const [autoGenerating, setAutoGenerating] = useState(false);
   const autoGenerationStarted = useRef(false);
   // A sentence the briefing offered, on its way to the composer. Held as a
@@ -633,6 +637,7 @@ export function Management({
             navigateToWeek={chatWeek}
             onRefreshReady={registerBoardRefresh}
             onOpenAgent={() => openAgent()}
+            onImport={() => setImportOpen(true)}
             // What the agent is currently saying, so the board can show
             // *where* on the week it applies. The same state the cards in the
             // control room render — one source, so the two screens can never
@@ -744,6 +749,7 @@ export function Management({
             draftKey={suggested.n}
             onPreview={setChatPreview}
             onOpenReceipt={(date) => setChatWeek((previous) => ({ date, n: (previous?.n ?? 0) + 1 }))}
+            onImport={() => setImportOpen(true)}
           />
 
           {section === "replace" ? <>
@@ -819,6 +825,21 @@ export function Management({
         />
       </main>
 
+      {importOpen ? (
+        <ImportSchedule
+          employees={(overview?.employees ?? []).map((person) => String(person.name ?? "")).filter(Boolean)}
+          shiftNames={(overview?.shifts ?? [])
+            .map((shift) => String((shift as { name?: unknown }).name ?? ""))
+            .filter(Boolean)}
+          onClose={() => setImportOpen(false)}
+          onImported={(imported) => {
+            setImportOpen(false);
+            // Land on the imported week, the same way a chat receipt does.
+            setChatWeek((previous) => ({ date: imported.starts_on, n: (previous?.n ?? 0) + 1 }));
+            void state.refresh();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

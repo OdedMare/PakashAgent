@@ -80,9 +80,10 @@ agent must be able to reason about a schedule it did not author.
 
 ## D7 — Import infers layout, boss confirms
 
-> **Removed.** Importing schedules from Excel was taken out of the product:
-> the importer, the preview/confirm endpoints and the import screen no longer
-> exist. Kept here as the record of what was decided at the time.
+> **Revived by [D39](#d39--import-is-back-a-sheets-shape-is-data-found-by-code-the-model-or-the-manager-revives-d7).**
+> Importing was removed for a while and is back, with the layout as data
+> rather than a reader per shape. What is below still holds: no template,
+> and nothing is stored before the manager confirms.
 
 No fixed template. The agent reads whatever it's given, infers the structure, and
 shows its interpretation for confirmation before committing anything.
@@ -1239,6 +1240,53 @@ What this gives up: a model genuinely slower than five minutes per chat
 answer now fails, and `llm_timeout_seconds` must be raised for it. A
 server that serves one request at a time queues concurrent calls itself,
 and a call waiting in its queue counts against the same ceiling.
+
+## D39 — Import is back: a sheet's shape is data, found by code, the model or the manager *(revives D7)*
+
+Importing was removed (D7) because a reader per shape could not keep up:
+every file that predated the app came in a shape of its own — dates down or
+across, people or shifts as lanes, weekday names with no dates, weeks
+stacked on one sheet — and each needed another class.
+
+**The shape is now a `Layout`, not a class.** Which way time runs, the line
+holding the dates, an optional shift line nested under them, what a lane is
+(`shifts`, `people` or `none`), where data starts and ends, and the sheet's
+own markers for "away" and "nothing". One reader (`bl/importer/reader.py`)
+reads any sheet given one. Turning the sheet on its side is a transpose, so
+"length or width" costs nothing.
+
+**Three sources answer "what is the layout", and one scorer judges them.**
+
+1. *The manager*, on the confirm screen: a few fields, or one click on an
+   alternative reading. Read as given.
+2. *Detection* (`detect.py`): every plausible layout, both orientations,
+   read and scored by how much of the sheet resolves to **people on the
+   roster and shifts the profile declares**. No model call.
+3. *The model* (`mapper.py`, flow `import`), asked only when detection is
+   below 75% sure, finds nothing, or the manager described the file in
+   words. It sees the sheet's corner and returns a layout — **never rows**.
+   Its layout is read and scored by the same code and used only if it
+   explains the sheet at least as well.
+
+So the model can make reading flexible without being able to place anybody:
+who works when is still read by code, cell by cell, and checked against the
+roster (D34's division, applied to files).
+
+**Names are matched, never guessed** (`roster.py`): "שובל ק." is שובל קרמר,
+"יוסי ב." is a roster that only says יוסי, "קרמר" alone with two Kramers is
+a question. The screen maps any name or shift heading to someone, or leaves
+it out, and the file is re-read with that mapping.
+
+**Preview writes nothing; confirm stores what was shown** (D7 unchanged).
+A confirm opens a new period, or — when the manager chose an overlapping
+draft — rewrites only the imported shifts on the imported dates of that
+draft. A published period is never written into. Rows carry
+`source='imported'` and a reason naming the file; absences the sheet stated
+become the manager's constraints.
+
+What this gives up: a layout is one shape per sheet. A sheet mixing two
+unrelated tables needs its data range narrowed (`first_line`/`last_line`)
+or splitting.
 
 ---
 

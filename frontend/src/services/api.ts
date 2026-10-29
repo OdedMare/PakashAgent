@@ -6,6 +6,9 @@ import type {
   Constraint,
   ConstraintRequestRow,
   EmployeeView,
+  ImportedRow,
+  ImportOptions,
+  ImportPreview,
   ManagementOverview,
   PlacementCheck,
   Preference,
@@ -1164,5 +1167,49 @@ export function updatePreference(
 export function deletePreference(rowId: string): Promise<{ status: string }> {
   return request<{ status: string }>(`/api/schedule/preferences/${rowId}`, {
     method: "DELETE",
+  });
+}
+
+/** Read one uploaded schedule file and say what it holds.
+ *
+ *  **Writes nothing** (D7): `confirmImport` is the only call that persists.
+ *  `options` carries the manager's corrections -- the layout, which name
+ *  means whom, which heading is which shift -- and the same file is sent
+ *  again with them, so the server re-reads rather than the browser patching
+ *  rows it cannot read itself. Multipart rather than through `request`,
+ *  which forces a JSON content-type and would break the boundary.
+ */
+export async function previewImport(file: File, options: ImportOptions = {}): Promise<ImportPreview> {
+  const path = "/api/schedule/import/preview";
+  const body = new FormData();
+  body.append("file", file);
+  body.append("options", JSON.stringify(options));
+  console.debug(`[api] → POST ${path}`, file.name);
+  let response: Response;
+  try {
+    response = await fetch(path, { method: "POST", credentials: "same-origin", body });
+  } catch (reason) {
+    console.error(`[api] ✗ POST ${path} network error`, reason);
+    throw new Error("לא ניתן להתחבר לשרת");
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    console.error(`[api] ✗ POST ${path} → ${response.status}`);
+    throw apiError(data, response.status);
+  }
+  return data as ImportPreview;
+}
+
+/** Store the rows the manager approved. With `schedule_id` they are merged
+ *  into that draft; without it a new period is opened. */
+export function confirmImport(body: {
+  assignments: ImportedRow[];
+  unavailability?: ImportedRow[];
+  schedule_id?: string | null;
+  filename?: string;
+}): Promise<Schedule> {
+  return request<Schedule>("/api/schedule/import/confirm", {
+    method: "POST",
+    body: JSON.stringify(body),
   });
 }

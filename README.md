@@ -80,7 +80,11 @@ the manager's reason attached. Pressing "ראיתי" is what marks it read
 
 **A schedule can leave.** The manager downloads the period as an Excel file
 laid out like the real source sheets, so a week can be edited outside the app
-and imported back. A message for the group chat is asked of the agent instead
+and imported back. Import reads a file in any shape — shifts or people as
+rows, dates across or down, weekday templates, stacked weeks — finding the
+layout in code, asking the model to describe it only when unsure, and
+letting the manager correct it before anything is stored
+([D39](docs/DECISIONS.md)). A message for the group chat is asked of the agent instead
 — it is writing, and writing here is the agent's job
 ([D17](docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
 

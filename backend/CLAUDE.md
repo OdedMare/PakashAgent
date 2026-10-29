@@ -111,6 +111,11 @@ uvicorn app.main:app --reload
   are listed, never touched.
 - `bl/schedule_service.create_blank/assign/unassign` — the manual path (D18).
   Writes with no model and no solver on them.
+- `bl/importer/` — a file in, in any shape (D39): one reader for any
+  `Layout`, detection scored against the roster, the model asked only to
+  describe the layout (never the rows). `schedule_service/importing.py`
+  previews (writes nothing) and commits what was approved — a new period, or
+  the imported shifts and dates merged into a chosen draft.
 - `bl/export.py` — a period out as `.xlsx`. Pure functions, no model, no
   repository. Laid out shift-major like `FILE_FORMATS.md` Sample A.
 - `bl/learn/` — what the manager's own corrections say about the workplace.

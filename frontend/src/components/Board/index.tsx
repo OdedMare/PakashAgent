@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Sparkles,
   Trash2,
+  Upload,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -108,6 +109,7 @@ export function Board({
   onPublish,
   onExport,
   onOpenAgent,
+  onImport,
   onPeriodChange,
   navigateToWeek,
   onRefreshReady,
@@ -193,6 +195,8 @@ export function Board({
   onRefreshReady?: (refresh: ((date?: string) => Promise<void>) | null) => void;
   /** Open the conversation with the agent — the control room beside this. */
   onOpenAgent?: () => void;
+  /** Open the import screen. Opening it writes nothing (D7). */
+  onImport?: () => void;
   /** What the agent is currently saying, so the week can show *where* it
    *  applies. Read-only: the board renders these and produces none of them,
    *  which is what keeps a highlight a description of the conversation
@@ -558,6 +562,18 @@ export function Board({
               אקסל
             </button>
           ) : null}
+          {onImport ? (
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={onImport}
+              disabled={busy}
+              title="ייבוא סידור קיים מקובץ — כל צורה של טבלה"
+            >
+              <Upload size={14} />
+              ייבוא
+            </button>
+          ) : null}
           {/* Taking the week back. Two buttons because they undo two
               different things: clearing empties the grid the manager is
               looking at, deleting removes the period that grid belongs to.
@@ -865,6 +881,7 @@ export function Board({
           onOpenBlank={() =>
             onOpenBlank({ starts_on: board.weekStart, ends_on: board.weekEnd })
           }
+          onImport={onImport}
         />
       )}
 
@@ -1295,6 +1312,7 @@ function EmptyWeek({
   fromDay,
   onGenerate,
   onOpenBlank,
+  onImport,
 }: {
   busy: boolean;
   generating: boolean;
@@ -1307,6 +1325,7 @@ function EmptyWeek({
   /** Open the build dialog on the whole week, or from one day of it. */
   onGenerate: (from?: string) => void;
   onOpenBlank: () => void;
+  onImport?: () => void;
 }) {
   if (!profile) {
     return (
@@ -1342,8 +1361,8 @@ function EmptyWeek({
     <div className="board-empty" data-tour="empty-week">
       <h2>אין סידור לשבוע הזה</h2>
       <p>
-        אפשר לבקש מהסוכן לבנות את השבוע, או לפתוח שבוע ריק ולשבץ ידנית — בלי
-        הסוכן בכלל.
+        אפשר לבקש מהסוכן לבנות את השבוע, לפתוח שבוע ריק ולשבץ ידנית — בלי
+        הסוכן בכלל — או לייבא סידור שכבר קיים אצלכם בקובץ.
       </p>
       {gaps && !gaps.complete ? (
         <p className="board-empty-partial">
@@ -1352,6 +1371,20 @@ function EmptyWeek({
         </p>
       ) : null}
       <div className="board-empty-actions">
+        {/* A week the workplace already has in a file, in whatever shape.
+            The import screen reads and shows; only its confirm stores (D7). */}
+        {onImport ? (
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={onImport}
+            disabled={busy || generating}
+            title="ייבוא סידור קיים מקובץ Excel, CSV או Word"
+          >
+            <Upload size={14} />
+            ייבוא מקובץ
+          </button>
+        ) : null}
         <button
           type="button"
           className="ghost-button"

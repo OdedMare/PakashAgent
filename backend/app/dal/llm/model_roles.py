@@ -58,6 +58,8 @@ _FLOW_ROLES = {
     "changes": DEFAULT,
     "planner": DEFAULT,
     "learn": DEFAULT,
+    # Reading a sheet's layout: a short structural question, never the rows.
+    "import": DEFAULT,
     "briefing": FAST,
 }
 
