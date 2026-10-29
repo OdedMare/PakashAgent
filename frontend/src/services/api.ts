@@ -750,6 +750,14 @@ export interface Departure {
   published: { id: string; starts_on: string; ends_on: string }[];
 }
 
+/** Somebody chosen to take over one shift a departure vacates. */
+export interface DepartureCover {
+  schedule_id: string;
+  shift_name: string;
+  slot_date: string;
+  employee: string;
+}
+
 /** Count what a departure would vacate. **Writes nothing.** */
 export function previewDeparture(body: {
   employee: string;

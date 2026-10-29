@@ -1174,5 +1174,8 @@ export interface ReplacementOptions {
   slots: ReplacementSlot[];
   /** Days in the range with no shift: only an absence is recorded for them. */
   free_dates: string[];
+  /** Shifts in the range that sit in later periods: one search plans one
+   *  period, so these get no candidates. */
+  elsewhere?: { date: string; shift: string; schedule_id: string }[];
   error: string;
 }

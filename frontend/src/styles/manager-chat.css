@@ -202,4 +202,5 @@ body:has(.management-workspace.has-drawer) .tutorial-fab { left: auto; right: 20
 .changes-done svg { flex: none; margin-top: 3px; }
 .changes-remove { display: grid; gap: 12px; }
 .changes-remove select { width: 100%; }
+.departure-covers { display: grid; gap: 10px; margin-bottom: 12px; }
 @media (max-width: 420px) { .changes-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } .changes-actions span { font-size: 12px; } }

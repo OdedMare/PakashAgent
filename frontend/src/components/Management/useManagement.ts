@@ -27,7 +27,8 @@ import {
   updateProfile,
   deleteShiftType,
 } from "@/services/api";
-import type { Departure } from "@/services/api";
+import { displayDate } from "@/components/DateInput";
+import type { Departure, DepartureCover } from "@/services/api";
 import type {
   GenerationProgress,
   ManagementOverview,
@@ -179,7 +180,14 @@ interface ManagementState {
   }) => Promise<boolean>;
   deleteShift: (name: string) => Promise<void>;
   previewDeparture: (input: { employee: string; effective_date?: string }) => Promise<Departure>;
-  depart: (input: { employee: string; effective_date?: string; reason?: string }) => Promise<boolean>;
+  /** Take somebody off the roster, then place each cover the manager chose
+   *  on a shift the departure vacated. */
+  depart: (input: {
+    employee: string;
+    effective_date?: string;
+    reason?: string;
+    covers?: DepartureCover[];
+  }) => Promise<boolean>;
   clearError: () => void;
 }
 
@@ -577,9 +585,38 @@ export function useManagement(): ManagementState {
     [],
   );
 
+  /** One write per cover after the departure, inside the same `run`, so the
+   *  board re-reads once. A cover the server refuses (a duty overlap, say)
+   *  leaves its shift vacant and is named in the banner; the departure and
+   *  the other covers stand. */
   const depart = useCallback(
-    async (input: { employee: string; effective_date?: string; reason?: string }) =>
-      (await run(() => departEmployee(input))) !== null,
+    async ({ covers = [], ...input }: {
+      employee: string;
+      effective_date?: string;
+      reason?: string;
+      covers?: DepartureCover[];
+    }) => {
+      const missed: string[] = [];
+      const done = await run(async () => {
+        const result = await departEmployee(input);
+        for (const cover of covers) {
+          try {
+            await assignEmployee({
+              ...cover,
+              reason: `מחליף/ה את ${input.employee} שיצא/ה מהסידור`,
+            });
+          } catch (reason) {
+            const why = reason instanceof Error ? reason.message : "";
+            missed.push(`${cover.employee} ל${cover.shift_name} ב-${displayDate(cover.slot_date)}${why ? ` (${why})` : ""}`);
+          }
+        }
+        return result;
+      });
+      if (done !== null && missed.length) {
+        setError(`${input.employee} הוצא/ה מהסידור, אבל לא ניתן היה לשבץ: ${missed.join("; ")}. המשמרות האלה נשארו פנויות.`);
+      }
+      return done !== null;
+    },
     [run],
   );
 

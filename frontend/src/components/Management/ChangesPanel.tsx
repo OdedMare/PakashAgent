@@ -3,10 +3,11 @@
 import { ArrowLeftRight, CalendarPlus, CheckCircle2, UserMinus, UserPlus } from "lucide-react";
 import { useState } from "react";
 
-import type { Departure } from "@/services/api";
+import type { Departure, DepartureCover } from "@/services/api";
 import type { DayCycle } from "@/types";
 
 import { ConfirmDeparture } from "./ConfirmDeparture";
+import { DepartureCovers } from "./DepartureCovers";
 import { ReplacementPanel } from "./ReplacementPanel";
 import { EmployeeForm, ShiftForm } from "./TeamPanel";
 
@@ -27,7 +28,8 @@ const ACTIONS: { id: Action; label: string; icon: React.ReactNode }[] = [
  *  while keeping the rows already there (D37); the board on screen shows
  *  that refit as a running build. Taking a soldier out is the team panel's
  *  departure: an end date, and every shift from it on vacated, counted in
- *  the dialog before the click. */
+ *  the dialog before the click, which also offers who could take each one
+ *  over and places the chosen covers right after. */
 export function ChangesPanel({
   employees,
   activeEmployees,
@@ -54,7 +56,12 @@ export function ChangesPanel({
     shifts?: Record<string, unknown>[];
   }) => Promise<boolean>;
   onPreviewDeparture: (input: { employee: string; effective_date?: string }) => Promise<Departure>;
-  onDepart: (input: { employee: string; effective_date?: string; reason?: string }) => Promise<boolean>;
+  onDepart: (input: {
+    employee: string;
+    effective_date?: string;
+    reason?: string;
+    covers?: DepartureCover[];
+  }) => Promise<boolean>;
 }) {
   const [action, setAction] = useState<Action>("replace");
   const [done, setDone] = useState("");
@@ -69,6 +76,8 @@ export function ChangesPanel({
   const [leaving, setLeaving] = useState("");
   const [departing, setDeparting] = useState(false);
   const [departBusy, setDepartBusy] = useState(false);
+  // The covers chosen in the dialog, with the date they were searched for.
+  const [covers, setCovers] = useState<{ date: string; rows: DepartureCover[] }>({ date: "", rows: [] });
 
   const choose = (next: Action) => {
     if (next === "shift") setStanders(activeEmployees);
@@ -182,13 +191,17 @@ export function ChangesPanel({
           busy={departBusy}
           onPreview={onPreviewDeparture}
           onCancel={() => setDeparting(false)}
+          covers={(date) => <DepartureCovers employee={leaving} date={date} onChange={setCovers} />}
           onConfirm={async ({ effective_date, reason }) => {
+            const placing = covers.date === effective_date ? covers.rows : [];
             setDepartBusy(true);
-            const ok = await onDepart({ employee: leaving, effective_date, reason });
+            const ok = await onDepart({ employee: leaving, effective_date, reason, covers: placing });
             setDepartBusy(false);
             if (ok) {
               setDeparting(false);
-              setDone(`«${leaving}» הוצא/ה מהסידור, והמשמרות שלו/ה מהתאריך שנבחר והלאה פונו.`);
+              setDone(placing.length
+                ? `«${leaving}» הוצא/ה מהסידור. ${placing.length === 1 ? "מחליף/ה אחד/ת שובץ/ה" : `${placing.length} מחליפים שובצו`} במשמרות שפונו.`
+                : `«${leaving}» הוצא/ה מהסידור, והמשמרות שלו/ה מהתאריך שנבחר והלאה פונו.`);
               setLeaving("");
             }
           }}

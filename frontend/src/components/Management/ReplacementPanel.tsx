@@ -93,7 +93,7 @@ export function ReplacementPanel({ employees, today, disabled, onPrepare }: {
   </section>;
 }
 
-function ReplacementSlotCard({ slot, chosen, disabled, onChoose }: {
+export function ReplacementSlotCard({ slot, chosen, disabled, onChoose }: {
   slot: ReplacementOptions["slots"][number]; chosen: string; disabled: boolean; onChoose: (name: string) => void;
 }) {
   return <section className="conversation-candidates replacement-slot" aria-label={`מחליפים ל${slot.shift} ב${dayLabel(slot.date)}`}>

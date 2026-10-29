@@ -2,6 +2,7 @@
 
 import { AlertTriangle, UserMinus, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
 import { DateInput, displayDate } from "@/components/DateInput";
 import type { Departure } from "@/services/api";
@@ -17,7 +18,10 @@ import type { Departure } from "@/services/api";
  *
  *  The reason is offered, not required, for the reason `ConfirmRemoval`'s
  *  is: the person is leaving, there is nobody left on the roster for the
- *  sentence to be owed to, and the log already says a manager did it. */
+ *  sentence to be owed to, and the log already says a manager did it.
+ *
+ *  `covers` renders under the count for the date on screen — the changes
+ *  tab puts who could take over the vacated shifts there. */
 export function ConfirmDeparture({
   employee,
   today,
@@ -25,6 +29,7 @@ export function ConfirmDeparture({
   onPreview,
   onCancel,
   onConfirm,
+  covers,
 }: {
   employee: string;
   today: string;
@@ -32,6 +37,7 @@ export function ConfirmDeparture({
   onPreview: (input: { employee: string; effective_date?: string }) => Promise<Departure>;
   onCancel: () => void;
   onConfirm: (input: { effective_date: string; reason: string }) => void;
+  covers?: (date: string) => ReactNode;
 }) {
   const [date, setDate] = useState(today);
   const [reason, setReason] = useState("");
@@ -82,6 +88,8 @@ export function ConfirmDeparture({
             </span>
           </p>
         ) : null}
+
+        {covers ? covers(date) : null}
 
         <p className="board-removal-note">
           המשמרות שכבר עבר/ה, ההיסטוריה ויומן השינויים נשמרים. אפשר להחזיר
