@@ -66,7 +66,10 @@ def evaluate(reading: Reading, profile: Optional[dict],
         + 0.15 * sum(1 for row in reading.unavailability if not row["employee"])
     unexplained = max(0, reading.filled - reading.explained)
     score = max(0.0, total - 0.5 * unexplained)
-    confidence = score / max(1, len(rows) + len(reading.unavailability), reading.filled)
+    # Out of what this reading could have scored had every name and shift
+    # been the workplace's own: a sheet that is mostly "בית" is no less sure.
+    ideal = len(rows) + 0.4 * len(reading.unavailability) + 0.5 * unexplained
+    confidence = score / max(1.0, ideal)
     return score, round(min(1.0, confidence), 2)
 
 

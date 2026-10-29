@@ -7,7 +7,9 @@ what the file said; the interpretation is what will be stored, and it is
 the only thing the manager sees before a write happens (D7).
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+
+import datetime
 
 from app.bl.importer.cells import human_date, text
 from app.bl.importer.headers import year_warnings
@@ -15,12 +17,20 @@ from app.bl.importer.layout import DATES_DOWN, LANES_PEOPLE, LANES_SHIFTS, Layou
 from app.bl.importer.reader import Reading
 from app.bl.importer.roster import AMBIGUOUS, EXACT, MATCHED, UNKNOWN, match_people
 from app.bl.importer.vocabulary import ShiftVocabulary
+from app.common.time_context import israel_today
+
+# Longest run of days one import may store: the ceiling a calendar view reads.
+MAX_IMPORT_DAYS = 62
 
 
 def interpret(reading: Reading, profile: Optional[dict], vocabulary: ShiftVocabulary,
               names: Optional[Dict[str, str]] = None,
-              shifts: Optional[Dict[str, str]] = None) -> dict:
-    """The rows to store, with every name and shift accounted for."""
+              shifts: Optional[Dict[str, str]] = None,
+              window: Tuple[str, str] = ("", "")) -> dict:
+    """The rows to store, with every name and shift accounted for.
+
+    `window` keeps only the dates from its first to its last (either may be
+    empty): a sheet holding a year is imported a month at a time."""
     names, shifts = names or {}, shifts or {}
     owners = [row["employee"] for row in reading.assignments + reading.unavailability]
     matches = match_people(owners, profile)
@@ -32,8 +42,13 @@ def interpret(reading: Reading, profile: Optional[dict], vocabulary: ShiftVocabu
                           ("employee", "shift", "date"))
     absences = _unique(_mapped(reading.unavailability, person, shift, keep_unowned=True),
                        ("employee", "shift", "date"))
+    every = sorted({row["date"] for row in assignments + absences})
+    window = window if any(window) else _default_window(every)
+    assignments, absences = _within(assignments, window), _within(absences, window)
     dates = sorted({row["date"] for row in assignments + absences})
     result = {
+        "file_starts_on": every[0] if every else "",
+        "file_ends_on": every[-1] if every else "",
         "people": people,
         "shifts": shift_rows,
         "dates": dates,
@@ -42,10 +57,31 @@ def interpret(reading: Reading, profile: Optional[dict], vocabulary: ShiftVocabu
         "assignments": assignments,
         "unavailability": absences,
         "assumed_week": reading.assumed_week,
+        "window": list(window),
     }
     result["warnings"] = _warnings(reading, result)
     result["summary"] = summary(result)
     return result
+
+
+def _default_window(dates: List[str]) -> Tuple[str, str]:
+    """No window for a file one import can hold; else one calendar month --
+    today's when the file covers it, otherwise the file's last -- so a year
+    on one sheet opens on something storable instead of on an error."""
+    if not dates or _days(dates[0], dates[-1]) <= MAX_IMPORT_DAYS:
+        return "", ""
+    today = israel_today().isoformat()[:7]
+    months = sorted({day[:7] for day in dates})
+    month = today if today in months else months[-1]
+    first = month + "-01"
+    following = (datetime.date.fromisoformat(first) + datetime.timedelta(days=32)).replace(day=1)
+    return first, (following - datetime.timedelta(days=1)).isoformat()
+
+
+def _within(rows: List[dict], window: Tuple[str, str]) -> List[dict]:
+    first, last = window
+    return [row for row in rows
+            if (not first or row["date"] >= first) and (not last or row["date"] <= last)]
 
 
 def describe(layout: Layout) -> str:
@@ -130,6 +166,10 @@ def _mapped(rows: List[dict], person: Dict[str, str], shift: Dict[str, str],
     return found
 
 
+def _days(first: str, last: str) -> int:
+    return (datetime.date.fromisoformat(last) - datetime.date.fromisoformat(first)).days + 1
+
+
 def _unique(rows: List[dict], fields: tuple) -> List[dict]:
     found, seen = [], set()
     for row in rows:
@@ -157,6 +197,14 @@ def _warnings(reading: Reading, result: dict) -> List[str]:
              if row["count"] and not row["declared"] and (row["shift"] or not row["name"])]
     if loose:
         notes.append("משמרות שאינן מוגדרות בצוות: %s" % ", ".join(loose[:6]))
+    if result["file_starts_on"] and (result["file_starts_on"], result["file_ends_on"]) \
+            != (result["starts_on"], result["ends_on"]) and any(result["window"]):
+        notes.append("הקובץ מכסה %s עד %s; מוצגים רק %s עד %s — אפשר לבחור טווח אחר"
+                     % (human_date(result["file_starts_on"]), human_date(result["file_ends_on"]),
+                        human_date(result["starts_on"]), human_date(result["ends_on"])))
+    if result["dates"] and _days(result["starts_on"], result["ends_on"]) > MAX_IMPORT_DAYS:
+        notes.append("הטווח שנבחר מכסה %d ימים; ייבוא אחד מכסה עד %d"
+                     % (_days(result["starts_on"], result["ends_on"]), MAX_IMPORT_DAYS))
     orphans = sum(1 for row in result["unavailability"] if not row["employee"])
     if orphans:
         notes.append("%d סימוני אי־זמינות אינם משויכים לאדם ולא יישמרו" % orphans)

@@ -62,6 +62,7 @@ class TransferRoutes(RouteGroup):
                 layout=choices.layout.model_dump() if choices.layout else None,
                 week_start=choices.week_start, hint=choices.hint,
                 names=choices.names, shifts=choices.shifts, use_model=choices.use_model,
+                date_from=choices.date_from, date_to=choices.date_to,
             )
 
         @router.post("/import/confirm", response_model=Schedule)

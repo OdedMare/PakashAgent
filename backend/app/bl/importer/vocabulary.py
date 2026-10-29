@@ -47,7 +47,7 @@ class ShiftVocabulary:
         reconciles it. Nothing is *invented*: a name is either the
         workplace's declared one or the one written in the manager's file.
         """
-        if not normalise(value) or parse_date(value) or is_weekday(value):
+        if not normalise(value) or _dated(value) or is_weekday(value):
             return ""
         return self.declared(value) or value.strip()
 
@@ -60,7 +60,7 @@ class ShiftVocabulary:
         running those hours, or one shift would appear twice.
         """
         cleaned = normalise(value)
-        if not cleaned or parse_date(value) or is_weekday(cleaned):
+        if not cleaned or _dated(value) or is_weekday(cleaned):
             return ""
         for shift in self._shifts:
             name = normalise(shift.get("name"))
@@ -94,3 +94,8 @@ class ShiftVocabulary:
             filled += 1
             matched += bool(self.declared(row[column]))
         return filled > 0 and matched == filled
+
+
+def _dated(value) -> bool:
+    """A date either way round is a header cell, never a shift's name."""
+    return bool(parse_date(value) or parse_date(value, month_first=True))

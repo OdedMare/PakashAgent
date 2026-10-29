@@ -117,3 +117,21 @@ def test_rows_outside_the_chosen_draft_are_refused():
     response = client.post("/api/schedule/import/confirm", json={
         "assignments": body["assignments"], "schedule_id": draft["id"]})
     assert response.status_code == 400 and "חורגים" in response.text
+
+
+def test_a_workbook_with_a_tab_per_month_opens_on_the_one_covering_today():
+    from app.common.time_context import israel_today
+
+    today = israel_today()
+    book = Workbook()
+    book.active.title = "ישן"
+    book.active.append(["", "2/1/20", "3/1/20"])
+    book.active.append([MORNING, "דנה", "יוסי"])
+    current = book.create_sheet("החודש")
+    current.append(["", today.strftime("%d/%m/%Y")])
+    current.append([MORNING, "דנה"])
+    buffer = io.BytesIO()
+    book.save(buffer)
+    app, _repo = _build_app()
+    body = _preview(_client(app), content=buffer.getvalue()).json()
+    assert body["sheets"] == ["ישן", "החודש"] and body["sheet_name"] == "החודש"

@@ -39,7 +39,8 @@ _PREVIEW_COLUMNS = 26
 def infer(grid: List[List[str]], profile: Optional[dict] = None,
           layout: Optional[dict] = None, mapper=None, week_start: str = "",
           hint: str = "", names: Optional[Dict[str, str]] = None,
-          shifts: Optional[Dict[str, str]] = None) -> dict:
+          shifts: Optional[Dict[str, str]] = None, date_from: str = "",
+          date_to: str = "") -> dict:
     """The interpretation the confirm screen shows. Raises `AgentError` in
     Hebrew when no layout explains the sheet at all."""
     grid = bounded(grid)
@@ -54,7 +55,7 @@ def infer(grid: List[List[str]], profile: Optional[dict] = None,
         chosen = _best(grid, profile, vocabulary, ranked, mapper, hint, week_start)
         alternatives = _alternatives(ranked, chosen)
     reading = chosen["reading"]
-    result = interpret(reading, profile, vocabulary, names, shifts)
+    result = interpret(reading, profile, vocabulary, names, shifts, (date_from, date_to))
     result.update(
         layout=reading.layout.to_dict(),
         layout_source=chosen["source"],

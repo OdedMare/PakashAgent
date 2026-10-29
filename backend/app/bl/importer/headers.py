@@ -4,7 +4,7 @@ import datetime
 from typing import Dict, List, Optional, Tuple
 
 from app.bl.importer.cells import (
-    is_unavailable, normalise, parse_date, split_names, text, weekday_index,
+    is_unavailable, month_first, normalise, parse_date, split_names, text, weekday_index,
 )
 from app.common.time_context import israel_today
 
@@ -16,9 +16,15 @@ Columns = List[Tuple[int, str]]
 
 
 def line_dates(row: List[str]) -> Columns:
-    """`(column, iso)` for every cell of a line that is a real date."""
-    return [(column, parse_date(value)) for column, value in enumerate(row)
-            if parse_date(value)]
+    """`(column, iso)` for every cell of a line that is a real date, in the
+    order -- day or month first -- the line itself was written in."""
+    swapped = month_first(row)
+    found = []
+    for column, value in enumerate(row):
+        iso = parse_date(value, swapped)
+        if iso:
+            found.append((column, iso))
+    return found
 
 
 def line_weekdays(row: List[str]) -> List[Tuple[int, int]]:
@@ -87,8 +93,15 @@ def is_date_row(row: List[str], columns: List[int]) -> bool:
     before every week; read as data, each repeat would be a person named
     "15/6/25".
     """
-    hits = sum(1 for column in columns
-               if column < len(row) and parse_date(row[column]))
+    # Most lines are names and markers: a line with too few digits to be
+    # dates is turned away before the whole line is parsed, which on a year
+    # kept across one sheet is the difference between seconds and minutes.
+    digits = sum(1 for column in columns
+                 if column < len(row) and any(ch.isdigit() for ch in str(row[column])))
+    if digits < max(1, (len(columns) + 1) // 2):
+        return False
+    dated = {column for column, _iso in line_dates(row)}
+    hits = sum(1 for column in columns if column in dated)
     return hits >= max(1, (len(columns) + 1) // 2)
 
 

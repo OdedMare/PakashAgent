@@ -1369,9 +1369,18 @@ draft. A published period is never written into. Rows carry
 `source='imported'` and a reason naming the file; absences the sheet stated
 become the manager's constraints.
 
+**What a real unit's file added** (Sample C in `FILE_FORMATS.md`): a
+header line decides for itself whether its dates are day or month first,
+since one copy of the same sheet writes `13/10/2024` and another
+`10/13/2024`; `בית` is an absence like `חופש`; a handover word
+(`חפיפה`) is a note on the row, not part of a name; a sheet up to 1,500
+columns wide is read, and one holding more than an import may store opens
+on the month covering today, with any other run of dates a field away; a
+workbook with a tab per month opens on the tab covering today.
+
 What this gives up: a layout is one shape per sheet. A sheet mixing two
 unrelated tables needs its data range narrowed (`first_line`/`last_line`)
-or splitting.
+or splitting. Colours carry no meaning to the importer.
 
 ---
 

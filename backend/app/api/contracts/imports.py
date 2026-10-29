@@ -33,6 +33,9 @@ class ImportOptions(BaseModel):
     # A shift heading in the file -> the declared shift; "" leaves it out.
     shifts: Dict[str, str] = Field(default={}, max_length=100)
     use_model: bool = True
+    # Only these dates, when the sheet holds more than one import may store.
+    date_from: str = Field(default="", max_length=10)
+    date_to: str = Field(default="", max_length=10)
 
 
 class ImportedRow(BaseModel):
@@ -88,6 +91,10 @@ class ImportPreview(BaseModel):
     dates: List[str] = []
     starts_on: str = ""
     ends_on: str = ""
+    file_starts_on: str = ""
+    file_ends_on: str = ""
+    # The dates kept, when only part of the file is shown; empty for all.
+    window: List[str] = []
     assumed_week: str = ""
     assignments: List[ImportedRow] = []
     unavailability: List[ImportedRow] = []

@@ -12,7 +12,9 @@ from app.common.errors import AgentError
 # A sheet bigger than this is not a shift schedule. Bounded because every
 # cell is visited several times during inference.
 MAX_ROWS = 400
-MAX_COLUMNS = 200
+# A year kept across one sheet, three shifts a day, is over a thousand
+# columns (Excel's AEB). Wide, but a real thing a manager keeps.
+MAX_COLUMNS = 1500
 _MAX_FILE_BYTES = 20 * 1024 * 1024
 _WORD_NAMESPACE = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 

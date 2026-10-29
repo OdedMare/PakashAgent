@@ -20,7 +20,9 @@ weeks stacked on one sheet -- restarts the dates where it appears.
 from typing import List, Optional, Tuple
 
 from app.bl.export import UNFILLED
-from app.bl.importer.cells import is_unavailable, is_yearless, normalise, split_names, text
+from app.bl.importer.cells import (
+    is_unavailable, is_yearless, normalise, split_names, split_note, text,
+)
 from app.bl.importer.headers import (
     carried, header_dates, is_date_row, is_title, is_weekday_row, lane_from_cells,
     lane_label, line_dates,
@@ -170,7 +172,8 @@ class _Lanes(object):
                 if is_unavailable(part, self._layout.unavailable):
                     self._absent("", date, shift or lane_shift, part)
                 else:
-                    self._place(part, date, shift or lane_shift)
+                    name, note = split_note(part)
+                    self._place(name, date, shift or lane_shift, note)
 
     def _person(self, row, columns: Columns, owner: str) -> None:
         """One person's lane: a cell says what they work, or only that they do."""
@@ -179,7 +182,7 @@ class _Lanes(object):
                 if is_unavailable(part, self._layout.unavailable):
                     self._absent(owner, date, shift, part)
                 elif shift:
-                    self._place(owner, date, shift)
+                    self._place(owner, date, shift, split_note(part)[1])
                 elif part.strip() in _CROSSES and not self._vocabulary.declared(part):
                     self._absent(owner, date, "", part)
                 else:
@@ -195,10 +198,12 @@ class _Lanes(object):
             self._reading.explained += 1
         return parts
 
-    def _place(self, employee: str, date: str, shift: str) -> None:
+    def _place(self, employee: str, date: str, shift: str, note: str = "") -> None:
         if employee:
-            self._reading.assignments.append(
-                {"employee": employee, "shift": shift, "date": date})
+            row = {"employee": employee, "shift": shift, "date": date}
+            if note:
+                row["reason"] = note
+            self._reading.assignments.append(row)
 
     def _absent(self, employee: str, date: str, shift: str, reason: str) -> None:
         self._reading.unavailability.append(

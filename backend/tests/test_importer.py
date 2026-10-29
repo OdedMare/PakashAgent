@@ -294,3 +294,74 @@ def test_a_cross_in_a_persons_lane_is_a_day_off_not_a_shift():
     result = infer(grid, PROFILE)
     assert _rows(result) == [("שובל קרמר", MORNING, "2026-11-01")]
     assert result["unavailability"][0]["date"] == "2026-11-02"
+
+
+# -- the unit's own file: names down column A, each date merged over its
+# three shifts, a weekday row and a shift row under it, "בית" across a home
+# stretch, a first name where the person works, "-חפיפה" on a handover.
+
+UNIT_NAMES = ("שובל קרמר", "אלמוג עזרא", "אורי אבן", "תאיר גל")
+UNIT_SHIFTS = (MORNING, NOON, NIGHT)
+DAY_NAMES = ("ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת")
+
+
+def _unit_file(dates, title_rows=0):
+    """`dates` are the header texts, one per day, as the file writes them."""
+    header = [""] + [text for text in dates for _shift in UNIT_SHIFTS]
+    weekday = [""] + [DAY_NAMES[i % 7] for i in range(len(dates)) for _shift in UNIT_SHIFTS]
+    shifts = ["שם"] + list(UNIT_SHIFTS) * len(dates)
+    lanes = [[name] + [""] * (3 * len(dates)) for name in UNIT_NAMES]
+    lanes[0][1] = "שובל"                      # works the first morning
+    lanes[1][2] = "אלמוג-חפיפה"               # a handover, first noon
+    lanes[2][1:4] = ["בית", "בית", "בית"]      # home the whole first day
+    lanes[3][6] = "תאיר"                      # second day, night
+    return [[""] * len(header)] * title_rows + [header, weekday, shifts] + lanes
+
+
+UNIT_ROWS = [("אלמוג עזרא", NOON), ("שובל קרמר", MORNING), ("תאיר גל", NIGHT)]
+
+
+def test_the_units_file_with_israeli_dates():
+    result = infer(_unit_file(["06/10/2024", "07/10/2024"]), PROFILE)
+    assert result["layout"]["lanes"] == "people" and result["layout"]["shift_line"] == 2
+    assert [(row[0], row[1]) for row in _rows(result)] == UNIT_ROWS
+    assert _rows(result)[2][2] == "2024-10-07"
+    assert result["confidence"] >= 0.9
+
+
+def test_american_dates_are_read_month_first_from_the_line_itself():
+    # 10/12 alone could be either; 10/13 settles the whole line.
+    result = infer(_unit_file(["10/12/2024", "10/13/2024"]), PROFILE)
+    assert result["dates"] == ["2024-10-12", "2024-10-13"]
+
+
+def test_an_ambiguous_line_is_read_whichever_way_its_dates_run_on():
+    result = infer(_unit_file(["10/01/2024", "10/02/2024"]), PROFILE)
+    assert result["dates"] == ["2024-10-01", "2024-10-02"]
+
+
+def test_dates_in_the_second_row_under_a_title_row():
+    result = infer(_unit_file(["22.12.2024", "23.12.2024"], title_rows=1), PROFILE)
+    assert result["layout"]["header"] == 1
+    assert [(row[0], row[1]) for row in _rows(result)] == UNIT_ROWS
+
+
+def test_home_is_an_absence_and_a_handover_is_a_note_not_a_name():
+    result = infer(_unit_file(["06/10/2024", "07/10/2024"]), PROFILE)
+    home = [row for row in result["unavailability"] if row["employee"] == "אורי אבן"]
+    assert len(home) == 3 and {row["reason"] for row in home} == {"בית"}
+    handover = [row for row in result["assignments"] if row["employee"] == "אלמוג עזרא"]
+    assert handover[0]["reason"] == "חפיפה"
+
+
+def test_a_year_on_one_sheet_opens_on_one_month_and_a_window_picks_another():
+    import datetime as dt
+
+    days = [dt.date(2024, 1, 1) + dt.timedelta(days=n) for n in range(366)]
+    grid = _unit_file([day.strftime("%d/%m/%Y") for day in days])
+    grid[-1][-1] = "תאיר"                     # the last night of the year
+    shown = infer(grid, PROFILE)
+    assert len(shown["dates"]) <= 31 and shown["file_ends_on"] == "2024-12-31"
+    assert any("מוצגים רק" in warning for warning in shown["warnings"])
+    chosen = infer(grid, PROFILE, date_from="2024-01-01", date_to="2024-01-02")
+    assert [(row[0], row[1]) for row in _rows(chosen)] == UNIT_ROWS

@@ -1211,6 +1211,9 @@ export interface ImportOptions {
   names?: Record<string, string>;
   shifts?: Record<string, string>;
   use_model?: boolean;
+  /** Only these dates, for a sheet holding more than one import stores. */
+  date_from?: string;
+  date_to?: string;
 }
 
 /** What a file holds (D7/D42). **Nothing is stored** until confirm. */
@@ -1235,6 +1238,10 @@ export interface ImportPreview {
   dates: string[];
   starts_on: string;
   ends_on: string;
+  /** The dates the whole file covers, before any window. */
+  file_starts_on: string;
+  file_ends_on: string;
+  window: string[];
   assumed_week: string;
   assignments: ImportedRow[];
   unavailability: ImportedRow[];

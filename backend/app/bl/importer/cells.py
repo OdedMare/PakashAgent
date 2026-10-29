@@ -6,6 +6,7 @@ text to display.
 """
 
 import datetime
+import functools
 import re
 from typing import Any, Iterable, List, Optional
 
@@ -23,8 +24,17 @@ _GERESH = "׳'`"
 # whole cell values after normalisation, never as substrings.
 _UNAVAILABLE = (
     "לא זמין", "לא זמינה", "לא יכול", "לא יכולה", "חופש", "חופשה", "מחלה",
-    "חולה", "גימל", "אילוץ",
+    "חולה", "גימל", "אילוץ", "בית", "בבית",
 )
+
+# Words a cell adds to a person's name that say *how* they work the shift,
+# not who they are: "עיינה-חפיפה" is עיינה, on a handover shift. Kept as the
+# row's note rather than read as part of a name nobody on the roster has.
+_NOTE_WORDS = ("חפיפה", "חפיפות", "בחפיפה", "חניכה", "תצפית")
+
+# Day, month and year in either order: which one a file meant is settled
+# per header line (`month_first`), never per cell.
+_NUMERIC_DATE = re.compile(r"^(\d{1,2})([/.\-])(\d{1,2})(?:\2(\d{2}|\d{4}))?$")
 
 _DATE_PATTERNS = (
     ("%Y-%m-%d", r"^(\d{4})-(\d{1,2})-(\d{1,2})$"),
@@ -94,7 +104,7 @@ def without_weekday(value: Any) -> str:
     return cleaned.strip(_LABEL_PUNCTUATION)
 
 
-def parse_date(value: Any) -> str:
+def parse_date(value: Any, month_first: bool = False) -> str:
     """A header cell as an ISO date, or empty.
 
     Handles both source formats plus real `datetime` values and Excel serial
@@ -106,6 +116,18 @@ def parse_date(value: Any) -> str:
     if isinstance(value, (int, float)) and not isinstance(value, bool) \
             and _excel_serial(value):
         return _excel_serial(value)
+    found = _parse_text(value if isinstance(value, str) else str(value), month_first)
+    if found.startswith(_YEARLESS):
+        # Resolved outside the cache: which year is nearest moves with today.
+        day, month = found[len(_YEARLESS):].split(".")
+        return _resolve_year(int(day), int(month))
+    return found
+
+
+@functools.lru_cache(maxsize=8192)
+def _parse_text(value: str, month_first: bool) -> str:
+    """`parse_date` for text, kept: a sheet repeats the same few hundred
+    values -- names, "בית", the dates -- across every layout tried."""
     cleaned = normalise(value)
     if not cleaned:
         return ""
@@ -114,6 +136,8 @@ def parse_date(value: Any) -> str:
     cleaned = without_weekday(cleaned)
     if not cleaned:
         return ""
+    if month_first:
+        cleaned = _swapped(cleaned)
     for fmt, pattern in _DATE_PATTERNS:
         if re.match(pattern, cleaned):
             try:
@@ -122,8 +146,58 @@ def parse_date(value: Any) -> str:
                 continue
     match = DAY_MONTH.match(cleaned)
     if match:
-        return _resolve_year(int(match.group(1)), int(match.group(2)))
+        return "%s%d.%d" % (_YEARLESS, int(match.group(1)), int(match.group(2)))
     return ""
+
+
+_YEARLESS = "yearless:"
+
+
+def _swapped(cleaned: str) -> str:
+    """`10/13/2024` written day first, so the patterns below read it."""
+    match = _NUMERIC_DATE.match(cleaned)
+    if not match:
+        return cleaned
+    first, separator, second, year = match.groups()
+    return separator.join(part for part in (second, first, year) if part)
+
+
+def month_first(values: Iterable[Any]) -> bool:
+    """Whether a line of dates is written month first (`10/13/2024`).
+
+    An Israeli sheet writes the day first, and that is the default; Excel on
+    an American locale writes the month first, and `10/12/2024` reads as two
+    different days depending on which. The line settles it: a part above 12
+    can only be a day, and failing that, the order that makes the dates run
+    on from one column to the next is the one the file meant.
+    """
+    pairs = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        match = _NUMERIC_DATE.match(without_weekday(value))
+        if match:
+            pairs.append((int(match.group(1)), int(match.group(3))))
+    if any(first > 12 for first, _second in pairs):
+        return False
+    if any(second > 12 for _first, second in pairs):
+        return True
+    return _runs_on(values, True) > _runs_on(values, False)
+
+
+def _runs_on(values: Iterable[Any], swapped: bool) -> int:
+    """How many neighbouring dates follow on within a week, read one way."""
+    found = [parse_date(value, swapped) for value in values if isinstance(value, str)]
+    days = [datetime.date.fromisoformat(day) for day in found if day]
+    return sum(1 for before, after in zip(days, days[1:]) if 0 <= (after - before).days <= 7)
+
+
+def split_note(part: str):
+    """`(name, note)`: a person's name with any handover word taken off."""
+    words = re.split(r"[\s\-–—()]+", part or "")
+    notes = [word for word in words if word in _NOTE_WORDS]
+    name = " ".join(word for word in words if word and word not in _NOTE_WORDS)
+    return name.strip(), " ".join(notes)
 
 
 def _excel_serial(value: float) -> str:

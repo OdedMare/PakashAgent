@@ -58,6 +58,37 @@ for one will fail on the other. This is why there is no template.
 
 ---
 
+## Sample C — the unit's own sheet: people down the side, `date × shift` across, a tab per month
+
+```
+    │  06/10/2024 (merged ×3)  │  07/10/2024 (merged ×3)  │ …
+    │        ראשון             │          שני             │
+ שם │ בוקר │ צהריים │ לילה     │ בוקר │ צהריים │ לילה     │
+────┼──────┼────────┼──────────┼──────┼────────┼──────────┤
+הלל רדובסקי │      │        │          │ רוני │        │          │
+עלמה שדה    │ בית  │  בית   │  בית     │      │ עלמה   │          │
+גלי רותם    │      │ גלי חפיפה│        │      │        │          │
+```
+
+- **Rows** = people, their full name in column A, under a header cell `שם`.
+- **Columns** = one date merged across three shift sub-columns, with a
+  weekday row between the date and the shift names. The dates sit in row 1
+  on one tab and in row 2 under a title on another.
+- **Cells**: the person's *first* name where they work; `בית` across a
+  stretch at home and `חופש` on leave (both absences); `<name> חפיפה` or
+  `<name>-חפיפה` on a handover shift — the person works it, and the word is
+  kept as the row's note.
+- **Dates are written either way round.** One copy writes `13/10/2024`,
+  another, saved on an American locale, `10/13/2024`. The header line
+  decides which (a part above 12, else the order that runs on day to day).
+- **Width**: a tab per month (אוקטובר, נובמבר, דצמבר, ינואר 25), or one tab
+  carrying the whole year out to column AEB. The preview opens on the month
+  covering today and takes any other run of dates.
+- Cell colours (purple for a shift, grey for home) and the name column's
+  colours are presentation only; the text says the same thing.
+
+---
+
 ## What the importer must therefore do
 
 1. **Infer axis semantics, not just orientation.** Which axis is time; whether

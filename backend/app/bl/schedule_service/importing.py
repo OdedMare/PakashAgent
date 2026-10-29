@@ -13,15 +13,15 @@ import datetime
 from typing import Dict, List, Optional
 
 from app.bl.importer import infer, read_grids
+from app.bl.importer.interpretation import MAX_IMPORT_DAYS as _MAX_DAYS
 from app.bl.scheduler.slots import build_slots
 from app.bl.schedule_service.constants import ACTION_IMPORTED, IMPORTED_REASON
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.rows import iso, slot_index, text
 from app.common.errors import AgentError, AppError
+from app.common.time_context import israel_today
 from app.dal.repository.schedules import ASSIGNED_BY_IMPORT, SOURCE_MANAGER
 
-# Longest period one import may open; the same ceiling a calendar view reads.
-_MAX_DAYS = 62
 
 
 class ImportPreview:
@@ -32,7 +32,8 @@ class ImportPreview:
     def preview(self, team_id: str, content: bytes, filename: str = "",
                 sheet: str = "", layout: Optional[dict] = None, week_start: str = "",
                 hint: str = "", names: Optional[Dict[str, str]] = None,
-                shifts: Optional[Dict[str, str]] = None, use_model: bool = True) -> dict:
+                shifts: Optional[Dict[str, str]] = None, use_model: bool = True,
+                date_from: str = "", date_to: str = "") -> dict:
         """What the file holds, read as the manager last corrected it."""
         profile = self._context.profile(team_id)
         grids = read_grids(content, filename)
@@ -40,7 +41,8 @@ class ImportPreview:
         title, grid = _sheet(grids, sheet, profile)
         result = infer(grid, profile, layout=layout,
                        mapper=self._mapper if use_model else None,
-                       week_start=week_start, hint=hint, names=names, shifts=shifts)
+                       week_start=week_start, hint=hint, names=names, shifts=shifts,
+                       date_from=date_from, date_to=date_to)
         result.update(filename=filename, sheets=titles, sheet_name=title,
                       overlaps=self._overlaps(team_id, result["starts_on"], result["ends_on"]))
         return result
@@ -57,10 +59,12 @@ class ImportPreview:
 
 
 def _sheet(grids, wanted: str, profile: dict):
-    """The sheet asked for, else the one detection reads most out of.
+    """The sheet asked for, else the month on today, else the one detection
+    reads most out of.
 
-    A workbook often opens on an instructions tab; trying each tab without
-    the model is cheap and picks the schedule rather than the cover page.
+    A workbook often opens on an instructions tab, and a unit keeps one tab
+    per month (אוקטובר, נובמבר, דצמבר); trying each tab without the model is
+    cheap, and the one covering today is the one the manager is working in.
     """
     if wanted:
         for title, grid in grids:
@@ -69,15 +73,17 @@ def _sheet(grids, wanted: str, profile: dict):
         raise AgentError("הגיליון שנבחר לא נמצא בקובץ")
     if len(grids) == 1:
         return grids[0]
-    best, best_rows = grids[0], -1.0
+    today = israel_today().isoformat()
+    best, best_key = grids[0], (False, -1.0)
     for title, grid in grids:
         try:
             found = infer(grid, profile)
         except AgentError:
             continue
-        rows = len(found["assignments"]) * found["confidence"]
-        if rows > best_rows:
-            best, best_rows = (title, grid), rows
+        covers = found["file_starts_on"] <= today <= found["file_ends_on"]
+        key = (covers, len(found["assignments"]) * found["confidence"])
+        if key > best_key:
+            best, best_key = (title, grid), key
     return best
 
 
@@ -218,6 +224,8 @@ def _placements(rows: List[dict], index: dict, reason: str) -> List[dict]:
     for row in rows:
         slot_id = index.get((row["shift"], row["date"]))
         if slot_id is not None:
+            # The file's own word for the row ("חפיפה") rides on the reason.
+            said = reason + (" — " + row["reason"][:60] if row.get("reason") else "")
             placements.append({"slot_id": slot_id, "employee": row["employee"],
-                               "reason": reason, "source": ASSIGNED_BY_IMPORT})
+                               "reason": said, "source": ASSIGNED_BY_IMPORT})
     return placements

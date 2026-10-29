@@ -157,6 +157,17 @@ export function ImportSchedule({ employees, shiftNames, onImported, onClose }: {
                       onChange={(value) => remap({ week_start: value })} />
                   </label>
                 ) : null}
+                {/* A sheet holding more than one import can store opens on
+                    one month; these pick any other run of its dates. */}
+                {preview.file_starts_on && preview.file_starts_on !== preview.file_ends_on ? (
+                  <span className="import-inline">טווח לייבוא
+                    <DateInput value={preview.starts_on} min={preview.file_starts_on} max={preview.file_ends_on}
+                      aria-label="מתאריך" onChange={(value) => remap({ date_from: value, date_to: preview.ends_on })} />
+                    עד
+                    <DateInput value={preview.ends_on} min={preview.file_starts_on} max={preview.file_ends_on}
+                      aria-label="עד תאריך" onChange={(value) => remap({ date_from: preview.starts_on, date_to: value })} />
+                  </span>
+                ) : null}
               </div>
               {preview.alternatives.length ? (
                 <div className="import-alternatives" aria-label="קריאות אחרות">
@@ -422,7 +433,7 @@ function RowsPreview({ preview }: { preview: ImportPreview }) {
       <table className="import-table">
         <tbody>
           {rows.slice(0, ROWS_SHOWN).map((row, index) => (
-            <tr key={index}><td>{displayDate(row.date)}</td><td>{row.shift || "—"}</td><td>{row.employee}</td></tr>
+            <tr key={index}><td>{displayDate(row.date)}</td><td>{row.shift || "—"}</td><td>{row.employee}</td><td>{row.reason ?? ""}</td></tr>
           ))}
         </tbody>
       </table>
