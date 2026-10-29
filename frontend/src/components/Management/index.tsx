@@ -763,6 +763,8 @@ export function Management({
             dayCycles={overview?.profile?.workplace?.day_cycles}
             disabled={agent.busy || agent.working}
             onSaveProfile={state.saveProfile}
+            onPreviewDeparture={state.previewDeparture}
+            onDepart={state.depart}
             onPrepare={(message) => {
               // The picks become a plan in the conversation, where approving
               // it is the one write path (D12); the server reads this wording
