@@ -124,7 +124,7 @@ the setup form owns its shape.
 - **A pending constraint request is never an `availability` row.** Promoting one
   is `bl/`'s job and happens only on the manager's approval; writing it here on
   submission would let an employee move the audit's arithmetic by asking, which
-  reverses [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-).
+  reverses [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34).
 - **`change_log` is append-only.** Never update or delete a row. It is the only
   history the system has ([D4](../../../docs/DECISIONS.md#d4--living-schedule-not-versioned)).
 - **`acknowledged_at` and `last_seen_at` are different columns on purpose.**
@@ -142,6 +142,6 @@ the setup form owns its shape.
   meant. `move_assignment` deliberately leaves it alone — dragging a
   hand-placed shift does not make it the agent's.
 - A schedule is edited in place. There are no version rows and no rollback.
-- Shift names are data, not enums — they come from `workplace_profile`.
+- Shift names are data, not enums — they come from the profile (`team_profiles.profile`).
 - SQL lives here and nowhere else. `bl/` never imports `psycopg`.
 - Employee personal details are never written to logs.

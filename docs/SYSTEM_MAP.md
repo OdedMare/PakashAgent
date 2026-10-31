@@ -132,7 +132,7 @@ PostgreSQL הוא המצב המשותף היחיד (D35):
 - נחפפים (`service_type` overlap) מקבלים משתנים אבל לא תופסים תקן: רק לצד חונך (`trainers` שלהם, אחרת מי ש-`can_train`, אחרת כל מי שנספר), לא יותר נחפפים מאנשים נספרים במשמרת, ועד חלק רגיל או `shadow_shifts_per_week` של מדיניות החפיפה.
 - אילוצים קשיחים (`rules.py`): תקן המשמרת, מנוחה מינימלית, ימים רצופים ותקרת שעות שבועית, לפי אותם ספים של ה-audit (`policy()`), כולל עד 14 ימי היסטוריה ושאר הטיוטה.
 - בקשות מובנות (`requests.py`, מ-`bl/schedule_requests.py`): בקשה קשיחה היא אילוץ, רכה היא מחיר במטרה, ו-`prefer` הוא פרס. גם זמינות רכה מתומחרת.
-- פתרון בשני שלבים (`solve.py`): קודם כיסוי (משמרות לא מאוישות, תפקידים חסרים, אחמ"ש), ואז, בלי לוותר על הכיסוי, משאלות, סוגרים בסגירה שלהם, איזון שעות ולילות, ויום חופש בין משמרות (`fairness.py`). בנייה ששומרת לוח מתחילה את השלב הראשון מהלוח הזה.
+- פתרון בשלבים (`solve.py`): קודם כיסוי (משמרות לא מאוישות, תפקידים חסרים, אחמ"ש), ואז, בלי לוותר על הכיסוי, משאלות, סוגרים בסגירה שלהם, איזון משמרות ולילות, ומנוחה ארוכה ככל האפשר בין משמרות (`fairness.py`). בנייה ששומרת לוח (D37) מוסיפה שלב באמצע: השלב הראשון שומר כמה שיותר מהלוח בלי לוותר על כיסוי, השלב האמצעי מקבע את השורות האלה וממלא סביבן את השינוי, והשלב האחרון מזיז שורה קיימת רק אם התוצאה טובה ממש מהתוצאה המקובעת. כך אותו שינוי לא מזיז אנשים בבנייה אחת ואף אחד בבנייה הבאה.
 - איזון: יעד לכל אדם ב-water-filling (הביקוש מחולק שווה, לא מתחת למה שכבר יש לו ולא מעל מה שהוא יכול). המרחק מהיעד והעומס הגבוה ביותר מתומחרים לכל יחידת עומס, בלי תלות בגודל הצוות, כך שמשמרת אחת של איזון זולה ממשאלה רכה.
 - כל שורה מקבלת סיבה (D8). משמרת שאי אפשר לאייש מדווחת ב-`notes` וכאזהרה, ולא נחסמת. מגבלת הזמן והמעבדים הן הגדרות (`solver_time_limit_seconds`, `solver_workers`).
 
@@ -166,16 +166,16 @@ PostgreSQL הוא המצב המשותף היחיד (D35):
 2. `ManagerChatService.start_turn()`:
    - אם ההודעה היא אישור תוכנית ("מאשר"), היא מופעלת מיד ואין קריאה למודל.
    - אחרת נשמרת הודעה בסטטוס `working` ונכנס job מסוג `manager_chat` לתור.
-3. ה-worker מריץ את `ManagerChatService.reply()`. `bl/manager_chat.py` הוא facade, והעבודה עצמה מתבצעת ב-`bl/chat_reply.py`:
+3. ה-worker מריץ את `ManagerChatService.reply()`. `bl/chat/service.py` הוא facade, והעבודה עצמה מתבצעת ב-`bl/chat/reply.py`:
    1. טוען את הסידור, הפרופיל, האילוצים מהשבוע האחרון ואילך, ההעדפות, 12 שינויים אחרונים ועד 32 הודעות שיחה.
-   2. **מסלולים מהירים, בלי מודל:** היעדרות ("X חולה בשני ושלישי", "X חולה עד 31.12") נקראת ומתוכננת ב-`bl/absence/` עוד בתוך `start_turn`, כך שתשובת השליחה כבר מכילה את התוכנית (D36). "עד X" לבד מתחיל מהיום; עד 120 יום. `ChatTools.replacement_lookup` (`bl/chat_tools.py`) עונה על "מי יכול להחליף".
-   3. אחרת יש עד **7 סבבים** של `complete_json(manager_chat.md)`, ב-streaming: התשובה נשמרת על ההודעה תוך כדי כתיבה ואות "chat" ב-SSE גורם לדפדפן לקרוא מיד. ה-payload מסודר מהאיטי-להשתנות למהיר (פרופיל, סידור … שיחה, בקשה) והשעון בסוף, כדי שה-prefix יישמר ב-cache של השרת. בכל סבב המודל מבקש עד 4 כלים (`_MAX_CALLS`) מ-`bl/tools/` ומ-`bl/chat_tools.py` (קריאה בלבד), והתוצאות נוספות לסבב הבא.
-   4. כשהמודל מחזיר תוכנית, `bl/chat_planner.py` (`prepare`) מאמת ומריץ audit. התוכנית יכולה להיות שינויים (מושב שהסרה מפנה ממולא על ידי הפותר, `chat_vacancies.py`: שאר השורות pins, מי שיצא `avoid` קשיח, ורק השיבוצים למושבים שהתפנו נכנסים לתוכנית; `leave_vacant` משאיר ריק), יצירה (`chat_generation.py`: פותר האילוצים רץ **בתוך** התור, עם cache התרגומים והגדרות הפותר השמורות), שינוי מבנה משמרות (`chat_lifecycle.py`: הפותר בונה מחדש ושומר כל שיבוץ קיים שעדיין מתאים), ניהול בקשות או אילוצים (`chat_constraints.py`: עד 126 בתוכנית; דחייה מציינת את השורה, הערך והאפשרויות התקינות כדי שהמודל יתקן שורה אחת).
+   2. **מסלולים מהירים, בלי מודל:** היעדרות ("X חולה בשני ושלישי", "X חולה עד 31.12") נקראת ומתוכננת ב-`bl/absence/` עוד בתוך `start_turn`, כך שתשובת השליחה כבר מכילה את התוכנית (D36). "עד X" לבד מתחיל מהיום; עד 120 יום. `ManagerChatTools.replacement_lookup` (`bl/chat/tools.py`) עונה על "מי יכול להחליף".
+   3. אחרת יש עד **7 סבבים** של `complete_json(manager_chat.md)`, ב-streaming: התשובה נשמרת על ההודעה תוך כדי כתיבה ואות "chat" ב-SSE גורם לדפדפן לקרוא מיד. ה-payload מסודר מהאיטי-להשתנות למהיר (פרופיל, סידור … שיחה, בקשה) והשעון בסוף, כדי שה-prefix יישמר ב-cache של השרת. בכל סבב המודל מבקש עד 4 כלים (`_MAX_CALLS`) מ-`bl/tools/` ומ-`bl/chat/tools.py` (קריאה בלבד), והתוצאות נוספות לסבב הבא.
+   4. כשהמודל מחזיר תוכנית, `bl/chat/planner.py` (`prepare`) מאמת ומריץ audit. התוכנית יכולה להיות שינויים (מושב שהסרה מפנה ממולא על ידי הפותר, `chat/vacancies.py`: שאר השורות pins, מי שיצא `avoid` קשיח, ורק השיבוצים למושבים שהתפנו נכנסים לתוכנית; `leave_vacant` משאיר ריק), יצירה (`chat/generation.py`: פותר האילוצים רץ **בתוך** התור, עם cache התרגומים והגדרות הפותר השמורות), שינוי מבנה משמרות (`chat/lifecycle.py`: הפותר בונה מחדש ושומר כל שיבוץ קיים שעדיין מתאים), ניהול בקשות או אילוצים (`chat/constraints.py`: עד 126 בתוכנית; דחייה מציינת את השורה, הערך והאפשרויות התקינות כדי שהמודל יתקן שורה אחת).
    5. אם יש אזהרות, התוכנית חוזרת למודל לבדיקה פעם אחת. אם הקוד דחה אותה, יש עד 2 תיקונים.
    6. בסוף ההודעה נשמרת עם התוכנית בסטטוס `pending`.
 4. הדפדפן דוגם את השיחה (`useManagerChat.ts`) ומציג את השלבים בזמן אמת. עצירה: `/stop`. עריכת הודעה מחליפה אותה ואת מה שאחריה; "ענה שוב" הוא `POST /{id}/regenerate`. אף אחד מהם לא מבטל תוכנית שכבר הופעלה.
 5. המנהל מאשר: `POST /api/agent/chats/{id}/messages/{mid}/apply`.
-   - הקוד ב-`bl/chat_apply.py`: נעילת שורה (`chat_approval`), ובדיקה שה-fingerprint של המצב לא השתנה מאז ההצעה.
+   - הקוד ב-`bl/chat/apply.py`: נעילת שורה (`chat_approval`), ובדיקה שה-fingerprint של המצב לא השתנה מאז ההצעה.
    - הפעלה דרך `OperationApplier`, `create_blank`, `apply_management` ועדכון הפרופיל, ורישום ביומן.
 6. דחייה: `/dismiss`.
 
@@ -269,7 +269,7 @@ PostgreSQL הוא המצב המשותף היחיד (D35):
 
 | זרימה | פעולה ב-UI | role | prompt | קריאות | איפה רץ |
 |---|---|---|---|---|---|
-| צ'אט מנהל (`bl/chat_reply.py`, flow `planner`) | AgentChat | default | `manager_chat.md` (כ-21K תווים) | 1–7 לכל הודעה, ועוד יצירה פנימית | worker |
+| צ'אט מנהל (`bl/chat/reply.py`, flow `planner`) | AgentChat | default | `manager_chat.md` (כ-21K תווים) | 1–7 לכל הודעה, ועוד יצירה פנימית | worker |
 | יצירה | GenerateDialog / צ'אט | – | – | 0 (פותר אילוצים) | worker |
 | תרגום הנחיות (`bl/directive_agent/`) | GenerateDialog / צ'אט | advanced | `scheduler_directives.md` | 1–4 לכל span (לולאת כלים), רק למקורות שלא ב-cache | worker |
 | תרגום קבוע (`bl/compiled_sources/`) | שמירת פרופיל או העדפה | advanced | `scheduler_directives.md` (`mode: compile`) | 1–4 לכל שמירה | worker |
@@ -343,7 +343,7 @@ Briefing, Ask, Simulate ו-Tool כבר הוסרו, וגם `Scheduler.generate()`
 ### מה מוחקים ומה חייב להישאר, לכל מועמד
 | רכיב | מה מוחקים | מה **חייב להישאר** (ומי משתמש בו) | טסטים שמושפעים |
 |---|---|---|---|
-| **Propose / apply** (`/schedule/propose`, `/schedule/apply`) | שני ה-routes, `ChangeService.propose`, `prompts/changes.md` והמחלקה `ChangeAgent` | `changes/proposal.py`, `schema.py`, `values.py`, `targets.py`, `questions.py`, `profile_ops.py` והקבועים `OP_*` (הצ'אט, ההחלפות, `simulate`). `chat_state.py` מייבא את `_closures_for_model` ו-`_schedule_for_model` מ-`changes/agent.py`, אז קודם מעבירים אותן ל-`changes/values.py`, ורק אחר כך מוחקים את `agent.py`. `ChangeService.apply` נשאר, כי אישור החלפה משתמש בו | `test_change_operations.py`, `test_clarification.py`, ומבחני ה-change agent ב-`test_scheduler.py` (החלק "the change agent") |
+| **Propose / apply** (`/schedule/propose`, `/schedule/apply`) | שני ה-routes, `ChangeService.propose`, `prompts/changes.md` והמחלקה `ChangeAgent` | `changes/proposal.py`, `schema.py`, `values.py`, `targets.py`, `questions.py`, `profile_ops.py` והקבועים `OP_*` (הצ'אט, ההחלפות, `simulate`). `chat/state.py` מייבא את `_closures_for_model` ו-`_schedule_for_model` מ-`changes/agent.py`, אז קודם מעבירים אותן ל-`changes/values.py`, ורק אחר כך מוחקים את `agent.py`. `ChangeService.apply` נשאר, כי אישור החלפה משתמש בו | `test_change_operations.py`, `test_clarification.py`, ומבחני ה-change agent ב-`test_scheduler.py` (החלק "the change agent") |
 | **Reads לא בשימוש** (`/constraints/list`, `/history/list`, `/current`, `/requests`, `/identities`, `/swaps`, `/employee/swaps/incoming`) | רק ה-routes | מתודות ה-repository, אם routes אחרים קוראים להן | לבדוק את `test_schedule_api.py`, `test_employee_api.py` ו-`test_swap_api.py` |
 
 ### סדר מומלץ

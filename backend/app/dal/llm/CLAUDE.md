@@ -316,7 +316,7 @@ first one's client, silently billing and authenticating as the wrong account.
 - Errors leaving this package are `AgentError` in Hebrew.
 - Never log API keys, or full prompts containing employee personal details.
 - Adding a rung to the ladder means adding it to `ladder.attempts` — do not scatter
-  fallback logic through `_complete`.
+  fallback logic through `_until_json`, the loop that walks it.
 - Routing is `model_roles.py` and nowhere else. A flow gets a model by being
   in the table, not by a branch at the call site.
 - Keep endpoint and credential routing beside model routing in
@@ -326,4 +326,4 @@ first one's client, silently billing and authenticating as the wrong account.
   the URL so two roles on one provider with different keys stay separate.
 - **Never fail over to another model.** See the routing section.
 - **Nothing in `bl/audit/` may call this.** The audit is arithmetic precisely so
-  it cannot be hallucinated ([D3](../../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+  it cannot be hallucinated ([D3](../../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)).

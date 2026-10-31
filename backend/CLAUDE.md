@@ -74,12 +74,12 @@ uvicorn app.main:app --reload
   instruction into structured requests (`bl/schedule_requests.py`), kept
   per sentence so a standing rule is translated once (D32). What does not
   translate is named in the build's notes.
-- `bl/manager_chat.py` + `bl/chat_*.py` — **the agent.** One persistent
+- `bl/chat/` — **the agent.** One persistent
   conversation per manager: questions answered with read-only tools,
   replacement plans, generation previews, profile and constraint changes.
-  A turn prepares a plan and writes nothing; `chat_apply.py` applies it on
+  A turn prepares a plan and writes nothing; `chat/apply.py` applies it on
   the manager's approval, atomically, after checking nothing moved. A seat
-  a planned removal vacates is filled by the solver (`chat_vacancies.py`).
+  a planned removal vacates is filled by the solver (`chat/vacancies.py`).
 - `bl/changes/` — conversational edits; asks for the boss's reason, proposes a
   replacement with justification, applies on confirmation. Proposes only — it is
   handed no repository, so it cannot write.
@@ -136,7 +136,7 @@ uvicorn app.main:app --reload
   Python.** Eight read-only operations (`read_period`, `team_overview`,
   `employee_state`, `coverage_gaps`, `validate_placement`,
   `find_replacements`, `publish_readiness`, `profile_gaps`); the chat adds
-  its own read tools in `chat_tools.py`. No LLM call anywhere in the file, and
+  its own read tools in `chat/tools.py`. No LLM call anywhere in the file, and
   no write: it holds a repository and uses it for reads only (D19).
 - `bl/planner/` — what the manager chat shares with the no-model reader:
   the question and tool-call schema, and deterministic answers over
@@ -152,7 +152,7 @@ uvicorn app.main:app --reload
   evenly (a bare "עד 31.12" runs from today; spans up to 120 days), and hands
   `ChatPlanBuilder.prepare` a model-shaped turn — so the plan
   meets every check a model plan does. Run inline by `start_turn` before the
-  model loop (`bl/chat_fast.py`); anything it cannot read goes to the model.
+  model loop (`bl/chat/fast.py`); anything it cannot read goes to the model.
   Also behind the read-only replacement tab, `GET /api/agent/replacements`.
 - `bl/simulate/` — what a change *would* do, computed in memory. Handed no
   repository, so persisting nothing is a property of the wiring (D20). The
@@ -184,7 +184,7 @@ package's `__init__` docstring carries a table of which module owns what.
   does not reject a schedule, rewrite an assignment, or veto the manager.
   The solver is built from the same thresholds so its output is clean by the
   audit's own measure, but the audit itself stays advisory
-  ([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-), D34)
+  ([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34), D34)
   — a hand-made or edited schedule that breaks a rule still saves.
 - **The audit contains no LLM call.** Its entire value is being arithmetic that
   cannot be hallucinated. Pure functions over a roster; trivially unit-testable.
@@ -308,7 +308,7 @@ package's `__init__` docstring carries a table of which module owns what.
   carrying out a request would mean guessing which person, shift or date it
   means, the agent asks one focused question and proposes nothing. On the
   write path this is enforced **in code**, not by the prompt:
-  `changes._proposal` withdraws every operation naming an employee the
+  `changes/proposal.py` (through `questions.unresolved_people`) withdraws every operation naming an employee the
   roster cannot resolve — unknown, or shared by several people — exactly as
   it already withdraws one with no reason (D8). The two gates are separate
   and either can hold a proposal, but only one question is asked at a time:
@@ -355,7 +355,7 @@ package's `__init__` docstring carries a table of which module owns what.
   input calls no model (D34); a build whose sentences could not be
   translated still completes and says what it left out. In the chat, "who
   can replace…" is answered by `bl/intent/` and the tools before any model
-  round (`chat_tools.replacement_lookup`). The reader never guesses — an
+  round (`replacement_lookup` in `chat/tools.py`). The reader never guesses — an
   agent acting on a misread sentence with no model to blame is worse than
   one that asks.
 - **A preference is not a rule and never authorises a write**

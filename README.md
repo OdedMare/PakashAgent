@@ -9,7 +9,8 @@ The boss defines the workplace once in a structured, zero-token setup form.
 After that a constraint solver builds schedules, and the agent rearranges
 them on request in a conversation — always explaining what it did and why.
 Employees see the result and submit constraint requests and swaps; they do
-not edit it. (Importing schedules from files was removed.)
+not edit it. A schedule kept in a spreadsheet can be imported, in any
+layout, and the manager confirms what was read before anything is stored (D42).
 
 **Each team gets its own workspace**, opened by the operator in the
 צוות משמרות זהב console at `/admin` ([D28](docs/DECISIONS.md)). The boss logs

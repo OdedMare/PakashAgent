@@ -17,7 +17,7 @@ tables which module owns what. `importer/` reads the workplace's own files in an
 | `scheduler/` | Building a span: the grid, translating the manager's words, then the solver |
 | `solver/` | **The OR-Tools CP-SAT constraint solver that assigns every schedule** (D34), and holds the existing board when a change is absorbed (D37). No model |
 | `changes/` | Conversational edits and the change log |
-| `manager_chat.py`, `chat_*.py` | **The agent**: one saved conversation per manager, plans prepared per turn and applied only on approval (see below) |
+| `chat/` | **The agent**: one saved conversation per manager, plans prepared per turn and applied only on approval (see below) |
 | `employee_service/` | Identity claims, the personal view, constraint requests, swaps, the unread-change mark |
 | `learn/` | Candidate rules from the manager's repeated corrections. Proposes only |
 | `schedule_service/` | Persistence and orchestration around all three: propose, confirm, apply |
@@ -40,7 +40,7 @@ tables which module owns what. `importer/` reads the workplace's own files in an
 ## The division that defines this layer
 
 The solver assigns; the model talks; code audits. ([D34](../../../docs/DECISIONS.md),
-amending [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-))
+amending [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34))
 
 Who works which shift is solved by `solver/`, an optimisation over the
 roster, never generated. The model translates the manager's sentences into
@@ -102,10 +102,14 @@ and the build still completes.
   the distance from the target and the largest overload are priced, per
   unit of load and independent of team size: one shift of evenness is
   cheaper than a soft wish (`model.py`) and dearer than any one gap.
-- `solve.py` solves in two phases: coverage (unfilled seats, missing roles,
-  the shift manager) first — started from the kept board when a rebuild
-  keeps one (D37) — then, with coverage fixed as a ceiling and the first
-  answer as a hint, everything else. It writes a reason on every row,
+- `solve.py` solves coverage (unfilled seats, missing roles, the shift
+  manager) first, then, with coverage fixed as a ceiling and the first
+  answer as a hint, everything else. A rebuild that keeps a board (D37)
+  adds a phase between them: phase one keeps as much of the board as the
+  best coverage allows, the middle phase holds those rows and fills the
+  change in around them, and the last phase may move a kept row only if
+  its answer is strictly better than the held one — so the same change
+  does not move people on one build and nobody on the next. It writes a reason on every row,
   turns every priced term the answer still pays for into a note, and audits
   the result.
 
@@ -134,24 +138,25 @@ span boundary and keeps every finished one; a hand-placed row on a date not
 yet solved is a pin. `POST /generate` solves a whole period inside the
 request for callers that want the schedule back rather than a job.
 
-## `manager_chat.py` and `chat_*.py` — the agent
+## `chat/` — the agent
 
 The one place the manager talks to the agent; see
 [`docs/MANAGER_CHAT.md`](../../../docs/MANAGER_CHAT.md). A turn runs as a
-`manager_chat` job: `chat_reply.py` first tries the zero-model fast path
-(`chat_tools.team_question` for who works / who did the most / who is away
-when no one is named and the time is, and `chat_tools.replacement_lookup`,
-over `intent/` and `tools/`), then up to
-seven model rounds that may call read-only tools, then `chat_planner.py`
+`manager_chat` job: `chat/reply.py` first tries the zero-model fast path
+(`chat/fast.py`: an absence through `bl/absence/`, then `team_question` in
+`chat/tools.py` for who works / who did the most / who is away when no one
+is named and the time is, then `replacement_lookup`, over `intent/` and
+`tools/`), then up to
+seven model rounds that may call read-only tools, then `chat/planner.py`
 validates and audits the plan the model proposes — changes (a seat a
 removal leaves empty is filled by the solver over the touched dates (D40),
-`chat_vacancies.py`: the other rows are pins, whoever left is a hard
+`chat/vacancies.py`: the other rows are pins, whoever left is a hard
 `avoid`, and only picks on vacated slots join the plan; `leave_vacant`
 keeps a seat empty on request; a model-picked cover for a seat the same
 plan vacates is dropped so the solver fills it), a generation
-preview (the solver, through `chat_generation.py`), a vocabulary rebuild
-(`chat_lifecycle.py`, keeping existing rows where they fit), profile or
-constraint edits (`chat_constraints.py`: up to 126 per plan; a refusal names
+preview (the solver, through `chat/generation.py`), a vocabulary rebuild
+(`chat/lifecycle.py`, keeping existing rows where they fit), profile or
+constraint edits (`chat/constraints.py`: up to 126 per plan; a refusal names
 the row, the offending value and the valid names or shifts so the model can
 repair that one row; whole-day words read as an empty shift, "8" as 08:00,
 an exact repeated row once; a row naming a `role` instead of an employee is one
@@ -160,12 +165,12 @@ or shifts it adds or changes; the rest stay as they are. Before the model loop,
 `bl/absence/` answers an absence in code (D36): a bare "עד X" runs from the
 earliest other day named, or today; spans up to 120 days; shifts in several
 stored periods plan the earliest and list the rest. Nothing is written until the manager
-approves; `chat_apply.py` then applies the stored plan in one transaction,
-after checking the state it was prepared against has not moved. `chat_state.py` gathers
+approves; `chat/apply.py` then applies the stored plan in one transaction,
+after checking the state it was prepared against has not moved. `chat/state.py` gathers
 what a turn starts from — its payload is serialised slowest-changing first
 (profile, schedule … conversation, request) so the server's prefix cache
 survives a new turn, and the schedule in it is written out for the model as
-`schedule_for_chat` (per date and shift: seats and names, no reasons); `chat_draft.py` saves the reply as it streams.
+`schedule_for_chat` (per date and shift: seats and names, no reasons); `chat/draft.py` saves the reply as it streams.
 
 ## `changes/`
 
@@ -356,7 +361,7 @@ whole week, so hours bind nothing until the manager sets a limit and load is
 evened in shifts), so a solved schedule is clean by this measure; a
 hand-edited one may not be, and that is the manager's call. If you find
 yourself giving the audit veto power, re-read
-[D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-) and D34.
+[D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34) and D34.
 
 On-call shifts may weight differently — read the weighting from the profile's
 shift vocabulary rather than assuming.
