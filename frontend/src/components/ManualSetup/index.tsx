@@ -44,6 +44,7 @@ const EXIT_PATTERNS = {
   round: "סבב א / ב",
   triplet: "תלתון א / ב / ג",
   quad: "רבעון א / ב / ג / ד — שבת אחת מכל ארבע",
+  quint: "חמישון א–ה — 1ל5, שבת אחת מכל חמש",
   hamshushim: "חמשושים",
   shushim: "שושים",
 } as const;
@@ -82,7 +83,7 @@ export function ManualSetup({
       text(initialWorkplace[`${pattern}_first_closure_group`])
         || (rotationMode === pattern ? text(initialWorkplace.first_closure_group) : ""),
     );
-    return { round: stored("round"), triplet: stored("triplet"), quad: stored("quad") };
+    return { round: stored("round"), triplet: stored("triplet"), quad: stored("quad"), quint: stored("quint") };
   });
   const [closureWindows, setClosureWindows] = useState<RotationClosureWindow[]>(
     profile.workplace?.rotation_closure_windows ?? [],
@@ -196,6 +197,8 @@ export function ManualSetup({
     triplet_first_closure_date: anchors.triplet,
     quad_first_closure_group: "א",
     quad_first_closure_date: anchors.quad,
+    quint_first_closure_group: "א",
+    quint_first_closure_date: anchors.quint,
     rotation_closure_windows: closureWindows,
   };
   const timedShifts = shifts.filter(named).map((shift) => ({ name: text(shift.name), start_time: text(shift.start_time), end_time: text(shift.end_time) }));

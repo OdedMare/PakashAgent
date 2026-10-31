@@ -9,6 +9,7 @@ const EXIT_PATTERN_FILTERS = [
   ["round", "סבב"],
   ["triplet", "תלתון"],
   ["quad", "רבעון"],
+  ["quint", "חמישון"],
   ["hamshushim", "חמשוש"],
   ["shushim", "שוש"],
 ] as const;

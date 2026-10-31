@@ -918,6 +918,7 @@ const EXIT_PATTERN_LABELS: Record<string, string> = {
   round: "סבב א / ב",
   triplet: "תלתון א / ב / ג",
   quad: "רבעון א / ב / ג / ד",
+  quint: "חמישון (1ל5) א–ה",
   hamshushim: "חמשושים",
   shushim: "שושים",
 };
@@ -946,6 +947,7 @@ function rawText(value: unknown): string {
 }
 
 function patternGroups(pattern: string, cycles: DayCycle[]): string[] {
+  if (pattern === "quint") return ["א", "ב", "ג", "ד", "ה"];
   if (pattern === "quad") return ["א", "ב", "ג", "ד"];
   if (pattern === "triplet") return ["א", "ב", "ג"];
   if (pattern === "round") return ["א", "ב"];
@@ -957,7 +959,7 @@ function exitPatternLabel(person: Record<string, unknown>, cycles: DayCycle[]): 
   if (isDayCycle(pattern)) return cycleName(cycles, pattern);
   if (EXIT_PATTERN_LABELS[pattern]) return EXIT_PATTERN_LABELS[pattern];
   const group = text(person.rotation_group);
-  return group === "ד" ? EXIT_PATTERN_LABELS.quad : group === "ג" ? EXIT_PATTERN_LABELS.triplet : EXIT_PATTERN_LABELS.round;
+  return group === "ה" ? EXIT_PATTERN_LABELS.quint : group === "ד" ? EXIT_PATTERN_LABELS.quad : group === "ג" ? EXIT_PATTERN_LABELS.triplet : EXIT_PATTERN_LABELS.round;
 }
 
 function strings(value: unknown): string[] {

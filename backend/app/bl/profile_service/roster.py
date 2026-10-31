@@ -10,8 +10,8 @@ from app.bl.shared import HEBREW_WEEKDAYS, weekday_key
 from app.common.errors import AgentError
 
 _SERVICE_TYPES = ("standard", "overlap", "reserve")
-_EXIT_PATTERNS = ("round", "triplet", "quad", "hamshushim", "shushim")
-_GROUPED = ("round", "triplet", "quad")
+_EXIT_PATTERNS = ("round", "triplet", "quad", "quint", "hamshushim", "shushim")
+_GROUPED = ("round", "triplet", "quad", "quint")
 # A day cycle is named by its id; whether that id exists is checked against
 # the workplace in `validate_rotation_groups`, once both halves are merged.
 _DAY_CYCLE = re.compile(r"^cycle:[A-Za-z0-9_-]{1,32}$")
@@ -144,6 +144,6 @@ def validate_first_profile(profile: dict) -> None:
         person.get("exit_pattern") in _GROUPED and not text(person.get("rotation_group"))
         for person in profile.get("employees") or []
     ):
-        raise AgentError("יש לבחור קבוצת סבב, תלתון או רבעון לכל איש צוות מתאים")
+        raise AgentError("יש לבחור קבוצת סבב, תלתון, רבעון או חמישון לכל איש צוות מתאים")
     if not profile.get("shifts"):
         raise AgentError("יש להוסיף לפחות סוג משמרת אחד")

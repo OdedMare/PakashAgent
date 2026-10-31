@@ -60,7 +60,7 @@ def build_router(service, guards, schedules=None) -> APIRouter:
         weeks = min(max(request.weeks, 1), 26)
         return {"error": "", "cycles": {
             pattern: weekend_preview(profile, pattern, start, weeks)
-            for pattern in ("round", "triplet", "quad")
+            for pattern in ("round", "triplet", "quad", "quint")
         }}
 
     @router.delete("/shifts/{name}")

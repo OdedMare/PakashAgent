@@ -8,9 +8,10 @@ The cycle is anchored, not inferred. `round` and `triplet` may each name their
 own Saturday and first group; the legacy `first_closure_*` pair is a fallback.
 Without an anchor there is no cycle, and nothing is guessed.
 
-Five patterns: `round` (א, ב), `triplet` (תלתון: א, ב, ג), `quad` (רבעון:
-א, ב, ג, ד — one weekend in four), `hamshushim` (from Thursday) and
-`shushim` (from Friday). Round, triplet and quad set *who*
+Six patterns: `round` (א, ב), `triplet` (תלתון: א, ב, ג), `quad` (רבעון:
+א, ב, ג, ד — one weekend in four), `quint` (חמישון, 1ל5: א–ה — one weekend
+in five), `hamshushim` (from Thursday) and `shushim` (from Friday). The
+lettered cycles set *who*
 closes; the other two set *how long*. **A closure weekend runs Thursday to
 Sunday morning** — the Sunday tail covers the day's first shift by the clock,
 found from declared start times rather than a Hebrew name (D9). This is the

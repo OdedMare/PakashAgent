@@ -20,6 +20,7 @@ const PATTERN_LABELS: Record<string, string> = {
   round: "סבב",
   triplet: "תלתון",
   quad: "רבעון",
+  quint: "חמישון",
   hamshushim: "חמשושים",
   shushim: "שושים",
 };
@@ -37,12 +38,12 @@ export function rotationLabel(pattern: unknown, group: unknown, cycles?: DayCycl
   // every person the roster is silent about would be labelled "סבב".
   if (!text(pattern) && !arm) return "";
   // The same fallback `TeamPanel.exitPatternLabel` applies to a row whose
-  // pattern was never written: a "ד" arm only exists in a רבעון and a "ג"
-  // arm in a triplet, so the group names the cycle when the cycle does not
+  // pattern was never written: an "ה" arm only exists in a חמישון, a "ד" arm
+  // in a רבעון and a "ג" arm in a triplet, so the group names the cycle when the cycle does not
   // name itself. Anything else is the default round.
   const name =
     PATTERN_LABELS[text(pattern)] ??
-    (arm === "ד" ? PATTERN_LABELS.quad : arm === "ג" ? PATTERN_LABELS.triplet : PATTERN_LABELS.round);
+    (arm === "ה" ? PATTERN_LABELS.quint : arm === "ד" ? PATTERN_LABELS.quad : arm === "ג" ? PATTERN_LABELS.triplet : PATTERN_LABELS.round);
   return arm ? `${name} ${arm}` : name;
 }
 

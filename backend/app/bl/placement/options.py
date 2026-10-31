@@ -111,9 +111,9 @@ def _option(context, person, shift_name, slot_date, day, load, shift_names) -> d
 
 
 def _cycle_of(profile: dict, person: dict) -> str:
-    """Which cycle a person turns on -- ג and ד name a תלתון or a רבעון, so
-    the label needs the cycle, not just the letter."""
+    """Which cycle a person turns on -- ג, ד and ה name a תלתון, a רבעון or a
+    חמישון, so the label needs the cycle, not just the letter."""
     pattern = rotation.exit_pattern(profile, person)
-    if pattern in ("round", "triplet", "quad", "hamshushim", "shushim") or rotation.is_day_cycle(pattern):
+    if pattern in ("round", "triplet", "quad", "quint", "hamshushim", "shushim") or rotation.is_day_cycle(pattern):
         return pattern
     return rotation.cycle_of_group(profile, values.text(person.get("rotation_group")))
