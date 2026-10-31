@@ -1,6 +1,6 @@
 """Strict structured outputs: the strict form, and the reply read back."""
 
-from app.bl.chat_schema import CHAT_SCHEMA
+from app.bl.chat.schema import CHAT_SCHEMA
 from app.bl.directive_agent.schema import TURN_SCHEMA
 from app.dal.llm.ladder import attempts
 from app.dal.llm.strict_schema import drop_nulls, to_strict

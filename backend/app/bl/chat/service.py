@@ -8,11 +8,11 @@ import datetime
 import logging
 
 from app.bl.absence import AbsenceOptions
-from app.bl.chat_apply import ChatPlanApplier
-from app.bl.chat_planner import ChatPlanBuilder
-from app.bl.chat_reply import ManagerChatReply
-from app.bl.chat_tools import ManagerChatTools
-from app.bl.chat_contract import (
+from app.bl.chat.apply import ChatPlanApplier
+from app.bl.chat.planner import ChatPlanBuilder
+from app.bl.chat.reply import ManagerChatReply
+from app.bl.chat.tools import ManagerChatTools
+from app.bl.chat.contract import (
     approval_text, confirmation_question,
 )
 from app.bl.profile_service import ProfileService

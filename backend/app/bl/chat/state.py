@@ -1,16 +1,16 @@
 """What one manager-chat turn starts from: the facts the model reads first.
 
-Split from `chat_reply.py`, which runs the rounds; this only gathers. The
+Split from `reply.py`, which runs the rounds; this only gathers. The
 payload's order is load-bearing — the stable context comes first so inference
 servers can reuse its prefix across rounds and across turns
-(`chat_reply._model_input`, in `PAYLOAD_ORDER`).
+(`reply._model_input`, in `PAYLOAD_ORDER`).
 """
 
 import datetime
 from dataclasses import dataclass, field
 
 from app.bl.changes.agent import _closures_for_model, _schedule_for_model
-from app.bl.chat_schema import PROFILE_SECTIONS
+from app.bl.chat.schema import PROFILE_SECTIONS
 from app.bl.shared import iso
 from app.common.time_context import agent_time_context, israel_today
 

@@ -4,7 +4,7 @@ import copy
 import re
 
 from app.bl.changes.schema import CHANGE_RESPONSE_SCHEMA
-from app.bl.chat_contract import approval_text
+from app.bl.chat.contract import approval_text
 from app.bl.planner.schema import _QUESTION_SCHEMA, _TOOL_CALL_SCHEMA
 
 CHAT_SCHEMA = copy.deepcopy(CHANGE_RESPONSE_SCHEMA)
@@ -74,7 +74,7 @@ PROFILE_SECTIONS = (
 
 # A suggestion is a button that sends its text as the manager's next message.
 # One that reads as approval would turn a click on "an idea" into consent to
-# the pending plan (`chat_contract.approval_text`), so anything approving,
+# the pending plan (`contract.approval_text`), so anything approving,
 # confirming or executing is dropped here rather than trusted to the prompt.
 _APPROVING = re.compile(r"אשר|אישור|מאושר|תבצע|לבצע|^כן(?!\S)")
 _MAX_SUGGESTIONS = 3

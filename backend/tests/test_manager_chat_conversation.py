@@ -4,9 +4,9 @@ import datetime
 
 import pytest
 
-from app.bl.chat_draft import ReplyDraft, partial_reply
-from app.bl.chat_schema import suggestions
-from app.bl.chat_state import changes_since_reply
+from app.bl.chat.draft import ReplyDraft, partial_reply
+from app.bl.chat.schema import suggestions
+from app.bl.chat.state import changes_since_reply
 from app.common.errors import ConflictError
 from tests.test_manager_chat import TEAM, converse, setup, sickness, turn
 

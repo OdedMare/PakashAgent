@@ -3,17 +3,17 @@
 from app.bl.changes.proposal import build_proposal
 from app.bl.changes.questions import report_dropped
 from app.bl.changes.targets import bound_operations
-from app.bl.chat_constraints import affected_periods, constraint_impact, normalize_constraints
-from app.bl.chat_contract import (
+from app.bl.chat.constraints import affected_periods, constraint_impact, normalize_constraints
+from app.bl.chat.contract import (
     NeedsManager, RejectedPlan, add_coverage, audit_plan, changed_rows,
     confirmation_question, draft_schedule_ids, fingerprint, whole_day_request,
 )
-from app.bl.chat_generation import prepare_generation
-from app.bl.chat_lifecycle import (
+from app.bl.chat.generation import prepare_generation
+from app.bl.chat.lifecycle import (
     prepare_blank, prepare_profile, prepare_retirement, prepare_structure,
 )
-from app.bl.chat_management import prepare_management
-from app.bl.chat_vacancies import fill_vacancies
+from app.bl.chat.management import prepare_management
+from app.bl.chat.vacancies import fill_vacancies
 from app.bl.shared import warning_key
 from app.bl.schedule_service.generation.history import AssignmentHistory
 from app.bl.scheduler import Scheduler
@@ -226,7 +226,7 @@ class ChatPlanBuilder:
         self, team_id, turn, state, profile, schedule_id, request, choices,
     ):
         """The turn without covers the model picked for seats it vacates: the
-        solver fills those (`chat_vacancies`). Asking instead looped, since an
+        solver fills those (`vacancies.py`). Asking instead looped, since an
         answer not spelling out the name brought the same question back."""
         constraints = turn.get("constraints") or []
         if not any(

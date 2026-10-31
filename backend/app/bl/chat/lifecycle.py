@@ -3,8 +3,8 @@
 import datetime
 import json
 
-from app.bl.chat_contract import NeedsManager, RejectedPlan
-from app.bl.chat_schema import PROFILE_SECTIONS
+from app.bl.chat.contract import NeedsManager, RejectedPlan
+from app.bl.chat.schema import PROFILE_SECTIONS
 from app.bl.scheduler import build_slots
 from app.bl.simulate.hypothetical import schedule_rows
 from app.bl.tools.values import iso

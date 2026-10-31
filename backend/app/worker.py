@@ -13,7 +13,7 @@ import time
 from app.bl.compiled_sources import SourceCompiler
 from app.bl.compiled_sources.compiler import JOB_KIND as COMPILE_SOURCES
 from app.bl.schedule_service import ScheduleService
-from app.bl.manager_chat import ManagerChatService
+from app.bl.chat.service import ManagerChatService
 from app.common.events import TeamEvents
 from app.dal.notify import PostgresSignals
 from app.common.activity import track_activity

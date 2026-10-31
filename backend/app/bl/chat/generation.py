@@ -2,8 +2,8 @@
 
 import datetime
 
-from app.bl.chat_contract import RejectedPlan as _Rejected, add_coverage, audit_plan
-from app.bl.chat_lifecycle import copied_day
+from app.bl.chat.contract import RejectedPlan as _Rejected, add_coverage, audit_plan
+from app.bl.chat.lifecycle import copied_day
 from app.bl.schedule_service.generation.pins import model_assignment
 from app.bl.tools.values import iso
 from app.bl.scheduler import build_slots

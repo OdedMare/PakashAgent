@@ -4,11 +4,11 @@ import json
 import logging
 
 from app.bl.changes.values import json_default
-from app.bl.chat_draft import ReplyDraft
-from app.bl.chat_fast import ChatFastAnswers
-from app.bl.chat_contract import NeedsManager, RejectedPlan, normalize_day_turn, normalize_week_turn, plan_for_model
-from app.bl.chat_schema import CHAT_SCHEMA, suggestions
-from app.bl.chat_state import PAYLOAD_ORDER, build_state, schedule_for_chat
+from app.bl.chat.draft import ReplyDraft
+from app.bl.chat.fast import ChatFastAnswers
+from app.bl.chat.contract import NeedsManager, RejectedPlan, normalize_day_turn, normalize_week_turn, plan_for_model
+from app.bl.chat.schema import CHAT_SCHEMA, suggestions
+from app.bl.chat.state import PAYLOAD_ORDER, build_state, schedule_for_chat
 from app.bl.planner.shaping import question
 from app.bl.shared import add_usage, usage_of
 from app.common.errors import AgentError, AppError
