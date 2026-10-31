@@ -179,7 +179,7 @@ The management calendar lets the manager drag an assignment to another slot.
 The drop **does not write**. It opens a confirmation that collects the
 manager's reason, and only that dialog applies the move.
 
-*Why:* [D3](#d3--the-agent-decides-code-only-audits-) says changes happen by
+*Why:* [D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34) says changes happen by
 talking, and [D8](#d8--two-reasons-both-required) requires two reasons on
 every change. A drag that wrote directly would satisfy neither — the
 `change_log` would gain a row nobody could account for, which is the one
@@ -257,7 +257,7 @@ unauthenticated form bolted onto the share link.
   unclaimed visitor is what it was.
 - **The audit stays advisory.** A pending request is not a constraint and is
   invisible to `audit.py` until approved. Approving one is what makes it
-  countable — which keeps [D3](#d3--the-agent-decides-code-only-audits-)
+  countable — which keeps [D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)
   intact rather than letting a submission silently change the arithmetic.
 - **The manager remains the sole decider.** Approval is a manager action, and
   a rejection carries the manager's reason.
@@ -308,7 +308,7 @@ that `apply` can read, and `bl/briefing.py` returns exactly three keys —
 
 *Why this shape and not autonomy:* "be proactive" reads like a request for an
 agent that acts. Acting would reverse three decisions at once —
-[D3](#d3--the-agent-decides-code-only-audits-) (the manager decides what
+[D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34) (the manager decides what
 lands), [D8](#d8--two-reasons-both-required) (every change carries the
 manager's reason, which only they can supply), and
 [D12](#d12--dragging-a-shift-is-a-proposal-not-an-edit) (even a *drag* is only
@@ -468,7 +468,7 @@ never made.
 
 **The audit does not move.** `bl/audit.py` runs on a hand-built week exactly
 as it runs on a generated one, and it still only warns
-([D3](#d3--the-agent-decides-code-only-audits-)). This is the *cheap* half of
+([D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)). This is the *cheap* half of
 the product — pure arithmetic, no model — so a manually built schedule is
 fully checked even though nothing about it was generated.
 
@@ -513,7 +513,7 @@ through the unchanged propose-then-confirm path.
 whole period and asks for operations, which works for a single absence and
 stops working the moment a question needs four countable things resolved in
 order. Each of those is what
-[D3](#d3--the-agent-decides-code-only-audits-) already assigns to code —
+[D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34) already assigns to code —
 arithmetic over a roster is what a model gets subtly wrong in a way that
 reads exactly like getting it right. Naming the questions moves each one to
 the side of the line D3 already drew, rather than drawing a new one.
@@ -635,7 +635,7 @@ screen rather than one warning.
 **D3 is untouched, and this is the reason the rest holds.** Nothing here
 blocks: the board opens, the scheduler runs on a thin profile and returns a
 thin schedule, and the audit warns exactly as it always did
-([D3](#d3--the-agent-decides-code-only-audits-)). The gaps are *reported*.
+([D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)). The gaps are *reported*.
 A partial profile that refused to schedule would be the audit becoming a
 gate, arriving through a side door.
 
@@ -744,7 +744,7 @@ write ([D10](#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold
 **⚠️ This is not the audit becoming a gate.** Nothing here refuses a change
 the manager wants; it refuses one the *agent* would have aimed by guessing.
 Once the target is named, the placement proceeds over every warning exactly
-as before ([D3](#d3--the-agent-decides-code-only-audits-)).
+as before ([D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)).
 
 **A tool failure is not an ambiguous request.** Nothing matching found, a
 technical error, and "which of these did you mean" are three different

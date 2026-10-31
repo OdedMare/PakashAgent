@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.api.dependencies import Guards
 from app.api.routers.manager_chat import build_router
-from app.bl.manager_chat import ManagerChatService
+from app.bl.chat.service import ManagerChatService
 from app.bl.schedule_service import ScheduleService
 from app.common.errors import AppError, ConflictError, NotFoundError, error_payload
 from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue

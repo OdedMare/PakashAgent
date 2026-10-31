@@ -13,7 +13,7 @@ stack into a double booking or a short rest.
 from typing import Dict, List, Optional
 
 from app.bl.audit import shift_stats
-from app.bl.chat_contract import GAP_CODES, audit_plan, changed_rows
+from app.bl.chat.contract import GAP_CODES, audit_plan, changed_rows
 from app.bl.shared import iso, warning_key
 from app.bl.tools import ScheduleTools
 

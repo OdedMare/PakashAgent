@@ -52,7 +52,7 @@ and the third of them is not an edit at all:
   that collects the manager's reason, and that dialog is what applies the move
   ([D12](../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
   Dragging is a faster way to say what you want, not a way around saying why
-  ([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-),
+  ([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34),
   [D8](../docs/DECISIONS.md#d8--two-reasons-both-required)).
 - **Filling an empty cell writes immediately** — the `+` on a cell opens an
   employee picker and the choice is saved
@@ -430,7 +430,7 @@ Never assume a Latin-script fallback.
 Warnings render as **non-blocking inline banners** on the schedule. They never
 gate a save, never block confirmation, and never present as errors. A schedule
 with warnings is a valid schedule the boss may knowingly accept
-([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)).
 An overlapping operational duty is not an advisory warning: the placement
 check marks it `blocking`, the confirmation action is disabled, and the server
 also refuses the write.

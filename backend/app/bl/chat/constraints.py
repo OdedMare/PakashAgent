@@ -4,7 +4,7 @@ import datetime
 
 from app.bl.audit import constraint_conflicts
 from app.bl.audit.roster import index_shifts, rows_of
-from app.bl.chat_contract import RejectedPlan, audit_plan
+from app.bl.chat.contract import RejectedPlan, audit_plan
 from app.bl.shared import person_roles, warning_key
 from app.bl.scheduler.availability import effective_availability
 from app.bl.simulate.hypothetical import schedule_rows

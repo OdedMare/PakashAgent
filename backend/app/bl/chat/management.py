@@ -1,7 +1,7 @@
 """Manager inbox and preference actions, prepared read-only before approval."""
 
-from app.bl.chat_constraints import affected_periods, normalize_constraints, constraint_impact
-from app.bl.chat_contract import NeedsManager, RejectedPlan, audit_plan
+from app.bl.chat.constraints import affected_periods, normalize_constraints, constraint_impact
+from app.bl.chat.contract import NeedsManager, RejectedPlan, audit_plan
 from app.bl.employee_service.requests import ConstraintRequests
 from app.bl.employee_service.swaps import SwapRequests, _swap_operation
 from app.bl.shared import warning_key

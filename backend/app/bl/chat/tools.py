@@ -7,8 +7,8 @@ from app.bl import intent as intent_reader
 from app.bl.intent.reader import first_named
 from app.bl.audit import shift_stats
 from app.bl.changes.proposal import build_proposal
-from app.bl.chat_constraints import constraints_report, normalize_constraints
-from app.bl.chat_contract import RejectedPlan, audit_plan, changed_rows, plan_for_model
+from app.bl.chat.constraints import constraints_report, normalize_constraints
+from app.bl.chat.contract import RejectedPlan, audit_plan, changed_rows, plan_for_model
 from app.bl.planner.fallback_answers import FallbackAnswers
 from app.bl.planner.team_answers import TeamAnswers
 from app.bl.prompts import load

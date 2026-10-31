@@ -9,7 +9,7 @@ import psycopg
 import pytest
 from psycopg import sql
 
-from app.bl.manager_chat import ManagerChatService
+from app.bl.chat.service import ManagerChatService
 from app.bl.schedule_service import ScheduleService
 from app.bl.schedule_service.generation.job import GenerationJob
 from app.common.config import Settings

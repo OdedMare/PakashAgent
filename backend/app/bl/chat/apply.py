@@ -2,10 +2,10 @@
 
 import logging
 
-from app.bl.chat_constraints import affected_periods
-from app.bl.chat_contract import exception_warnings, fingerprint
-from app.bl.chat_lifecycle import future_schedules
-from app.bl.chat_management import apply_management, management_state
+from app.bl.chat.constraints import affected_periods
+from app.bl.chat.contract import exception_warnings, fingerprint
+from app.bl.chat.lifecycle import future_schedules
+from app.bl.chat.management import apply_management, management_state
 from app.bl.profile_service import ProfileService
 from app.bl.schedule_service.operations import OperationApplier
 from app.bl.shared import iso

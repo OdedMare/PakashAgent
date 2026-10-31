@@ -32,7 +32,7 @@ A change is deliberately **two calls**, not one:
 Any response carrying a schedule also carries `warnings` from `bl/audit/`. They
 are **advisory** — a response with warnings is still a success, still `200`, and
 the schedule is still valid to display. Do not turn a warning into a `4xx`
-([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)).
 
 ## Access control
 
