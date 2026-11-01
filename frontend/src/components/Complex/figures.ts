@@ -14,6 +14,9 @@ export interface Focus {
 export interface CellReading {
   seats: number;
   names: string[];
+  /** Of `names`, those who fill a seat — a נחפף/ת does not. */
+  filled: number;
+  shadows: Set<string>;
   status: ComplexPeriod["status"];
 }
 
@@ -23,10 +26,15 @@ export function readCell(unit: Unit, shift: string, day: string): CellReading | 
   const seats = period.slots
     .filter((slot) => slot.slot_date === day && slot.shift_name === shift)
     .reduce((sum, slot) => sum + (slot.headcount || 0), 0);
-  const names = period.assignments
-    .filter((row) => row.date === day && row.shift === shift)
-    .map((row) => row.employee);
-  return { seats, names, status: period.status };
+  const rows = period.assignments.filter((row) => row.date === day && row.shift === shift);
+  const shadows = new Set(rows.filter((row) => row.counts === false).map((row) => row.employee));
+  return {
+    seats,
+    names: rows.map((row) => row.employee),
+    filled: rows.length - shadows.size,
+    shadows,
+    status: period.status,
+  };
 }
 
 /** A משמרת's shift types in the order its own board reads them: by the
@@ -81,8 +89,8 @@ export function figuresOf(units: Unit[], days: string[], focus: Focus): Figures 
         const cell = readCell(unit, shift, day);
         if (!cell) continue;
         figures.seats += cell.seats;
-        figures.assigned += Math.min(cell.names.length, cell.seats || cell.names.length);
-        figures.open += Math.max(0, cell.seats - cell.names.length);
+        figures.assigned += Math.min(cell.filled, cell.seats || cell.filled);
+        figures.open += Math.max(0, cell.seats - cell.filled);
         cell.names.forEach((name) => people.add(`${unit.id}:${name}`));
       }
     }

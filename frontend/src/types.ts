@@ -339,7 +339,8 @@ export interface ComplexPeriod {
     end_time: string;
     headcount: number;
   }[];
-  assignments: { employee: string; shift: string; date: string }[];
+  /** `counts` is false for a נחפף/ת: on the shift, not in a seat. */
+  assignments: { employee: string; shift: string; date: string; counts?: boolean }[];
   warnings: number;
 }
 

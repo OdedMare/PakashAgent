@@ -15,6 +15,7 @@ import datetime
 import re
 from typing import Dict, List, Optional
 
+from app.bl.audit import counts_toward_staffing
 from app.common.errors import AgentError, NotFoundError
 
 # The combined board reads a month view at most (six weeks): it audits every period of
@@ -171,12 +172,15 @@ class ComplexService:
             raise AgentError("טווח התאריכים ארוך מדי")
         teams = []
         for team in self._repository.complex_teams(complex_id):
-            periods = []
+            periods, shadows = [], set()
             if team["active"] and self._schedules is not None:
                 periods = self._schedules.periods_between(
                     team["id"], start, end, role="boss"
                 )
-            teams.append(dict(team, periods=[_compact(p) for p in periods]))
+                shadows = _shadows(self._repository.team_profile(team["id"]))
+            teams.append(dict(
+                team, periods=[_compact(p, shadows) for p in periods],
+            ))
         return {"start": start, "end": end, "teams": teams}
 
     # --- what the manager is told -------------------------------------------------
@@ -206,9 +210,22 @@ def _date(value: str) -> Optional[datetime.date]:
         return None
 
 
-def _compact(period: dict) -> dict:
+def _shadows(profile: Optional[dict]) -> set:
+    """Who on this roster stands on a shift without filling a seat — the
+    audit's own definition (`counts_toward_staffing`), so the combined
+    board counts seats exactly as the משמרת's own board does."""
+    profile = profile if isinstance(profile, dict) else {}
+    return {
+        str(person.get("name"))
+        for person in profile.get("employees") or []
+        if isinstance(person, dict) and not counts_toward_staffing(person, profile)
+    }
+
+
+def _compact(period: dict, shadows: Optional[set] = None) -> dict:
     """What the combined board draws of a period: its slots and who is on
     them. Not the audit, the notes or the generation state."""
+    shadows = shadows or set()
     return {
         "id": period["id"],
         "starts_on": period["starts_on"],
@@ -229,6 +246,7 @@ def _compact(period: dict) -> dict:
                 "employee": row["employee"],
                 "shift": row["shift"],
                 "date": row["date"],
+                "counts": row["employee"] not in shadows,
             }
             for row in period.get("assignments", [])
         ],

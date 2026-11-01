@@ -175,14 +175,21 @@ function Cell({
       </div>
     );
   }
-  const missing = cell.seats - cell.names.length;
+  const missing = cell.seats - cell.filled;
   return (
     <div role="cell" className={[...base, missing > 0 ? "is-short" : ""].filter(Boolean).join(" ")}>
       {cell.names.map((name) => (
         <div
           key={name}
-          className={`board-card cmd-card ${cell.status === "draft" ? "is-draft" : "is-published"}`}
-          style={colorStyle(hueOf(`${unit.id}:${name}`), dark)}
+          className={[
+            "board-card cmd-card",
+            cell.status === "draft" ? "is-draft" : "is-published",
+            cell.shadows.has(name) ? "is-overlap" : "",
+          ].filter(Boolean).join(" ")}
+          // A נחפף/ת wears the board's one shared overlap colour, never a
+          // person's hue, so they never read as a filled seat.
+          style={cell.shadows.has(name) ? undefined : colorStyle(hueOf(`${unit.id}:${name}`), dark)}
+          title={cell.shadows.has(name) ? "נחפף/ת — לא נספר/ת בתקן" : undefined}
         >
           <div className="board-card-main">
             <span className="board-card-name">{name}</span>
