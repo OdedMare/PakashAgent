@@ -1347,3 +1347,54 @@ export interface ImportPreview {
   warnings: string[];
   summary: string;
 }
+
+/** A מכלול's kind of duty (מטבח, שמירה…), set by its commander. `days` are
+ *  weekday keys ("ראשון" … "שבת"); empty runs every day. `weight` is how many
+ *  shifts one duty day counts as in fairness and statistics. */
+export interface DutyType {
+  id: string;
+  name: string;
+  seats: number;
+  days: string[];
+  weight: number;
+  active: boolean;
+}
+
+/** One soldier on one duty for one whole day. `blocks: false` is a duty
+ *  recorded after the fact: it counts, and blocks nothing. */
+export interface ComplexDuty {
+  id: string;
+  duty_type_id: string;
+  duty_type: string;
+  weight: number;
+  team_id: string;
+  team_name: string;
+  employee: string;
+  duty_date: string;
+  note: string;
+  blocks: boolean;
+}
+
+export interface DutyBoard {
+  start: string;
+  end: string;
+  types: DutyType[];
+  duties: ComplexDuty[];
+}
+
+/** A stored shift a new duty now blocks: a warning, the duty is saved. */
+export interface DutyConflict {
+  schedule_id: string;
+  status: "draft" | "published";
+  shift_name: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+}
+
+export interface DutyRosterTeam {
+  id: string;
+  name: string;
+  active: boolean;
+  soldiers: { name: string; role: string; inactive_from: string }[];
+}

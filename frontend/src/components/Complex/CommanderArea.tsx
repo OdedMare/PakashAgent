@@ -10,6 +10,7 @@ import {
   Moon,
   Network,
   RefreshCw,
+  Soup,
   Sun,
   UserCheck,
   UserMinus,
@@ -29,13 +30,14 @@ import { enterComplexTeam } from "@/services/api";
 import type { CommanderView } from "@/types";
 
 import { ComplexGrid } from "./ComplexGrid";
+import { DutiesView } from "./DutiesView";
 import { figuresOf, type Focus, type Unit } from "./figures";
 import { FocusBar, Tile } from "./parts";
 import { UnitTools, type Tool } from "./UnitTools";
 import { UnitsView } from "./UnitsView";
 import { useCommanderBoard } from "./useCommander";
 
-type View = "board" | "units" | Tool;
+type View = "board" | "units" | "duties" | Tool;
 
 const TOOL_COPY: Record<Tool, { title: string; lede: string }> = {
   agent: {
@@ -167,6 +169,15 @@ export function CommanderArea({
           </button>
           <button
             type="button"
+            className={`management-nav-item${view === "duties" ? " is-active" : ""}`}
+            aria-current={view === "duties" ? "page" : undefined}
+            onClick={() => setView("duties")}
+            data-tour="cmd-duties"
+          >
+            <Soup size={15} /> תורנויות
+          </button>
+          <button
+            type="button"
             className={`management-nav-item${view === "agent" ? " is-active" : ""}`}
             aria-current={view === "agent" ? "page" : undefined}
             onClick={() => setView("agent")}
@@ -248,11 +259,15 @@ export function CommanderArea({
               <h1 id="cmd-title">
                 {tool
                   ? TOOL_COPY[tool].title
-                  : view === "units" ? "המשמרות" : focusedUnit ? focusedUnit.name : "לוח המכלול"}
+                  : view === "units" ? "המשמרות"
+                    : view === "duties" ? "תורנויות המכלול"
+                    : focusedUnit ? focusedUnit.name : "לוח המכלול"}
               </h1>
               <p>
                 {tool
                   ? TOOL_COPY[tool].lede
+                  : view === "duties"
+                    ? "שיבוץ ידני של חיילים מכל המשמרות לתורנויות. יום תורנות חוסם את החייל במשמרת שלו, נספר בהוגנות ובסטטיסטיקה, ומפקד המשמרת מקבל הודעה."
                   : view === "units"
                     ? "מצב כל משמרת בטווח שעל המסך, והכניסה לנהל אותה."
                     : "כל המשמרות זו לצד זו, עם כל החיילים. עורכים בתוך המשמרת — כל שינוי נשלח למפקד המשמרת."}
@@ -306,7 +321,9 @@ export function CommanderArea({
               </div>
             </div>
 
-            {state.board === null ? (
+            {view === "duties" ? (
+              <DutiesView days={days} today={localToday()} />
+            ) : state.board === null ? (
               <CrewStage label="טוען את לוח המכלול…" />
             ) : view === "units" ? (
               <UnitsView

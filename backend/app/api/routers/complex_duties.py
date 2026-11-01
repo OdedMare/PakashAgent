@@ -57,6 +57,11 @@ class ComplexDutyRoutes:
     def _register_duties(self, router: APIRouter) -> None:
         service, commander = self._service, self._guards.commander()
 
+        @router.get("/duty-roster")
+        def roster(session: dict = Depends(commander)) -> list:
+            """Every soldier of the מכלול's משמרות, for the picker."""
+            return service.roster(session["complex_id"])
+
         @router.get("/duties")
         def duties(start: str, end: str, session: dict = Depends(commander)) -> dict:
             return service.duties(session["complex_id"], start, end)

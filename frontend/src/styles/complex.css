@@ -420,3 +420,258 @@
     margin-inline-start: 0;
   }
 }
+
+/* The מכלול's duties (תורנויות): a row per kind, a column per day, the
+   soldiers standing it in each cell. A recorded duty (counted, blocking
+   nothing) is dashed, so it never reads as a seat on the plan. */
+
+.duties {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.duty-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.duty-panel,
+.duty-form {
+  position: relative;
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.9rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.duty-panel-close {
+  position: absolute;
+  inset-inline-end: 0.5rem;
+  top: 0.5rem;
+}
+
+.duty-form header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.duty-form h3,
+.duty-types h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.duty-form form,
+.duty-type-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+
+.duty-form label,
+.duty-type-form > label {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 9rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.duty-type-form input[type="number"] {
+  width: 6rem;
+}
+
+.duty-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.7rem;
+  margin: 0;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+
+.duty-day {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 44px;
+}
+
+.duty-types {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.duty-type-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.duty-type-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.duty-type-list li.is-retired {
+  opacity: 0.6;
+}
+
+.duty-type-name {
+  font-weight: 600;
+}
+
+.duty-type-facts {
+  flex: 1;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.duty-conflicts {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  color: var(--text);
+  background: var(--warning-soft);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+}
+
+.duty-conflicts svg {
+  flex: none;
+  color: var(--warning);
+}
+
+.duty-conflicts ul {
+  margin: 0.3rem 0;
+  padding-inline-start: 1.1rem;
+}
+
+.duty-grid-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.duty-grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.duty-grid th,
+.duty-grid td {
+  padding: 0.4rem;
+  border-bottom: 1px solid var(--border);
+  border-inline-start: 1px solid var(--border);
+  vertical-align: top;
+  text-align: start;
+}
+
+.duty-grid thead th {
+  background: var(--surface-2);
+  white-space: nowrap;
+}
+
+.duty-grid th span,
+.duty-grid th small {
+  display: block;
+}
+
+.duty-grid th small {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.duty-grid thead th.is-today {
+  color: var(--primary);
+}
+
+.duty-grid tbody th {
+  min-width: 7rem;
+  background: var(--surface-2);
+}
+
+.duty-cell {
+  min-width: 7.5rem;
+}
+
+.duty-cell.is-off {
+  background: var(--surface-2);
+}
+
+.duty-chip {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  margin-bottom: 0.3rem;
+  padding: 0.25rem 0.4rem;
+  background: color-mix(in srgb, var(--hue-teal) 14%, var(--surface));
+  border-inline-start: 3px solid var(--hue-teal);
+  border-radius: 6px;
+}
+
+.duty-chip.is-record {
+  background: transparent;
+  border: 1px dashed var(--hue-teal);
+}
+
+.duty-chip-name {
+  font-weight: 600;
+}
+
+.duty-chip small {
+  grid-column: 1;
+  color: var(--text-muted);
+}
+
+.duty-chip-remove {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  min-height: 28px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.duty-chip-remove:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.duty-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  width: 100%;
+  min-height: 32px;
+  padding: 0.2rem 0.4rem;
+  color: var(--primary);
+  background: none;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.duty-add:hover:not(:disabled) {
+  border-color: var(--primary);
+}

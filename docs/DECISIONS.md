@@ -1475,6 +1475,53 @@ about one משמרת, because its tools, the solver and the constraints are
 scoped to one. Each is an extension of
 this model, not a change to it.
 
+## D44 — A מכלול's duties block a whole day and count as load *(extends D43, D34)*
+
+A מכלול commander asked to assign duties (תורנויות: מטבח, שמירה, ש״ג…) to
+soldiers of every משמרת, so that a soldier on duty is out of that day's
+shifts, the duties are shared fairly, and they show in the statistics.
+
+**What is now true:**
+
+- **The מכלול owns its duties.** `complex_duty_types` (name, seats a day,
+  weekdays, `weight`, `active`) and `complex_duties` (one soldier -- a team
+  and a roster name -- on one duty for one whole day, at most one a day).
+  The commander sets them by hand on the "תורנויות" page; there are no
+  מכלול-wide rules beyond that (D43 stands).
+- **A duty blocks the whole day, midnight to midnight.** `records.
+  availability()` projects it as a `duty` with no hours, and
+  `audit/constraints.py` reads that as the day: every shift touching it is
+  blocked, the night before that ends on its morning included, a shift
+  ending exactly at midnight not. The solver, the manual and chat write
+  guards and the audit read it through the same `constraint_conflicts`.
+  Duty reads reach one day either side of a span for that reason.
+- **The team's commander sees it and cannot remove it.** It lists among the
+  constraints as "תורנות מכלול", the constraint delete refuses it, every
+  set, cancel and record lands in the team's change log as
+  `commander:<id>` and reaches its commander as a notice (D43).
+- **A duty on a shift already placed is a warning, not a refusal.** The
+  commander is shown the stored shifts it now blocks; the duty is saved and
+  the team's commander finds the cover.
+- **A recorded duty counts without blocking.** `blocks = FALSE` is a duty
+  stood before this system or outside it: not projected into availability,
+  but counted like any other.
+- **A duty day is a shift already carried.** The solver is handed the
+  team's duties (`generate_span(duties=)`, read by `AssignmentHistory.
+  duties` over the fairness lookback through the period's end) and adds
+  `weight` shifts per day to that person's carried load before water-filling
+  the targets. Nights are not charged. With no duties -- most soldiers, and
+  every team outside a מכלול -- the spread is exactly what it was. The build
+  notes say who was counted.
+- **The statistics count it too.** `shift_stats(duties=)` adds per person
+  duties, weekend duties, weighted load and `load` = shifts + duty load
+  (which orders the list), and totals per kind; nothing is drawn for a team
+  without duties.
+
+**Deliberately not done:** a team's own timed duty (`duties`) still blocks
+hours and is not counted as load; no automatic fair fill yet (planned, the
+commander approves it); a published week the duty collides with is not
+changed.
+
 ## D45 — Many teams at once: fewer round trips, more API processes, no PgBouncer *(extends D35, D39)*
 
 With many teams signed in, pages stalled waiting on PostgreSQL. The cause

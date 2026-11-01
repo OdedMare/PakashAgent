@@ -23,6 +23,9 @@ MONDAY = "2026-11-09"
 
 
 class _Complexes:
+    def describe(self, complex_id):
+        return {"teams": [{"id": TEAM, "name": "משמרת א", "active": True}]}
+
     def require_team(self, complex_id, team_id):
         if complex_id == COMPLEX and team_id == TEAM:
             return {"id": TEAM, "name": "משמרת א", "active": True}
@@ -204,3 +207,11 @@ def test_recording_a_past_duty_counts_without_planning_rules(setup):
     assert told[-1] == (TEAM, COMPLEX, "רשם תורנות מכלול שכבר נעשתה")
     with pytest.raises(AgentError, match="לא נמצא/ת"):  # the roster is still checked
         service.assign(COMPLEX, kitchen["id"], TEAM, "אבי", TUESDAY, blocks=False)
+
+
+def test_the_roster_lists_every_soldier_of_every_team(setup):
+    service = setup[0]
+    [team] = service.roster(COMPLEX)
+    assert team["name"] == "משמרת א"
+    assert [(row["name"], row["inactive_from"]) for row in team["soldiers"]] == [
+        ("דנה", ""), ("יוסי", ""), ("רון", "2026-11-05")]

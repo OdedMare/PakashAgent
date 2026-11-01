@@ -70,6 +70,9 @@ def test_a_commander_sets_a_duty_and_the_team_sees_it(repo):  # noqa: F811
     assert (duty["team_name"], duty["duty_type"], duty["weight"]) == ("משמרת א", "מטבח", 1)
     assert seated.json()["conflicts"] == []
 
+    roster = client.get("/api/complex/duty-roster").json()
+    assert [(t["name"], [p["name"] for p in t["soldiers"]]) for t in roster] == [
+        ("משמרת א", ["דנה"])]
     board = client.get("/api/complex/duties", params={"start": DAY, "end": DAY}).json()
     assert [d["employee"] for d in board["duties"]] == ["דנה"]
     assert [t["name"] for t in board["types"]] == ["מטבח"]

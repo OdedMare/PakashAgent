@@ -5,6 +5,11 @@ import type {
   CommanderView,
   ComplexBoard,
   ComplexSummary,
+  ComplexDuty,
+  DutyBoard,
+  DutyConflict,
+  DutyRosterTeam,
+  DutyType,
   AdminTeam,
   AdminTeamDetail,
   ChangeLearning,
@@ -1279,3 +1284,19 @@ export function confirmImport(body: {
     body: JSON.stringify(body),
   });
 }
+
+// The מכלול's duties (תורנויות), on the commander's cookie.
+export const dutyBoard = (start: string, end: string) =>
+  request<DutyBoard>(`/api/complex/duties?${new URLSearchParams({ start, end })}`);
+export const dutyRoster = () => request<DutyRosterTeam[]>("/api/complex/duty-roster");
+export const createDutyType = (input: { name: string; seats: number; weight: number; days: string[] }) =>
+  request<DutyType>("/api/complex/duty-types", { method: "POST", body: JSON.stringify(input) });
+export const updateDutyType = (id: string, patch: Partial<Omit<DutyType, "id">>) =>
+  request<DutyType>(`/api/complex/duty-types/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+export const deleteDutyType = (id: string) =>
+  request<{ status: string }>(`/api/complex/duty-types/${encodeURIComponent(id)}`, { method: "DELETE" });
+// `blocks: false` records a duty already stood: it counts and blocks nothing.
+export const assignDuty = (input: { duty_type_id: string; team_id: string; employee: string; duty_date: string; note: string; blocks: boolean }) =>
+  request<{ duty: ComplexDuty; conflicts: DutyConflict[] }>("/api/complex/duties", { method: "POST", body: JSON.stringify(input) });
+export const cancelDuty = (id: string) =>
+  request<ComplexDuty>(`/api/complex/duties/${encodeURIComponent(id)}`, { method: "DELETE" });

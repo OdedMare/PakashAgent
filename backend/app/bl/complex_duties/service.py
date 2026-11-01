@@ -11,6 +11,7 @@ from typing import Callable, Dict, List, Optional
 
 from app.bl.audit import constraint_conflicts
 from app.bl.complex_duties import values
+from app.bl.shared import text
 from app.common.actor import acting_as
 from app.common.errors import AgentError, ConflictError
 
@@ -128,6 +129,22 @@ class ComplexDutyService:
                 end_time=row["end_time"],
             ), block)
         ]
+
+    def roster(self, complex_id: str) -> List[dict]:
+        """Every soldier of every משמרת in the מכלול, for the duty picker:
+        name, role and the day they left, if they did."""
+        teams = []
+        for team in self._complexes.describe(complex_id)["teams"]:
+            profile = self._repository.team_profile(team["id"]) or {}
+            soldiers = [
+                {"name": text(person.get("name")), "role": text(person.get("role")),
+                 "inactive_from": text(person.get("inactive_from"))}
+                for person in profile.get("employees") or []
+                if isinstance(person, dict) and text(person.get("name"))
+            ]
+            teams.append({"id": team["id"], "name": team["name"],
+                          "active": team["active"], "soldiers": soldiers})
+        return teams
 
     # --- a team's own view ---------------------------------------------------
 
