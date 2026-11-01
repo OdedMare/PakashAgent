@@ -15,6 +15,7 @@ from typing import Optional
 from fastapi import APIRouter, Cookie, Depends, Response
 
 from app.api.contracts import CommanderLoginRequest
+from app.api.routers.complex_duties import ComplexDutyRoutes
 from app.common.sessions import (
     COMMANDER_COOKIE_NAME, COOKIE_NAME, ROLE_BOSS, issue, issue_commander,
     read,
@@ -133,10 +134,12 @@ class ComplexRoutes:
 
 def build_router(
     service, guards, secret, days: int,
-    throttle: Optional[LoginThrottle] = None,
+    throttle: Optional[LoginThrottle] = None, duties=None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/complex", tags=["complex"])
     ComplexRoutes(
         service, guards, secret, days, throttle or LoginThrottle(),
     ).register(router)
+    if duties is not None:
+        ComplexDutyRoutes(duties, guards).register(router)
     return router

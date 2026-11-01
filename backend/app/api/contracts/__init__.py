@@ -15,6 +15,11 @@ from app.api.contracts.admin import (  # noqa: F401
     AdminUpdateTeamRequest,
     CommanderLoginRequest,
 )
+from app.api.contracts.complex_duties import (  # noqa: F401
+    DutyAssignRequest,
+    DutyTypePatch,
+    DutyTypeRequest,
+)
 from app.api.contracts.settings import (  # noqa: F401
     ModelsProbeRequest,
 )

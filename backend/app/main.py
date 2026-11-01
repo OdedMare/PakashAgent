@@ -17,6 +17,7 @@ from app.api.routers import (
 )
 from app import worker as job_worker
 from app.bl.admin_service import AdminService
+from app.bl.complex_duties import ComplexDutyService
 from app.bl.complex_service import ComplexService, describe_action
 from app.bl.compiled_sources import SourceCompiler
 from app.bl.employee_service import EmployeeService
@@ -105,6 +106,21 @@ admin_service = AdminService(repository, workspace_service, admin_password, stor
 # A מכלול (D43): workplaces under one commander, whose password the
 # operator issues.
 complex_service = ComplexService(repository, workspace_service, schedule_service)
+
+
+def _tell_about_duty(team_id: str, complex_id: str, action: str) -> None:
+    """A duty the commander set or cancelled reaches the soldier's team
+    commander like any other commander write (D43). Never fails the write."""
+    try:
+        complex_service.record(team_id, complex_id, action)
+        team_events.publish(team_id, COMMANDER)
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("commander notice not recorded: %s", exc)
+
+
+complex_duty_service = ComplexDutyService(
+    repository, complex_service, notify=_tell_about_duty,
+)
 
 
 def startup() -> None:
@@ -215,7 +231,7 @@ app.include_router(
 app.include_router(
     complex_router.build_router(
         complex_service, guards, session_secret, env.session_days,
-        login_throttle,
+        login_throttle, duties=complex_duty_service,
     )
 )
 app.include_router(schedules.build_router(schedule_service, guards))

@@ -678,7 +678,8 @@ export interface Constraint {
   end_time: string;
   is_hard: boolean;
   reason: string;
-  source: "manager" | "agent" | "employee_reported" | "setup";
+  /** `complex`: a מכלול duty, set and cancelled by the מכלול commander only. */
+  source: "manager" | "agent" | "employee_reported" | "setup" | "complex";
   constraint_type: "availability" | "duty";
 }
 

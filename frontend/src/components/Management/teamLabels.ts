@@ -36,6 +36,7 @@ export const SOURCE_LABELS: Record<string, string> = {
   agent: "הסוכן",
   employee_reported: "העובד מסר",
   setup: "מהגדרת היחידה",
+  complex: "מפקד המכלול",
 };
 
 export const SERVICE_TYPE_LABELS: Record<string, string> = {

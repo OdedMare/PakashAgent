@@ -459,7 +459,9 @@ export function TeamPanel({
                 <span className="constraint-who">{row.employee}</span>
                 <span className="constraint-when">
                   {displayDate(row.constraint_date)}
-                  {row.constraint_type === "duty"
+                  {row.source === "complex"
+                    ? " · תורנות מכלול · כל היום"
+                    : row.constraint_type === "duty"
                     ? " · תורנות חוסמת"
                     : row.shift_name ? ` · ${row.shift_name}` : " · כל היום"}
                   {formatWindow(row) ? ` · ${formatWindow(row)}` : ""}
@@ -474,7 +476,7 @@ export function TeamPanel({
               <span className="constraint-source">
                 {row.is_hard ? "קשיח" : "העדפה"}
               </span>
-              {!readOnly && onRemove ? (
+              {!readOnly && onRemove && row.source !== "complex" ? (
                 <button
                   type="button"
                   className="icon-button subtle"

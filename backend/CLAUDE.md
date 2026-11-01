@@ -52,6 +52,13 @@ uvicorn app.main:app --reload
   `describe_action` names the commander's writes for the notice the team's
   own commander reads (recorded by the middleware in `main.py`).
   `dal/repository/complexes.py` holds its SQL.
+- `bl/complex_duties/` — the מכלול's duties (תורנויות): types the commander
+  defines, and one soldier on one duty for a whole day. A write is checked
+  (the soldier is on the team's roster and serving, the type is on and runs
+  that weekday, a seat is free), logged in the soldier's team as
+  `commander:<id>`, and told to that team's commander. The day is blocked
+  by `records.availability()`, which projects it as a `duty` with no hours.
+  `dal/repository/complex_duties.py` holds its SQL.
 - `api/dependencies.py` — the route guards (`visitor`, `boss`, `own_manager`,
   `employee`, `admin`, `commander`). `visitor` also refuses a suspended or
   deleted team, and a commander's cookie for a team no longer in their מכלול.

@@ -167,6 +167,22 @@ class ComplexDutyRepository(RepositoryBase):
         )
         return row
 
+    def soldier_shifts(
+        self, team_id: str, employee: str, starts_on: str, ends_on: str,
+    ) -> List[dict]:
+        """One soldier's stored shifts over a few dates, with each period's
+        status -- what a duty on those dates would collide with."""
+        return self._all("""
+            SELECT a.id, a.schedule_id, s.status, sl.shift_name,
+                   sl.slot_date, sl.start_time, sl.end_time
+            FROM assignments a
+            JOIN shift_slots sl ON sl.id = a.slot_id
+            JOIN schedules s ON s.id = a.schedule_id
+            WHERE a.team_id=%s AND a.employee=%s
+              AND sl.slot_date BETWEEN %s AND %s
+            ORDER BY sl.slot_date, sl.start_time
+        """, (team_id, employee, starts_on, ends_on))
+
     def team_complex_duties(
         self, team_id: str, starts_on: str, ends_on: str,
         employee: Optional[str] = None,
