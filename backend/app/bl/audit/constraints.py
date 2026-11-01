@@ -40,6 +40,8 @@ def constraint_conflicts(assignment: dict, constraint: dict) -> bool:
 def _duty_overlaps(assignment: dict, duty: dict) -> bool:
     if text(assignment.get("employee")) != text(duty.get("employee")):
         return False
+    if is_whole_day(duty):
+        return _overlaps_whole_day(assignment, duty)
     shift = _interval(
         assignment.get("date"),
         assignment.get("start") or assignment.get("start_time"),
@@ -50,6 +52,28 @@ def _duty_overlaps(assignment: dict, duty: dict) -> bool:
         duty.get("start_time"), duty.get("end_time"),
     )
     return bool(shift and blocked and shift[0] < blocked[1] and blocked[0] < shift[1])
+
+
+def is_whole_day(duty: dict) -> bool:
+    """A duty with no hours -- a מכלול duty -- holds the whole day."""
+    return not text(duty.get("start_time")) and not text(duty.get("end_time"))
+
+
+def _overlaps_whole_day(assignment: dict, duty: dict) -> bool:
+    """Midnight to midnight of the duty's date. A shift with hours conflicts
+    if any part of it falls inside: a night shift starting that evening, and
+    one from the evening before that ends that morning. A shift whose hours
+    the workplace never defined conflicts when it is dated that day."""
+    day = text(duty.get("date") or duty.get("constraint_date"))
+    shift = _interval(
+        assignment.get("date"),
+        assignment.get("start") or assignment.get("start_time"),
+        assignment.get("end") or assignment.get("end_time"),
+    )
+    if shift is None:
+        return bool(day) and text(assignment.get("date")) == day
+    blocked = _interval(day, "00:00", "00:00")
+    return bool(blocked and shift[0] < blocked[1] and blocked[0] < shift[1])
 
 
 def _interval(day, start, end):

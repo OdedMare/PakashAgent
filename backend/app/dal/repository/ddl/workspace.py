@@ -116,4 +116,50 @@ CREATE INDEX IF NOT EXISTS commander_notices_unseen
 
 COMMIT;
 
+-- A מכלול's duties (תורנויות: מטבח, שמירה…), set by its commander for
+-- soldiers of every linked משמרת. `weight` is how many shifts one duty day
+-- counts as in the load fairness and statistics read. `days` empty means
+-- every day.
+CREATE TABLE IF NOT EXISTS complex_duty_types (
+    id TEXT PRIMARY KEY,
+    complex_id TEXT NOT NULL REFERENCES complexes(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    seats INTEGER NOT NULL DEFAULT 1 CHECK (seats >= 1),
+    days TEXT[] NOT NULL DEFAULT '{}',
+    weight INTEGER NOT NULL DEFAULT 1 CHECK (weight >= 0),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (complex_id, name)
+);
+
+COMMIT;
+
+-- One soldier on one duty for one whole day. The soldier is named as their
+-- own משמרת's roster names them. Owned by the מכלול, not the team: the
+-- team's manager sees the row (it blocks the day in their schedule) but its
+-- constraint routes never delete it.
+CREATE TABLE IF NOT EXISTS complex_duties (
+    id TEXT PRIMARY KEY,
+    complex_id TEXT NOT NULL REFERENCES complexes(id) ON DELETE CASCADE,
+    duty_type_id TEXT NOT NULL REFERENCES complex_duty_types(id) ON DELETE CASCADE,
+    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    employee TEXT NOT NULL,
+    duty_date DATE NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (team_id, employee, duty_date)
+);
+
+COMMIT;
+
+CREATE INDEX IF NOT EXISTS complex_duties_team_date_idx
+    ON complex_duties (team_id, duty_date);
+
+COMMIT;
+
+CREATE INDEX IF NOT EXISTS complex_duties_complex_date_idx
+    ON complex_duties (complex_id, duty_date);
+
+COMMIT;
+
 """

@@ -10,7 +10,7 @@ in a long method.
 from typing import Callable, Dict, List, Optional
 
 from app.bl.changes import OP_ASSIGN, OP_REMOVE, OP_SWAP
-from app.bl.audit import constraint_conflicts
+from app.bl.audit import constraint_conflicts, is_whole_day
 from app.bl.scheduler.availability import effective_availability
 from app.bl.schedule_service.constants import (
     ACTION_ASSIGNED,
@@ -50,6 +50,12 @@ def assert_no_blocking_duty(
     ), None)
     if duty is not None:
         reason = (duty.get("reason") or "").strip()
+        if is_whole_day(duty):
+            raise ConflictError(
+                "%s בתורנות%s של המכלול ביום %s ולכן לא ניתן לשבץ אותו/ה למשמרת."
+                % (employee, " " + reason if reason else "",
+                   duty.get("date") or duty.get("constraint_date") or "?")
+            )
         raise ConflictError(
             "%s בתורנות חוסמת בשעות %s–%s%s ולכן לא ניתן לשבץ אותו/ה למשמרת."
             % (employee, duty.get("start_time") or "?", duty.get("end_time") or "?",

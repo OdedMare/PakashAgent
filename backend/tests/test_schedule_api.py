@@ -309,7 +309,10 @@ class _FakeScheduleRepo:
                 previous if r.get("constraint_type") == "duty" else starts_on
             )]
         if ends_on:
-            rows = [r for r in rows if r["constraint_date"] <= ends_on]
+            following = (datetime.date.fromisoformat(ends_on) + datetime.timedelta(days=1)).isoformat()
+            rows = [r for r in rows if r["constraint_date"] <= (
+                following if r.get("constraint_type") == "duty" else ends_on
+            )]
         if employee:
             rows = [r for r in rows if r["employee"] == employee]
         return rows
@@ -1960,6 +1963,33 @@ def test_a_duty_is_recorded_and_blocks_manual_placement_even_across_midnight():
     })
     assert assigned.status_code == 409
     assert "תורנות חוסמת" in assigned.json()["detail"]
+
+
+def test_a_complex_duty_blocks_manual_placement_for_the_whole_day():
+    app, repo = _build_app([])
+    client = _client(app)
+    schedule = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    # As `records.availability()` projects a מכלול duty: no hours.
+    repo.availability_rows.append({
+        "id": "complex-duty-1", "team_id": TEAM, "employee": "דנה",
+        "constraint_date": "2026-08-18", "shift_name": "", "available": False,
+        "start_time": "", "end_time": "", "is_hard": True, "reason": "מטבח",
+        "source": "complex", "constraint_type": "duty",
+    })
+
+    assigned = client.post("/api/schedule/assign", json={
+        "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-18",
+        "schedule_id": schedule["id"],
+    })
+    assert assigned.status_code == 409
+    assert "בתורנות מטבח של המכלול" in assigned.json()["detail"]
+
+    assert client.post("/api/schedule/assign", json={
+        "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-17",
+        "schedule_id": schedule["id"],
+    }).status_code == 200
 
 
 def test_a_duty_requires_both_clock_bounds():

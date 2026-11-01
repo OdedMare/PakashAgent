@@ -81,6 +81,18 @@ class AvailabilityRepository(RepositoryBase):
                        start_time, end_time, TRUE AS is_hard, reason,
                        source, created_at, 'duty' AS constraint_type
                 FROM duties
+                UNION ALL
+                -- A מכלול duty holds the soldier for the whole day: no
+                -- hours, which `audit/constraints.py` reads as the day from
+                -- midnight to midnight.
+                SELECT cd.id, cd.team_id, cd.employee,
+                       cd.duty_date AS constraint_date, '' AS shift_name,
+                       FALSE AS available, '' AS start_time, '' AS end_time,
+                       TRUE AS is_hard, dt.name AS reason,
+                       'complex' AS source, cd.created_at,
+                       'duty' AS constraint_type
+                FROM complex_duties cd
+                JOIN complex_duty_types dt ON dt.id = cd.duty_type_id
             ) AS scheduling_constraints
             WHERE team_id=%s
         """
@@ -90,7 +102,8 @@ class AvailabilityRepository(RepositoryBase):
             query += " AND constraint_date >= %s::date - CASE WHEN constraint_type='duty' THEN 1 ELSE 0 END"
             params.append(starts_on)
         if ends_on:
-            query += " AND constraint_date <= %s"
+            # And the next day's duty may overlap the last night shift.
+            query += " AND constraint_date <= %s::date + CASE WHEN constraint_type='duty' THEN 1 ELSE 0 END"
             params.append(ends_on)
         if employee:
             query += " AND employee=%s"
@@ -122,6 +135,11 @@ class AvailabilityRepository(RepositoryBase):
         """, (row_id, team_id))
 
     def delete_availability(self, row_id: str, team_id: str) -> None:
+        if self._all(
+            "SELECT 1 FROM complex_duties WHERE id=%s AND team_id=%s",
+            (row_id, team_id),
+        ):
+            raise AgentError("תורנות מכלול נקבעת ומבוטלת על ידי מפקד המכלול")
         self._execute(
             "DELETE FROM availability WHERE id=%s AND team_id=%s", (row_id, team_id),
         )

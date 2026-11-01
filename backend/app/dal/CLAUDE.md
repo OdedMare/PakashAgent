@@ -103,6 +103,8 @@ same call. Add a new guarded migration after its own `COMMIT`.
 |---|---|
 | `teams` | One workspace: name, the boss's password hash, the member share token — plus the operator's controls (D28): `active` (FALSE = suspended) and `notes` |
 | `complexes` | A מכלול (D43): name, the commander's password hash, `active`, `notes`. `teams.complex_id` links a team to at most one; deleting a מכלול leaves its teams standing |
+| `complex_duty_types` | A מכלול's duties (מטבח, שמירה…): seats per day, the weekdays it runs, and `weight` — how many shifts a duty day counts as in fairness and statistics |
+| `complex_duties` | One soldier (`team_id` + roster name) on one duty for one whole day, owned by the מכלול. Projected into the team's `availability()` as a `duty` with no hours, which blocks midnight to midnight; the team's own constraint delete refuses it |
 | `commander_notices` | What a מכלול commander changed inside a team, for that team's own commander: the action in words, a count of folded repeats, `seen_at` |
 | `team_profiles` | One structured workplace profile per team, with a `revision` bumped on every save: a save naming an older one is refused (409) instead of silently undoing another manager's edit |
 | `schedules` | One living schedule per period, `draft` or `published` |
@@ -136,7 +138,7 @@ the setup form owns its shape.
   holding another's row id must still get a 404. The team is a required
   argument, not an optional filter.
 - **`admin.py` is the one module whose reads cross teams**, for the operator
-  console (D28) — and `complexes.py`, whose commander reads cross only the
+  console (D28) — and `complexes.py` and `complex_duties.py`, whose commander reads cross only the
   teams of one מכלול, always filtered on `teams.complex_id`. Keep every cross-team query there, name the `teams` columns
   explicitly, and never return a hash.
 - **A cross-team miss is a `NotFoundError`, never a distinct "wrong team".**
