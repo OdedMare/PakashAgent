@@ -28,6 +28,7 @@ from psycopg_pool import ConnectionPool
 from app.common.runtime_settings.runtime_settings_store import (
     RuntimeSettingsStore,
 )
+from app.dal import pool_hooks
 
 # Sized for the threadpool FastAPI runs sync handlers in, not for the model:
 # a request blocked on a 3-minute generation is holding a worker thread, not a
@@ -100,7 +101,8 @@ def _pool_for(settings) -> ConnectionPool:
             # health route is what reports that, and it can only answer if
             # the process finished starting (see `main.startup`).
             open=True,
-            check=ConnectionPool.check_connection,
+            check=pool_hooks.check,
+            reset=pool_hooks.reset,
         )
         _pool_key = key
     if old is not None:
@@ -146,6 +148,40 @@ def connect(store: RuntimeSettingsStore):
     if job is not None and job[0] is store:
         return _borrow_job_connection(job[1])
     return _pool_for(store.get()).connection()
+
+
+def in_atomic(store) -> bool:
+    """Inside `atomic()`: what is read here may yet be rolled back."""
+    active = _transaction.get()
+    return active is not None and active[0] is store
+
+
+def in_transaction(store) -> bool:
+    """Whether `connect(store)` would lend `atomic()`'s or a job's
+    connection rather than a fresh pooled one."""
+    job = _job_connection.get()
+    return in_atomic(store) or (job is not None and job[0] is store)
+
+
+@contextmanager
+def single_statement(store: RuntimeSettingsStore):
+    """A connection for exactly one statement, committed by the server.
+
+    A repository read or write that runs one statement and commits is its own
+    transaction either way; in autocommit Postgres wraps it implicitly, so the
+    separate `BEGIN` and `COMMIT` round trips buy nothing and are skipped.
+    The caller's `commit()` becomes a no-op. Inside `atomic()` or a job's
+    bound connection the statement joins that transaction exactly as through
+    `connect()` -- autocommit there would break the all-or-nothing promise.
+    """
+    if in_transaction(store):
+        with connect(store) as connection:
+            yield connection
+        return
+    with _pool_for(store.get()).connection() as connection:
+        # `pool_hooks.reset` turns it off again when the pool takes it back.
+        connection.autocommit = True
+        yield connection
 
 
 def standalone_connection(store: RuntimeSettingsStore):

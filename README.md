@@ -162,6 +162,10 @@ and the repository base. See [`backend/CLAUDE.md`](backend/CLAUDE.md).
 docker compose up          # backend, job worker, frontend, postgres
 ```
 
+Compose runs four API processes beside one worker and a tuned PostgreSQL.
+For many teams at once -- sizing processes and connections, and finding the
+slow query -- see [`docs/SCALING.md`](docs/SCALING.md).
+
 Running the two halves directly instead:
 
 ```bash

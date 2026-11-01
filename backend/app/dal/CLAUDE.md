@@ -44,6 +44,28 @@ Two properties are load-bearing:
 connection to ask whether the schema exists would put the question after the
 assumption.
 
+**Round trips are the cost to cut, not queries** (D45). Measured with
+0.5 ms per network hop, a one-statement read went from 10 ms to 3 ms and
+`get_schedule` from 35 ms to 6 ms by removing round trips alone:
+
+- `RepositoryBase._all`/`_execute` borrow through `single_statement()`,
+  which runs a pooled connection in **autocommit**: one statement is its own
+  transaction anyway, so `BEGIN`/`COMMIT` are not sent. Inside `atomic()`
+  or a job's bound connection it lends that connection instead, unchanged.
+  A multi-statement write still uses `connect()` and commits itself.
+- `pool_hooks.py`: the checkout health check is skipped for a connection
+  returned in the last `FRESH_SECONDS`, and the return hook resets
+  `autocommit` to off so no later caller inherits it.
+- `get_schedule` sends its three queries in one pipeline.
+- `team_profile()` sends the document only when `(revision, updated_at)`
+  changed since this process last read it (`repository/profile_cache.py`).
+  The row is still read every time, so a save from any process is seen at
+  once; nothing read inside `atomic()` is cached.
+
+**No PgBouncer in transaction mode.** Session advisory locks (job claim,
+model slots), `LISTEN` and the per-connection `search_path` all need a
+session (`docs/SCALING.md`).
+
 `close_pool()` runs on FastAPI shutdown. Without it the pool's worker threads
 outlive the process and Postgres accumulates idle backends across restarts.
 

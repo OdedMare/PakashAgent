@@ -1,13 +1,34 @@
 """Schedule periods and their slot grids."""
 
+from contextlib import nullcontext
 from typing import List, Optional
 
+from psycopg import Pipeline
 from psycopg.types.json import Jsonb
 
-from app.common.errors import AgentError
+from app.common.errors import AgentError, NotFoundError
 from app.common.time_context import israel_today
-from app.dal.database import connect
+from app.dal.database import connect, single_statement
+from app.dal.repository.assignments import SCHEDULE_ASSIGNMENTS
 from app.dal.repository.base import RepositoryBase, new_id
+
+_SCHEDULE_ROW = "SELECT * FROM schedules WHERE id=%s AND team_id=%s"
+_SCHEDULE_SLOTS = """
+    SELECT * FROM shift_slots
+    WHERE schedule_id=%s AND team_id=%s
+    ORDER BY slot_date, start_time, shift_name
+"""
+
+
+def _pipelined(connection):
+    """Pipeline mode where the connection and the libpq build allow it.
+
+    A connection lent by `atomic()` is a wrapper with no pipeline; there the
+    queries simply run one after another, inside that transaction.
+    """
+    if hasattr(connection, "pipeline") and Pipeline.is_supported():
+        return connection.pipeline()
+    return nullcontext()
 
 
 class PeriodRepository(RepositoryBase):
@@ -20,14 +41,24 @@ class PeriodRepository(RepositoryBase):
         return self.get_schedule(schedule_id, team_id)
 
     def get_schedule(self, schedule_id: str, team_id: str) -> dict:
-        """A schedule with its slots and assignments, scoped to the team."""
-        schedule = self._one(
-            "SELECT * FROM schedules WHERE id=%s AND team_id=%s",
-            (schedule_id, team_id),
-        )
-        schedule["slots"] = self.slots(schedule_id, team_id)
-        schedule["assignments"] = self.assignments(schedule_id, team_id)
-        return schedule
+        """A schedule with its slots and assignments, scoped to the team.
+
+        Read on every page and after every write, so the three queries go
+        out together in one pipeline: one network round trip, not three.
+        Each is still its own statement, as when they were separate calls.
+        """
+        params = (schedule_id, team_id)
+        with single_statement(self._store) as connection:
+            with _pipelined(connection):
+                cursors = [connection.execute(query, params) for query in (
+                    _SCHEDULE_ROW, _SCHEDULE_SLOTS, SCHEDULE_ASSIGNMENTS,
+                )]
+            head, slots, assignments = (
+                [dict(row) for row in cursor.fetchall()] for cursor in cursors
+            )
+        if not head:
+            raise NotFoundError("הפריט לא נמצא")
+        return dict(head[0], slots=slots, assignments=assignments)
 
     def list_schedules(self, team_id: str) -> List[dict]:
         """Every period this team has, newest first. Rows only, no slots."""
@@ -141,11 +172,7 @@ class PeriodRepository(RepositoryBase):
         return self.slots(schedule_id, team_id)
 
     def slots(self, schedule_id: str, team_id: str) -> List[dict]:
-        return self._all("""
-            SELECT * FROM shift_slots
-            WHERE schedule_id=%s AND team_id=%s
-            ORDER BY slot_date, start_time, shift_name
-        """, (schedule_id, team_id))
+        return self._all(_SCHEDULE_SLOTS, (schedule_id, team_id))
 
     def replace_span_slots(self, schedule_id, team_id, starts_on, ends_on, slots):
         """Migrate only the approved dates; other slot and assignment ids survive."""

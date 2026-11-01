@@ -1386,8 +1386,6 @@ What this gives up: a layout is one shape per sheet. A sheet mixing two
 unrelated tables needs its data range narrowed (`first_line`/`last_line`)
 or splitting. Colours carry no meaning to the importer.
 
----
-
 ## D43 — A מכלול joins several משמרות under one מפקד מכלול *(amends D10, D28)*
 
 Some units are not one shift but several independent ones that together make
@@ -1476,6 +1474,50 @@ single agent conversation about the whole מכלול — the agent always speaks
 about one משמרת, because its tools, the solver and the constraints are
 scoped to one. Each is an extension of
 this model, not a change to it.
+
+## D45 — Many teams at once: fewer round trips, more API processes, no PgBouncer *(extends D35, D39)*
+
+With many teams signed in, pages stalled waiting on PostgreSQL. The cause
+was not the data -- a hundred teams is a small database -- but the queue in
+front of it: one API process, sixteen pooled connections, and every
+repository call paying up to four round trips (the pool's health check,
+`BEGIN`, the query, `COMMIT`) while holding a connection. `get_schedule`, read on
+every page and after every write, was three such calls.
+
+- **A single statement runs in autocommit** (`database.single_statement`,
+  used by `RepositoryBase._all`/`_execute`). It was its own transaction
+  already; Postgres now wraps it implicitly. Inside `atomic()` or a job's
+  bound connection it joins that transaction as before.
+- **The checkout check is skipped for a connection returned in the last two
+  seconds** (`dal/pool_hooks.py`); one idle longer is still checked, so a
+  database restart is noticed. The return hook puts `autocommit` back off.
+- **`get_schedule` sends its three queries in one pipeline.**
+- **`team_profile()` sends the document only when it changed**, keyed on
+  `(revision, updated_at)` per process (`profile_cache.py`). The row is
+  read every time, so another process's save is seen on the next read;
+  nothing read inside `atomic()` is kept.
+- **The API runs several processes** (`WEB_CONCURRENCY`, four in compose)
+  beside the separate worker, and PostgreSQL gets sized settings, 200
+  connections and `pg_stat_statements` (`docs/SCALING.md`).
+
+Measured against the repository on one host with 0.5 ms added per network
+hop: `get_schedule` 35 -> 6 ms, a single-row read 10 -> 3 ms, and a
+three-read page under 64 threads on one pool of 16 from 98 to 219 per
+second.
+
+**PgBouncer in transaction mode was considered and refused.** The job
+claim and the model slots hold *session* advisory locks, `LISTEN` needs a
+session of its own, and `search_path` is set per connection -- each of
+them breaks when consecutive transactions land on different server
+connections. Sizing `max_connections` to the processes is enough at this
+scale.
+
+What this gives up: a request still borrows a connection per statement
+rather than one per request -- a request may call the model between two
+reads, and holding a connection across that would bring back the pool
+exhaustion this decision is about.
+
+---
 
 ---
 

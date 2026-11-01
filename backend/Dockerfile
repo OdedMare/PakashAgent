@@ -15,6 +15,12 @@ RUN pip install --no-cache-dir .
 # Set PAKASH_EMBEDDED_WORKER=false only when a separate
 # `python -m app.worker` container runs them instead.
 ENV PAKASH_EMBEDDED_WORKER=true
+# API processes (uvicorn reads WEB_CONCURRENCY as --workers). One by default,
+# because with the embedded worker on every process would run its own job
+# lanes. Raise it together with PAKASH_EMBEDDED_WORKER=false and a separate
+# worker, as docker-compose.yml does. A key in PAKASH_SESSION_SECRET or the
+# database is required with more than one (D39, session_key.py).
+ENV WEB_CONCURRENCY=1
 
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
