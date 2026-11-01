@@ -1388,6 +1388,80 @@ or splitting. Colours carry no meaning to the importer.
 
 ---
 
+## D43 — A מכלול joins several workplaces under one commander *(amends D10, D28)* — **specified, not yet built**
+
+Some units are not one shift but several independent ones that together make
+one large shift — a **מכלול**. Each part keeps its own manager; above them a
+**מפקד מכלול** sees and edits all of them.
+
+**The parts stay teams.** Each workplace in a מכלול is an ordinary team,
+exactly as today: its own roster, shift types, rotations, rules, constraints,
+requests, solver builds, chat, statistics and share link. Nothing about a
+team changes by joining a מכלול. A מכלול is a new object above teams that
+links them; it holds no schedule of its own.
+
+**Who does what:**
+
+- **The operator** (צוות משמרות זהב, `/admin`) opens a מכלול, links existing
+  workplaces into it, unlinks them, and sets and resets the commander's
+  password — the same hand-over card as a team's first password (D28).
+- **A workplace manager (מנהל תת-משמרת)** is a manager exactly as today: sees
+  and edits only their own workplace, and publishes their own schedule. They
+  never see the other workplaces of the מכלול.
+- **The commander (מפקד מכלול)** holds every power a manager has, in every
+  linked workplace: the board, dragging and placing shifts, building with the
+  solver, the agent chat, statistics, the roster, setup (shift types, rules,
+  rotations), constraints and requests, and publishing that workplace.
+  Above that, the commander has one thing no manager has: a **combined board**
+  — every shift of every linked workplace on one screen, with every soldier.
+- **A soldier** sees the schedule of their own workplace, as today. The
+  מכלול is invisible to them.
+
+**Constraints and rules stay in the workplace.** There are no מכלול-wide
+rules: no site-wide minimum, no rest counted across workplaces. Each
+workplace's solver runs on its own data, as it does today. The commander
+edits a workplace's constraints *in that workplace*.
+
+**A soldier belongs to one workplace.** "The commander moves any soldier"
+means moving them within their workplace's schedule (from one shift or day
+to another), from the combined board or from inside the workplace. Moving a
+soldier *between* workplaces — seating someone from workplace A in a shift
+of workplace B — is deliberately left out: it would need a person known to
+two rosters, a rule for whose constraints apply, and a guard against one
+person being placed in both at once. Revisit if it is asked for.
+
+**A commander's edit reaches the workplace.** Every change the commander
+makes in a workplace is written to that workplace's change log under the
+commander's name (not as the manager), and the workplace manager is told
+of it as it happens — the same channel a soldier's submission uses (D29).
+There is no locking: the last edit stands, and both sides see who made it.
+
+**Publishing stays per workplace.** Each manager publishes their own; the
+commander, holding a manager's powers, may publish any one workplace from
+inside it. There is no "publish the whole מכלול" action.
+
+**Sessions.** The commander signs in once and moves between workplaces
+without another password. A commander session is not a team's boss cookie:
+it names a מכלול, and every team route admits it for any team linked to that
+מכלול — and only those. The guard is the same one D10 established (every
+read is scoped by team); the commander's session simply carries a set of
+teams instead of one. A suspended workplace (D28) is refused to its
+commander as to its manager. Unlinking a workplace removes the commander's
+access to it at once.
+
+**Statistics and chat are kept, per workplace.** The commander opens a
+workplace and gets its full control room — statistics, the agent
+conversation, every feature a manager has. The chat speaks about the
+workplace it was opened in, because the agent's tools, the solver and the
+constraints are all scoped to one team. A chat or statistics that span the
+whole מכלול are not part of this decision.
+
+What this gives up: no cross-workplace staffing, no shared soldiers, and no
+single conversation about the whole מכלול. Each is an extension of this
+model, not a change to it.
+
+---
+
 ## Open
 
 - *(none)* — the Python version is settled at **3.11** (D30).
