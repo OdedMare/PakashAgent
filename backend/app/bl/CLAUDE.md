@@ -97,7 +97,9 @@ and the build still completes.
   not counted at a share they cannot reach — and prices every pair of one
   person's shifts by the square of the hours their gap falls short of 48
   (`SPACING_HOURS`), so the longest and most even rest wins (back-to-back days are charged instead only when
-  shifts carry no clock). Each target is a constant computed before solving
+  shifts carry no clock). A day of מכלול duty in the window counts as its
+  type's `weight` in shifts already carried (`problem._duty_load`); with no
+  duties nothing changes. Each target is a constant computed before solving
   (a target that moved with the answer made optimality unprovable). Both
   the distance from the target and the largest overload are priced, per
   unit of load and independent of team size: one shift of evenness is

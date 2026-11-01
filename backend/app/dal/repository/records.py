@@ -73,13 +73,15 @@ class AvailabilityRepository(RepositoryBase):
             SELECT * FROM (
                 SELECT id, team_id, employee, constraint_date, shift_name,
                        available, start_time, end_time, is_hard, reason,
-                       source, created_at, 'availability' AS constraint_type
+                       source, created_at, 'availability' AS constraint_type,
+                       0 AS duty_weight
                 FROM availability
                 UNION ALL
                 SELECT id, team_id, employee, duty_date AS constraint_date,
                        '' AS shift_name, FALSE AS available,
                        start_time, end_time, TRUE AS is_hard, reason,
-                       source, created_at, 'duty' AS constraint_type
+                       source, created_at, 'duty' AS constraint_type,
+                       0 AS duty_weight
                 FROM duties
                 UNION ALL
                 -- A מכלול duty holds the soldier for the whole day: no
@@ -90,7 +92,9 @@ class AvailabilityRepository(RepositoryBase):
                        FALSE AS available, '' AS start_time, '' AS end_time,
                        TRUE AS is_hard, dt.name AS reason,
                        'complex' AS source, cd.created_at,
-                       'duty' AS constraint_type
+                       'duty' AS constraint_type,
+                       -- How many shifts the day counts as in fairness.
+                       dt.weight AS duty_weight
                 FROM complex_duties cd
                 JOIN complex_duty_types dt ON dt.id = cd.duty_type_id
             ) AS scheduling_constraints

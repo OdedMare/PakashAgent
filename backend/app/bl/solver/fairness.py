@@ -25,7 +25,9 @@ cheaper than a soft wish however large the team is (`model.py`).
 
 The load counts the rows already fixed (the rest of the draft and the last
 two weeks), so a day rebuilt inside a period, or a period following a heavy
-one, leans away from whoever already carries more. People with no legal
+one, leans away from whoever already carries more. A day of מכלול duty in
+that window counts as `weight` shifts carried; nights are not charged for
+it. With no duties the spread is exactly what it was. People with no legal
 placement and nothing fixed take no part.
 """
 
@@ -42,7 +44,9 @@ from app.bl.solver.rules import timed_pairs
 def apply_fairness(model: Model) -> None:
     _closers(model)
     shifts = lambda times: SHIFT_SCALE
-    _spread(model, shifts, SHIFT_SPREAD, SHIFT_PEAK, "shifts")
+    # A day of מכלול duty is a shift already carried (`problem._duty_load`).
+    duties = {name: SHIFT_SCALE * load for name, load in model.problem.duty_load.items()}
+    _spread(model, shifts, SHIFT_SPREAD, SHIFT_PEAK, "shifts", carried=duties)
     nights = lambda times: NIGHT_SCALE * int(bool(times["night"]))
     _spread(model, nights, NIGHT_SPREAD, NIGHT_PEAK, "nights")
     clocked = any(times["begins"] is not None for times in model.problem.times)
@@ -60,12 +64,17 @@ def _closers(model: Model) -> None:
             model.price(-CLOSER, var, kind="closer")
 
 
-def _spread(model: Model, measure, weight: int, peak: int, label: str) -> None:
+def _spread(model: Model, measure, weight: int, peak: int, label: str,
+            carried: Dict[str, int] = None) -> None:
+    """`carried` is load a person holds outside the grid (a מכלול duty),
+    in the measure's own units; it counts like a fixed row."""
     problem = model.problem
+    carried = carried or {}
     loads = {}
     for name in problem.staff:
         placed = model.of_person(name)
         fixed = sum(measure(row) for row in problem.fixed if row["employee"] == name)
+        fixed += carried.get(name, 0)
         if placed or fixed:
             loads[name] = (placed, fixed)
     if len(loads) < 2:

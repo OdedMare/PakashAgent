@@ -51,6 +51,8 @@ def solve(problem, time_limit: float = 10.0, workers: int = 8) -> dict:
     if problem.kept_rows:
         metrics.update(absorbed(problem, chosen))
         notes.insert(0, absorbed_note(metrics))
+    if problem.duty_load:
+        notes.append(_duty_note(problem.duty_load))
     return {
         "slots": problem.slots, "assignments": final, "notes": notes,
         "warnings": warnings, "summary": SUMMARY, "metrics": metrics,
@@ -189,6 +191,12 @@ def _ordered(problem, rows: List[dict]) -> List[dict]:
     slots = {(slot["shift_name"], slot["slot_date"]): index for index, slot in enumerate(problem.slots)}
     return sorted(rows, key=lambda row: (
         row["date"], slots.get((row["shift"], row["date"]), 0), order.get(row["employee"], 0)))
+
+
+def _duty_note(load) -> str:
+    """Why someone on מכלול duty got fewer shifts: the duty was counted."""
+    people = ", ".join("%s (%d)" % (name, load[name]) for name in sorted(load))
+    return "תורנויות המכלול נספרו בעומס, כל יום תורנות כמשמרת לפי משקלו: %s" % people
 
 
 def _notes(solver, model: Model) -> List[str]:

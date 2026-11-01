@@ -84,3 +84,61 @@ def test_the_solver_places_nobody_on_duty_that_day_or_the_night_before():
     assert (DAY, "בוקר") not in placed
     assert (DAY, "לילה") not in placed
     assert (BEFORE, "לילה") not in placed
+
+
+# --- fairness: a duty day is a shift already carried ------------------------
+
+SPAN = ("2026-11-16", "2026-11-19")  # Monday to Thursday, one seat a day
+
+
+def _one_seat(*names):
+    return {
+        "workplace": {"name": "יחידה"},
+        "employees": [{"name": name, "eligible_shifts": ["בוקר"]} for name in names],
+        "shifts": [{"name": "בוקר", "start_time": "07:00", "end_time": "15:00", "days": [],
+                    "staffing": [{"days": [], "headcount": 1, "required_roles": []}]}],
+    }
+
+
+def _carried(date, weight=1, employee="דנה"):
+    return dict(_duty(employee, date), date=date, duty_weight=weight)
+
+
+def _counts(availability):
+    result = generate_span(_one_seat("דנה", "יוסי"), *SPAN, availability=availability)
+    counts = {"דנה": 0, "יוסי": 0}
+    for row in result["assignments"]:
+        counts[row["employee"]] += 1
+    return counts
+
+
+def test_without_duties_the_load_is_shared_as_before():
+    assert _counts([]) == {"דנה": 2, "יוסי": 2}
+
+
+def test_whoever_stood_a_duty_takes_fewer_shifts():
+    # Two duty days in the week before: the target is three each, counting them.
+    assert _counts([_carried("2026-11-12"), _carried("2026-11-13")]) == {"דנה": 1, "יוסי": 3}
+
+
+def test_a_heavier_duty_counts_more():
+    assert _counts([_carried("2026-11-13", weight=2)]) == {"דנה": 1, "יוסי": 3}
+
+
+@pytest.mark.parametrize("row", [
+    _carried("2026-11-13", weight=0),            # counts nothing by its type
+    _carried("2026-10-20"),                      # long before the window
+    dict(_carried("2026-11-13"), source="manager"),   # the team's own duty, not the מכלול's
+    _carried("2026-11-13", employee="אבי"),      # nobody on this roster
+])
+def test_what_carries_no_load(row):
+    assert _counts([row]) == {"דנה": 2, "יוסי": 2}
+
+
+def test_the_build_says_the_duties_were_counted():
+    profile = _one_seat("דנה", "יוסי")
+    counted = generate_span(profile, *SPAN, availability=[_carried("2026-11-13", weight=2)])
+    plain = generate_span(profile, *SPAN, availability=[])
+
+    assert "תורנויות המכלול נספרו בעומס, כל יום תורנות כמשמרת לפי משקלו: דנה (2)" in counted["notes"]
+    assert not any("תורנויות המכלול" in note for note in plain["notes"])
