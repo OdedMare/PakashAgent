@@ -322,7 +322,8 @@
    link under the form: a worker is not a second-class visitor here. */
 .gate-doors {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
   gap: 0.6rem;
 }
 

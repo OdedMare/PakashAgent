@@ -22,7 +22,10 @@ from app.dal.repository.base import RepositoryBase
 # The columns of `teams` the console may see. Not the hash, ever; the member
 # token only in the single-team detail, where the operator may need to hand
 # the link over again.
-_TEAM_COLUMNS = "t.id, t.name, t.created_at, t.active, t.notes"
+_TEAM_COLUMNS = (
+    "t.id, t.name, t.created_at, t.active, t.notes, t.complex_id, "
+    "(SELECT c.name FROM complexes c WHERE c.id = t.complex_id) AS complex_name"
+)
 
 # One row per team with its counts, read in a single round trip.
 _TEAM_STATS = """

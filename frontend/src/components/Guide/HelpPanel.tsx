@@ -45,6 +45,8 @@ const INTRO: Record<Surface, string> = {
     "היי! כאן רואים את המשמרות שלכם, מה השתנה מאז הפעם הקודמת, ושולחים בקשות ואילוצים למנהל.",
   member:
     "היי! זה הסידור שפורסם לצוות. מכאן אפשר גם להיכנס לאזור האישי שלכם.",
+  commander:
+    "היי, מפקד/ת! כאן רואים את כל משמרות המכלול יחד. מתמקדים במשמרת או בסוג משמרת, ונכנסים לכל משמרת כדי לערוך אותה עם כל הכלים.",
 };
 
 const SURFACE_LABEL: Record<Surface, string> = {
@@ -52,6 +54,7 @@ const SURFACE_LABEL: Record<Surface, string> = {
   manager: "אזור הניהול",
   employee: "האזור האישי",
   member: "תצוגת הצוות",
+  commander: "לוח המכלול",
 };
 
 export function HelpPanel({

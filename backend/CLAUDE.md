@@ -45,8 +45,16 @@ uvicorn app.main:app --reload
 - `bl/admin_service.py` — the צוות משמרות זהב operator console (D28): opening,
   suspending and deleting teams. `dal/repository/admin.py` holds its
   cross-team queries — the one deliberate exception to team scoping.
-- `api/dependencies.py` — the route guards (`visitor`, `boss`,
-  `employee`, `admin`). `visitor` also refuses a suspended or deleted team.
+- `bl/complex_service.py` — a מכלול (D43): משמרות (teams) joined under one
+  commander. The operator links existing teams and issues the commander's
+  password; the commander signs in on `pakash_commander`, reads the combined
+  board, and enters a team on an ordinary boss cookie marked `commander`.
+  `describe_action` names the commander's writes for the notice the team's
+  own commander reads (recorded by the middleware in `main.py`).
+  `dal/repository/complexes.py` holds its SQL.
+- `api/dependencies.py` — the route guards (`visitor`, `boss`, `own_manager`,
+  `employee`, `admin`, `commander`). `visitor` also refuses a suspended or
+  deleted team, and a commander's cookie for a team no longer in their מכלול.
 - `common/sessions.py` — signed session cookies (HMAC-SHA256, no library).
 - `common/events.py` — "an inbox moved" signals per team (across processes
   over PostgreSQL LISTEN/NOTIFY, `dal/notify.py`, D35), feeding

@@ -5,12 +5,15 @@ routers import from `app.api.contracts` as before.
 """
 
 from app.api.contracts.admin import (  # noqa: F401
+    AdminCreateComplexRequest,
     AdminCreateTeamRequest,
     AdminDeleteRequest,
     AdminLoginRequest,
     AdminPasswordRequest,
     AdminReleaseRequest,
+    AdminUpdateComplexRequest,
     AdminUpdateTeamRequest,
+    CommanderLoginRequest,
 )
 from app.api.contracts.settings import (  # noqa: F401
     ModelsProbeRequest,

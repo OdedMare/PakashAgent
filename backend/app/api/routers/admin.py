@@ -16,11 +16,13 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Response
 
 from app.api.contracts import (
+    AdminCreateComplexRequest,
     AdminCreateTeamRequest,
     AdminDeleteRequest,
     AdminLoginRequest,
     AdminPasswordRequest,
     AdminReleaseRequest,
+    AdminUpdateComplexRequest,
     AdminUpdateTeamRequest,
 )
 from app.common.sessions import ADMIN_COOKIE_NAME, issue_admin
@@ -32,8 +34,12 @@ _THROTTLE_KEY = "admin"
 
 
 class AdminRoutes:
-    def __init__(self, service, guards, secret: str, hours: int, throttle):
+    def __init__(
+        self, service, guards, secret: str, hours: int, throttle,
+        complexes=None,
+    ):
         self._service = service
+        self._complexes = complexes
         self._guards = guards
         self._admin = guards.admin()
         self._secret = secret
@@ -44,6 +50,8 @@ class AdminRoutes:
         self._register_session(router)
         self._register_reads(router)
         self._register_writes(router)
+        if self._complexes is not None:
+            self._register_complexes(router)
 
     def _register_session(self, router: APIRouter) -> None:
         service, throttle, admin = self._service, self._throttle, self._admin
@@ -102,6 +110,7 @@ class AdminRoutes:
             # `exclude_unset`: a key left out is left alone, not nulled.
             result = service.update(team_id, request.model_dump(exclude_unset=True))
             guards.forget_team(team_id)
+            guards.forget_complexes()
             return result
 
         @router.post("/teams/{team_id}/password")
@@ -133,15 +142,64 @@ class AdminRoutes:
             confirmation unreliable."""
             service.delete(team_id, request.confirm_name)
             guards.forget_team(team_id)
+            guards.forget_complexes()
+            return {"status": "deleted"}
+
+    def _register_complexes(self, router: APIRouter) -> None:
+        """A מכלול (D43): existing workplaces joined under one commander,
+        whose password the operator issues. Every change to membership or
+        state clears the guards' cache, so it lands on the next request."""
+        complexes, admin, guards = self._complexes, self._admin, self._guards
+
+        @router.get("/complexes")
+        def list_complexes(session: dict = Depends(admin)) -> list:
+            return complexes.list_for_admin()
+
+        @router.post("/complexes")
+        def create_complex(
+            request: AdminCreateComplexRequest, session: dict = Depends(admin),
+        ) -> dict:
+            result = complexes.create(
+                request.name, request.password, request.team_ids,
+            )
+            guards.forget_complexes()
+            return result
+
+        @router.patch("/complexes/{complex_id}")
+        def update_complex(
+            complex_id: str, request: AdminUpdateComplexRequest,
+            session: dict = Depends(admin),
+        ) -> dict:
+            result = complexes.update(
+                complex_id, request.model_dump(exclude_unset=True),
+            )
+            guards.forget_complexes()
+            return result
+
+        @router.post("/complexes/{complex_id}/password")
+        def reset_complex_password(
+            complex_id: str, request: AdminPasswordRequest,
+            session: dict = Depends(admin),
+        ) -> dict:
+            complexes.reset_password(complex_id, request.password)
+            return {"status": "ok"}
+
+        @router.post("/complexes/{complex_id}/delete")
+        def delete_complex(
+            complex_id: str, request: AdminDeleteRequest,
+            session: dict = Depends(admin),
+        ) -> dict:
+            complexes.delete(complex_id, request.confirm_name)
+            guards.forget_complexes()
             return {"status": "deleted"}
 
 
 def build_router(
     service, guards, secret: str, hours: int = 12,
-    throttle: Optional[LoginThrottle] = None,
+    throttle: Optional[LoginThrottle] = None, complexes=None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/admin", tags=["admin"])
     AdminRoutes(
-        service, guards, secret, hours, throttle or LoginThrottle()
+        service, guards, secret, hours, throttle or LoginThrottle(), complexes,
     ).register(router)
     return router

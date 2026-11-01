@@ -1388,77 +1388,94 @@ or splitting. Colours carry no meaning to the importer.
 
 ---
 
-## D43 — A מכלול joins several workplaces under one commander *(amends D10, D28)* — **specified, not yet built**
+## D43 — A מכלול joins several משמרות under one מפקד מכלול *(amends D10, D28)*
 
 Some units are not one shift but several independent ones that together make
-one large shift — a **מכלול**. Each part keeps its own manager; above them a
-**מפקד מכלול** sees and edits all of them.
+one large shift — a **מכלול**. Each part is a **משמרת** with its own
+commander, the **מפקד משמרת**; above them a **מפקד מכלול** sees and edits all
+of them.
 
-**The parts stay teams.** Each workplace in a מכלול is an ordinary team,
-exactly as today: its own roster, shift types, rotations, rules, constraints,
-requests, solver builds, chat, statistics and share link. Nothing about a
-team changes by joining a מכלול. A מכלול is a new object above teams that
-links them; it holds no schedule of its own.
+*Words.* In code a משמרת is a team (`teams`) and its commander is the boss
+role; on screen they are **משמרת** and **מפקד/ת משמרת**, and the login door
+says so. "סוג משמרת" stays the name of a shift type (בוקר, לילה) inside one.
+(The roster badge "מפקד/ת" — someone qualified to command a shift on the
+board — is older and unrelated.)
+
+**The parts stay teams.** A משמרת in a מכלול is an ordinary team in every
+respect: its own roster, shift types, rotations, rules, constraints,
+requests, solver builds, agent chat, statistics and share link. Nothing in a
+team changes by joining. A מכלול is a row above teams (`complexes`, with
+`teams.complex_id`); it holds no schedule of its own. A team belongs to at
+most one מכלול, and linking one already in another is refused, not moved.
 
 **Who does what:**
 
-- **The operator** (צוות משמרות זהב, `/admin`) opens a מכלול, links existing
-  workplaces into it, unlinks them, and sets and resets the commander's
-  password — the same hand-over card as a team's first password (D28).
-- **A workplace manager (מנהל תת-משמרת)** is a manager exactly as today: sees
-  and edits only their own workplace, and publishes their own schedule. They
-  never see the other workplaces of the מכלול.
-- **The commander (מפקד מכלול)** holds every power a manager has, in every
-  linked workplace: the board, dragging and placing shifts, building with the
-  solver, the agent chat, statistics, the roster, setup (shift types, rules,
-  rotations), constraints and requests, and publishing that workplace.
-  Above that, the commander has one thing no manager has: a **combined board**
-  — every shift of every linked workplace on one screen, with every soldier.
-- **A soldier** sees the schedule of their own workplace, as today. The
-  מכלול is invisible to them.
+- **The operator** (צוות משמרות זהב, `/admin`, tab "מכלולים") opens a מכלול
+  from **existing** teams, changes its membership, renames, suspends and
+  deletes it (deleting removes the grouping only), and issues and resets the
+  **מפקד מכלול password** — shown once on a hand-over card, kept only as a
+  scrypt hash, like a team's.
+- **A מפקד משמרת** signs in with the team password exactly as before, sees
+  and edits only their own משמרת, and publishes their own schedule. The
+  password stays theirs: a commander's session is refused at
+  `/api/workspace/password` (`guards.own_manager()`).
+- **A מפקד מכלול** signs in at the login page's third door ("מפקד מכלול",
+  shown only when a מכלול exists) on a cookie of their own,
+  `pakash_commander`. They land on the **combined board** — every משמרת's
+  shifts side by side with every soldier, narrowed to one משמרת and then to
+  one shift type, over a day, a week, two weeks or a month — and a
+  "המשמרות" page with each משמרת's coverage, open seats and warnings.
+  "כניסה לניהול" opens a משמרת with **every power its commander has**: the
+  board, building, the agent, statistics, the roster, setup, constraints,
+  requests and publishing. The **agent, statistics and changes** are also
+  pages of the מכלול screen itself: a row on top picks the משמרת, and the
+  page renders that משמרת's own `AgentChat`, `Stats` and `ChangesPanel` —
+  not copies — after opening it on the commander's session exactly as
+  "כניסה לניהול" does. Which of the two the commander is in ("entered" or
+  "on the מכלול screen") is remembered per browser tab, since the cookie is
+  the same in both.
+- **A soldier** sees their own משמרת, as today. The מכלול is invisible to
+  them.
 
-**Constraints and rules stay in the workplace.** There are no מכלול-wide
-rules: no site-wide minimum, no rest counted across workplaces. Each
-workplace's solver runs on its own data, as it does today. The commander
-edits a workplace's constraints *in that workplace*.
+**Entering is an ordinary boss cookie, marked.** `POST /api/complex/teams/
+{id}/enter` issues `pakash_session` for that team with `commander` set to
+the מכלול's id. Every manager route therefore serves the commander
+unchanged; `Guards.visitor_session` re-checks on each request (cached ten
+seconds, cleared by the console at once) that the team is still linked to
+that מכלול and both are active, so unlinking or suspending ends access on
+the next request. The commander's chats are their own (`manager_id`
+`commander-<id>`), the same from any browser.
 
-**A soldier belongs to one workplace.** "The commander moves any soldier"
-means moving them within their workplace's schedule (from one shift or day
-to another), from the combined board or from inside the workplace. Moving a
-soldier *between* workplaces — seating someone from workplace A in a shift
-of workplace B — is deliberately left out: it would need a person known to
-two rosters, a rule for whose constraints apply, and a guard against one
-person being placed in both at once. Revisit if it is asked for.
+**Constraints and rules stay in the משמרת.** There are no מכלול-wide rules:
+no site-wide minimum, no rest counted across משמרות. Each solver runs on its
+own data. The combined board only reads — counting seats as each stored grid
+states them — and is not a second audit.
 
-**A commander's edit reaches the workplace.** Every change the commander
-makes in a workplace is written to that workplace's change log under the
-commander's name (not as the manager), and the workplace manager is told
-of it as it happens — the same channel a soldier's submission uses (D29).
-There is no locking: the last edit stands, and both sides see who made it.
+**A soldier belongs to one משמרת.** Moving a soldier means moving them
+inside their משמרת's schedule. Seating someone from one משמרת in another's
+shift is deliberately left out: it would need a person known to two
+rosters, a rule for whose constraints apply, and a guard against one person
+being placed in both at once.
 
-**Publishing stays per workplace.** Each manager publishes their own; the
-commander, holding a manager's powers, may publish any one workplace from
-inside it. There is no "publish the whole מכלול" action.
+**A מפקד מכלול's edit reaches the מפקד משמרת.** Every write they make inside
+a משמרת is recorded in its change log under `commander:<id>`, and — by the
+middleware in `main.py`, after the write succeeded — as a row in
+`commander_notices` named in the commander's words ("פרסם סידור", "שינה
+שיבוץ בלוח", "שינה את הגדרות המשמרת"…; checks and previews are not told).
+Repeats within ten minutes fold into one row with a count. A `commander`
+signal wakes the משמרת commander's open screen, where a banner lists them
+until "ראיתי". There is no locking: the last edit stands, and both sides see
+who made it.
 
-**Sessions.** The commander signs in once and moves between workplaces
-without another password. A commander session is not a team's boss cookie:
-it names a מכלול, and every team route admits it for any team linked to that
-מכלול — and only those. The guard is the same one D10 established (every
-read is scoped by team); the commander's session simply carries a set of
-teams instead of one. A suspended workplace (D28) is refused to its
-commander as to its manager. Unlinking a workplace removes the commander's
-access to it at once.
+**Publishing stays per משמרת.** Each מפקד משמרת publishes their own; the מפקד
+מכלול may publish any one from inside it. There is no "publish the whole
+מכלול".
 
-**Statistics and chat are kept, per workplace.** The commander opens a
-workplace and gets its full control room — statistics, the agent
-conversation, every feature a manager has. The chat speaks about the
-workplace it was opened in, because the agent's tools, the solver and the
-constraints are all scoped to one team. A chat or statistics that span the
-whole מכלול are not part of this decision.
-
-What this gives up: no cross-workplace staffing, no shared soldiers, and no
-single conversation about the whole מכלול. Each is an extension of this
-model, not a change to it.
+What this gives up: no cross-משמרת staffing, no shared soldiers, and no
+single agent conversation about the whole מכלול — the agent always speaks
+about one משמרת, because its tools, the solver and the constraints are
+scoped to one. Each is an extension of
+this model, not a change to it.
 
 ---
 

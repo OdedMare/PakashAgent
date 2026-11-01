@@ -1,6 +1,6 @@
 """The operator console (D28): sign-in, and the teams it manages."""
 
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -38,3 +38,26 @@ class AdminDeleteRequest(BaseModel):
 
 class AdminReleaseRequest(BaseModel):
     employee: str = Field(min_length=1, max_length=120)
+
+
+class AdminCreateComplexRequest(BaseModel):
+    """A מכלול (D43): its name, the commander's first password, and the
+    existing workplaces it joins."""
+
+    name: str = Field(min_length=1, max_length=80)
+    password: str = Field(min_length=6, max_length=200)
+    team_ids: List[str] = Field(default_factory=list, max_length=100)
+
+
+class AdminUpdateComplexRequest(BaseModel):
+    """A partial edit; `team_ids`, when sent, is the whole new membership."""
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    active: Optional[bool] = None
+    notes: Optional[str] = Field(default=None, max_length=500)
+    team_ids: Optional[List[str]] = Field(default=None, max_length=100)
+
+
+class CommanderLoginRequest(BaseModel):
+    complex_id: str = Field(min_length=1, max_length=80)
+    password: str = Field(min_length=1, max_length=200)

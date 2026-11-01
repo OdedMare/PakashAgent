@@ -229,6 +229,9 @@ export interface AdminTeam {
   pending_requests: number;
   pending_swaps: number;
   last_activity: string | null;
+  /** The מכלול this team is linked to (D43), if any. */
+  complex_id?: string | null;
+  complex_name?: string | null;
 }
 
 export interface AdminTeamDetail extends AdminTeam {
@@ -295,6 +298,72 @@ export interface TeamView extends Workspace {
   profile: WorkplaceProfile | null;
   /** What a profile save sends back as `expected_revision`. */
   profile_revision?: number | null;
+  /** The מכלול this workplace belongs to (D43), for a boss session. */
+  complex?: { id: string; name: string } | null;
+  /** The boss session is the מכלול commander's, not the manager's. */
+  commander?: boolean;
+}
+
+// --- a מכלול: workplaces under one commander (D43) ---------------------------
+
+export interface ComplexSummary {
+  id: string;
+  name: string;
+}
+
+export interface ComplexTeam {
+  id: string;
+  name: string;
+  active: boolean;
+  has_profile: boolean;
+  shifts: { name: string; start_time: string; end_time: string }[];
+  employees: number;
+}
+
+export interface CommanderView {
+  id: string;
+  name: string;
+  teams: ComplexTeam[];
+}
+
+/** One period of one workplace, as the combined board draws it. */
+export interface ComplexPeriod {
+  id: string;
+  starts_on: string;
+  ends_on: string;
+  status: "draft" | "published";
+  slots: {
+    shift_name: string;
+    slot_date: string;
+    start_time: string;
+    end_time: string;
+    headcount: number;
+  }[];
+  assignments: { employee: string; shift: string; date: string }[];
+  warnings: number;
+}
+
+export interface ComplexBoard {
+  start: string;
+  end: string;
+  teams: (ComplexTeam & { periods: ComplexPeriod[] })[];
+}
+
+export interface CommanderNotice {
+  id: string;
+  complex_name: string;
+  action: string;
+  count: number;
+  created_at: string;
+}
+
+export interface AdminComplex {
+  id: string;
+  name: string;
+  notes: string;
+  active: boolean;
+  created_at: string;
+  teams: { id: string; name: string; active: boolean }[];
 }
 
 /** One advisory finding from `bl/audit.py`.

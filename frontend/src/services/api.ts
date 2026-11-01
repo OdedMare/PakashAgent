@@ -1,5 +1,10 @@
 import type {
+  AdminComplex,
   AdminOverview,
+  CommanderNotice,
+  CommanderView,
+  ComplexBoard,
+  ComplexSummary,
   AdminTeam,
   AdminTeamDetail,
   ChangeLearning,
@@ -54,7 +59,7 @@ export const stopManagerReply = (id: string) =>
 
 /** Routes whose 401 is an answer rather than a symptom: the probes that
  *  ask "who am I". */
-const EXPECTED_401 = ["/api/workspace/me", "/api/employee/me"];
+const EXPECTED_401 = ["/api/workspace/me", "/api/employee/me", "/api/complex/me"];
 
 const sessionLostListeners = new Set<() => void>();
 
@@ -81,6 +86,8 @@ export function onSessionLost(listener: () => void): () => void {
 function signalsSessionLost(method: string, path: string): boolean {
   if (method !== "GET") return false;
   if (path.startsWith("/api/admin/")) return false;
+  // The commander's own cookie, like the operator's, is a separate session.
+  if (path.startsWith("/api/complex/")) return false;
   return !EXPECTED_401.some((probe) => path === probe || path.startsWith(`${probe}?`));
 }
 
@@ -273,6 +280,39 @@ export const adminReleaseIdentity = (id: string, employee: string) =>
 /** Irreversible. The team's name must be typed back. */
 export const adminDeleteTeam = (id: string, confirmName: string) =>
   request<{ status: string }>(`/api/admin/teams/${encodeURIComponent(id)}/delete`, { method: "POST", body: JSON.stringify({ confirm_name: confirmName }) });
+
+// --- a מכלול (D43) ---------------------------------------------------------
+// The operator links existing teams and issues the commander's password; the
+// commander signs in on a cookie of their own and enters a workplace, which
+// hands them an ordinary manager session for it.
+
+export const adminComplexes = () => request<AdminComplex[]>("/api/admin/complexes");
+export const adminCreateComplex = (input: { name: string; password: string; team_ids: string[] }) =>
+  request<AdminComplex>("/api/admin/complexes", { method: "POST", body: JSON.stringify(input) });
+/** Only the keys present are applied; `team_ids` is the whole membership. */
+export const adminUpdateComplex = (id: string, patch: Partial<{ name: string; active: boolean; notes: string; team_ids: string[] }>) =>
+  request<AdminComplex>(`/api/admin/complexes/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+export const adminResetComplexPassword = (id: string, password: string) =>
+  request<{ status: string }>(`/api/admin/complexes/${encodeURIComponent(id)}/password`, { method: "POST", body: JSON.stringify({ password }) });
+/** Removes the grouping only; the teams stay. The name is typed back. */
+export const adminDeleteComplex = (id: string, confirmName: string) =>
+  request<{ status: string }>(`/api/admin/complexes/${encodeURIComponent(id)}/delete`, { method: "POST", body: JSON.stringify({ confirm_name: confirmName }) });
+
+export const listComplexes = () => request<ComplexSummary[]>("/api/complex/list");
+export const commanderLogin = (complexId: string, password: string) =>
+  request<ComplexSummary>("/api/complex/login", { method: "POST", body: JSON.stringify({ complex_id: complexId, password }) });
+export const commanderLogout = () => request<{ status: string }>("/api/complex/logout", { method: "POST" });
+export const commanderMe = () => request<CommanderView>("/api/complex/me");
+export const complexBoard = (start: string, end: string) =>
+  request<ComplexBoard>(`/api/complex/board?${new URLSearchParams({ start, end })}`);
+export const enterComplexTeam = (teamId: string) =>
+  request<ComplexSummary>(`/api/complex/teams/${encodeURIComponent(teamId)}/enter`, { method: "POST" });
+export const leaveComplexTeam = () => request<{ status: string }>("/api/complex/leave", { method: "POST" });
+/** For the workplace's own manager: what the commander changed, unseen. */
+export const commanderNotices = () =>
+  request<{ complex: ComplexSummary | null; notices: CommanderNotice[] }>("/api/complex/notices");
+export const markCommanderNoticesSeen = () =>
+  request<{ status: string }>("/api/complex/notices/seen", { method: "POST" });
 
 /** Teams for the login picker. Served unauthenticated. */
 export function listTeams(): Promise<TeamSummary[]> {

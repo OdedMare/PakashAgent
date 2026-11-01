@@ -54,6 +54,15 @@ MANAGER_COOKIE_NAME = "pakash_manager"
 ADMIN_COOKIE_NAME = "pakash_admin"
 ROLE_ADMIN = "admin"
 
+# The commander of a מכלול (D43). Like the operator, a cookie of its own: a
+# commander belongs to a group of teams, not to one. Entering a workplace
+# issues an ordinary boss cookie for that team carrying `commander` (the
+# מכלול's id), which is what lets every manager route serve the commander
+# unchanged while the guards re-check, on each request, that the team is
+# still linked to that מכלול.
+COMMANDER_COOKIE_NAME = "pakash_commander"
+ROLE_COMMANDER = "commander"
+
 
 def _b64(raw: bytes) -> str:
     """URL-safe base64 without padding -- `=` is legal in a cookie value but
@@ -73,6 +82,7 @@ def issue(
     days: int,
     employee: Optional[str] = None,
     manager_id: Optional[str] = None,
+    commander: Optional[str] = None,
 ) -> str:
     """`<payload>.<signature>`, both URL-safe base64.
 
@@ -91,6 +101,8 @@ def issue(
         payload["employee"] = employee
     if manager_id:
         payload["manager_id"] = manager_id
+    if commander:
+        payload["commander"] = commander
     body = _b64(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
     return "%s.%s" % (body, _sign(secret, body))
 
@@ -144,6 +156,28 @@ def issue_admin(secret: str, hours: int) -> str:
 
 def read_admin(secret: str, cookie: Optional[str]) -> Optional[dict]:
     """The operator payload if authentic and unexpired, else None."""
+    return _read_role(secret, cookie, ROLE_ADMIN)
+
+
+def issue_commander(secret: str, complex_id: str, days: int) -> str:
+    """A commander session: names the מכלול, never a team."""
+    payload = {
+        "role": ROLE_COMMANDER, "complex_id": complex_id,
+        "exp": int(time.time()) + days * 86400,
+    }
+    body = _b64(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    return "%s.%s" % (body, _sign(secret, body))
+
+
+def read_commander(secret: str, cookie: Optional[str]) -> Optional[dict]:
+    """The commander payload if authentic and unexpired, else None."""
+    payload = _read_role(secret, cookie, ROLE_COMMANDER)
+    if payload is None or not payload.get("complex_id"):
+        return None
+    return payload
+
+
+def _read_role(secret, cookie: Optional[str], role: str) -> Optional[dict]:
     if not cookie or "." not in cookie:
         return None
     body, _, signature = cookie.rpartition(".")
@@ -153,7 +187,7 @@ def read_admin(secret: str, cookie: Optional[str]) -> Optional[dict]:
         payload = json.loads(_unb64(body).decode("utf-8"))
     except (ValueError, UnicodeDecodeError):
         return None
-    if not isinstance(payload, dict) or payload.get("role") != ROLE_ADMIN:
+    if not isinstance(payload, dict) or payload.get("role") != role:
         return None
     if int(payload.get("exp", 0)) < time.time():
         return None

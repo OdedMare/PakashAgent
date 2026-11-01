@@ -5,6 +5,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Crown,
+  Network,
   ShieldCheck,
   UserCircle,
   UserCog,
@@ -13,11 +14,11 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { CrewStage, Guard } from "@/components/Crew";
-import { listTeams } from "@/services/api";
-import type { TeamSummary } from "@/types";
+import { listComplexes, listTeams } from "@/services/api";
+import type { ComplexSummary, TeamSummary } from "@/types";
 
 /** Which door the visitor is standing at. */
-type Mode = "boss" | "worker";
+type Mode = "boss" | "worker" | "commander";
 
 /** The front door: pick the team, then come in as its manager or as a worker.
  *
@@ -29,12 +30,17 @@ type Mode = "boss" | "worker";
  *  reason: a picker here would publish every team's roster.
  *
  *  There is no "open a team" door any more (D28): workspaces are opened by
- *  צוות משמרות זהב from the operator console, and this page says so. */
+ *  צוות משמרות זהב from the operator console, and this page says so.
+ *
+ *  The third door is the מכלול commander's (D43): it picks a מכלול rather
+ *  than a team, and takes the password צוות משמרות זהב issued. It is shown
+ *  only when a מכלול exists. */
 export function Login({
   busy,
   error,
   onLogin,
   onEmployeeLogin,
+  onCommanderLogin,
   onDismissError,
 }: {
   busy: boolean;
@@ -45,6 +51,7 @@ export function Login({
     employee: string,
     passcode: string,
   ) => Promise<void>;
+  onCommanderLogin: (complexId: string, password: string) => Promise<void>;
   onDismissError: () => void;
 }) {
   // `undefined` until the list has answered, so the card does not flash an
@@ -52,6 +59,8 @@ export function Login({
   const [teams, setTeams] = useState<TeamSummary[] | undefined>(undefined);
   const [mode, setMode] = useState<Mode>("boss");
   const [teamId, setTeamId] = useState("");
+  const [complexes, setComplexes] = useState<ComplexSummary[]>([]);
+  const [complexId, setComplexId] = useState("");
   const [employee, setEmployee] = useState("");
   const [password, setPassword] = useState("");
 
@@ -68,13 +77,21 @@ export function Login({
         setTeamId((current) => current || rows[0]?.id || "");
       })
       .catch(() => setTeams([]));
+    listComplexes()
+      .then((rows) => {
+        setComplexes(rows);
+        setComplexId((current) => current || rows[0]?.id || "");
+      })
+      .catch(() => setComplexes([]));
   }, []);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (busy) return;
     try {
-      if (mode === "worker") {
+      if (mode === "commander") {
+        await onCommanderLogin(complexId, password);
+      } else if (mode === "worker") {
         await onEmployeeLogin(teamId, employee.trim(), password);
       } else {
         await onLogin(teamId, password);
@@ -88,7 +105,9 @@ export function Login({
   };
 
   const canSubmit =
-    mode === "worker"
+    mode === "commander"
+      ? complexId.length > 0 && password.length > 0
+      : mode === "worker"
       ? teamId.length > 0 && employee.trim().length > 0 && password.length > 0
       : teamId.length > 0 && password.length > 0;
 
@@ -154,18 +173,41 @@ export function Login({
           <div className="gate-form-head">
             <span>כניסה מאובטחת</span>
             <h2 id="gate-form-title">
-              {mode === "worker" ? "כניסת עובד/ת" : "כניסת מנהל"}
+              {mode === "worker"
+                ? "כניסת עובד/ת"
+                : mode === "commander"
+                  ? "כניסת מפקד מכלול"
+                  : "כניסת מפקד משמרת"}
             </h2>
           </div>
           <p className="gate-lede">
-            {teams.length === 0
-              ? "עדיין לא נפתח צוות פעיל. צוותים חדשים נפתחים על ידי צוות משמרות זהב."
-              : "בחרו את הצוות, ואז היכנסו כמנהל או כעובד/ת."}
+            {mode === "commander"
+              ? "בחרו את המכלול והיכנסו עם סיסמת המפקד שקיבלתם מצוות משמרות זהב."
+              : teams.length === 0
+                ? "עדיין לא נפתח צוות פעיל. צוותים חדשים נפתחים על ידי צוות משמרות זהב."
+                : complexes.length > 0
+                  ? "בחרו את המשמרת, ואז היכנסו כמפקד/ת משמרת או כעובד/ת — או כמפקד/ת מכלול."
+                  : "בחרו את המשמרת, ואז היכנסו כמפקד/ת משמרת או כעובד/ת."}
           </p>
 
-          {teams.length === 0 ? null : (
+          {mode === "commander" ? (
             <label className="gate-field">
-              <span>צוות</span>
+              <span>מכלול</span>
+              <select
+                value={complexId}
+                onChange={(event) => setComplexId(event.target.value)}
+                disabled={busy}
+              >
+                {complexes.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : teams.length === 0 ? null : (
+            <label className="gate-field">
+              <span>משמרת</span>
               <select
                 value={teamId}
                 onChange={(event) => setTeamId(event.target.value)}
@@ -191,7 +233,7 @@ export function Login({
                 disabled={busy}
               >
                 <UserCog size={18} />
-                <span>מנהל</span>
+                <span>מפקד משמרת</span>
               </button>
               <button
                 type="button"
@@ -204,6 +246,19 @@ export function Login({
                 <UserCircle size={18} />
                 <span>עובד/ת</span>
               </button>
+              {complexes.length > 0 ? (
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={mode === "commander"}
+                  className={`gate-door${mode === "commander" ? " is-selected" : ""}`}
+                  onClick={() => switchMode("commander")}
+                  disabled={busy}
+                >
+                  <Network size={18} />
+                  <span>מפקד מכלול</span>
+                </button>
+              ) : null}
             </div>
           )}
 
@@ -228,7 +283,7 @@ export function Login({
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoComplete="current-password"
-              disabled={busy || teams.length === 0}
+              disabled={busy || (mode !== "commander" && teams.length === 0)}
             />
             {mode === "worker" ? (
               <small className="gate-hint">

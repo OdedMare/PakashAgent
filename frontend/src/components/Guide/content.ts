@@ -8,7 +8,7 @@
  *  Steps point at `data-tour` attributes on real elements rather than at
  *  class names, so restyling a screen cannot silently detach the tour. */
 
-export type Surface = "setup" | "manager" | "employee" | "member";
+export type Surface = "setup" | "manager" | "employee" | "member" | "commander";
 
 export interface TourStep {
   /** The `data-tour` value of the element to spotlight. */
@@ -26,6 +26,32 @@ export interface TourStep {
 }
 
 export const TOURS: Partial<Record<Surface, TourStep[]>> = {
+  // The מכלול commander's combined board (D43).
+  commander: [
+    {
+      target: "cmd-nav",
+      title: "המכלול כולו, במקום אחד",
+      body: "‘לוח המכלול’ מציג את כל המשמרות זו לצד זו, עם כל החיילים, ו‘המשמרות’ מרכז את מצב כל אחת. ‘סוכן הסידור’, ‘סטטיסטיקות’ ו‘שינויים’ הם הכלים של המשמרת עצמה — בוחרים בראש העמוד על איזו משמרת מדובר. מתחת — רשימת המשמרות.",
+    },
+    {
+      target: "cmd-coverage",
+      title: "מצב המכלול במבט אחד",
+      body: "איוש, מקומות פתוחים, משמרות שפורסמו וחיילים משובצים — סכום של כל המשמרות בטווח שעל המסך.",
+      optional: true,
+    },
+    {
+      target: "cmd-focus",
+      title: "התמקדות במשמרת ובסוג משמרת",
+      body: "בוחרים משמרת, ואז סוג משמרת מסוים — למשל רק הלילות. גם לחיצה על שם סוג משמרת בלוח ממקדת בו. ההתמקדות משנה רק את התצוגה.",
+      optional: true,
+    },
+    {
+      target: "cmd-grid",
+      title: "הלוח קורא, המשמרת עורכת",
+      body: "כל משמרת עם החוקים, האילוצים והסולבר שלה, ולכן עורכים בתוכה: ‘כניסה לניהול’ פותח אותה עם כל הכלים של מפקד המשמרת — לוח, סוכן, סטטיסטיקות והגדרות. כל שינוי שלכם נשלח גם למפקד המשמרת.",
+      optional: true,
+    },
+  ],
   setup: [
     {
       target: "setup-workplace",
@@ -286,6 +312,16 @@ export const GLOSSARY: GlossaryEntry[] = [
     audience: ["manager", "team"],
   },
   {
+    term: "מכלול",
+    definition: "כמה משמרות עצמאיות שמתחברות למשמרת אחת גדולה. לכל משמרת מפקד, חוקים ואילוצים משלה; מעליהן מפקד המכלול. צוות משמרות זהב פותח מכלול ומנפיק את סיסמת המפקד.",
+    audience: ["manager"],
+  },
+  {
+    term: "מפקד/ת מכלול",
+    definition: "רואה את כל משמרות המכלול בלוח אחד ונכנס/ת לכל אחת מהן עם כל הכלים של מפקד המשמרת. כל שינוי שלו/ה נשלח למפקד אותה משמרת.",
+    audience: ["manager"],
+  },
+  {
     term: "כוננות",
     definition: "משמרת כונן, למשל כונן לילה. איך היא נספרת לשעות ולהוגנות נקבע בהגדרת היחידה.",
     audience: ["manager", "team"],
@@ -339,7 +375,7 @@ export const GLOSSARY: GlossaryEntry[] = [
 
 export function glossaryFor(surface: Surface | null): GlossaryEntry[] {
   // Nobody signed in yet: show everything, the visitor may be either.
-  if (surface === null || surface === "setup" || surface === "manager") {
+  if (surface === null || surface === "setup" || surface === "manager" || surface === "commander") {
     return GLOSSARY;
   }
   return GLOSSARY.filter((entry) => entry.audience.includes("team"));

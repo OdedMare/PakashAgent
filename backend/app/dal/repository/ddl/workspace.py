@@ -75,4 +75,45 @@ ALTER TABLE team_profiles ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEF
 
 COMMIT;
 
+-- A מכלול (D43): several workplaces joined under one commander. Each linked
+-- team stays a team in every respect; this row only names the group and
+-- holds the commander's password, hashed like a team's.
+CREATE TABLE IF NOT EXISTS complexes (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    notes TEXT NOT NULL DEFAULT '',
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+COMMIT;
+
+-- A team belongs to at most one מכלול. Deleting the מכלול leaves its teams
+-- standing, unlinked.
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS complex_id TEXT
+    REFERENCES complexes(id) ON DELETE SET NULL;
+
+COMMIT;
+
+-- What the commander changed inside a workplace, for that workplace's
+-- manager to read (D43). Repeats of one action within a few minutes fold
+-- into one row with a count, so a chat turn by turn is one notice.
+CREATE TABLE IF NOT EXISTS commander_notices (
+    id TEXT PRIMARY KEY,
+    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    complex_name TEXT NOT NULL DEFAULT '',
+    action TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    seen_at TIMESTAMPTZ
+);
+
+COMMIT;
+
+CREATE INDEX IF NOT EXISTS commander_notices_unseen
+    ON commander_notices (team_id, created_at DESC) WHERE seen_at IS NULL;
+
+COMMIT;
+
 """

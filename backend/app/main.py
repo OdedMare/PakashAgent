@@ -8,14 +8,16 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.api.dependencies import Guards
 from app.api.routers import (
-    admin, employee, health, profile, schedules, settings,
-    workspace,
+    admin, complex as complex_router, employee, health, profile, schedules,
+    settings, workspace,
 )
 from app import worker as job_worker
 from app.bl.admin_service import AdminService
+from app.bl.complex_service import ComplexService, describe_action
 from app.bl.compiled_sources import SourceCompiler
 from app.bl.employee_service import EmployeeService
 from app.bl.profile_service import ProfileService
@@ -25,7 +27,7 @@ from app.bl.chat.service import ManagerChatService
 from app.api.routers import manager_chat, replacements
 from app.common.config import Settings
 from app.common.errors import AppError, error_payload
-from app.common.events import TeamEvents
+from app.common.events import COMMANDER, TeamEvents
 from app.common.logging_setup import QUIET_401_METHODS, configure_logging
 from app.common.actor import acting_as, actor_of
 from app.common.sessions import (
@@ -79,7 +81,11 @@ session_secret = session_key(env, store, repository)
 # The guards ask the database whether a team is still active, so a team the
 # operator suspended or deleted stops working under cookies already issued
 # (D28). Cached briefly per team inside `Guards`.
-guards = Guards(session_secret, team_active=repository.team_is_active)
+guards = Guards(
+    session_secret, team_active=repository.team_is_active,
+    team_in_complex=repository.team_in_complex,
+    complex_active=repository.complex_is_active,
+)
 # One throttle for every password check in the process. Keys are namespaced
 # (`boss:`, `employee:`, `settings:`), so sharing it couples nothing.
 login_throttle = LoginThrottle(shared=repository)
@@ -96,6 +102,9 @@ if not admin_password:
         "the operator console is locked."
     )
 admin_service = AdminService(repository, workspace_service, admin_password, store=store)
+# A מכלול (D43): workplaces under one commander, whose password the
+# operator issues.
+complex_service = ComplexService(repository, workspace_service, schedule_service)
 
 
 def startup() -> None:
@@ -167,7 +176,28 @@ async def bind_model_team(request: Request, call_next):
         # database down, `/api/health` must still answer and say so.
         session, actor = {}, ""
     with model_team(session.get("team_id", "")), acting_as(actor):
-        return await call_next(request)
+        response = await call_next(request)
+    if session.get("commander") and response.status_code < 400:
+        await _tell_the_manager(request, session)
+    return response
+
+
+async def _tell_the_manager(request: Request, session: dict) -> None:
+    """A commander's write inside a workplace is told to its manager (D43):
+    a notice row, and a signal that wakes the manager's open screen. Never
+    fails the request that caused it -- the write already happened."""
+    action = describe_action(request.method, request.url.path)
+    if action is None or not request.url.path.startswith("/api/") \
+            or request.url.path.startswith("/api/complex"):
+        return
+    try:
+        await run_in_threadpool(
+            complex_service.record,
+            session["team_id"], session["commander"], action,
+        )
+        team_events.publish(session["team_id"], COMMANDER)
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("commander notice not recorded: %s", exc)
 
 app.include_router(health.build_router(repository))
 app.include_router(
@@ -179,6 +209,12 @@ app.include_router(
 app.include_router(
     admin.build_router(
         admin_service, guards, session_secret, env.admin_session_hours,
+        login_throttle, complexes=complex_service,
+    )
+)
+app.include_router(
+    complex_router.build_router(
+        complex_service, guards, session_secret, env.session_days,
         login_throttle,
     )
 )

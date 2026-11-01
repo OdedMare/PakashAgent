@@ -26,6 +26,13 @@ markers, and errors are all Hebrew. See [`backend/app/bl/CLAUDE.md`](backend/app
 **Unit setup works end to end without a model call.** The boss defines the
 roster, shifts, rotations and rules in a structured form saved in Postgres.
 
+**A מכלול works end to end** ([D43](docs/DECISIONS.md)). צוות משמרות זהב
+joins existing teams — each a **משמרת** with its own **מפקד משמרת** — under a
+**מפקד מכלול**, whose password only the operator issues. The commander sees
+every משמרת on one board, narrows it to one משמרת and one shift type, and
+enters any משמרת with all of its commander's tools; every change they make
+there is told to that משמרת's commander.
+
 **Workspaces work end to end.** A boss opens a team, gets a share link for the
 employees, and everything they author is scoped to that team.
 

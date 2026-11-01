@@ -80,6 +80,8 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | Table | Holds |
 |---|---|
 | `teams` | One workspace: name, the boss's password hash, the member share token — plus the operator's controls (D28): `active` (FALSE = suspended) and `notes` |
+| `complexes` | A מכלול (D43): name, the commander's password hash, `active`, `notes`. `teams.complex_id` links a team to at most one; deleting a מכלול leaves its teams standing |
+| `commander_notices` | What a מכלול commander changed inside a team, for that team's own commander: the action in words, a count of folded repeats, `seen_at` |
 | `team_profiles` | One structured workplace profile per team, with a `revision` bumped on every save: a save naming an older one is refused (409) instead of silently undoing another manager's edit |
 | `schedules` | One living schedule per period, `draft` or `published` |
 | `shift_slots` | One shift on one date — the thing an assignment points into |
@@ -112,7 +114,8 @@ the setup form owns its shape.
   holding another's row id must still get a 404. The team is a required
   argument, not an optional filter.
 - **`admin.py` is the one module whose reads cross teams**, for the operator
-  console (D28). Keep every cross-team query there, name the `teams` columns
+  console (D28) — and `complexes.py`, whose commander reads cross only the
+  teams of one מכלול, always filtered on `teams.complex_id`. Keep every cross-team query there, name the `teams` columns
   explicitly, and never return a hash.
 - **A cross-team miss is a `NotFoundError`, never a distinct "wrong team".**
   Distinguishing them turns any id-taking endpoint into an oracle for which

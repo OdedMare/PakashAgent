@@ -1,0 +1,422 @@
+/* A מכלול (D43): the commander's combined board, the pill shown while the
+   commander is inside a משמרת, the notice its own commander reads, and the
+   operator console's מכלולים tab. Same tokens and restraint as the board. */
+
+/* The commander's screen sits in the management shell (`.management`,
+   `.workspace-sidebar`, `.management-topbar`) and on the board's own
+   pieces (`.board-head`, `.board-coverage`, `.board-grid`, `.board-card`).
+   What follows is only what the מכלול adds: a band per משמרת across the
+   grid, the focus row, and the משמרות cards. */
+
+.cmd-workspace .manager-analytics {
+  display: grid;
+  gap: 1rem;
+}
+
+.cmd-workspace .board {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.cmd-focus {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.cmd-hint,
+.cmd-empty {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+/* A row of the grid is its cells: the wrapper only groups them. */
+.cmd-row {
+  display: contents;
+}
+
+.cmd-band {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.65rem 0.8rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border-strong);
+  position: sticky;
+  inset-inline-start: 0;
+}
+
+.cmd-band-name {
+  font-weight: 650;
+  font-size: 0.95rem;
+}
+
+.cmd-band-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--warning);
+}
+
+.cmd-band-enter {
+  margin-inline-start: auto;
+}
+
+.cmd-band-empty {
+  grid-column: 1 / -1;
+  padding: 0.7rem 0.8rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.cmd-shift-name {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.cmd-shift-name:hover {
+  color: var(--primary);
+}
+
+/* A card on the combined board is read, not dragged. */
+.board-card.cmd-card {
+  min-height: 2.4rem;
+  cursor: default;
+}
+
+.board-card.cmd-card:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.board-cell.cmd-cell-unplanned {
+  justify-content: center;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+/* The agent, statistics and changes pages: the משמרת's own components,
+   under a row choosing which משמרת they are about. */
+.cmd-tools {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.cmd-tools > .board-views {
+  width: fit-content;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.cmd-chat {
+  height: max(32rem, calc(100vh - 19rem));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.cmd-chat.is-hidden {
+  display: none;
+}
+
+.cmd-changes {
+  display: grid;
+  gap: 0.85rem;
+  max-width: 52rem;
+}
+
+/* "המשמרות": a card per משמרת. */
+.cmd-units {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
+  gap: 0.9rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cmd-unit {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.cmd-unit.is-off {
+  opacity: 0.6;
+}
+
+.cmd-unit header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.cmd-unit h2 {
+  margin: 0;
+  font-size: 1.02rem;
+}
+
+.cmd-unit header p {
+  margin: 0.15rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.cmd-unit-meter {
+  height: 6px;
+  background: var(--surface-3);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.cmd-unit-meter span {
+  display: block;
+  height: 100%;
+  background: var(--primary-fill, var(--primary));
+  border-radius: inherit;
+}
+
+.cmd-unit-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.cmd-unit-facts div {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+
+.cmd-unit-facts dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.cmd-unit-facts dd {
+  margin: 0;
+  font-weight: 650;
+  font-size: 1.05rem;
+}
+
+.cmd-unit-shifts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.cmd-unit-shifts span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.2rem 0.55rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+
+.cmd-unit-shifts small {
+  color: var(--text-muted);
+}
+
+.cmd-unit footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* Inside a משמרת, the מכלול commander's strip: a pill floating over the
+   control room, so the room keeps its own full-height layout. */
+.cmd-bar {
+  position: fixed;
+  z-index: 60;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  padding: 6px 6px 6px 14px;
+  padding-inline-start: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.14);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.cmd-bar > svg {
+  color: var(--primary);
+  flex: none;
+}
+
+.cmd-bar > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmd-bar .ghost-button {
+  flex: none;
+  border-radius: 999px;
+}
+
+/* For the משמרת's own commander: what the מכלול commander changed. */
+.cmd-notices {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 16px;
+  padding: 10px 14px;
+  background: var(--primary-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.cmd-notices > div {
+  flex: 1;
+}
+
+.cmd-notices ul {
+  margin: 4px 0 0;
+  padding-inline-start: 18px;
+}
+
+.cmd-notices small {
+  color: var(--text-muted);
+}
+
+/* The operator console's מכלולים tab. */
+.adm-complexes {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-complexes > li {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.adm-complexes > li.is-suspended {
+  opacity: 0.65;
+}
+
+.adm-complex-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.adm-complex-head .adm-team-name {
+  flex: 1;
+}
+
+.adm-complex-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.adm-complex-teams {
+  display: grid;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+
+.adm-complex-teams label {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.adm-field.adm-complex-teams input[type="checkbox"] {
+  flex: none;
+  width: 18px;
+  min-height: 0;
+  height: 18px;
+  padding: 0;
+  accent-color: var(--primary);
+}
+
+.adm-complex-teams label > span {
+  flex: 1;
+}
+
+.adm-complex-danger {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.adm-complex-danger input {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 12px;
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.adm-complex-teams label.is-taken {
+  color: var(--text-muted);
+}
+
+.adm-complex-teams small {
+  margin-inline-start: auto;
+}
+
+@media (max-width: 720px) {
+  .cmd-bar .cmd-bar-note {
+    display: none;
+  }
+
+  .cmd-band-enter {
+    margin-inline-start: 0;
+  }
+}

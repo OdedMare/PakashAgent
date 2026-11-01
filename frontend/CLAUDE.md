@@ -201,7 +201,8 @@ profile comes from the setup form.
 | Surface | Purpose |
 |---|---|
 | Workspace gate | Pick the team, then the manager or worker door — `src/components/Workspace/`. No team creation here (D28) |
-| Operator console | `/admin` — צוות משמרות זהב: every team with its counts, open (name + password)/rename/suspend/delete, and the system settings ("מערכת", the only place they are edited) — `src/components/Admin/` |
+| Operator console | `/admin` — צוות משמרות זהב: every team with its counts, open (name + password)/rename/suspend/delete, the מכלולים tab (link existing teams, issue the מפקד מכלול password, D43), and the system settings ("מערכת", the only place they are edited) — `src/components/Admin/` |
+| Commander area | The מפקד מכלול's combined board (D43) in the management shell, on the board's own pieces (`WeekNav`, `ViewSwitch`, tiles, `board-card`): every משמרת side by side, narrowed to one משמרת and then one shift type, plus "המשמרות" cards. Reads only; "כניסה לניהול" enters a משמרת with its commander's powers, under `CommanderBar`. `CommanderNotices` tells the משמרת's own commander what changed — `src/components/Complex/` |
 | Member area | The employee's read-only surface — `MemberArea.tsx` |
 | Unit setup | The structured profile form — roster, shift vocabulary, staffing, rotations, rules — and what code made of each sentence (`CompiledSources.tsx`, D32) — `src/components/ManualSetup/` |
 | Guide | The first-run tour, the help panel and the `/tutorial` page, narrated by the two guards — `src/components/Guide/`, `src/app/tutorial/` |
@@ -415,6 +416,13 @@ one on screen and names any published week it left alone.
 - **The member share link is `/team/<token>`.** `MemberEntry` exchanges the
   token for a cookie and then `replaceState`s it out of the URL, so the
   credential stops travelling in the address bar and the back stack.
+- **A מכלול commander has a cookie of their own** (`pakash_commander`, D43).
+  `useWorkspace` asks `/api/complex/me` beside `/api/workspace/me`: with no
+  team session and a commander session the gate renders `CommanderArea`;
+  entering a משמרת hands back an ordinary boss session marked `commander`,
+  so `BossSurface` renders as for its own commander, under `CommanderBar`.
+  On screen a team inside a מכלול is a **משמרת** and its manager a **מפקד/ת
+  משמרת**; the login door says so.
 - **This routing is not the access control.** The backend guards every route
   independently; a visitor who forced past the component still gets a 401.
 
