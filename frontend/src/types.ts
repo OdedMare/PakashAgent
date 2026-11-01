@@ -759,6 +759,21 @@ export interface EmployeeLoad {
    *  somebody the roster no longer lists. */
   exit_pattern: string;
   rotation_group: string;
+  /** מכלול duties in the span, those on Friday/Saturday, and their load in
+   *  shifts by each type's weight. `load` is `shifts` + `duty_load`: what the
+   *  solver evens out, and what the list is ordered by. Zero without duties. */
+  duties?: number;
+  weekend_duties?: number;
+  duty_load?: number;
+  load?: number;
+}
+
+/** One kind of מכלול duty in the span. */
+export interface DutyLoad {
+  duty: string;
+  count: number;
+  load: number;
+  weight: number;
 }
 
 /** How many audit findings of one code. A count, never a score. */
@@ -796,6 +811,10 @@ export interface ShiftStats {
    *  board's own tile leaves them out. */
   conflicts: number;
   constraint_pressure: ConstraintPressure;
+  /** מכלול duties in the span. Absent or zero for a team outside a מכלול. */
+  total_duties?: number;
+  total_duty_load?: number;
+  by_duty?: DutyLoad[];
 }
 
 /** Everything the management area opens with, in one call. */

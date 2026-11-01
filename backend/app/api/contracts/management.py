@@ -106,6 +106,22 @@ class EmployeeLoad(BaseModel):
     # roster no longer lists.
     exit_pattern: str = ""
     rotation_group: str = ""
+    # מכלול duties in the span: how many, of them on Friday/Saturday, and
+    # their weighted load in shifts. `load` is `shifts` plus `duty_load` --
+    # what the solver evens out, and what the list is ordered by.
+    duties: int = 0
+    weekend_duties: int = 0
+    duty_load: int = 0
+    load: int = 0
+
+
+class DutyLoad(BaseModel):
+    """One kind of מכלול duty in the span."""
+
+    duty: str
+    count: int = 0
+    load: int = 0
+    weight: int = 1
 
 
 class WarningCount(BaseModel):
@@ -152,6 +168,9 @@ class ShiftStats(BaseModel):
     # here so the two can never show different numbers for one week.
     conflicts: int = 0
     constraint_pressure: ConstraintPressure = ConstraintPressure()
+    total_duties: int = 0
+    total_duty_load: int = 0
+    by_duty: List[DutyLoad] = []
 
 
 class ManagementOverview(BaseModel):

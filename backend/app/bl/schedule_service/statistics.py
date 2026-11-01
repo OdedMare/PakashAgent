@@ -61,6 +61,7 @@ class StatsReader:
                 team_id, {"starts_on": first, "ends_on": last}, with_reason=False
             ),
             employee=rows.text(employee),
+            duties=self._context.complex_duties(team_id, first, last),
         )
 
 
