@@ -1,233 +1,255 @@
-# תורנויות מכלול: מפקד המכלול משבץ תורנויות לכל החיילים
+# תורנויות מכלול: מפקד המכלול משבץ, ההוגנות והסטטיסטיקה סופרות אותן
 
-> מטרה: דרג חדש מעל הצוותים, **מכלול**. מפקד המכלול מגדיר סוגי תורנויות
-> (מטבח, שמירה, ש״ג…) ומשבץ אליהן חיילים מכל הצוותים שבמכלול. חייל בתורנות
-> **חסום ליום כולו**: הפותר לא ישבץ אותו, ומנהל הצוות לא יכול לעקוף את החסימה.
-> השיבוץ ידני, ויש גם "מלא בהוגנות" שמציע חלוקה למפקד לאישור, בלי מודל.
+> מטרה: מפקד המכלול (D43) מגדיר סוגי תורנויות (מטבח, שמירה, ש״ג…) ומשבץ
+> אליהן חיילים מכל המשמרות שבמכלול. חייל בתורנות **חסום ליום כולו** בסידור
+> של המשמרת שלו. התורנות **נספרת כעומס**: בחלוקת התורנויות בין כל חיילי
+> המכלול, בהוגנות של הפותר בכל משמרת, ובסטטיסטיקה של המשמרת ושל המכלול.
 
 ## סטטוס: תוכנית, עוד לא מומשה
 
-החלטות שהתקבלו: (1) תפקיד חדש מעל הצוותים, (2) חסימה של יום שלם,
-(3) שיבוץ ידני עם הצעה הוגנת.
+החלטות שהתקבלו:
+1. **מבוסס על המכלול הקיים (D43)**: `complexes`, `teams.complex_id`, ה־cookie
+   `pakash_commander`, `Guards.commander`, ו־`commander_notices`. אין תפקיד
+   חדש ואין התחברות חדשה.
+2. **חסימה של יום שלם.**
+3. **שיבוץ ידני + "מלא בהוגנות"** שמציע ולא שומר.
+4. **הוגנות**: התורנות נספרת גם בחלוקת התורנויות וגם בעומס המשמרות.
+5. **סטטיסטיקה**: התורנויות מופיעות במסך הסטטיסטיקה של המשמרת ובמאזן מכלולי.
 
 ---
 
-## 1. מה קיים היום ועל מה בונים
+## 1. מה קיים ועל מה בונים
 
-- **`duties`** (`dal/repository/ddl/scheduling.py`): תורנות חוסמת לחייל אחד,
-  לפי שעות, ברמת הצוות. `records.availability()` מאחדת אותה עם `availability`
-  לצורה אחת (`constraint_type='duty'`).
-- **אכיפה, שקיימת כבר בכל המקומות**:
-  - הפותר: `scheduler/availability.py` → `effective_availability`
-  - שיבוץ ידני וגרירה: `schedule_service/operations.py::assert_no_blocking_duty`
-    (`ConflictError` שאי אפשר לעקוף)
-  - ביקורת: `audit/constraints.py::_duty_overlaps`, `audit/checks/people.py`
-  - כלי הצ'אט "מי לא נמצא": `tools/team_tools.py`, `planner/team_answers.py`
-  - ממשק: `ConfirmDrop.tsx` ו־`ShiftEditor.tsx` כבר מסבירים "תורנות חוסמת"
-- **תפקידים**: `boss` / `member` / `employee` לכל צוות (`common/sessions.py`),
-  ובנוסף `admin` (צוות משמרות זהב) עם cookie נפרד (D28). אין היום שום דרג
-  מעל צוות.
-
-**העיקרון**: תורנות מכלול נכנסת **לאותה שאילתה** (`records.availability`)
-כשורת `duty`. כך כל מנגנוני האכיפה הקיימים מכבדים אותה בלי שינוי. הדבר
-החדש היחיד במסלול האכיפה הוא הסמנטיקה של "יום שלם".
+| קיים | איפה | שימוש בתוכנית |
+|---|---|---|
+| מכלול, משמרות, מפקד | `complexes`, `complex_service.py`, `routers/complex.py`, `Complex/CommanderArea.tsx` | עמוד חדש "תורנויות" בתפריט המפקד, ליד לוח / המשמרות / סוכן / סטטיסטיקה / שינויים |
+| הודעה למפקד המשמרת | `commander_notices`, `ComplexService.record` | כל שיבוץ או ביטול תורנות מודיע למפקד המשמרת של החייל |
+| תורנות חוסמת (שעות, ברמת צוות) | טבלת `duties`, `records.availability()` | תורנות מכלול נכנסת לאותה שאילתה, וכל האכיפה הקיימת מכבדת אותה |
+| אכיפה | הפותר (`scheduler/availability.py`), `operations.py::assert_no_blocking_duty`, `audit/constraints.py` | אין שינוי חוץ מהסמנטיקה של "יום שלם" |
+| הוגנות הפותר | `solver/fairness.py::_spread`: עומס = משמרות קבועות + משובצות, יעד ב־water-fill | ימי תורנות נכנסים כעומס קבוע (§5ב) |
+| סטטיסטיקה | `audit/stats.py::shift_stats` → `/api/schedules/stats` → `Management/Stats.tsx`. המפקד רואה את אותו `Stats` לכל משמרת | שדות תורנות חדשים (§6) |
 
 ---
 
 ## 2. מודל נתונים
 
 ```sql
--- מכלול: קבוצת צוותים עם מפקד אחד
-CREATE TABLE IF NOT EXISTS clusters (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    password_hash TEXT NOT NULL,          -- הסיסמה של מפקד המכלול
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- לכל צוות לכל היותר מכלול אחד
-ALTER TABLE teams ADD COLUMN IF NOT EXISTS cluster_id TEXT
-    REFERENCES clusters(id) ON DELETE SET NULL;
-
 -- סוגי התורנויות של המכלול
-CREATE TABLE IF NOT EXISTS cluster_duty_types (
+CREATE TABLE IF NOT EXISTS complex_duty_types (
     id TEXT PRIMARY KEY,
-    cluster_id TEXT NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,                   -- "מטבח", "שמירה"
-    seats INT NOT NULL DEFAULT 1,         -- כמה חיילים ביום
-    days TEXT[] NOT NULL DEFAULT '{}',    -- ריק = כל יום
+    complex_id TEXT NOT NULL REFERENCES complexes(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,                     -- "מטבח", "שמירה"
+    seats INT NOT NULL DEFAULT 1,           -- כמה חיילים ביום
+    days TEXT[] NOT NULL DEFAULT '{}',      -- ריק = כל יום
+    weight INT NOT NULL DEFAULT 1,          -- כמה "משמרות" שווה יום תורנות (§5ב)
     active BOOLEAN NOT NULL DEFAULT TRUE,
-    UNIQUE (cluster_id, name)
+    UNIQUE (complex_id, name)
 );
 
 -- שיבוץ: חייל אחד, יום אחד, תורנות אחת
-CREATE TABLE IF NOT EXISTS cluster_duties (
+CREATE TABLE IF NOT EXISTS complex_duties (
     id TEXT PRIMARY KEY,
-    cluster_id TEXT NOT NULL REFERENCES clusters(id) ON DELETE CASCADE,
-    duty_type_id TEXT NOT NULL REFERENCES cluster_duty_types(id) ON DELETE CASCADE,
+    complex_id TEXT NOT NULL REFERENCES complexes(id) ON DELETE CASCADE,
+    duty_type_id TEXT NOT NULL REFERENCES complex_duty_types(id) ON DELETE CASCADE,
     team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-    employee TEXT NOT NULL,               -- השם כפי שהוא בפרופיל הצוות
+    employee TEXT NOT NULL,                 -- השם כפי שהוא ברוסטר המשמרת
     duty_date DATE NOT NULL,
     note TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (team_id, employee, duty_date) -- תורנות אחת ליום לחייל
+    UNIQUE (team_id, employee, duty_date)   -- תורנות אחת ליום לחייל
 );
-CREATE INDEX IF NOT EXISTS cluster_duties_team_date_idx
-    ON cluster_duties (team_id, duty_date);
+CREATE INDEX IF NOT EXISTS complex_duties_team_date_idx
+    ON complex_duties (team_id, duty_date);
+CREATE INDEX IF NOT EXISTS complex_duties_complex_date_idx
+    ON complex_duties (complex_id, duty_date);
 ```
 
-**למה טבלה נפרדת ולא שורות ב־`duties`**: הבעלים הוא המכלול ולא הצוות. מנהל
-הצוות לא מוחק ולא עורך אותן (`delete_availability` מוחק לפי `team_id`, ולכן
-לא יגיע לטבלה הזו). ההיסטוריה של המכלול שלמה גם אם צוות עוזב.
-
-**זיהוי חייל**: `(team_id, employee)`, כמו בכל שאר המערכת. כשמשנים שם חייל
-בפרופיל, צריך לעדכן גם את `cluster_duties` (באותו מקום שבו שינוי שם מטופל
-היום), אחרת התורנות "תתנתק".
+- **טבלה נפרדת מ־`duties`**: הבעלים הוא המכלול. מפקד המשמרת רואה את
+  התורנות אבל לא מוחק אותה (`delete_availability` מוחק לפי `team_id` רק
+  מ־`availability` ו־`duties`).
+- **משמרת שעוזבת את המכלול**: התורנויות **העתידיות** שלה נמחקות (עם הודעה),
+  ושל העבר נשמרות לסטטיסטיקה. ההחלטה נכנסת לקוד ניתוק הצוות בקונסולה.
+- **שינוי שם חייל ברוסטר**: מעדכנים גם את `complex_duties`, באותו מקום שבו
+  שינוי שם מטופל היום.
+- **חייל שעזב** (`inactive_from`): תורנויות מהתאריך הזה והלאה מוצגות למפקד
+  כ"דורש החלפה".
 
 ---
 
-## 3. אכיפה: איך היא מגיעה לכל מקום
+## 3. אכיפה: חסימת יום שלם
 
-1. **`records.availability()`**: מוסיפים ענף שלישי ל־`UNION ALL`:
+1. **`records.availability()`**: ענף שלישי ב־`UNION ALL`:
    ```sql
    SELECT cd.id, cd.team_id, cd.employee, cd.duty_date AS constraint_date,
-          '' AS shift_name, FALSE AS available,
-          '' AS start_time, '' AS end_time, TRUE AS is_hard,
-          t.name AS reason,  -- "מטבח"
-          'cluster' AS source, cd.created_at, 'duty' AS constraint_type
-   FROM cluster_duties cd JOIN cluster_duty_types t ON t.id = cd.duty_type_id
+          '' AS shift_name, FALSE AS available, '' AS start_time, '' AS end_time,
+          TRUE AS is_hard, dt.name AS reason, 'complex' AS source,
+          cd.created_at, 'duty' AS constraint_type
+   FROM complex_duties cd JOIN complex_duty_types dt ON dt.id = cd.duty_type_id
    ```
-   - מרחיבים את `source` (גם ב־CHECK של `availability`/`duties` אם נדרש)
-     בערך `'cluster'`, כדי שהממשק יידע לכתוב "נקבע ע״י מפקד המכלול".
-2. **סמנטיקת יום שלם**: תורנות בלי שעות = חוסמת **כל משמרת שתאריכה הוא
-   יום התורנות**.
-   - `audit/constraints.py::_duty_overlaps`: אם אין `start_time`/`end_time`
-     משווים תאריך (`_same_occurrence` בלי shift) במקום חפיפת שעות.
-   - `schedule_service/constraints.py` ו־`api/contracts/*`: לא משנים. תורנות
-     ידנית של הצוות עדיין דורשת שעות. רק שורות `source='cluster'` מגיעות בלי.
-   - `operations.py::assert_no_blocking_duty`: הודעה חדשה כשאין שעות:
-     `"%s בתורנות מכלול (%s) בתאריך הזה ולכן לא ניתן לשבץ אותו/ה."`
-   - הסינון של היום הקודם ב־`records.availability` / `_explicit_rows`
-     (`-1 day` לתורנות לילה) לא מזיק, כי תורנות יום שלם לא חוצה חצות.
-3. **פותר**: אין שינוי. הוא כבר מוציא שורת `duty` קשיחה מרשימת המועמדים.
-   צריך לוודא בבדיקה ש־`solver/rows.py` מחשב את החפיפה דרך `constraint_conflicts`.
-4. **מחיקה ע״י מנהל צוות**: `delete_availability` מוחק רק מ־`availability`
-   ומ־`duties`, ולכן תורנות מכלול נשארת. בממשק מסתירים לה את כפתור המחיקה.
+   `source='complex'` הוא ערך תצוגה בלבד, שקיים רק בשאילתה ולא בעמודה.
+2. **`audit/constraints.py::_duty_overlaps`**: תורנות בלי שעות פירושה חסימה
+   של **כל משמרת שתאריכה הוא יום התורנות** (השוואת תאריך, כמו `_same_occurrence`).
+3. **`operations.py::assert_no_blocking_duty`**: הודעה ליום שלם:
+   `"%s בתורנות %s בתאריך הזה (שובץ/ה ע״י מפקד המכלול), ולכן לא ניתן לשבץ אותו/ה."`
+4. **הפותר**: אין שינוי. שורת `duty` קשיחה כבר מוציאה את החייל מהמועמדים.
+   בדיקה תוודא את זה.
+5. **"מי לא נמצא"** (`tools/team_tools.py`): התורנות מופיעה כ־`duty`, עם שם
+   התורנות כסיבה.
 
 ---
 
-## 4. כשתורנות נופלת על משמרת שכבר שובצה
+## 4. תורנות שנופלת על משמרת שכבר שובצה
 
-זה המקרה הקשה. הצעה:
-
-| מצב השבוע | מה קורה |
+| מצב השבוע במשמרת | מה קורה |
 |---|---|
-| טיוטה (לא פורסם) | המושב מתפנה ומתמלא אוטומטית במסלול של D40/D37 (`refit`) |
-| פורסם | המושב **לא** מתפנה לבד. נוצרת התראה למנהל הצוות ("X בתורנות מטבח ב־12/11 ומשובץ לבוקר") עם כפתור "מצא מחליף" (מסלול ההיעדרות של D36) |
+| טיוטה | המושב מתפנה ומתמלא אוטומטית (מסלול D40/D37) |
+| פורסם | לא נוגעים. `commander_notices` + באנר אצל מפקד המשמרת ("X בתורנות מטבח ב־12/11 ומשובץ לבוקר"), עם כפתור "מצא מחליף" (D36) |
 
-לפני שמירה, מסך המפקד מציג אזהרה: "החייל משובץ למשמרת בוקר בצוות א׳". זו
-אזהרה ולא חסימה: המפקד מחליט, והצוות מתאים את עצמו.
-
----
-
-## 5. "מלא בהוגנות" (בלי מודל)
-
-`bl/cluster/fill.py`, פונקציה טהורה:
-
-- **קלט**: סוגי תורנויות, טווח תאריכים, כל החיילים הפעילים בצוותי המכלול,
-  שיבוצים קיימים, ומונה תורנויות לכל חייל (היסטוריה של 60 יום אחורה).
-- **פסילה (קשיח)**: חייל בבית לפי הסבב (`rotation/presence.py::presence_status`),
-  אילוץ יום שלם קשיח, תורנות אחרת באותו יום, `inactive_from`, נחפף/ת (לבחירה).
-- **דירוג (רך)**: הכי מעט תורנויות קודם, אחר כך מי שאין לו משמרת באותו יום,
-  אחר כך הכי רחוק מהתורנות האחרונה, ושובר שוויון קבוע (שם) לתוצאה דטרמיניסטית.
-- **פלט**: הצעה בלבד (רשימת שורות + סיבה לכל אחת). שום דבר לא נשמר עד
-  שהמפקד לוחץ "אשר". אותו עיקרון כמו D20 ("סימולציה אינה הצעה").
-
-אלגוריתם חמדני יום אחרי יום מספיק. CP-SAT לא נדרש בשלב הזה.
+לפני שמירה, המפקד רואה אזהרה ולא חסימה: "משובץ למשמרת בוקר במשמרת א׳".
 
 ---
 
-## 6. הרשאות והתחברות
+## 5. הוגנות
 
-- **תפקיד חדש `cluster`** עם cookie נפרד `pakash_cluster`, באותו דפוס של
-  `pakash_admin` (D28): המפקד לא שייך לצוות אחד, ושני ה־cookies צריכים לחיות
-  יחד בדפדפן. `Guards.cluster()` ב־`api/dependencies.py`.
-- **מי פותח מכלול**: המפעיל, בקונסולה `/admin`: "פתיחת מכלול" (שם + סיסמה,
-  כרטיס מסירה חד-פעמי כמו בצוות) ושיוך צוותים למכלול (`teams.cluster_id`).
-  איפוס סיסמה דרך המפעיל.
-- **מה המפקד רואה**: שמות, צוות, תפקיד, סבב ונוכחות של כל חייל בצוותי
-  המכלול, ואילו משמרות יש לו (קריאה בלבד). הוא **לא** רואה צ'אט, בקשות או
-  הערות של הצוות.
-- **מה מנהל הצוות רואה**: את תורנויות המכלול של אנשיו (קריאה בלבד, עם תג
-  "מפקד המכלול"), בלוח, ב־TeamPanel וב"מי לא נמצא".
-- **חייל**: רואה את התורנות שלו באזור האישי.
-- כל השאילתות חוצות-הצוותים של המכלול נמצאות ב־mixin אחד,
-  `dal/repository/clusters.py`, כמו `admin.py`, כדי שיהיה קובץ אחד לבדוק.
-  כל שאילתה מסוננת `WHERE team.cluster_id = session.cluster_id`.
+### 5א. חלוקת התורנויות בין כל חיילי המכלול ("מלא בהוגנות")
+
+`bl/complex_duties/fill.py`, פונקציה טהורה, בלי מודל.
+
+**מה נספר לכל חייל, על פני כל המכלול** (חלון של 8 שבועות אחורה + הטווח
+המתוכנן):
+- `duty_load` = Σ `weight` של התורנויות שלו
+- `weekend_duties` = תורנויות בשישי/שבת, נספרות בנפרד, כמו לילות בפותר
+- `shift_load` = משמרות בסידור של המשמרת שלו באותו חלון (מ־`periods_between`)
+
+**פסילה (קשיח)**:
+- בבית לפי הסבב (`rotation/presence.py::presence_status`)
+- אילוץ יום שלם קשיח, או תורנות אחרת באותו יום
+- `inactive_from`, או נחפף/ת (לפי הגדרה בסוג התורנות)
+
+**דירוג (רך, לקסיקוגרפי)**:
+1. `duty_load` נמוך קודם. זה הלב: מספר התורנויות מתאזן בין כולם.
+2. בסופ״ש: `weekend_duties` נמוך קודם.
+3. `duty_load + shift_load` נמוך קודם: מי שעובד פחות משמרות מקבל תורנות לפני מי שעמוס.
+4. אין לו משמרת באותו יום (כדי לא לגרום לפינוי).
+5. הכי רחוק מהתורנות האחרונה שלו.
+6. שובר שוויון קבוע (משמרת, שם), לתוצאה דטרמיניסטית.
+
+**פלט**: הצעה בלבד, ולכל שורה סיבה ("2 תורנויות ב־8 שבועות, הכי מעט
+במכלול"). שום דבר לא נשמר עד "אשר" (העיקרון של D20). אלגוריתם חמדני יום
+אחרי יום מעדכן את המונים תוך כדי. CP-SAT לא נדרש.
+
+### 5ב. תורנות נספרת בעומס המשמרות (הפותר של כל משמרת)
+
+היום `_spread` מחשב לכל אדם `load = משובץ + fixed`, ומכוון ליעד אישי ב־water-fill.
+
+- `Problem` מקבל `duty_load: Dict[name, int]`, שהוא Σ `weight` של התורנויות
+  של החייל **בחלון של `fixed`** (שבועיים אחורה + הטווח הנבנה + טיוטה מחוץ לטווח).
+- ב־`_spread`, **רק במדד `shifts`**: `fixed += SHIFT_SCALE * duty_load[name]`,
+  והתורנויות נכנסות גם ל־`demand`. מי שעשה תורנות "כבר נושא" עומס, וה־water-fill
+  נותן לו פחות משמרות.
+- **לא** נכנס ל־`problem.fixed` עצמו, כדי שלא ישפיע על כללי מנוחה, רצף ימים
+  וכו׳. יום התורנות כבר חסום ב־§3.
+- **לילות**: לא נספרות. אפשר להוסיף בעתיד `counts_as_night` לסוג תורנות.
+- הסבר בבנייה: `solve.py` מוסיף לסיבה "פחות משמרות כי היה/תה בתורנות X".
+
+`weight` בסוג התורנות מאפשר לקבוע ששמירה של 24 שעות שווה 2 משמרות ומטבח שווה 1.
+
+---
+
+## 6. סטטיסטיקה
+
+### 6א. סטטיסטיקה של משמרת (`shift_stats`), אצל מפקד המשמרת ואצל המפקד
+
+`ScheduleService.stats` קורא את `complex_duties` של הצוות בטווח ומעביר
+`duties` ל־`shift_stats`. שדות חדשים:
+
+- ב־`by_employee`: `duties` (ספירה), `duty_load` (עם משקל), `weekend_duties`,
+  ו־**`load` = `shifts` + `duty_load`**. המיון יעבור ל־`load`, כדי שמי
+  שעבד 4 משמרות ועשה 2 תורנויות יופיע לפני מי שעבד 5 משמרות.
+- ברמת הסיכום: `total_duties` ו־`by_duty: [{duty, count}]`.
+- `constraint_pressure` כבר סופר שורות `duty`, ולכן תורנויות מכלול ייספרו
+  בו אוטומטית.
+- **`Stats.tsx`**: עמודה "תורנויות" בטבלת החיילים, מקטע נפרד בבר העומס
+  (משמרות | תורנויות), כרטיס "תורנויות בטווח", ופירוש לפי סוג.
+- `contracts`: הרחבת `ShiftStats` (השדות אופציונליים, ובצוות שלא במכלול הם אפסים).
+
+### 6ב. מאזן תורנויות מכלולי (עמוד התורנויות של המפקד)
+
+`GET /api/complex/duties/stats?start&end`:
+- לכל חייל: משמרת, `duties`, `duty_load`, `weekend_duties`, `shifts`, `load`
+- לכל משמרת: סך תורנויות, ממוצע לחייל נוכח
+- לכל סוג תורנות: כמה ימים מאוישים מתוך כמה נדרשו
+- **מדד פיזור**: מקסימום מול מינימום של `duty_load` בין החיילים הזמינים, כדי
+  לראות במבט אחד אם החלוקה הוגנת
+- סינון לפי משמרת ולפי חייל
 
 ---
 
 ## 7. API
 
-`api/routers/cluster.py`, הכול תחת `Guards.cluster()`:
+ב־`routers/complex.py`, תחת `Guards.commander`. כל שאילתה מסוננת לפי
+`session.complex_id`, וכל `team_id` עובר `require_team`.
 
 | שיטה | נתיב | מה |
 |---|---|---|
-| POST | `/api/cluster/login` · `/logout` · GET `/me` | התחברות |
-| GET | `/api/cluster/roster?from&to` | כל החיילים + נוכחות + משמרות בטווח |
-| GET/POST/PATCH/DELETE | `/api/cluster/duty-types[/{id}]` | ניהול סוגי תורנויות |
-| GET | `/api/cluster/duties?from&to` | השיבוצים |
-| POST | `/api/cluster/duties` | שיבוץ (מחזיר אזהרות התנגשות) |
-| DELETE | `/api/cluster/duties/{id}` | ביטול |
-| POST | `/api/cluster/duties/suggest` | "מלא בהוגנות": מחזיר הצעה ולא שומר |
-| POST | `/api/cluster/duties/bulk` | אישור הצעה (טרנזקציה אחת) |
-| GET | `/api/cluster/stats?from&to` | מונה תורנויות לחייל |
+| GET | `/api/complex/duty-types` · POST · PATCH/DELETE `/{id}` | סוגי תורנויות |
+| GET | `/api/complex/roster?start&end` | כל חיילי המכלול + נוכחות + משמרות + מונים |
+| GET | `/api/complex/duties?start&end` | השיבוצים |
+| POST | `/api/complex/duties` | שיבוץ (מחזיר אזהרות התנגשות) |
+| DELETE | `/api/complex/duties/{id}` | ביטול |
+| POST | `/api/complex/duties/suggest` | "מלא בהוגנות": הצעה בלבד |
+| POST | `/api/complex/duties/bulk` | אישור הצעה, בטרנזקציה אחת |
+| GET | `/api/complex/duties/stats?start&end` | המאזן (§6ב) |
 
-לכל שמירה ומחיקה: `append_change` ביומן של **הצוות** של החייל (פעולה חדשה
-`ACTION_CLUSTER_DUTY`), כדי ש"למה יוסי הוזז" ימשיך לקבל תשובה (D4). אחר כך
-מפעילים refit לטיוטות ומתריעים על שבועות שפורסמו (§4).
+לכל שמירה או ביטול, בצוות של החייל:
+- `append_change` ביומן (`ACTION_COMPLEX_DUTY`, השחקן `commander:<id>`, כמו ב־D43)
+- `ComplexService.record(team_id, complex_id, "שיבץ תורנות")`, שמגיע לבאנר של
+  מפקד המשמרת. הנתיבים האלה הם תחת `/api/complex` ולא עוברים ב־middleware
+  של D43, ולכן קוראים ל־`record` במפורש.
+- refit לטיוטות והודעה על שבועות שפורסמו (§4)
 
-Admin: `POST /api/admin/clusters`, `PATCH /api/admin/teams/{id}` עם `cluster_id`.
+**מפקד המשמרת** (`boss`) מקבל `GET /api/schedules/complex-duties?start&end`
+לקריאה בלבד, וגם הלוח שלו מקבל את התורנויות.
 
 ---
 
 ## 8. ממשק
 
-- **`/cluster`** (דף חדש, `components/Cluster/`):
-  - **לוח תורנויות**: שורות = סוגי תורנויות, עמודות = ימים (שבוע/שבועיים).
-    כל תא = מושבים. לחיצה פותחת בורר חיילים עם חיפוש, סינון לפי צוות, וסימון
-    "בבית" / "במשמרת" / "כבר בתורנות", כמו `CandidateFilters` בלוח הקיים.
-  - כפתור **"מלא בהוגנות"** לטווח: ההצעה מוצגת בתאים בצבע טיוטה, ואחריה
-    "אשר" או "בטל".
-  - **הגדרות**: ניהול סוגי תורנויות.
-  - **מאזן**: טבלת מונה תורנויות לכל חייל (מי קיבל הכי הרבה, מי הכי מעט).
-- **Admin**: לשונית "מכלולים" (פתיחה, שיוך צוותים, איפוס סיסמה).
-- **צוות**: תג "תורנות מכלול · מטבח" בלוח וב־TeamPanel, בלי כפתור מחיקה.
-  התראה על התנגשות בשבוע שפורסם.
-- **מדריך**: מונח חדש "תורנות מכלול" ב־`Guide/content.ts`.
+- **עמוד "תורנויות" ב־`CommanderArea`** (`components/Complex/Duties*.tsx`):
+  - **לוח**: שורות = סוגי תורנויות, עמודות = ימים (שבוע/שבועיים/חודש). תא =
+    מושבים. לחיצה פותחת בורר חיילים מכל המכלול: חיפוש, סינון לפי משמרת, תגים
+    "בבית" / "במשמרת בוקר" / "כבר בתורנות", ומוני `duty_load` ליד כל שם.
+  - **"מלא בהוגנות"**: ההצעה בצבע טיוטה עם סיבה ב־tooltip, ואחריה אשר / בטל.
+  - **מאזן** (§6ב), **הגדרות** (סוגים, מושבים, ימים, משקל).
+- **לוח המכלול** (`ComplexGrid`): תג תורנות על החייל ביום התורנות.
+- **אצל מפקד המשמרת**: תג "תורנות מכלול · מטבח" בלוח, ב־TeamPanel ובבורר
+  המועמדים, בלי כפתור מחיקה. הבאנר הקיים של `CommanderNotices`.
+- **חייל**: התורנות שלו באזור האישי.
+- **מדריך**: מונח "תורנות מכלול" + פסקה בפרק המכלול ב־`tutorial`.
 
 ---
 
 ## 9. סדר מימוש (כל שלב נבדק לבד)
 
-1. **DDL + repository + אכיפה**: הטבלאות, הענף ב־`availability()`,
-   סמנטיקת יום שלם ב־`_duty_overlaps` ו־`assert_no_blocking_duty`.
-   בדיקות: הפותר לא משבץ, שיבוץ ידני נדחה, ביקורת מסמנת, מנהל לא מוחק.
-2. **תפקיד + התחברות + Admin**: `clusters`, `pakash_cluster`, פתיחה ושיוך.
-3. **API ידני**: roster, duty-types, duties, יומן שינויים.
-4. **התנגשויות**: refit לטיוטות והתראה לשבועות שפורסמו.
-5. **ממשק המפקד**: לוח, בורר, הגדרות.
-6. **"מלא בהוגנות"** + מאזן.
-7. **תצוגה בצד הצוות והחייל** + מדריך + `DECISIONS.md` (D43).
+1. **DDL + repository + אכיפה**: טבלאות, ענף ב־`availability()`, יום שלם.
+   בדיקות: הפותר לא משבץ, שיבוץ ידני נדחה, ביקורת מסמנת, מפקד משמרת לא מוחק.
+2. **API ידני + יומן + הודעות** (`test_complex_api.py`): כולל בדיקה שמפקד
+   ממכלול אחר מקבל 403.
+3. **הוגנות בפותר** (§5ב): בדיקה שבשני חיילים זהים, מי שעשה תורנות מקבל
+   פחות משמרות.
+4. **סטטיסטיקה של משמרת** (§6א): backend + `Stats.tsx`.
+5. **"מלא בהוגנות" + מאזן מכלולי** (§5א, §6ב): בדיקות דטרמיניזם, פסילה
+   ופיזור.
+6. **ממשק המפקד**: עמוד התורנויות.
+7. **התנגשויות** (§4), תגים בצד מפקד המשמרת והחייל, מדריך, `DECISIONS.md` (D44).
 
 ---
 
 ## 10. שאלות פתוחות
 
-- **משמרת לילה שמסתיימת בבוקר יום התורנות**: לחסום גם אותה? (ההצעה: לא.
-  "יום שלם" = משמרות שתאריכן הוא יום התורנות.)
-- **מנוחה אחרי תורנות** (למשל אחרי שמירת לילה): לא בשלב הזה. אפשר להוסיף
-  בהמשך `rest_hours_after` לסוג התורנות.
-- **האם חייל רואה את התורנות של אחרים?** (ההצעה: רק את שלו.)
-- **חיילים שלא בשום צוות** (למשל אנשי מטה): כרגע מחוץ לתחום. כל חייל שייך
-  לצוות.
+- **משמרת לילה שמסתיימת בבוקר יום התורנות**: לחסום? (ההצעה: לא. "יום שלם" =
+  משמרות שתאריכן הוא יום התורנות.)
+- **ברירת מחדל ל־`weight`**: 1 = יום תורנות שווה משמרת אחת. מתאים?
+- **חלון ההוגנות של "מלא בהוגנות"**: 8 שבועות אחורה, או מתחילת החודש/הרבעון?
+- **האם מפקד משמרת יכול לבקש החלפת תורנות** מהמפקד (כמו בקשת החלפה של
+  חייל)? (ההצעה: לא בשלב הזה.)
