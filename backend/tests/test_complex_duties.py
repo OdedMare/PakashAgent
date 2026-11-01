@@ -101,11 +101,12 @@ def _one_seat(*names):
 
 
 def _carried(date, weight=1, employee="דנה"):
-    return dict(_duty(employee, date), date=date, duty_weight=weight)
+    """A `team_complex_duties` row, as the build hands the solver."""
+    return {"employee": employee, "duty_date": date, "weight": weight}
 
 
-def _counts(availability):
-    result = generate_span(_one_seat("דנה", "יוסי"), *SPAN, availability=availability)
+def _counts(duties):
+    result = generate_span(_one_seat("דנה", "יוסי"), *SPAN, duties=duties)
     counts = {"דנה": 0, "יוסי": 0}
     for row in result["assignments"]:
         counts[row["employee"]] += 1
@@ -128,7 +129,6 @@ def test_a_heavier_duty_counts_more():
 @pytest.mark.parametrize("row", [
     _carried("2026-11-13", weight=0),            # counts nothing by its type
     _carried("2026-10-20"),                      # long before the window
-    dict(_carried("2026-11-13"), source="manager"),   # the team's own duty, not the מכלול's
     _carried("2026-11-13", employee="אבי"),      # nobody on this roster
 ])
 def test_what_carries_no_load(row):
@@ -137,8 +137,16 @@ def test_what_carries_no_load(row):
 
 def test_the_build_says_the_duties_were_counted():
     profile = _one_seat("דנה", "יוסי")
-    counted = generate_span(profile, *SPAN, availability=[_carried("2026-11-13", weight=2)])
-    plain = generate_span(profile, *SPAN, availability=[])
+    counted = generate_span(profile, *SPAN, duties=[_carried("2026-11-13", weight=2)])
+    plain = generate_span(profile, *SPAN, duties=[])
 
     assert "תורנויות המכלול נספרו בעומס, כל יום תורנות כמשמרת לפי משקלו: דנה (2)" in counted["notes"]
     assert not any("תורנויות המכלול" in note for note in plain["notes"])
+
+
+def test_a_team_duty_in_the_availability_carries_no_load():
+    """Only מכלול duties count as load; a team's own timed duty blocks."""
+    own = dict(_duty(date="2026-11-13"), source="manager", start_time="08:00",
+               end_time="12:00", date="2026-11-13")
+    result = generate_span(_one_seat("דנה", "יוסי"), *SPAN, availability=[own])
+    assert sorted(row["employee"] for row in result["assignments"]) == ["דנה", "דנה", "יוסי", "יוסי"]

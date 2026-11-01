@@ -162,4 +162,12 @@ CREATE INDEX IF NOT EXISTS complex_duties_complex_date_idx
 
 COMMIT;
 
+-- A duty recorded after the fact, or stood outside this system, counts in
+-- fairness and statistics like any other but blocks nothing: it is not
+-- projected into the team's availability (`records.availability()`).
+ALTER TABLE complex_duties
+    ADD COLUMN IF NOT EXISTS blocks BOOLEAN NOT NULL DEFAULT TRUE;
+
+COMMIT;
+
 """

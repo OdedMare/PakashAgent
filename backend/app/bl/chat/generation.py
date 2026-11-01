@@ -59,6 +59,7 @@ def _generate(repository, scheduler, history, team_id, turn, plan, state, values
             preferences=state["preferences"], instructions=turn.get("instructions") or "",
             required_assignments=required,
             already_scheduled=[model_assignment(row) for row in outside],
+            duties=_duties(history, team_id, schedule, first, last),
         )
     else:
         generated = scheduler.generate_verified(
@@ -66,8 +67,20 @@ def _generate(repository, scheduler, history, team_id, turn, plan, state, values
             history=history.before(team_id, first),
             preferences=state["preferences"], instructions=turn.get("instructions") or "",
             required_assignments=required,
+            duties=_duties(history, team_id, None, first, last),
         )
     return generated
+
+
+def _duties(history, team_id, schedule, first, last):
+    """The team's מכלול duties over the period the build sits in, so the
+    rest of the draft and the duties beside it count alike."""
+    reader = getattr(history, "duties", None)
+    if reader is None:
+        return []
+    schedule = schedule or {}
+    return reader(team_id, iso(schedule.get("starts_on")) or first,
+                  max(iso(schedule.get("ends_on")) or last, last))
 
 
 def prepare_generation(repository, scheduler, history, team_id, turn, plan, state):

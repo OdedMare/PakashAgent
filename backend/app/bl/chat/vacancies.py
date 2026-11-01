@@ -52,6 +52,9 @@ def fill_vacancies(scheduler, history, cache, team_id, turn, plan, state, rows):
             required_assignments=solved, shift_names=shifts,
             already_scheduled=[model_assignment(row) for row in rows if row not in solved],
             requests=_avoid(plan, vacant, state["profile"]),
+            duties=history.duties(team_id, iso(schedule["starts_on"]),
+                                  iso(schedule.get("ends_on")) or last)
+            if hasattr(history, "duties") else None,
         )
     except AgentError as exc:
         plan["solver_note"] = _FAILED % exc

@@ -1,5 +1,7 @@
-"""Earlier periods' assignments, read once per build for the fairness tally."""
+"""Earlier periods' assignments, read once per build for the fairness tally --
+and the team's מכלול duties around a build, which count as load carried."""
 
+import datetime
 import time
 from threading import Lock
 from typing import List
@@ -10,6 +12,7 @@ from app.bl.schedule_service.constants import (
     HISTORY_ROW_LIMIT,
 )
 from app.bl.schedule_service.rows import iso
+from app.bl.solver.problem import LOOKBACK_DAYS as DUTY_LOOKBACK_DAYS
 
 
 class AssignmentHistory:
@@ -63,3 +66,22 @@ class AssignmentHistory:
             if len(rows) > HISTORY_ROW_LIMIT:
                 break
         return rows
+
+    def duties(self, team_id: str, starts_on: str, ends_on: str) -> List[dict]:
+        """The team's מכלול duties a build counts as load (blocking or only
+        recorded): from the fairness lookback before `starts_on` through
+        `ends_on`. Empty for a team outside a מכלול, or a repository that
+        holds none. Not cached: a duty set a moment ago must count."""
+        reader = getattr(self._repository, "team_complex_duties", None)
+        if reader is None or not starts_on or not ends_on:
+            return []
+        try:
+            first = datetime.date.fromisoformat(iso(starts_on)) - datetime.timedelta(
+                days=DUTY_LOOKBACK_DAYS)
+        except ValueError:
+            return []
+        return [
+            {"employee": row["employee"], "duty_date": iso(row["duty_date"]),
+             "weight": row.get("weight", 1)}
+            for row in reader(team_id, first.isoformat(), iso(ends_on))
+        ]

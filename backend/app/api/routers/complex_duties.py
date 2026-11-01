@@ -70,6 +70,7 @@ class ComplexDutyRoutes:
             return service.assign(
                 session["complex_id"], request.duty_type_id, request.team_id,
                 request.employee, request.duty_date, request.note,
+                blocks=request.blocks,
             )
 
         @router.delete("/duties/{duty_id}")

@@ -40,6 +40,7 @@ def generate_span(
     requests: Optional[List[dict]] = None,
     shift_names: Optional[List[str]] = None,
     keep: Optional[List[dict]] = None,
+    duties: Optional[List[dict]] = None,
     time_limit: float = 10.0,
     workers: int = 8,
 ) -> dict:
@@ -52,12 +53,15 @@ def generate_span(
     `keep` is the board as it stood on these dates: each row is rewarded for
     staying where it is (`stability.py`), so a new person or a new shift is
     absorbed with as few moves as evenness and coverage call for.
+    `duties` are the team's מכלול duties around the span: each day counts
+    as its weight in shifts already carried (`problem._duty_load`). What
+    blocks a day comes through `availability`, not here.
     """
     slots = slots_for(profile, starts_on, ends_on, shift_names)
     if not slots:
         return _empty(starts_on, ends_on)
     problem = Problem(profile, slots, availability, history, required_assignments,
-                      already_scheduled, requests, keep)
+                      already_scheduled, requests, keep, duties)
     return solve(problem, time_limit, workers)
 
 

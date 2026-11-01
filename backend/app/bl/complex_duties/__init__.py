@@ -10,9 +10,11 @@ which projects it as a `duty` with no hours (`audit/constraints.py`).
 """
 
 from app.bl.complex_duties.service import (
-    ACTION_COMPLEX_DUTY, ACTION_COMPLEX_DUTY_CANCELLED, ComplexDutyService,
+    ACTION_COMPLEX_DUTY, ACTION_COMPLEX_DUTY_CANCELLED, ACTION_COMPLEX_DUTY_RECORDED,
+    ComplexDutyService,
 )
 
 __all__ = [
-    "ACTION_COMPLEX_DUTY", "ACTION_COMPLEX_DUTY_CANCELLED", "ComplexDutyService",
+    "ACTION_COMPLEX_DUTY", "ACTION_COMPLEX_DUTY_CANCELLED",
+    "ACTION_COMPLEX_DUTY_RECORDED", "ComplexDutyService",
 ]

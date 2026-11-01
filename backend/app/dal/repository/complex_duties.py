@@ -25,7 +25,7 @@ _TYPE_EDITABLE = ("name", "seats", "days", "weight", "active")
 _DUTY_COLUMNS = """
     d.id, d.complex_id, d.duty_type_id, dt.name AS duty_type, dt.weight,
     d.team_id, t.name AS team_name, d.employee, d.duty_date, d.note,
-    d.created_at
+    d.blocks, d.created_at
 """
 
 _DUTY_FROM = """
@@ -119,9 +119,10 @@ class ComplexDutyRepository(RepositoryBase):
 
     def set_complex_duty(
         self, complex_id: str, type_id: str, team_id: str, employee: str,
-        duty_date: str, note: str = "",
+        duty_date: str, note: str = "", blocks: bool = True,
     ) -> dict:
-        """Seat one soldier on one duty for one day.
+        """Seat one soldier on one duty for one day. `blocks=False` records
+        one that counts without blocking the day.
 
         The INSERT selects its own guards: no row is written unless the
         type and the team both belong to this מכלול right now."""
@@ -137,12 +138,12 @@ class ComplexDutyRepository(RepositoryBase):
             created = connection.execute("""
                 INSERT INTO complex_duties
                     (id, complex_id, duty_type_id, team_id, employee,
-                     duty_date, note)
-                VALUES (%s,%s,%s,%s,%s,%s,%s)
+                     duty_date, note, blocks)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (team_id, employee, duty_date) DO NOTHING
                 RETURNING id
             """, (duty_id, complex_id, type_id, team_id, employee,
-                  duty_date, note or "")).fetchone()
+                  duty_date, note or "", bool(blocks))).fetchone()
             connection.commit()
         if created is None:
             raise ConflictError("%s כבר בתורנות בתאריך הזה" % employee)

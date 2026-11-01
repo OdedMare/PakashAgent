@@ -16,9 +16,11 @@ from app.common.errors import AgentError, ConflictError
 
 ACTION_COMPLEX_DUTY = "complex_duty"
 ACTION_COMPLEX_DUTY_CANCELLED = "complex_duty_cancelled"
+ACTION_COMPLEX_DUTY_RECORDED = "complex_duty_recorded"
 
 NOTICE_ASSIGNED = "שיבץ תורנות מכלול"
 NOTICE_CANCELLED = "ביטל תורנות מכלול"
+NOTICE_RECORDED = "רשם תורנות מכלול שכבר נעשתה"
 
 
 class ComplexDutyService:
@@ -65,25 +67,36 @@ class ComplexDutyService:
 
     def assign(
         self, complex_id: str, type_id: str, team_id: str, employee: str,
-        duty_date: str, note: str = "",
+        duty_date: str, note: str = "", blocks: bool = True,
     ) -> dict:
         """Seat one soldier. Returns the duty and the stored shifts it now
         blocks: a warning for the commander, not a refusal (§4 of the plan);
-        the team's commander is told either way."""
+        the team's commander is told either way.
+
+        `blocks=False` records a duty already stood, or stood outside this
+        system: it counts in fairness and statistics, blocks nothing, and
+        is a fact rather than a plan -- so the type need not be running
+        that weekday or still active, and no seat is checked."""
         day = values.parse_day(duty_date)
         employee = (employee or "").strip()
         team = self._complexes.require_team(complex_id, team_id)
         duty_type = self._repository.complex_duty_type(complex_id, type_id)
         self._check_soldier(team, employee, day)
-        self._check_type(complex_id, duty_type, day)
+        if blocks:
+            self._check_type(complex_id, duty_type, day)
         duty = self._repository.set_complex_duty(
             complex_id, type_id, team["id"], employee, day.isoformat(),
-            values.note(note),
+            values.note(note), blocks=blocks,
         )
-        self._log(complex_id, duty, ACTION_COMPLEX_DUTY,
-                  "שובץ/ה לתורנות %s על ידי מפקד המכלול" % duty_type["name"])
-        self._notify(team["id"], complex_id, NOTICE_ASSIGNED)
-        return {"duty": duty, "conflicts": self.conflicts(duty)}
+        if blocks:
+            self._log(complex_id, duty, ACTION_COMPLEX_DUTY,
+                      "שובץ/ה לתורנות %s על ידי מפקד המכלול" % duty_type["name"])
+        else:
+            self._log(complex_id, duty, ACTION_COMPLEX_DUTY_RECORDED,
+                      "נרשמה תורנות %s שכבר נעשתה (נספרת בעומס, לא חוסמת)"
+                      % duty_type["name"])
+        self._notify(team["id"], complex_id, NOTICE_ASSIGNED if blocks else NOTICE_RECORDED)
+        return {"duty": duty, "conflicts": self.conflicts(duty) if blocks else []}
 
     def cancel(self, complex_id: str, duty_id: str) -> dict:
         duty = self._repository.delete_complex_duty(complex_id, duty_id)

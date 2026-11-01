@@ -28,7 +28,7 @@ LOOKBACK_DAYS = 14
 class Problem:
     def __init__(self, profile: dict, slots: List[dict], availability=None,
                  history=None, required_assignments=None, already_scheduled=None,
-                 requests=None, keep=None):
+                 requests=None, keep=None, duties=None):
         self.profile = profile or {}
         self.slots = slots
         self.shifts = index_shifts(self.profile.get("shifts") or [])
@@ -50,7 +50,7 @@ class Problem:
         self.times = [_slot_time(slot, self.shifts) for slot in slots]
         self.pins = self._pins(required_assignments)
         self.fixed = self._fixed(already_scheduled, history)
-        self.duty_load = self._duty_load(availability)
+        self.duty_load = self._duty_load(duties)
         self.legal = {(name, index): True for name in self.people
                       for index in range(len(slots)) if self._legal(name, index)}
         self.keep, self.kept_rows = self._keep(keep)
@@ -91,13 +91,14 @@ class Problem:
         return [dict(row, past=row not in current, **_times(timed_row(row, self.shifts)))
                 for row in rows]
 
-    def _duty_load(self, availability) -> Dict[str, int]:
+    def _duty_load(self, duties) -> Dict[str, int]:
         """Weighted מכלול duty days per person, over the window the fixed
         rows cover: from `LOOKBACK_DAYS` before the plan to the last date
         the plan or the rest of the draft reaches. A day of duty is load
-        already carried, like a fixed shift (`fairness.py`). Most people
-        have none, and a team outside a מכלול has none at all: then this
-        is empty and fairness is exactly what it was without duties."""
+        already carried, like a fixed shift (`fairness.py`) -- blocking or
+        only recorded. Most people have none, and a team outside a מכלול
+        has none at all: then this is empty and fairness is exactly what it
+        was without duties. `duties` are `team_complex_duties` rows."""
         if not self.dates:
             return {}
         first = datetime.date.fromisoformat(self.dates[0])
@@ -105,13 +106,12 @@ class Problem:
         earliest = (first - datetime.timedelta(days=LOOKBACK_DAYS)).isoformat()
         load: Dict[str, int] = {}
         seen = set()
-        for row in availability or []:
-            if not isinstance(row, dict) or text(row.get("source")) != "complex" \
-                    or text(row.get("constraint_type")) != "duty":
+        for row in duties or []:
+            if not isinstance(row, dict):
                 continue
             name = text(row.get("employee"))
-            day = text(str(row.get("date") or row.get("constraint_date") or ""))[:10]
-            weight = row.get("duty_weight", 1)
+            day = str(row.get("duty_date") or row.get("date") or "")[:10]
+            weight = row.get("weight", 1)
             weight = weight if isinstance(weight, int) and not isinstance(weight, bool) else 1
             if name not in self.people or not earliest <= day <= last or (name, day) in seen:
                 continue

@@ -10,7 +10,8 @@ duty now blocks returned as a warning.
 import pytest
 
 from app.bl.complex_duties import (
-    ACTION_COMPLEX_DUTY, ACTION_COMPLEX_DUTY_CANCELLED, ComplexDutyService,
+    ACTION_COMPLEX_DUTY, ACTION_COMPLEX_DUTY_CANCELLED, ACTION_COMPLEX_DUTY_RECORDED,
+    ComplexDutyService,
 )
 from app.common.actor import current_actor
 from app.common.errors import AgentError, ConflictError, NotFoundError
@@ -63,8 +64,9 @@ class _Repo:
         return [d for d in self.duties.values()
                 if starts_on <= d["duty_date"] <= ends_on]
 
-    def set_complex_duty(self, complex_id, type_id, team_id, employee, duty_date, note=""):
-        row = dict(id="d-%d" % (len(self.duties) + 1), complex_id=complex_id,
+    def set_complex_duty(self, complex_id, type_id, team_id, employee, duty_date, note="",
+                         blocks=True):
+        row = dict(blocks=blocks, id="d-%d" % (len(self.duties) + 1), complex_id=complex_id,
                    duty_type_id=type_id, duty_type=self.types[type_id]["name"],
                    team_id=team_id, employee=employee, duty_date=duty_date, note=note)
         self.duties[row["id"]] = row
@@ -185,3 +187,20 @@ def test_a_span_is_bounded(setup):
     with pytest.raises(AgentError):
         service.duties(COMPLEX, "2026-11-10", "2026-11-01")
     assert service.duties(COMPLEX, "2026-11-01", "2026-11-30")["duties"] == []
+
+
+def test_recording_a_past_duty_counts_without_planning_rules(setup):
+    service, repo, told, kitchen = setup
+    service.update_type(COMPLEX, kitchen["id"], {"active": False, "days": ["שישי"]})
+    repo.shifts = [_shift(TUESDAY, "ערב", "15:00", "23:00")]
+    service.assign(COMPLEX, kitchen["id"], TEAM, "יוסי", TUESDAY, blocks=False)
+
+    result = service.assign(COMPLEX, kitchen["id"], TEAM, "דנה", TUESDAY,
+                            "לפני המערכת", blocks=False)
+
+    assert result["duty"]["blocks"] is False
+    assert result["conflicts"] == []  # it blocks nothing, so it collides with nothing
+    assert repo.changes[-1]["action"] == ACTION_COMPLEX_DUTY_RECORDED
+    assert told[-1] == (TEAM, COMPLEX, "רשם תורנות מכלול שכבר נעשתה")
+    with pytest.raises(AgentError, match="לא נמצא/ת"):  # the roster is still checked
+        service.assign(COMPLEX, kitchen["id"], TEAM, "אבי", TUESDAY, blocks=False)

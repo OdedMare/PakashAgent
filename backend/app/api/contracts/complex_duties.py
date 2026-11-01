@@ -30,3 +30,5 @@ class DutyAssignRequest(BaseModel):
     employee: str = Field(min_length=1, max_length=120)
     duty_date: str = Field(min_length=10, max_length=10)
     note: str = Field(default="", max_length=400)
+    # False records a duty already stood: it counts, and blocks nothing.
+    blocks: bool = True

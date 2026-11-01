@@ -47,6 +47,7 @@ class Scheduler:
         keep: Optional[List[dict]] = None,
         shift_names: Optional[List[str]] = None,
         requests: Optional[List[dict]] = None,
+        duties: Optional[List[dict]] = None,
     ) -> dict:
         """Assign every slot from `starts_on` through `ends_on`.
 
@@ -72,6 +73,7 @@ class Scheduler:
             requests=translated["requests"] + list(requests or []),
             keep=keep,
             shift_names=shift_names,
+            duties=duties,
             **self._limits(),
         )
         if translated["sources"]:
@@ -84,7 +86,8 @@ class Scheduler:
 
     def generate_verified(self, profile, starts_on, ends_on, availability=None,
                           history=None, instructions="", required_assignments=None,
-                          preferences=None, already_scheduled=None, keep=None):
+                          preferences=None, already_scheduled=None, keep=None,
+                          duties=None):
         """A period for the manager's chat: spans in order, each seeing the
         last, then audited and measured as one."""
         committed = list(already_scheduled or [])
@@ -94,7 +97,8 @@ class Scheduler:
             generated = self.generate_span(
                 profile, span["date"], span["through"], availability=availability,
                 history=history, instructions=instructions, required_assignments=pins,
-                preferences=preferences, already_scheduled=committed, keep=keep)
+                preferences=preferences, already_scheduled=committed, keep=keep,
+                duties=duties)
             committed = [row for row in committed if row.get("date") not in span["dates"]]
             committed.extend(generated["assignments"])
             for key in ("slots", "assignments", "warnings", "notes"):

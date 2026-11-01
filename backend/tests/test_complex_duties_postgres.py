@@ -88,7 +88,6 @@ def test_a_duty_blocks_the_day_in_its_own_team_only(complex_setup):
              r["reason"], r["source"]) for r in rows] == [
         ("דנה", "duty", "", "", "מטבח", "complex"),
     ]
-    assert rows[0]["duty_weight"] == 1  # what fairness counts the day as
     assert repo.availability(s["second"], DAY, DAY) == []
     # The day after the span reaches back to its last night.
     assert len(repo.availability(s["first"], "2026-11-09", "2026-11-09")) == 1
@@ -109,3 +108,15 @@ def test_deleting_a_type_removes_its_assignments(complex_setup):
     repo.delete_complex_duty_type(s["mine"], s["kitchen"]["id"])
 
     assert repo.complex_duties(s["mine"], DAY, DAY) == []
+
+
+def test_a_recorded_duty_counts_but_blocks_nothing(complex_setup):
+    s = complex_setup
+    repo = s["repo"]
+    recorded = repo.set_complex_duty(s["mine"], s["kitchen"]["id"], s["first"],
+                                     "דנה", DAY, blocks=False)
+
+    assert recorded["blocks"] is False
+    assert repo.availability(s["first"], DAY, DAY) == []
+    [row] = repo.team_complex_duties(s["first"], DAY, DAY)
+    assert (row["employee"], row["weight"], row["blocks"]) == ("דנה", 1, False)
