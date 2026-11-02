@@ -61,7 +61,9 @@ def apply_fairness(model: Model) -> None:
 def _closers(model: Model) -> None:
     problem = model.problem
     for (name, index), var in sorted(model.x.items()):
-        if problem.people[name].get("rotation_group") and problem.closes(name, index):
+        person = problem.people[name]
+        closer = person.get("rotation_group") or person.get("exit_pattern") == "personal"
+        if closer and problem.closes(name, index):
             model.price(-CLOSER, var, kind="closer")
 
 

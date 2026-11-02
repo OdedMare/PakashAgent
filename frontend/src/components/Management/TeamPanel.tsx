@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CalendarDays,
   CalendarOff,
   Clock3,
   GripVertical,
@@ -37,6 +38,7 @@ import {
 } from "./teamLabels";
 import { EmployeeForm, ShiftForm } from "./TeamForms";
 import { ConstraintForm } from "./TeamConstraintForm";
+import { ReserveWeek } from "./ReserveWeek";
 
 /** The roster and the constraints recorded against it.
  *
@@ -103,6 +105,7 @@ export function TeamPanel({
 }) {
   const [adding, setAdding] = useState(false);
   const [departing, setDeparting] = useState<string | null>(null);
+  const [weekOf, setWeekOf] = useState<string | null>(null);
   const [departBusy, setDepartBusy] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<string | null>(null);
   const [addingEmployee, setAddingEmployee] = useState(false);
@@ -206,6 +209,17 @@ export function TeamPanel({
                 {draggable ? (
                   <GripVertical className="roster-grip" size={17} aria-hidden="true" />
                 ) : null}
+                {!readOnly && onAdd && onRemove && text(person?.service_type) === "reserve" ? (
+                  <button
+                    type="button"
+                    className={`icon-button subtle${weekOf === name ? " is-active" : ""}`}
+                    onClick={() => setWeekOf(weekOf === name ? null : name)}
+                    aria-label={`הימים של ${name} בשבוע`}
+                    title="אילו ימים מתאימים השבוע"
+                  >
+                    <CalendarDays size={13} />
+                  </button>
+                ) : null}
                 {onSaveProfile ? (
                   <button
                     type="button"
@@ -247,6 +261,9 @@ export function TeamPanel({
             <li className="panel-empty">אין עובדים בפרופיל עדיין.</li>
           ) : null}
         </ul>
+        {weekOf && onAdd && onRemove ? (
+          <ReserveWeek name={weekOf} today={today} constraints={constraints} onAdd={onAdd} onRemove={onRemove} />
+        ) : null}
         {archived.length ? <details className="roster-archive"><summary>עובדים שסיימו את העבודה ({archived.length})</summary>
           <ul>{archived.map((person) => <li key={text(person.name)}><strong>{text(person.name)}</strong>
             <span>סיום עבודה · {displayDate(text(person.inactive_from))}</span>

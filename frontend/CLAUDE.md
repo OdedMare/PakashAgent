@@ -113,6 +113,19 @@ a second answer to a question that must have exactly one. The Sunday a
 closure hands over on reads dimmer and says `חילוף` — the group is in for
 that morning and out for the rest of the day.
 
+**The rotation section opens on one question: "איך יוצאים אצלכם?"**
+(`ManualSetup/ExitKinds.tsx`). The manager ticks the kinds of exits the
+unit has — none, daily, weekend groups (2–5 groups: סבב, תלתון, רבעון,
+חמישון), days on base / at home, every weekend home (חמשושים/שושים), a
+personal 1 ל־N, reservists — and only those open their questions below and
+appear in each soldier's pattern list. What is ticked is saved as
+`enabled_exit_patterns`; a pattern somebody is on stays on. A soldier's own
+questions (daily days and hours, a personal 1 ל־N and its first weekend)
+render under their pattern (`Management/ExitPatternFields.tsx`). A
+reservist's coming week is set from the team list (`Management/ReserveWeek.tsx`):
+each day cycles רגיל → עדיף שלא → לא יכול/ה, stored as whole-day
+availability rows, and the solver picks the days.
+
 **A cycle is typed once, in the team setup screen** (`ManualSetup/`, the
 sliders icon). The server-wide model, solver and database settings are not
 on the team screen at all: they live in the operator console's "מערכת" tab.

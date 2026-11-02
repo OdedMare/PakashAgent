@@ -275,6 +275,14 @@ Tuesdays" says nothing about א.
 refuses their Thursday (Friday on שושים)–Sunday-handover slots outright;
 the audit warns about one already placed there.
 
+**Some patterns belong to one person** (`rotation/personal.py`): `none`
+(no exits; nothing blocked), `daily` (comes on `daily_days` within
+`daily_start`–`daily_end`; anything outside is refused) and `personal`
+(closes one weekend in `closure_every`, from the weekend of
+`closure_from`, home on the others from Thursday to the Sunday handover).
+They take no group and no shared anchor, and read through the same
+`closure_status` gate as every cycle.
+
 **Day cycles are the other kind** (`rotation/day_cycles.py`): 11/3, 12/2,
 שבוע־שבוע — N days on base, M home, from one anchor day, with each group
 starting a stated number of days after it (spread evenly by default). They

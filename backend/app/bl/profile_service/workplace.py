@@ -8,7 +8,8 @@ from app.bl.profile_service.validation import text, text_list, valid_time
 from app.common.errors import AgentError
 from app.bl.shared import weekday_key
 
-_OPTIONAL_EXIT_PATTERNS = ("triplet", "quad", "quint", "hamshushim", "shushim")
+_OPTIONAL_EXIT_PATTERNS = ("round", "triplet", "quad", "quint", "hamshushim", "shushim",
+                           "none", "daily", "personal")
 _GROUPS = {"round": ("א", "ב"), "triplet": ("א", "ב", "ג"), "quad": ("א", "ב", "ג", "ד"),
            "quint": ("א", "ב", "ג", "ד", "ה")}
 _AUDIT_FIELDS = (

@@ -6,6 +6,7 @@ import { TimeInput } from "@/components/TimeInput";
 import { cycleOf, cyclePattern, isDayCycle } from "@/lib/dayCycles";
 import type { DayCycle } from "@/types";
 
+import { ExitPatternFields } from "./ExitPatternFields";
 import { SoldierFields } from "./SoldierFields";
 import {
   EXIT_PATTERN_LABELS,
@@ -39,6 +40,14 @@ export function EmployeeForm({
     text(initial?.exit_pattern) || defaultExitPattern,
   );
   const groups = patternGroups(exitPattern, dayCycles);
+  // Daily hours and a personal 1-in-N, kept while the form is open.
+  const [exitFields, setExitFields] = useState<Record<string, unknown>>(() => ({
+    daily_days: Array.isArray(initial?.daily_days) ? initial.daily_days : [],
+    daily_start: text(initial?.daily_start),
+    daily_end: text(initial?.daily_end),
+    closure_every: typeof initial?.closure_every === "number" ? initial.closure_every : null,
+    closure_from: text(initial?.closure_from),
+  }));
   const [rotationGroup, setRotationGroup] = useState(text(initial?.rotation_group) || groups[0] || "");
   const [serviceType, setServiceType] = useState(text(initial?.service_type) || "standard");
   const [countsTowardStaffing, setCountsTowardStaffing] = useState(initial?.counts_toward_staffing !== false);
@@ -63,7 +72,7 @@ export function EmployeeForm({
     <form className="constraint-form profile-form" onSubmit={(event) => {
       event.preventDefault();
       if (!name.trim()) return;
-      onSubmit({ name: name.trim(), role: role.trim(), eligible_shifts: eligible, exit_pattern: exitPattern, rotation_group: rotationGroup, service_type: serviceType, counts_toward_staffing: countsTowardStaffing, is_shift_manager: isShiftManager, can_train: canTrain, notes: notes.trim(), competence, reserve_days_per_week: reserveDays, reserve_min_days: reserveMinDays, reserve_consecutive: reserveConsecutive, reserve_call: reserveCall });
+      onSubmit({ ...exitFields, name: name.trim(), role: role.trim(), eligible_shifts: eligible, exit_pattern: exitPattern, rotation_group: rotationGroup, service_type: serviceType, counts_toward_staffing: countsTowardStaffing, is_shift_manager: isShiftManager, can_train: canTrain, notes: notes.trim(), competence, reserve_days_per_week: reserveDays, reserve_min_days: reserveMinDays, reserve_consecutive: reserveConsecutive, reserve_call: reserveCall });
     }}>
       <label>
         <span>שם *</span>
@@ -89,6 +98,7 @@ export function EmployeeForm({
           if (event.target.value === "overlap") setCountsTowardStaffing(false);
         }}><option value="standard">תקן</option><option value="overlap">נחפף/ת</option><option value="reserve">מילואים</option></select></label>
       </div>
+      <ExitPatternFields pattern={exitPattern} person={exitFields} onChange={(field, value) => setExitFields((current) => ({ ...current, [field]: value }))} />
       <SoldierFields
         serviceType={serviceType}
         competence={competence}

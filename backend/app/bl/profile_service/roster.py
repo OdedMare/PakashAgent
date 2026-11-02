@@ -10,7 +10,10 @@ from app.bl.shared import HEBREW_WEEKDAYS, weekday_key
 from app.common.errors import AgentError
 
 _SERVICE_TYPES = ("standard", "overlap", "reserve")
-_EXIT_PATTERNS = ("round", "triplet", "quad", "quint", "hamshushim", "shushim")
+_EXIT_PATTERNS = ("round", "triplet", "quad", "quint", "hamshushim", "shushim",
+                  "none", "daily", "personal")
+# Patterns one person carries alone (`rotation/personal.py`): no group.
+_PERSONAL = ("none", "daily", "personal")
 _GROUPED = ("round", "triplet", "quad", "quint")
 # How capable a soldier is, weakest first. Optional: an empty value is "not
 # rated", and the solver balances only the people who are (`solver/competence.py`).
@@ -43,12 +46,13 @@ def _employee(row: dict, default_exit_pattern: str) -> dict:
         raise AgentError("האילוצים הקבועים של איש הצוות אינם תקינים")
     _validate_recurring(recurring)
     row.update(_soldier_fields(row, service_type))
+    row.update(_personal_fields(row, exit_pattern))
     row.update({
         "service_type": service_type,
         "exit_pattern": exit_pattern,
         # Kept for every pattern, because a group is what makes one rotate:
         # a חמשושים person *with* a group goes out on their group's weekends.
-        "rotation_group": text(row.get("rotation_group")),
+        "rotation_group": "" if exit_pattern in _PERSONAL else text(row.get("rotation_group")),
         "role": text(row.get("role")),
         "notes": text(row.get("notes")),
         "is_shift_manager": bool(row.get("is_shift_manager")),
@@ -90,6 +94,38 @@ def _soldier_fields(row: dict, service_type: str) -> dict:
     if call and call not in _RESERVE_CALLS:
         raise AgentError("סוג הזימון למילואים אינו תקין (צו או ימי מילואים)")
     fields["reserve_call"] = call
+    return fields
+
+
+def _personal_fields(row: dict, pattern: str) -> dict:
+    """Daily hours, or one weekend in N; dropped when the pattern changes."""
+    fields = {"daily_days": [], "daily_start": "", "daily_end": "",
+              "closure_every": None, "closure_from": ""}
+    if pattern == "daily":
+        days = text_list(row.get("daily_days") or [])
+        weekdays = {weekday_key(day) for day in HEBREW_WEEKDAYS}
+        if any(weekday_key(day) not in weekdays for day in days):
+            raise AgentError("ימי ההגעה היומית חייבים להיות שמות ימים בעברית")
+        for key in ("daily_start", "daily_end"):
+            if text(row.get(key)) and not valid_time(text(row.get(key))):
+                raise AgentError("שעות ההגעה היומית חייבות להיות בפורמט HH:MM")
+            fields[key] = text(row.get(key))
+        fields["daily_days"] = days
+    elif pattern == "personal":
+        count = row.get("closure_every")
+        try:
+            count = int(count) if count not in (None, "") and not isinstance(count, bool) else None
+        except (TypeError, ValueError):
+            count = -1
+        if count is not None and not 2 <= count <= 8:
+            raise AgentError("סגירה אישית היא שבת אחת מכל 2 עד 8 שבתות")
+        first = text(row.get("closure_from"))
+        if first:
+            try:
+                first = datetime.date.fromisoformat(first).isoformat()
+            except ValueError:
+                raise AgentError("תאריך הסגירה הראשונה חייב להיות בפורמט YYYY-MM-DD")
+        fields.update(closure_every=count, closure_from=first)
     return fields
 
 
@@ -152,7 +188,8 @@ def employee_item(item: dict) -> dict:
         "notes": item.get("notes") or "",
         "competence": item.get("competence") or "",
         **{key: item[key] for key in ("service_type", "reserve_days_per_week", "reserve_min_days",
-                                 "reserve_consecutive", "reserve_call")
+                                 "reserve_consecutive", "reserve_call", "daily_days",
+                                 "daily_start", "daily_end", "closure_every", "closure_from")
            if item.get(key) not in (None, "")},
     }
 
@@ -173,6 +210,8 @@ def validate_rotation_groups(profile: dict) -> None:
         pattern = text(person.get("exit_pattern")) or mode
         if pattern.startswith("cycle:"):
             _check_day_cycle(person, cycles.get(pattern))
+            continue
+        if pattern in _PERSONAL:
             continue
         cycle = pattern if pattern in _GROUPED else mode
         groups = set(groups_for(cycle) or groups_for("round"))

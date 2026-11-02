@@ -46,6 +46,9 @@ export const SERVICE_TYPE_LABELS: Record<string, string> = {
 };
 
 export const EXIT_PATTERN_LABELS: Record<string, string> = {
+  none: "בלי יציאות",
+  daily: "יומי",
+  personal: "סגירה אישית 1 ל־N",
   round: "סבב א / ב",
   triplet: "תלתון א / ב / ג",
   quad: "רבעון א / ב / ג / ד",
@@ -88,6 +91,7 @@ export function patternGroups(pattern: string, cycles: DayCycle[]): string[] {
 export function exitPatternLabel(person: Record<string, unknown>, cycles: DayCycle[]): string {
   const pattern = text(person.exit_pattern);
   if (isDayCycle(pattern)) return cycleName(cycles, pattern);
+  if (pattern === "personal" && typeof person.closure_every === "number") return `סגירה אישית 1ל${person.closure_every}`;
   if (EXIT_PATTERN_LABELS[pattern]) return EXIT_PATTERN_LABELS[pattern];
   const group = text(person.rotation_group);
   return group === "ה" ? EXIT_PATTERN_LABELS.quint : group === "ד" ? EXIT_PATTERN_LABELS.quad : group === "ג" ? EXIT_PATTERN_LABELS.triplet : EXIT_PATTERN_LABELS.round;

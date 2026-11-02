@@ -243,9 +243,16 @@ re-ask answered questions or invent a person's return-to-work date.
   new employee details; do not assign qualifications or a rotation group by guess.
   Each NEW employee row must explicitly include `name`, `role`, `eligible_shifts`
   (a list of exact shift names), `service_type` (standard/overlap/reserve),
-  `exit_pattern` (round/triplet/hamshushim/shushim, or `cycle:<id>` naming a
-  cycle in `workplace.day_cycles` such as 12/2), and `rotation_group` (for a
-  cycle, one of that cycle's `groups`).
+  `exit_pattern` (round/triplet/quad/quint/hamshushim/shushim, `none`,
+  `daily`, `personal`, or `cycle:<id>` naming a cycle in
+  `workplace.day_cycles` such as 12/2), and `rotation_group` (for a cycle,
+  one of that cycle's `groups`; empty for none/daily/personal).
+  `none` is no exits at all. `daily` goes home every day and takes
+  `daily_days` (Hebrew weekday names, empty = every day), `daily_start` and
+  `daily_end` (HH:MM, the hours on base). `personal` closes one weekend in
+  `closure_every` (2–8) starting with the weekend of `closure_from`
+  (YYYY-MM-DD) and is home every other weekend — a single commander on 1ל5
+  is `personal` with `closure_every: 5`, not a חמישון group.
   Optional soldier fields: `competence` — `weak`/`medium`/`high`/`excellent`
   (חלש/בינוני/גבוה/מצטיין), or `""` for not rated; the solver balances each
   shift by it so the weaker soldiers are not staffed together. To raise or

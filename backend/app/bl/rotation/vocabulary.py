@@ -26,7 +26,8 @@ GROUPED_PATTERNS = frozenset({"round", "triplet", "quad", "quint"})
 # How many days before Saturday each pattern's closure begins. Thursday is 2
 # days before Saturday, Friday is 1. The lettered cycles lead by two like a
 # חמשוש: a closure weekend in an Israeli unit runs Thursday to Sunday morning.
-CLOSURE_LEAD_DAYS = {"round": 2, "triplet": 2, "quad": 2, "quint": 2, "hamshushim": 2, "shushim": 1}
+CLOSURE_LEAD_DAYS = {"round": 2, "triplet": 2, "quad": 2, "quint": 2, "hamshushim": 2, "shushim": 1,
+                     "personal": 2}
 
 # How many days past Saturday a closure runs. One, and only until that day's
 # handover. Shared by every pattern: they differ in when the stretch begins,
