@@ -3,8 +3,10 @@
 import { AlertTriangle, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { DateInput, displayDate } from "@/components/DateInput";
+import { DateInput } from "@/components/DateInput";
 import type { ComplexDuty, DutyConflict, DutyRosterTeam, DutyType } from "@/types";
+
+import { conflictLine } from "./dutyText";
 
 /** Seat a soldier on a duty, or record one already stood.
  *
@@ -73,24 +75,20 @@ export function DutyForm({
       <p className="cmd-hint">
         {record
           ? "תורנות שנעשתה לפני המערכת או מחוץ לה. נספרת בהוגנות ובסטטיסטיקה, ולא חוסמת שום יום בסידור."
-          : "החייל/ת חסום/ה לכל היום במשמרת שלו/ה, וגם בלילה שלפני שמסתיים בבוקר. מפקד המשמרת מקבל הודעה."}
+          : "החייל/ת חסום/ה לכל היום במשמרת שלו/ה, וגם בלילה שלפני שמסתיים בבוקר. אם כבר יש שיבוץ כזה בטיוטה, הוא מוסר והמשבצת מושלמת מחדש. מפקד המשמרת מקבל הודעה."}
       </p>
 
       {conflicts ? (
         <div className="duty-conflicts" role="status">
           <AlertTriangle size={15} aria-hidden="true" />
           <div>
-            <strong>התורנות נשמרה. {conflicts.who} כבר משובץ/ת במשמרות שהיא חוסמת:</strong>
+            <strong>התורנות נשמרה. {conflicts.who} היה/הייתה משובץ/ת במשמרות שהיא חוסמת:</strong>
             <ul>
               {conflicts.rows.map((row) => (
-                <li key={`${row.date}-${row.shift_name}`}>
-                  {displayDate(row.date)} · {row.shift_name}
-                  {row.start_time ? ` ${row.start_time}–${row.end_time}` : ""}
-                  {row.status === "published" ? " · שבוע שפורסם" : " · טיוטה"}
-                </li>
+                <li key={`${row.date}-${row.shift_name}`}>{conflictLine(row)}</li>
               ))}
             </ul>
-            <span>מפקד המשמרת קיבל הודעה וצריך למצוא מחליף.</span>
+            <span>מפקד המשמרת קיבל הודעה על כל שינוי.</span>
           </div>
         </div>
       ) : null}

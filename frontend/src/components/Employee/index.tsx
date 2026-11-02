@@ -18,7 +18,7 @@ import { useState } from "react";
 import { CrewLoading } from "@/components/Crew";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import { useTheme } from "@/hooks/useTheme";
-import { Calendar } from "@/components/Management/Calendar";
+import { Calendar, hebrewWeekday } from "@/components/Management/Calendar";
 import type { EmployeeView } from "@/types";
 
 import { ConstraintForm } from "./ConstraintForm";
@@ -152,6 +152,7 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
         </nav>
 
         <div className="employee-tab-panel" role="tabpanel">
+          {section === "mine" ? <MyDuties view={view} /> : null}
           {section === "mine" ? (
             view.schedule ? (
               <>
@@ -317,6 +318,35 @@ function MyShifts({ view }: { view: EmployeeView }) {
   );
 }
 
+/** Their own מכלול duties (D44): a whole day each, set by the מכלול
+ *  commander, which no shift of theirs can fall on. Nothing renders for a
+ *  soldier with none -- most of them, and every team outside a מכלול. */
+function MyDuties({ view }: { view: EmployeeView }) {
+  const duties = view.duties ?? [];
+  if (!duties.length) return null;
+  return (
+    <section className="employee-panel">
+      <h2>התורנויות שלי</h2>
+      <ul className="shift-list">
+        {duties.map((duty) => (
+          <li key={duty.duty_date}>
+            <div className="shift-when">
+              <strong>{hebrewWeekday(duty.duty_date)}</strong>
+              <span>{shortDate(duty.duty_date)}</span>
+            </div>
+            <div className="shift-what">
+              <span className="shift-name">{duty.duty_type}</span>
+              <span className="shift-with">
+                {duty.blocks ? "כל היום · תורנות מכלול" : "נרשמה כתורנות שנעשתה"}
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /** Changes that touched this person, with the manager's reason.
  *
  *  Read from the append-only change log (D4) and filtered server-side to
@@ -344,8 +374,10 @@ function MyChanges({ view }: { view: EmployeeView }) {
               {entry.slot_date ? shortDate(entry.slot_date) : ""}
               {entry.shift_name ? ` · ${entry.shift_name}` : ""}
             </span>
-            {entry.reason ? (
-              <span className="change-reason">{entry.reason}</span>
+            {entry.reason || entry.action.startsWith("complex_duty") ? (
+              <span className="change-reason">
+                {entry.action.startsWith("complex_duty") ? entry.agent_reason : entry.reason}
+              </span>
             ) : null}
           </li>
         ))}

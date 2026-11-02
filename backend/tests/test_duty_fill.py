@@ -20,9 +20,9 @@ def _duty(name, day, team="t1", weight=1, type_id="k", blocks=True):
             "duty_type_id": type_id, "weight": weight, "blocks": blocks}
 
 
-def _fill(soldiers, dates, duties=(), shifts=None, ruled=None, types=(KITCHEN,)):
+def _fill(soldiers, dates, duties=(), shifts=None, ruled=None, types=(KITCHEN,), busy=None):
     return suggest(list(types), list(dates), soldiers, list(duties), shifts or {},
-                   ruled or (lambda soldier, day: ""))
+                   ruled or (lambda soldier, day: ""), busy)
 
 
 def _picks(result):
@@ -125,3 +125,21 @@ def test_the_balance_counts_per_soldier_team_and_kind():
     assert kinds == {"מטבח": (1, 5), "שמירה": (1, 1)}  # a recorded duty fills no seat
     assert [(team["team_name"], team["average"]) for team in result["teams"]] == [
         ("משמרת א", 1.5), ("משמרת ב", 1.0)]
+
+
+def test_a_free_soldier_wins_over_a_lighter_one_on_a_shift_the_duty_would_take():
+    soldiers = [_soldier("אבי"), _soldier("דנה")]
+    # דנה carries more shifts, but אבי's night on Sunday ends on Monday morning.
+    shifts = {("t1", "אבי"): {D(2026, 11, 15)}, ("t1", "דנה"): {D(2026, 11, 10), D(2026, 11, 11)}}
+    busy = {("t1", "אבי"): {D(2026, 11, 15), MON}, ("t1", "דנה"): {D(2026, 11, 10), D(2026, 11, 11)}}
+    result = _fill(soldiers, [MON], shifts=shifts, busy=busy)
+    assert _picks(result) == [("2026-11-16", "דנה")]
+    # Fewer duties still comes first: a free soldier does not jump that.
+    assert _picks(_fill(soldiers, [MON], [_duty("דנה", D(2026, 11, 2))], shifts, busy=busy)) == [
+        ("2026-11-16", "אבי")]
+
+
+def test_a_kind_asks_for_seats_only_from_the_day_it_was_created():
+    kitchen = dict(KITCHEN, created_at=datetime.datetime(2026, 11, 19, 8, 30))
+    result = balance(_Ledger([], [], {}), [kitchen], MON, FRI)
+    assert result["types"][0]["required"] == 2  # Thursday and Friday

@@ -675,3 +675,88 @@
 .duty-add:hover:not(:disabled) {
   border-color: var(--primary);
 }
+
+/* "מלא בהוגנות": a proposal is blue and dashed until it is approved. */
+.duty-chip.is-proposal {
+  background: var(--primary-soft);
+  border: 1px dashed var(--primary);
+  border-inline-start-width: 3px;
+}
+
+.duty-suggestion {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.8rem 1rem;
+  background: var(--primary-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.duty-suggestion header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+}
+
+.duty-suggestion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.duty-unfilled {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  color: var(--warning);
+  font-size: 0.82rem;
+}
+
+.duty-balance h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.duty-balance-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.duty-balance-tiles span {
+  padding: 0.35rem 0.7rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.duty-balance-tiles strong {
+  margin-inline-end: 0.3rem;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.duty-balance-tiles .is-wide strong {
+  color: var(--warning);
+}
+
+.duty-balance-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.82rem;
+}
+
+.duty-balance-kinds em {
+  color: var(--warning);
+  font-style: normal;
+}

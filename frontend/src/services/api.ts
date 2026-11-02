@@ -6,9 +6,12 @@ import type {
   ComplexBoard,
   ComplexSummary,
   ComplexDuty,
+  DutyApproval,
+  DutyBalance,
   DutyBoard,
   DutyConflict,
   DutyRosterTeam,
+  DutySuggestion,
   DutyType,
   AdminTeam,
   AdminTeamDetail,
@@ -1300,3 +1303,10 @@ export const assignDuty = (input: { duty_type_id: string; team_id: string; emplo
   request<{ duty: ComplexDuty; conflicts: DutyConflict[] }>("/api/complex/duties", { method: "POST", body: JSON.stringify(input) });
 export const cancelDuty = (id: string) =>
   request<ComplexDuty>(`/api/complex/duties/${encodeURIComponent(id)}`, { method: "DELETE" });
+// "מלא בהוגנות": a proposal for every open seat. Writes nothing.
+export const suggestDuties = (start: string, end: string) =>
+  request<DutySuggestion>(`/api/complex/duties/suggest?${new URLSearchParams({ start, end })}`, { method: "POST" });
+export const approveDuties = (rows: { duty_type_id: string; team_id: string; employee: string; duty_date: string }[]) =>
+  request<DutyApproval>("/api/complex/duties/approve", { method: "POST", body: JSON.stringify({ rows }) });
+export const dutyBalance = (start: string, end: string) =>
+  request<DutyBalance>(`/api/complex/duties/balance?${new URLSearchParams({ start, end })}`);

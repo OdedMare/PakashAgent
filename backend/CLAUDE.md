@@ -58,6 +58,9 @@ uvicorn app.main:app --reload
   that weekday, a seat is free), logged in the soldier's team as
   `commander:<id>`, and told to that team's commander. The day is blocked
   by `records.availability()`, which projects it as a `duty` with no hours.
+  A duty on a draft shift vacates it and opens a keep-existing refill
+  (`collisions.py`); "מלא בהוגנות" (`fill.py`, pure) proposes and the
+  commander approves; `balance.py` reports the spread (D44).
   `dal/repository/complex_duties.py` holds its SQL.
 - `api/dependencies.py` — the route guards (`visitor`, `boss`, `own_manager`,
   `employee`, `admin`, `commander`). `visitor` also refuses a suspended or

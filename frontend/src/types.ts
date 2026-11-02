@@ -1009,6 +1009,9 @@ export interface EmployeeView {
    *  not have to compare a grid against memory to find out. */
   unseen: number;
   shifts: Record<string, unknown>[];
+  /** Their own מכלול duties, a week back to eight weeks ahead (D44). Shown
+   *  whether or not a week is published: the מכלול commander sets them. */
+  duties?: { duty_date: string; duty_type: string; blocks: boolean }[];
 }
 
 /** A change-log entry as the employee sees it — the manager's row plus
@@ -1382,8 +1385,15 @@ export interface DutyBoard {
   duties: ComplexDuty[];
 }
 
-/** A stored shift a new duty now blocks: a warning, the duty is saved. */
+/** A stored shift a new duty now blocks: the duty is saved, and `outcome`
+ *  says what became of the shift. `vacated`: taken off a draft and being
+ *  refilled around the board; `vacated_only`: taken off, the refill could
+ *  not open (another build running); `published`: left on a published week,
+ *  its commander told; `past`: left as it stood. */
 export interface DutyConflict {
+  outcome?: "vacated" | "vacated_only" | "published" | "past";
+  employee?: string;
+  team_id?: string;
   schedule_id: string;
   status: "draft" | "published";
   shift_name: string;
@@ -1397,4 +1407,43 @@ export interface DutyRosterTeam {
   name: string;
   active: boolean;
   soldiers: { name: string; role: string; inactive_from: string }[];
+}
+
+/** One pick of "מלא בהוגנות": a proposal, saved only on approval. */
+export interface DutyProposal {
+  duty_type_id: string;
+  duty_type: string;
+  team_id: string;
+  team_name: string;
+  employee: string;
+  duty_date: string;
+  reason: string;
+}
+
+export interface DutySuggestion {
+  start: string;
+  end: string;
+  window_start: string;
+  proposals: DutyProposal[];
+  /** Seats nobody could stand: everyone home, constrained or on duty. */
+  unfilled: { duty_type_id: string; duty_type: string; duty_date: string }[];
+}
+
+export interface DutyApproval {
+  saved: ComplexDuty[];
+  conflicts: DutyConflict[];
+  failed: (DutyProposal & { error: string })[];
+}
+
+/** The מכלול's duty balance over a span. */
+export interface DutyBalance {
+  start: string;
+  end: string;
+  people: {
+    team_id: string; team_name: string; employee: string; duties: number;
+    duty_load: number; weekend_duties: number; recorded: number; shifts: number; load: number;
+  }[];
+  teams: { team_id: string; team_name: string; soldiers: number; duties: number; duty_load: number; average: number }[];
+  types: { duty_type_id: string; duty: string; filled: number; required: number; weight: number }[];
+  spread: { most: number; least: number; gap: number };
 }

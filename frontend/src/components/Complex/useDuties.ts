@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import {
-  assignDuty, cancelDuty, createDutyType, deleteDutyType, dutyBoard, dutyRoster,
-  updateDutyType,
+  approveDuties, assignDuty, cancelDuty, createDutyType, deleteDutyType, dutyBoard,
+  dutyRoster, suggestDuties, updateDutyType,
 } from "@/services/api";
 import type { DutyBoard, DutyConflict, DutyRosterTeam, DutyType } from "@/types";
 
@@ -66,6 +66,9 @@ export function useDuties(start: string, end: string) {
       return result ? result.conflicts : null;
     },
     cancel: (id: string) => run(() => cancelDuty(id)),
+    /** "מלא בהוגנות" over the range on screen. Writes nothing. */
+    suggest: () => run(() => suggestDuties(start, end)),
+    approve: (rows: Parameters<typeof approveDuties>[0]) => run(() => approveDuties(rows)),
   };
 }
 

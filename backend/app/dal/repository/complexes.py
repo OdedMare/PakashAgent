@@ -90,7 +90,8 @@ class ComplexRepository(RepositoryBase):
 
         A team already linked to *another* מכלול is refused rather than
         moved: taking a workplace from one commander and giving it to another
-        is a decision the operator should see named, not a side effect.
+        is a decision the operator should see named, not a side effect. A
+        team unlinked loses its מכלול duties from today on.
         """
         wanted = sorted(set(team_ids))
         with connect(self._store) as connection:
@@ -114,6 +115,14 @@ class ComplexRepository(RepositoryBase):
                     raise ConflictError(
                         "כבר משויך למכלול אחר: " + ", ".join(taken)
                     )
+            # A team leaving takes no plan with it: its duties from today on
+            # would block days nobody can cancel any more (D44). Past ones
+            # stay, as history and in the statistics.
+            connection.execute(
+                "DELETE FROM complex_duties WHERE complex_id=%s "
+                "AND NOT (team_id = ANY(%s)) AND duty_date >= CURRENT_DATE",
+                (complex_id, wanted),
+            )
             connection.execute(
                 "UPDATE teams SET complex_id=NULL "
                 "WHERE complex_id=%s AND NOT (id = ANY(%s))",

@@ -189,7 +189,7 @@ class ComplexDutyRepository(RepositoryBase):
         fill and the balance count a soldier's shifts from. Drafts and
         published weeks alike -- the load is the same either way."""
         return self._all("""
-            SELECT a.employee, sl.slot_date
+            SELECT a.employee, sl.slot_date, sl.start_time, sl.end_time
             FROM assignments a JOIN shift_slots sl ON sl.id = a.slot_id
             WHERE a.team_id=%s AND sl.slot_date BETWEEN %s AND %s
         """, (team_id, starts_on, ends_on))

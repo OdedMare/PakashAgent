@@ -285,3 +285,24 @@ def test_a_week_already_being_built_is_vacated_without_a_refill():
 
     assert [c["outcome"] for c in result["conflicts"]] == ["vacated_only"]
     assert [call[0] for call in schedules.calls] == ["unassign"]
+
+
+def test_a_soldier_sees_only_their_own_duties_and_a_team_without_any_sees_none():
+    import datetime as _dt
+    from app.bl.employee_service.personal import PersonalView
+
+    asked = []
+
+    class _Own:
+        def team_complex_duties(self, team_id, start, end, employee=None):
+            asked.append((team_id, employee))
+            return [{"duty_date": _dt.date(2026, 11, 10), "duty_type": "מטבח", "blocks": True},
+                    {"duty_date": "2026-11-03", "duty_type": "שמירה", "blocks": False}]
+
+    view = PersonalView(_Own(), None, None)
+    assert view._duties(TEAM, "דנה") == [
+        {"duty_date": "2026-11-10", "duty_type": "מטבח", "blocks": True},
+        {"duty_date": "2026-11-03", "duty_type": "שמירה", "blocks": False},
+    ]
+    assert asked == [(TEAM, "דנה")]  # the name off the cookie, nobody else's
+    assert PersonalView(object(), None, None)._duties(TEAM, "דנה") == []

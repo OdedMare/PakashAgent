@@ -1,13 +1,15 @@
 "use client";
 
-import { AlertTriangle, History, Plus, Settings2, X } from "lucide-react";
+import { AlertTriangle, History, Plus, Scale, Settings2, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 
 import { displayDate } from "@/components/DateInput";
 import { hebrewWeekday } from "@/components/Management/Calendar";
-import type { ComplexDuty, DutyType } from "@/types";
+import type { ComplexDuty, DutyApproval, DutyProposal, DutySuggestion, DutyType } from "@/types";
 
+import { DutyBalancePanel } from "./DutyBalancePanel";
 import { DutyForm } from "./DutyForm";
+import { DutySuggestionBar } from "./DutySuggestionBar";
 import { DutyTypes } from "./DutyTypes";
 import { runsOn, useDuties } from "./useDuties";
 
@@ -15,6 +17,7 @@ type Panel =
   | { kind: "assign"; typeId: string; date: string }
   | { kind: "record" }
   | { kind: "types" }
+  | { kind: "balance" }
   | null;
 
 /** The מכלול's duties over the range on screen: one row per kind of duty,
@@ -34,8 +37,34 @@ export function DutiesView({ days, today }: { days: string[]; today: string }) {
   const shown = types.filter((type) => type.active
     || board?.duties.some((duty) => duty.duty_type_id === type.id));
 
+  const [suggestion, setSuggestion] = useState<DutySuggestion | null>(null);
+  const [approval, setApproval] = useState<DutyApproval | null>(null);
+
   const on = (type: DutyType, date: string): ComplexDuty[] =>
     (board?.duties ?? []).filter((duty) => duty.duty_type_id === type.id && duty.duty_date === date);
+  const proposed = (type: DutyType, date: string): DutyProposal[] =>
+    (suggestion?.proposals ?? []).filter((row) => row.duty_type_id === type.id && row.duty_date === date);
+
+  const suggest = async () => {
+    setApproval(null);
+    setPanel(null);
+    const result = await duties.suggest();
+    if (result) setSuggestion(result);
+  };
+  const drop = (pick: DutyProposal) => setSuggestion((current) => current && {
+    ...current, proposals: current.proposals.filter((row) => row !== pick),
+  });
+  const approve = async () => {
+    if (!suggestion) return;
+    const result = await duties.approve(suggestion.proposals.map((row) => ({
+      duty_type_id: row.duty_type_id, team_id: row.team_id,
+      employee: row.employee, duty_date: row.duty_date,
+    })));
+    if (result) {
+      setSuggestion(null);
+      setApproval(result);
+    }
+  };
 
   return (
     <div className="duties">
@@ -47,7 +76,19 @@ export function DutiesView({ days, today }: { days: string[]; today: string }) {
           onClick={() => setPanel({ kind: "record" })}>
           <History size={15} /> רישום תורנות שכבר נעשתה
         </button>
+        <button type="button" className="ghost-button" onClick={() => setPanel({ kind: "balance" })}>
+          <Scale size={15} /> מאזן
+        </button>
+        <button type="button" className="primary-button" disabled={duties.busy || !types.some((type) => type.active)}
+          onClick={() => void suggest()}
+          title="הצעה לכל המקומות הפנויים בטווח שעל המסך. שום דבר לא נשמר עד האישור.">
+          <Sparkles size={15} /> מלא בהוגנות
+        </button>
       </div>
+
+      <DutySuggestionBar suggestion={suggestion} approval={approval} busy={duties.busy}
+        onApprove={() => void approve()}
+        onDiscard={() => { setSuggestion(null); setApproval(null); }} />
 
       {duties.error ? (
         <div className="error" role="alert">
@@ -58,7 +99,9 @@ export function DutiesView({ days, today }: { days: string[]; today: string }) {
         </div>
       ) : null}
 
-      {panel?.kind === "types" ? (
+      {panel?.kind === "balance" ? (
+        <DutyBalancePanel start={start} end={end} today={today} onClose={() => setPanel(null)} />
+      ) : panel?.kind === "types" ? (
         <div className="duty-panel">
           <button type="button" className="icon-button subtle duty-panel-close"
             onClick={() => setPanel(null)} aria-label="סגירה"><X size={15} /></button>
@@ -107,6 +150,7 @@ export function DutiesView({ days, today }: { days: string[]; today: string }) {
                   </th>
                   {days.map((date) => (
                     <DutyCell key={date} type={type} date={date} rows={on(type, date)}
+                      picks={proposed(type, date)} onDrop={drop}
                       busy={duties.busy}
                       onAdd={() => setPanel({ kind: "assign", typeId: type.id, date })}
                       onCancel={(duty) => {
@@ -126,18 +170,20 @@ export function DutiesView({ days, today }: { days: string[]; today: string }) {
 }
 
 function DutyCell({
-  type, date, rows, busy, onAdd, onCancel,
+  type, date, rows, picks, busy, onAdd, onCancel, onDrop,
 }: {
   type: DutyType;
   date: string;
   rows: ComplexDuty[];
+  picks: DutyProposal[];
+  onDrop: (pick: DutyProposal) => void;
   busy: boolean;
   onAdd: () => void;
   onCancel: (duty: ComplexDuty) => void;
 }) {
   const runs = type.active && runsOn(type, date);
   const seated = rows.filter((row) => row.blocks).length;
-  const open = runs ? Math.max(0, type.seats - seated) : 0;
+  const open = runs ? Math.max(0, type.seats - seated - picks.length) : 0;
 
   return (
     <td className={`duty-cell${runs ? "" : " is-off"}${open ? " is-open" : ""}`}>
@@ -149,6 +195,16 @@ function DutyCell({
           <small>{row.team_name}{row.blocks ? "" : " · רישום"}</small>
           <button type="button" className="duty-chip-remove" disabled={busy}
             onClick={() => onCancel(row)} aria-label={`ביטול התורנות של ${row.employee}`}>
+            <X size={12} />
+          </button>
+        </span>
+      ))}
+      {picks.map((pick) => (
+        <span key={`${pick.team_id}-${pick.employee}`} className="duty-chip is-proposal" title={pick.reason}>
+          <span className="duty-chip-name">{pick.employee}</span>
+          <small>{pick.team_name} · הצעה</small>
+          <button type="button" className="duty-chip-remove" onClick={() => onDrop(pick)}
+            aria-label={`הסרת ההצעה ${pick.employee}`}>
             <X size={12} />
           </button>
         </span>

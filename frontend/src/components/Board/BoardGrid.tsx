@@ -165,6 +165,18 @@ export function BoardGrid({
   // schedule rather than derived here: which group closes on 12/09 is
   // arithmetic the backend already did, and a browser-side cycle would be a
   // second answer to a question that must have exactly one (D3).
+  // Who is on מכלול duty each date (D44), read off the constraints the
+  // board already has: the server projects a duty there with no hours.
+  const duties = useMemo(() => {
+    const byDate = new Map<string, string[]>();
+    for (const row of constraints) {
+      if (row.source !== "complex") continue;
+      const list = byDate.get(row.constraint_date) ?? [];
+      list.push(row.reason ? `${row.employee} · ${row.reason}` : row.employee);
+      byDate.set(row.constraint_date, list);
+    }
+    return byDate;
+  }, [constraints]);
   const closures = useMemo(() => {
     const map = new Map<string, Closure>();
     for (const row of schedule?.closures ?? []) {
@@ -354,6 +366,7 @@ export function BoardGrid({
             isToday={date === today}
             coverage={index.dayCoverage(date)}
             closure={closures.get(date)}
+            duties={duties.get(date)}
             columnRef={date === today ? todayColumn : undefined}
             onOpenAgent={onOpenDay ? () => onOpenDay(date) : undefined}
             // Only on a day the period actually holds: a build aimed at a

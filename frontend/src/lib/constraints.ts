@@ -12,7 +12,11 @@ export function constraintBlocksSlot(
     if (row.constraint_type === "duty") {
       if (!row.is_hard || row.employee !== employee) return false;
       const shift = interval(date, slot.start_time, slot.end_time);
-      const duty = interval(row.constraint_date, row.start_time, row.end_time);
+      // A מכלול duty has no hours: it holds its date midnight to midnight,
+      // so the night before that ends on its morning is blocked too (D44).
+      const duty = !row.start_time && !row.end_time
+        ? interval(row.constraint_date, "00:00", "00:00")
+        : interval(row.constraint_date, row.start_time, row.end_time);
       return Boolean(shift && duty && shift[0] < duty[1] && duty[0] < shift[1]);
     }
     if (

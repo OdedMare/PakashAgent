@@ -589,6 +589,11 @@
   white-space: nowrap;
 }
 
+.board-dayhead-closure.is-duty {
+  color: var(--hue-teal);
+  background: var(--hue-teal-soft);
+}
+
 .board-dayhead-closure.is-handover {
   background: transparent;
   border: 1px dashed var(--border);

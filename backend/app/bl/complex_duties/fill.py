@@ -12,8 +12,10 @@ the order is, first deciding:
 
 1. the fewest weighted duty days over the window (8 weeks back to the span's end);
 2. on a Friday or Saturday, the fewest weekend duties;
-3. the lightest whole load -- duties plus shifts;
-4. no shift of their own that day (no seat to vacate);
+3. no shift of their own the duty would take -- that day's, or a night
+   from the evening before (`busy_days`): every one is a seat vacated and
+   rebuilt in a משמרת, so a free soldier wins among equals;
+4. the lightest whole load -- duties plus shifts;
 5. the longest since their last duty;
 6. the משמרת and the name, so the same input gives the same answer.
 """
@@ -38,12 +40,14 @@ def suggest(
     duties: List[dict],
     shift_days: Dict[Key, set],
     ruled_out: Callable[[dict, datetime.date], str],
+    busy_days: Dict[Key, set] = None,
 ) -> dict:
     """`soldiers` carry `team_id`, `team_name` and `name`; `duties` are the
     מכלול's stored rows over the window (blocking or recorded); `shift_days`
     is each soldier's dates with a shift; `ruled_out(soldier, day)` names why
-    a soldier cannot stand a duty that day, or is empty."""
-    state = _State(soldiers, duties, shift_days)
+    a soldier cannot stand a duty that day, or is empty. `busy_days` are
+    the days a duty would take a shift from (default: the shift dates)."""
+    state = _State(soldiers, duties, shift_days, busy_days)
     proposals, unfilled = [], []
     for day in dates:
         for duty_type in types:
@@ -68,9 +72,10 @@ def suggest(
 
 
 class _State:
-    def __init__(self, soldiers, duties, shift_days):
+    def __init__(self, soldiers, duties, shift_days, busy_days=None):
         self.soldiers = soldiers
         self.shift_days = shift_days
+        self.busy_days = busy_days if busy_days is not None else shift_days
         self.load: Dict[Key, int] = {}
         self.weekend: Dict[Key, int] = {}
         self.last: Dict[Key, datetime.date] = {}
@@ -110,8 +115,8 @@ class _State:
         return (
             self.load.get(key, 0),
             self.weekend.get(key, 0) if weekend else 0,
+            day in self.busy_days.get(key, ()),
             self.load.get(key, 0) + shifts,
-            day in self.shift_days.get(key, ()),
             -since,
             soldier["team_name"], soldier["name"],
         )
@@ -123,8 +128,8 @@ class _State:
                  "%d משמרות" % shifts]
         if day.weekday() in _WEEKEND:
             parts.append("%d תורנויות סופ״ש" % self.weekend.get(key, 0))
-        if day in self.shift_days.get(key, ()):
-            parts.append("שים לב: משובץ/ת למשמרת ביום הזה")
+        if day in self.busy_days.get(key, ()):
+            parts.append("שים לב: משובץ/ת למשמרת שהתורנות תחסום — היא תפונה ותושלם מחדש")
         return ", ".join(parts)
 
     def add(self, soldier, duty_type, day) -> None:

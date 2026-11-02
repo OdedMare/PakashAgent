@@ -1499,9 +1499,31 @@ shifts, the duties are shared fairly, and they show in the statistics.
   constraints as "תורנות מכלול", the constraint delete refuses it, every
   set, cancel and record lands in the team's change log as
   `commander:<id>` and reaches its commander as a notice (D43).
-- **A duty on a shift already placed is a warning, not a refusal.** The
-  commander is shown the stored shifts it now blocks; the duty is saved and
-  the team's commander finds the cover.
+- **A duty on a shift already placed is saved, and the shift follows the
+  week it is in** (`complex_duties/collisions.py`). On a draft, from today
+  on, the soldier is taken off (logged with the duty as the reason, as the
+  commander) and one keep-existing range rebuild per week (D37) refills the
+  seat around the board. A published week is never changed: its commander
+  is told who to cover. The past is left. The commander sees each outcome.
+- **"מלא בהוגנות" proposes; the commander approves** (D20). A pure greedy
+  fill (`fill.py`), a day and a kind at a time: the fewest weighted duty
+  days over 8 weeks first, then weekend duties, then whoever has no shift
+  the duty would take (that day's, or a night from the evening before),
+  then the whole load, then the longest since the last duty, then the
+  names. Whoever has left, holds a hard whole-day constraint or a team
+  duty, already stands a duty, or is home on the cycle (the solver's own
+  `bl/rotation` gates) is not proposed. Approval seats each kept row
+  through the ordinary assign, reports the ones it could not, and resolves
+  the collisions once for the whole fill.
+- **The balance** (`balance.py`) reports per soldier, per משמרת and per kind
+  -- seats asked for counted from the day a kind was created -- and the
+  spread. A report, never a quota.
+- **The soldier sees their own duties** in the personal area, a week back
+  to eight ahead, whether or not a week is published; the team's board
+  marks each day's duties on its column head and paints those cells
+  blocked (`lib/constraints.ts` mirrors the whole day).
+- **A team leaving the מכלול** loses its duties from today on, in the same
+  transaction; past ones stay as history.
 - **A recorded duty counts without blocking.** `blocks = FALSE` is a duty
   stood before this system or outside it: not projected into availability,
   but counted like any other.
@@ -1518,9 +1540,10 @@ shifts, the duties are shared fairly, and they show in the statistics.
   without duties.
 
 **Deliberately not done:** a team's own timed duty (`duties`) still blocks
-hours and is not counted as load; no automatic fair fill yet (planned, the
-commander approves it); a published week the duty collides with is not
-changed.
+hours and is not counted as load; a published week a duty collides with is
+not changed; a soldier cannot be on two duties a day; deleting a מכלול
+removes its duties with it, history included (the grouping is what owned
+them).
 
 ## D45 — Many teams at once: fewer round trips, more API processes, no PgBouncer *(extends D35, D39)*
 

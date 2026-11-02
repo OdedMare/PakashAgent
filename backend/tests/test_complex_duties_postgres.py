@@ -120,3 +120,17 @@ def test_a_recorded_duty_counts_but_blocks_nothing(complex_setup):
     assert repo.availability(s["first"], DAY, DAY) == []
     [row] = repo.team_complex_duties(s["first"], DAY, DAY)
     assert (row["employee"], row["weight"], row["blocks"]) == ("דנה", 1, False)
+
+
+def test_a_team_leaving_the_complex_takes_no_future_duty_with_it(complex_setup):
+    s = complex_setup
+    repo = s["repo"]
+    repo.set_complex_duty(s["mine"], s["kitchen"]["id"], s["second"], "נועה", "2020-01-05")
+    repo.set_complex_duty(s["mine"], s["kitchen"]["id"], s["second"], "נועה", "2099-01-05")
+    repo.set_complex_duty(s["mine"], s["kitchen"]["id"], s["first"], "דנה", "2099-01-05")
+
+    repo.set_complex_teams(s["mine"], [s["first"]])
+
+    left = repo.team_complex_duties(s["second"], "2000-01-01", "2100-01-01")
+    assert [str(row["duty_date"]) for row in left] == ["2020-01-05"]  # history stays
+    assert len(repo.team_complex_duties(s["first"], "2000-01-01", "2100-01-01")) == 1

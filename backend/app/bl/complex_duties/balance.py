@@ -70,11 +70,13 @@ def _teams(rows: List[dict]) -> List[dict]:
 
 
 def _required(duty_type: dict, first: datetime.date, last: datetime.date) -> int:
-    """Seats the kind asked for over the span, on the days it runs. A
-    retired kind asks for none."""
+    """Seats the kind asked for over the span, on the days it runs, from the
+    day it was created -- a kitchen added this week did not ask for seven
+    weeks of seats before it. A retired kind asks for none."""
     if not duty_type.get("active", True):
         return 0
-    day, seats = first, 0
+    created = _day(duty_type.get("created_at"))
+    day, seats = max(first, created) if created else first, 0
     while day <= last:
         seats += duty_type["seats"] if runs_on(duty_type, day) else 0
         day += datetime.timedelta(days=1)
@@ -82,6 +84,8 @@ def _required(duty_type: dict, first: datetime.date, last: datetime.date) -> int
 
 
 def _day(value):
+    if isinstance(value, datetime.datetime):
+        return value.date()
     if isinstance(value, datetime.date):
         return value
     try:

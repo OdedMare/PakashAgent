@@ -24,6 +24,9 @@ class DutyLedger:
         self.since = first - datetime.timedelta(days=window_days)
         self.soldiers: List[dict] = []
         self.shift_days: Dict[Key, Set[datetime.date]] = {}
+        # The days a whole-day duty would take a shift from: a shift's own
+        # date, and the next one for a shift crossing midnight.
+        self.busy_days: Dict[Key, Set[datetime.date]] = {}
         self._blocked: Set[tuple] = set()
         for team in complexes.describe(complex_id)["teams"]:
             if team["active"]:
@@ -43,8 +46,14 @@ class DutyLedger:
         for row in repository.team_shift_rows(
                 team["id"], self.since.isoformat(), self.last.isoformat()):
             day = _day(row["slot_date"])
-            if day is not None:
-                self.shift_days.setdefault((team["id"], row["employee"]), set()).add(day)
+            if day is None:
+                continue
+            key = (team["id"], row["employee"])
+            self.shift_days.setdefault(key, set()).add(day)
+            busy = self.busy_days.setdefault(key, set())
+            busy.add(day)
+            if _crosses_midnight(row.get("start_time"), row.get("end_time")):
+                busy.add(day + datetime.timedelta(days=1))
         for row in repository.availability(
                 team["id"], self.first.isoformat(), self.last.isoformat()):
             if _blocks_day(row):
@@ -91,6 +100,11 @@ def _home(soldier: dict, day: datetime.date) -> bool:
     except (KeyError, TypeError, ValueError):
         return False
     return status is False
+
+
+def _crosses_midnight(start, end) -> bool:
+    start, end = text(start), text(end)
+    return bool(start and end) and end <= start
 
 
 def _day(value):
