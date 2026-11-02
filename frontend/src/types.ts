@@ -457,6 +457,13 @@ export interface RequiredAssignment {
   date: string;
 }
 
+/** A one-day exception to a shift's normal required seats. */
+export interface StaffingOverride {
+  date: string;
+  shift: string;
+  headcount: number;
+}
+
 /** How an assignment got into the schedule (D18). */
 export type AssignmentSource = "agent" | "manager" | "imported";
 
@@ -519,6 +526,7 @@ export interface GenerationProgress {
   days: GenerationDay[];
   /** The shift types this build covers; empty or absent means all. */
   shifts?: string[];
+  staffing_overrides?: StaffingOverride[];
   /** When a worker last said it was still on this job, UTC ISO-8601.
    *
    *  What separates a slow model from a hung one: with no LLM timeout

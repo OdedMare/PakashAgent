@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarPlus, Eraser, Repeat2, Soup, Sparkles } from "lucide-react";
+import { CalendarCog, CalendarPlus, Eraser, Repeat2, Soup, Sparkles } from "lucide-react";
 
 import { hebrewWeekday, isWeekend } from "@/components/Management/Calendar";
 import type { Closure } from "@/types";
@@ -18,6 +18,7 @@ export function DayHead({
   coverage,
   closure,
   duties,
+  specialStaffing,
   columnRef,
   onOpenAgent,
   onBuildFrom,
@@ -35,6 +36,8 @@ export function DayHead({
   /** Who stands a מכלול duty this day, as "name · duty" (D44). They are out
    *  of the whole day, and the grid's blocked cells say so one by one. */
   duties?: string[];
+  /** Shift headcounts explicitly changed for this date. */
+  specialStaffing?: string[];
   /** Set on today's head only, so the scroller can bring it into view. */
   columnRef?: React.Ref<HTMLDivElement>;
   onOpenAgent?: () => void;
@@ -117,6 +120,15 @@ export function DayHead({
           title={`בתורנות מכלול כל היום: ${duties.join(", ")}`}>
           <Soup size={11} aria-hidden="true" />
           {duties.length === 1 ? duties[0] : `${duties.length} בתורנות`}
+        </span>
+      ) : null}
+      {specialStaffing?.length ? (
+        <span
+          className="board-dayhead-special"
+          title={`תקינה מיוחדת: ${specialStaffing.join(", ")}`}
+        >
+          <CalendarCog size={11} aria-hidden="true" />
+          תקינה מיוחדת
         </span>
       ) : null}
       <div className="board-dayhead-actions">

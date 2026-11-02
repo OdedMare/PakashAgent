@@ -184,6 +184,15 @@ export function BoardGrid({
     }
     return map;
   }, [schedule?.closures]);
+  const specialStaffing = useMemo(() => {
+    const byDate = new Map<string, string[]>();
+    for (const row of schedule?.generation.staffing_overrides ?? []) {
+      const list = byDate.get(row.date) ?? [];
+      list.push(`${row.shift}: תקן ${row.headcount}`);
+      byDate.set(row.date, list);
+    }
+    return byDate;
+  }, [schedule?.generation.staffing_overrides]);
 
   // When each shift starts, read off whichever slot in its row carries the
   // hours: a shift's times come from the vocabulary and hold all week, but a
@@ -367,6 +376,7 @@ export function BoardGrid({
             coverage={index.dayCoverage(date)}
             closure={closures.get(date)}
             duties={duties.get(date)}
+            specialStaffing={specialStaffing.get(date)}
             columnRef={date === today ? todayColumn : undefined}
             onOpenAgent={onOpenDay ? () => onOpenDay(date) : undefined}
             // Only on a day the period actually holds: a build aimed at a

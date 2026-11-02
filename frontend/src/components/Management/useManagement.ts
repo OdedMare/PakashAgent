@@ -369,6 +369,7 @@ export function useManagement(): ManagementState {
       build_through?: string;
       instructions?: string;
       required_assignments?: import("@/types").RequiredAssignment[];
+      staffing_overrides?: import("@/types").StaffingOverride[];
       shifts?: string[];
       keep_existing?: boolean;
     }) => {
@@ -395,6 +396,7 @@ export function useManagement(): ManagementState {
           instructions: period.instructions,
           shifts: period.shifts,
           keep_existing: keepExisting,
+          staffing_overrides: period.staffing_overrides,
         };
         await watchGeneration(
           (onProgress, signal) =>

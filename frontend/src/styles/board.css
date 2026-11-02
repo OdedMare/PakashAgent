@@ -601,6 +601,21 @@
   font-weight: 500;
 }
 
+.board-dayhead-special {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-top: 0.15rem;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 0.66rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
 .board-dayhead-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1212,6 +1227,50 @@
   gap: 0.65rem;
 }
 
+.generate-special {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.generate-special-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.generate-special-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.generate-special-row legend {
+  padding-inline: 0.3rem;
+  color: var(--text-soft);
+  font-size: 0.76rem;
+}
+
+.generate-special-row label {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+}
+
+.generate-special-row select,
+.generate-special-row input {
+  width: 100%;
+}
+
 /* Wraps rather than squeezing: a workplace may declare five or six shifts,
    and each button still has to clear the 44px touch target. */
 .generate-shift-choices {
@@ -1431,6 +1490,10 @@
   }
 
   .generate-required-row {
+    grid-template-columns: 1fr;
+  }
+
+  .generate-special-row {
     grid-template-columns: 1fr;
   }
 }

@@ -1,15 +1,16 @@
 "use client";
 
-import { CalendarPlus, CalendarRange, Layers, Plus, Trash2, X } from "lucide-react";
+import { CalendarCog, CalendarPlus, CalendarRange, Layers, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DateInput, displayDate } from "@/components/DateInput";
 import { hebrewWeekday } from "@/components/Management/Calendar";
-import type { RequiredAssignment, Schedule } from "@/types";
+import type { RequiredAssignment, Schedule, StaffingOverride } from "@/types";
 
 import { addDays, sundayOf } from "./dates";
 
 type Row = RequiredAssignment & { id: number };
+type OverrideRow = StaffingOverride & { id: number };
 
 /** Ask the agent for a run of days.
  *
@@ -53,6 +54,7 @@ export function GenerateDialog({
     /** Hold the rows already built and move only what a new soldier or
      *  shift needs, instead of rebuilding the days. */
     keep_existing: boolean;
+    staffing_overrides: StaffingOverride[];
   }) => void;
   onCancel: () => void;
 }) {
@@ -79,6 +81,12 @@ export function GenerateDialog({
   const runsInRange = dates.some((date) => shiftsForDate(built, date).length > 0);
   const nextId = useRef(1);
   const [rows, setRows] = useState<Row[]>([]);
+  const [overrides, setOverrides] = useState<OverrideRow[]>(() =>
+    (period?.generation.staffing_overrides ?? [])
+      .filter((row) => row.date >= from && row.date <= through)
+      .map((row, index) => ({ ...row, id: index + 1 })),
+  );
+  const overrideId = useRef(overrides.length + 1);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -102,9 +110,15 @@ export function GenerateDialog({
     }));
   };
   const validRange = dates.length > 0 && startsOn <= endsOn;
+  const overrideKeys = overrides.map((row) => `${row.shift}|${row.date}`);
+  const validOverrides = overrides.every(
+    (row) => dates.includes(row.date)
+      && shiftsForDate(options, row.date).some((shift) => shift.name === row.shift)
+      && Number.isInteger(row.headcount) && row.headcount >= 0 && row.headcount <= 100,
+  ) && new Set(overrideKeys).size === overrideKeys.length;
   const valid = validRange && runsInRange && rows.every(
     (row) => row.employee && dates.includes(row.date) && row.shift,
-  );
+  ) && validOverrides;
 
   const presets = useMemo(
     () => rangePresets(startsOn, period?.ends_on),
@@ -157,6 +171,9 @@ export function GenerateDialog({
               required_assignments: rows.map(({ employee, shift, date }) => ({ employee, shift, date })),
               shifts: chosen,
               keep_existing: Boolean(period) && keepExisting,
+              staffing_overrides: overrides.map(({ date, shift, headcount }) => ({
+                date, shift, headcount,
+              })),
             });
           }
         }}>
@@ -261,6 +278,98 @@ export function GenerateDialog({
               ) : null}
             </section>
           ) : null}
+
+          <section className="generate-special" aria-labelledby="generate-special-title">
+            <div className="generate-period-head">
+              <span className="generate-period-mark" aria-hidden="true">
+                <CalendarCog size={18} />
+              </span>
+              <div>
+                <h3 id="generate-special-title">ימים עם תקינה מיוחדת</h3>
+                <p>חג, אירוע או יום חריג: התקן כאן מחליף רק את התקן של אותה משמרת באותו תאריך.</p>
+              </div>
+            </div>
+            {overrides.length ? (
+              <div className="generate-special-list">
+                {overrides.map((row, index) => {
+                  const available = shiftsForDate(options, row.date);
+                  return (
+                    <fieldset className="generate-special-row" key={row.id}>
+                      <legend>יום מיוחד {index + 1}</legend>
+                      <label>
+                        <span>תאריך</span>
+                        <select
+                          value={row.date}
+                          onChange={(event) => setOverrides((current) => current.map((item) => {
+                            if (item.id !== row.id) return item;
+                            const date = event.target.value;
+                            const choices = shiftsForDate(options, date);
+                            const shift = choices.some((item) => item.name === row.shift)
+                              ? row.shift : (choices[0]?.name ?? "");
+                            return { ...item, date, shift, headcount: normalHeadcount(choices.find((item) => item.name === shift), date) };
+                          }))}
+                        >
+                          {dates.map((date) => (
+                            <option key={date} value={date}>{hebrewWeekday(date)} · {displayDate(date)}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>משמרת</span>
+                        <select
+                          value={row.shift}
+                          onChange={(event) => setOverrides((current) => current.map((item) => item.id === row.id
+                            ? { ...item, shift: event.target.value, headcount: normalHeadcount(available.find((shift) => shift.name === event.target.value), row.date) }
+                            : item))}
+                        >
+                          {available.map((shift) => <option key={shift.name}>{shift.name}</option>)}
+                        </select>
+                      </label>
+                      <label>
+                        <span>תקן מיוחד</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={row.headcount}
+                          onChange={(event) => setOverrides((current) => current.map((item) => item.id === row.id
+                            ? { ...item, headcount: Number(event.target.value) }
+                            : item))}
+                          required
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="icon-button generate-remove"
+                        onClick={() => setOverrides((current) => current.filter((item) => item.id !== row.id))}
+                        aria-label={`מחיקת יום מיוחד ${index + 1}`}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </fieldset>
+                  );
+                })}
+                {new Set(overrideKeys).size !== overrideKeys.length ? (
+                  <p className="generate-shifts-empty" role="alert">אותה משמרת ותאריך הוגדרו יותר מפעם אחת.</p>
+                ) : null}
+              </div>
+            ) : null}
+            <button
+              type="button"
+              className="ghost-button generate-add"
+              disabled={!dates.length || !options.length}
+              onClick={() => {
+                const date = dates.find((day) => shiftsForDate(options, day).length) ?? startsOn;
+                const shift = shiftsForDate(options, date)[0];
+                setOverrides((current) => [...current, {
+                  id: overrideId.current++, date, shift: shift?.name ?? "",
+                  headcount: normalHeadcount(shift, date),
+                }]);
+              }}
+            >
+              <Plus size={15} /> הוספת יום מיוחד
+            </button>
+          </section>
 
           <label className="generate-instructions">
             <span>הנחיות מיוחדות לתקופה הזאת <small>לא חובה</small></span>
@@ -395,7 +504,13 @@ export function GenerateDialog({
   );
 }
 
-type ShiftOption = { name: string; hours: string; days: string[] };
+type ShiftOption = {
+  name: string;
+  hours: string;
+  days: string[];
+  staffing: Record<string, unknown>[];
+  headcount: number;
+};
 
 function shiftOptions(rows: Record<string, unknown>[]): ShiftOption[] {
   return rows.flatMap((row) => {
@@ -406,8 +521,29 @@ function shiftOptions(rows: Record<string, unknown>[]): ShiftOption[] {
     const days = Array.isArray(row.days)
       ? row.days.filter((day): day is string => typeof day === "string")
       : [];
-    return [{ name, hours: start && end ? `${start}–${end}` : "", days }];
+    const staffing = Array.isArray(row.staffing)
+      ? row.staffing.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+      : [];
+    return [{
+      name, hours: start && end ? `${start}–${end}` : "", days, staffing,
+      headcount: typeof row.headcount === "number" ? row.headcount : 1,
+    }];
   });
+}
+
+function normalHeadcount(shift: ShiftOption | undefined, date: string): number {
+  if (!shift) return 1;
+  const weekday = hebrewWeekday(date).replace(/^יום /, "");
+  let fallback = shift.headcount;
+  for (const group of shift.staffing) {
+    if (typeof group.headcount !== "number") continue;
+    const days = Array.isArray(group.days)
+      ? group.days.filter((day): day is string => typeof day === "string")
+      : [];
+    if (!days.length) fallback = group.headcount;
+    else if (days.some((day) => day.replace(/^יום /, "") === weekday)) return group.headcount;
+  }
+  return fallback;
 }
 
 function shiftsForDate(shifts: ShiftOption[], date: string): ShiftOption[] {

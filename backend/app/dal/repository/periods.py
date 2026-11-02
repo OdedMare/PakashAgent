@@ -174,6 +174,24 @@ class PeriodRepository(RepositoryBase):
     def slots(self, schedule_id: str, team_id: str) -> List[dict]:
         return self._all(_SCHEDULE_SLOTS, (schedule_id, team_id))
 
+    def update_slot_headcounts(
+        self, schedule_id: str, team_id: str, slots: List[dict]
+    ) -> None:
+        """Update dated staffing in place so existing assignment ids survive."""
+        self._require_schedule(schedule_id, team_id)
+        with connect(self._store) as connection:
+            for slot in slots:
+                connection.execute("""
+                    UPDATE shift_slots SET headcount=%s
+                    WHERE schedule_id=%s AND team_id=%s
+                      AND shift_name=%s AND slot_date=%s
+                """, (
+                    slot["headcount"], schedule_id, team_id,
+                    slot["shift_name"], slot["slot_date"],
+                ))
+            self._touch_schedule(connection, schedule_id)
+            connection.commit()
+
     def replace_span_slots(self, schedule_id, team_id, starts_on, ends_on, slots):
         """Migrate only the approved dates; other slot and assignment ids survive."""
         self._require_schedule(schedule_id, team_id)

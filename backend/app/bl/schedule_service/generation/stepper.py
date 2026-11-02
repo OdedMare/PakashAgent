@@ -15,6 +15,7 @@ from app.bl.schedule_service.generation.pins import (
 )
 from app.bl.schedule_service.profile_gate import ProfileGate
 from app.bl.schedule_service.rows import iso
+from app.bl.scheduler import with_staffing_overrides
 from app.common.errors import AgentError
 
 
@@ -74,7 +75,10 @@ class GenerationStepper:
 
         job.start_span(target)
         self._repository.set_generation(schedule_id, team_id, job.to_dict())
-        profile = self._gate.buildable_profile(team_id)
+        profile = with_staffing_overrides(
+            self._gate.buildable_profile(team_id),
+            job.get("staffing_overrides") or [],
+        )
         self._run_span(team_id, schedule, profile, job, target)
 
         # A stop asked for while the model was answering. The day that just

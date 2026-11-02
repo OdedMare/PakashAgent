@@ -11,6 +11,7 @@ import type {
   RequiredAssignment,
   Schedule,
   Simulation,
+  StaffingOverride,
 } from "@/types";
 
 import { collectTouches } from "./agentTouch";
@@ -117,6 +118,7 @@ export function Board({
     build_through?: string;
     instructions?: string;
     required_assignments?: RequiredAssignment[];
+    staffing_overrides?: StaffingOverride[];
     /** Only these shift types are built; empty means every shift. */
     shifts?: string[];
     /** Absorb into the rows already there instead of rebuilding them. */
@@ -752,6 +754,7 @@ export function Board({
                     instructions: input.instructions,
                     shifts: input.shifts,
                     keep_existing: input.keep_existing,
+                    staffing_overrides: input.staffing_overrides,
                   }
                 : inWholeWeeks(input),
             );

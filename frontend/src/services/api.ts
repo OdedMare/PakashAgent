@@ -486,6 +486,7 @@ export async function generateSchedule(
     build_through?: string;
     instructions?: string;
     required_assignments?: import("@/types").RequiredAssignment[];
+    staffing_overrides?: import("@/types").StaffingOverride[];
     /** Only these shift types are built; empty or absent means all. */
     shifts?: string[];
   } = {},
@@ -656,6 +657,7 @@ export async function generateScheduleRange(
     instructions?: string;
     shifts?: string[];
     keep_existing?: boolean;
+    staffing_overrides?: import("@/types").StaffingOverride[];
   },
   onProgress?: (schedule: Schedule) => void,
   options?: { signal?: AbortSignal },
@@ -670,6 +672,7 @@ export async function generateScheduleRange(
         instructions: body.instructions ?? "",
         shifts: body.shifts ?? [],
         keep_existing: body.keep_existing ?? false,
+        staffing_overrides: body.staffing_overrides ?? [],
       }),
     },
   );

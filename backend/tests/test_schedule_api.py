@@ -158,6 +158,17 @@ class _FakeScheduleRepo:
         ]
         return self.slots[schedule_id]
 
+    def update_slot_headcounts(self, schedule_id, team_id, slots):
+        self.get_schedule(schedule_id, team_id)
+        changes = {
+            (slot["shift_name"], slot["slot_date"]): slot["headcount"]
+            for slot in slots
+        }
+        for slot in self.slots[schedule_id]:
+            key = slot["shift_name"], slot["slot_date"]
+            if key in changes:
+                slot["headcount"] = changes[key]
+
     def find_slot(self, schedule_id, team_id, shift_name, slot_date):
         self.get_schedule(schedule_id, team_id)
         for slot in self.slots.get(schedule_id, []):
@@ -512,6 +523,24 @@ def test_progressive_generation_supports_one_specific_date():
     assert len(finished["assignments"]) == 1
 
 
+def test_progressive_generation_uses_and_returns_special_day_staffing():
+    app, _ = _build_app()
+    client = _client(app)
+    override = {"date": "2026-08-17", "shift": MORNING, "headcount": 2}
+
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+        "staffing_overrides": [override],
+    }).json()
+    finished = client.post(
+        "/api/schedule/generate/%s/next" % started["id"]
+    ).json()
+
+    assert started["generation"]["staffing_overrides"] == [override]
+    assert started["slots"][0]["headcount"] == 2
+    assert len(finished["assignments"]) == 2
+
+
 def test_generation_run_returns_before_the_solve_and_is_polled_with_get():
     launcher = _DeferredLauncher()
     app, repo = _build_app(launch=launcher)
@@ -647,6 +676,37 @@ def test_a_run_of_days_is_built_inside_an_existing_draft():
     }
     assert {row["employee"] for row in built["assignments"]
             if row["date"] == "2026-08-21"} == {"יוסי"}
+
+
+def test_rebuilding_an_existing_day_updates_its_special_staffing():
+    app, _ = _build_app()
+    client = _client(app)
+    opened = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+    override = {"date": "2026-08-17", "shift": MORNING, "headcount": 2}
+
+    prepared = client.post(
+        "/api/schedule/generate/%s/range/start" % opened["id"],
+        json={
+            "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+            "staffing_overrides": [override],
+        },
+    ).json()
+    built = client.post(
+        "/api/schedule/generate/%s/next" % opened["id"]
+    ).json()
+
+    assert prepared["slots"][0]["headcount"] == 2
+    assert prepared["generation"]["staffing_overrides"] == [override]
+    assert len(built["assignments"]) == 2
+
+    reset = client.post(
+        "/api/schedule/generate/%s/range/start" % opened["id"],
+        json={"starts_on": "2026-08-17", "ends_on": "2026-08-17"},
+    ).json()
+    assert reset["slots"][0]["headcount"] == 1
+    assert reset["generation"]["staffing_overrides"] == []
 
 
 def test_a_run_of_days_is_refused_on_a_published_period_and_off_its_dates():

@@ -4,7 +4,7 @@ Built in code: which dates fall in a period and which weekday each one is
 is arithmetic. The solver assigns people into this grid.
 """
 
-from typing import List
+from typing import List, Optional
 
 from app.bl.shared import hebrew_weekday, runs_on
 from app.bl.scheduler.values import (
@@ -38,19 +38,21 @@ def build_slots(profile: dict, starts_on: str, ends_on: str) -> List[dict]:
     if (end - start).days + 1 > MAX_PERIOD_DAYS:
         raise AgentError("התקופה ארוכה מדי לבניית סידור אחד")
     shifts = named((profile or {}).get("shifts"))
-    slots = [
-        _slot(shift, day, hebrew_weekday(day))
-        for day in dates_between(start, end)
-        for shift in shifts
-        if runs_on(shift.get("days"), hebrew_weekday(day))
-    ]
-    # A headcount of 0 is the manager saying the shift does not run that
-    # day (off on the weekend, or only on it): no slot, nothing to fill,
-    # and nothing for the audit to call short.
-    return [slot for slot in slots if slot["headcount"] != 0]
+    slots = []
+    for day in dates_between(start, end):
+        weekday = hebrew_weekday(day)
+        for shift in shifts:
+            override = _override(profile, shift, day)
+            if runs_on(shift.get("days"), weekday):
+                slot = _slot(shift, day, weekday, override)
+                if slot["headcount"] != 0 or override is not None:
+                    slots.append(slot)
+    # A normal headcount of 0 removes the shift. A dated override stays as a
+    # zero-seat slot so the board can show the explicit special-day choice.
+    return slots
 
 
-def _slot(shift: dict, day, weekday: str) -> dict:
+def _slot(shift: dict, day, weekday: str, override: Optional[int] = None) -> dict:
     headcount, required_roles = staffing_requirements(shift, weekday)
     return {
         "shift_name": bounded(shift.get("name")),
@@ -58,13 +60,32 @@ def _slot(shift: dict, day, weekday: str) -> dict:
         "weekday": weekday,
         "start_time": bounded(shift.get("start_time")),
         "end_time": bounded(shift.get("end_time")),
-        "headcount": headcount,
+        "headcount": headcount if override is None else override,
         "required_roles": required_roles,
         "requires_shift_manager": bool(shift.get("requires_shift_manager")),
         "is_on_call": bool(shift.get("is_on_call")),
         "is_night": bool(shift.get("is_night") or shift.get("is_overnight")),
         "hour_weight": shift.get("hour_weight", 1.0),
     }
+
+
+def _override(profile: dict, shift: dict, day) -> Optional[int]:
+    """The dated headcount for this shift, when the build request has one."""
+    name, date = bounded(shift.get("name")), day.isoformat()
+    for row in (profile or {}).get("staffing_overrides") or []:
+        if not isinstance(row, dict):
+            continue
+        headcount = row.get("headcount")
+        if row.get("date") == date and bounded(row.get("shift")) == name \
+                and isinstance(headcount, int) and not isinstance(headcount, bool) \
+                and 0 <= headcount <= 100:
+            return headcount
+    return None
+
+
+def with_staffing_overrides(profile: dict, overrides: Optional[List[dict]]) -> dict:
+    """A build-scoped profile carrying dated staffing exceptions."""
+    return dict(profile or {}, staffing_overrides=[dict(row) for row in overrides or []])
 
 
 def staffing_requirements(shift: dict, weekday: str) -> tuple:
