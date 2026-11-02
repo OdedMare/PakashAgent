@@ -30,6 +30,16 @@ returns to the corner and every 25 seconds there, never while the chat is
 open, and the chat uses that guard as its avatar, greeting and working
 indicator. All motion stops under `prefers-reduced-motion`.
 
+**One field, everywhere.** Every text input, select and textarea gets one
+box from `styles/tokens.css` — 44px, the strong border, `--radius-sm`, the
+surface behind it, the blue focus ring — through a `:where()` rule with no
+specificity, sized by the `--control-*` tokens (16px text on a phone, so iOS
+does not zoom). Do not restate it on a screen: a form's class sets layout
+only (width, flex, grid). Override it only for something that is not a
+field — a search inside a bar, the chat composer, a toolbar filter chip. A
+label above a field is a `<span>` inside `.manual-field`, `.soldier-field`
+or a `.constraint-form` label, or `.field-label`: one muted 0.74rem/650.
+
 **Every date and time field can be picked as well as typed.** `DateInput`
 adds a calendar button over the browser's own picker; `TimeInput` is typed
 24-hour `HH:MM` plus a clock button with an hour/minute list (`pickers.ts`,

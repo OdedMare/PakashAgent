@@ -70,21 +70,6 @@
   color: var(--text-soft);
 }
 
-.identity-form input {
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-}
-
-.identity-form input:focus-visible {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: var(--focus);
-}
-
 .identity-form button {
   padding: 10px 16px;
   border: none;
@@ -377,14 +362,6 @@
   resize: vertical;
 }
 
-.employee-constraint-form input:focus-visible,
-.employee-constraint-form select:focus-visible,
-.employee-constraint-form textarea:focus-visible {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: var(--focus);
-}
-
 .constraint-toggle {
   display: flex;
   align-items: center;
@@ -610,13 +587,6 @@
 .request-inbox .request-actions input {
   flex: 1;
   min-inline-size: 160px;
-  padding: 7px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.83rem;
 }
 
 .request-inbox button {
@@ -744,17 +714,6 @@
   gap: 4px;
   font-size: 0.8rem;
   color: var(--text-soft);
-}
-
-.swap-form select,
-.swap-form input {
-  padding: 7px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.85rem;
 }
 
 .swap-form button:disabled {

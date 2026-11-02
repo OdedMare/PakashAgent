@@ -51,9 +51,12 @@
 .shift-grid { grid-template-columns: repeat(auto-fill, minmax(min(9rem, 100%), 1fr)); }
 
 .manual-field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
-.manual-field > span, .manual-checkboxes legend { color: var(--text-muted); font-size: 0.74rem; font-weight: 650; }
-.manual-field input, .manual-field select, .manual-field textarea, .manual-rule input, .manual-rule select { width: 100%; min-height: 44px; padding: 0.55rem 0.65rem; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
-.manual-field textarea { min-height: 5rem; resize: vertical; line-height: 1.5; }
+/* A field's label: one look wherever a field is labelled. */
+.manual-field > span, .manual-checkboxes legend,
+.soldier-field > span, .constraint-form label:not(.profile-check) > span,
+.field-label { color: var(--text-muted); font-size: 0.74rem; font-weight: 650; }
+.manual-field input, .manual-field select, .manual-field textarea, .manual-rule input, .manual-rule select { width: 100%; }
+.manual-field textarea { resize: vertical; line-height: 1.5; }
 .manual-field input[readonly] { color: var(--text-muted); background: var(--surface-2); }
 
 .manual-checkboxes { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0; padding: 0; border: 0; }

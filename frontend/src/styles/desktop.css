@@ -74,7 +74,7 @@
   .sidebar-new-chat:hover { background: var(--surface-3); }
   .sidebar-search { display: flex; align-items: center; gap: 8px; padding: 8px 12px; color: var(--text-muted); border: 1px solid transparent; border-radius: 10px; }
   .sidebar-search:focus-within { border-color: var(--border-strong); }
-  .sidebar-search input { min-width: 0; width: 100%; border: 0; background: transparent; font-size: 13px; outline: none; box-shadow: none; }
+  .sidebar-search input { min-height: 0; padding: 0; min-width: 0; width: 100%; border: 0; background: transparent; font-size: 13px; outline: none; box-shadow: none; }
   .sidebar-section-label { font-size: 11px; color: var(--text-muted); padding: 10px 12px 4px; }
   .sidebar-chat-list { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; min-height: 0; scrollbar-width: thin; }
   .sidebar-chat-list button { display: flex; gap: 9px; align-items: center; flex-shrink: 0; border: 0; min-height: 40px; padding: 10px 12px; background: transparent; border-radius: 9px; font-size: 12px; text-align: start; }

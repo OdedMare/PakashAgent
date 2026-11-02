@@ -746,22 +746,6 @@
 .constraint-form textarea,
 .modal-field input {
   flex: 1;
-  font: inherit;
-  font-size: 0.86rem;
-  padding: 0.45rem 0.6rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
-}
-
-.constraint-form input:focus-visible,
-.constraint-form select:focus-visible,
-.constraint-form textarea:focus-visible,
-.modal-field input:focus-visible {
-  outline: none;
-  box-shadow: var(--focus);
-  border-color: var(--primary);
 }
 
 .profile-form input[readonly] {
@@ -973,9 +957,7 @@
 .constraint-form label {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  font-size: 0.78rem;
-  color: var(--text-muted);
+  gap: 0.35rem;
 }
 
 .profile-form label > small {
@@ -2108,23 +2090,6 @@
 .preferences-add input {
   flex: 1;
   min-width: 0;
-  font: inherit;
-  font-size: 0.83rem;
-  padding: 0.42rem 0.55rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
-}
-
-.preferences-add select {
-  font: inherit;
-  font-size: 0.78rem;
-  padding: 0.42rem 0.4rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
 }
 
 .preferences-group {
@@ -2202,13 +2167,6 @@
 .preferences-edit input {
   flex: 1;
   min-width: 0;
-  font: inherit;
-  font-size: 0.82rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
 }
 
 .preferences-empty {
@@ -2445,7 +2403,7 @@
   border-bottom: 1px solid var(--border);
 }
 
-.import-table select { min-height: 36px; max-width: 14rem; }
+.import-table select { max-width: 14rem; }
 
 .import-status {
   font-size: 0.72rem;
@@ -2466,13 +2424,6 @@
   gap: 0.5rem 0.75rem;
   margin-top: 0.6rem;
   align-items: end;
-}
-
-.import-layout select,
-.import-layout input,
-.import-hint textarea {
-  min-height: 36px;
-  font: inherit;
 }
 
 .import-hint {
@@ -2528,7 +2479,7 @@
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 0.5rem;
 }
-.soldier-field { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.78rem; color: var(--text-muted); }
+.soldier-field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
 .soldier-reserve > small,
 .soldier-advanced > small { color: var(--text-muted); font-size: 0.72rem; line-height: 1.4; }
 

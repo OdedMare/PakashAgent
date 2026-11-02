@@ -401,13 +401,6 @@
 .adm-complex-danger input {
   flex: 1;
   min-width: 0;
-  min-height: 40px;
-  padding: 8px 12px;
-  font: inherit;
-  color: inherit;
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
 }
 
 .adm-complex-teams label.is-taken {

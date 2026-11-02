@@ -1276,13 +1276,6 @@
 .generate-date-fields input,
 .generate-instructions textarea {
   width: 100%;
-  min-height: 2.75rem;
-  padding: 0.55rem 0.65rem;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
 }
 
 .generate-date-fields input {
@@ -1293,9 +1286,7 @@
 
 .generate-date-fields input:focus-visible,
 .generate-instructions textarea:focus-visible {
-  outline: 2px solid var(--primary);
   outline-offset: 2px;
-  box-shadow: none;
 }
 
 /* Refit rather than rebuild: rows already built stay where they fit. */
@@ -1369,7 +1360,6 @@
 }
 
 .generate-instructions textarea {
-  min-height: 5rem;
   resize: vertical;
   line-height: 1.5;
 }
@@ -1405,18 +1395,11 @@
 }
 
 .generate-required-row select {
-  min-height: 2.75rem;
   width: 100%;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
   padding-inline: 0.55rem;
-  font: inherit;
 }
 
 .generate-required-row select:focus-visible {
-  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
@@ -3609,6 +3592,7 @@ button.week-rail-day:focus-visible {
 .board-candidate-search input {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   padding: 0.35rem 0;
   color: var(--text);
   background: transparent;
@@ -3632,21 +3616,7 @@ button.week-rail-day:focus-visible {
 }
 
 .board-candidate-selects select {
-  min-height: 44px;
-  padding: 0.3rem 0.5rem;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font: inherit;
-  font-size: 0.76rem;
   cursor: pointer;
-}
-
-.board-candidate-selects select:focus-visible {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: var(--focus);
 }
 
 .board-candidate-filter-summary {
