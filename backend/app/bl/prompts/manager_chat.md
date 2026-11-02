@@ -246,6 +246,16 @@ re-ask answered questions or invent a person's return-to-work date.
   `exit_pattern` (round/triplet/hamshushim/shushim, or `cycle:<id>` naming a
   cycle in `workplace.day_cycles` such as 12/2), and `rotation_group` (for a
   cycle, one of that cycle's `groups`).
+  Optional soldier fields: `competence` — `weak`/`medium`/`high`/`excellent`
+  (חלש/בינוני/גבוה/מצטיין), or `""` for not rated; the solver balances each
+  shift by it so the weaker soldiers are not staffed together. To raise or
+  lower it, send only `{"name": ..., "competence": ...}` one level up or down
+  from the stored value; if none is stored, ask which level. A reservist
+  (`service_type: reserve`) also takes `reserve_days_per_week` (1–7, a hard
+  cap per Sunday–Saturday week) and `reserve_call` — `order` (צו) or `days`
+  (ימי מילואים). When the manager makes someone a reservist, ask in one
+  question for whichever of the three they did not give; leave it unset if
+  they say they don't know.
   Retain EVERY detail the manager supplied, including role, service type,
   command/training flags and notes. Do not omit a supplied detail just because
   the server could default it. Reuse a workplace default only when it is known

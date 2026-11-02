@@ -36,6 +36,7 @@ from app.bl.solver.model import (
     BACK_TO_BACK, CLOSER, NIGHT_PEAK, NIGHT_SCALE, NIGHT_SPREAD, SHIFT_PEAK, SHIFT_SCALE,
     SHIFT_SPREAD, SPACING, SPACING_HOURS, Model,
 )
+from app.bl.solver.competence import reserve_days, week_of
 from app.bl.solver.rules import timed_pairs
 
 
@@ -90,13 +91,20 @@ def _spread(model: Model, measure, weight: int, peak: int, label: str) -> None:
 
 def _capacity(problem, name: str, placed, measure) -> int:
     """About the most this person can still take: the heaviest legal slot
-    of each day (rest rarely allows two). An estimate, not a promise; the
-    rules decide the rest."""
+    of each day (rest rarely allows two), and for a reservist only their
+    heaviest days of each week. An estimate, not a promise; the rules
+    decide the rest."""
     days: Dict[str, int] = {}
     for index in placed:
         day = problem.slots[index]["slot_date"]
         days[day] = max(days.get(day, 0), measure(problem.times[index]))
-    return sum(days.values())
+    limit = reserve_days(problem.people[name])
+    if limit is None:
+        return sum(days.values())
+    weeks: Dict[str, List[int]] = {}
+    for day, load in days.items():
+        weeks.setdefault(week_of(day), []).append(load)
+    return sum(sum(sorted(loads, reverse=True)[:limit]) for loads in weeks.values())
 
 
 def water_fill(floors: Dict[str, int], room: Dict[str, int], demand: int) -> Dict[str, int]:

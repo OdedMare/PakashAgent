@@ -12,6 +12,11 @@ from app.common.errors import AgentError
 _SERVICE_TYPES = ("standard", "overlap", "reserve")
 _EXIT_PATTERNS = ("round", "triplet", "quad", "quint", "hamshushim", "shushim")
 _GROUPED = ("round", "triplet", "quad", "quint")
+# How capable a soldier is, weakest first. Optional: an empty value is "not
+# rated", and the solver balances only the people who are (`solver/competence.py`).
+COMPETENCE_LEVELS = ("weak", "medium", "high", "excellent")
+# How a reservist was called up: an emergency order (צו 8) or reserve days.
+_RESERVE_CALLS = ("order", "days")
 # A day cycle is named by its id; whether that id exists is checked against
 # the workplace in `validate_rotation_groups`, once both halves are merged.
 _DAY_CYCLE = re.compile(r"^cycle:[A-Za-z0-9_-]{1,32}$")
@@ -37,6 +42,7 @@ def _employee(row: dict, default_exit_pattern: str) -> dict:
     if not isinstance(recurring, list):
         raise AgentError("האילוצים הקבועים של איש הצוות אינם תקינים")
     _validate_recurring(recurring)
+    row.update(_soldier_fields(row, service_type))
     row.update({
         "service_type": service_type,
         "exit_pattern": exit_pattern,
@@ -55,6 +61,36 @@ def _employee(row: dict, default_exit_pattern: str) -> dict:
     if not isinstance(row.get("counts_toward_staffing"), bool):
         row["counts_toward_staffing"] = service_type != "overlap"
     return row
+
+
+def _soldier_fields(row: dict, service_type: str) -> dict:
+    """Competence for anyone; days a week and call-up type for a reservist.
+
+    A reservist's fields are dropped once they stop being one, so a soldier
+    moved back to standard service is not capped by a week they no longer owe.
+    """
+    competence = text(row.get("competence"))
+    if competence and competence not in COMPETENCE_LEVELS:
+        raise AgentError("רמת הכשירות אינה תקינה (חלש, בינוני, גבוה או מצטיין)")
+    fields = {"competence": competence, "reserve_days_per_week": None, "reserve_call": ""}
+    if service_type != "reserve":
+        return fields
+    days = row.get("reserve_days_per_week")
+    if days not in (None, ""):
+        if isinstance(days, bool) or not isinstance(days, (int, float, str)):
+            raise AgentError("מספר ימי המילואים בשבוע חייב להיות בין 1 ל-7")
+        try:
+            days = int(float(days))
+        except ValueError:
+            raise AgentError("מספר ימי המילואים בשבוע חייב להיות בין 1 ל-7")
+        if not 1 <= days <= 7:
+            raise AgentError("מספר ימי המילואים בשבוע חייב להיות בין 1 ל-7")
+        fields["reserve_days_per_week"] = days
+    call = text(row.get("reserve_call"))
+    if call and call not in _RESERVE_CALLS:
+        raise AgentError("סוג הזימון למילואים אינו תקין (צו או ימי מילואים)")
+    fields["reserve_call"] = call
+    return fields
 
 
 def _validate_recurring(rows: list) -> None:
@@ -98,6 +134,9 @@ def employee_item(item: dict) -> dict:
         "is_shift_manager": bool(item.get("is_shift_manager")),
         "can_train": bool(item.get("can_train")),
         "notes": item.get("notes") or "",
+        "competence": item.get("competence") or "",
+        **{key: item[key] for key in ("service_type", "reserve_days_per_week", "reserve_call")
+           if item.get(key) not in (None, "")},
     }
 
 

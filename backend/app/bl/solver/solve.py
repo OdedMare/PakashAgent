@@ -14,6 +14,7 @@ from ortools.sat.python import cp_model
 
 from app.bl.audit import audit
 from app.bl.schedule_requests import covers
+from app.bl.solver.competence import apply_competence
 from app.bl.solver.cpu_budget import BUDGET
 from app.bl.solver.fairness import apply_fairness
 from app.bl.solver.model import COVERAGE, Model
@@ -35,6 +36,7 @@ def solve(problem, time_limit: float = 10.0, workers: int = 8) -> dict:
     apply_rules(model)
     apply_requests(model)
     apply_fairness(model)
+    apply_competence(model)
     apply_stability(model)
     # Threads are taken from the process's budget, so concurrent solves
     # queue instead of each getting a slice of the time it was promised.

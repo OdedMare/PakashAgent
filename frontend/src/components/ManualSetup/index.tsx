@@ -19,6 +19,7 @@ import { TimeInput } from "@/components/TimeInput";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import { deleteShiftType, updateProfile } from "@/services/api";
 import { cyclePattern, isDayCycle } from "@/lib/dayCycles";
+import { SoldierFields } from "@/components/Management/SoldierFields";
 import type { DayCycle, RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
 
 import { CompiledSources } from "./CompiledSources";
@@ -244,6 +245,9 @@ export function ManualSetup({
           is_shift_manager: Boolean(person.is_shift_manager),
           can_train: Boolean(person.can_train),
           notes: text(person.notes),
+          competence: text(person.competence),
+          reserve_days_per_week: typeof person.reserve_days_per_week === "number" ? person.reserve_days_per_week : null,
+          reserve_call: text(person.reserve_call),
         })),
         // A deleted saved shift is still sent here: names are identity keys
         // the profile save refuses to drop, so it leaves through
@@ -420,6 +424,13 @@ export function ManualSetup({
                   </div>
                   <button type="button" className="icon-button subtle" aria-label="מחיקת איש צוות" disabled={originalEmployees.has(text(person.name))} onClick={() => setEmployees((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
                 </div>
+                <SoldierFields
+                  serviceType={text(person.service_type) || "standard"}
+                  competence={text(person.competence)}
+                  reserveDays={typeof person.reserve_days_per_week === "number" ? person.reserve_days_per_week : null}
+                  reserveCall={text(person.reserve_call)}
+                  onChange={(field, value) => edit(setEmployees, index, field, value)}
+                />
                 <Field label="הערות לחייל/ת"><textarea value={inputText(person.notes)} onChange={(e) => edit(setEmployees, index, "notes", e.target.value)} rows={2} placeholder="מידע קבוע שכדאי לקחת בחשבון בשיבוץ" /></Field>
               </article>
             ))}

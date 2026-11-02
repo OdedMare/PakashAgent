@@ -17,6 +17,7 @@ schedules the pick may differ from one build to the next.
 | `rules.py` | Seats, roles, the shift manager, נחפפים beside a trainer, rest, runs of days, weekly hours |
 | `requests.py` | Structured requests (`bl/schedule_requests.py`) and soft availability |
 | `fairness.py` | Closers, shifts and nights spread to per-person targets, the longest rest between shifts |
+| `competence.py` | A reservist's days a week; shifts balanced by competence so the weakest are not staffed together |
 | `stability.py` | Absorbing a change into an existing board: moving as few rows as it needs |
 | `solve.py` | Solving, reasons, notes, warnings and metrics |
 | `cpu_budget.py` | How many solver threads the process runs at once; a solve waits for its share |

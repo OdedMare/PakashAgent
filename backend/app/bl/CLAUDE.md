@@ -28,6 +28,7 @@ tables which module owns what. `importer/` reads the workplace's own files in an
 | `planner/` | The chat's question/tool-call schema and the deterministic no-model answers |
 | `intent/` | **Reading a Hebrew sentence with no model.** Seven shapes; never guesses |
 | `absence/` | **An absence read and planned in code** (D36): dates, one question when needed, the fairest cover per shift; no model, no write |
+| `competence/` | **A competence change read and planned in code**: "תעלה/תוריד כשירות ל…", or a named level; one question when nobody rated them; no model, no write |
 | `simulate/` | **What a change would do.** No model, no repository, persists nothing |
 | `rotation/` | **Whose closure a date is, and who is home on a day cycle.** Pure arithmetic off separate anchors; no model |
 | `placement/` | **What a placement would cost, and what else the manager could do.** No model |
@@ -90,6 +91,13 @@ and the build still completes.
   them; their row's reason names whom they shadow.
 - `requests.py` turns each structured request into a constraint (hard) or
   a priced term (soft), and prices soft availability.
+- `competence.py` caps a reservist (`service_type: reserve`) at
+  `reserve_days_per_week` worked days per Sunday–Saturday week (hard, fixed
+  days counted), and — when the roster rates people at two or more
+  `competence` levels (weak/medium/high/excellent; optional, unrated counts
+  as the mean) — pulls every slot of two or more seats towards the team's
+  average strength, a shortfall priced four times an excess, plus a price
+  per extra weak soldier on one shift. Below a soft wish.
 - `fairness.py` rewards closers on their own closure, spreads shifts (not
   hours: on base nobody is on the clock) and nights towards a target per
   person — the demand poured evenly, but never below what someone already

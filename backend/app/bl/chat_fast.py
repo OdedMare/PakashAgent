@@ -1,6 +1,6 @@
 """The manager-chat turns code answers without a model round.
 
-Three shapes, tried in order: an absence (`bl/absence/`, read and planned in
+Four shapes, tried in order: a competence change (`bl/competence/`), an absence (`bl/absence/`, read and planned in
 code), a team question nobody is named in -- who works, who did the most,
 who is away -- and a plain candidate lookup for one named person on one
 day. Each either finishes the turn or leaves it untouched for the model loop.
@@ -9,6 +9,7 @@ day. Each either finishes the turn or leaves it untouched for the model loop.
 import logging
 
 from app.bl.absence import AbsenceFastPath
+from app.bl.competence import CompetenceFastPath
 
 _log = logging.getLogger("pakash.chat")
 _NO_USAGE = dict(prompt_tokens=0, completion_tokens=0, total_tokens=0, model_rounds=0)
@@ -19,9 +20,10 @@ class ChatFastAnswers:
         self._repo = repository
         self._tools = tools
         self._absence = AbsenceFastPath(repository, context, planner)
+        self._competence = CompetenceFastPath(repository, planner)
 
     def handle(self, state) -> bool:
-        return self._absence.handle(state) or self._team(state) or self._replacements(state)
+        return self._competence.handle(state) or self._absence.handle(state) or self._team(state) or self._replacements(state)
 
     def _team(self, state) -> bool:
         return self._finish(state, self._tools.team_question(

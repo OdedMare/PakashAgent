@@ -12,6 +12,7 @@ import type { Constraint, DayCycle, ShiftStats } from "@/types";
 
 import { ConfirmDeparture } from "./ConfirmDeparture";
 import { buildPalette, colorStyle } from "./palette";
+import { SoldierFields, soldierSummary } from "./SoldierFields";
 
 /** The roster and the constraints recorded against it.
  *
@@ -164,6 +165,7 @@ export function TeamPanel({
                   {text(person?.inactive_from) ? <span className="roster-note">מסיים/ת · {displayDate(text(person?.inactive_from))}</span> : null}
                   {person?.is_shift_manager ? <span className="roster-capability">מפקד/ת משמרת</span> : null}
                   {person?.can_train ? <span className="roster-capability">מוסמך/ת לחפוף</span> : null}
+                  {soldierSummary(person) ? <span className="roster-capability">{soldierSummary(person)}</span> : null}
                   {text(person?.notes) ? <span className="roster-note">{text(person?.notes)}</span> : null}
                 </span>
                 <span className="roster-load" aria-label="עומס בסידור הנוכחי">
@@ -546,6 +548,11 @@ export function EmployeeForm({
   const [isShiftManager, setIsShiftManager] = useState(Boolean(initial?.is_shift_manager));
   const [canTrain, setCanTrain] = useState(Boolean(initial?.can_train));
   const [notes, setNotes] = useState(rawText(initial?.notes));
+  const [competence, setCompetence] = useState(text(initial?.competence));
+  const [reserveDays, setReserveDays] = useState<number | null>(
+    typeof initial?.reserve_days_per_week === "number" ? initial.reserve_days_per_week : null,
+  );
+  const [reserveCall, setReserveCall] = useState(text(initial?.reserve_call));
   const initialEligible = Array.isArray(initial?.eligible_shifts)
     ? initial.eligible_shifts.filter((value): value is string => typeof value === "string")
     : shiftNames;
@@ -555,7 +562,7 @@ export function EmployeeForm({
     <form className="constraint-form profile-form" onSubmit={(event) => {
       event.preventDefault();
       if (!name.trim()) return;
-      onSubmit({ name: name.trim(), role: role.trim(), eligible_shifts: eligible, exit_pattern: exitPattern, rotation_group: rotationGroup, service_type: serviceType, counts_toward_staffing: countsTowardStaffing, is_shift_manager: isShiftManager, can_train: canTrain, notes: notes.trim() });
+      onSubmit({ name: name.trim(), role: role.trim(), eligible_shifts: eligible, exit_pattern: exitPattern, rotation_group: rotationGroup, service_type: serviceType, counts_toward_staffing: countsTowardStaffing, is_shift_manager: isShiftManager, can_train: canTrain, notes: notes.trim(), competence, reserve_days_per_week: reserveDays, reserve_call: reserveCall });
     }}>
       <label>
         <span>שם *</span>
@@ -581,6 +588,17 @@ export function EmployeeForm({
           if (event.target.value === "overlap") setCountsTowardStaffing(false);
         }}><option value="standard">תקן</option><option value="overlap">נחפף/ת</option><option value="reserve">מילואים</option></select></label>
       </div>
+      <SoldierFields
+        serviceType={serviceType}
+        competence={competence}
+        reserveDays={reserveDays}
+        reserveCall={reserveCall}
+        onChange={(field, value) => {
+          if (field === "competence") setCompetence(String(value ?? ""));
+          else if (field === "reserve_call") setReserveCall(String(value ?? ""));
+          else setReserveDays(typeof value === "number" ? value : null);
+        }}
+      />
       <label className="profile-check"><input type="checkbox" checked={countsTowardStaffing} onChange={(event) => setCountsTowardStaffing(event.target.checked)} /><span>נספר/ת בתקן</span></label>
       <label className="profile-check"><input type="checkbox" checked={isShiftManager} onChange={(event) => setIsShiftManager(event.target.checked)} /><span>מוסמך/ת כמפקד/ת משמרת</span></label>
       <label className="profile-check"><input type="checkbox" checked={canTrain} onChange={(event) => setCanTrain(event.target.checked)} /><span>מוסמך/ת לחפוף</span></label>
