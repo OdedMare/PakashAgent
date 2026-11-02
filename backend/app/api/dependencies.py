@@ -127,6 +127,28 @@ class Guards:
             return session
         return dependency
 
+    def commander_in_team(self):
+        """The מכלול commander in one of their workplaces, named by the path
+        (`team_id`) and checked against the מכלול, on their own cookie (D43).
+        The session `manager()` hands them after "כניסה לניהול" -- same team,
+        same `commander-<id>` chats -- without swapping the team cookie, so
+        one pane can speak to every משמרת at once."""
+        def dependency(
+            team_id: str,
+            session: dict = Depends(self.commander()),
+        ) -> dict:
+            complex_id = session["complex_id"]
+            if not self.is_active(team_id) or not self.commander_reaches(
+                team_id, complex_id
+            ):
+                raise ForbiddenError(UNLINKED_MESSAGE)
+            return {
+                "team_id": team_id, "role": ROLE_BOSS,
+                "commander": complex_id,
+                "manager_id": "commander-" + complex_id,
+            }
+        return dependency
+
     def require_active(self, team_id: str) -> None:
         """Refuse a sign-in to a suspended team before a cookie is issued.
 

@@ -2,8 +2,10 @@
 
 import logging
 import os
+import re
 import secrets
 import threading
+from typing import Optional
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -32,7 +34,8 @@ from app.common.events import COMMANDER, TeamEvents
 from app.common.logging_setup import QUIET_401_METHODS, configure_logging
 from app.common.actor import acting_as, actor_of
 from app.common.sessions import (
-    ADMIN_COOKIE_NAME, COOKIE_NAME, MANAGER_COOKIE_NAME, read, read_admin,
+    ADMIN_COOKIE_NAME, COMMANDER_COOKIE_NAME, COOKIE_NAME, MANAGER_COOKIE_NAME,
+    ROLE_BOSS, read, read_admin, read_commander,
 )
 from app.common.throttle import LoginThrottle
 from app.dal.notify import PostgresSignals
@@ -181,7 +184,8 @@ async def bind_model_team(request: Request, call_next):
     """Carry the signed workspace into the cross-process LLM quota, and who
     is acting into the change log (`common/actor.py`)."""
     try:
-        session = read(session_secret, request.cookies.get(COOKIE_NAME)) or {}
+        session = _commander_in_path(request) or \
+            read(session_secret, request.cookies.get(COOKIE_NAME)) or {}
         manager = read(session_secret, request.cookies.get(MANAGER_COOKIE_NAME))
         actor = actor_of(session, manager) if session else (
             "admin" if read_admin(session_secret, request.cookies.get(ADMIN_COOKIE_NAME))
@@ -198,13 +202,36 @@ async def bind_model_team(request: Request, call_next):
     return response
 
 
+_COMMANDER_CHAT = re.compile(r"^/api/complex/teams/([^/]+)(/chats.*)$")
+
+
+def _commander_in_path(request: Request) -> Optional[dict]:
+    """The commander's chat with one משמרת (`/api/complex/teams/<id>/chats`)
+    names its team in the path, not the cookie: bill that team's model
+    quota and log its writes as the commander's. Only for these lines --
+    the route's own guard still refuses a team outside the מכלול."""
+    found = _COMMANDER_CHAT.match(request.url.path)
+    commander = found and read_commander(
+        session_secret, request.cookies.get(COMMANDER_COOKIE_NAME))
+    if not commander:
+        return None
+    return {"team_id": found.group(1), "role": ROLE_BOSS,
+            "commander": commander["complex_id"]}
+
+
 async def _tell_the_manager(request: Request, session: dict) -> None:
     """A commander's write inside a workplace is told to its manager (D43):
     a notice row, and a signal that wakes the manager's open screen. Never
     fails the request that caused it -- the write already happened."""
-    action = describe_action(request.method, request.url.path)
-    if action is None or not request.url.path.startswith("/api/") \
-            or request.url.path.startswith("/api/complex"):
+    path = request.url.path
+    chat = _COMMANDER_CHAT.match(path)
+    if chat:
+        # The same conversation as `/api/agent/chats`, reached from the
+        # מכלול screen: told in the same words.
+        path = "/api/agent" + chat.group(2)
+    action = describe_action(request.method, path)
+    if action is None or not path.startswith("/api/") \
+            or path.startswith("/api/complex"):
         return
     try:
         await run_in_threadpool(
@@ -237,6 +264,9 @@ app.include_router(
 app.include_router(schedules.build_router(schedule_service, guards))
 app.include_router(profile.build_router(profile_service, guards, schedule_service))
 app.include_router(manager_chat.build_router(manager_chat_service, repository, guards))
+app.include_router(
+    manager_chat.build_commander_router(manager_chat_service, repository, guards)
+)
 app.include_router(replacements.build_router(manager_chat_service, guards))
 app.include_router(
     settings.build_router(

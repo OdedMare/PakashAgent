@@ -13,6 +13,7 @@ tables which module owns what. `importer/` reads the workplace's own files in an
 |---|---|
 | `profile_service/` | Structured workplace profile validation and updates |
 | `workspace_service.py` | Workspace rules: entering a team, roles, the share link |
+| `complex_routing.py` | **Which משמרות a commander's chat sentence is about** (D46): a named משמרת, else a named soldier's, else all. No model |
 | `admin_service.py` | **The צוות משמרות זהב console** (D28): operator sign-in, opening, re-capping, suspending and deleting teams |
 | `scheduler/` | Building a span: the grid, translating the manager's words, then the solver |
 | `solver/` | **The OR-Tools CP-SAT constraint solver that assigns every schedule** (D34), and holds the existing board when a change is absorbed (D37). No model |

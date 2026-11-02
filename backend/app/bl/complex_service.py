@@ -16,6 +16,7 @@ import re
 from typing import Dict, List, Optional
 
 from app.bl.audit import counts_toward_staffing
+from app.bl.complex_routing import route as route_sentence
 from app.common.errors import AgentError, NotFoundError
 
 # The combined board reads a month view at most (six weeks): it audits every period of
@@ -182,6 +183,23 @@ class ComplexService:
                 team, periods=[_compact(p, shadows) for p in periods],
             ))
         return {"start": start, "end": end, "teams": teams}
+
+    def route(self, complex_id: str, content: str) -> dict:
+        """Which of the commander's משמרות a chat sentence is about
+        (`bl/complex_routing.py`): named ones, else a named soldier's,
+        else all. Reads only."""
+        teams = []
+        for team in self._repository.complex_teams(complex_id):
+            if not team["active"]:
+                continue
+            profile = self._repository.team_profile(team["id"]) or {}
+            teams.append({
+                "id": team["id"], "name": team["name"],
+                "employees": [str(person.get("name") or "")
+                              for person in profile.get("employees") or []
+                              if isinstance(person, dict)],
+            })
+        return route_sentence(content, teams)
 
     # --- what the manager is told -------------------------------------------------
 

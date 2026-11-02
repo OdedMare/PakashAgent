@@ -35,8 +35,9 @@ def test_the_fewest_duties_first_and_the_count_moves_as_it_fills():
 
     result = _fill(soldiers, [MON, TUE, D(2026, 11, 18)], past)
 
-    # יוסי had none, then אבי had one, then the tie is broken by the load.
-    assert _picks(result) == [("2026-11-16", "יוסי"), ("2026-11-17", "אבי"), ("2026-11-18", "יוסי")]
+    # יוסי had none, then אבי had one; on Wednesday both stood a duty a day
+    # or two before, so דנה -- two duties, but two weeks clear -- stands it.
+    assert _picks(result) == [("2026-11-16", "יוסי"), ("2026-11-17", "אבי"), ("2026-11-18", "דנה")]
     assert "בלי תורנויות" in result["proposals"][0]["reason"]
 
 
@@ -137,6 +138,37 @@ def test_a_free_soldier_wins_over_a_lighter_one_on_a_shift_the_duty_would_take()
     # Fewer duties still comes first: a free soldier does not jump that.
     assert _picks(_fill(soldiers, [MON], [_duty("דנה", D(2026, 11, 2))], shifts, busy=busy)) == [
         ("2026-11-16", "אבי")]
+
+
+def test_duties_are_spread_wide_never_day_after_day():
+    soldiers = [_soldier(name) for name in ("אבי", "דנה", "יוסי", "נועה", "רון", "שירה", "תמר", "גיל")]
+    days = [MON + datetime.timedelta(days=n) for n in range(14)]
+
+    result = _fill(soldiers, days)
+
+    by_soldier = {}
+    for day, name in _picks(result):
+        by_soldier.setdefault(name, []).append(D.fromisoformat(day))
+    gaps = [(b - a).days for dates in by_soldier.values() for a, b in zip(dates, dates[1:])]
+    # Eight soldiers, one seat a day: about every eighth day, and never
+    # closer than six even where the fewest-duties rule picks first.
+    assert gaps and min(gaps) >= 6 and gaps.count(8) >= 4
+
+
+def test_a_stored_duty_ahead_keeps_its_soldier_off_the_days_before_it():
+    soldiers = [_soldier("אבי"), _soldier("דנה")]
+    ahead = [_duty("אבי", D(2026, 11, 18)), _duty("דנה", D(2026, 11, 2))]
+    # One duty each, but אבי's is two days ahead of Monday.
+    assert _picks(_fill(soldiers, [MON], ahead)) == [("2026-11-16", "דנה")]
+
+
+def test_too_close_is_taken_only_when_nobody_else_is_free():
+    soldiers = [_soldier("אבי"), _soldier("דנה")]
+    result = _fill(soldiers, [MON, TUE, D(2026, 11, 18)])
+    # Two soldiers and three days in a row: the third day must go to
+    # whoever is furthest, and the reason says it is close.
+    assert _picks(result) == [("2026-11-16", "אבי"), ("2026-11-17", "דנה"), ("2026-11-18", "אבי")]
+    assert "קרוב לתורנות אחרת" in result["proposals"][2]["reason"]
 
 
 def test_a_kind_asks_for_seats_only_from_the_day_it_was_created():

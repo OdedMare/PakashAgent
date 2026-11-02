@@ -41,29 +41,48 @@ import type {
   ReplacementOptions,
 } from "@/types";
 
-export const listManagerChats = () => request<ManagerChatSummary[]>("/api/agent/chats");
-export const createManagerChat = () => request<ManagerConversation>("/api/agent/chats", { method: "POST" });
-// `fromMessage` asks for that message and everything after it, not the whole thread.
-export const readManagerChat = (id: string, fromMessage?: string) => request<ManagerConversation>(
-  `/api/agent/chats/${encodeURIComponent(id)}${fromMessage ? `?from_message=${encodeURIComponent(fromMessage)}` : ""}`);
-export const deleteManagerChat = (id: string) => request(`/api/agent/chats/${encodeURIComponent(id)}`, { method: "DELETE" });
-export const sendManagerMessage = (id: string, input: { content: string; request_id: string; schedule_id?: string; visible_week?: string; focus_date?: string; approval_message_id?: string; displayed_plan_id?: string; replaces_message_id?: string }) =>
-  request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/messages`, { method: "POST", body: JSON.stringify(input) });
-// Answer the last request again, replacing the last answer in the thread.
-export const regenerateManagerReply = (id: string, input: { request_id: string; schedule_id?: string; visible_week?: string; focus_date?: string }) =>
-  request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/regenerate`, { method: "POST", body: JSON.stringify(input) });
-export const applyManagerPlan = (id: string, messageId: string, acceptExceptions: boolean) =>
-  request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/apply`, {
-    method: "POST", body: JSON.stringify({ accept_exceptions: acceptExceptions }),
+/** One set of conversation routes. The manager's own live under
+ *  `/api/agent/chats` on the team cookie; a מכלול commander reaches each
+ *  משמרת's under `/api/complex/teams/<id>/chats` on their own cookie (D43),
+ *  so one pane can speak to every משמרת without entering any of them. */
+export function chatRoutes(base = "/api/agent/chats") {
+  const at = (id: string, rest = "") => `${base}/${encodeURIComponent(id)}${rest}`;
+  return {
+    list: () => request<ManagerChatSummary[]>(base),
+    create: () => request<ManagerConversation>(base, { method: "POST" }),
+    // `fromMessage` asks for that message and everything after it, not the whole thread.
+    read: (id: string, fromMessage?: string) => request<ManagerConversation>(
+      at(id, fromMessage ? `?from_message=${encodeURIComponent(fromMessage)}` : "")),
+    remove: (id: string) => request(at(id), { method: "DELETE" }),
+    send: (id: string, input: { content: string; request_id: string; schedule_id?: string; visible_week?: string; focus_date?: string; approval_message_id?: string; displayed_plan_id?: string; replaces_message_id?: string }) =>
+      request<ManagerConversation>(at(id, "/messages"), { method: "POST", body: JSON.stringify(input) }),
+    // Answer the last request again, replacing the last answer in the thread.
+    regenerate: (id: string, input: { request_id: string; schedule_id?: string; visible_week?: string; focus_date?: string }) =>
+      request<ManagerConversation>(at(id, "/regenerate"), { method: "POST", body: JSON.stringify(input) }),
+    apply: (id: string, messageId: string, acceptExceptions: boolean) =>
+      request<ManagerConversation>(at(id, `/messages/${encodeURIComponent(messageId)}/apply`), {
+        method: "POST", body: JSON.stringify({ accept_exceptions: acceptExceptions }),
+      }),
+    dismiss: (id: string, messageId: string) =>
+      request<ManagerConversation>(at(id, `/messages/${encodeURIComponent(messageId)}/dismiss`), { method: "POST" }),
+    stop: (id: string) => request<ManagerConversation>(at(id, "/stop"), { method: "POST" }),
+    /** The live "something moved" stream; only the team cookie has one. */
+    events: base === "/api/agent/chats" ? () => managerEvents() : null,
+  };
+}
+export type ChatRoutes = ReturnType<typeof chatRoutes>;
+export const managerChatRoutes = chatRoutes();
+export const commanderChatRoutes = (teamId: string) =>
+  chatRoutes(`/api/complex/teams/${encodeURIComponent(teamId)}/chats`);
+/** Which of the commander's משמרות a sentence is about — read in code. */
+export const routeCommanderMessage = (content: string) =>
+  request<{ team_ids: string[]; by: "team" | "soldier" | "all" }>("/api/complex/route", {
+    method: "POST", body: JSON.stringify({ content }),
   });
-export const dismissManagerPlan = (id: string, messageId: string) =>
-  request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/dismiss`, { method: "POST" });
 // Who could cover one person's absence, fairest first. Reads only: the picks
 // become a plan by being sent to the conversation.
 export const getReplacementOptions = (employee: string, startsOn: string, endsOn: string) =>
   request<ReplacementOptions>(`/api/agent/replacements?${new URLSearchParams({ employee, starts_on: startsOn, ends_on: endsOn })}`);
-export const stopManagerReply = (id: string) =>
-  request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/stop`, { method: "POST" });
 
 /** Routes whose 401 is an answer rather than a symptom: the probes that
  *  ask "who am I". */

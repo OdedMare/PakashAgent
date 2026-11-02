@@ -1506,11 +1506,12 @@ shifts, the duties are shared fairly, and they show in the statistics.
   seat around the board. A published week is never changed: its commander
   is told who to cover. The past is left. The commander sees each outcome.
 - **"מלא בהוגנות" proposes; the commander approves** (D20). A pure greedy
-  fill (`fill.py`), a day and a kind at a time: the fewest weighted duty
-  days over 8 weeks first, then weekend duties, then whoever has no shift
-  the duty would take (that day's, or a night from the evening before),
-  then the whole load, then the longest since the last duty, then the
-  names. Whoever has left, holds a hard whole-day constraint or a team
+  fill (`fill.py`), a day and a kind at a time: first, nobody within six
+  days of another duty of theirs, before or after (D46); then the fewest
+  weighted duty days over 8 weeks, then weekend duties, then the widest
+  gap to their nearest duty, then whoever has no shift the duty would take
+  (that day's, or a night from the evening before), then the whole load,
+  then the names. Whoever has left, holds a hard whole-day constraint or a team
   duty, already stands a duty, or is home on the cycle (the solver's own
   `bl/rotation` gates) is not proposed. Approval seats each kept row
   through the ordinary assign, reports the ones it could not, and resolves
@@ -1588,6 +1589,47 @@ reads, and holding a connection across that would bring back the pool
 exhaustion this decision is about.
 
 ---
+
+## D46 — The מכלול commander's agent speaks to every משמרת, and duties are spread wide *(extends D43, D44)*
+
+**Context.** The commander's screen looked like a separate product: a page
+title over a small board, the agent on a page of its own that spoke to one
+משמרת at a time (entering it swapped the browser's team cookie), and the
+duties drawn as a table of their own. And "מלא בהוגנות" ranked by count
+first and spacing fifth, backwards only, so equal counts put a soldier on
+duty day after day.
+
+**Decision.**
+
+- **The commander's screen is the משמרת's control room, a level up**: the
+  same sidebar, board head, tiles, filter bar (משמרת, shift type, soldier,
+  "רק חוסרים"), cards, and the agent in the resizable drawer opened from
+  the guard. The duties page is drawn on the same grid and cards.
+- **One pane, one conversation per משמרת.** `/api/complex/teams/{id}/chats`
+  serves the manager-chat routes to the commander on their own cookie,
+  the team named by the path and checked against the מכלול
+  (`guards.commander_in_team`) -- the one place a team id comes from a
+  path outside the operator console, because the commander acts on every
+  משמרת by design. The session is the one "כניסה לניהול" gives
+  (`commander-<id>` chats), the middleware bills the team's model quota,
+  logs the actor as `commander:<id>` and tells the team's commander, as
+  for any commander write.
+- **"כל המכלול" routes a sentence in code** (`bl/complex_routing.py`,
+  `POST /api/complex/route`): a משמרת it names, else the משמרת of a
+  soldier it names (full name, or a first name unique in the מכלול), else
+  every משמרת -- or the משמרות the commander picked. Each agent answers in
+  its own conversation; each plan is approved on its own and applies in
+  its משמרת only. There is no cross-משמרת plan: each has its own rules
+  and solver, and one approval spanning several would be a write no
+  single audit answers to.
+- **Duties are spread wide.** The fill keeps every soldier at least
+  `MIN_GAP_DAYS` (6) from their other duties, stored future ones included,
+  while anybody else is free; a closer pick says so in its reason. Among
+  equals the widest gap wins.
+
+**What this gives up.** A sentence about two soldiers in two משמרות goes to
+both agents with the whole sentence, and each acts on its own soldier; a
+sentence that names nobody reaches every משמרת and costs one turn each.
 
 ---
 

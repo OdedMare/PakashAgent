@@ -1,49 +1,90 @@
 "use client";
 
-import { shiftsOf, type Focus, type Unit } from "./figures";
+import { Filter, UserMinus, X } from "lucide-react";
 
-/** Narrowing the board: a משמרת, then one of its shift types. The board's
- *  own segmented control, changing only what is shown. */
-export function FocusBar({
-  units, focus, onUnit, onShift,
+import { allShifts, NO_FOCUS, shiftsOf, soldiersOf, type Focus, type Unit } from "./figures";
+
+/** Narrowing the combined board, in the משמרת board's own filter bar
+ *  (`board-filters`): a משמרת, a shift type, one soldier, and "רק חוסרים".
+ *  It hides; it never changes a row, and the tiles above keep counting
+ *  every soldier of the משמרות and shift types chosen. */
+export function CommanderFilters({
+  units, focus, onChange,
 }: {
   units: Unit[];
   focus: Focus;
-  onUnit: (id: string | null) => void;
-  onShift: (shift: string | null) => void;
+  onChange: (next: Focus) => void;
 }) {
   const unit = units.find((row) => row.id === focus.unit) ?? null;
+  const shifts = unit ? shiftsOf(unit) : allShifts(units);
+  const soldiers = soldiersOf(unit ? [unit] : units);
+  const active = Boolean(focus.unit || focus.shift || focus.soldier || focus.gapsOnly);
   return (
-    <div className="cmd-focus" data-tour="cmd-focus">
-      <div className="board-views" role="group" aria-label="משמרת">
-        <button type="button" className={`board-view${focus.unit === null ? " is-on" : ""}`}
-          aria-pressed={focus.unit === null} onClick={() => onUnit(null)}>
-          כל המשמרות
+    <div className="board-filters cmd-filters" role="group" aria-label="סינון לוח המכלול" data-tour="cmd-focus">
+      <span className="board-filters-icon" aria-hidden="true"><Filter size={14} /></span>
+      <Select
+        label="משמרת"
+        value={focus.unit ?? ""}
+        allLabel="כל המשמרות"
+        options={units.map((row) => ({ value: row.id, label: row.name }))}
+        onChange={(value) => onChange({
+          ...focus, unit: value || null,
+          // A shift type or soldier the chosen משמרת does not have would
+          // leave an empty board with no visible reason.
+          shift: value && focus.shift && !shiftsOf(units.find((row) => row.id === value)!).includes(focus.shift)
+            ? null : focus.shift,
+          soldier: value && focus.soldier && !focus.soldier.startsWith(`${value}:`) ? null : focus.soldier,
+        })}
+      />
+      <Select
+        label="סוג משמרת"
+        value={focus.shift ?? ""}
+        allLabel="כל הסוגים"
+        options={shifts.map((name) => ({ value: name, label: name }))}
+        onChange={(value) => onChange({ ...focus, shift: value || null })}
+      />
+      <Select
+        label="חייל"
+        value={focus.soldier ?? ""}
+        allLabel="כל החיילים"
+        options={soldiers}
+        onChange={(value) => onChange({ ...focus, soldier: value || null })}
+      />
+      <div className="board-filter-toggles">
+        <button type="button" className={`board-toggle${focus.gapsOnly ? " is-on" : ""}`}
+          aria-pressed={focus.gapsOnly} onClick={() => onChange({ ...focus, gapsOnly: !focus.gapsOnly })}>
+          <span aria-hidden="true"><UserMinus size={13} /></span>
+          רק חוסרים
         </button>
-        {units.map((row) => (
-          <button key={row.id} type="button" className={`board-view${focus.unit === row.id ? " is-on" : ""}`}
-            aria-pressed={focus.unit === row.id} onClick={() => onUnit(row.id)}>
-            {row.name}
-          </button>
-        ))}
       </div>
-      {unit ? (
-        <div className="board-views" role="group" aria-label={`סוגי משמרות ב${unit.name}`}>
-          <button type="button" className={`board-view${focus.shift === null ? " is-on" : ""}`}
-            aria-pressed={focus.shift === null} onClick={() => onShift(null)}>
-            כל סוגי המשמרות
-          </button>
-          {shiftsOf(unit).map((shift) => (
-            <button key={shift} type="button" className={`board-view${focus.shift === shift ? " is-on" : ""}`}
-              aria-pressed={focus.shift === shift} onClick={() => onShift(shift)}>
-              {shift}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <span className="cmd-hint">בחרו משמרת כדי להתמקד גם בסוג משמרת מסוים.</span>
-      )}
+      {active ? (
+        <button type="button" className="board-filter-clear" onClick={() => onChange(NO_FOCUS)} title="ניקוי כל הסינונים">
+          <X size={13} /> ניקוי
+        </button>
+      ) : null}
     </div>
+  );
+}
+
+function Select({
+  label, value, options, allLabel, onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  allLabel: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="board-filter-field">
+      <span className="board-filter-label">{label}</span>
+      <select className="board-filter-select" value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">{allLabel}</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
   );
 }
 

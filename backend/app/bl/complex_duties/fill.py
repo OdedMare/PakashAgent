@@ -10,14 +10,19 @@ as it goes -- so the third seat of a week sees the first two. A soldier is
 constraint, already stand a duty that day, or have left. Among the rest
 the order is, first deciding:
 
-1. the fewest weighted duty days over the window (8 weeks back to the span's end);
-2. on a Friday or Saturday, the fewest weekend duties;
-3. no shift of their own the duty would take -- that day's, or a night
+1. **not within `MIN_GAP_DAYS` of another duty of theirs**, before or
+   after (a stored future one counts too). Duties are spread wide, never
+   day after day: someone that close is picked only when nobody else is
+   free, and then whoever is furthest;
+2. the fewest weighted duty days over the window (8 weeks back to the span's end);
+3. on a Friday or Saturday, the fewest weekend duties;
+4. the widest gap to their nearest duty -- among equals, the soldier whose
+   duties lie furthest from this day, so the spread stays large;
+5. no shift of their own the duty would take -- that day's, or a night
    from the evening before (`busy_days`): every one is a seat vacated and
    rebuilt in a משמרת, so a free soldier wins among equals;
-4. the lightest whole load -- duties plus shifts;
-5. the longest since their last duty;
-6. the משמרת and the name, so the same input gives the same answer.
+6. the lightest whole load -- duties plus shifts;
+7. the משמרת and the name, so the same input gives the same answer.
 """
 
 import datetime
@@ -31,6 +36,11 @@ Key = Tuple[str, str]  # (team_id, soldier name)
 _WEEKEND = (4, 5)
 # How far back the counts reach.
 WINDOW_DAYS = 56
+# The fewest days between two duties of one soldier the fill proposes while
+# anybody else is free: six apart leaves at least five days clear between.
+MIN_GAP_DAYS = 6
+# No duty at all reads as this far apart.
+_FAR = 10 ** 6
 
 
 def suggest(
@@ -78,7 +88,7 @@ class _State:
         self.busy_days = busy_days if busy_days is not None else shift_days
         self.load: Dict[Key, int] = {}
         self.weekend: Dict[Key, int] = {}
-        self.last: Dict[Key, datetime.date] = {}
+        self.dates: Dict[Key, List[datetime.date]] = {}
         self.on_duty: set = set()          # (key, date)
         self.by_type: Dict[tuple, int] = {}  # (type_id, date) -> blocking seats
         for row in duties:
@@ -93,9 +103,13 @@ class _State:
     def _count(self, key: Key, weight: int, day: datetime.date) -> None:
         self.load[key] = self.load.get(key, 0) + weight
         self.weekend[key] = self.weekend.get(key, 0) + (day.weekday() in _WEEKEND)
-        if day > self.last.get(key, datetime.date.min):
-            self.last[key] = day
+        self.dates.setdefault(key, []).append(day)
         self.on_duty.add((key, day))
+
+    def gap(self, key: Key, day: datetime.date) -> int:
+        """Days from `day` to this soldier's nearest duty, either side."""
+        return min((abs((day - other).days) for other in self.dates.get(key, ())),
+                   default=_FAR)
 
     def seated(self, type_id: str, day: datetime.date) -> int:
         return self.by_type.get((type_id, day), 0)
@@ -111,13 +125,16 @@ class _State:
     def _rank(self, soldier, day, weekend):
         key = _of(soldier)
         shifts = len(self.shift_days.get(key, ()))
-        since = (day - self.last[key]).days if key in self.last else 10 ** 6
+        gap = self.gap(key, day)
+        close = gap < MIN_GAP_DAYS
         return (
+            close,
+            -gap if close else 0,
             self.load.get(key, 0),
             self.weekend.get(key, 0) if weekend else 0,
+            -gap,
             day in self.busy_days.get(key, ()),
             self.load.get(key, 0) + shifts,
-            -since,
             soldier["team_name"], soldier["name"],
         )
 
@@ -128,6 +145,11 @@ class _State:
                  "%d משמרות" % shifts]
         if day.weekday() in _WEEKEND:
             parts.append("%d תורנויות סופ״ש" % self.weekend.get(key, 0))
+        gap = self.gap(key, day)
+        if gap < _FAR:
+            parts.append("התורנות הקרובה שלו/ה במרחק %d ימים" % gap)
+        if gap < MIN_GAP_DAYS:
+            parts.append("שים לב: קרוב לתורנות אחרת — לא נמצא חייל פנוי רחוק יותר")
         if day in self.busy_days.get(key, ()):
             parts.append("שים לב: משובץ/ת למשמרת שהתורנות תחסום — היא תפונה ותושלם מחדש")
         return ", ".join(parts)

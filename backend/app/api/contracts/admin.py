@@ -61,3 +61,8 @@ class AdminUpdateComplexRequest(BaseModel):
 class CommanderLoginRequest(BaseModel):
     complex_id: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=1, max_length=200)
+
+
+class CommanderRouteRequest(BaseModel):
+    """A sentence typed in the commander's chat, to be routed (D43)."""
+    content: str = Field(min_length=1, max_length=4000)

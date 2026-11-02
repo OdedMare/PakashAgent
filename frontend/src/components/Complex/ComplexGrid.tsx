@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, LogIn } from "lucide-react";
+import { AlertTriangle, LogIn, MessagesSquare, Users } from "lucide-react";
 import type { CSSProperties } from "react";
 
 import { shortDate } from "@/components/DateInput";
@@ -23,6 +23,7 @@ export function ComplexGrid({
   busy,
   onFocusShift,
   onEnter,
+  onChat,
 }: {
   units: Unit[];
   days: string[];
@@ -33,7 +34,14 @@ export function ComplexGrid({
   busy: boolean;
   onFocusShift: (unit: string, shift: string) => void;
   onEnter: (unit: string) => void;
+  onChat: (unit: string) => void;
 }) {
+  const bands = units
+    .map((unit) => ({ unit, rows: rowsOf(unit, days, focus) }))
+    .filter((band) => band.rows.length > 0 || (!focus.soldier && !focus.gapsOnly));
+  if (bands.length === 0) {
+    return <p className="cmd-empty">אין שורות שמתאימות לסינון בטווח שעל המסך.</p>;
+  }
   return (
     <div className="board-grid-wrap">
       <div className="board-grid-scroll" data-tour="cmd-grid">
@@ -57,13 +65,15 @@ export function ComplexGrid({
               <span className="board-dayhead-weekday">{hebrewWeekday(day)}</span>
               <span className="board-dayhead-date">{shortDate(day)}</span>
               {day === today ? <span className="board-dayhead-pill">היום</span> : null}
+              <DayCoverage units={bands.map((band) => band.unit)} day={day} focus={focus} />
             </div>
           ))}
 
-          {units.map((unit) => (
+          {bands.map(({ unit, rows }) => (
             <UnitBand
               key={unit.id}
               unit={unit}
+              shifts={rows}
               days={days}
               today={today}
               focus={focus}
@@ -72,6 +82,7 @@ export function ComplexGrid({
               busy={busy}
               onFocusShift={onFocusShift}
               onEnter={onEnter}
+              onChat={onChat}
             />
           ))}
         </div>
@@ -80,10 +91,47 @@ export function ComplexGrid({
   );
 }
 
+/** The shift rows of one משמרת the filters leave in. */
+function rowsOf(unit: Unit, days: string[], focus: Focus): string[] {
+  return shiftsOf(unit).filter((name) => {
+    if (focus.shift && name !== focus.shift) return false;
+    const cells = days.map((day) => readCell(unit, name, day));
+    if (focus.soldier) {
+      const [id, ...rest] = focus.soldier.split(":");
+      const who = rest.join(":");
+      if (id !== unit.id || !cells.some((cell) => cell?.names.includes(who))) return false;
+    }
+    if (focus.gapsOnly && !cells.some((cell) => cell && cell.seats > cell.filled)) return false;
+    return true;
+  });
+}
+
+/** "filled/seats" for a day over what is on screen — the board's own pill. */
+function DayCoverage({ units, day, focus }: { units: Unit[]; day: string; focus: Focus }) {
+  let seats = 0;
+  let filled = 0;
+  for (const unit of units) {
+    for (const shift of shiftsOf(unit)) {
+      if (focus.shift && shift !== focus.shift) continue;
+      const cell = readCell(unit, shift, day);
+      if (!cell) continue;
+      seats += cell.seats;
+      filled += Math.min(cell.filled, cell.seats || cell.filled);
+    }
+  }
+  if (!seats) return null;
+  return (
+    <span className={`board-dayhead-coverage${filled < seats ? " is-short" : ""}`} title="מאוישים מתוך המקומות">
+      {filled}/{seats}
+    </span>
+  );
+}
+
 function UnitBand({
-  unit, days, today, focus, dark, hueOf, busy, onFocusShift, onEnter,
+  unit, shifts, days, today, focus, dark, hueOf, busy, onFocusShift, onEnter, onChat,
 }: {
   unit: Unit;
+  shifts: string[];
   days: string[];
   today: string;
   focus: Focus;
@@ -92,8 +140,8 @@ function UnitBand({
   busy: boolean;
   onFocusShift: (unit: string, shift: string) => void;
   onEnter: (unit: string) => void;
+  onChat: (unit: string) => void;
 }) {
-  const shifts = shiftsOf(unit).filter((name) => !focus.shift || name === focus.shift);
   const touching = unit.periods.filter((p) => p.starts_on <= days[days.length - 1] && p.ends_on >= days[0]);
   const status = touching.length === 0
     ? { label: "לא תוכנן", tone: "" }
@@ -110,6 +158,15 @@ function UnitBand({
         {warnings ? (
           <span className="cmd-band-warn"><AlertTriangle size={12} /> {warnings} אזהרות</span>
         ) : null}
+        <button
+          type="button"
+          className="ghost-button cmd-band-chat"
+          disabled={!unit.active}
+          onClick={() => onChat(unit.id)}
+          title={`שיחה עם הסוכן של ${unit.name}`}
+        >
+          <MessagesSquare size={14} /> סוכן
+        </button>
         <button
           type="button"
           className="ghost-button cmd-band-enter"
@@ -143,7 +200,8 @@ function UnitBand({
                 ) : null}
               </div>
               {days.map((day) => (
-                <Cell key={day} unit={unit} shift={shift} day={day} today={today} dark={dark} hueOf={hueOf} />
+                <Cell key={day} unit={unit} shift={shift} day={day} today={today} dark={dark} hueOf={hueOf}
+                  soldier={focus.soldier} hours={hours?.start_time ? `${hours.start_time}–${hours.end_time}` : ""} />
               ))}
             </div>
           );
@@ -154,7 +212,7 @@ function UnitBand({
 }
 
 function Cell({
-  unit, shift, day, today, dark, hueOf,
+  unit, shift, day, today, dark, hueOf, soldier, hours,
 }: {
   unit: Unit;
   shift: string;
@@ -162,6 +220,8 @@ function Cell({
   today: string;
   dark: boolean;
   hueOf: (name: string) => number;
+  soldier: string | null;
+  hours: string;
 }) {
   const cell = readCell(unit, shift, day);
   const base = ["board-cell", isWeekend(day) ? "is-weekend" : "", day === today ? "is-today" : ""];
@@ -178,7 +238,7 @@ function Cell({
   const missing = cell.seats - cell.filled;
   return (
     <div role="cell" className={[...base, missing > 0 ? "is-short" : ""].filter(Boolean).join(" ")}>
-      {cell.names.map((name) => (
+      {cell.names.filter((name) => !soldier || soldier === `${unit.id}:${name}`).map((name) => (
         <div
           key={name}
           className={[
@@ -194,6 +254,12 @@ function Cell({
           <div className="board-card-main">
             <span className="board-card-name">{name}</span>
           </div>
+          {hours || cell.shadows.has(name) ? (
+            <div className="board-card-meta">
+              {hours ? <span className="board-card-hours">{hours}</span> : null}
+              {cell.shadows.has(name) ? <span className="board-card-overlap"><Users size={11} /> נחפף/ת</span> : null}
+            </div>
+          ) : null}
         </div>
       ))}
       {missing > 0 ? (

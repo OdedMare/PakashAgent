@@ -14,7 +14,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Cookie, Depends, Response
 
-from app.api.contracts import CommanderLoginRequest
+from app.api.contracts import CommanderLoginRequest, CommanderRouteRequest
 from app.api.routers.complex_duties import ComplexDutyRoutes
 from app.common.sessions import (
     COMMANDER_COOKIE_NAME, COOKIE_NAME, ROLE_BOSS, issue, issue_commander,
@@ -104,6 +104,15 @@ class ComplexRoutes:
                 commander=session["complex_id"],
             ))
             return {"id": team["id"], "name": team["name"]}
+
+        @router.post("/route")
+        def route(
+            request: CommanderRouteRequest,
+            session: dict = Depends(commander),
+        ) -> dict:
+            """Which משמרות the commander's chat sentence is about -- read
+            in code, no model; the chat sends it to each one's agent."""
+            return service.route(session["complex_id"], request.content)
 
         @router.post("/leave")
         def leave(

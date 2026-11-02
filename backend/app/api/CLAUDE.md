@@ -9,9 +9,9 @@ the result.
 |---|---|
 | `workspace.py` | Enter a workspace, the member share link, logout. Creating one is refused unless `allow_signup` (D28) |
 | `admin.py` | The צוות משמרות זהב console (D28): operator sign-in, every team with its counts, open (name + password)/rename/suspend/delete a team, reset its manager password, rotate its link |
-| `complex.py` | `/api/complex` — the מכלול commander (D43): the login picker and sign-in on `pakash_commander`, `me`, the combined `board` (≤ 43 days), `teams/{id}/enter` (a boss cookie for a linked team, marked `commander`) and `leave`; plus `notices`, what the commander changed, for the team's own commander (`own_manager`). `complex_duties.py` adds the מכלול's duties under the same prefix: `duty-types` (CRUD) and `duties` (read a span ≤ 62 days, assign one soldier for a whole day — answered with the shifts it now blocks as `conflicts`, still a 200 — and cancel), `duties/suggest` (the fair fill, writes nothing), `duties/approve` (seats the kept rows) and `duties/balance`, `duty-roster` (every soldier of the מכלול), all `commander`; and `team-duties`, a team's own soldiers' duties, `boss`. The operator's מכלול routes are `admin.py`'s `/complexes` |
+| `complex.py` | `/api/complex` — the מכלול commander (D43): the login picker and sign-in on `pakash_commander`, `me`, the combined `board` (≤ 43 days), `teams/{id}/enter` (a boss cookie for a linked team, marked `commander`) and `leave`; `route`, which משמרות a chat sentence is about (D46); plus `notices`, what the commander changed, for the team's own commander (`own_manager`). `complex_duties.py` adds the מכלול's duties under the same prefix: `duty-types` (CRUD) and `duties` (read a span ≤ 62 days, assign one soldier for a whole day — answered with the shifts it now blocks as `conflicts`, still a 200 — and cancel), `duties/suggest` (the fair fill, writes nothing), `duties/approve` (seats the kept rows) and `duties/balance`, `duty-roster` (every soldier of the מכלול), all `commander`; and `team-duties`, a team's own soldiers' duties, `boss`. The operator's מכלול routes are `admin.py`'s `/complexes` |
 | `profile.py` | Boss-only structured unit setup, profile updates (`PUT` also starts the refit of every draft ahead of today when it adds a soldier or a shift, and returns it as `absorbed`, D37), `DELETE /shifts/{name}` — archiving a shift type (stored schedules keep their rows) — and `/compiled`, what code made of each rule and note (D32) |
-| `manager_chat.py` | `/api/agent/chats` — the manager's conversations: send a message (queued as a job; an edited message replaces it and what followed), poll, stop, `regenerate` (answer the last request again in place of the last answer), apply or dismiss a pending plan |
+| `manager_chat.py` | `/api/agent/chats` — the manager's conversations, and the same routes at `/api/complex/teams/{team_id}/chats` for the מכלול commander on their own cookie (`commander_in_team`, D46): send a message (queued as a job; an edited message replaces it and what followed), poll, stop, `regenerate` (answer the last request again in place of the last answer), apply or dismiss a pending plan |
 | `replacements.py` | `GET /api/agent/replacements` — the changes tab's ranked covers for who is out and when (D36). Reads only |
 | `schedules/` | `/api/schedule` — the management area. `reading.py`: the overview, the current period, the one at a date (`/at`), a span (`/between`, capped at 62 days); `statistics.py`: stats over any span. `generation.py`: solve a period now (`/generate`), or open a resumable job (`/generate/start`, `build_from`/`build_through`), run, poll `progress`, cancel, dismiss, one day (`/day/start`) or a run of days in a draft (`/range/start`); the build calls also take `shifts` (only those shift types) and the range `keep_existing` (hold the board, D37). `manual.py`: blank period, assign, unassign, check, departure (D18). `periods.py`: publish, unpublish, clear, delete, progress; `transfer.py`: export, and `/import/preview` (multipart, writes nothing) then `/import/confirm` (D7/D42). `agent.py`: propose, apply, move (D8/D12). Constraints, history, learning and preferences (D21) |
 | `settings.py` | `/api/settings` and `/api/models` — the process-wide settings and the model-list probe. The team screen no longer links to them; the operator console's "מערכת" tab is their UI |
@@ -50,6 +50,10 @@ and a new route added under the wrong prefix silently inherits the wrong guard.
   Never satisfied by a team cookie, and a team guard is never satisfied by
   it. The console's routes are the only ones that take a team id from the
   path, because the operator acts on every team by design.
+- `guards.commander_in_team()` — the commander in one of their משמרות named
+  by the path (`team_id`), checked against the מכלול on every request; the
+  session `manager()` would give them inside it (D46). The chat routes
+  under `/api/complex/teams/{team_id}/chats` are its only users.
 - `guards.commander()` — the מכלול commander on `pakash_commander` (D43).
   Inside a team they hold a boss cookie with `commander` set, which every
   `boss()` route accepts; `visitor` re-checks the link per request.
@@ -77,7 +81,10 @@ schedule ids. FastAPI resolves in declaration order.
 body or a path parameter.** A route that accepts a team id from the caller is a
 route that lets one workspace name another.
 The only exceptions are the two logins that *issue* that cookie,
-`POST /api/workspace/login` and `POST /api/employee/signin` (D25). Each one
+`POST /api/workspace/login` and `POST /api/employee/signin` (D25), and the
+commander's chat routes, whose path names one משמרת that
+`commander_in_team` checks against the מכלול on the commander's cookie
+(D46) — the operator console's way, for the same reason. Each one
 checks a credential for the team it names before signing anything.
 
 `/api/settings` is process-wide — it holds the database credentials and the

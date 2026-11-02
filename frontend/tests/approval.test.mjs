@@ -73,9 +73,18 @@ function hook(file, name, api, args = [], stored = {}) {
 const plan = { kind: "changes", schedule_id: "old-week", operations: [{ date: "2026-10-05" }], constraints: [] };
 const conversation = (status) => ({ id: "chat", messages: [{ id: "plan", status, payload: { plan } }] });
 async function chat(api, onApplied = async () => {}) {
-  const h = hook("components/Management/useManagerChat.ts", "useManagerChat", {
+  const legacy = {
     listManagerChats: async () => [{ id: "chat" }], readManagerChat: async () => conversation("pending"), ...api,
-  }, ["team", "old-week", "2026-10-04", "", onApplied]);
+  };
+  const routes = {
+    list: (...a) => legacy.listManagerChats(...a), create: (...a) => legacy.createManagerChat(...a),
+    read: (...a) => legacy.readManagerChat(...a), remove: (...a) => legacy.deleteManagerChat(...a),
+    send: (...a) => legacy.sendManagerMessage(...a), regenerate: (...a) => legacy.regenerateManagerReply(...a),
+    apply: (...a) => legacy.applyManagerPlan(...a), dismiss: (...a) => legacy.dismissManagerPlan(...a),
+    stop: (...a) => legacy.stopManagerReply(...a), events: legacy.managerEvents ?? null,
+  };
+  const h = hook("components/Management/useManagerChat.ts", "useManagerChat", { managerChatRoutes: routes },
+    ["team", "old-week", "2026-10-04", "", onApplied]);
   await h.settle();
   return h;
 }

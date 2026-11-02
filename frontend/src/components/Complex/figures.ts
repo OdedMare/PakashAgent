@@ -3,10 +3,41 @@ import type { ComplexBoard, ComplexPeriod } from "@/types";
 
 export type Unit = ComplexBoard["teams"][number];
 
-/** Which משמרת, and which of its shift types, the board narrows to. */
+/** What the board narrows to. `unit` and `shift` choose rows (and drive
+ *  the tiles); `soldier` (`<unit id>:<name>`) and `gapsOnly` only hide —
+ *  like the משמרת's own `FilterBar`, they never change what is counted. */
 export interface Focus {
   unit: string | null;
   shift: string | null;
+  soldier: string | null;
+  gapsOnly: boolean;
+}
+
+export const NO_FOCUS: Focus = { unit: null, shift: null, soldier: null, gapsOnly: false };
+
+/** Every soldier standing somewhere on the board, as `<unit id>:<name>`
+ *  with a label naming the משמרת, sorted by name. */
+export function soldiersOf(units: Unit[]): { value: string; label: string }[] {
+  const seen = new Map<string, string>();
+  for (const unit of units) {
+    for (const period of unit.periods) {
+      for (const row of period.assignments) {
+        seen.set(`${unit.id}:${row.employee}`, `${row.employee} · ${unit.name}`);
+      }
+    }
+  }
+  return [...seen.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "he"));
+}
+
+/** Every shift type of the משמרות on the board, once each. */
+export function allShifts(units: Unit[]): string[] {
+  const names: string[] = [];
+  for (const unit of units) {
+    for (const shift of shiftsOf(unit)) if (!names.includes(shift)) names.push(shift);
+  }
+  return names;
 }
 
 /** One cell of the combined board: the seats the stored grid asks for and

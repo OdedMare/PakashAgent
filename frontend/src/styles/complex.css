@@ -13,9 +13,16 @@
   gap: 1rem;
 }
 
+/* A column, not a grid: inside the scrolling workspace a grid squeezes
+   its rows, and the tiles collapsed to nothing beside the agent. */
 .cmd-workspace .board {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 0.9rem;
+}
+
+.cmd-workspace .board > * {
+  flex-shrink: 0;
 }
 
 .cmd-focus {
@@ -561,126 +568,52 @@
   padding-inline-start: 1.1rem;
 }
 
-.duty-grid-wrap {
-  overflow-x: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+/* The duties grid is the board's own (`.board-grid`, `.board-card`): a
+   duty is a card in the soldier's colour, like a shift. What follows is
+   only what a duty adds — the remove button, a record and a proposal. */
+.duty-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 3.2rem;
 }
 
-.duty-grid {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.82rem;
-}
-
-.duty-grid th,
-.duty-grid td {
-  padding: 0.4rem;
-  border-bottom: 1px solid var(--border);
-  border-inline-start: 1px solid var(--border);
-  vertical-align: top;
-  text-align: start;
-}
-
-.duty-grid thead th {
-  background: var(--surface-2);
-  white-space: nowrap;
-}
-
-.duty-grid th span,
-.duty-grid th small {
-  display: block;
-}
-
-.duty-grid th small {
-  color: var(--text-muted);
-  font-weight: 400;
-}
-
-.duty-grid thead th.is-today {
-  color: var(--primary);
-}
-
-.duty-grid tbody th {
-  min-width: 7rem;
-  background: var(--surface-2);
-}
-
-.duty-cell {
-  min-width: 7.5rem;
-}
-
-.duty-cell.is-off {
-  background: var(--surface-2);
-}
-
-.duty-chip {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  margin-bottom: 0.3rem;
-  padding: 0.25rem 0.4rem;
-  background: color-mix(in srgb, var(--hue-teal) 14%, var(--surface));
-  border-inline-start: 3px solid var(--hue-teal);
-  border-radius: 6px;
-}
-
-.duty-chip.is-record {
-  background: transparent;
-  border: 1px dashed var(--hue-teal);
-}
-
-.duty-chip-name {
-  font-weight: 600;
-}
-
-.duty-chip small {
-  grid-column: 1;
-  color: var(--text-muted);
-}
-
-.duty-chip-remove {
-  grid-row: 1 / span 2;
+.duty-card-remove {
   grid-column: 2;
+  grid-row: 1 / span 2;
   display: inline-grid;
   place-items: center;
-  min-width: 28px;
-  min-height: 28px;
-  color: var(--text-muted);
+  width: 28px;
+  height: 28px;
+  color: inherit;
+  opacity: 0.6;
   background: none;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
-.duty-chip-remove:hover:not(:disabled) {
+.duty-card-remove:hover:not(:disabled),
+.duty-card-remove:focus-visible {
+  opacity: 1;
   color: var(--danger);
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
 }
 
-.duty-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  width: 100%;
-  min-height: 32px;
-  padding: 0.2rem 0.4rem;
-  color: var(--primary);
-  background: none;
-  border: 1px dashed var(--border-strong);
-  border-radius: 6px;
-  cursor: pointer;
-  font: inherit;
-}
-
-.duty-add:hover:not(:disabled) {
-  border-color: var(--primary);
+/* Recorded after the fact: counts, blocks nothing — the card's hue, hollow. */
+.board-card.duty-card.is-record {
+  background: transparent;
+  border: 1px dashed currentColor;
 }
 
 /* "מלא בהוגנות": a proposal is blue and dashed until it is approved. */
-.duty-chip.is-proposal {
+.board-card.duty-card.is-proposal {
   background: var(--primary-soft);
+  color: var(--primary);
   border: 1px dashed var(--primary);
-  border-inline-start-width: 3px;
+}
+
+/* An open seat is the thing the commander looks for: always visible. */
+.duty-cell .board-add.duty-add {
+  opacity: 1;
 }
 
 .duty-suggestion {
@@ -759,4 +692,241 @@
 .duty-balance-kinds em {
   color: var(--warning);
   font-style: normal;
+}
+
+/* -- the commander's board, full size ------------------------------------- */
+
+/* The board head names what is on screen, at the far end from the arrows. */
+.cmd-head-title {
+  display: grid;
+  justify-items: end;
+  gap: 0.1rem;
+  margin-inline-start: auto;
+}
+
+.cmd-head-title strong {
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.cmd-board .board-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Larger cells than a single משמרת's board: the commander reads many
+   bands at once and wants each name legible at a glance. */
+.cmd-board .board-grid {
+  grid-template-columns: 10rem repeat(var(--board-days, 7), minmax(9.5rem, 1fr));
+}
+
+.cmd-board .board-cell {
+  min-height: 5.2rem;
+}
+
+.cmd-board .board-card.cmd-card {
+  min-height: 3.1rem;
+}
+
+/* The band's actions sit beside its name, at the start of the row: a wide
+   week scrolls sideways under the agent, and the far end is off screen. */
+.cmd-band .cmd-band-chat,
+.cmd-band .cmd-band-enter {
+  margin-inline-start: 0;
+}
+
+/* -- the agent drawer: one conversation per משמרת, and the מכלול tab ------ */
+
+.cmd-drawer {
+  position: relative;
+}
+
+.cmd-drawer-close {
+  position: absolute;
+  inset-block-start: 10px;
+  inset-inline-end: 12px;
+  z-index: 2;
+}
+
+.cmd-chat-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.cmd-chat-targets {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+  overflow-x: auto;
+  padding: 10px 14px;
+  padding-inline-end: 56px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: thin;
+}
+
+.cmd-chat-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cmd-chat-target:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.cmd-chat-target.is-active {
+  color: var(--text);
+  background: var(--surface-3);
+}
+
+.cmd-chat-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+.cmd-chat-spin {
+  color: var(--primary);
+  animation: cmd-spin 1s linear infinite;
+}
+
+@keyframes cmd-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cmd-chat-spin { animation: none; }
+}
+
+.cmd-chat-head {
+  display: grid;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cmd-chat-route {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.cmd-chat-route-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.cmd-chat-sent {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-soft, var(--text-muted));
+}
+
+.cmd-chat-sent svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--primary);
+}
+
+.cmd-chat-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.cmd-chat-body.is-broadcast {
+  gap: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 18px;
+}
+
+.cmd-chat-full {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.cmd-chat-empty {
+  margin: auto 0;
+}
+
+.cmd-chat-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.cmd-chat-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cmd-chat-card-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 650;
+}
+
+.cmd-chat-card .conversation-message {
+  margin-bottom: 0;
+}
+
+/* Six rooms do not fit a phone's width the way the משמרת's four do: the
+   strip scrolls inside itself rather than pushing the page sideways. */
+@media (max-width: 899px) {
+  .cmd-management .workspace-sidebar,
+  .cmd-management .brand {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .cmd-management .management-nav {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .cmd-management .management-nav-item {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .cmd-head-title {
+    justify-items: start;
+    margin-inline-start: 0;
+  }
 }

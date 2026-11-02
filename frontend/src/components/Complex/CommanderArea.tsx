@@ -15,34 +15,40 @@ import {
   UserCheck,
   UserMinus,
   Users,
+  X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 
 import { datesBetween, localToday } from "@/components/Board/dates";
+import { rangeOf } from "@/components/Board/views";
 import { ViewSwitch } from "@/components/Board/ViewSwitch";
 import { WeekNav } from "@/components/Board/WeekNav";
-import { CrewStage } from "@/components/Crew";
+import { AgentGuard, CrewStage, randomGuard } from "@/components/Crew";
+import type { Who } from "@/components/Crew";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import { AccountMenu } from "@/components/Management/AccountMenu";
 import { buildPalette } from "@/components/Management/palette";
+import { useChatSplit } from "@/components/Management/useChatSplit";
 import { useTheme } from "@/hooks/useTheme";
 import { enterComplexTeam } from "@/services/api";
 import type { CommanderView } from "@/types";
 
+import { CommanderChat, type ChatTarget } from "./CommanderChat";
 import { ComplexGrid } from "./ComplexGrid";
 import { DutiesView } from "./DutiesView";
-import { figuresOf, type Focus, type Unit } from "./figures";
-import { FocusBar, Tile } from "./parts";
+import { figuresOf, NO_FOCUS, type Focus, type Unit } from "./figures";
+import { CommanderFilters, Tile } from "./parts";
 import { UnitTools, type Tool } from "./UnitTools";
 import { UnitsView } from "./UnitsView";
 import { useCommanderBoard } from "./useCommander";
 
-type View = "board" | "units" | "duties" | Tool;
+type View = "board" | "duties" | "units" | Tool;
 
-const TOOL_COPY: Record<Tool, { title: string; lede: string }> = {
-  agent: {
-    title: "סוכן הסידור",
-    lede: "אותו סוכן של המשמרת: שאלות, שינויים ותוכניות — שום דבר לא נשמר עד שמאשרים. כל שינוי נשלח למפקד המשמרת.",
+const PAGE_COPY: Record<"units" | Tool, { title: string; lede: string }> = {
+  units: {
+    title: "המשמרות",
+    lede: "מצב כל משמרת בטווח שעל המסך, והכניסה לנהל אותה.",
   },
   stats: {
     title: "סטטיסטיקות",
@@ -54,14 +60,16 @@ const TOOL_COPY: Record<Tool, { title: string; lede: string }> = {
   },
 };
 
-/** The מכלול commander's own screen (D43), in the management area's shell:
- *  the same sidebar, top bar, board head, tiles and cards a מפקד משמרת
- *  works in, so moving between the two is moving between rooms of one
- *  building rather than between products.
+/** The מכלול commander's own screen (D43) — the shift manager's control
+ *  room, a level up. The same sidebar, top bar, board head, tiles, filter
+ *  bar and cards; the same agent in a drawer beside the board, resizable,
+ *  opened from the guard in the corner. What differs is what it spans:
+ *  the board is every משמרת at once, and the agent speaks to all of their
+ *  agents (`CommanderChat`).
  *
- *  It reads; it does not write. Each משמרת has its own rules, constraints
- *  and solver, so a change is made inside it — "כניסה לניהול" opens the
- *  משמרת with every power its commander holds. */
+ *  The board reads; it does not write. Each משמרת keeps its own rules,
+ *  constraints and solver, so a change is a plan its agent prepares and
+ *  the commander approves, or is made inside it ("כניסה לניהול"). */
 export function CommanderArea({
   commander,
   busy,
@@ -74,17 +82,43 @@ export function CommanderArea({
   onLogout: () => Promise<void>;
 }) {
   const state = useCommanderBoard();
+  const { reload } = state;
   const { theme, toggle } = useTheme();
   const dark = theme === "dark";
   const [view, setView] = useState<View>("board");
-  const [focus, setFocus] = useState<Focus>({ unit: null, shift: null });
+  const [focus, setFocus] = useState<Focus>(NO_FOCUS);
   useGuideSurface("commander");
 
+  // The agent drawer, as in the משמרת: open beside the board on a wide
+  // screen, the split the commander's to drag, the X handing the width back.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const { workspace: workspaceRef, share: chatShare, resizing, handle: resizeHandle } = useChatSplit();
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (window.matchMedia("(min-width: 900px)").matches) setDrawerOpen(true);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  const [chatTarget, setChatTarget] = useState<ChatTarget>("all");
+  const [agentWho, setAgentWho] = useState<Who>("him");
+  const rollAgent = useCallback(() => setAgentWho(randomGuard()), []);
+  useEffect(() => {
+    if (drawerOpen) return;
+    const frame = requestAnimationFrame(rollAgent);
+    return () => cancelAnimationFrame(frame);
+  }, [drawerOpen, rollAgent]);
+  const openAgent = useCallback((target?: ChatTarget) => {
+    if (target !== undefined) setChatTarget(target);
+    setView((current) => (current === "board" || current === "duties" ? current : "board"));
+    setDrawerOpen(true);
+  }, []);
+  const [seed, setSeed] = useState<{ unit: string; text: string; n: number }>();
+
   const days = useMemo(() => datesBetween(state.start, state.end), [state.start, state.end]);
+  const week = rangeOf("week", state.focus).start;
   const units: Unit[] = useMemo(() => state.board?.teams ?? [], [state.board]);
   const shown = units.filter((unit) => !focus.unit || unit.id === focus.unit);
   const figures = figuresOf(shown, days, focus);
-  const focusedUnit = units.find((unit) => unit.id === focus.unit) ?? null;
   // One colour per soldier across the whole מכלול, keyed by משמרת so two
   // soldiers who share a name in different משמרות are not one person.
   const hueOf = useMemo(() => {
@@ -99,15 +133,28 @@ export function CommanderArea({
     }
     return buildPalette(roster);
   }, [units]);
+  const rosterOf = useCallback((id: string) => {
+    const names = new Set<string>();
+    for (const period of units.find((unit) => unit.id === id)?.periods ?? []) {
+      for (const row of period.assignments) names.add(row.employee);
+    }
+    return [...names];
+  }, [units]);
 
   const enter = (id: string) => void onEnter(id);
-  const focusUnit = (id: string | null) => setFocus({ unit: id, shift: null });
-  const tool: Tool | null = view === "agent" || view === "stats" || view === "changes" ? view : null;
+  const page = view === "units" || view === "stats" || view === "changes" ? view : null;
+  const tool: Tool | null = view === "stats" || view === "changes" ? view : null;
+  const go = (next: View) => {
+    setView(next);
+    // A page takes the whole width, as in the משמרת; the board and the
+    // duties keep the agent beside them.
+    if (next !== "board" && next !== "duties") setDrawerOpen(false);
+    window.scrollTo({ top: 0 });
+  };
 
-  // The משמרת the agent, statistics and changes are about. Opening it signs
-  // this browser into that משמרת on the commander's session — the same act
-  // as "כניסה לניהול", without leaving the מכלול screen — so the tools
-  // below read and write that משמרת and no other.
+  // The משמרת statistics and changes are about. Opening it signs this
+  // browser into that משמרת on the commander's session — the same act as
+  // "כניסה לניהול", without leaving the מכלול screen.
   const [toolUnit, setToolUnit] = useState<string | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const [toolError, setToolError] = useState<string | null>(null);
@@ -137,6 +184,41 @@ export function CommanderArea({
     return () => { cancelled = true; };
   }, [tool, toolUnit, wanted]);
 
+  const sidebarUnit = tool ? toolUnit : focus.unit;
+  const navItem = (id: View, icon: React.ReactNode, label: string, tour?: string) => (
+    <button
+      type="button"
+      className={`management-nav-item${view === id && !(id === "board" && drawerOpen) ? " is-active" : ""}`}
+      aria-current={view === id ? "page" : undefined}
+      onClick={() => go(id)}
+      data-tour={tour}
+    >
+      {icon} {label}
+    </button>
+  );
+
+  const head = (
+    <div className="board-head">
+      <div className="board-head-nav">
+        <WeekNav
+          view={state.view}
+          focus={state.focus}
+          rangeStart={state.start}
+          rangeEnd={state.end}
+          isCurrent={state.isCurrent}
+          onPrevious={state.previous}
+          onNext={state.next}
+          onToday={state.goToToday}
+        />
+        <ViewSwitch view={state.view} onChange={state.setView} />
+      </div>
+      <div className="cmd-head-title">
+        <span className="manager-analytics-eyebrow">{commander.name}</span>
+        <strong>{view === "duties" ? "תורנויות המכלול" : "לוח המכלול"}</strong>
+      </div>
+    </div>
+  );
+
   return (
     <div className="management cmd-management">
       <header className="workspace-sidebar">
@@ -153,53 +235,17 @@ export function CommanderArea({
         <nav className="management-nav" aria-label="ניווט ראשי" data-tour="cmd-nav">
           <button
             type="button"
-            className={`management-nav-item${view === "board" ? " is-active" : ""}`}
-            aria-current={view === "board" ? "page" : undefined}
-            onClick={() => setView("board")}
+            className={`management-nav-item${drawerOpen ? " is-active" : ""}`}
+            aria-expanded={drawerOpen}
+            onClick={() => openAgent()}
           >
-            <LayoutGrid size={15} /> לוח המכלול
+            <MessagesSquare size={15} /> סוכן המכלול
           </button>
-          <button
-            type="button"
-            className={`management-nav-item${view === "units" ? " is-active" : ""}`}
-            aria-current={view === "units" ? "page" : undefined}
-            onClick={() => setView("units")}
-          >
-            <Layers size={15} /> המשמרות
-          </button>
-          <button
-            type="button"
-            className={`management-nav-item${view === "duties" ? " is-active" : ""}`}
-            aria-current={view === "duties" ? "page" : undefined}
-            onClick={() => setView("duties")}
-            data-tour="cmd-duties"
-          >
-            <Soup size={15} /> תורנויות
-          </button>
-          <button
-            type="button"
-            className={`management-nav-item${view === "agent" ? " is-active" : ""}`}
-            aria-current={view === "agent" ? "page" : undefined}
-            onClick={() => setView("agent")}
-          >
-            <MessagesSquare size={15} /> סוכן הסידור
-          </button>
-          <button
-            type="button"
-            className={`management-nav-item${view === "stats" ? " is-active" : ""}`}
-            aria-current={view === "stats" ? "page" : undefined}
-            onClick={() => setView("stats")}
-          >
-            <BarChart3 size={15} /> סטטיסטיקות
-          </button>
-          <button
-            type="button"
-            className={`management-nav-item${view === "changes" ? " is-active" : ""}`}
-            aria-current={view === "changes" ? "page" : undefined}
-            onClick={() => setView("changes")}
-          >
-            <ArrowLeftRight size={15} /> שינויים
-          </button>
+          {navItem("board", <LayoutGrid size={15} />, "לוח המכלול")}
+          {navItem("duties", <Soup size={15} />, "תורנויות", "cmd-duties")}
+          {navItem("units", <Layers size={15} />, "המשמרות")}
+          {navItem("stats", <BarChart3 size={15} />, "סטטיסטיקות")}
+          {navItem("changes", <ArrowLeftRight size={15} />, "שינויים")}
         </nav>
 
         <section className="workspace-conversations" aria-label="משמרות המכלול">
@@ -209,7 +255,7 @@ export function CommanderArea({
               type="button"
               className={!tool && focus.unit === null ? "is-active" : ""}
               aria-current={!tool && focus.unit === null ? "true" : undefined}
-              onClick={() => { focusUnit(null); setView("board"); }}
+              onClick={() => { setFocus(NO_FOCUS); if (!tool) go(view === "duties" ? "duties" : "board"); }}
             >
               <Network size={15} /><span>כל המשמרות</span>
             </button>
@@ -218,13 +264,13 @@ export function CommanderArea({
                 type="button"
                 key={unit.id}
                 title={unit.name}
-                className={(tool ? toolUnit : focus.unit) === unit.id ? "is-active" : ""}
-                aria-current={(tool ? toolUnit : focus.unit) === unit.id ? "true" : undefined}
+                className={sidebarUnit === unit.id ? "is-active" : ""}
+                aria-current={sidebarUnit === unit.id ? "true" : undefined}
                 onClick={() => {
-                focusUnit(unit.id);
-                if (tool) void openTool(unit.id);
-                else setView("board");
-              }}
+                  setFocus({ ...NO_FOCUS, unit: unit.id });
+                  if (tool) void openTool(unit.id);
+                  else go("board");
+                }}
               >
                 <Users size={15} /><span>{unit.name}</span>
               </button>
@@ -235,7 +281,7 @@ export function CommanderArea({
 
       <div className="management-topbar">
         <div className="header-actions">
-          <button type="button" className="icon-button" onClick={state.reload} aria-label="רענון" title="רענון">
+          <button type="button" className="icon-button" onClick={reload} aria-label="רענון" title="רענון">
             <RefreshCw size={17} />
           </button>
           <button type="button" className="icon-button" onClick={toggle}
@@ -251,88 +297,80 @@ export function CommanderArea({
         <div className="error" role="alert"><AlertTriangle size={16} /><span>{state.error}</span></div>
       ) : null}
 
-      <main id="main-content" className="management-workspace is-page cmd-workspace">
-        <section className="manager-analytics" aria-labelledby="cmd-title">
-          <header className="manager-analytics-head">
-            <div>
-              <span className="manager-analytics-eyebrow">המכלול שלך</span>
-              <h1 id="cmd-title">
-                {tool
-                  ? TOOL_COPY[tool].title
-                  : view === "units" ? "המשמרות"
-                    : view === "duties" ? "תורנויות המכלול"
-                    : focusedUnit ? focusedUnit.name : "לוח המכלול"}
-              </h1>
-              <p>
-                {tool
-                  ? TOOL_COPY[tool].lede
-                  : view === "duties"
-                    ? "שיבוץ ידני של חיילים מכל המשמרות לתורנויות. יום תורנות חוסם את החייל במשמרת שלו, נספר בהוגנות ובסטטיסטיקה, ומפקד המשמרת מקבל הודעה."
-                  : view === "units"
-                    ? "מצב כל משמרת בטווח שעל המסך, והכניסה לנהל אותה."
-                    : "כל המשמרות זו לצד זו, עם כל החיילים. עורכים בתוך המשמרת — כל שינוי נשלח למפקד המשמרת."}
-              </p>
-            </div>
-            <span className="manager-analytics-status">{commander.teams.length} משמרות</span>
-          </header>
-
-          {tool ? (
-            <div className="cmd-tools">
-              <div className="board-views" role="group" aria-label="המשמרת">
-                {commander.teams.map((unit) => (
-                  <button
-                    key={unit.id}
-                    type="button"
-                    className={`board-view${toolUnit === unit.id ? " is-on" : ""}`}
-                    aria-pressed={toolUnit === unit.id}
-                    disabled={!unit.active || Boolean(opening)}
-                    onClick={() => void openTool(unit.id)}
-                  >
-                    {unit.name}
-                  </button>
-                ))}
+      <main
+        id="main-content"
+        ref={workspaceRef}
+        className={`management-workspace cmd-workspace${drawerOpen && !page ? " has-drawer" : ""}${page ? " is-page" : ""}${resizing ? " is-resizing" : ""}`}
+        style={{ "--chat-share": `${(chatShare * 100).toFixed(2)}%` } as CSSProperties}
+      >
+        {page ? (
+          <section className="manager-analytics" aria-labelledby="cmd-title">
+            <header className="manager-analytics-head">
+              <div>
+                <span className="manager-analytics-eyebrow">{commander.name}</span>
+                <h1 id="cmd-title">{PAGE_COPY[page].title}</h1>
+                <p>{PAGE_COPY[page].lede}</p>
               </div>
-              {toolError ? (
-                <div className="error" role="alert"><AlertTriangle size={16} /><span>{toolError}</span></div>
-              ) : null}
-              {toolUnit && !opening ? (
-                <UnitTools key={toolUnit} unitId={toolUnit} tool={tool} onTool={setView} />
-              ) : commander.teams.length === 0 ? (
-                <p className="cmd-empty">עדיין לא שויכו משמרות למכלול. צוות משמרות זהב משייך אותן.</p>
-              ) : (
-                <CrewStage label="פותח את המשמרת…" />
-              )}
-            </div>
-          ) : (
-          <div className="board">
-            <div className="board-head">
-              <div className="board-head-nav">
-                <WeekNav
-                  view={state.view}
-                  focus={state.focus}
-                  rangeStart={state.start}
-                  rangeEnd={state.end}
-                  isCurrent={state.isCurrent}
-                  onPrevious={state.previous}
-                  onNext={state.next}
-                  onToday={state.goToToday}
+              <span className="manager-analytics-status">{commander.teams.length} משמרות</span>
+            </header>
+            {tool ? (
+              <div className="cmd-tools">
+                <div className="board-views" role="group" aria-label="המשמרת">
+                  {commander.teams.map((unit) => (
+                    <button
+                      key={unit.id}
+                      type="button"
+                      className={`board-view${toolUnit === unit.id ? " is-on" : ""}`}
+                      aria-pressed={toolUnit === unit.id}
+                      disabled={!unit.active || Boolean(opening)}
+                      onClick={() => void openTool(unit.id)}
+                    >
+                      {unit.name}
+                    </button>
+                  ))}
+                </div>
+                {toolError ? (
+                  <div className="error" role="alert"><AlertTriangle size={16} /><span>{toolError}</span></div>
+                ) : null}
+                {toolUnit && !opening ? (
+                  <UnitTools
+                    key={toolUnit}
+                    tool={tool}
+                    onPrepare={(text) => {
+                      // The picks become a plan in that משמרת's conversation,
+                      // where approving it is the one write path (D12).
+                      setSeed((previous) => ({ unit: toolUnit, text, n: (previous?.n ?? 0) + 1 }));
+                      openAgent(toolUnit);
+                    }}
+                  />
+                ) : commander.teams.length === 0 ? (
+                  <p className="cmd-empty">עדיין לא שויכו משמרות למכלול. צוות משמרות זהב משייך אותן.</p>
+                ) : (
+                  <CrewStage label="פותח את המשמרת…" />
+                )}
+              </div>
+            ) : state.board === null ? (
+              <CrewStage label="טוען את המשמרות…" />
+            ) : (
+              <>
+                {head}
+                <UnitsView
+                  units={units}
+                  days={days}
+                  busy={busy}
+                  onEnter={enter}
+                  onOpen={(id) => { setFocus({ ...NO_FOCUS, unit: id }); go("board"); }}
                 />
-                <ViewSwitch view={state.view} onChange={state.setView} />
-              </div>
-            </div>
-
+              </>
+            )}
+          </section>
+        ) : (
+          <div className="board cmd-board">
+            {head}
             {view === "duties" ? (
-              <DutiesView days={days} today={localToday()} />
+              <DutiesView days={days} today={localToday()} units={commander.teams} dark={dark} />
             ) : state.board === null ? (
               <CrewStage label="טוען את לוח המכלול…" />
-            ) : view === "units" ? (
-              <UnitsView
-                units={units}
-                days={days}
-                busy={busy}
-                onEnter={enter}
-                onOpen={(id) => { focusUnit(id); setView("board"); }}
-              />
             ) : (
               <>
                 <div className="board-coverage" role="group" aria-label="מצב המכלול" data-tour="cmd-coverage">
@@ -368,12 +406,7 @@ export function CommanderArea({
                   />
                 </div>
 
-                <FocusBar
-                  units={units}
-                  focus={focus}
-                  onUnit={focusUnit}
-                  onShift={(shift) => setFocus((current) => ({ ...current, shift }))}
-                />
+                <CommanderFilters units={units} focus={focus} onChange={setFocus} />
 
                 {shown.length === 0 ? (
                   <p className="cmd-empty">עדיין לא שויכו משמרות למכלול. צוות משמרות זהב משייך אותן.</p>
@@ -386,15 +419,74 @@ export function CommanderArea({
                     dark={dark}
                     hueOf={hueOf}
                     busy={busy}
-                    onFocusShift={(unit, shift) => setFocus({ unit, shift })}
+                    onFocusShift={(unit, shift) => setFocus({ ...focus, unit, shift })}
                     onEnter={enter}
+                    onChat={(unit) => openAgent(unit)}
                   />
                 )}
               </>
             )}
           </div>
-          )}
-        </section>
+        )}
+
+        {drawerOpen || page ? null : (
+          <AgentGuard who={agentWho} onOpen={() => openAgent()} onSwap={rollAgent} />
+        )}
+        <button
+          type="button"
+          className="manager-drawer-backdrop"
+          hidden={!drawerOpen || Boolean(page)}
+          onClick={() => setDrawerOpen(false)}
+          aria-label="סגירת הסוכן"
+        />
+        <aside
+          className={`manager-drawer cmd-drawer${drawerOpen && !page ? " is-open" : ""}`}
+          aria-label="סוכן המכלול"
+          hidden={!drawerOpen || Boolean(page)}
+        >
+          <div
+            className="manager-chat-resizer"
+            role="separator"
+            tabIndex={0}
+            aria-label="גודל הסוכן מול הלוח — גרירה או חיצים, לחיצה כפולה לאיפוס"
+            title="גרירה לשינוי הגודל · לחיצה כפולה לאיפוס"
+            aria-orientation="vertical"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(chatShare * 100)}
+            {...resizeHandle}
+          />
+          <div className="manager-drawer-head">
+            <div>
+              <strong>סוכן המכלול</strong>
+              <span>{commander.teams.length} משמרות</span>
+            </div>
+            <button type="button" className="icon-button" onClick={() => setDrawerOpen(false)} aria-label="סגירה">
+              <X size={17} />
+            </button>
+          </div>
+          <button
+            type="button"
+            className="icon-button manager-tabs-close cmd-drawer-close"
+            onClick={() => setDrawerOpen(false)}
+            aria-label="סגירת הסוכן"
+            title="סגירת הסוכן — הלוח יתרחב"
+          >
+            <X size={16} />
+          </button>
+          {/* Mounted once and kept: closing the drawer hides it, so a
+              sentence still being answered in four משמרות keeps going. */}
+          <CommanderChat
+            who={agentWho}
+            units={commander.teams}
+            target={chatTarget}
+            week={week}
+            rosterOf={rosterOf}
+            seed={seed}
+            onTarget={setChatTarget}
+            onApplied={reload}
+          />
+        </aside>
       </main>
     </div>
   );

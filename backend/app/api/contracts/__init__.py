@@ -14,6 +14,7 @@ from app.api.contracts.admin import (  # noqa: F401
     AdminUpdateComplexRequest,
     AdminUpdateTeamRequest,
     CommanderLoginRequest,
+    CommanderRouteRequest,
 )
 from app.api.contracts.complex_duties import (  # noqa: F401
     DutyApproveRequest,

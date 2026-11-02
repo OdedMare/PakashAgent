@@ -50,7 +50,10 @@ uvicorn app.main:app --reload
   password; the commander signs in on `pakash_commander`, reads the combined
   board, and enters a team on an ordinary boss cookie marked `commander`.
   `describe_action` names the commander's writes for the notice the team's
-  own commander reads (recorded by the middleware in `main.py`).
+  own commander reads (recorded by the middleware in `main.py`, which also
+  credits the commander's chat routes, `/api/complex/teams/{id}/chats`, to
+  that team). `bl/complex_routing.py` reads which משמרות a sentence in the
+  commander's chat is about — named, a named soldier's, else all (D46).
   `dal/repository/complexes.py` holds its SQL.
 - `bl/complex_duties/` — the מכלול's duties (תורנויות): types the commander
   defines, and one soldier on one duty for a whole day. A write is checked
@@ -59,8 +62,9 @@ uvicorn app.main:app --reload
   `commander:<id>`, and told to that team's commander. The day is blocked
   by `records.availability()`, which projects it as a `duty` with no hours.
   A duty on a draft shift vacates it and opens a keep-existing refill
-  (`collisions.py`); "מלא בהוגנות" (`fill.py`, pure) proposes and the
-  commander approves; `balance.py` reports the spread (D44).
+  (`collisions.py`); "מלא בהוגנות" (`fill.py`, pure) proposes — keeping
+  each soldier six days from their other duties while anyone else is free
+  (D46) — and the commander approves; `balance.py` reports the spread (D44).
   `dal/repository/complex_duties.py` holds its SQL.
 - `api/dependencies.py` — the route guards (`visitor`, `boss`, `own_manager`,
   `employee`, `admin`, `commander`). `visitor` also refuses a suspended or

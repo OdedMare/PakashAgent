@@ -2,7 +2,7 @@
 
 import { AlertTriangle, LayoutGrid, LogIn, UserMinus, Users } from "lucide-react";
 
-import { figuresOf, shiftsOf, type Unit } from "./figures";
+import { figuresOf, NO_FOCUS, shiftsOf, type Unit } from "./figures";
 
 /** "המשמרות": one card per משמרת of the מכלול with how its span on screen
  *  stands — coverage, open seats, warnings, whether it is published — and
@@ -26,7 +26,7 @@ export function UnitsView({
   return (
     <ul className="cmd-units" aria-label="משמרות המכלול">
       {units.map((unit) => {
-        const figures = figuresOf([unit], days, { unit: unit.id, shift: null });
+        const figures = figuresOf([unit], days, { ...NO_FOCUS, unit: unit.id });
         const percent = figures.seats ? Math.round((figures.assigned / figures.seats) * 100) : null;
         const status = figures.planned === 0
           ? { label: "לא תוכנן", tone: "" }
