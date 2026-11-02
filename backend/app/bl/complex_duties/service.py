@@ -11,6 +11,8 @@ from typing import Callable, Dict, List, Optional
 
 from app.bl.audit import constraint_conflicts
 from app.bl.complex_duties import values
+from app.bl.complex_duties.collisions import DutyCollisions
+from app.bl.complex_duties.planning import DutyPlanning
 from app.bl.shared import text
 from app.common.actor import acting_as
 from app.common.errors import AgentError, ConflictError
@@ -28,6 +30,7 @@ class ComplexDutyService:
     def __init__(
         self, repository, complexes,
         notify: Optional[Callable[[str, str, str], None]] = None,
+        schedules=None, today=None,
     ):
         """`complexes` is the `ComplexService` (which teams are this
         commander's); `notify(team_id, complex_id, action)` tells a team's
@@ -35,6 +38,23 @@ class ComplexDutyService:
         self._repository = repository
         self._complexes = complexes
         self._notify = notify or (lambda *_: None)
+        self._planning = DutyPlanning(repository, complexes, self)
+        # `schedules` is the ScheduleService: what vacates a draft shift a new
+        # duty collides with and refills it (`collisions.py`).
+        self._collisions = DutyCollisions(schedules, self._notify, today)
+
+    # --- the fair fill and the balance (`planning.py`) -------------------------
+
+    def suggest(self, complex_id: str, start: str, end: str) -> dict:
+        """The fairest soldier for every open seat in the span. Writes nothing."""
+        return self._planning.suggest(complex_id, start, end)
+
+    def approve(self, complex_id: str, rows: List[dict]) -> dict:
+        """Seat what the commander kept of a suggestion, each like a hand-set duty."""
+        return self._planning.approve(complex_id, rows)
+
+    def balance(self, complex_id: str, start: str, end: str) -> dict:
+        return self._planning.balance(complex_id, start, end)
 
     # --- duty types ----------------------------------------------------------
 
@@ -68,7 +88,7 @@ class ComplexDutyService:
 
     def assign(
         self, complex_id: str, type_id: str, team_id: str, employee: str,
-        duty_date: str, note: str = "", blocks: bool = True,
+        duty_date: str, note: str = "", blocks: bool = True, resolve: bool = True,
     ) -> dict:
         """Seat one soldier. Returns the duty and the stored shifts it now
         blocks: a warning for the commander, not a refusal (§4 of the plan);
@@ -97,7 +117,15 @@ class ComplexDutyService:
                       "נרשמה תורנות %s שכבר נעשתה (נספרת בעומס, לא חוסמת)"
                       % duty_type["name"])
         self._notify(team["id"], complex_id, NOTICE_ASSIGNED if blocks else NOTICE_RECORDED)
-        return {"duty": duty, "conflicts": self.conflicts(duty) if blocks else []}
+        conflicts = self.conflicts(duty) if blocks else []
+        if resolve and conflicts:
+            conflicts = self.resolve(complex_id, conflicts)
+        return {"duty": duty, "conflicts": conflicts}
+
+    def resolve(self, complex_id: str, conflicts: List[dict]) -> List[dict]:
+        """Vacate and refill the draft shifts the duties collide with; each
+        conflict comes back with its `outcome` (`collisions.py`)."""
+        return self._collisions.resolve(complex_id, conflicts)
 
     def cancel(self, complex_id: str, duty_id: str) -> dict:
         duty = self._repository.delete_complex_duty(complex_id, duty_id)
@@ -119,7 +147,9 @@ class ComplexDutyService:
             duty["team_id"], duty["employee"], before, day.isoformat(),
         )
         return [
-            {"schedule_id": row["schedule_id"], "status": row["status"],
+            {"assignment_id": row["id"], "team_id": duty["team_id"],
+             "employee": duty["employee"], "duty_type": duty.get("duty_type", ""),
+             "schedule_id": row["schedule_id"], "status": row["status"],
              "shift_name": row["shift_name"], "date": str(row["slot_date"])[:10],
              "start_time": row["start_time"], "end_time": row["end_time"]}
             for row in rows

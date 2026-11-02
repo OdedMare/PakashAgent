@@ -184,6 +184,16 @@ class ComplexDutyRepository(RepositoryBase):
             ORDER BY sl.slot_date, sl.start_time
         """, (team_id, employee, starts_on, ends_on))
 
+    def team_shift_rows(self, team_id: str, starts_on: str, ends_on: str) -> List[dict]:
+        """Who stood which shift on which date, over a span: what the duty
+        fill and the balance count a soldier's shifts from. Drafts and
+        published weeks alike -- the load is the same either way."""
+        return self._all("""
+            SELECT a.employee, sl.slot_date
+            FROM assignments a JOIN shift_slots sl ON sl.id = a.slot_id
+            WHERE a.team_id=%s AND sl.slot_date BETWEEN %s AND %s
+        """, (team_id, starts_on, ends_on))
+
     def team_complex_duties(
         self, team_id: str, starts_on: str, ends_on: str,
         employee: Optional[str] = None,

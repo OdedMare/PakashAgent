@@ -8,7 +8,9 @@ the request; a duty type, a duty or a team of another מכלול is a 404.
 
 from fastapi import APIRouter, Depends
 
-from app.api.contracts import DutyAssignRequest, DutyTypePatch, DutyTypeRequest
+from app.api.contracts import (
+    DutyApproveRequest, DutyAssignRequest, DutyTypePatch, DutyTypeRequest,
+)
 
 
 class ComplexDutyRoutes:
@@ -77,6 +79,21 @@ class ComplexDutyRoutes:
                 request.employee, request.duty_date, request.note,
                 blocks=request.blocks,
             )
+
+        @router.post("/duties/suggest")
+        def suggest(start: str, end: str, session: dict = Depends(commander)) -> dict:
+            """"מלא בהוגנות": a pick for every open seat, with its reason.
+            Writes nothing; `duties/approve` seats what the commander kept."""
+            return service.suggest(session["complex_id"], start, end)
+
+        @router.post("/duties/approve")
+        def approve(request: DutyApproveRequest, session: dict = Depends(commander)) -> dict:
+            return service.approve(
+                session["complex_id"], [row.model_dump() for row in request.rows])
+
+        @router.get("/duties/balance")
+        def balance(start: str, end: str, session: dict = Depends(commander)) -> dict:
+            return service.balance(session["complex_id"], start, end)
 
         @router.delete("/duties/{duty_id}")
         def cancel(duty_id: str, session: dict = Depends(commander)) -> dict:

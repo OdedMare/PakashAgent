@@ -32,3 +32,9 @@ class DutyAssignRequest(BaseModel):
     note: str = Field(default="", max_length=400)
     # False records a duty already stood: it counts, and blocks nothing.
     blocks: bool = True
+
+
+class DutyApproveRequest(BaseModel):
+    """The suggestion rows the commander kept."""
+
+    rows: List[DutyAssignRequest] = Field(max_length=400)

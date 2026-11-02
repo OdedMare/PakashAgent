@@ -1,0 +1,155 @@
+"""The fairest soldier for every open duty seat: a proposal, never a write.
+
+Pure arithmetic over what `ledger.py` gathered, no model and no repository
+(the same shape as `bl/simulate/`): the commander sees every pick with its
+reason and approves it, or not (D20).
+
+Greedy, a day at a time and a kind of duty at a time, updating the counts
+as it goes -- so the third seat of a week sees the first two. A soldier is
+**ruled out** when they are home on the cycle, hold a hard whole-day
+constraint, already stand a duty that day, or have left. Among the rest
+the order is, first deciding:
+
+1. the fewest weighted duty days over the window (8 weeks back to the span's end);
+2. on a Friday or Saturday, the fewest weekend duties;
+3. the lightest whole load -- duties plus shifts;
+4. no shift of their own that day (no seat to vacate);
+5. the longest since their last duty;
+6. the משמרת and the name, so the same input gives the same answer.
+"""
+
+import datetime
+from typing import Callable, Dict, List, Tuple
+
+from app.bl.complex_duties.values import runs_on
+
+Key = Tuple[str, str]  # (team_id, soldier name)
+
+# Friday and Saturday by `date.weekday()`.
+_WEEKEND = (4, 5)
+# How far back the counts reach.
+WINDOW_DAYS = 56
+
+
+def suggest(
+    types: List[dict],
+    dates: List[datetime.date],
+    soldiers: List[dict],
+    duties: List[dict],
+    shift_days: Dict[Key, set],
+    ruled_out: Callable[[dict, datetime.date], str],
+) -> dict:
+    """`soldiers` carry `team_id`, `team_name` and `name`; `duties` are the
+    מכלול's stored rows over the window (blocking or recorded); `shift_days`
+    is each soldier's dates with a shift; `ruled_out(soldier, day)` names why
+    a soldier cannot stand a duty that day, or is empty."""
+    state = _State(soldiers, duties, shift_days)
+    proposals, unfilled = [], []
+    for day in dates:
+        for duty_type in types:
+            if not duty_type.get("active", True) or not runs_on(duty_type, day):
+                continue
+            open_seats = duty_type["seats"] - state.seated(duty_type["id"], day)
+            for _ in range(max(0, open_seats)):
+                pick = state.best(day, ruled_out)
+                if pick is None:
+                    unfilled.append({"duty_type_id": duty_type["id"],
+                                     "duty_type": duty_type["name"],
+                                     "duty_date": day.isoformat()})
+                    continue
+                proposals.append(dict(
+                    duty_type_id=duty_type["id"], duty_type=duty_type["name"],
+                    team_id=pick["team_id"], team_name=pick["team_name"],
+                    employee=pick["name"], duty_date=day.isoformat(),
+                    reason=state.reason(pick, day),
+                ))
+                state.add(pick, duty_type, day)
+    return {"proposals": proposals, "unfilled": unfilled}
+
+
+class _State:
+    def __init__(self, soldiers, duties, shift_days):
+        self.soldiers = soldiers
+        self.shift_days = shift_days
+        self.load: Dict[Key, int] = {}
+        self.weekend: Dict[Key, int] = {}
+        self.last: Dict[Key, datetime.date] = {}
+        self.on_duty: set = set()          # (key, date)
+        self.by_type: Dict[tuple, int] = {}  # (type_id, date) -> blocking seats
+        for row in duties:
+            day = _day(row.get("duty_date"))
+            if day is None:
+                continue
+            self._count(_key(row["team_id"], row["employee"]), _weight(row), day)
+            if row.get("blocks", True):
+                slot = (row["duty_type_id"], day)
+                self.by_type[slot] = self.by_type.get(slot, 0) + 1
+
+    def _count(self, key: Key, weight: int, day: datetime.date) -> None:
+        self.load[key] = self.load.get(key, 0) + weight
+        self.weekend[key] = self.weekend.get(key, 0) + (day.weekday() in _WEEKEND)
+        if day > self.last.get(key, datetime.date.min):
+            self.last[key] = day
+        self.on_duty.add((key, day))
+
+    def seated(self, type_id: str, day: datetime.date) -> int:
+        return self.by_type.get((type_id, day), 0)
+
+    def best(self, day, ruled_out):
+        free = [soldier for soldier in self.soldiers
+                if (_of(soldier), day) not in self.on_duty and not ruled_out(soldier, day)]
+        if not free:
+            return None
+        weekend = day.weekday() in _WEEKEND
+        return min(free, key=lambda soldier: self._rank(soldier, day, weekend))
+
+    def _rank(self, soldier, day, weekend):
+        key = _of(soldier)
+        shifts = len(self.shift_days.get(key, ()))
+        since = (day - self.last[key]).days if key in self.last else 10 ** 6
+        return (
+            self.load.get(key, 0),
+            self.weekend.get(key, 0) if weekend else 0,
+            self.load.get(key, 0) + shifts,
+            day in self.shift_days.get(key, ()),
+            -since,
+            soldier["team_name"], soldier["name"],
+        )
+
+    def reason(self, soldier, day) -> str:
+        key = _of(soldier)
+        load, shifts = self.load.get(key, 0), len(self.shift_days.get(key, ()))
+        parts = ["%d ימי תורנות ב־8 השבועות האחרונים" % load if load else "בלי תורנויות ב־8 השבועות האחרונים",
+                 "%d משמרות" % shifts]
+        if day.weekday() in _WEEKEND:
+            parts.append("%d תורנויות סופ״ש" % self.weekend.get(key, 0))
+        if day in self.shift_days.get(key, ()):
+            parts.append("שים לב: משובץ/ת למשמרת ביום הזה")
+        return ", ".join(parts)
+
+    def add(self, soldier, duty_type, day) -> None:
+        self._count(_of(soldier), _weight(duty_type), day)
+        slot = (duty_type["id"], day)
+        self.by_type[slot] = self.by_type.get(slot, 0) + 1
+
+
+def _of(soldier: dict) -> Key:
+    return _key(soldier["team_id"], soldier["name"])
+
+
+def _key(team_id, name) -> Key:
+    return (str(team_id), str(name))
+
+
+def _weight(row: dict) -> int:
+    weight = row.get("weight", 1)
+    return max(0, weight) if isinstance(weight, int) and not isinstance(weight, bool) else 1
+
+
+def _day(value):
+    if isinstance(value, datetime.date):
+        return value
+    try:
+        return datetime.date.fromisoformat(str(value or "")[:10])
+    except ValueError:
+        return None

@@ -119,7 +119,7 @@ def _tell_about_duty(team_id: str, complex_id: str, action: str) -> None:
 
 
 complex_duty_service = ComplexDutyService(
-    repository, complex_service, notify=_tell_about_duty,
+    repository, complex_service, notify=_tell_about_duty, schedules=schedule_service,
 )
 
 

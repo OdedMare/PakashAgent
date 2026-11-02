@@ -99,9 +99,9 @@ def setup():
     return service, repo, told, kitchen
 
 
-def _shift(date, name, start, end, status="draft"):
-    return dict(employee="דנה", slot_date=date, shift_name=name, start_time=start,
-                end_time=end, status=status, schedule_id="s-1")
+def _shift(date, name, start, end, status="draft", schedule="s-1"):
+    return dict(id="a-%s-%s" % (date, name), employee="דנה", slot_date=date, shift_name=name,
+                start_time=start, end_time=end, status=status, schedule_id=schedule)
 
 
 def test_assigning_logs_as_the_commander_tells_the_team_and_warns(setup):
@@ -112,7 +112,8 @@ def test_assigning_logs_as_the_commander_tells_the_team_and_warns(setup):
         _shift(TUESDAY, "ערב", "15:00", "23:00"),
     ]
 
-    result = service.assign(COMPLEX, kitchen["id"], TEAM, " דנה ", TUESDAY, "מטבח מרכזי")
+    result = service.assign(COMPLEX, kitchen["id"], TEAM, " דנה ", TUESDAY, "מטבח מרכזי",
+                            resolve=False)
 
     assert result["duty"]["employee"] == "דנה"
     assert [(c["date"], c["shift_name"], c["status"]) for c in result["conflicts"]] == [
@@ -215,3 +216,72 @@ def test_the_roster_lists_every_soldier_of_every_team(setup):
     assert team["name"] == "משמרת א"
     assert [(row["name"], row["inactive_from"]) for row in team["soldiers"]] == [
         ("דנה", ""), ("יוסי", ""), ("רון", "2026-11-05")]
+
+
+
+class _Schedules:
+    """What `collisions.py` asks of the ScheduleService, recorded."""
+
+    def __init__(self, busy=()):
+        self.calls, self.busy = [], set(busy)
+
+    def unassign(self, team_id, assignment_id, reason="", schedule_id=None):
+        self.calls.append(("unassign", assignment_id, reason, current_actor()))
+
+    def start_range_generation(self, team_id, schedule_id, starts_on, ends_on, shifts=None,
+                               keep_existing=False):
+        if schedule_id in self.busy:
+            raise ConflictError("בנייה אחרת רצה על הסידור הזה")
+        self.calls.append(("range", schedule_id, starts_on, ends_on, tuple(shifts), keep_existing))
+
+    def queue_generation(self, team_id, schedule_id):
+        self.calls.append(("queue", schedule_id))
+
+
+def _with_schedules(schedules, today="2026-11-09"):
+    repo, told = _Repo(), []
+    service = ComplexDutyService(repo, _Complexes(), notify=lambda *args: told.append(args),
+                                 schedules=schedules, today=lambda: today)
+    kitchen = service.create_type(COMPLEX, {"name": "מטבח", "seats": 3})
+    return service, repo, told, kitchen
+
+
+def test_a_draft_shift_is_vacated_and_refilled_around_the_board():
+    schedules = _Schedules()
+    service, repo, told, kitchen = _with_schedules(schedules)
+    repo.shifts = [_shift(MONDAY, "לילה", "23:00", "07:00"), _shift(TUESDAY, "ערב", "15:00", "23:00")]
+
+    result = service.assign(COMPLEX, kitchen["id"], TEAM, "דנה", TUESDAY)
+
+    assert [c["outcome"] for c in result["conflicts"]] == ["vacated", "vacated"]
+    assert schedules.calls == [
+        ("unassign", "a-2026-11-09-לילה", "תורנות מכלול: מטבח", "commander:" + COMPLEX),
+        ("unassign", "a-2026-11-10-ערב", "תורנות מכלול: מטבח", "commander:" + COMPLEX),
+        ("range", "s-1", MONDAY, TUESDAY, ("לילה", "ערב"), True),
+        ("queue", "s-1"),
+    ]
+    assert told[-1] == (TEAM, COMPLEX, "הוריד חייל ממשמרת בגלל תורנות מכלול, והמשבצת מושלמת מחדש")
+
+
+def test_a_published_week_and_the_past_are_left_and_the_team_is_told():
+    schedules = _Schedules()
+    service, repo, told, kitchen = _with_schedules(schedules, today=TUESDAY)
+    repo.shifts = [_shift(MONDAY, "לילה", "23:00", "07:00"),
+                   _shift(TUESDAY, "ערב", "15:00", "23:00", status="published", schedule="s-2")]
+
+    result = service.assign(COMPLEX, kitchen["id"], TEAM, "דנה", TUESDAY)
+
+    assert [c["outcome"] for c in result["conflicts"]] == ["past", "published"]
+    assert schedules.calls == []
+    assert "בשבוע שפורסם — יש למצוא מחליף" in told[-1][2]
+
+
+def test_a_week_already_being_built_is_vacated_without_a_refill():
+    schedules = _Schedules(busy={"s-1"})
+    service, repo, _, kitchen = _with_schedules(schedules)
+    repo.shifts = [_shift(TUESDAY, "ערב", "15:00", "23:00")]
+
+    result = service.assign(COMPLEX, kitchen["id"], TEAM, "דנה", TUESDAY)
+
+    assert [c["outcome"] for c in result["conflicts"]] == ["vacated_only"]
+    assert [call[0] for call in schedules.calls] == ["unassign"]

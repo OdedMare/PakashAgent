@@ -89,3 +89,72 @@ def test_a_commander_sets_a_duty_and_the_team_sees_it(repo):  # noqa: F811
     assert (change["action"], change["employee"], change["actor"]) == (
         "complex_duty", "דנה", "commander:" + created["id"])
     assert client.get("/api/complex/duties", params={"start": DAY, "end": DAY}).status_code == 401
+
+
+def test_the_fair_fill_proposes_writes_nothing_and_approval_seats_it(repo):  # noqa: F811
+    team = repo.create_team("משמרת א", "pw-team-1")
+    repo.create_team_profile(team["id"], {"employees": [{"name": "דנה"}, {"name": "יוסי"},
+                                                        {"name": "רון"}],
+                                          "shifts": [{"name": "בוקר"}]})
+    created = repo.create_complex("מכלול", "pw-commander")
+    repo.set_complex_teams(created["id"], [team["id"]])
+    # דנה cannot stand a duty on the 10th: a hard whole-day constraint.
+    repo.set_availability(team["id"], "דנה", DAY, reason="קורס")
+    client, _ = _app(repo)
+    client.post("/api/complex/login", json={"complex_id": created["id"], "password": "pw-commander"})
+    kitchen = client.post("/api/complex/duty-types", json={"name": "מטבח"}).json()
+    # יוסי already stood one last week.
+    assert client.post("/api/complex/duties", json={
+        "duty_type_id": kitchen["id"], "team_id": team["id"], "employee": "יוסי",
+        "duty_date": "2026-11-03", "blocks": False}).status_code == 200
+
+    span = {"start": DAY, "end": "2026-11-11"}
+    suggested = client.post("/api/complex/duties/suggest", params=span).json()
+    picks = [(row["duty_date"], row["employee"]) for row in suggested["proposals"]]
+    assert picks == [(DAY, "רון"), ("2026-11-11", "דנה")]
+    assert suggested["unfilled"] == []
+    assert client.get("/api/complex/duties", params=span).json()["duties"] == []
+
+    approved = client.post("/api/complex/duties/approve", json={"rows": [
+        {key: row[key] for key in ("duty_type_id", "team_id", "employee", "duty_date")}
+        for row in suggested["proposals"]] + [
+        {"duty_type_id": kitchen["id"], "team_id": team["id"], "employee": "יוסי", "duty_date": DAY}]})
+    body = approved.json()
+    assert len(body["saved"]) == 2
+    assert [row["employee"] for row in body["failed"]] == ["יוסי"]  # the seat was taken
+    assert "מאוישים" in body["failed"][0]["error"]
+
+    result = client.get("/api/complex/duties/balance",
+                        params={"start": "2026-11-01", "end": "2026-11-30"}).json()
+    people = {row["employee"]: row["duty_load"] for row in result["people"]}
+    assert people == {"דנה": 1, "יוסי": 1, "רון": 1}
+    assert result["spread"]["gap"] == 0
+
+
+def test_a_duty_on_a_draft_shift_vacates_it_and_queues_the_refill(repo):  # noqa: F811
+    from app.bl.schedule_service import ScheduleService
+
+    team = repo.create_team("משמרת א", "pw-team-1")
+    shift = {"name": "בוקר", "start_time": "07:00", "end_time": "15:00", "days": [],
+             "staffing": [{"days": [], "headcount": 1, "required_roles": []}]}
+    repo.create_team_profile(team["id"], {"workplace": {"name": "א"},
+                                          "employees": [{"name": "דנה"}, {"name": "יוסי"}],
+                                          "shifts": [shift]})
+    created = repo.create_complex("מכלול", "pw-commander")
+    repo.set_complex_teams(created["id"], [team["id"]])
+    schedules = ScheduleService(repo, None)
+    week = schedules.create_blank(team["id"], "2099-03-01", "2099-03-07")
+    schedules.assign(team["id"], "בוקר", "2099-03-03", "דנה", schedule_id=week["id"])
+    complexes = ComplexService(repo, WorkspaceService(repo))
+    duties = ComplexDutyService(repo, complexes, notify=complexes.record, schedules=schedules)
+    kitchen = duties.create_type(created["id"], {"name": "מטבח"})
+
+    result = duties.assign(created["id"], kitchen["id"], team["id"], "דנה", "2099-03-03")
+
+    assert [(c["shift_name"], c["outcome"]) for c in result["conflicts"]] == [("בוקר", "vacated")]
+    stored = repo.get_schedule(week["id"], team["id"])
+    assert [row["employee"] for row in stored["assignments"]] == []
+    assert stored["generation"]["keep_existing"] is True
+    removed = [row for row in repo.change_log(team["id"]) if row["action"] == "removed"]
+    assert removed and removed[0]["reason"] == "תורנות מכלול: מטבח"
+    assert removed[0]["actor"] == "commander:" + created["id"]
