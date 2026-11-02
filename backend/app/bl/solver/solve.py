@@ -17,6 +17,7 @@ from app.bl.schedule_requests import covers
 from app.bl.solver.competence import apply_competence
 from app.bl.solver.cpu_budget import BUDGET
 from app.bl.solver.explain import coverage_notes
+from app.bl.solver import wishes
 from app.bl.solver.fairness import apply_fairness
 from app.bl.solver.model import COVERAGE, Model
 from app.bl.solver.requests import apply_requests
@@ -46,8 +47,10 @@ def solve(problem, time_limit: float = 10.0, workers: int = 8) -> dict:
     apply_stability(model)
     # Threads are taken from the process's budget, so concurrent solves
     # queue instead of each getting a slice of the time it was promised.
+    base = wishes.snapshot(model)
     with BUDGET.threads(max(1, int(workers))) as granted:
         solver, status, phases = _phases(model, max(0.2, float(time_limit)), granted)
+        priced = wishes.price_of_wishes(model, base, solver, time_limit * wishes.SHARE, granted)
     chosen = [_row(problem, name, index) for (name, index), var in sorted(model.x.items())
               if solver.Value(var)]
     _shadow_reasons(problem, chosen)
@@ -55,7 +58,7 @@ def solve(problem, time_limit: float = 10.0, workers: int = 8) -> dict:
     warnings = _warnings(problem, final)
     metrics = _metrics(problem, solver, status, started, final, phases)
     metrics["warnings"] = len(warnings)
-    notes = coverage_notes(problem, chosen) + _notes(solver, model)
+    notes = coverage_notes(problem, chosen) + [priced.get(note, note) for note in _notes(solver, model)]
     if problem.kept_rows:
         metrics.update(absorbed(problem, chosen))
         notes.insert(0, absorbed_note(metrics))

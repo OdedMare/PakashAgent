@@ -135,7 +135,13 @@ and the build still completes.
   an overlapping shift, too little rest, a run of days, weekly hours, a
   reservist's week, another hard request — "free" when nothing applies,
   which points at the time limit. Names are listed for a reason three or
-  fewer share. Its metrics carry the solver's bound and gap (`bound`,
+  fewer share. A broken soft wish is probed by `wishes.py`: the three
+  costliest are solved again with the wish binding, for 30% of the time
+  limit on top of it, and its note says what keeping it would cost — a
+  seat (only when keeping today's coverage beside it is proven
+  impossible), nothing ("the time limit broke it"), or, as a quick check,
+  another wish or the evenness, rest or closure price it would raise. A
+  probe the clock cuts short adds nothing. Its metrics carry the solver's bound and gap (`bound`,
   `gap_pct`, `solver_ms`) and one entry per phase under `phases`
   (`coverage`, `held` with a board, `balance`) — status, time given and
   taken, conflicts, objective, bound and gap — so whether a team needs more
