@@ -63,11 +63,13 @@ def _roles(model: Model, index: int) -> None:
         if role not in present:
             holders = model.on_slot(index, problem.holders(index, lambda p, r=role: r in roles(p)))
             covered = model.bool_or(holders, "role_%d" % index)
-            model.price(MISSING_ROLE, 1 - covered, "", kind="role")
+            model.price(MISSING_ROLE, 1 - covered, "חסר/ה %s ב%s בתאריך %s."
+                        % (role, slot["shift_name"], slot["slot_date"]), kind="role")
     if slot.get("requires_shift_manager") and not any(p.get("is_shift_manager") for p in fixed):
         managers = model.on_slot(index, problem.holders(index, lambda p: bool(p.get("is_shift_manager"))))
         covered = model.bool_or(managers, "manager_%d" % index)
-        model.price(MISSING_ROLE, 1 - covered, "", kind="manager")
+        model.price(MISSING_ROLE, 1 - covered, "אין מפקד/ת משמרת ב%s בתאריך %s."
+                    % (slot["shift_name"], slot["slot_date"]), kind="manager")
 
 
 # -- נחפפים ----------------------------------------------------------------

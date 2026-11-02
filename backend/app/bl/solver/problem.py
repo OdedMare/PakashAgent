@@ -20,6 +20,10 @@ from app.bl.scheduler.availability import effective_availability
 from app.bl.scheduler.slots import build_slots
 from app.common.errors import AgentError
 
+# What a hard availability row says about why it blocks, by its
+# `constraint_type` first, then its `source` (`scheduler/availability.py`).
+_BLOCKED_BY = {"duty": "duty", "rotation": "away", "closure": "away", "retirement": "retired"}
+
 # How far back history still matters: a run of days or a short rest does not
 # start where the period does.
 LOOKBACK_DAYS = 14
@@ -144,26 +148,45 @@ class Problem:
                         list(self.shifts.values()), name in self.shadows)
 
     def _legal(self, name: str, index: int) -> bool:
-        slot = self.slots[index]
-        if not self._eligible(name, slot["shift_name"]):
-            return False
         if any(row["employee"] == name for row in self.fixed_on(index)):
             return False
-        if self._blocked(name, index):
-            return False
-        return not any(
-            request["is_hard"] and request["kind"] == "avoid"
-            and name in request["employees"]
-            and covers(request, slot["shift_name"], slot["slot_date"])
-            for request in self.requests
-        )
+        return not self.refusal(name, index)
+
+    def refusal(self, name: str, index: int) -> str:
+        """Why this person may never stand on this slot, or "" when they may:
+        `ineligible`; a hard availability, named by where it came from
+        (`away` for the rotation or a closure, `duty`, `retired`, else
+        `unavailable`); `away` for presence the profile implies; or `avoid`,
+        a hard request. The same tests legality runs, named, so an empty
+        seat can say who it could not take."""
+        slot = self.slots[index]
+        if not self._eligible(name, slot["shift_name"]):
+            return "ineligible"
+        candidate = self.candidate(name, index)
+        blocking = next((item for item in self.hard if constraint_conflicts(candidate, item)), None)
+        if blocking is not None:
+            return _BLOCKED_BY.get(blocking.get("constraint_type")) \
+                or _BLOCKED_BY.get(blocking.get("source")) or "unavailable"
+        if self._away(name, index):
+            return "away"
+        if any(request["is_hard"] and request["kind"] == "avoid"
+               and name in request["employees"]
+               and covers(request, slot["shift_name"], slot["slot_date"])
+               for request in self.requests):
+            return "avoid"
+        return ""
 
     def _blocked(self, name: str, index: int) -> bool:
         """A hard availability, presence or closure forbids it."""
-        slot = self.slots[index]
+        return self._unavailable(name, index) or self._away(name, index)
+
+    def _unavailable(self, name: str, index: int) -> bool:
         candidate = self.candidate(name, index)
-        if any(constraint_conflicts(candidate, item) for item in self.hard):
-            return True
+        return any(constraint_conflicts(candidate, item) for item in self.hard)
+
+    def _away(self, name: str, index: int) -> bool:
+        """Rotation presence or closure keeps this person home on the slot."""
+        slot = self.slots[index]
         profile = dict(self.profile, shifts=list(self.shifts.values()))
         person = self.people[name]
         status = presence_status(profile, person, slot)

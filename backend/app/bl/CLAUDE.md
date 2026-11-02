@@ -128,7 +128,14 @@ and the build still completes.
   gets whatever they left, so a coverage proven in milliseconds does not
   waste its share. It writes a reason on every row,
   turns every priced term the answer still pays for into a note, and audits
-  the result. Its metrics carry the solver's bound and gap (`bound`,
+  the result. An empty seat, a missing role and a missing shift manager are
+  noted by `explain.py` instead, from the answer: who on the roster could
+  not take it and why — not qualified, home on the rotation, on a duty,
+  absent, a hard `avoid` (`problem.refusal`, the legality tests named), or
+  an overlapping shift, too little rest, a run of days, weekly hours, a
+  reservist's week, another hard request — "free" when nothing applies,
+  which points at the time limit. Names are listed for a reason three or
+  fewer share. Its metrics carry the solver's bound and gap (`bound`,
   `gap_pct`, `solver_ms`) and one entry per phase under `phases`
   (`coverage`, `held` with a board, `balance`) — status, time given and
   taken, conflicts, objective, bound and gap — so whether a team needs more

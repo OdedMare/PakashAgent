@@ -16,6 +16,7 @@ from app.bl.audit import audit
 from app.bl.schedule_requests import covers
 from app.bl.solver.competence import apply_competence
 from app.bl.solver.cpu_budget import BUDGET
+from app.bl.solver.explain import coverage_notes
 from app.bl.solver.fairness import apply_fairness
 from app.bl.solver.model import COVERAGE, Model
 from app.bl.solver.requests import apply_requests
@@ -54,7 +55,7 @@ def solve(problem, time_limit: float = 10.0, workers: int = 8) -> dict:
     warnings = _warnings(problem, final)
     metrics = _metrics(problem, solver, status, started, final, phases)
     metrics["warnings"] = len(warnings)
-    notes = _notes(solver, model)
+    notes = coverage_notes(problem, chosen) + _notes(solver, model)
     if problem.kept_rows:
         metrics.update(absorbed(problem, chosen))
         notes.insert(0, absorbed_note(metrics))
@@ -243,8 +244,12 @@ def _duty_note(load) -> str:
 
 
 def _notes(solver, model: Model) -> List[str]:
+    """Every priced term the answer still pays for, but coverage: an empty
+    seat, role or shift manager is explained from the answer instead
+    (`explain.coverage_notes`), with who could not take it and why."""
     notes = [term.note for term in model.terms
-             if term.note and _value(solver, term.expression) > 0]
+             if term.note and term.kind not in COVERAGE
+             and _value(solver, term.expression) > 0]
     return list(dict.fromkeys(notes))
 
 
