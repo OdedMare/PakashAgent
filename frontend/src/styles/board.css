@@ -218,7 +218,7 @@
 
 .week-rail-day-head span {
   color: var(--text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.62rem;
   direction: ltr;
 }
@@ -3034,7 +3034,7 @@
 .board-load-error-detail {
   font-size: 0.78rem !important;
   color: var(--text-muted) !important;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   word-break: break-word;
 }
 

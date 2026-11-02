@@ -1,6 +1,8 @@
 /* Shared native-inspired neutrals. Blue identifies actions; schedule status
    and per-person colours retain their meaning. Glass belongs to navigation. */
 :root {
+  --font-system: -apple-system, BlinkMacSystemFont, "Inter", "Noto Sans Hebrew", "Arial Hebrew", "Segoe UI", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --bg: #f5f5f7;
   --surface: #ffffff;
   --surface-2: #f9f9fb;
@@ -115,6 +117,7 @@
 
 html {
   color-scheme: light;
+  font-family: var(--font-system);
 }
 
 :root[data-theme="dark"] {
@@ -133,12 +136,15 @@ body,
 button,
 input,
 textarea,
-select {
+select,
+option,
+optgroup,
+dialog {
   /* The system face first: on Apple devices that is SF Pro and SF Hebrew,
      which is most of what makes the app feel native there. Elsewhere Inter
      carries Latin and digits and Noto Sans Hebrew the Hebrew — both loaded
      in the root layout, degrading to system faces if the host is unreachable. */
-  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Noto Sans Hebrew", "Arial Hebrew", "Segoe UI", Arial, sans-serif;
+  font-family: var(--font-system);
   font-size: 15px;
   letter-spacing: -0.01em;
   font-feature-settings: "cv11", "ss01";
@@ -155,6 +161,10 @@ input,
 textarea,
 select {
   color: inherit;
+}
+
+input::file-selector-button {
+  font: inherit;
 }
 
 button {
