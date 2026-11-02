@@ -28,6 +28,11 @@ from app.common.errors import AgentError
 SUMMARY = "השיבוץ נבנה בפותר אילוצים לפי זמינות, כשירות, כללים, בקשות והוגנות."
 _STATUS = {cp_model.OPTIMAL: "optimal", cp_model.FEASIBLE: "feasible"}
 _COLUMNS = ("begins", "ends", "hours", "night", "past")
+# The longest phase one, and with a board the held phase, may each take, as
+# a share of the limit. The last phase takes whatever they left, and never
+# less than its own floor.
+_FIRST_SHARE = 0.3
+_LAST_FLOOR = {False: 0.7, True: 0.4}
 
 
 def solve(problem, time_limit: float = 10.0, workers: int = 8) -> dict:
@@ -41,13 +46,13 @@ def solve(problem, time_limit: float = 10.0, workers: int = 8) -> dict:
     # Threads are taken from the process's budget, so concurrent solves
     # queue instead of each getting a slice of the time it was promised.
     with BUDGET.threads(max(1, int(workers))) as granted:
-        solver, status = _phases(model, max(0.2, float(time_limit)), granted)
+        solver, status, phases = _phases(model, max(0.2, float(time_limit)), granted)
     chosen = [_row(problem, name, index) for (name, index), var in sorted(model.x.items())
               if solver.Value(var)]
     _shadow_reasons(problem, chosen)
     final = _ordered(problem, problem.pins + chosen)
     warnings = _warnings(problem, final)
-    metrics = _metrics(problem, solver, status, started, final)
+    metrics = _metrics(problem, solver, status, started, final, phases)
     metrics["warnings"] = len(warnings)
     notes = _notes(solver, model)
     if problem.kept_rows:
@@ -77,25 +82,61 @@ def _phases(model: Model, time_limit: float, workers: int):
     the held one. Without the middle phase the last one started from an
     arbitrary fill of the change, and within its time limit it often bought
     an improvement by moving people the best answer keeps in place: the same
-    change moved some people on one build and none on the next."""
+    change moved some people on one build and none on the next.
+
+    The last phase gets whatever the earlier ones left of the limit:
+    coverage is usually proven in milliseconds, and a fixed split threw the
+    rest of its share away. Returns the answer's solver and status, and what
+    each phase did (`_phase`)."""
     coverage = model.cost(COVERAGE)
     kept = _kept(model)
-    first, found = _coverage_phase(model, coverage, kept, time_limit * 0.3, workers)
+    share = time_limit * _FIRST_SHARE
+    first, found = _coverage_phase(model, coverage, kept, share, workers)
+    phases = {"coverage": _phase(first, found, share)}
     model.cp.Add(coverage <= _value(first, coverage))
     model.cp.Minimize(model.cost())
     _hint(model, first)
     start = (first, found)
     if kept is not None:
-        start = _held_phase(model, first, time_limit * 0.3, workers) or start
+        held = _held_phase(model, first, share, workers)
+        phases["held"] = _phase(*(held or (None, None)), share)
+        start = held or start
         _hint(model, start[0])
-    last = _solver(time_limit * (0.4 if kept is not None else 0.7), workers)
+    spent = sum(phase["wall_ms"] for phase in phases.values()) / 1000.0
+    remaining = max(time_limit * _LAST_FLOOR[kept is not None], time_limit - spent)
+    last = _solver(remaining, workers)
     status = last.Solve(model.cp)
+    phases["balance"] = _phase(last, status, remaining)
     if status not in _STATUS:
-        return start
+        return start + (phases,)
     if kept is not None and start[0] is not first and \
             last.ObjectiveValue() >= start[0].ObjectiveValue():
-        return start
-    return last, status
+        return start + (phases,)
+    return last, status, phases
+
+
+def _phase(solver, status, limit: float) -> dict:
+    """What one phase did: its verdict, the time it was given and took, and
+    how far its answer may be from the best (`gap` in the objective's units,
+    `gap_pct` relative to the answer). A held phase that found nothing is
+    `unknown`."""
+    measured = {"status": "unknown", "limit_ms": int(limit * 1000), "wall_ms": 0}
+    if solver is None:
+        return measured
+    measured.update(status=solver.StatusName(status).lower(),
+                    wall_ms=int(solver.WallTime() * 1000),
+                    conflicts=int(solver.NumConflicts()), branches=int(solver.NumBranches()))
+    if status in _STATUS:
+        measured.update(_gap(solver))
+    return measured
+
+
+def _gap(solver) -> dict:
+    objective = int(round(solver.ObjectiveValue()))
+    bound = int(round(solver.BestObjectiveBound()))
+    gap = max(0, objective - bound)
+    return {"objective": objective, "bound": bound, "gap": gap,
+            "gap_pct": round(100.0 * gap / max(1, abs(objective)), 2)}
 
 
 def _coverage_phase(model: Model, coverage, kept, seconds: float, workers: int):
@@ -225,7 +266,7 @@ def _warnings(problem, final: List[dict]) -> List[dict]:
     ]
 
 
-def _metrics(problem, solver, status, started, final) -> dict:
+def _metrics(problem, solver, status, started, final, phases) -> dict:
     return {
         "date": problem.dates[0] if problem.dates else "",
         "through": problem.dates[-1] if problem.dates else "",
@@ -237,5 +278,9 @@ def _metrics(problem, solver, status, started, final) -> dict:
         "engine": "solver",
         "solver_status": _STATUS[status],
         "objective": int(solver.ObjectiveValue()),
+        "bound": _gap(solver)["bound"],
+        "gap_pct": _gap(solver)["gap_pct"],
+        "solver_ms": sum(phase["wall_ms"] for phase in phases.values()),
         "variables": len(problem.legal),
+        "phases": phases,
     }

@@ -24,6 +24,7 @@ The code still writes `Optional`, `List`, `Dict`; match the file you are in.
 cd backend
 python -m pytest -q
 uvicorn app.main:app --reload
+python -m benchmarks.solver_bench --save before.json   # solver quality and time
 ```
 
 ## Architecture

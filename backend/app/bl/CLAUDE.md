@@ -123,9 +123,22 @@ and the build still completes.
   best coverage allows, the middle phase holds those rows and fills the
   change in around them, and the last phase may move a kept row only if
   its answer is strictly better than the held one — so the same change
-  does not move people on one build and nobody on the next. It writes a reason on every row,
+  does not move people on one build and nobody on the next. Phase one (and
+  the held phase) may each take up to 30% of the time limit; the last phase
+  gets whatever they left, so a coverage proven in milliseconds does not
+  waste its share. It writes a reason on every row,
   turns every priced term the answer still pays for into a note, and audits
-  the result.
+  the result. Its metrics carry the solver's bound and gap (`bound`,
+  `gap_pct`, `solver_ms`) and one entry per phase under `phases`
+  (`coverage`, `held` with a board, `balance`) — status, time given and
+  taken, conflicts, objective, bound and gap — so whether a team needs more
+  time is read off a build, not guessed.
+
+**The benchmark** (`backend/benchmarks/`, `python -m benchmarks.solver_bench`)
+solves four fixed synthetic teams and measures the answers — unfilled seats,
+wishes broken, spread of shifts and nights, short rests, gap and time — with
+`--save`/`--compare` to put a change to the solver side by side with what it
+replaced. The tests say a schedule is legal; this says whether it got better.
 
 **Spans are up to four weeks** (`slots.plan_spans`). A longer period is
 solved in such blocks, each seeing the rows of the ones before it as fixed.
