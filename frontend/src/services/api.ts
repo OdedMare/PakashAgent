@@ -1273,7 +1273,23 @@ export function deletePreference(rowId: string): Promise<{ status: string }> {
  *  which forces a JSON content-type and would break the boundary.
  */
 export async function previewImport(file: File, options: ImportOptions = {}): Promise<ImportPreview> {
-  const path = "/api/schedule/import/preview";
+  return uploadPreview<ImportPreview>("/api/schedule/import/preview", file, options);
+}
+
+export interface UnitImportPreview {
+  filename: string;
+  sheets: { name: string; rows: number; preview: string[][]; recognized: boolean }[];
+  people: { name: string; sources: string[]; existing: string; candidates: string[] }[];
+  shifts: { name: string; start_time: string; end_time: string; headcount: number;
+    sources: string[]; hours_source: string; counts: number[]; existing: Record<string, unknown> | null }[];
+  warnings: string[];
+}
+
+export function previewUnitImport(file: File): Promise<UnitImportPreview> {
+  return uploadPreview<UnitImportPreview>("/api/profile/import/preview", file, {});
+}
+
+async function uploadPreview<T>(path: string, file: File, options: ImportOptions): Promise<T> {
   const body = new FormData();
   body.append("file", file);
   body.append("options", JSON.stringify(options));
@@ -1290,7 +1306,7 @@ export async function previewImport(file: File, options: ImportOptions = {}): Pr
     console.error(`[api] ✗ POST ${path} → ${response.status}`);
     throw apiError(data, response.status);
   }
-  return data as ImportPreview;
+  return data as T;
 }
 
 /** Store the rows the manager approved. With `schedule_id` they are merged

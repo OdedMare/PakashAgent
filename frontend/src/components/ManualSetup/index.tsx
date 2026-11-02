@@ -30,6 +30,7 @@ import { CheckboxGrid, Field } from "./fields";
 import { CYCLES, CycleSetup, firstGroupAnchor } from "./RotationSetup";
 import type { Cycle } from "./RotationSetup";
 import { useRotationPreview } from "./useRotationPreview";
+import { ImportUnit } from "./ImportUnit";
 
 const DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 const WEEKEND = ["שישי", "שבת"];
@@ -145,6 +146,7 @@ export function ManualSetup({
   const [removedShifts, setRemovedShifts] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [importing, setImporting] = useState(false);
 
   const shiftNames = useMemo(
     () => shifts.map((shift) => text(shift.name)).filter(Boolean),
@@ -328,6 +330,7 @@ export function ManualSetup({
         </div>
         <div className="manual-header-actions">
           <HelpButton />
+          <button type="button" className="ghost-button" disabled={busy} onClick={() => setImporting(true)}>ייבוא הגדרה מאקסל</button>
           {onCancel ? (
             <button type="button" className="ghost-button" onClick={onCancel} disabled={busy}>
               <X size={16} /> ביטול
@@ -342,6 +345,27 @@ export function ManualSetup({
       {error ? <div className="manual-error" role="alert">{error}</div> : null}
 
       <main id="main-content" className="manual-sections">
+        {importing && <ImportUnit teamId={workspace.id} onClose={() => setImporting(false)} onApply={(people, importedShifts) => {
+          setEmployees((current) => {
+            const names = new Set(current.map((p) => text(p.name)));
+            return [...current, ...people.filter((p) => {
+              const name = text(p.name);
+              if (names.has(name)) return false;
+              names.add(name);
+              return true;
+            })];
+          });
+          setShifts((current) => {
+            const merged = [...current];
+            for (const shift of importedShifts) {
+              const index = merged.findIndex((s) => text(s.name) === text(shift.name));
+              if (index < 0) merged.push(shift);
+              else merged[index] = { ...merged[index], ...shift };
+            }
+            return merged;
+          });
+          setImporting(false);
+        }} />}
         <SetupSection tour="setup-workplace" icon={<CalendarClock />} title="היחידה והיציאות הכלליות" hint="מתארים כאן את תמונת היציאות של הצוות; את המבנה האישי מגדירים לכל חייל/ת בנפרד.">
           <div className="manual-grid three">
             <Field label="שם היחידה *">

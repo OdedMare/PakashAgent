@@ -4,6 +4,20 @@
   background: var(--bg);
 }
 
+.unit-import { display: grid; gap: 1rem; min-width: 0; padding: clamp(1rem, 3vw, 2rem); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); }
+.unit-import > header, .unit-import > footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.unit-import h2, .unit-import h3, .unit-import p { margin: 0; }
+.unit-import p, .unit-import li { line-height: 1.65; }
+.unit-import small { color: var(--text-muted); }
+.unit-import-steps { display: flex; flex-wrap: wrap; gap: 0.6rem 1.8rem; padding-inline-start: 1.5rem; color: var(--text-muted); }
+.unit-import-steps [aria-current="step"] { color: var(--primary); font-weight: 700; }
+.unit-import-table { overflow: auto; max-height: 18rem; }
+.unit-import table { border-collapse: collapse; font-size: 0.85rem; }
+.unit-import td { padding: 0.5rem; border: 1px solid var(--border); white-space: pre-wrap; min-width: 5rem; }
+.unit-import summary { cursor: pointer; padding: 0.75rem 0; }
+.unit-import > footer { padding-top: 1rem; border-top: 1px solid var(--border); }
+.manual-header-actions { flex-wrap: wrap; }
+
 .manual-setup-header {
   display: flex;
   align-items: center;

@@ -3,11 +3,12 @@
 import datetime
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
 
 from app.api.contracts import ProfileUpdate, RotationPreviewRequest
 from app.bl.profile_service.workplace import workplace as checked_workplace
 from app.bl.rotation import weekend_preview
+from app.bl.importer.unit import preview_unit
 from app.common.errors import AgentError
 from app.common.time_context import israel_today
 
@@ -17,6 +18,13 @@ _log = logging.getLogger("pakash.profile")
 def build_router(service, guards, schedules=None) -> APIRouter:
     router = APIRouter(prefix="/api/profile", tags=["profile"])
     boss = guards.boss()
+
+    @router.post("/import/preview")
+    async def import_preview(file: UploadFile = File(...),
+                             session: dict = Depends(boss)) -> dict:
+        # Read at most the reader's limit, including when Content-Length is absent.
+        content = await file.read(20 * 1024 * 1024 + 1)
+        return preview_unit(content, file.filename or "", service.current(session["team_id"]))
 
     @router.get("/compiled")
     def compiled(session: dict = Depends(boss)) -> dict:
