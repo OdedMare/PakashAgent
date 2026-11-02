@@ -447,10 +447,11 @@ export function ManualSetup({
                   <Field label="סוג"><select value={text(shift.shift_type) || (shift.is_on_call ? "on_call" : "regular")} onChange={(e) => edit(setShifts, index, "shift_type", e.target.value)}>{Object.entries(SHIFT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
                   <Field label="התחלה"><TimeInput value={text(shift.start_time)} onChange={(time) => edit(setShifts, index, "start_time", time)} /></Field>
                   <Field label="סיום"><TimeInput value={text(shift.end_time)} onChange={(time) => edit(setShifts, index, "end_time", time)} /></Field>
-                  <Field label="תקן א׳–ה׳"><input type="number" min={1} max={100} value={number(shift.headcount, headcount(shift))} onChange={(e) => edit(setShifts, index, "headcount", Number(e.target.value) || 1)} /></Field>
-                  <Field label="תקן סופ״ש"><input title={`חל על: ${closureDays(shift, closure).join(", ")}`} type="number" min={1} max={100} value={shift.weekend_headcount === "" || shift.weekend_headcount === undefined ? "" : String(shift.weekend_headcount)} placeholder="כמו באמצע השבוע" onChange={(e) => edit(setShifts, index, "weekend_headcount", e.target.value === "" ? "" : Math.max(1, Number(e.target.value) || 1))} /></Field>
+                  <Field label="תקן א׳–ה׳"><input type="number" min={0} max={100} value={number(shift.headcount, headcount(shift))} onChange={(e) => edit(setShifts, index, "headcount", seats(e.target.value))} /></Field>
+                  <Field label="תקן סופ״ש"><input title={`חל על: ${closureDays(shift, closure).join(", ")}`} type="number" min={0} max={100} value={shift.weekend_headcount === "" || shift.weekend_headcount === undefined ? "" : String(shift.weekend_headcount)} placeholder="כמו באמצע השבוע" onChange={(e) => edit(setShifts, index, "weekend_headcount", e.target.value === "" ? "" : seats(e.target.value))} /></Field>
                   <Field label="ייעוד"><input value={inputText(shift.purpose)} onChange={(e) => edit(setShifts, index, "purpose", e.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></Field>
                 </div>
+                {offNote(number(shift.headcount, headcount(shift)), shift.weekend_headcount) ? <p className="manual-zero-note">{offNote(number(shift.headcount, headcount(shift)), shift.weekend_headcount)}</p> : null}
                 <label className="manual-check"><input type="checkbox" checked={Boolean(shift.requires_shift_manager)} onChange={(e) => edit(setShifts, index, "requires_shift_manager", e.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
                 <CheckboxGrid label="ימים" values={DAYS} selected={strings(shift.days)} onChange={(value) => edit(setShifts, index, "days", value)} />
                 <RoleOptions roles={roleNames} selected={strings(shift.allowed_roles)} onChange={(value) => edit(setShifts, index, "allowed_roles", value)} />
@@ -547,6 +548,16 @@ function rotationGroups(pattern: string, cycles: DayCycle[]): string[] {
   return cycles.find((cycle) => cyclePattern(cycle) === pattern)?.groups ?? [];
 }
 function number(value: unknown, fallback: number): number { return typeof value === "number" && Number.isFinite(value) ? value : fallback; }
+/** A headcount typed into a field: a whole number from 0 to 100. */
+function seats(value: string): number { return Math.min(100, Math.max(0, Math.floor(Number(value)) || 0)); }
+/** What a headcount of 0 means, said under the shift: it does not run then. */
+function offNote(weekday: number, weekend: unknown): string {
+  const weekendOff = weekend === 0 || (weekend === "" || weekend === undefined ? weekday === 0 : false);
+  if (weekday === 0 && weekendOff) return "תקן 0 בכל הימים: המשמרת לא תיבנה עד שיוגדר לה תקן.";
+  if (weekday === 0) return "תקן 0 באמצע השבוע: המשמרת פועלת רק בסופ״ש.";
+  if (weekend === 0) return "תקן 0 בסופ״ש: המשמרת לא פועלת בסופ״ש.";
+  return "";
+}
 function named(row: Row): boolean { return Boolean(text(row.name)); }
 /** The weekend's own headcount, or "" when it takes the weekday number.
  *  Read off the staffing group marked as the closure's, or an older one

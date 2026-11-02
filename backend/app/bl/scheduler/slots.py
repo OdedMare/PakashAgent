@@ -38,12 +38,16 @@ def build_slots(profile: dict, starts_on: str, ends_on: str) -> List[dict]:
     if (end - start).days + 1 > MAX_PERIOD_DAYS:
         raise AgentError("התקופה ארוכה מדי לבניית סידור אחד")
     shifts = named((profile or {}).get("shifts"))
-    return [
+    slots = [
         _slot(shift, day, hebrew_weekday(day))
         for day in dates_between(start, end)
         for shift in shifts
         if runs_on(shift.get("days"), hebrew_weekday(day))
     ]
+    # A headcount of 0 is the manager saying the shift does not run that
+    # day (off on the weekend, or only on it): no slot, nothing to fill,
+    # and nothing for the audit to call short.
+    return [slot for slot in slots if slot["headcount"] != 0]
 
 
 def _slot(shift: dict, day, weekday: str) -> dict:

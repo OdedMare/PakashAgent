@@ -256,6 +256,12 @@ re-ask answered questions or invent a person's return-to-work date.
   (ימי מילואים). When the manager makes someone a reservist, ask in one
   question for whichever of the three they did not give; leave it unset if
   they say they don't know.
+  A shift's `staffing` is a list of groups: the one with `days: []` is the
+  default, a group naming weekdays overrides it on those days, and the one
+  marked `closure: true` is the weekend. `headcount: 0` means the shift does
+  not run on those days ("תקן 0 בסופ״ש" → the closure group's headcount 0;
+  "only on weekends" → the default group's headcount 0). Send the shift's
+  full `staffing` list when changing it.
   Retain EVERY detail the manager supplied, including role, service type,
   command/training flags and notes. Do not omit a supplied detail just because
   the server could default it. Reuse a workplace default only when it is known
