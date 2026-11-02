@@ -247,6 +247,8 @@ export function ManualSetup({
           notes: text(person.notes),
           competence: text(person.competence),
           reserve_days_per_week: typeof person.reserve_days_per_week === "number" ? person.reserve_days_per_week : null,
+          reserve_min_days: typeof person.reserve_min_days === "number" ? person.reserve_min_days : null,
+          reserve_consecutive: person.reserve_consecutive === true,
           reserve_call: text(person.reserve_call),
         })),
         // A deleted saved shift is still sent here: names are identity keys
@@ -428,6 +430,8 @@ export function ManualSetup({
                   serviceType={text(person.service_type) || "standard"}
                   competence={text(person.competence)}
                   reserveDays={typeof person.reserve_days_per_week === "number" ? person.reserve_days_per_week : null}
+                  reserveMinDays={typeof person.reserve_min_days === "number" ? person.reserve_min_days : null}
+                  reserveConsecutive={person.reserve_consecutive === true}
                   reserveCall={text(person.reserve_call)}
                   onChange={(field, value) => edit(setEmployees, index, field, value)}
                 />

@@ -6,7 +6,10 @@
  *  the solver balances each shift by it so the weaker soldiers are not
  *  staffed together. Choosing "מילואים" opens the three questions a
  *  reservist owes — days a week (a hard cap per Sunday–Saturday week),
- *  call-up type, and competence — in place of that drawer. */
+ *  call-up type, and competence — in place of that drawer, and two optional
+ *  ones for a reservist whose days change week to week: a minimum the
+ *  solver tries to reach, and whether the days must run in one block. The
+ *  solver picks which days. */
 
 export const COMPETENCE_LABELS: Record<string, string> = {
   weak: "חלש/ה",
@@ -20,20 +23,26 @@ export const RESERVE_CALL_LABELS: Record<string, string> = {
   days: "ימי מילואים",
 };
 
-export type SoldierField = "competence" | "reserve_days_per_week" | "reserve_call";
+export type SoldierField = "competence" | "reserve_days_per_week" | "reserve_min_days" | "reserve_consecutive" | "reserve_call";
+
+const dayCount = (days: number) => (days === 1 ? "יום אחד" : `${days} ימים`);
 
 export function SoldierFields({
   serviceType,
   competence,
   reserveDays,
+  reserveMinDays,
+  reserveConsecutive,
   reserveCall,
   onChange,
 }: {
   serviceType: string;
   competence: string;
   reserveDays: number | null;
+  reserveMinDays: number | null;
+  reserveConsecutive: boolean;
   reserveCall: string;
-  onChange: (field: SoldierField, value: string | number | null) => void;
+  onChange: (field: SoldierField, value: string | number | boolean | null) => void;
 }) {
   const competenceField = (
     <label className="soldier-field">
@@ -54,10 +63,25 @@ export function SoldierFields({
             <span>כמה ימים בשבוע יכול/ה להגיע</span>
             <select
               value={reserveDays ?? ""}
-              onChange={(event) => onChange("reserve_days_per_week", event.target.value ? Number(event.target.value) : null)}
+              onChange={(event) => {
+                const days = event.target.value ? Number(event.target.value) : null;
+                onChange("reserve_days_per_week", days);
+                if (days !== null && reserveMinDays !== null && reserveMinDays > days) onChange("reserve_min_days", days);
+              }}
             >
               <option value="">לא ידוע</option>
-              {[1, 2, 3, 4, 5, 6, 7].map((days) => <option key={days} value={days}>{days === 1 ? "יום אחד" : `${days} ימים`}</option>)}
+              {[1, 2, 3, 4, 5, 6, 7].map((days) => <option key={days} value={days}>{dayCount(days)}</option>)}
+            </select>
+          </label>
+          <label className="soldier-field">
+            <span>לפחות (רשות)</span>
+            <select
+              value={reserveMinDays ?? ""}
+              onChange={(event) => onChange("reserve_min_days", event.target.value ? Number(event.target.value) : null)}
+            >
+              <option value="">ללא מינימום</option>
+              {[1, 2, 3, 4, 5, 6, 7].filter((days) => reserveDays === null || days <= reserveDays)
+                .map((days) => <option key={days} value={days}>{dayCount(days)}</option>)}
             </select>
           </label>
           <label className="soldier-field">
@@ -69,7 +93,11 @@ export function SoldierFields({
           </label>
           {competenceField}
         </div>
-        <small>מספר הימים הוא תקרה קשיחה לכל שבוע (ראשון–שבת) בבניית הסידור.</small>
+        <label className="profile-check">
+          <input type="checkbox" checked={reserveConsecutive} onChange={(event) => onChange("reserve_consecutive", event.target.checked)} />
+          <span>הימים ברצף (בלי ימים בודדים באמצע השבוע)</span>
+        </label>
+        <small>מספר הימים הוא תקרה קשיחה לכל שבוע (ראשון–שבת). המינימום הוא יעד: הסידור ישבץ לפחות כך, אלא אם אין משמרות פנויות או שהחייל/ת לא זמין/ה. את הימים עצמם בוחר הסידור לפי הצורך.</small>
       </fieldset>
     );
   }
@@ -91,8 +119,10 @@ export function soldierSummary(person: Record<string, unknown> | undefined): str
   if (COMPETENCE_LABELS[competence]) parts.push(`כשירות ${COMPETENCE_LABELS[competence]}`);
   if (person.service_type === "reserve") {
     const days = typeof person.reserve_days_per_week === "number" ? person.reserve_days_per_week : null;
+    const least = typeof person.reserve_min_days === "number" ? person.reserve_min_days : null;
     const call = typeof person.reserve_call === "string" ? RESERVE_CALL_LABELS[person.reserve_call] : "";
-    const reserve = [days ? `${days} ימים בשבוע` : "", call ?? ""].filter(Boolean).join(", ");
+    const span = days && least && least < days ? `${least}–${days} ימים בשבוע` : days ? `${days} ימים בשבוע` : least ? `לפחות ${least} ימים בשבוע` : "";
+    const reserve = [span, person.reserve_consecutive === true ? "ברצף" : "", call ?? ""].filter(Boolean).join(", ");
     if (reserve) parts.push(`מילואים: ${reserve}`);
   }
   return parts.join(" · ");

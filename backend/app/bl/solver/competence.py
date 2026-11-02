@@ -6,6 +6,17 @@ each Sunday–Saturday week, counting the days already fixed in it (the rest
 of the draft, the last two weeks). Like every other hard rule here, a limit
 made negative by fixed rows is clamped at zero, so the model stays feasible.
 
+**A reservist can be owed a minimum, and a block.** `reserve_min_days` is a
+soft floor on the same week: each day short of it is priced below a soft
+wish and above several shifts of evenness, so a reservist who was called up
+is used, but a hard availability or a full board can still leave them short
+(and the build says so). It is weighed only on a week the span reaches to
+its Saturday; a week cut by the span's end is finished by the next span,
+which sees these rows as fixed. `reserve_consecutive` makes the week's
+worked days one unbroken block (hard): for any two worked days, every day
+between them is worked too. Which days is left to the solver, so a dynamic
+reservist is placed where the board needs them.
+
 **A shift should not be staffed only by the weakest.** `competence` is an
 optional rating — weak, medium, high, excellent — and when the roster rates
 people at more than one level, each slot with two or more seats is pulled
@@ -32,11 +43,16 @@ BELOW_AVERAGE = 4
 ABOVE_AVERAGE = 1
 # Each weak soldier past the first on one shift.
 WEAK_TOGETHER = 150
+# Each day a reservist falls short of their weekly minimum: below a soft wish
+# (1000), above several shifts of evenness (10 per tenth of a shift).
+RESERVE_SHORT = 600
 
 
 def apply_competence(model: Model) -> None:
     for name in model.problem.people:
         _reserve_days(model, name)
+        _reserve_minimum(model, name)
+        _reserve_block(model, name)
     _balance(model)
 
 
@@ -52,6 +68,25 @@ def reserve_days(person: dict) -> Optional[int]:
     except (TypeError, ValueError):
         return None
     return days if 1 <= days <= 7 else None
+
+
+def reserve_minimum(person: dict) -> Optional[int]:
+    """The fewest days a week this reservist should come, or None."""
+    if text(person.get("service_type")) != "reserve":
+        return None
+    try:
+        days = int(person.get("reserve_min_days") or 0)
+    except (TypeError, ValueError):
+        return None
+    if not 1 <= days <= 7:
+        return None
+    cap = reserve_days(person)
+    return min(days, cap) if cap is not None else days
+
+
+def reserve_consecutive(person: dict) -> bool:
+    return text(person.get("service_type")) == "reserve" \
+        and person.get("reserve_consecutive") is True
 
 
 def week_of(day: str) -> str:
@@ -78,6 +113,72 @@ def _reserve_days(model: Model, name: str) -> None:
             weeks.setdefault(week_of(day), []).append(flag)
     for week, flags in weeks.items():
         model.at_most(flags, limit - len(fixed.get(week, set())))
+
+
+def _fixed_days(problem, name: str) -> set:
+    return {row["date"] for row in problem.fixed if row["employee"] == name}
+
+
+def _week_dates(sunday: str) -> List[str]:
+    start = datetime.date.fromisoformat(sunday)
+    return [(start + datetime.timedelta(days=offset)).isoformat() for offset in range(7)]
+
+
+def _reserve_minimum(model: Model, name: str) -> None:
+    problem = model.problem
+    least = reserve_minimum(problem.people[name])
+    if least is None or not problem.dates:
+        return
+    fixed = _fixed_days(problem, name)
+    last = problem.dates[-1]
+    for sunday in sorted({week_of(day) for day in problem.dates}):
+        week = _week_dates(sunday)
+        if week[-1] > last:
+            continue  # the next span finishes this week
+        owed = least - len(fixed.intersection(week))
+        if owed <= 0:
+            continue
+        flags = [flag for flag in (model.worked(name, day) for day in week if day not in fixed)
+                 if flag is not None]
+        short = model.cp.NewIntVar(0, owed, "reserve_short")
+        model.cp.Add(short >= owed - sum(flags))
+        model.price(RESERVE_SHORT, short,
+                    "%s (מילואים) שובץ/ה לפחות מ-%d ימים בשבוע שמתחיל ב-%s" % (name, least, sunday),
+                    "reserve")
+
+
+def _reserve_block(model: Model, name: str) -> None:
+    """Hard: the week's worked days have no gap. A day the span does not
+    reach is unknown and constrains nothing; two fixed days around a gap no
+    variable can close are already decided and are left alone, so the model
+    stays feasible."""
+    problem = model.problem
+    if not reserve_consecutive(problem.people[name]) or not problem.dates:
+        return
+    fixed = _fixed_days(problem, name)
+    first, last = problem.dates[0], problem.dates[-1]
+    for sunday in sorted({week_of(day) for day in problem.dates}):
+        values = []
+        for day in _week_dates(sunday):
+            if day in fixed:
+                values.append(1)
+            elif day > last:
+                values.append(None)  # a later span decides it
+            else:
+                # Before the span and not fixed: not worked. In the span: the flag, or 0.
+                flag = model.worked(name, day) if day >= first else None
+                values.append(flag if flag is not None else 0)
+        for i in range(7):
+            for k in range(i + 2, 7):
+                ends = (values[i], values[k])
+                # Compare by identity: `==` on a CP-SAT variable builds a constraint.
+                if any(end is None for end in ends) or all(isinstance(end, int) for end in ends):
+                    continue
+                for j in range(i + 1, k):
+                    middle = values[j]
+                    if middle is None or (isinstance(middle, int) and middle == 1):
+                        continue
+                    model.cp.Add(values[i] + values[k] - 1 <= middle)
 
 
 # -- competence ------------------------------------------------------------

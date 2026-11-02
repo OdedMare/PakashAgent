@@ -72,25 +72,41 @@ def _soldier_fields(row: dict, service_type: str) -> dict:
     competence = text(row.get("competence"))
     if competence and competence not in COMPETENCE_LEVELS:
         raise AgentError("רמת הכשירות אינה תקינה (חלש, בינוני, גבוה או מצטיין)")
-    fields = {"competence": competence, "reserve_days_per_week": None, "reserve_call": ""}
+    fields = {"competence": competence, "reserve_days_per_week": None,
+              "reserve_min_days": None, "reserve_consecutive": False, "reserve_call": ""}
     if service_type != "reserve":
         return fields
-    days = row.get("reserve_days_per_week")
-    if days not in (None, ""):
-        if isinstance(days, bool) or not isinstance(days, (int, float, str)):
-            raise AgentError("מספר ימי המילואים בשבוע חייב להיות בין 1 ל-7")
-        try:
-            days = int(float(days))
-        except ValueError:
-            raise AgentError("מספר ימי המילואים בשבוע חייב להיות בין 1 ל-7")
-        if not 1 <= days <= 7:
-            raise AgentError("מספר ימי המילואים בשבוע חייב להיות בין 1 ל-7")
-        fields["reserve_days_per_week"] = days
+    days = _week_days(row.get("reserve_days_per_week"), "מספר ימי המילואים בשבוע")
+    least = _week_days(row.get("reserve_min_days"), "מינימום ימי המילואים בשבוע")
+    if least is not None and days is not None and least > days:
+        raise AgentError("מינימום ימי המילואים בשבוע גדול ממספר הימים שהחייל/ת מגיע/ה")
+    fields["reserve_days_per_week"] = days
+    fields["reserve_min_days"] = least
+    consecutive = row.get("reserve_consecutive")
+    if consecutive not in (None, "") and not isinstance(consecutive, bool):
+        raise AgentError("reserve_consecutive חייב להיות ערך בוליאני")
+    fields["reserve_consecutive"] = bool(consecutive)
     call = text(row.get("reserve_call"))
     if call and call not in _RESERVE_CALLS:
         raise AgentError("סוג הזימון למילואים אינו תקין (צו או ימי מילואים)")
     fields["reserve_call"] = call
     return fields
+
+
+def _week_days(value, what: str):
+    """A count of days in one week, 1–7, or None when not stated."""
+    if value in (None, ""):
+        return None
+    error = "%s חייב להיות בין 1 ל-7" % what
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise AgentError(error)
+    try:
+        days = int(float(value))
+    except ValueError:
+        raise AgentError(error)
+    if not 1 <= days <= 7:
+        raise AgentError(error)
+    return days
 
 
 def _validate_recurring(rows: list) -> None:
@@ -135,7 +151,8 @@ def employee_item(item: dict) -> dict:
         "can_train": bool(item.get("can_train")),
         "notes": item.get("notes") or "",
         "competence": item.get("competence") or "",
-        **{key: item[key] for key in ("service_type", "reserve_days_per_week", "reserve_call")
+        **{key: item[key] for key in ("service_type", "reserve_days_per_week", "reserve_min_days",
+                                 "reserve_consecutive", "reserve_call")
            if item.get(key) not in (None, "")},
     }
 

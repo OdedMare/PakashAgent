@@ -256,6 +256,11 @@ re-ask answered questions or invent a person's return-to-work date.
   (ימי מילואים). When the manager makes someone a reservist, ask in one
   question for whichever of the three they did not give; leave it unset if
   they say they don't know.
+  Two optional fields serve a reservist whose days change week to week:
+  `reserve_min_days` (1–7, at most `reserve_days_per_week`; the solver tries
+  to give at least that many days, a soft floor) and `reserve_consecutive`
+  (`true`: the week's days run in one unbroken block). The solver picks the
+  days; never ask which days unless the manager says they are fixed.
   A shift's `staffing` is a list of groups: the one with `days: []` is the
   default, a group naming weekdays overrides it on those days, and the one
   marked `closure: true` is the weekend. `headcount: 0` means the shift does

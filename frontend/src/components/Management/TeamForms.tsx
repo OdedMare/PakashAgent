@@ -49,6 +49,10 @@ export function EmployeeForm({
   const [reserveDays, setReserveDays] = useState<number | null>(
     typeof initial?.reserve_days_per_week === "number" ? initial.reserve_days_per_week : null,
   );
+  const [reserveMinDays, setReserveMinDays] = useState<number | null>(
+    typeof initial?.reserve_min_days === "number" ? initial.reserve_min_days : null,
+  );
+  const [reserveConsecutive, setReserveConsecutive] = useState(initial?.reserve_consecutive === true);
   const [reserveCall, setReserveCall] = useState(text(initial?.reserve_call));
   const initialEligible = Array.isArray(initial?.eligible_shifts)
     ? initial.eligible_shifts.filter((value): value is string => typeof value === "string")
@@ -59,7 +63,7 @@ export function EmployeeForm({
     <form className="constraint-form profile-form" onSubmit={(event) => {
       event.preventDefault();
       if (!name.trim()) return;
-      onSubmit({ name: name.trim(), role: role.trim(), eligible_shifts: eligible, exit_pattern: exitPattern, rotation_group: rotationGroup, service_type: serviceType, counts_toward_staffing: countsTowardStaffing, is_shift_manager: isShiftManager, can_train: canTrain, notes: notes.trim(), competence, reserve_days_per_week: reserveDays, reserve_call: reserveCall });
+      onSubmit({ name: name.trim(), role: role.trim(), eligible_shifts: eligible, exit_pattern: exitPattern, rotation_group: rotationGroup, service_type: serviceType, counts_toward_staffing: countsTowardStaffing, is_shift_manager: isShiftManager, can_train: canTrain, notes: notes.trim(), competence, reserve_days_per_week: reserveDays, reserve_min_days: reserveMinDays, reserve_consecutive: reserveConsecutive, reserve_call: reserveCall });
     }}>
       <label>
         <span>שם *</span>
@@ -89,10 +93,14 @@ export function EmployeeForm({
         serviceType={serviceType}
         competence={competence}
         reserveDays={reserveDays}
+        reserveMinDays={reserveMinDays}
+        reserveConsecutive={reserveConsecutive}
         reserveCall={reserveCall}
         onChange={(field, value) => {
           if (field === "competence") setCompetence(String(value ?? ""));
           else if (field === "reserve_call") setReserveCall(String(value ?? ""));
+          else if (field === "reserve_consecutive") setReserveConsecutive(value === true);
+          else if (field === "reserve_min_days") setReserveMinDays(typeof value === "number" ? value : null);
           else setReserveDays(typeof value === "number" ? value : null);
         }}
       />

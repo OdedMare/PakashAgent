@@ -94,7 +94,10 @@ and the build still completes.
   a priced term (soft), and prices soft availability.
 - `competence.py` caps a reservist (`service_type: reserve`) at
   `reserve_days_per_week` worked days per Sunday–Saturday week (hard, fixed
-  days counted), and — when the roster rates people at two or more
+  days counted), prices each day short of `reserve_min_days` on a week the
+  span reaches to its Saturday (`RESERVE_SHORT`, below a wish), keeps a
+  `reserve_consecutive` reservist's days in one block (hard; days past the
+  span are left to the next one), and — when the roster rates people at two or more
   `competence` levels (weak/medium/high/excellent; optional, unrated counts
   as the mean) — pulls every slot of two or more seats towards the team's
   average strength, a shortfall priced four times an excess, plus a price
