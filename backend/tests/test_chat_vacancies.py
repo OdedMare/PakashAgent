@@ -1,7 +1,7 @@
 """A chat change that leaves a seat empty: the solver picks who fills it."""
 
-from app.bl.chat_vacancies import vacated_slots
-from app.bl.manager_chat import ManagerChatService
+from app.bl.chat.vacancies import vacated_slots
+from app.bl.chat.service import ManagerChatService
 from app.bl.schedule_service import ScheduleService
 from tests.test_manager_chat import ChatRepo, TEAM, MORNING, converse, setup, sickness, translation
 from tests.test_schedule_api import _ScriptedLlm

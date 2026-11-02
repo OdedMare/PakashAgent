@@ -229,6 +229,9 @@ export interface AdminTeam {
   pending_requests: number;
   pending_swaps: number;
   last_activity: string | null;
+  /** The מכלול this team is linked to (D43), if any. */
+  complex_id?: string | null;
+  complex_name?: string | null;
 }
 
 export interface AdminTeamDetail extends AdminTeam {
@@ -295,6 +298,73 @@ export interface TeamView extends Workspace {
   profile: WorkplaceProfile | null;
   /** What a profile save sends back as `expected_revision`. */
   profile_revision?: number | null;
+  /** The מכלול this workplace belongs to (D43), for a boss session. */
+  complex?: { id: string; name: string } | null;
+  /** The boss session is the מכלול commander's, not the manager's. */
+  commander?: boolean;
+}
+
+// --- a מכלול: workplaces under one commander (D43) ---------------------------
+
+export interface ComplexSummary {
+  id: string;
+  name: string;
+}
+
+export interface ComplexTeam {
+  id: string;
+  name: string;
+  active: boolean;
+  has_profile: boolean;
+  shifts: { name: string; start_time: string; end_time: string }[];
+  employees: number;
+}
+
+export interface CommanderView {
+  id: string;
+  name: string;
+  teams: ComplexTeam[];
+}
+
+/** One period of one workplace, as the combined board draws it. */
+export interface ComplexPeriod {
+  id: string;
+  starts_on: string;
+  ends_on: string;
+  status: "draft" | "published";
+  slots: {
+    shift_name: string;
+    slot_date: string;
+    start_time: string;
+    end_time: string;
+    headcount: number;
+  }[];
+  /** `counts` is false for a נחפף/ת: on the shift, not in a seat. */
+  assignments: { employee: string; shift: string; date: string; counts?: boolean }[];
+  warnings: number;
+}
+
+export interface ComplexBoard {
+  start: string;
+  end: string;
+  teams: (ComplexTeam & { periods: ComplexPeriod[] })[];
+}
+
+export interface CommanderNotice {
+  id: string;
+  complex_name: string;
+  action: string;
+  count: number;
+  created_at: string;
+}
+
+export interface AdminComplex {
+  id: string;
+  name: string;
+  notes: string;
+  active: boolean;
+  created_at: string;
+  teams: { id: string; name: string; active: boolean }[];
 }
 
 /** One advisory finding from `bl/audit.py`.
@@ -608,7 +678,8 @@ export interface Constraint {
   end_time: string;
   is_hard: boolean;
   reason: string;
-  source: "manager" | "agent" | "employee_reported" | "setup";
+  /** `complex`: a מכלול duty, set and cancelled by the מכלול commander only. */
+  source: "manager" | "agent" | "employee_reported" | "setup" | "complex";
   constraint_type: "availability" | "duty";
 }
 
@@ -688,6 +759,21 @@ export interface EmployeeLoad {
    *  somebody the roster no longer lists. */
   exit_pattern: string;
   rotation_group: string;
+  /** מכלול duties in the span, those on Friday/Saturday, and their load in
+   *  shifts by each type's weight. `load` is `shifts` + `duty_load`: what the
+   *  solver evens out, and what the list is ordered by. Zero without duties. */
+  duties?: number;
+  weekend_duties?: number;
+  duty_load?: number;
+  load?: number;
+}
+
+/** One kind of מכלול duty in the span. */
+export interface DutyLoad {
+  duty: string;
+  count: number;
+  load: number;
+  weight: number;
 }
 
 /** How many audit findings of one code. A count, never a score. */
@@ -725,6 +811,10 @@ export interface ShiftStats {
    *  board's own tile leaves them out. */
   conflicts: number;
   constraint_pressure: ConstraintPressure;
+  /** מכלול duties in the span. Absent or zero for a team outside a מכלול. */
+  total_duties?: number;
+  total_duty_load?: number;
+  by_duty?: DutyLoad[];
 }
 
 /** Everything the management area opens with, in one call. */
@@ -919,6 +1009,9 @@ export interface EmployeeView {
    *  not have to compare a grid against memory to find out. */
   unseen: number;
   shifts: Record<string, unknown>[];
+  /** Their own מכלול duties, a week back to eight weeks ahead (D44). Shown
+   *  whether or not a week is published: the מכלול commander sets them. */
+  duties?: { duty_date: string; duty_type: string; blocks: boolean }[];
 }
 
 /** A change-log entry as the employee sees it — the manager's row plus
@@ -1256,4 +1349,101 @@ export interface ImportPreview {
   overlaps: { id: string; starts_on: string; ends_on: string; status: string }[];
   warnings: string[];
   summary: string;
+}
+
+/** A מכלול's kind of duty (מטבח, שמירה…), set by its commander. `days` are
+ *  weekday keys ("ראשון" … "שבת"); empty runs every day. `weight` is how many
+ *  shifts one duty day counts as in fairness and statistics. */
+export interface DutyType {
+  id: string;
+  name: string;
+  seats: number;
+  days: string[];
+  weight: number;
+  active: boolean;
+}
+
+/** One soldier on one duty for one whole day. `blocks: false` is a duty
+ *  recorded after the fact: it counts, and blocks nothing. */
+export interface ComplexDuty {
+  id: string;
+  duty_type_id: string;
+  duty_type: string;
+  weight: number;
+  team_id: string;
+  team_name: string;
+  employee: string;
+  duty_date: string;
+  note: string;
+  blocks: boolean;
+}
+
+export interface DutyBoard {
+  start: string;
+  end: string;
+  types: DutyType[];
+  duties: ComplexDuty[];
+}
+
+/** A stored shift a new duty now blocks: the duty is saved, and `outcome`
+ *  says what became of the shift. `vacated`: taken off a draft and being
+ *  refilled around the board; `vacated_only`: taken off, the refill could
+ *  not open (another build running); `published`: left on a published week,
+ *  its commander told; `past`: left as it stood. */
+export interface DutyConflict {
+  outcome?: "vacated" | "vacated_only" | "published" | "past";
+  employee?: string;
+  team_id?: string;
+  schedule_id: string;
+  status: "draft" | "published";
+  shift_name: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+}
+
+export interface DutyRosterTeam {
+  id: string;
+  name: string;
+  active: boolean;
+  soldiers: { name: string; role: string; inactive_from: string }[];
+}
+
+/** One pick of "מלא בהוגנות": a proposal, saved only on approval. */
+export interface DutyProposal {
+  duty_type_id: string;
+  duty_type: string;
+  team_id: string;
+  team_name: string;
+  employee: string;
+  duty_date: string;
+  reason: string;
+}
+
+export interface DutySuggestion {
+  start: string;
+  end: string;
+  window_start: string;
+  proposals: DutyProposal[];
+  /** Seats nobody could stand: everyone home, constrained or on duty. */
+  unfilled: { duty_type_id: string; duty_type: string; duty_date: string }[];
+}
+
+export interface DutyApproval {
+  saved: ComplexDuty[];
+  conflicts: DutyConflict[];
+  failed: (DutyProposal & { error: string })[];
+}
+
+/** The מכלול's duty balance over a span. */
+export interface DutyBalance {
+  start: string;
+  end: string;
+  people: {
+    team_id: string; team_name: string; employee: string; duties: number;
+    duty_load: number; weekend_duties: number; recorded: number; shifts: number; load: number;
+  }[];
+  teams: { team_id: string; team_name: string; soldiers: number; duties: number; duty_load: number; average: number }[];
+  types: { duty_type_id: string; duty: string; filled: number; required: number; weight: number }[];
+  spread: { most: number; least: number; gap: number };
 }

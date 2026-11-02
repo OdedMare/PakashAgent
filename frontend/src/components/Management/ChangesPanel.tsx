@@ -9,7 +9,7 @@ import type { DayCycle } from "@/types";
 import { ConfirmDeparture } from "./ConfirmDeparture";
 import { DepartureCovers } from "./DepartureCovers";
 import { ReplacementPanel } from "./ReplacementPanel";
-import { EmployeeForm, ShiftForm } from "./TeamPanel";
+import { EmployeeForm, ShiftForm } from "./TeamForms";
 
 type Action = "replace" | "soldier" | "remove" | "shift";
 

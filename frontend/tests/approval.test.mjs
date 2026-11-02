@@ -51,6 +51,8 @@ function hook(file, name, api, args = [], stored = {}) {
       require(id) {
         if (id === "react") return react;
         if (id === "@/services/api") return api;
+        // A .tsx component module; the hook reads only its date formatter.
+        if (id === "@/components/DateInput") return { displayDate: (day) => day };
         if (id.startsWith(".")) return load(path.resolve(path.dirname(filename), `${id}.ts`));
         throw new Error(`Unexpected import: ${id}`);
       },

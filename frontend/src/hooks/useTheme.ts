@@ -21,10 +21,12 @@ export function useTheme() {
 }
 
 function current(): Theme {
-  const applied = document.documentElement.dataset.theme as Theme | undefined;
-  if (applied) return applied;
-  const stored = window.localStorage.getItem(STORAGE_KEY) as Theme | null;
-  const initial = stored ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  const applied = document.documentElement.dataset.theme;
+  if (applied === "light" || applied === "dark") return applied;
+  const stored = window.localStorage.getItem(STORAGE_KEY);
+  const initial = stored === "light" || stored === "dark"
+    ? stored
+    : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   document.documentElement.dataset.theme = initial;
   return initial;
 }

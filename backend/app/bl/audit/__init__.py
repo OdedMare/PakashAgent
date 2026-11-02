@@ -39,7 +39,7 @@ from app.bl.audit.codes import (
     UNAVAILABLE,
     UNFILLED,
 )
-from app.bl.audit.constraints import constraint_conflicts
+from app.bl.audit.constraints import constraint_conflicts, is_whole_day
 from app.bl.audit.reports import fairness, load_history, personal_summary
 from app.bl.audit.staffing_rules import counts_toward_staffing, required_headcount
 from app.bl.audit.stats import shift_stats
@@ -48,6 +48,7 @@ from app.bl.audit.window import in_window, warning_in_window
 __all__ = [
     "audit", "personal_summary", "fairness", "load_history", "shift_stats",
     "counts_toward_staffing", "required_headcount", "constraint_conflicts",
+    "is_whole_day",
     "in_window", "warning_in_window",
     "OVER_HOURS", "CONSECUTIVE", "SHORT_REST", "DOUBLE_BOOKED",
     "UNAVAILABLE", "UNFILLED", "OVERSTAFFED", "MISSING_ROLE",

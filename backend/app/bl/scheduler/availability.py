@@ -56,10 +56,12 @@ def _explicit_rows(rows: Any, start, end) -> List[dict]:
             continue
         parsed = parse_date(date)
         constraint_type = bounded(row.get("constraint_type")) or "availability"
-        earliest = start - datetime.timedelta(days=1) \
-            if start is not None and constraint_type == "duty" else start
+        # A duty may reach a night shift on either edge: the day before the
+        # span (crossing into its first morning), or the day after it (from
+        # midnight, over the last night).
+        reach = datetime.timedelta(days=1 if constraint_type == "duty" else 0)
         if start is not None and end is not None and (
-            parsed is None or parsed < earliest or parsed > end
+            parsed is None or parsed < start - reach or parsed > end + reach
         ):
             continue
         explicit.append({

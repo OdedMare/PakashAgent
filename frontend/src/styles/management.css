@@ -1600,6 +1600,11 @@
   background: var(--hue-violet);
 }
 
+.stats-legend-swatch.is-duty {
+  margin-inline-start: 0.5rem;
+  background: var(--hue-teal);
+}
+
 /* Days: vertical columns, one per date in the period. */
 
 .day-bars {
@@ -1780,6 +1785,25 @@
 
 .load-night {
   color: var(--hue-violet);
+}
+
+/* מכלול duties: a second segment after the shifts, in the load they count
+   as. Teal, like the legend: a duty is load carried, not a finding. */
+.load-track.has-duty {
+  display: flex;
+  gap: 2px;
+}
+
+.load-fill-duty {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  background: var(--hue-teal);
+  border-radius: 999px;
+}
+
+.load-duty {
+  color: var(--hue-teal);
 }
 
 .load-conflict {

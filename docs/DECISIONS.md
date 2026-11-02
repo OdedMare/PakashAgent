@@ -179,7 +179,7 @@ The management calendar lets the manager drag an assignment to another slot.
 The drop **does not write**. It opens a confirmation that collects the
 manager's reason, and only that dialog applies the move.
 
-*Why:* [D3](#d3--the-agent-decides-code-only-audits-) says changes happen by
+*Why:* [D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34) says changes happen by
 talking, and [D8](#d8--two-reasons-both-required) requires two reasons on
 every change. A drag that wrote directly would satisfy neither — the
 `change_log` would gain a row nobody could account for, which is the one
@@ -257,7 +257,7 @@ unauthenticated form bolted onto the share link.
   unclaimed visitor is what it was.
 - **The audit stays advisory.** A pending request is not a constraint and is
   invisible to `audit.py` until approved. Approving one is what makes it
-  countable — which keeps [D3](#d3--the-agent-decides-code-only-audits-)
+  countable — which keeps [D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)
   intact rather than letting a submission silently change the arithmetic.
 - **The manager remains the sole decider.** Approval is a manager action, and
   a rejection carries the manager's reason.
@@ -308,7 +308,7 @@ that `apply` can read, and `bl/briefing.py` returns exactly three keys —
 
 *Why this shape and not autonomy:* "be proactive" reads like a request for an
 agent that acts. Acting would reverse three decisions at once —
-[D3](#d3--the-agent-decides-code-only-audits-) (the manager decides what
+[D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34) (the manager decides what
 lands), [D8](#d8--two-reasons-both-required) (every change carries the
 manager's reason, which only they can supply), and
 [D12](#d12--dragging-a-shift-is-a-proposal-not-an-edit) (even a *drag* is only
@@ -468,7 +468,7 @@ never made.
 
 **The audit does not move.** `bl/audit.py` runs on a hand-built week exactly
 as it runs on a generated one, and it still only warns
-([D3](#d3--the-agent-decides-code-only-audits-)). This is the *cheap* half of
+([D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)). This is the *cheap* half of
 the product — pure arithmetic, no model — so a manually built schedule is
 fully checked even though nothing about it was generated.
 
@@ -513,7 +513,7 @@ through the unchanged propose-then-confirm path.
 whole period and asks for operations, which works for a single absence and
 stops working the moment a question needs four countable things resolved in
 order. Each of those is what
-[D3](#d3--the-agent-decides-code-only-audits-) already assigns to code —
+[D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34) already assigns to code —
 arithmetic over a roster is what a model gets subtly wrong in a way that
 reads exactly like getting it right. Naming the questions moves each one to
 the side of the line D3 already drew, rather than drawing a new one.
@@ -635,7 +635,7 @@ screen rather than one warning.
 **D3 is untouched, and this is the reason the rest holds.** Nothing here
 blocks: the board opens, the scheduler runs on a thin profile and returns a
 thin schedule, and the audit warns exactly as it always did
-([D3](#d3--the-agent-decides-code-only-audits-)). The gaps are *reported*.
+([D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)). The gaps are *reported*.
 A partial profile that refused to schedule would be the audit becoming a
 gate, arriving through a side door.
 
@@ -744,7 +744,7 @@ write ([D10](#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold
 **⚠️ This is not the audit becoming a gate.** Nothing here refuses a change
 the manager wants; it refuses one the *agent* would have aimed by guessing.
 Once the target is named, the placement proceeds over every warning exactly
-as before ([D3](#d3--the-agent-decides-code-only-audits-)).
+as before ([D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)).
 
 **A tool failure is not an ambiguous request.** Nothing matching found, a
 technical error, and "which of these did you mean" are three different
@@ -1385,6 +1385,209 @@ manager maps to a declared shift, to an absence, or to nothing.
 What this gives up: a layout is one shape per sheet. A sheet mixing two
 unrelated tables needs its data range narrowed (`first_line`/`last_line`)
 or splitting. Colours carry no meaning to the importer.
+
+## D43 — A מכלול joins several משמרות under one מפקד מכלול *(amends D10, D28)*
+
+Some units are not one shift but several independent ones that together make
+one large shift — a **מכלול**. Each part is a **משמרת** with its own
+commander, the **מפקד משמרת**; above them a **מפקד מכלול** sees and edits all
+of them.
+
+*Words.* In code a משמרת is a team (`teams`) and its commander is the boss
+role; on screen they are **משמרת** and **מפקד/ת משמרת**, and the login door
+says so. "סוג משמרת" stays the name of a shift type (בוקר, לילה) inside one.
+(The roster badge "מפקד/ת" — someone qualified to command a shift on the
+board — is older and unrelated.)
+
+**The parts stay teams.** A משמרת in a מכלול is an ordinary team in every
+respect: its own roster, shift types, rotations, rules, constraints,
+requests, solver builds, agent chat, statistics and share link. Nothing in a
+team changes by joining. A מכלול is a row above teams (`complexes`, with
+`teams.complex_id`); it holds no schedule of its own. A team belongs to at
+most one מכלול, and linking one already in another is refused, not moved.
+
+**Who does what:**
+
+- **The operator** (צוות משמרות זהב, `/admin`, tab "מכלולים") opens a מכלול
+  from **existing** teams, changes its membership, renames, suspends and
+  deletes it (deleting removes the grouping only), and issues and resets the
+  **מפקד מכלול password** — shown once on a hand-over card, kept only as a
+  scrypt hash, like a team's.
+- **A מפקד משמרת** signs in with the team password exactly as before, sees
+  and edits only their own משמרת, and publishes their own schedule. The
+  password stays theirs: a commander's session is refused at
+  `/api/workspace/password` (`guards.own_manager()`).
+- **A מפקד מכלול** signs in at the login page's third door ("מפקד מכלול",
+  shown only when a מכלול exists) on a cookie of their own,
+  `pakash_commander`. They land on the **combined board** — every משמרת's
+  shifts side by side with every soldier, narrowed to one משמרת and then to
+  one shift type, over a day, a week, two weeks or a month — and a
+  "המשמרות" page with each משמרת's coverage, open seats and warnings.
+  "כניסה לניהול" opens a משמרת with **every power its commander has**: the
+  board, building, the agent, statistics, the roster, setup, constraints,
+  requests and publishing. The **agent, statistics and changes** are also
+  pages of the מכלול screen itself: a row on top picks the משמרת, and the
+  page renders that משמרת's own `AgentChat`, `Stats` and `ChangesPanel` —
+  not copies — after opening it on the commander's session exactly as
+  "כניסה לניהול" does. Which of the two the commander is in ("entered" or
+  "on the מכלול screen") is remembered per browser tab, since the cookie is
+  the same in both.
+- **A soldier** sees their own משמרת, as today. The מכלול is invisible to
+  them.
+
+**Entering is an ordinary boss cookie, marked.** `POST /api/complex/teams/
+{id}/enter` issues `pakash_session` for that team with `commander` set to
+the מכלול's id. Every manager route therefore serves the commander
+unchanged; `Guards.visitor_session` re-checks on each request (cached ten
+seconds, cleared by the console at once) that the team is still linked to
+that מכלול and both are active, so unlinking or suspending ends access on
+the next request. The commander's chats are their own (`manager_id`
+`commander-<id>`), the same from any browser.
+
+**Constraints and rules stay in the משמרת.** There are no מכלול-wide rules:
+no site-wide minimum, no rest counted across משמרות. Each solver runs on its
+own data. The combined board only reads — counting seats as each stored grid
+states them — and is not a second audit.
+
+**A soldier belongs to one משמרת.** Moving a soldier means moving them
+inside their משמרת's schedule. Seating someone from one משמרת in another's
+shift is deliberately left out: it would need a person known to two
+rosters, a rule for whose constraints apply, and a guard against one person
+being placed in both at once.
+
+**A מפקד מכלול's edit reaches the מפקד משמרת.** Every write they make inside
+a משמרת is recorded in its change log under `commander:<id>`, and — by the
+middleware in `main.py`, after the write succeeded — as a row in
+`commander_notices` named in the commander's words ("פרסם סידור", "שינה
+שיבוץ בלוח", "שינה את הגדרות המשמרת"…; checks and previews are not told).
+Repeats within ten minutes fold into one row with a count. A `commander`
+signal wakes the משמרת commander's open screen, where a banner lists them
+until "ראיתי". There is no locking: the last edit stands, and both sides see
+who made it.
+
+**Publishing stays per משמרת.** Each מפקד משמרת publishes their own; the מפקד
+מכלול may publish any one from inside it. There is no "publish the whole
+מכלול".
+
+What this gives up: no cross-משמרת staffing, no shared soldiers, and no
+single agent conversation about the whole מכלול — the agent always speaks
+about one משמרת, because its tools, the solver and the constraints are
+scoped to one. Each is an extension of
+this model, not a change to it.
+
+## D44 — A מכלול's duties block a whole day and count as load *(extends D43, D34)*
+
+A מכלול commander asked to assign duties (תורנויות: מטבח, שמירה, ש״ג…) to
+soldiers of every משמרת, so that a soldier on duty is out of that day's
+shifts, the duties are shared fairly, and they show in the statistics.
+
+**What is now true:**
+
+- **The מכלול owns its duties.** `complex_duty_types` (name, seats a day,
+  weekdays, `weight`, `active`) and `complex_duties` (one soldier -- a team
+  and a roster name -- on one duty for one whole day, at most one a day).
+  The commander sets them by hand on the "תורנויות" page; there are no
+  מכלול-wide rules beyond that (D43 stands).
+- **A duty blocks the whole day, midnight to midnight.** `records.
+  availability()` projects it as a `duty` with no hours, and
+  `audit/constraints.py` reads that as the day: every shift touching it is
+  blocked, the night before that ends on its morning included, a shift
+  ending exactly at midnight not. The solver, the manual and chat write
+  guards and the audit read it through the same `constraint_conflicts`.
+  Duty reads reach one day either side of a span for that reason.
+- **The team's commander sees it and cannot remove it.** It lists among the
+  constraints as "תורנות מכלול", the constraint delete refuses it, every
+  set, cancel and record lands in the team's change log as
+  `commander:<id>` and reaches its commander as a notice (D43).
+- **A duty on a shift already placed is saved, and the shift follows the
+  week it is in** (`complex_duties/collisions.py`). On a draft, from today
+  on, the soldier is taken off (logged with the duty as the reason, as the
+  commander) and one keep-existing range rebuild per week (D37) refills the
+  seat around the board. A published week is never changed: its commander
+  is told who to cover. The past is left. The commander sees each outcome.
+- **"מלא בהוגנות" proposes; the commander approves** (D20). A pure greedy
+  fill (`fill.py`), a day and a kind at a time: the fewest weighted duty
+  days over 8 weeks first, then weekend duties, then whoever has no shift
+  the duty would take (that day's, or a night from the evening before),
+  then the whole load, then the longest since the last duty, then the
+  names. Whoever has left, holds a hard whole-day constraint or a team
+  duty, already stands a duty, or is home on the cycle (the solver's own
+  `bl/rotation` gates) is not proposed. Approval seats each kept row
+  through the ordinary assign, reports the ones it could not, and resolves
+  the collisions once for the whole fill.
+- **The balance** (`balance.py`) reports per soldier, per משמרת and per kind
+  -- seats asked for counted from the day a kind was created -- and the
+  spread. A report, never a quota.
+- **The soldier sees their own duties** in the personal area, a week back
+  to eight ahead, whether or not a week is published; the team's board
+  marks each day's duties on its column head and paints those cells
+  blocked (`lib/constraints.ts` mirrors the whole day).
+- **A team leaving the מכלול** loses its duties from today on, in the same
+  transaction; past ones stay as history.
+- **A recorded duty counts without blocking.** `blocks = FALSE` is a duty
+  stood before this system or outside it: not projected into availability,
+  but counted like any other.
+- **A duty day is a shift already carried.** The solver is handed the
+  team's duties (`generate_span(duties=)`, read by `AssignmentHistory.
+  duties` over the fairness lookback through the period's end) and adds
+  `weight` shifts per day to that person's carried load before water-filling
+  the targets. Nights are not charged. With no duties -- most soldiers, and
+  every team outside a מכלול -- the spread is exactly what it was. The build
+  notes say who was counted.
+- **The statistics count it too.** `shift_stats(duties=)` adds per person
+  duties, weekend duties, weighted load and `load` = shifts + duty load
+  (which orders the list), and totals per kind; nothing is drawn for a team
+  without duties.
+
+**Deliberately not done:** a team's own timed duty (`duties`) still blocks
+hours and is not counted as load; a published week a duty collides with is
+not changed; a soldier cannot be on two duties a day; deleting a מכלול
+removes its duties with it, history included (the grouping is what owned
+them).
+
+## D45 — Many teams at once: fewer round trips, more API processes, no PgBouncer *(extends D35, D39)*
+
+With many teams signed in, pages stalled waiting on PostgreSQL. The cause
+was not the data -- a hundred teams is a small database -- but the queue in
+front of it: one API process, sixteen pooled connections, and every
+repository call paying up to four round trips (the pool's health check,
+`BEGIN`, the query, `COMMIT`) while holding a connection. `get_schedule`, read on
+every page and after every write, was three such calls.
+
+- **A single statement runs in autocommit** (`database.single_statement`,
+  used by `RepositoryBase._all`/`_execute`). It was its own transaction
+  already; Postgres now wraps it implicitly. Inside `atomic()` or a job's
+  bound connection it joins that transaction as before.
+- **The checkout check is skipped for a connection returned in the last two
+  seconds** (`dal/pool_hooks.py`); one idle longer is still checked, so a
+  database restart is noticed. The return hook puts `autocommit` back off.
+- **`get_schedule` sends its three queries in one pipeline.**
+- **`team_profile()` sends the document only when it changed**, keyed on
+  `(revision, updated_at)` per process (`profile_cache.py`). The row is
+  read every time, so another process's save is seen on the next read;
+  nothing read inside `atomic()` is kept.
+- **The API runs several processes** (`WEB_CONCURRENCY`, four in compose)
+  beside the separate worker, and PostgreSQL gets sized settings, 200
+  connections and `pg_stat_statements` (`docs/SCALING.md`).
+
+Measured against the repository on one host with 0.5 ms added per network
+hop: `get_schedule` 35 -> 6 ms, a single-row read 10 -> 3 ms, and a
+three-read page under 64 threads on one pool of 16 from 98 to 219 per
+second.
+
+**PgBouncer in transaction mode was considered and refused.** The job
+claim and the model slots hold *session* advisory locks, `LISTEN` needs a
+session of its own, and `search_path` is set per connection -- each of
+them breaks when consecutive transactions land on different server
+connections. Sizing `max_connections` to the processes is enough at this
+scale.
+
+What this gives up: a request still borrows a connection per statement
+rather than one per request -- a request may call the model between two
+reads, and holding a connection across that would bring back the pool
+exhaustion this decision is about.
+
+---
 
 ---
 

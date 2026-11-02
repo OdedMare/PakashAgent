@@ -218,7 +218,7 @@
 
 .week-rail-day-head span {
   color: var(--text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.62rem;
   direction: ltr;
 }
@@ -587,6 +587,11 @@
   font-size: 0.66rem;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.board-dayhead-closure.is-duty {
+  color: var(--hue-teal);
+  background: var(--hue-teal-soft);
 }
 
 .board-dayhead-closure.is-handover {
@@ -3029,7 +3034,7 @@
 .board-load-error-detail {
   font-size: 0.78rem !important;
   color: var(--text-muted) !important;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   word-break: break-word;
 }
 

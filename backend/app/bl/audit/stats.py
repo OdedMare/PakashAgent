@@ -10,6 +10,7 @@ from typing import Dict, List, Optional
 
 from app.bl.audit.codes import SEVERITY_NOTICE, SEVERITY_WARNING, severity_rank
 from app.bl.audit.constraints import constraint_conflicts
+from app.bl.audit.duty_stats import add_duties
 from app.bl.audit.roster import index_shifts, rows_of
 from app.bl.audit.staffing_rules import checked_slots, required_headcount, seat_counts
 from app.bl.audit.values import person_name, slot_date, text
@@ -26,6 +27,7 @@ def shift_stats(
     availability: Optional[List[dict]] = None,
     profile: Optional[dict] = None,
     employee: str = "",
+    duties: Optional[List[dict]] = None,
 ) -> dict:
     """Everyone on the roster appears in `by_employee`, zeros included.
 
@@ -33,6 +35,9 @@ def shift_stats(
     naming them, their constraints. Coverage is the exception and stays the
     span's own -- a seat belongs to the slot, and one person's share of the
     required seats is not a figure anybody staffs against.
+
+    `duties` are the team's מכלול duties in the span (`duty_stats.py`):
+    each person's duties and `load` (shifts plus weighted duty days).
     """
     shift_index = index_shifts(((profile or {}).get("archived_shifts") or []) + (shifts or []))
     everyone = rows_of(assignments, shift_index, slots)
@@ -42,7 +47,7 @@ def shift_stats(
         if not employee or person_name(person) == employee
     ]
     warnings, availability = _of(warnings, employee), _of(availability, employee)
-    return {
+    return add_duties({
         "total_hours": round(sum(row["hours"] for row in rows), 2),
         "total_shifts": len(rows),
         "total_nights": sum(1 for row in rows if row["is_night"]),
@@ -54,7 +59,7 @@ def shift_stats(
         "warning_counts": _warning_counts(warnings),
         "conflicts": len(_conflicts(warnings)),
         "constraint_pressure": _constraint_pressure(rows, availability),
-    }
+    }, duties, employee)
 
 
 def _of(items: Optional[List[dict]], employee: str) -> List[dict]:

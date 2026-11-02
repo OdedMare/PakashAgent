@@ -9,6 +9,7 @@ the result.
 |---|---|
 | `workspace.py` | Enter a workspace, the member share link, logout. Creating one is refused unless `allow_signup` (D28) |
 | `admin.py` | The צוות משמרות זהב console (D28): operator sign-in, every team with its counts, open (name + password)/rename/suspend/delete a team, reset its manager password, rotate its link |
+| `complex.py` | `/api/complex` — the מכלול commander (D43): the login picker and sign-in on `pakash_commander`, `me`, the combined `board` (≤ 43 days), `teams/{id}/enter` (a boss cookie for a linked team, marked `commander`) and `leave`; plus `notices`, what the commander changed, for the team's own commander (`own_manager`). `complex_duties.py` adds the מכלול's duties under the same prefix: `duty-types` (CRUD) and `duties` (read a span ≤ 62 days, assign one soldier for a whole day — answered with the shifts it now blocks as `conflicts`, still a 200 — and cancel), `duties/suggest` (the fair fill, writes nothing), `duties/approve` (seats the kept rows) and `duties/balance`, `duty-roster` (every soldier of the מכלול), all `commander`; and `team-duties`, a team's own soldiers' duties, `boss`. The operator's מכלול routes are `admin.py`'s `/complexes` |
 | `profile.py` | Boss-only structured unit setup, profile updates (`PUT` also starts the refit of every draft ahead of today when it adds a soldier or a shift, and returns it as `absorbed`, D37), `DELETE /shifts/{name}` — archiving a shift type (stored schedules keep their rows) — and `/compiled`, what code made of each rule and note (D32) |
 | `manager_chat.py` | `/api/agent/chats` — the manager's conversations: send a message (queued as a job; an edited message replaces it and what followed), poll, stop, `regenerate` (answer the last request again in place of the last answer), apply or dismiss a pending plan |
 | `replacements.py` | `GET /api/agent/replacements` — the changes tab's ranked covers for who is out and when (D36). Reads only |
@@ -32,7 +33,7 @@ A change is deliberately **two calls**, not one:
 Any response carrying a schedule also carries `warnings` from `bl/audit/`. They
 are **advisory** — a response with warnings is still a success, still `200`, and
 the schedule is still valid to display. Do not turn a warning into a `4xx`
-([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)).
 
 ## Access control
 
@@ -49,6 +50,11 @@ and a new route added under the wrong prefix silently inherits the wrong guard.
   Never satisfied by a team cookie, and a team guard is never satisfied by
   it. The console's routes are the only ones that take a team id from the
   path, because the operator acts on every team by design.
+- `guards.commander()` — the מכלול commander on `pakash_commander` (D43).
+  Inside a team they hold a boss cookie with `commander` set, which every
+  `boss()` route accepts; `visitor` re-checks the link per request.
+  `guards.own_manager()` is `boss()` minus that cookie: the team password and
+  the commander notices are the team's own commander's.
 - `guards.employee()` — a signed-in employee acting as themselves
   ([D14](../../../docs/DECISIONS.md)). Admits exactly one write, a constraint
   *request*, and nothing that touches a schedule. The identity comes from

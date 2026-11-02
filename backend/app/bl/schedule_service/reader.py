@@ -193,4 +193,7 @@ class ScheduleReader:
             availability=self._context.availability_facts(
                 team_id, schedule, with_reason=False
             ),
+            duties=self._context.complex_duties(
+                team_id, rows.iso(schedule.get("starts_on")), rows.iso(schedule.get("ends_on")),
+            ),
         )

@@ -20,6 +20,8 @@ AiSummryIO.
   logs at DEBUG and is dropped from uvicorn's access log unless the level is
   DEBUG; a refused POST (a wrong password) still warns.
 - `errors.py` — `AgentError`, the Hebrew-facing error type everything raises.
+- `actor.py` — who is acting, for the change log's `actor`: set per request
+  from the signed cookies, and per job from the request that queued it.
 - `throttle.py` — `LoginThrottle`: every password check (boss login,
   employee login, change password, settings password) runs through
   `attempt()`, which locks an account for 15 minutes after 5 wrong guesses.

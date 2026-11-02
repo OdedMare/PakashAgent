@@ -15,8 +15,9 @@ from typing import Callable, Optional
 
 from app.common.errors import AuthError, ForbiddenError
 from app.common.sessions import (
-    ADMIN_COOKIE_NAME, COOKIE_NAME, MANAGER_COOKIE_NAME, ROLE_BOSS,
-    ROLE_EMPLOYEE, issue, read, read_admin,
+    ADMIN_COOKIE_NAME, COMMANDER_COOKIE_NAME, COOKIE_NAME,
+    MANAGER_COOKIE_NAME, ROLE_BOSS, ROLE_EMPLOYEE, issue, read, read_admin,
+    read_commander,
 )
 
 # How long a team's active/suspended answer is trusted before it is asked
@@ -25,6 +26,7 @@ from app.common.sessions import (
 _STATUS_TTL_SECONDS = 10.0
 
 SUSPENDED_MESSAGE = "הצוות הושבת על ידי צוות משמרות זהב. פנו אלינו כדי להפעיל אותו מחדש"
+UNLINKED_MESSAGE = "המשמרת אינה משויכת עוד למכלול שלך"
 
 
 class Guards:
@@ -39,9 +41,16 @@ class Guards:
     def __init__(
         self, secret: str,
         team_active: Optional[Callable[[str], bool]] = None,
+        team_in_complex: Optional[Callable[[str, str], bool]] = None,
+        complex_active: Optional[Callable[[str], bool]] = None,
     ):
         self._secret = secret
         self._team_active = team_active
+        # D43: is this team still linked to this מכלול (and both on)? And is
+        # this מכלול still on? Without them -- tests -- a commander cookie is
+        # taken at its word, as `team_active` is.
+        self._team_in_complex = team_in_complex
+        self._complex_active = complex_active
         self._status: dict[str, tuple[bool, float]] = {}
         self._lock = Lock()
 
@@ -64,6 +73,59 @@ class Guards:
         """Drop the cached answer, so a suspension applies on the next call."""
         with self._lock:
             self._status.pop(team_id, None)
+
+    def forget_complexes(self) -> None:
+        """Drop every cached מכלול answer -- after the operator links,
+        unlinks, suspends or deletes one."""
+        with self._lock:
+            for key in [key for key in self._status if key.startswith("c:")]:
+                self._status.pop(key, None)
+
+    def _cached(self, key: str, ask: Callable[[], bool]) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            cached = self._status.get(key)
+        if cached and now - cached[1] < _STATUS_TTL_SECONDS:
+            return cached[0]
+        answer = bool(ask())
+        with self._lock:
+            self._status[key] = (answer, now)
+        return answer
+
+    def commander_reaches(self, team_id: str, complex_id: str) -> bool:
+        """True while `team_id` is one of this commander's workplaces."""
+        if self._team_in_complex is None:
+            return True
+        return self._cached(
+            "c:%s:%s" % (complex_id, team_id),
+            lambda: self._team_in_complex(team_id, complex_id),
+        )
+
+    def commander_session(self, cookie: Optional[str]) -> Optional[dict]:
+        """The commander payload behind a raw cookie, or None -- also None
+        for a מכלול the operator suspended or deleted."""
+        session = read_commander(self._secret, cookie)
+        if session is None:
+            return None
+        if self._complex_active is not None and not self._cached(
+            "c:%s" % session["complex_id"],
+            lambda: self._complex_active(session["complex_id"]),
+        ):
+            return None
+        return session
+
+    def commander(self):
+        """The commander of a מכלול (D43), on their own cookie."""
+        def dependency(
+            pakash_commander: Optional[str] = Cookie(
+                default=None, alias=COMMANDER_COOKIE_NAME
+            )
+        ) -> dict:
+            session = self.commander_session(pakash_commander)
+            if session is None:
+                raise AuthError("נדרשת התחברות של מפקד מכלול")
+            return session
+        return dependency
 
     def require_active(self, team_id: str) -> None:
         """Refuse a sign-in to a suspended team before a cookie is issued.
@@ -115,6 +177,12 @@ class Guards:
         # under an open session.
         if not self.is_active(session["team_id"]):
             raise AuthError(SUSPENDED_MESSAGE)
+        # A commander inside a workplace (D43): the team must still be one
+        # of theirs. Unlinking it ends the access on the next request.
+        if session.get("commander") and not self.commander_reaches(
+            session["team_id"], session["commander"]
+        ):
+            raise AuthError(UNLINKED_MESSAGE)
         return session
 
     def boss_session(self, cookie: Optional[str]) -> dict:
@@ -139,6 +207,16 @@ class Guards:
         def dependency(session: dict = Depends(self.visitor())) -> dict:
             if session.get("role") != ROLE_BOSS:
                 raise AuthError("הפעולה מותרת למנהל בלבד")
+            return session
+        return dependency
+
+    def own_manager(self):
+        """The workplace's own manager -- a boss session that is not a
+        commander's. For the few things that are the manager's alone: their
+        password, and reading what the commander changed (D43)."""
+        def dependency(session: dict = Depends(self.boss())) -> dict:
+            if session.get("commander"):
+                raise ForbiddenError("הפעולה שמורה למפקד המשמרת")
             return session
         return dependency
 
@@ -174,6 +252,12 @@ class Guards:
             session: dict = Depends(self.boss()),
             pakash_manager: Optional[str] = Cookie(default=None),
         ) -> dict:
+            if session.get("commander"):
+                # One conversation set per commander per workplace, the same
+                # from any browser they sign in on (D43).
+                return dict(
+                    session, manager_id="commander-" + session["commander"]
+                )
             owner = read(self._secret, pakash_manager)
             if not owner or owner.get("team_id") != session["team_id"] \
                     or not owner.get("manager_id"):
@@ -189,4 +273,4 @@ class Guards:
         return dependency
 
 
-__all__ = ["Guards", "SUSPENDED_MESSAGE"]
+__all__ = ["Guards", "SUSPENDED_MESSAGE", "UNLINKED_MESSAGE"]

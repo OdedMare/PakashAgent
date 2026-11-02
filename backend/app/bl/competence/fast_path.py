@@ -10,7 +10,7 @@ import json
 import logging
 
 from app.bl.absence.fast_path import _previous_task, _turn
-from app.bl.chat_contract import NeedsManager, RejectedPlan
+from app.bl.chat.contract import NeedsManager, RejectedPlan
 from app.bl.competence import reader
 from app.bl.competence.reader import LABELS
 from app.bl.planner.shaping import plain_question

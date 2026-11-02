@@ -91,3 +91,57 @@ def test_a_departed_employee_is_listed_but_not_counted_as_current(repo):
 
     [row] = repo.admin_teams()
     assert row["employees"] == 1 and row["roster_total"] == 2
+
+
+# --- a מכלול (D43) --------------------------------------------------------------
+
+def test_a_complex_links_existing_teams_and_scopes_its_commander(repo):
+    a = repo.create_team("משמרת א", "sod-gadol")
+    b = repo.create_team("משמרת ב", "sod-gadol")
+    c = repo.create_team("משמרת ג", "sod-gadol")
+    repo.create_team_profile(a["id"], {
+        "employees": [{"name": "דנה"}],
+        "shifts": [{"name": "בוקר", "start_time": "07:00", "end_time": "15:00"}],
+    })
+    group = repo.create_complex("מכלול צפון", "mefaked1")
+    repo.set_complex_teams(group["id"], [a["id"], b["id"]])
+
+    assert repo.authenticate_commander(group["id"], "mefaked1")["name"] == "מכלול צפון"
+    with pytest.raises(Exception):
+        repo.authenticate_commander(group["id"], "wrong-one")
+    teams = {t["id"]: t for t in repo.complex_teams(group["id"])}
+    assert set(teams) == {a["id"], b["id"]}
+    assert teams[a["id"]]["shifts"][0]["name"] == "בוקר"
+    assert teams[a["id"]]["employees"] == 1
+    assert repo.team_in_complex(a["id"], group["id"])
+    assert not repo.team_in_complex(c["id"], group["id"])
+    assert repo.team_complex(a["id"])["name"] == "מכלול צפון"
+    assert any(t["complex_name"] == "מכלול צפון" for t in repo.admin_teams())
+
+    other = repo.create_complex("מכלול דרום", "mefaked2")
+    with pytest.raises(Exception):
+        repo.set_complex_teams(other["id"], [a["id"]])
+
+    repo.set_complex_teams(group["id"], [b["id"]])
+    assert not repo.team_in_complex(a["id"], group["id"])
+
+    repo.update_complex(group["id"], {"active": False})
+    assert not repo.team_in_complex(b["id"], group["id"])
+    assert repo.list_complexes() == [{"id": other["id"], "name": "מכלול דרום"}]
+
+    repo.delete_complex(group["id"])
+    assert repo.get_team(b["id"])["complex_id"] is None
+
+
+def test_commander_notices_fold_repeats_and_clear_when_seen(repo):
+    team = repo.create_team("משמרת א", "sod-gadol")
+    repo.record_commander_notice(team["id"], "מכלול", "שינה שיבוץ בלוח")
+    repo.record_commander_notice(team["id"], "מכלול", "שינה שיבוץ בלוח")
+    repo.record_commander_notice(team["id"], "מכלול", "פרסם סידור")
+
+    notices = repo.commander_notices(team["id"])
+    assert sorted((n["action"], n["count"]) for n in notices) == [
+        ("פרסם סידור", 1), ("שינה שיבוץ בלוח", 2),
+    ]
+    repo.mark_commander_notices_seen(team["id"])
+    assert repo.commander_notices(team["id"]) == []

@@ -11,6 +11,7 @@ import {
   Moon,
   Repeat,
   ShieldCheck,
+  Soup,
   Users,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -212,6 +213,7 @@ export function Stats({
                 <DayChart days={stats.by_day} />
                 <EmployeeChart people={stats.by_employee} />
                 <ShiftChart shifts={stats.by_shift} />
+                <DutyChart duties={stats.by_duty ?? []} />
                 <WarningChart counts={stats.warning_counts} />
                 {/* Said out loud, in the same voice the warnings use. A wall
                     of charts invites being read as a scorecard; this is the
@@ -304,8 +306,21 @@ function TeamTiles({ stats }: { stats: ShiftStats }) {
         value={String(stats.people_working)}
         note={`מתוך ${stats.by_employee.length} ברשימה`}
       />
+      {stats.total_duties ? (
+        <Tile
+          icon={<Soup size={15} />}
+          label="תורנויות מכלול"
+          value={String(stats.total_duties)}
+          note={dutyNote(stats.total_duties, stats.total_duty_load ?? 0)}
+        />
+      ) : null}
     </>
   );
+}
+
+/** "3 תורנויות · שוות 5 משמרות" -- the weight said only when it differs. */
+function dutyNote(count: number, load: number): string {
+  return load === count ? "כל תורנות נספרת כמשמרת" : `נספרות כ־${load} משמרות`;
 }
 
 /** One person's glance: their rotation, their shifts, their nights.
@@ -338,6 +353,14 @@ function PersonTiles({ stats, name }: { stats: ShiftStats; name: string }) {
         value={String(stats.total_nights)}
         note={`מתוך ${stats.total_shifts} משמרות`}
       />
+      {person?.duties ? (
+        <Tile
+          icon={<Soup size={15} />}
+          label="תורנויות מכלול"
+          value={String(person.duties)}
+          note={`עומס כולל ${person.load ?? stats.total_shifts} · ${dutyNote(person.duties, person.duty_load ?? 0)}`}
+        />
+      ) : null}
     </>
   );
 }
@@ -442,15 +465,22 @@ function DayChart({ days }: { days: ShiftStats["by_day"] }) {
  *  carries its rotation in the words the board's cards use. */
 function EmployeeChart({ people }: { people: ShiftStats["by_employee"] }) {
   if (!people.length) return null;
-  const peak = Math.max(...people.map((row) => row.shifts), 1);
+  const peak = Math.max(...people.map((row) => row.load ?? row.shifts), 1);
+  const withDuties = people.some((row) => row.duty_load);
 
   return (
     <Chart
-      title="משמרות לפי חייל/ת"
+      title={withDuties ? "עומס לפי חייל/ת: משמרות ותורנויות" : "משמרות לפי חייל/ת"}
       legend={
         <span className="stats-legend">
           <span className="stats-legend-swatch is-night" aria-hidden="true" />
           מתוכן לילה
+          {withDuties ? (
+            <>
+              <span className="stats-legend-swatch is-duty" aria-hidden="true" />
+              תורנויות מכלול
+            </>
+          ) : null}
         </span>
       }
     >
@@ -469,7 +499,7 @@ function EmployeeChart({ people }: { people: ShiftStats["by_employee"] }) {
                   <span className="load-rotation">{rotation}</span>
                 ) : null}
               </span>
-              <span className="load-track">
+              <span className={row.duty_load ? "load-track has-duty" : "load-track"}>
                 <span
                   className={row.shifts ? "load-fill" : "load-fill is-empty"}
                   style={{ width: `${(row.shifts / peak) * 100}%` }}
@@ -483,9 +513,18 @@ function EmployeeChart({ people }: { people: ShiftStats["by_employee"] }) {
                     />
                   ) : null}
                 </span>
+                {row.duty_load ? (
+                  <span
+                    className="load-fill-duty"
+                    style={{ width: `${(row.duty_load / peak) * 100}%` }}
+                  />
+                ) : null}
               </span>
               <span className="load-value">
                 {row.shifts ? row.shifts : "—"}
+                {row.duties ? (
+                  <span className="load-duty"> · {row.duties} תורנויות</span>
+                ) : null}
                 {row.nights ? (
                   <span className="load-night"> · {row.nights} לילה</span>
                 ) : null}
@@ -516,8 +555,42 @@ function personSummary(row: ShiftStats["by_employee"][number]): string {
     formatHours(row.hours),
   ];
   if (row.on_call) parts.push(`${row.on_call} כוננויות`);
+  if (row.duties) {
+    parts.push(`${row.duties} תורנויות מכלול (${row.weekend_duties ?? 0} בסופ״ש)`);
+    parts.push(`עומס כולל ${row.load ?? row.shifts}`);
+  }
   if (row.conflicts) parts.push(`${row.conflicts} התנגשויות`);
   return `${row.employee} · ${parts.join(" · ")}`;
+}
+
+/** מכלול duties by kind. Not drawn for a team with none -- most teams. */
+function DutyChart({ duties }: { duties: NonNullable<ShiftStats["by_duty"]> }) {
+  if (!duties.length) return null;
+  const peak = Math.max(...duties.map((row) => row.count), 1);
+
+  return (
+    <Chart title="תורנויות מכלול לפי סוג">
+      <ul className="load-rows">
+        {duties.map((row) => (
+          <li className="load-row" key={row.duty}>
+            <span className="load-name">{row.duty}</span>
+            <span className="load-track">
+              <span
+                className="load-fill-duty is-alone"
+                style={{ width: `${(row.count / peak) * 100}%` }}
+              />
+            </span>
+            <span className="load-value">
+              {row.count}
+              {row.weight !== 1 ? (
+                <span className="load-duty"> · כל אחת שווה {row.weight}</span>
+              ) : null}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Chart>
+  );
 }
 
 /** Load per shift name, in the workplace's own vocabulary (D9).

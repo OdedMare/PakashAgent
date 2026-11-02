@@ -81,7 +81,7 @@
 .conversation-text.is-rich a { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
 .conversation-text.is-rich blockquote { margin: 16px 0; border-inline-start: 3px solid var(--border-strong); padding-inline-start: 16px; color: var(--text-soft); }
 .conversation-text.is-rich hr { border: 0; border-top: 1px solid var(--border); margin: 24px 0; }
-.conversation-text.is-rich code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.9em; background: var(--surface-3); border-radius: 4px; padding: 2px 5px; }
+.conversation-text.is-rich code { font-family: var(--font-mono); font-size: 0.9em; background: var(--surface-3); border-radius: 4px; padding: 2px 5px; }
 .conversation-table { overflow-x: auto; max-width: 100%; margin-block: 16px; border: 1px solid var(--border); border-radius: 12px; }
 .conversation-table table { border-collapse: collapse; width: 100%; font-size: 14px; }
 .conversation-table :is(th, td) { padding: 10px 14px; text-align: start; border-bottom: 1px solid var(--border); white-space: normal; min-width: 100px; }

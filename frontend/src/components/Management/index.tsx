@@ -27,6 +27,7 @@ import type { Who } from "@/components/Crew";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import type { ChecklistItem } from "@/components/Guide";
 import { useTheme } from "@/hooks/useTheme";
+import { CommanderNotices } from "@/components/Complex/CommanderNotices";
 import { ShareLink } from "@/components/Workspace/ShareLink";
 import type { ChatPlan, ManagementOverview, Proposal, TeamView } from "@/types";
 
@@ -319,7 +320,9 @@ export function Management({
             <span className="brand-name">משמרות זהב</span>
             <span>
               {workspace.name}
-              <span className="brand-sub"> · איזור ניהול</span>
+              <span className="brand-sub">
+                {workspace.commander ? " · מפקד מכלול" : " · איזור ניהול"}
+              </span>
             </span>
           </span>
         </div>
@@ -433,6 +436,9 @@ export function Management({
           <HelpButton />
           <AccountMenu
             name={workspace.name}
+            role={workspace.commander
+              ? "מפקד/ת מכלול"
+              : workspace.complex ? "מפקד/ת משמרת" : undefined}
             onLogout={onLogout}
           />
         </div>
@@ -544,6 +550,12 @@ export function Management({
             סגירה
           </button>
         </div>
+      ) : null}
+
+      {/* What the מכלול commander changed here, for this workplace's own
+          manager (D43). The commander, inside, is not shown their own. */}
+      {workspace.complex && !workspace.commander ? (
+        <CommanderNotices onSeen={() => void state.refresh()} />
       ) : null}
 
       {/* A build refused for a reason the manager can close. Above the board
@@ -861,7 +873,7 @@ function inWeek(date: string, weekStart: string): boolean {
 type ManagerSection = "agent" | "replace" | "requests" | "team";
 
 /** Roster names still on the active roster on `today`. */
-function activeEmployees(employees: Record<string, unknown>[], today: string): string[] {
+export function activeEmployees(employees: Record<string, unknown>[], today: string): string[] {
   return employees
     .filter((person) => !person.inactive_from || !today || String(person.inactive_from) > today)
     .map((person) => String(person.name ?? ""))

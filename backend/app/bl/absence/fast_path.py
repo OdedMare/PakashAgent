@@ -25,7 +25,7 @@ from app.bl.absence.replies import (
     ask_dates, ask_scope, plan_reply, recurring_reply,
 )
 from app.bl.absence.selections import selections
-from app.bl.chat_contract import NeedsManager, RejectedPlan
+from app.bl.chat.contract import NeedsManager, RejectedPlan
 from app.bl.intent.vocabulary import WEEKDAYS
 from app.bl.planner.shaping import plain_question
 from app.common.errors import AppError

@@ -187,6 +187,8 @@ class GenerationStepper:
             translation_cache=self._context.translation_cache(team_id),
             shift_names=job.shifts or None,
             keep=_board_on(schedule, dates) if job.get("keep_existing") else None,
+            duties=self._history.duties(
+                team_id, iso(schedule.get("starts_on")), iso(schedule.get("ends_on"))),
         )
 
     def _write_span(

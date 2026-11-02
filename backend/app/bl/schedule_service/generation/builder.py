@@ -49,6 +49,7 @@ class PeriodBuilder:
             instructions=instructions,
             required_assignments=required_assignments,
             preferences=self._context.active_preferences(team_id),
+            duties=self._history.duties(team_id, starts_on, ends_on),
         )
         schedule_id = self._store(team_id, starts_on, ends_on, result)
         self._repository.append_change(
