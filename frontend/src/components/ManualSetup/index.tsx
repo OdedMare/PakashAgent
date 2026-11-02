@@ -18,7 +18,8 @@ import { DateInput } from "@/components/DateInput";
 import { updateProfile } from "@/services/api";
 import type { TeamView, WorkplaceProfile } from "@/types";
 
-const DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+import { WEEKDAYS as DAYS, weekdayNames } from "./days";
+
 const SERVICE_TYPES = {
   standard: "תקן",
   overlap: "נחפף/ת",
@@ -53,8 +54,8 @@ export function ManualSetup({
   const [unitName, setUnitName] = useState(text(initialWorkplace.name) || workspace.name);
   const [planningHorizon, setPlanningHorizon] = useState(text(initialWorkplace.planning_horizon) || "שבוע");
   const [operatingDays, setOperatingDays] = useState<string[]>(
-    strings(initialWorkplace.operating_days).length
-      ? strings(initialWorkplace.operating_days)
+    weekdayNames(initialWorkplace.operating_days).length
+      ? weekdayNames(initialWorkplace.operating_days)
       : DAYS,
   );
   const [rotationMode] = useState<"round" | "triplet">(
@@ -82,7 +83,7 @@ export function ManualSetup({
     inputText(initialWorkplace.general_exit_schedule),
   );
   const [employees, setEmployees] = useState<Row[]>(rows(profile.employees));
-  const [shifts, setShifts] = useState<Row[]>(rows(profile.shifts));
+  const [shifts, setShifts] = useState<Row[]>(() => withWeekdayNames(rows(profile.shifts)));
   const [enabledExitPatterns, setEnabledExitPatterns] = useState<string[]>(() => {
     const configured = strings(initialWorkplace.enabled_exit_patterns);
     const used = rows(profile.employees)
@@ -91,7 +92,7 @@ export function ManualSetup({
     return [...new Set([...configured, ...used])];
   });
   const [rotationAUnavailability, setRotationAUnavailability] = useState<Row[]>(
-    rows(initialWorkplace.rotation_a_unavailability),
+    () => withWeekdayNames(rows(initialWorkplace.rotation_a_unavailability)),
   );
   const [rules, setRules] = useState<Row[]>(rows(profile.rules));
   const audit = record(profile.audit_policy);
@@ -133,7 +134,7 @@ export function ManualSetup({
           ...initialWorkplace,
           name: unitName.trim(),
           planning_horizon: planningHorizon.trim() || "שבוע",
-          operating_days: operatingDays,
+          operating_days: weekdayNames(operatingDays),
           rotation_mode: rotationMode,
           // Keep the old pair readable by older deployments while the two
           // real cycles use their own independent anchors.
@@ -146,7 +147,7 @@ export function ManualSetup({
           general_exit_schedule: generalExitSchedule.trim(),
           enabled_exit_patterns: enabledExitPatterns,
           rotation_a_unavailability: rotationAUnavailability.map((rule) => ({
-            days: strings(rule.days),
+            days: weekdayNames(rule.days),
             shifts: strings(rule.shifts),
             start_time: text(rule.start_time),
             end_time: text(rule.end_time),
@@ -175,7 +176,7 @@ export function ManualSetup({
           shift_type: text(shift.shift_type) || "regular",
           start_time: text(shift.start_time),
           end_time: text(shift.end_time),
-          days: strings(shift.days),
+          days: weekdayNames(shift.days),
           headcount: number(shift.headcount, headcount(shift)),
           requires_shift_manager: Boolean(shift.requires_shift_manager),
         })),
@@ -289,7 +290,7 @@ export function ManualSetup({
                   <div><strong>תקופת אי־זמינות {index + 1}</strong><span>השארת ימים או משמרות ללא בחירה תחיל את הכלל על כולם.</span></div>
                   <button type="button" className="icon-button subtle" aria-label={`מחיקת תקופת אי־זמינות ${index + 1}`} onClick={() => setRotationAUnavailability((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
                 </div>
-                <CheckboxGrid label="ימים שבהם סבב א׳ אינו זמין" values={DAYS} selected={strings(rule.days)} onChange={(value) => edit(setRotationAUnavailability, index, "days", value)} />
+                <CheckboxGrid label="ימים שבהם סבב א׳ אינו זמין" values={DAYS} selected={weekdayNames(rule.days)} onChange={(value) => edit(setRotationAUnavailability, index, "days", value)} />
                 {shiftNames.length ? <CheckboxGrid label="משמרות (ללא בחירה = כל המשמרות)" values={shiftNames} selected={strings(rule.shifts)} onChange={(value) => edit(setRotationAUnavailability, index, "shifts", value)} /> : null}
                 <div className="manual-grid three">
                   <Field label="משעה (רשות)"><input type="time" step={300} value={inputText(rule.start_time)} onChange={(event) => edit(setRotationAUnavailability, index, "start_time", event.target.value)} /></Field>
@@ -353,7 +354,7 @@ export function ManualSetup({
                   <Field label="ייעוד"><input value={inputText(shift.purpose)} onChange={(e) => edit(setShifts, index, "purpose", e.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></Field>
                 </div>
                 <label className="manual-check"><input type="checkbox" checked={Boolean(shift.requires_shift_manager)} onChange={(e) => edit(setShifts, index, "requires_shift_manager", e.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
-                <CheckboxGrid label="ימים" values={DAYS} selected={strings(shift.days)} onChange={(value) => edit(setShifts, index, "days", value)} />
+                <CheckboxGrid label="ימים" values={DAYS} selected={weekdayNames(shift.days)} onChange={(value) => edit(setShifts, index, "days", value)} />
                 <button type="button" className="icon-button subtle manual-delete" aria-label="מחיקת סוג משמרת" disabled={originalShifts.has(text(shift.name))} onClick={() => setShifts((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
               </article>
             ))}
@@ -423,6 +424,10 @@ function toggleRowList(setter: React.Dispatch<React.SetStateAction<Row[]>>, inde
   setter((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, [key]: checked ? [...strings(row[key]), value] : strings(row[key]).filter((item) => item !== value) } : row));
 }
 
+/** Rows whose `days` the checkboxes can match (see `days.ts`). */
+function withWeekdayNames(list: Row[]): Row[] {
+  return list.map((row) => ("days" in row ? { ...row, days: weekdayNames(row.days) } : row));
+}
 function record(value: unknown): Row { return value && typeof value === "object" && !Array.isArray(value) ? value as Row : {}; }
 function rows(value: unknown): Row[] { return Array.isArray(value) ? value.filter((item): item is Row => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : []; }
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : []; }
