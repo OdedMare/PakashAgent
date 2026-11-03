@@ -16,10 +16,12 @@ and told here after the commit -- from the API and from the worker alike,
 since every process shares the same Redis. A write with no team in context
 (the operator console, a commander's duties) bumps the deployment's counter.
 
-**Never wrong for long, never required.** No Redis, a cache TTL of 0, or a
-command that fails: the read goes to PostgreSQL as it always did. A write
-that could not reach Redis leaves a debt, paid by bumping the deployment's
-counter the next time Redis answers; the TTL bounds anything else.
+**Never wrong for long, never required, never waited for.** No Redis, a
+cache TTL of 0, or a command that fails: the read goes to PostgreSQL as it
+always did. No request waits for a connection either: the hub connects on
+a thread of its own (`RedisHub.client`). A write that could not reach Redis
+leaves a debt, paid by bumping the deployment's counter the moment Redis
+answers again; the TTL bounds anything else.
 
 Every key starts with the configured prefix (`RedisHub.key`).
 """
@@ -50,6 +52,7 @@ class ReadCache:
         self._today = today
         # A fresh process may have missed writes while it had no Redis.
         self._owed = True
+        hub.on_connect(self._settle)
 
     def read(self, team_id: str, name: str, args: tuple, load: Callable[[], Any]):
         """`load()`'s answer, JSON-ready -- from Redis when it is current."""
@@ -83,8 +86,10 @@ class ReadCache:
             self._owed = True
             return
         try:
-            if _GLOBAL in teams:
+            # A debt still owed is paid by this write, as every team's.
+            if _GLOBAL in teams or self._owed:
                 teams = {_GLOBAL}
+            self._owed = False
             _bump(client, [self._generation_key(team) for team in teams])
         except Exception as exc:  # noqa: BLE001
             self._owed = True
@@ -144,6 +149,23 @@ def _bump(client, counters) -> None:
         pipe.incr(counter)
         pipe.expire(counter, _GENERATION_TTL_SECONDS)
     pipe.execute()
+
+
+class CachedPeriods:
+    """`periods_between` through the cache, under the very key `/between`
+    reads (`api/routers/schedules/reading.py`): the commander's combined
+    board (`ComplexService.board`) and each team's own month view then share
+    one entry per team, retired by that team's writes like any other."""
+
+    def __init__(self, schedules, cache):
+        self._schedules = schedules
+        self._cache = cache
+
+    def periods_between(self, team_id: str, start: str, end: str, role: str = "boss"):
+        return self._cache.read(
+            team_id, "between", (start, end, role),
+            lambda: self._schedules.periods_between(team_id, start, end, role),
+        )
 
 
 class NoCache:

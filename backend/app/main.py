@@ -37,7 +37,7 @@ from app.common.sessions import (
     ADMIN_COOKIE_NAME, COMMANDER_COOKIE_NAME, COOKIE_NAME, MANAGER_COOKIE_NAME,
     ROLE_BOSS, read, read_admin, read_commander,
 )
-from app.common.read_cache import ReadCache
+from app.common.read_cache import CachedPeriods, ReadCache
 from app.common.redis_hub import RedisHub
 from app.common.throttle import LoginThrottle
 from app.dal import write_marks
@@ -119,7 +119,10 @@ admin_service = AdminService(
 )
 # A מכלול (D43): workplaces under one commander, whose password the
 # operator issues.
-complex_service = ComplexService(repository, workspace_service, schedule_service)
+# The combined board reads each team's periods through the cache (D50).
+complex_service = ComplexService(
+    repository, workspace_service, CachedPeriods(schedule_service, read_cache),
+)
 
 
 def _tell_about_duty(team_id: str, complex_id: str, action: str) -> None:

@@ -85,7 +85,9 @@ def prefix():
 def _cache(url, prefix, ttl=300, today="2026-11-03"):
     store = _store(url, prefix, ttl)
     hub = RedisHub(store)
-    return ReadCache(hub, store, today=lambda: today), hub, store
+    cache = ReadCache(hub, store, today=lambda: today)
+    hub.client(wait=True)  # a request never waits; the test does, once
+    return cache, hub, store
 
 
 # --- without Redis -----------------------------------------------------------
@@ -179,6 +181,7 @@ def test_a_new_day_is_a_new_read(redis_url, prefix):
     hub = RedisHub(store)
     today = ["2026-11-03"]
     cache = ReadCache(hub, store, today=lambda: today[0])
+    hub.client(wait=True)
     load = _Loader("x")
     cache.read("t1", "overview", (), load)
     today[0] = "2026-11-04"
@@ -261,3 +264,67 @@ def test_the_hub_never_polls_the_settings_from_inside_a_write():
     hub = RedisHub(_Store())
     assert hub.client() is None
     assert hub.key("cache", "x") == "pakash:cache:x"
+
+
+def test_a_write_never_waits_for_redis_to_answer():
+    """A Redis that takes its time to connect costs a write nothing: the
+    connection is made on a thread of its own."""
+    import threading
+
+    gate = threading.Event()
+
+    def slow_factory(url, password=""):
+        gate.wait(5)
+        raise ConnectionError("still connecting")
+
+    store = _store("redis://cache.invalid:6379/0")
+    cache = ReadCache(RedisHub(store, factory=slow_factory), store)
+    started = time.monotonic()
+    cache.written({"t1"})
+    assert cache.read("t1", "stats", (), _Loader(1)) == 1
+    assert time.monotonic() - started < 0.5
+    gate.set()
+
+
+def test_a_debt_is_paid_the_moment_redis_answers(redis_url, prefix):
+    store = _store(redis_url, prefix)
+    hub = RedisHub(store)
+    cache = ReadCache(hub, store)
+    counter = prefix + ":cache:generation"
+    cache.written({"t1"})  # not connected yet: owed, and a connect begins
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and redis_client(redis_url).get(counter) is None:
+        time.sleep(0.02)
+    # Paid by the connection itself -- no read or later write was needed.
+    assert redis_client(redis_url).get(counter) is not None
+
+
+def redis_client(url):
+    import redis
+
+    return redis.Redis.from_url(url, decode_responses=True)
+
+
+def test_the_combined_board_shares_the_team_s_own_cached_span(redis_url, prefix):
+    from app.common.read_cache import CachedPeriods
+
+    cache, _, _ = _cache(redis_url, prefix)
+
+    class _Schedules:
+        calls = 0
+
+        def periods_between(self, team_id, start, end, role="boss"):
+            self.calls += 1
+            return [{"id": "p1", "team": team_id}]
+
+    schedules = _Schedules()
+    board = CachedPeriods(schedules, cache)
+    assert board.periods_between("t1", "2026-11-01", "2026-11-30") == [{"id": "p1", "team": "t1"}]
+    # The team's own month view (`/between` as the boss) is the same entry.
+    own = _Loader("never called")
+    assert cache.read("t1", "between", ("2026-11-01", "2026-11-30", "boss"), own) == [
+        {"id": "p1", "team": "t1"}]
+    assert (schedules.calls, own.calls) == (1, 0)
+    cache.written({"t1"})
+    board.periods_between("t1", "2026-11-01", "2026-11-30")
+    assert schedules.calls == 2

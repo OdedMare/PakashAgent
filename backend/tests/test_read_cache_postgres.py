@@ -42,7 +42,9 @@ def wired(redis_url):  # noqa: F811
     settings.redis_cache_ttl_seconds = 300
     store = SimpleNamespace(get=lambda: settings)
     repository = Repository(store)
-    cache = ReadCache(RedisHub(store), store)
+    hub = RedisHub(store)
+    cache = ReadCache(hub, store)
+    hub.client(wait=True)
     try:
         repository.initialize()
         write_marks.on_written(cache.written)

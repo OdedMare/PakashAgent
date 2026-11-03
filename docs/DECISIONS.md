@@ -1768,7 +1768,10 @@ the live signals and the model queue stay where D35 put them.
 `/overview`, `/current`, `/at`, `/between`, `/stats` and `GET /{id}`, keyed
 by team, the arguments, the role (a member reads published periods only)
 and today's date. The value is stored as the JSON the route returns, so a
-hit and a miss answer the same shape.
+hit and a miss answer the same shape. The commander's combined board
+(`/api/complex/board`) reads each team's span through the same entry
+(`CachedPeriods`), so it and the team's own month view share one copy per
+team and are retired together.
 
 **Invalidation is by version, and every write is noticed at the cursor.**
 Finding every write by hand — a route, a job checkpoint, a commander's duty
@@ -1798,11 +1801,15 @@ longer true, so it is not done by hand:
   lands under the old generation, where nobody asks again. A counter Redis
   evicted starts again from the clock, so it cannot revive an old read.
 
-**Never required, never wrong for long.** With no Redis, a TTL of 0, or a
-command that fails, the read goes to PostgreSQL exactly as before. A write
+**Never required, never wrong for long, never waited for.** With no Redis,
+a TTL of 0, or a command that fails, the read goes to PostgreSQL exactly as
+before. No request waits for a connection: the hub connects on a thread of
+its own and answers "not connected" meanwhile, so a Redis that is down never
+costs a read or a write its connect timeout. A write
 that could not reach Redis leaves a debt that bumps the deployment's
 counter before anything cached is trusted again; a fresh process starts
-owing it. `redis_cache_ttl_seconds` (default 300, at most a day) bounds what
+owing it, and the debt is paid the moment a connection is made — a worker
+that only writes leaves nothing stale behind. `redis_cache_ttl_seconds` (default 300, at most a day) bounds what
 that cannot cover, such as a process that cannot reach Redis while others
 can.
 

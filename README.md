@@ -215,7 +215,8 @@ server (Opik tracing was removed for air-gapped networks).
 **Redis is optional, and only a cache** ([D50](docs/DECISIONS.md)). With a
 URL saved in the operator console ("מערכת" → Redis) or `PAKASH_REDIS_URL`,
 the board's heavy reads — the overview, stats, a day, a week, a span, a
-period — are answered from Redis until that team's data changes. Every
+period, and the מכלול commander's combined board — are answered from Redis
+until that team's data changes. Every
 write, from the API or the worker, retires its team's cached reads once it
 commits, and every key starts with the configured prefix
 (`PAKASH_REDIS_KEY_PREFIX`). Without Redis everything reads PostgreSQL as

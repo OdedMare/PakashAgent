@@ -97,6 +97,12 @@ class RedisHub:
         self._client = None
         self._down_until = 0.0
         self._error = ""
+        self._connecting = False
+        self._on_connect = []
+
+    def on_connect(self, callback: Callable) -> None:
+        """Run `callback(client)` each time a connection is made."""
+        self._on_connect.append(callback)
 
     def _settings(self):
         """The settings as held, never polled: `client()` runs inside a
@@ -112,8 +118,16 @@ class RedisHub:
         """A key under this deployment's prefix."""
         return ":".join((self.prefix(),) + tuple(str(part) for part in parts))
 
-    def client(self):
-        """The shared client, or `None` -- not configured, or not reachable."""
+    def client(self, wait: bool = False):
+        """The shared client, or `None` -- not configured, or not connected.
+
+        **No request waits for a connection.** With none open, one is made
+        on a thread of its own and this answers `None` now: the caller reads
+        PostgreSQL, and a write leaves its invalidation owed, paid by the
+        `on_connect` callbacks the moment the connection is up. A Redis that
+        is down never costs a request its connect timeout. `wait` connects
+        here instead -- for the panel, which is asking about exactly that.
+        """
         settings = self._settings()
         config = (url_of(settings), getattr(settings, "redis_password", "") or "")
         with self._lock:
@@ -126,18 +140,39 @@ class RedisHub:
                 return None
             if self._client is not None:
                 return self._client
-            if self._clock() < self._down_until:
+            if self._connecting or self._clock() < self._down_until:
                 return None
+            self._connecting = True
+        if wait:
+            return self._connect(config)
+        threading.Thread(
+            target=self._connect, args=(config,), name="redis-connect", daemon=True,
+        ).start()
+        return None
+
+    def _connect(self, config):
+        try:
+            client = self._factory(*config)
+            client.ping()
+        except Exception as exc:  # noqa: BLE001 -- any failure means "not now"
+            with self._lock:
+                self._connecting = False
+                if config == self._config:
+                    self._down(exc)
+            return None
+        with self._lock:
+            self._connecting = False
+            if config != self._config:  # the settings moved on meanwhile
+                client.close()
+                return None
+            self._client, self._error = client, ""
+        _log.info("redis connected url=%s", mask_url(config[0]))
+        for callback in list(self._on_connect):
             try:
-                client = self._factory(*config)
-                client.ping()
-            except Exception as exc:  # noqa: BLE001 -- any failure means "not now"
-                self._down(exc)
-                return None
-            _log.info("redis connected url=%s", mask_url(config[0]))
-            self._client = client
-            self._error = ""
-            return client
+                callback(client)
+            except Exception as exc:  # noqa: BLE001 -- the next use retries
+                _log.warning("redis on-connect step failed: %s", exc)
+        return client
 
     def failed(self, exc: BaseException) -> None:
         """A command on the shared client failed: stay off Redis a while."""
@@ -147,7 +182,7 @@ class RedisHub:
 
     def status(self) -> dict:
         """What this process is using right now, for the panel."""
-        client = self.client()
+        client = self.client(wait=True)
         settings = self._settings()
         with self._lock:
             error = self._error
