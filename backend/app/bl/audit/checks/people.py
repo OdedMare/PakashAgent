@@ -80,6 +80,7 @@ class UnavailableCheck(AuditCheck):
                 "start_time": text(item.get("start_time")),
                 "end_time": text(item.get("end_time")),
                 "constraint_type": item.get("constraint_type") or "availability",
+                "reason": reason,
             },
         )
 

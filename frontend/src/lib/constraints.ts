@@ -8,7 +8,18 @@ export function constraintBlocksSlot(
   date: string,
   slot: Slot,
 ): boolean {
-  return constraints.some((row) => {
+  return blockingConstraint(constraints, employee, date, slot) !== null;
+}
+
+/** The constraint that blocks this cell, so the board can say *which* one —
+ * its hours and its reason — rather than only that one exists. */
+export function blockingConstraint(
+  constraints: Constraint[],
+  employee: string,
+  date: string,
+  slot: Slot,
+): Constraint | null {
+  return constraints.find((row) => {
     if (row.constraint_type === "duty") {
       if (!row.is_hard || row.employee !== employee) return false;
       const shift = interval(date, slot.start_time, slot.end_time);
@@ -54,7 +65,7 @@ export function constraintBlocksSlot(
       blockedEnd += 24 * 60;
     }
     return shiftStart < blockedEnd && blockedStart < shiftEnd;
-  });
+  }) ?? null;
 }
 
 function interval(date: string, start: string, end: string): [number, number] | null {

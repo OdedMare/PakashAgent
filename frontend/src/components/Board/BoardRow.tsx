@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 
 import { isWeekend } from "@/components/Management/Calendar";
-import { constraintBlocksSlot } from "@/lib/constraints";
+import { blockingConstraint } from "@/lib/constraints";
 import type { Assignment, CardPerson, Constraint, Schedule } from "@/types";
 import { shortDate } from "@/components/DateInput";
 
@@ -340,7 +340,7 @@ export function BoardRow({
                 hue={hueOf(row.employee)}
                 dark={dark}
                 status={schedule.status}
-                blocked={constraintBlocksSlot(
+                blocker={blockingConstraint(
                   constraints, row.employee, date, slot,
                 )}
                 warnings={warnings.filter(

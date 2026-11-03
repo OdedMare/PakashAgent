@@ -10,7 +10,18 @@ import {
 } from "lucide-react";
 
 import { colorStyle } from "@/components/Management/palette";
-import type { Assignment, CardPerson, ScheduleWarning, Slot } from "@/types";
+import {
+  constraintHeadline,
+  constraintSentence,
+  warningHeadline,
+} from "@/lib/warningSummary";
+import type {
+  Assignment,
+  CardPerson,
+  Constraint,
+  ScheduleWarning,
+  Slot,
+} from "@/types";
 
 import { STATUS_LABELS } from "./person";
 
@@ -36,6 +47,13 @@ import { STATUS_LABELS } from "./person";
  *  same rule `Calendar.tsx` applies to `is-blocked`, applied to the whole
  *  warning set.
  *
+ *  **An alarm says what it is about, on the card.** A red card with a bare
+ *  triangle told the manager *that* a soldier was flagged and made them
+ *  hover to learn *why* — and a hover does not exist on a phone. The card's
+ *  last line now names the rule and the number that broke it ("אילוץ
+ *  08:00–14:00 · מילואים", "רק 6 ש׳ מנוחה (נדרש 8)"), and the hover lists
+ *  every finding in full. Still advice, never a gate (D3).
+ *
  *  Clicking opens the editor; dragging proposes a move. Both are on the same
  *  element and the browser distinguishes them for us — a `click` does not
  *  fire after a drag.
@@ -47,7 +65,7 @@ export function ShiftCard({
   hue,
   dark,
   status,
-  blocked,
+  blocker,
   warnings,
   draggable,
   touched = null,
@@ -67,8 +85,8 @@ export function ShiftCard({
   hue: number;
   dark: boolean;
   status: "draft" | "published";
-  /** A constraint recorded against this person on this cell. */
-  blocked: boolean;
+  /** The constraint recorded against this person on this cell, if any. */
+  blocker: Constraint | null;
   warnings: ScheduleWarning[];
   draggable: boolean;
   /** Set when the agent is currently pointing at this person in this cell.
@@ -92,7 +110,9 @@ export function ShiftCard({
   onRemove?: () => void;
   onOpen?: () => void;
 }) {
+  const blocked = blocker !== null;
   const alarming = blocked || warnings.some((row) => row.severity === "warning");
+  const reasons = alarming ? alarmReasons(assignment.employee, blocker, warnings) : [];
   const manual = assignment.source === "manager";
   // An alarm still out-shouts everything, overlap included.
   const overlap = person.is_overlap && !alarming;
@@ -131,7 +151,7 @@ export function ShiftCard({
       }}
       onDragEnd={onDragEnd}
       onClick={onOpen}
-      title={identityTitle(assignment, person)}
+      title={identityTitle(assignment, person, reasons)}
       onKeyDown={(event) => {
         // The card is a div because it is also a drag source; a button
         // inside a draggable is fought over by both behaviours. Keyboard
@@ -167,7 +187,7 @@ export function ShiftCard({
       // the card, not just the name: the role and rotation are the point.
       aria-label={
         onOpen
-          ? `${ariaWho(assignment, person)}, ${slot.shift_name}. עריכה${onRemove ? ", Delete להסרה" : ""}`
+          ? `${ariaWho(assignment, person)}, ${slot.shift_name}.${reasons.length ? ` אזהרה: ${reasons.map((row) => row.short).join("; ")}.` : ""} עריכה${onRemove ? ", Delete להסרה" : ""}`
           : undefined
       }
       aria-grabbed={onPick ? picked : undefined}
@@ -236,18 +256,6 @@ export function ShiftCard({
             {STATUS_LABELS[person.status]}
           </span>
         ) : null}
-        {alarming ? (
-          <span
-            className="board-card-alarm"
-            title={
-              blocked
-                ? `${assignment.employee} — נרשם אילוץ למשמרת הזו`
-                : warnings.map((row) => row.message).join("\n")
-            }
-          >
-            <AlertTriangle size={11} />
-          </span>
-        ) : null}
       </div>
 
       {/* Who she is, not why she is here.
@@ -262,6 +270,22 @@ export function ShiftCard({
           even around next weekend. */}
       {person.rotation ? (
         <p className="board-card-identity">{person.rotation}</p>
+      ) : null}
+
+      {/* Why this card is red, in words, where the manager is already
+          looking. The first finding is spelled out; any others are counted
+          and listed in full on the hover. */}
+      {reasons.length ? (
+        <p
+          className="board-card-why"
+          title={reasons.map((row) => `• ${row.full}`).join("\n")}
+        >
+          <AlertTriangle size={11} aria-hidden="true" />
+          <span className="board-card-why-text">{reasons[0].short}</span>
+          {reasons.length > 1 ? (
+            <span className="board-card-why-more" dir="ltr">+{reasons.length - 1}</span>
+          ) : null}
+        </p>
       ) : null}
 
       {/* The move handle, as a real button.
@@ -306,7 +330,11 @@ export function ShiftCard({
  *  mean losing it: it moves from the line that is read a hundred times a
  *  week to the one place somebody goes when they actually want to know.
  */
-function identityTitle(assignment: Assignment, person: CardPerson): string {
+function identityTitle(
+  assignment: Assignment,
+  person: CardPerson,
+  reasons: AlarmReason[],
+): string {
   const who = [
     person.role,
     person.rotation,
@@ -318,8 +346,50 @@ function identityTitle(assignment: Assignment, person: CardPerson): string {
     .join(" · ");
   const lines = [`${assignment.employee}${who ? ` — ${who}` : ""}`];
   if (person.note) lines.push(`הערה: ${person.note}`);
+  if (reasons.length) {
+    lines.push("", "⚠ למה הכרטיס מסומן:");
+    for (const row of reasons) lines.push(`• ${row.full}`);
+    lines.push("");
+  }
   if (assignment.reason) lines.push(`סיבת השיבוץ: ${assignment.reason}`);
   return lines.join("\n");
+}
+
+interface AlarmReason {
+  /** The rule and the number, short enough for the card's last line. */
+  short: string;
+  /** The audit's full sentence, for the hover. */
+  full: string;
+}
+
+/** Every reason this card is red, most serious first.
+ *
+ *  A recorded constraint and the audit's `unavailable` finding are usually
+ *  the same fact seen twice — the board checks the constraint list itself
+ *  so a fresh drop is flagged before the audit re-runs. The audit's version
+ *  wins when both are there, since it carries the constraint's reason;
+ *  the board's own one stands in only when the audit has not spoken. */
+function alarmReasons(
+  employee: string,
+  blocker: Constraint | null,
+  warnings: ScheduleWarning[],
+): AlarmReason[] {
+  const ordered = [
+    ...warnings.filter((row) => row.severity === "warning"),
+    ...warnings.filter((row) => row.severity !== "warning"),
+  ];
+  const reasons = ordered.map((row) => ({
+    short: warningHeadline(row),
+    full: row.message,
+  }));
+  const audited = warnings.some((row) => row.code === "unavailable");
+  if (blocker && !audited) {
+    reasons.unshift({
+      short: constraintHeadline(blocker),
+      full: constraintSentence(employee, blocker),
+    });
+  }
+  return reasons;
 }
 
 /** The card's identity as one spoken phrase, for `aria-label`. */

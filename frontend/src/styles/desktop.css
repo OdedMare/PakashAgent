@@ -117,6 +117,7 @@
   .management-workspace.has-drawer .board-card-name { font-size: 12px; }
   .management-workspace.has-drawer .board-card-role, .management-workspace.has-drawer .board-card-identity { display: none; }
   .management-workspace.has-drawer .board-card-hours { font-size: 10px; }
+  .management-workspace.has-drawer .board-card-why { font-size: 10px; padding: 2px 4px; }
   .management-workspace.has-drawer .board-rowhead { padding-inline: 8px; }
   .management-workspace.has-drawer .board-rowhead-hours { font-size: 10px; }
   .management-workspace.has-drawer .board-dayhead { padding: 8px 2px; }
