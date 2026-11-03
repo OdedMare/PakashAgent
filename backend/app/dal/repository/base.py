@@ -8,7 +8,7 @@ import uuid
 from typing import List
 
 from app.common.errors import NotFoundError
-from app.dal.database import connect
+from app.dal.database import single_statement
 
 
 def new_id() -> str:
@@ -20,7 +20,7 @@ class RepositoryBase:
         self._store = settings_store
 
     def health(self) -> dict:
-        with connect(self._store) as connection:
+        with single_statement(self._store) as connection:
             connection.execute("SELECT 1").fetchone()
         return {"database": "ok"}
 
@@ -31,13 +31,16 @@ class RepositoryBase:
         return rows[0]
 
     def _all(self, query: str, params=()) -> List[dict]:
-        with connect(self._store) as connection:
+        # One statement, so autocommit: no BEGIN/COMMIT round trips
+        # (`database.single_statement`). The commit stays for the
+        # transaction and job connections, where it is the deferred one.
+        with single_statement(self._store) as connection:
             rows = connection.execute(query, params).fetchall()
             connection.commit()
         return [dict(row) for row in rows]
 
     def _execute(self, query: str, params=()) -> None:
-        with connect(self._store) as connection:
+        with single_statement(self._store) as connection:
             connection.execute(query, params)
             connection.commit()
 

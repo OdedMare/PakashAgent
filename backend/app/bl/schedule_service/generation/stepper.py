@@ -15,6 +15,7 @@ from app.bl.schedule_service.generation.pins import (
 )
 from app.bl.schedule_service.profile_gate import ProfileGate
 from app.bl.schedule_service.rows import iso
+from app.bl.scheduler import with_staffing_overrides
 from app.common.errors import AgentError
 
 
@@ -74,7 +75,10 @@ class GenerationStepper:
 
         job.start_span(target)
         self._repository.set_generation(schedule_id, team_id, job.to_dict())
-        profile = self._gate.buildable_profile(team_id)
+        profile = with_staffing_overrides(
+            self._gate.buildable_profile(team_id),
+            job.get("staffing_overrides") or [],
+        )
         self._run_span(team_id, schedule, profile, job, target)
 
         # A stop asked for while the model was answering. The day that just
@@ -187,6 +191,8 @@ class GenerationStepper:
             translation_cache=self._context.translation_cache(team_id),
             shift_names=job.shifts or None,
             keep=_board_on(schedule, dates) if job.get("keep_existing") else None,
+            duties=self._history.duties(
+                team_id, iso(schedule.get("starts_on")), iso(schedule.get("ends_on"))),
         )
 
     def _write_span(

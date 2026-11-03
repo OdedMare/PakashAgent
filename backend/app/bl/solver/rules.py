@@ -1,4 +1,5 @@
-"""The workplace's own rules: seats, roles, the shift manager, נחפפים,
+"""The workplace's own rules: seats, the shift manager (role seats are
+`staffing.py`'s), נחפפים,
 rest, runs of days and weekly hours.
 
 These are the audit's blocking checks (`bl/audit/`) stated as constraints,
@@ -19,7 +20,7 @@ from app.bl.audit import counts_toward_staffing
 from app.bl.audit.roster import iso_week
 from app.bl.audit.values import number
 from app.bl.solver.model import HOUR_SCALE, MISSING_ROLE, SHADOW, UNFILLED, Model
-from app.bl.solver.rows import roles
+from app.bl.solver.staffing import apply_staffing
 
 # Two shifts further apart than this cannot be short of any rest we model.
 _REST_HORIZON = datetime.timedelta(hours=96)
@@ -27,9 +28,11 @@ _REST_HORIZON = datetime.timedelta(hours=96)
 
 def apply_rules(model: Model) -> None:
     problem = model.problem
+    lateness = _lateness(problem)
     for index in range(len(problem.slots)):
-        _seats(model, index)
+        _seats(model, index, lateness[index])
         _roles(model, index)
+    apply_staffing(model)
     _shadows(model)
     for name in problem.people:
         for first, second in rest_pairs(problem, model, name, problem.policy["min_rest_hours"]):
@@ -39,7 +42,19 @@ def apply_rules(model: Model) -> None:
         _weekly_hours(model, name)
 
 
-def _seats(model: Model, index: int) -> None:
+def _lateness(problem) -> List[int]:
+    """Each slot's place counted from the end of the plan: 1 for the last
+    slot to begin, more for every earlier one. Slots that begin together
+    share a place; a slot with no clock goes by its date and grid order."""
+    def when(index):
+        begins = problem.times[index]["begins"]
+        return problem.slots[index]["slot_date"], begins.isoformat() if begins else "", index
+    starts = sorted({when(index)[:2] for index in range(len(problem.slots))}, reverse=True)
+    place = {start: number for number, start in enumerate(starts, 1)}
+    return [place[when(index)[:2]] for index in range(len(problem.slots))]
+
+
+def _seats(model: Model, index: int, lateness: int) -> None:
     problem, slot = model.problem, model.problem.slots[index]
     fixed = sum(counts_toward_staffing(problem.people.get(row["employee"]), problem.profile)
                 for row in problem.fixed_on(index))
@@ -50,24 +65,18 @@ def _seats(model: Model, index: int) -> None:
         model.price(UNFILLED, open_seats - sum(placed),
                     "לא נמצא שיבוץ חוקי ל%s בתאריך %s; המשמרת נשארה בחוסר."
                     % (slot["shift_name"], slot["slot_date"]), kind="unfilled")
+        model.gaps.append(lateness ** 3 * (open_seats - sum(placed)))
 
 
 def _roles(model: Model, index: int) -> None:
     problem, slot = model.problem, model.problem.slots[index]
     fixed = [problem.people.get(row["employee"], {}) for row in problem.fixed_on(index)]
-    present = set()
-    for person in fixed:
-        if counts_toward_staffing(person, problem.profile):
-            present.update(roles(person))
-    for role in slot.get("required_roles") or []:
-        if role not in present:
-            holders = model.on_slot(index, problem.holders(index, lambda p, r=role: r in roles(p)))
-            covered = model.bool_or(holders, "role_%d" % index)
-            model.price(MISSING_ROLE, 1 - covered, "", kind="role")
+    # Role seats (counts, fallbacks) are `staffing.py`'s.
     if slot.get("requires_shift_manager") and not any(p.get("is_shift_manager") for p in fixed):
         managers = model.on_slot(index, problem.holders(index, lambda p: bool(p.get("is_shift_manager"))))
         covered = model.bool_or(managers, "manager_%d" % index)
-        model.price(MISSING_ROLE, 1 - covered, "", kind="manager")
+        model.price(MISSING_ROLE, 1 - covered, "אין מפקד/ת משמרת ב%s בתאריך %s."
+                    % (slot["shift_name"], slot["slot_date"]), kind="manager")
 
 
 # -- נחפפים ----------------------------------------------------------------

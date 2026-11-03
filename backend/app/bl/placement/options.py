@@ -17,6 +17,7 @@ _NO_CLOSURE = {
 _PATTERN_LABELS = {
     "hamshushim": "חמשושים",
     "shushim": "שושים",
+    "daily": "יומי",
 }
 
 
@@ -147,15 +148,21 @@ def _option(context, person, shift_name, slot_date, day, load, shift_names, crew
         ],
         "rotation_group": rotation_group,
         "rotation": rotation.label(_cycle_of(context.profile, person), rotation_group, context.profile)
-        or _PATTERN_LABELS.get(exit_pattern, ""),
+        or _personal_label(person, exit_pattern),
         "closing": bool(
             day is not None
             # Ungrouped חמשושים/שושים "hold" the weekend they are home for.
-            and values.text(person.get("rotation_group"))
+            and (values.text(person.get("rotation_group")) or exit_pattern == "personal")
             and rotation.holds(context.profile, person, day, shift_name)
         ),
     }
     return _borrow(option, verdict, person, crew)
+
+
+def _personal_label(person: dict, exit_pattern: str) -> str:
+    if exit_pattern == "personal" and person.get("closure_every"):
+        return "סוגר/ת 1 ל-%s" % person["closure_every"]
+    return _PATTERN_LABELS.get(exit_pattern, "")
 
 
 def _cycle_of(profile: dict, person: dict) -> str:

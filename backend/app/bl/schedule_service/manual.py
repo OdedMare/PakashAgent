@@ -17,6 +17,7 @@ from app.bl.schedule_service.constants import (
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.rows import find_assignment, iso
 from app.bl.schedule_service.operations import assert_no_blocking_duty
+from app.bl.shared import out_of_service, switched_off
 from app.common.errors import AgentError, AppError, ConflictError, NotFoundError
 from app.common.time_context import israel_today
 from app.dal.repository.schedules import ASSIGNED_BY_MANAGER
@@ -59,7 +60,9 @@ class ManualEditor:
             raise NotFoundError("המשמרת לא נמצאה בסידור")
         person = next((row for row in self._context.profile(team_id).get("employees") or []
                        if row.get("name") == employee), {})
-        if person.get("inactive_from") and slot_date >= person["inactive_from"]:
+        if switched_off(person):
+            raise AgentError("%s כבוי/ה ולא משתתף/ת בשיבוץ. אפשר להדליק אותו/ה ברשימת כוח האדם" % employee)
+        if out_of_service(person, slot_date):
             raise AgentError("העובד סיים את העבודה לפני המשמרת שנבחרה. יש לבחור עובד פעיל")
         assert_no_blocking_duty(
             self._repository, team_id, schedule, employee, slot,

@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -185,6 +185,46 @@ class Settings(BaseSettings):
     """Parallel search workers for one solve: more finds a better schedule
     in the same time. Among equally good schedules the pick may differ
     from one build to the next."""
+
+    redis_url: str = ""
+    """Redis for the read cache (`common/read_cache.py`, D50). Empty -- the
+    default -- means no Redis: every read goes to PostgreSQL, exactly as
+    before. `redis://host:6379/0`, `rediss://` for TLS, or
+    `unix:///path.sock`; a bare `host:port` is read as `redis://`.
+    Live-editable in the panel: every process picks up a saved change within
+    seconds."""
+
+    redis_host: str = ""
+    """Redis host. Overrides the host in `redis_url`; with the URL empty, a
+    host alone turns Redis on (`redis://host:port`)."""
+
+    redis_port: Optional[int] = None
+    """Redis port. Overrides the port in the URL. Empty = the URL's, else
+    6379."""
+
+    redis_username: str = ""
+    """Redis ACL user. Overrides the user in the URL. Empty = the URL's, else
+    the server's `default` user."""
+
+    @field_validator("redis_port", mode="before")
+    @classmethod
+    def _empty_port_is_unset(cls, value):
+        """`PAKASH_REDIS_PORT=` -- what `.env.example` and compose ship --
+        means "not set", not a start-up failure."""
+        return None if isinstance(value, str) and not value.strip() else value
+
+    redis_password: str = ""
+    """Redis password (AUTH). Empty = none, or whatever the URL carries.
+    Never returned by the API."""
+
+    redis_key_prefix: str = "pakash"
+    """Prepended to every key this app writes, so one Redis can serve several
+    deployments (or other applications) without their keys meeting."""
+
+    redis_cache_ttl_seconds: int = 300
+    """How long a cached read may live. Every write already retires the
+    team's cached reads at once; this only bounds a write that could not
+    reach Redis. 0 turns the cache off while keeping the connection."""
 
     session_secret: str = ""
     """Key that signs the workspace session cookie.

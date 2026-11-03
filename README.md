@@ -9,7 +9,8 @@ The boss defines the workplace once in a structured, zero-token setup form.
 After that a constraint solver builds schedules, and the agent rearranges
 them on request in a conversation — always explaining what it did and why.
 Employees see the result and submit constraint requests and swaps; they do
-not edit it. (Importing schedules from files was removed.)
+not edit it. A schedule kept in a spreadsheet can be imported, in any
+layout, and the manager confirms what was read before anything is stored (D42).
 
 **Each team gets its own workspace**, opened by the operator in the
 צוות משמרות זהב console at `/admin` ([D28](docs/DECISIONS.md)). The boss logs
@@ -24,6 +25,13 @@ markers, and errors are all Hebrew. See [`backend/app/bl/CLAUDE.md`](backend/app
 
 **Unit setup works end to end without a model call.** The boss defines the
 roster, shifts, rotations and rules in a structured form saved in Postgres.
+
+**A מכלול works end to end** ([D43](docs/DECISIONS.md)). צוות משמרות זהב
+joins existing teams — each a **משמרת** with its own **מפקד משמרת** — under a
+**מפקד מכלול**, whose password only the operator issues. The commander sees
+every משמרת on one board, narrows it to one משמרת and one shift type, and
+enters any משמרת with all of its commander's tools; every change they make
+there is told to that משמרת's commander.
 
 **Workspaces work end to end.** A boss opens a team, gets a share link for the
 employees, and everything they author is scoped to that team.
@@ -154,6 +162,10 @@ and the repository base. See [`backend/CLAUDE.md`](backend/CLAUDE.md).
 docker compose up          # backend, job worker, frontend, postgres
 ```
 
+Compose runs four API processes beside one worker and a tuned PostgreSQL.
+For many teams at once -- sizing processes and connections, and finding the
+slow query -- see [`docs/SCALING.md`](docs/SCALING.md).
+
 Running the two halves directly instead:
 
 ```bash
@@ -197,8 +209,18 @@ cd backend
 **PostgreSQL is the only stateful service.** The login throttle, the
 manager's live inbox (LISTEN/NOTIFY) and the model-call limit
 (`PAKASH_LLM_MAX_CONCURRENCY`, default 4; set 1 for a local Ollama) all go
-through it ([D35](docs/DECISIONS.md)). There is no Redis, and nothing calls
-out but the model server (Opik tracing was removed for air-gapped networks).
+through it ([D35](docs/DECISIONS.md)). Nothing calls out but the model
+server (Opik tracing was removed for air-gapped networks).
+
+**Redis is optional, and only a cache** ([D50](docs/DECISIONS.md)). With a
+URL saved in the operator console ("מערכת" → Redis) or `PAKASH_REDIS_URL`,
+the board's heavy reads — the overview, stats, a day, a week, a span, a
+period, and the מכלול commander's combined board — are answered from Redis
+until that team's data changes. Every
+write, from the API or the worker, retires its team's cached reads once it
+commits, and every key starts with the configured prefix
+(`PAKASH_REDIS_KEY_PREFIX`). Without Redis everything reads PostgreSQL as
+before; `docker compose --profile redis up` starts one.
 A team may use every model slot unless `PAKASH_LLM_TEAM_CONCURRENCY` caps it;
 `PAKASH_LLM_TIMEOUT_SECONDS=0` is a built-in ceiling (300s, builds 900s), so a
 hung call fails instead of holding its slot ([D38](docs/DECISIONS.md)). See

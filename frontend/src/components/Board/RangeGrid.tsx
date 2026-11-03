@@ -88,19 +88,10 @@ export function RangeGrid({
   const index = useMemo(() => buildScheduleIndex(span, people), [span, people]);
   const hueOf = useMemo(() => buildPalette(employees), [employees]);
 
-  const startTimes = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const slot of span?.slots ?? []) {
-      if (slot.start_time && !map[slot.shift_name]) {
-        map[slot.shift_name] = slot.start_time;
-      }
-    }
-    return map;
-  }, [span?.slots]);
   // The manager's own row order, the one the week board reads in. A month
   // that listed the shifts differently from the week it opens into would
   // have to be re-read on every click.
-  const order = useShiftOrder({ shifts: index.shifts, startTimes });
+  const order = useShiftOrder({ shifts: index.shifts });
 
   const flagged = useMemo(() => {
     const map = new Map<string, number>();

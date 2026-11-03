@@ -37,13 +37,28 @@ def test_an_absence_until_the_end_of_the_year_is_every_day_from_today():
 @pytest.mark.parametrize("sentence, scope", [
     ("עודד חולה בשני ושלישי תחליף אותו מהלוח", "dates"),
     ("עודד טס לחול אל תשבץ", "ask_dates"),
+    ("שים אי זמינות לעודד ליום אחד", "ask_dates"),
     ("ירין עמלקית היא לא יכולה לעבוד בשישי", "ask_scope"),
     ("ירין עמלקית לא יכולה לעבוד בכל יום שישי", "recurring"),
     ("עודד לא זמין ב-27.10", "dates"),
+    ("שים אי זמינות לעודד ל-27.10", "dates"),
 ])
 def test_the_three_shapes_a_manager_types_are_told_apart(sentence, scope):
     found = read(sentence, ROSTER, ["בוקר"], TODAY, WEEK)
     assert found["scope"] == scope
+
+
+def test_one_day_unavailability_is_one_constraint_without_a_model_round():
+    repo, llm, service, chat_id, schedule_id = setup([])
+    message = converse(
+        service, repo, chat_id, schedule_id,
+        "שים אי זמינות לדנה ל-2026-10-05",
+    )
+    assert message["status"] == "pending"
+    assert [row["date"] for row in message["payload"]["plan"]["constraints"]] == [
+        "2026-10-05",
+    ]
+    assert not llm.calls
 
 
 @pytest.mark.parametrize("sentence", [
@@ -165,6 +180,35 @@ def test_the_replacement_tab_ranks_covers_for_a_range_and_writes_nothing():
     assert [row["employee"] for row in slot["candidates"]] == ["יוסי", "רון"]
     assert {"hours", "shifts", "nights", "why"} <= set(slot["candidates"][0])
     assert not llm.calls and not repo.changes and not repo.availability_rows
+
+
+def test_the_replacement_tab_shows_covers_that_break_rest_hours_with_a_warning():
+    from app.common.sessions import ROLE_BOSS
+
+    repo, _, client = _replacement_client(ROLE_BOSS)
+    night = "לילה"
+    repo.profiles[TEAM]["audit_policy"] = {"min_rest_hours": 10}
+    repo.profiles[TEAM]["shifts"].append({
+        "name": night, "start_time": "15:00", "end_time": "23:00",
+        "days": [], "staffing": [],
+    })
+    schedule_id = next(iter(repo.schedules))
+    repo.add_slots(schedule_id, TEAM, [{
+        "shift_name": night, "slot_date": "2026-10-04", "headcount": 2,
+    }])
+    night_slot = repo.find_slot(schedule_id, TEAM, night, "2026-10-04")
+    for employee in ("יוסי", "רון"):
+        repo.add_assignment(schedule_id, TEAM, night_slot["id"], employee, "שיבוץ קיים")
+
+    slot = client.get("/api/agent/replacements", params=dict(
+        employee="דנה", starts_on="2026-10-05", ends_on="2026-10-05",
+    )).json()["slots"][0]
+
+    assert slot["pick"] == ""
+    assert [row["employee"] for row in slot["candidates"]] == ["יוסי", "רון"]
+    assert all(row["requires_exception"] for row in slot["candidates"])
+    assert all(row["warnings"][0]["code"] == "short_rest" for row in slot["candidates"])
+    assert all("שעות מנוחה" in row["warnings"][0]["message"] for row in slot["candidates"])
 
 
 def test_the_replacement_tab_refuses_strangers_and_members():

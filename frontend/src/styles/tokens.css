@@ -1,6 +1,8 @@
 /* Shared native-inspired neutrals. Blue identifies actions; schedule status
    and per-person colours retain their meaning. Glass belongs to navigation. */
 :root {
+  --font-system: -apple-system, BlinkMacSystemFont, "Inter", "Noto Sans Hebrew", "Arial Hebrew", "Segoe UI", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --bg: #f5f5f7;
   --surface: #ffffff;
   --surface-2: #f9f9fb;
@@ -40,6 +42,11 @@
   --radius: 16px;
   --radius-sm: 10px;
   --focus: 0 0 0 3px rgba(0, 113, 227, 0.28);
+  /* The one form field: `:where(input, select, textarea)` below. */
+  --control-height: 44px;
+  --control-pad-y: 0.55rem;
+  --control-pad-x: 0.65rem;
+  --control-font-size: 15px;
   --brand-gradient: linear-gradient(var(--primary-fill), var(--primary-fill));
   --on-primary: #ffffff;
   --brand-glow: none;
@@ -115,6 +122,7 @@
 
 html {
   color-scheme: light;
+  font-family: var(--font-system);
 }
 
 :root[data-theme="dark"] {
@@ -133,12 +141,15 @@ body,
 button,
 input,
 textarea,
-select {
+select,
+option,
+optgroup,
+dialog {
   /* The system face first: on Apple devices that is SF Pro and SF Hebrew,
      which is most of what makes the app feel native there. Elsewhere Inter
      carries Latin and digits and Noto Sans Hebrew the Hebrew — both loaded
      in the root layout, degrading to system faces if the host is unreachable. */
-  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Noto Sans Hebrew", "Arial Hebrew", "Segoe UI", Arial, sans-serif;
+  font-family: var(--font-system);
   font-size: 15px;
   letter-spacing: -0.01em;
   font-feature-settings: "cv11", "ss01";
@@ -155,6 +166,58 @@ input,
 textarea,
 select {
   color: inherit;
+}
+
+input::file-selector-button {
+  font: inherit;
+}
+
+/* One field, everywhere. Every text input, select and textarea in the app
+   has this box: 44px tall, the strong border, the small radius, the surface
+   behind it and the blue focus ring. Written in `:where()` so it carries no
+   specificity: a screen never restates it, and only a field that is
+   deliberately not a field — a search inside a bar, the chat composer, a
+   toolbar filter chip — overrides it with a class of its own. A label above
+   a field is `.field-label` (or `.manual-field > span`), styled once below. */
+:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="button"], [type="submit"]), select, textarea) {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-height: var(--control-height);
+  padding: var(--control-pad-y) var(--control-pad-x);
+  font: inherit;
+  font-size: var(--control-font-size);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]), select, textarea):focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: var(--focus);
+}
+
+:where(input[readonly], textarea[readonly]) {
+  color: var(--text-muted);
+  background: var(--surface-2);
+}
+
+:where(input, select, textarea):disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+:where(textarea) {
+  min-height: 5rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+/* iOS zooms into a field under 16px; on a phone every field is 16px. */
+@media (max-width: 640px) {
+  :root { --control-font-size: 16px; }
 }
 
 button {

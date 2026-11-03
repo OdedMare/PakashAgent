@@ -8,7 +8,7 @@ from app.api.routers.schedules.base import RouteGroup
 
 class StatisticsRoutes(RouteGroup):
     def register(self, router: APIRouter) -> None:
-        service, boss = self.service, self.boss
+        service, boss, cache = self.service, self.boss, self.cache
 
         @router.get("/stats", response_model=ShiftStats)
         def stats(
@@ -22,4 +22,6 @@ class StatisticsRoutes(RouteGroup):
             `boss` and not `visitor`: load per person is the manager's view
             (D27), and the span reads drafts.
             """
-            return service.stats(session["team_id"], start, end, employee)
+            team = session["team_id"]
+            return cache.read(team, "stats", (start, end, employee),
+                              lambda: service.stats(team, start, end, employee))

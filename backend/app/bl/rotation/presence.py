@@ -2,10 +2,10 @@
 
 import datetime
 
-from app.bl.rotation import day_cycles
-from app.bl.rotation.closures import closure_days, holds, shift_interval
+from app.bl.rotation import day_cycles, personal
+from app.bl.rotation.closures import closure_days, handover_shifts, holds, shift_interval
 from app.bl.rotation.vocabulary import (
-    cycle_of_group, exit_pattern, groups_for, minutes, parse_date, text,
+    CLOSURE_LEAD_DAYS, cycle_of_group, exit_pattern, groups_for, minutes, parse_date, text,
 )
 from app.bl.shared import hebrew_weekday, weekday_key
 
@@ -81,6 +81,9 @@ def closure_status(profile, person, slot):
     pattern = exit_pattern(profile, person)
     if day_cycles.is_day_cycle(pattern):
         return day_cycles.status(profile, person, slot)
+    if personal.is_personal(pattern):
+        return personal.status(pattern, person, slot, handover_shifts(profile),
+                               CLOSURE_LEAD_DAYS["personal"])
     group = text(person.get("rotation_group"))
     if not group:
         return _weekly_exit_status(profile, person, slot)

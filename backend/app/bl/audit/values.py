@@ -6,6 +6,7 @@ entire reason it is not the model doing this.
 """
 
 import datetime
+import functools
 from typing import Any, Optional
 
 from app.bl.shared import number, text
@@ -24,6 +25,14 @@ def parse_time(value: Any) -> Optional[datetime.datetime]:
     stated = text(value)
     if not stated:
         return None
+    return _parsed_time(stated)
+
+
+@functools.lru_cache(maxsize=1024)
+def _parsed_time(stated: str) -> Optional[datetime.datetime]:
+    # A workplace has a handful of distinct times, and an audit parses each
+    # of them once per row, so `strptime` ran thousands of times per search.
+    # The result is an immutable datetime, so sharing it is safe.
     for shape in ("%H:%M", "%H:%M:%S", "%H"):
         try:
             parsed = datetime.datetime.strptime(stated, shape)

@@ -4,9 +4,9 @@ import json
 
 import pytest
 
-from app.bl.chat_constraints import affected_periods, normalize_constraints
-from app.bl.chat_contract import RejectedPlan
-from app.bl.chat_fast import ChatFastAnswers
+from app.bl.chat.constraints import affected_periods, normalize_constraints
+from app.bl.chat.contract import RejectedPlan
+from app.bl.chat.fast import ChatFastAnswers
 from tests.test_manager_chat import MORNING, PROFILE, converse, setup, translation, turn
 
 REQUEST = "תכניס אילוץ לדנה ב-2026-10-06"

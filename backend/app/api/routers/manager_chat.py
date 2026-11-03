@@ -30,9 +30,25 @@ class ChatApproval(BaseModel):
 
 
 def build_router(service, repository, guards):
+    """The manager's own conversations, on the team cookie."""
     router = APIRouter(prefix="/api/agent/chats", tags=["manager chat"])
-    manager = guards.manager()
+    _register(router, service, repository, guards.manager())
+    return router
 
+
+def build_commander_router(service, repository, guards):
+    """The same conversations for a מכלול commander, one per משמרת, named by
+    the path and checked against the מכלול (D43). The commander's chat pane
+    speaks to every משמרת through these without entering any of them; each
+    session is the one `manager()` gives the commander inside that team."""
+    router = APIRouter(
+        prefix="/api/complex/teams/{team_id}/chats", tags=["commander chat"],
+    )
+    _register(router, service, repository, guards.commander_in_team())
+    return router
+
+
+def _register(router, service, repository, manager):
     @router.get("")
     def list_chats(session: dict = Depends(manager)):
         return repository.list_chats(session["team_id"], session["manager_id"])
@@ -78,8 +94,6 @@ def build_router(service, repository, guards):
     def stop(chat_id: str, session: dict = Depends(manager)):
         repository.stop_chat_turn(session["team_id"], session["manager_id"], chat_id)
         return repository.get_chat(session["team_id"], session["manager_id"], chat_id)
-
-    return router
 
 
 def _regenerate_route(router, service, repository, manager):

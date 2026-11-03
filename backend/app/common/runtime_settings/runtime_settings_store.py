@@ -10,16 +10,12 @@ import time
 from dataclasses import asdict, fields, replace
 from pathlib import Path
 
-from app.common.config import (
-    Settings,
-)
+from app.common.config import Settings
 from app.common.runtime_settings.normalizers import (
-    MASKED_SECRET,
-    extract_url_schema,
-    normalize_database_schema,
-    normalize_database_url,
-    normalize_llm_base_url,
+    MASKED_SECRET, extract_url_schema, normalize_database_schema,
+    normalize_database_url, normalize_llm_base_url,
 )
+from app.common.runtime_settings import redis_fields
 from app.common.runtime_settings.runtime_settings import RuntimeSettings
 from app.common.runtime_settings.shared import SharedSettings, shareable
 
@@ -29,17 +25,15 @@ _SECRET_FIELDS = {
     "llm_api_key_fast",
     "llm_api_key_default",
     "llm_api_key_advanced",
+    "redis_password",
 }
 
 # Fields where None/empty means "clear the value", not "keep current".
 # Without this, an emptied base URL or port could never be unset from the UI.
 _LLM_BASE_URL_FIELDS = (
-    "llm_base_url",
-    "llm_base_url_fast",
-    "llm_base_url_default",
-    "llm_base_url_advanced",
+    "llm_base_url", "llm_base_url_fast", "llm_base_url_default", "llm_base_url_advanced",
 )
-_NULLABLE = ("database_port", *_LLM_BASE_URL_FIELDS)
+_NULLABLE = ("database_port", "redis_port", *_LLM_BASE_URL_FIELDS)
 
 # Integers where 0 is not a meaningful value and is clamped away. Only
 # concurrency qualifies: `llm_timeout_seconds` is handled separately because
@@ -89,6 +83,7 @@ class RuntimeSettingsStore:
             llm_verify_ssl=env.llm_verify_ssl,
             solver_time_limit_seconds=_seconds(env.solver_time_limit_seconds),
             solver_workers=max(1, int(env.solver_workers)),
+            **redis_fields.from_env(env),
         )
         self._mtime = None
         self._checked = time.monotonic()
@@ -106,6 +101,10 @@ class RuntimeSettingsStore:
             self._checked = now
             self.reload_if_changed()
             self.pull_shared()
+        return self._settings
+
+    def peek(self) -> RuntimeSettings:
+        """The settings held now, with no file or database look (D50)."""
         return self._settings
 
     def share_through(self, shared) -> None:
@@ -241,6 +240,8 @@ def _normalized(key: str, value, patch: dict, settings):
         return _reasoning_effort(value)
     if key == "solver_time_limit_seconds":
         return _seconds(value)
+    if key in redis_fields.FIELDS:
+        return redis_fields.normalized(key, value)
     return value
 
 

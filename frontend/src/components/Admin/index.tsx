@@ -1,17 +1,18 @@
 "use client";
 
-import { Building2, Crown, LogOut, Moon, RefreshCw, Server, Sun } from "lucide-react";
+import { Building2, Crown, LogOut, Moon, Network, RefreshCw, Server, Sun } from "lucide-react";
 import { useState } from "react";
 
 import { CrewLoading } from "@/components/Crew";
 import { useTheme } from "@/hooks/useTheme";
 
 import { AdminLogin } from "./AdminLogin";
+import { ComplexesView } from "./ComplexesView";
 import { SystemView } from "./SystemView";
 import { TeamsView } from "./TeamsView";
 import { useAdmin } from "./useAdmin";
 
-type Tab = "teams" | "system";
+type Tab = "teams" | "complexes" | "system";
 
 /** The צוות משמרות זהב console (D28) at `/admin`.
  *
@@ -55,6 +56,13 @@ export function AdminConsole() {
           </button>
           <button
             type="button"
+            aria-current={tab === "complexes" ? "page" : undefined}
+            onClick={() => setTab("complexes")}
+          >
+            <Network size={15} /> מכלולים
+          </button>
+          <button
+            type="button"
             aria-current={tab === "system" ? "page" : undefined}
             onClick={() => setTab("system")}
           >
@@ -88,7 +96,13 @@ export function AdminConsole() {
       </header>
 
       <main id="main-content" className="adm-main">
-        {tab === "teams" ? <TeamsView state={state} /> : <SystemView state={state} />}
+        {tab === "teams" ? (
+          <TeamsView state={state} />
+        ) : tab === "complexes" ? (
+          <ComplexesView state={state} />
+        ) : (
+          <SystemView state={state} />
+        )}
       </main>
     </div>
   );

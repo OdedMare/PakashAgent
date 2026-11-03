@@ -14,7 +14,7 @@ from app.api.routers.schedules.base import RouteGroup
 
 class PeriodRoutes(RouteGroup):
     def register(self, router: APIRouter) -> None:
-        service, boss = self.service, self.boss
+        service, boss, cache = self.service, self.boss, self.cache
 
         @router.post("/{schedule_id}/publish", response_model=Schedule)
         def publish(schedule_id: str, session: dict = Depends(boss)) -> dict:
@@ -56,4 +56,6 @@ class PeriodRoutes(RouteGroup):
 
         @router.get("/{schedule_id}", response_model=Schedule)
         def get(schedule_id: str, session: dict = Depends(boss)) -> dict:
-            return service.get(schedule_id, session["team_id"])
+            team = session["team_id"]
+            return cache.read(team, "period", (schedule_id,),
+                              lambda: service.get(schedule_id, team))

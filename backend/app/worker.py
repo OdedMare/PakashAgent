@@ -13,7 +13,7 @@ import time
 from app.bl.compiled_sources import SourceCompiler
 from app.bl.compiled_sources.compiler import JOB_KIND as COMPILE_SOURCES
 from app.bl.schedule_service import ScheduleService
-from app.bl.manager_chat import ManagerChatService
+from app.bl.chat.service import ManagerChatService
 from app.common.events import TeamEvents
 from app.dal.notify import PostgresSignals
 from app.common.activity import track_activity
@@ -21,9 +21,12 @@ from app.common.actor import acting_as
 from app.common.errors import NotFoundError
 from app.common.config import Settings
 from app.common.logging_setup import configure_logging
+from app.common.read_cache import ReadCache
+from app.common.redis_hub import RedisHub
 from app.common.runtime_settings.runtime_settings_store import RuntimeSettingsStore
 from app.dal.llm.openai_client import OpenAIJsonClient
 from app.dal.llm.team_context import model_team
+from app.dal import write_marks
 from app.dal.repository import Repository
 
 _log = logging.getLogger("pakash.worker")
@@ -124,6 +127,8 @@ def _build():
     # job on: a database not ready yet is simply asked again by `get()`.
     store.share_through(repository)
     store.pull_shared()
+    # What a job writes retires its team's cached reads in the API (D50).
+    write_marks.on_written(ReadCache(RedisHub(store), store).written)
     llm = OpenAIJsonClient(store)
     schedules = ScheduleService(repository, llm, settings=store)
     return repository, JobWorker(

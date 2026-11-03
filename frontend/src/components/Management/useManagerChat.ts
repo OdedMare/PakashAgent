@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { applyManagerPlan, createManagerChat, deleteManagerChat, dismissManagerPlan, listManagerChats,
-  managerEvents, readManagerChat, regenerateManagerReply, sendManagerMessage, stopManagerReply } from "@/services/api";
+import { managerChatRoutes, type ChatRoutes } from "@/services/api";
 import type { ChatPlan, ManagerChatSummary, ManagerConversation } from "@/types";
 
 // `crypto.randomUUID` exists only in secure contexts (HTTPS/localhost), so a
@@ -30,7 +29,10 @@ function withTail(previous: ManagerConversation | null, tail: ManagerConversatio
   return { ...tail, messages: [...previous.messages.slice(0, start), ...tail.messages] };
 }
 
-export function useManagerChat(workspaceId: string, scheduleId: string, visibleWeek: string, focusDate: string, onApplied: (plan?: ChatPlan) => Promise<void>) {
+/** One conversation set. `routes` is the manager's own by default; the
+ *  מכלול commander passes one משמרת's (`commanderChatRoutes`), keyed by
+ *  `workspaceId`, so a hook per משמרת can run side by side. */
+export function useManagerChat(workspaceId: string, scheduleId: string, visibleWeek: string, focusDate: string, onApplied: (plan?: ChatPlan) => Promise<void>, routes: ChatRoutes = managerChatRoutes) {
   const [chat, setChat] = useState<ManagerConversation | null>(null);
   const [chats, setChats] = useState<ManagerChatSummary[]>([]);
   const [busy, setBusy] = useState(false);
@@ -45,14 +47,14 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
   useEffect(() => {
     mounted.current = true;
     let cancelled = false;
-    void listManagerChats().then(async (rows) => {
-      const initial = rows.length ? await readManagerChat(rows[0].id) : await createManagerChat();
+    void routes.list().then(async (rows) => {
+      const initial = rows.length ? await routes.read(rows[0].id) : await routes.create();
       if (!cancelled) { setChats(rows); setChat(initial); }
     }).catch((reason) => {
       if (!cancelled) setError(reason instanceof Error ? reason.message : "לא ניתן לטעון שיחות");
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; mounted.current = false; };
-  }, [workspaceId]);
+  }, [workspaceId, routes]);
 
   const chatId = chat?.id;
   useEffect(() => {
@@ -69,12 +71,12 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
       reading = true; clearTimeout(timer);
       let finished = false;
       try {
-        const next = await readManagerChat(chatId, workingId);
+        const next = await routes.read(chatId, workingId);
         if (cancelled) return;
         setChat((previous) => withTail(previous, next, workingId));
         setError(null);
         finished = !next.messages.some((message) => message.status === "working");
-        if (finished) setChats(await listManagerChats());
+        if (finished) setChats(await routes.list());
       } catch (reason) {
         if (!cancelled) setError(reason instanceof Error ? reason.message : "החיבור נותק; מנסה שוב…");
       } finally { reading = false; }
@@ -85,7 +87,7 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
     // The server signals every check, every few words of the reply and the
     // end of the turn; each signal re-reads at once. The timer underneath
     // covers a stream a proxy buffers or drops.
-    const source = typeof EventSource === "undefined" ? null : managerEvents();
+    const source = typeof EventSource === "undefined" || !routes.events ? null : routes.events();
     source?.addEventListener("open", () => {
       streaming = true;
       // Anything signalled while the line was down produced no event to hear.
@@ -95,7 +97,7 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
     source?.addEventListener("chat", () => void poll());
     timer = setTimeout(() => void poll(), FIRST_POLL_MS);
     return () => { cancelled = true; clearTimeout(timer); source?.close(); };
-  }, [chatId, workingId]);
+  }, [chatId, workingId, routes]);
 
   const run = useCallback(async (action: () => Promise<ManagerConversation>) => {
     if (inFlight.current) return false;
@@ -105,7 +107,7 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
       const next = await action();
       if (mounted.current) {
         setChat(next);
-        const rows = await listManagerChats().catch(() => null);
+        const rows = await routes.list().catch(() => null);
         if (rows && mounted.current) setChats(rows);
       }
       return true;
@@ -116,7 +118,7 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
       inFlight.current = false;
       if (mounted.current) setBusy(false);
     }
-  }, []);
+  }, [routes]);
 
   const syncBoard = useCallback(async (plan: ChatPlan) => {
     try {
@@ -142,12 +144,12 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
         const latest = chat?.messages[chat.messages.length - 1];
         let next: ManagerConversation;
         try {
-          next = await sendManagerMessage(chatId, { content: content.trim(), request_id: id,
+          next = await routes.send(chatId, { content: content.trim(), request_id: id,
             schedule_id: scheduleId || undefined, visible_week: visibleWeek, focus_date: focusDate || undefined,
             displayed_plan_id: !replaces && latest?.status === "pending" ? latest.id : undefined,
             replaces_message_id: replaces });
         } catch (reason) {
-          const recovered = await readManagerChat(chatId).catch(() => null);
+          const recovered = await routes.read(chatId).catch(() => null);
           if (recovered?.messages.some((message) => message.status === "working" || message.request_id === id)) next = recovered;
           else throw reason;
         }
@@ -157,11 +159,11 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
         return next;
       });
     } finally { if (mounted.current) setOutgoing(null); }
-  }, [chat, chatId, working, scheduleId, visibleWeek, focusDate, run, syncBoard]);
+  }, [chat, chatId, working, scheduleId, visibleWeek, focusDate, run, syncBoard, routes]);
 
-  const regenerate = useCallback(() => chatId && !working ? run(() => regenerateManagerReply(chatId, {
+  const regenerate = useCallback(() => chatId && !working ? run(() => routes.regenerate(chatId, {
     request_id: requestId(), schedule_id: scheduleId || undefined, visible_week: visibleWeek, focus_date: focusDate || undefined,
-  })) : Promise.resolve(false), [chatId, working, scheduleId, visibleWeek, focusDate, run]);
+  })) : Promise.resolve(false), [chatId, working, scheduleId, visibleWeek, focusDate, run, routes]);
 
   const apply = useCallback(async (messageId: string, exceptions: boolean) => {
     if (!chatId || working) return;
@@ -170,10 +172,10 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
       // Approval is idempotent by message id; recover or retry a lost response once.
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          next = await applyManagerPlan(chatId, messageId, exceptions);
+          next = await routes.apply(chatId, messageId, exceptions);
           break;
         } catch (reason) {
-          const recovered = await readManagerChat(chatId).catch(() => null);
+          const recovered = await routes.read(chatId).catch(() => null);
           const status = recovered?.messages.find((message) => message.id === messageId)?.status;
           if (status === "applied") { next = recovered!; break; }
           if (attempt === 1 || (recovered && status !== "pending")) throw reason;
@@ -186,7 +188,7 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
       await syncBoard(applied.payload.plan);
       return next!;
     });
-  }, [chatId, working, run, syncBoard]);
+  }, [chatId, working, run, syncBoard, routes]);
 
   return {
     chat, chats, busy, working, loading, error, send, apply, refreshPending, outgoing, regenerate,
@@ -194,20 +196,20 @@ export function useManagerChat(workspaceId: string, scheduleId: string, visibleW
       await syncBoard(refreshPending);
       return chat;
     }) : Promise.resolve(false),
-    select: (id: string) => run(() => readManagerChat(id)),
-    newChat: () => run(createManagerChat),
+    select: (id: string) => run(() => routes.read(id)),
+    newChat: () => run(() => routes.create()),
     remove: () => chatId ? run(async () => {
-      await deleteManagerChat(chatId);
-      const remaining = await listManagerChats();
-      return remaining.length ? readManagerChat(remaining[0].id) : createManagerChat();
+      await routes.remove(chatId);
+      const remaining = await routes.list();
+      return remaining.length ? routes.read(remaining[0].id) : routes.create();
     }) : Promise.resolve(false),
     // Done with this thread: drop it and start clean, rather than landing on
     // whichever older conversation `remove` would open.
     restart: () => chatId ? run(async () => {
-      await deleteManagerChat(chatId);
-      return createManagerChat();
+      await routes.remove(chatId);
+      return routes.create();
     }) : Promise.resolve(false),
-    dismiss: (messageId: string) => chatId ? run(() => dismissManagerPlan(chatId, messageId)) : Promise.resolve(false),
-    stop: () => chatId ? run(() => stopManagerReply(chatId)) : Promise.resolve(false),
+    dismiss: (messageId: string) => chatId ? run(() => routes.dismiss(chatId, messageId)) : Promise.resolve(false),
+    stop: () => chatId ? run(() => routes.stop(chatId)) : Promise.resolve(false),
   };
 }

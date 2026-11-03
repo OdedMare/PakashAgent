@@ -4,14 +4,28 @@ import datetime
 import re
 from typing import Any, List
 
+from app.bl.profile_service import unit as unit_rules
 from app.bl.profile_service.validation import named_rows, text, text_list, valid_time
 from app.bl.rotation.vocabulary import groups_for
 from app.bl.shared import HEBREW_WEEKDAYS, weekday_key
 from app.common.errors import AgentError
 
-_SERVICE_TYPES = ("standard", "overlap", "reserve")
-_EXIT_PATTERNS = ("round", "triplet", "quad", "quint", "hamshushim", "shushim")
+# civilian = אע״צ (אזרח עובד צה״ל), hatzach = הצ״ח. Both sit beside reserve
+# (מילואים) as a status of the person; neither takes reserve days, and
+# neither changes how the solver places them — only how they are labelled
+# and coloured on the board.
+_SERVICE_TYPES = ("standard", "overlap", "reserve", "civilian", "hatzach")
+_RANK_GROUPS = ("officer", "nco")
+_EXIT_PATTERNS = ("round", "triplet", "quad", "quint", "hamshushim", "shushim",
+                  "none", "daily", "personal")
+# Patterns one person carries alone (`rotation/personal.py`): no group.
+_PERSONAL = ("none", "daily", "personal")
 _GROUPED = ("round", "triplet", "quad", "quint")
+# How capable a soldier is, weakest first. Optional: an empty value is "not
+# rated", and the solver balances only the people who are (`solver/competence.py`).
+COMPETENCE_LEVELS = ("weak", "medium", "high", "excellent")
+# How a reservist was called up: an emergency order (צו 8) or reserve days.
+_RESERVE_CALLS = ("order", "days")
 # A day cycle is named by its id; whether that id exists is checked against
 # the workplace in `validate_rotation_groups`, once both halves are merged.
 _DAY_CYCLE = re.compile(r"^cycle:[A-Za-z0-9_-]{1,32}$")
@@ -22,6 +36,7 @@ def employees(rows: Any, default_exit_pattern: str = "round") -> List[dict]:
 
 
 def _employee(row: dict, default_exit_pattern: str) -> dict:
+    raw = dict(row)
     if row.get("inactive_from"):
         try:
             row["inactive_from"] = datetime.date.fromisoformat(row["inactive_from"]).isoformat()
@@ -30,6 +45,9 @@ def _employee(row: dict, default_exit_pattern: str) -> dict:
     service_type = text(row.get("service_type")) or "standard"
     if service_type not in _SERVICE_TYPES:
         raise AgentError("סוג כוח האדם אינו תקין")
+    rank_group = text(row.get("rank_group"))
+    if rank_group and rank_group not in _RANK_GROUPS:
+        raise AgentError("דרג התקן אינו תקין")
     exit_pattern = text(row.get("exit_pattern")) or default_exit_pattern
     if exit_pattern not in _EXIT_PATTERNS and not _DAY_CYCLE.match(exit_pattern):
         raise AgentError("מבנה היציאות של איש הצוות אינו תקין")
@@ -37,12 +55,15 @@ def _employee(row: dict, default_exit_pattern: str) -> dict:
     if not isinstance(recurring, list):
         raise AgentError("האילוצים הקבועים של איש הצוות אינם תקינים")
     _validate_recurring(recurring)
+    row.update(_soldier_fields(row, service_type))
+    row.update(_personal_fields(row, exit_pattern))
     row.update({
         "service_type": service_type,
+        "rank_group": rank_group,
         "exit_pattern": exit_pattern,
         # Kept for every pattern, because a group is what makes one rotate:
         # a חמשושים person *with* a group goes out on their group's weekends.
-        "rotation_group": text(row.get("rotation_group")),
+        "rotation_group": "" if exit_pattern in _PERSONAL else text(row.get("rotation_group")),
         "role": text(row.get("role")),
         "notes": text(row.get("notes")),
         "is_shift_manager": bool(row.get("is_shift_manager")),
@@ -50,11 +71,94 @@ def _employee(row: dict, default_exit_pattern: str) -> dict:
         "eligible_shifts": text_list(row.get("eligible_shifts") or []),
         "is_trainee": service_type == "overlap",
         "is_casual": service_type == "reserve",
+        # The on/off switch: off keeps the soldier on the roster and out of
+        # every build. Anything but an explicit false is on.
+        "on_duty": row.get("on_duty") is not False,
         "recurring_constraints": recurring,
     })
+    row.pop("qualifications", None)
+    row.update(unit_rules.person_fields(dict(raw)))
     if not isinstance(row.get("counts_toward_staffing"), bool):
         row["counts_toward_staffing"] = service_type != "overlap"
     return row
+
+
+def _soldier_fields(row: dict, service_type: str) -> dict:
+    """Competence for anyone; days a week and call-up type for a reservist.
+
+    A reservist's fields are dropped once they stop being one, so a soldier
+    moved back to standard service is not capped by a week they no longer owe.
+    """
+    competence = text(row.get("competence"))
+    if competence and competence not in COMPETENCE_LEVELS:
+        raise AgentError("הרמה המקצועית אינה תקינה (חלש, בינוני, גבוה או מצטיין)")
+    fields = {"competence": competence, "reserve_days_per_week": None,
+              "reserve_min_days": None, "reserve_consecutive": False, "reserve_call": ""}
+    if service_type != "reserve":
+        return fields
+    days = _week_days(row.get("reserve_days_per_week"), "מספר ימי המילואים בשבוע")
+    least = _week_days(row.get("reserve_min_days"), "מינימום ימי המילואים בשבוע")
+    if least is not None and days is not None and least > days:
+        raise AgentError("מינימום ימי המילואים בשבוע גדול ממספר הימים שהחייל/ת מגיע/ה")
+    fields["reserve_days_per_week"] = days
+    fields["reserve_min_days"] = least
+    consecutive = row.get("reserve_consecutive")
+    if consecutive not in (None, "") and not isinstance(consecutive, bool):
+        raise AgentError("reserve_consecutive חייב להיות ערך בוליאני")
+    fields["reserve_consecutive"] = bool(consecutive)
+    call = text(row.get("reserve_call"))
+    if call and call not in _RESERVE_CALLS:
+        raise AgentError("סוג הזימון למילואים אינו תקין (צו או ימי מילואים)")
+    fields["reserve_call"] = call
+    return fields
+
+
+def _personal_fields(row: dict, pattern: str) -> dict:
+    """Daily hours, or one weekend in N; dropped when the pattern changes."""
+    fields = {"daily_days": [], "daily_start": "", "daily_end": "",
+              "closure_every": None, "closure_from": ""}
+    if pattern == "daily":
+        days = text_list(row.get("daily_days") or [])
+        weekdays = {weekday_key(day) for day in HEBREW_WEEKDAYS}
+        if any(weekday_key(day) not in weekdays for day in days):
+            raise AgentError("ימי ההגעה היומית חייבים להיות שמות ימים בעברית")
+        for key in ("daily_start", "daily_end"):
+            if text(row.get(key)) and not valid_time(text(row.get(key))):
+                raise AgentError("שעות ההגעה היומית חייבות להיות בפורמט HH:MM")
+            fields[key] = text(row.get(key))
+        fields["daily_days"] = days
+    elif pattern == "personal":
+        count = row.get("closure_every")
+        try:
+            count = int(count) if count not in (None, "") and not isinstance(count, bool) else None
+        except (TypeError, ValueError):
+            count = -1
+        if count is not None and not 2 <= count <= 8:
+            raise AgentError("סגירה אישית היא שבת אחת מכל 2 עד 8 שבתות")
+        first = text(row.get("closure_from"))
+        if first:
+            try:
+                first = datetime.date.fromisoformat(first).isoformat()
+            except ValueError:
+                raise AgentError("תאריך הסגירה הראשונה חייב להיות בפורמט YYYY-MM-DD")
+        fields.update(closure_every=count, closure_from=first)
+    return fields
+
+
+def _week_days(value, what: str):
+    """A count of days in one week, 1–7, or None when not stated."""
+    if value in (None, ""):
+        return None
+    error = "%s חייב להיות בין 1 ל-7" % what
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise AgentError(error)
+    try:
+        days = int(float(value))
+    except ValueError:
+        raise AgentError(error)
+    if not 1 <= days <= 7:
+        raise AgentError(error)
+    return days
 
 
 def _validate_recurring(rows: list) -> None:
@@ -98,6 +202,12 @@ def employee_item(item: dict) -> dict:
         "is_shift_manager": bool(item.get("is_shift_manager")),
         "can_train": bool(item.get("can_train")),
         "notes": item.get("notes") or "",
+        "competence": item.get("competence") or "",
+        **({"rank_group": item.get("rank_group") or ""} if "rank_group" in item else {}),
+        **{key: item[key] for key in ("service_type", "reserve_days_per_week", "reserve_min_days",
+                                 "reserve_consecutive", "reserve_call", "daily_days",
+                                 "daily_start", "daily_end", "closure_every", "closure_from")
+           if item.get(key) not in (None, "")},
     }
 
 
@@ -117,6 +227,8 @@ def validate_rotation_groups(profile: dict) -> None:
         pattern = text(person.get("exit_pattern")) or mode
         if pattern.startswith("cycle:"):
             _check_day_cycle(person, cycles.get(pattern))
+            continue
+        if pattern in _PERSONAL:
             continue
         cycle = pattern if pattern in _GROUPED else mode
         groups = set(groups_for(cycle) or groups_for("round"))
@@ -140,10 +252,21 @@ def validate_first_profile(profile: dict) -> None:
         raise AgentError("יש להזין שם יחידה")
     if not profile.get("employees"):
         raise AgentError("יש להוסיף לפחות איש צוות אחד")
+    workplace = profile.get("workplace") or {}
     if any(
         person.get("exit_pattern") in _GROUPED and not text(person.get("rotation_group"))
+        and _anchored(workplace, person["exit_pattern"])
         for person in profile.get("employees") or []
     ):
         raise AgentError("יש לבחור קבוצת סבב, תלתון, רבעון או חמישון לכל איש צוות מתאים")
     if not profile.get("shifts"):
         raise AgentError("יש להוסיף לפחות סוג משמרת אחד")
+
+
+def _anchored(workplace: dict, pattern: str) -> bool:
+    """Whether the unit runs this weekend cycle at all. A unit with no
+    closure anchor (a reserve unit on 12-hour shifts, no weekend rotation)
+    leaves its people ungrouped, which means no rotation."""
+    if pattern == "round" and text(workplace.get("first_closure_date")):
+        return True
+    return bool(text(workplace.get("%s_first_closure_date" % pattern)))

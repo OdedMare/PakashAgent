@@ -120,11 +120,15 @@ def semantic_sources(profile, availability=None, instructions="", preferences=No
     training = (profile or {}).get("training_policy") or {}
     if training.get("shadow_shift_fraction") or training.get("shadow_shifts_per_week"):
         add("training_policy", training)
+    # The manager may keep soldiers' notes as something to read on the
+    # board and nothing more: they are then not a source at all.
+    semantics = tuple(key for key in _EMPLOYEE_SEMANTICS
+                      if key != "notes" or not workplace.get("notes_visual_only"))
     for person in (profile or {}).get("employees") or []:
         if not isinstance(person, dict):
             continue
         name = bounded(person.get("name"))
-        for key in _EMPLOYEE_SEMANTICS:
+        for key in semantics:
             add("employee_" + key, person.get(key), name)
         # Soft structured constraints are already code's to weigh
         # (`bl/solver/requests.py`); only sentences need reading.

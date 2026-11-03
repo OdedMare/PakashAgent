@@ -67,4 +67,6 @@ const ACTION_LABELS: Record<string, string> = {
   removed: "הוסר",
   swapped: "הוחלף",
   constraint: "אילוץ",
+  complex_duty: "תורנות מכלול",
+  complex_duty_cancelled: "תורנות מכלול בוטלה",
 };

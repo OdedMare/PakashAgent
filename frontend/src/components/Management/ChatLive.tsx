@@ -49,6 +49,7 @@ const ACTIVE_LABELS: Record<string, string> = {
   coverage_gaps: "מחפש משמרות חסרות", validate_placement: "בודק שהשיבוץ תקין", find_replacements: "מחפש מי יכול להחליף",
   publish_readiness: "בודק אם אפשר לפרסם", profile_gaps: "בודק מה חסר בהגדרות", list_periods: "מחפש סידורים קודמים ועתידיים",
   workload_report: "משווה עומסים", change_history: "קורא את היסטוריית השינויים", simulate_changes: "בודק מה ישתנה בלי לשמור",
+  staffing_scenario: "משווה תרחישי כוח אדם ומאזן חוסרים",
   constraints_report: "בודק אילוצים", request_inbox: "קורא את הבקשות של הצוות", preference_list: "קורא את ההעדפות השמורות",
   plan_review: "בוחן את החריגות ומתקן את ההצעה", plan_check: "מתקן את התוכנית לפי בדיקת השרת",
 };

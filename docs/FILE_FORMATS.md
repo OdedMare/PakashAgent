@@ -140,7 +140,7 @@ for one will fail on the other. This is why there is no template.
    the latter with no year, which must be resolved from surrounding context or
    the period being imported.
 
-5. **Match shift headers against the interview's declared vocabulary** ([D9](DECISIONS.md#d9--shift-vocabulary-is-per-workplace)),
+5. **Match shift headers against the vocabulary declared in unit setup** ([D9](DECISIONS.md#d9--shift-vocabulary-is-per-workplace)),
    rather than inferring shift names from scratch.
 
 6. **Emit an interpretation for confirmation** before committing — e.g. *"8 people,
@@ -148,7 +148,8 @@ for one will fail on the other. This is why there is no template.
 
 ## Fixtures
 
-Rebuild both samples as `.xlsx` fixtures under `backend/tests/fixtures/` and assert
-the inferred interpretation for each. They are the regression suite for layout
-inference — the riskiest part of the build. Add a third real file as a fixture
-when one becomes available.
+Both samples are rebuilt in code as workbooks in `backend/tests/test_importer.py`
+(`test_sample_a_*`, `test_sample_b_*`), each also turned on its side, beside the
+other shapes D42 reads — people down the side, weekday templates, stacked weeks.
+They are the regression suite for layout inference, the riskiest part of the
+build. Add a real file the same way when one becomes available.

@@ -11,7 +11,9 @@ banner after it — same authority, better timing.
 
 The alternatives are the other half: a manager told "דנה has a constraint that
 day — יוסי and רון are both free and qualified" has the answer. Both lists are
-derived from the profile and the stored grid, never invented.
+derived from the profile and the stored grid, never invented. Colleagues come
+in stages (`tiers.py`): the same role from the seat's own post, the same role
+from another post, then anyone else who fits.
 """
 
 from typing import List, Optional

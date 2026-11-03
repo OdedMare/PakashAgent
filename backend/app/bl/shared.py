@@ -51,12 +51,41 @@ def employees(profile: dict) -> list[dict]:
     return dict_items((profile or {}).get("employees"))
 
 
+def switched_off(person: Any) -> bool:
+    """A soldier the manager switched off: still on the roster, out of every build.
+
+    Reservists come and go, so `on_duty` is a switch rather than a departure:
+    missing or true means on; only an explicit false takes them out.
+    """
+    return isinstance(person, dict) and person.get("on_duty") is False
+
+
+def out_of_service(person: Any, date: str = "") -> bool:
+    """Whether this person may not be placed on `date`: switched off, or gone by then."""
+    if switched_off(person):
+        return True
+    ended = text(person.get("inactive_from")) if isinstance(person, dict) else ""
+    return bool(date and ended and date >= ended)
+
+
 def shifts(profile: dict) -> list[dict]:
     return dict_items((profile or {}).get("shifts"))
 
 
 def person_roles(person: dict) -> set:
-    """Every role a person holds: the `roles` list plus the single `role`."""
+    """Every role a person holds: the `roles` list, the single `role`, and
+    the role of each `qualifications` row (stale or not -- staleness is a
+    warning, `audit/unit_policy.py`, never a bar)."""
+    result = declared_roles(person)
+    rows = person.get("qualifications") if isinstance(person, dict) else None
+    if isinstance(rows, list):
+        result.update(text(row.get("role")) for row in rows
+                      if isinstance(row, dict) and text(row.get("role")))
+    return result
+
+
+def declared_roles(person: dict) -> set:
+    """The roles stated on `role`/`roles`, without qualifications."""
     listed = person.get("roles") if isinstance(person, dict) else None
     result = {text(role) for role in listed if text(role)} if isinstance(listed, list) else set()
     if isinstance(person, dict) and text(person.get("role")):

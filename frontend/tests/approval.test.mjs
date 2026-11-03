@@ -51,6 +51,8 @@ function hook(file, name, api, args = [], stored = {}) {
       require(id) {
         if (id === "react") return react;
         if (id === "@/services/api") return api;
+        // A .tsx component module; the hook reads only its date formatter.
+        if (id === "@/components/DateInput") return { displayDate: (day) => day };
         if (id.startsWith(".")) return load(path.resolve(path.dirname(filename), `${id}.ts`));
         throw new Error(`Unexpected import: ${id}`);
       },
@@ -71,9 +73,18 @@ function hook(file, name, api, args = [], stored = {}) {
 const plan = { kind: "changes", schedule_id: "old-week", operations: [{ date: "2026-10-05" }], constraints: [] };
 const conversation = (status) => ({ id: "chat", messages: [{ id: "plan", status, payload: { plan } }] });
 async function chat(api, onApplied = async () => {}) {
-  const h = hook("components/Management/useManagerChat.ts", "useManagerChat", {
+  const legacy = {
     listManagerChats: async () => [{ id: "chat" }], readManagerChat: async () => conversation("pending"), ...api,
-  }, ["team", "old-week", "2026-10-04", "", onApplied]);
+  };
+  const routes = {
+    list: (...a) => legacy.listManagerChats(...a), create: (...a) => legacy.createManagerChat(...a),
+    read: (...a) => legacy.readManagerChat(...a), remove: (...a) => legacy.deleteManagerChat(...a),
+    send: (...a) => legacy.sendManagerMessage(...a), regenerate: (...a) => legacy.regenerateManagerReply(...a),
+    apply: (...a) => legacy.applyManagerPlan(...a), dismiss: (...a) => legacy.dismissManagerPlan(...a),
+    stop: (...a) => legacy.stopManagerReply(...a), events: legacy.managerEvents ?? null,
+  };
+  const h = hook("components/Management/useManagerChat.ts", "useManagerChat", { managerChatRoutes: routes },
+    ["team", "old-week", "2026-10-04", "", onApplied]);
   await h.settle();
   return h;
 }
@@ -229,6 +240,36 @@ test("an older overview response cannot replace the read made after approval", a
   failed = true;
   await assert.rejects(h.render().refresh(true), /offline/);
   assert.equal(h.render().overview, fresh);
+});
+
+test("manual assignments use their schedule response and coalesce overview refreshes", async () => {
+  let reads = 0, writes = 0;
+  const initial = {
+    schedule: { id: "week", assignments: [], generation: { status: "completed" } },
+    employees: [],
+  };
+  const final = {
+    schedule: { id: "week", assignments: [{ id: "two" }], generation: { status: "completed" } },
+    employees: [],
+  };
+  const h = hook("components/Management/useManagement.ts", "useManagement", {
+    scheduleOverview: async () => (++reads === 1 ? initial : final),
+    assignEmployee: async () => ({
+      id: "week",
+      assignments: [{ id: ++writes === 1 ? "one" : "two" }],
+    }),
+  });
+  await h.settle();
+
+  await h.render().assign({ shift_name: "בוקר", slot_date: "2026-11-03", employee: "דנה" });
+  await h.render().assign({ shift_name: "בוקר", slot_date: "2026-11-03", employee: "יוסי" });
+
+  assert.equal(h.render().overview.schedule.assignments[0].id, "two");
+  assert.equal(reads, 1);
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  await h.settle();
+  assert.equal(reads, 2);
+  assert.equal(h.render().overview, final);
 });
 
 test("a sent message is on screen before the server answers, and leaves once the thread has it", async () => {

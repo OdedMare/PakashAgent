@@ -15,6 +15,7 @@ usually gets reached for when a project wants to avoid a dependency.
 
 import hashlib
 import hmac
+import json
 import os
 import secrets
 from typing import List, Optional
@@ -24,7 +25,12 @@ from psycopg.types.json import Jsonb
 from app.common.errors import (
     PROFILE_CHANGED, AuthError, ConflictError, NotFoundError,
 )
+from app.dal.database import in_atomic
 from app.dal.repository.base import RepositoryBase, new_id
+from app.dal.repository.profile_cache import ProfileCache
+
+# Per process, shared by every repository instance (`profile_cache.py`).
+_profiles = ProfileCache()
 
 # scrypt's cost parameters. n=2**14 with r=8 lands around 16MB and a few tens
 # of milliseconds per verify -- slow enough to make guessing expensive, fast
@@ -154,7 +160,35 @@ class TeamRepository(RepositoryBase):
         )
 
     def team_profile(self, team_id: str) -> Optional[dict]:
-        """The workplace profile saved by the manager."""
+        """The workplace profile saved by the manager.
+
+        The document is sent only when it changed since this process last
+        read it (`profile_cache.py`); the row is read every time, so a save
+        from any process is seen on the very next read.
+        """
+        key = (getattr(self._store.get(), "database_schema", ""), team_id)
+        cacheable = not in_atomic(self._store)
+        revision, updated_at = _profiles.version(key) if cacheable else (None, None)
+        rows = self._all("""
+            SELECT revision, updated_at,
+                   CASE WHEN revision=%s AND updated_at=%s THEN NULL
+                        ELSE profile::text END AS profile
+            FROM team_profiles WHERE team_id=%s
+        """, (revision, updated_at, team_id))
+        if not rows:
+            _profiles.drop(key)
+            return None
+        row = rows[0]
+        text = row["profile"]
+        if text is None:
+            text = _profiles.text(key, row["revision"], row["updated_at"])
+            if text is None:  # dropped in between: read it whole
+                return self._uncached_profile(team_id)
+        elif cacheable:
+            _profiles.keep(key, row["revision"], row["updated_at"], text)
+        return json.loads(text)
+
+    def _uncached_profile(self, team_id: str) -> Optional[dict]:
         rows = self._all(
             "SELECT profile FROM team_profiles WHERE team_id=%s", (team_id,)
         )

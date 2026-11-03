@@ -24,6 +24,9 @@ dependencies = [
     "python-multipart>=0.0.9,<0.1",
     # The constraint solver that assigns every schedule (bl/solver/, D34).
     "ortools>=9.12,<10",
+    # The read cache, when a Redis URL is configured (common/redis_hub.py,
+    # D50). Inert without one.
+    "redis>=5,<6",
 ]
 
 [project.optional-dependencies]

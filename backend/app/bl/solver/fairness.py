@@ -25,7 +25,9 @@ cheaper than a soft wish however large the team is (`model.py`).
 
 The load counts the rows already fixed (the rest of the draft and the last
 two weeks), so a day rebuilt inside a period, or a period following a heavy
-one, leans away from whoever already carries more. People with no legal
+one, leans away from whoever already carries more. A day of מכלול duty in
+that window counts as `weight` shifts carried; nights are not charged for
+it. With no duties the spread is exactly what it was. People with no legal
 placement and nothing fixed take no part.
 """
 
@@ -36,13 +38,16 @@ from app.bl.solver.model import (
     BACK_TO_BACK, CLOSER, NIGHT_PEAK, NIGHT_SCALE, NIGHT_SPREAD, SHIFT_PEAK, SHIFT_SCALE,
     SHIFT_SPREAD, SPACING, SPACING_HOURS, Model,
 )
+from app.bl.solver.competence import reserve_days, week_of
 from app.bl.solver.rules import timed_pairs
 
 
 def apply_fairness(model: Model) -> None:
     _closers(model)
     shifts = lambda times: SHIFT_SCALE
-    _spread(model, shifts, SHIFT_SPREAD, SHIFT_PEAK, "shifts")
+    # A day of מכלול duty is a shift already carried (`problem._duty_load`).
+    duties = {name: SHIFT_SCALE * load for name, load in model.problem.duty_load.items()}
+    _spread(model, shifts, SHIFT_SPREAD, SHIFT_PEAK, "shifts", carried=duties)
     nights = lambda times: NIGHT_SCALE * int(bool(times["night"]))
     _spread(model, nights, NIGHT_SPREAD, NIGHT_PEAK, "nights")
     clocked = any(times["begins"] is not None for times in model.problem.times)
@@ -56,16 +61,23 @@ def apply_fairness(model: Model) -> None:
 def _closers(model: Model) -> None:
     problem = model.problem
     for (name, index), var in sorted(model.x.items()):
-        if problem.people[name].get("rotation_group") and problem.closes(name, index):
+        person = problem.people[name]
+        closer = person.get("rotation_group") or person.get("exit_pattern") == "personal"
+        if closer and problem.closes(name, index):
             model.price(-CLOSER, var, kind="closer")
 
 
-def _spread(model: Model, measure, weight: int, peak: int, label: str) -> None:
+def _spread(model: Model, measure, weight: int, peak: int, label: str,
+            carried: Dict[str, int] = None) -> None:
+    """`carried` is load a person holds outside the grid (a מכלול duty),
+    in the measure's own units; it counts like a fixed row."""
     problem = model.problem
+    carried = carried or {}
     loads = {}
     for name in problem.staff:
         placed = model.of_person(name)
         fixed = sum(measure(row) for row in problem.fixed if row["employee"] == name)
+        fixed += carried.get(name, 0)
         if placed or fixed:
             loads[name] = (placed, fixed)
     if len(loads) < 2:
@@ -90,13 +102,20 @@ def _spread(model: Model, measure, weight: int, peak: int, label: str) -> None:
 
 def _capacity(problem, name: str, placed, measure) -> int:
     """About the most this person can still take: the heaviest legal slot
-    of each day (rest rarely allows two). An estimate, not a promise; the
-    rules decide the rest."""
+    of each day (rest rarely allows two), and for a reservist only their
+    heaviest days of each week. An estimate, not a promise; the rules
+    decide the rest."""
     days: Dict[str, int] = {}
     for index in placed:
         day = problem.slots[index]["slot_date"]
         days[day] = max(days.get(day, 0), measure(problem.times[index]))
-    return sum(days.values())
+    limit = reserve_days(problem.people[name])
+    if limit is None:
+        return sum(days.values())
+    weeks: Dict[str, List[int]] = {}
+    for day, load in days.items():
+        weeks.setdefault(week_of(day), []).append(load)
+    return sum(sum(sorted(loads, reverse=True)[:limit]) for loads in weeks.values())
 
 
 def water_fill(floors: Dict[str, int], room: Dict[str, int], demand: int) -> Dict[str, int]:

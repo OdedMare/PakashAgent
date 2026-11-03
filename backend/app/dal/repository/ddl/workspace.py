@@ -75,4 +75,148 @@ ALTER TABLE team_profiles ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEF
 
 COMMIT;
 
+-- A מכלול (D43): several workplaces joined under one commander. Each linked
+-- team stays a team in every respect; this row only names the group and
+-- holds the commander's password, hashed like a team's.
+CREATE TABLE IF NOT EXISTS complexes (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    password_hash TEXT NOT NULL,
+    notes TEXT NOT NULL DEFAULT '',
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+COMMIT;
+
+-- A team belongs to at most one מכלול. Deleting the מכלול leaves its teams
+-- standing, unlinked.
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS complex_id TEXT
+    REFERENCES complexes(id) ON DELETE SET NULL;
+
+COMMIT;
+
+-- What the commander changed inside a workplace, for that workplace's
+-- manager to read (D43). Repeats of one action within a few minutes fold
+-- into one row with a count, so a chat turn by turn is one notice.
+CREATE TABLE IF NOT EXISTS commander_notices (
+    id TEXT PRIMARY KEY,
+    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    complex_name TEXT NOT NULL DEFAULT '',
+    action TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    seen_at TIMESTAMPTZ
+);
+
+COMMIT;
+
+CREATE INDEX IF NOT EXISTS commander_notices_unseen
+    ON commander_notices (team_id, created_at DESC) WHERE seen_at IS NULL;
+
+COMMIT;
+
+-- A מכלול's duties (תורנויות: מטבח, שמירה…), set by its commander for
+-- soldiers of every linked משמרת. `weight` is how many shifts one duty day
+-- counts as in the load fairness and statistics read. `days` empty means
+-- every day.
+CREATE TABLE IF NOT EXISTS complex_duty_types (
+    id TEXT PRIMARY KEY,
+    complex_id TEXT NOT NULL REFERENCES complexes(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    seats INTEGER NOT NULL DEFAULT 1 CHECK (seats >= 1),
+    days TEXT[] NOT NULL DEFAULT '{}',
+    weight INTEGER NOT NULL DEFAULT 1 CHECK (weight >= 0),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (complex_id, name)
+);
+
+COMMIT;
+
+-- One soldier on one duty for one whole day. The soldier is named as their
+-- own משמרת's roster names them. Owned by the מכלול, not the team: the
+-- team's manager sees the row (it blocks the day in their schedule) but its
+-- constraint routes never delete it.
+CREATE TABLE IF NOT EXISTS complex_duties (
+    id TEXT PRIMARY KEY,
+    complex_id TEXT NOT NULL REFERENCES complexes(id) ON DELETE CASCADE,
+    duty_type_id TEXT NOT NULL REFERENCES complex_duty_types(id) ON DELETE CASCADE,
+    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    employee TEXT NOT NULL,
+    duty_date DATE NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (team_id, employee, duty_date)
+);
+
+COMMIT;
+
+CREATE INDEX IF NOT EXISTS complex_duties_team_date_idx
+    ON complex_duties (team_id, duty_date);
+
+COMMIT;
+
+CREATE INDEX IF NOT EXISTS complex_duties_complex_date_idx
+    ON complex_duties (complex_id, duty_date);
+
+COMMIT;
+
+-- A duty recorded after the fact, or stood outside this system, counts in
+-- fairness and statistics like any other but blocks nothing: it is not
+-- projected into the team's availability (`records.availability()`).
+ALTER TABLE complex_duties
+    ADD COLUMN IF NOT EXISTS blocks BOOLEAN NOT NULL DEFAULT TRUE;
+
+COMMIT;
+
+"""
+
+# Once per database: whoever had been taken out of the roster (an
+# `inactive_from` on or before today, Israel time, or the Magen Merkava
+# builder's "לא זמין/ה:" soldiers, dated at a call-up that may still be
+# ahead) comes back to it switched off (`on_duty: false`). Reservists come and go, and the on/off switch is
+# how a unit now says so; a departure stays available for whoever really
+# left. Marked done in `deployment_state`, so a soldier taken out after the
+# upgrade is never brought back by a restart. Appended after
+# `DEPLOYMENT_DDL`, which creates that table.
+ROSTER_SWITCH_DDL = """
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM deployment_state WHERE key = 'migration:roster_switch_off'
+    ) THEN
+        UPDATE team_profiles AS saved
+        SET profile = jsonb_set(saved.profile, '{employees}', (
+                SELECT jsonb_agg(
+                    CASE WHEN jsonb_typeof(person) = 'object'
+                              AND jsonb_typeof(person -> 'inactive_from') = 'string'
+                              AND person ->> 'inactive_from' <> ''
+                              AND (person ->> 'inactive_from'
+                                   <= to_char((NOW() AT TIME ZONE 'Asia/Jerusalem')::date, 'YYYY-MM-DD')
+                                   OR person ->> 'notes' LIKE 'לא זמין/ה:%')
+                         THEN (person - 'inactive_from') || '{"on_duty": false}'::jsonb
+                         ELSE person END
+                    ORDER BY position)
+                FROM jsonb_array_elements(saved.profile -> 'employees')
+                     WITH ORDINALITY AS roster(person, position)
+            )),
+            revision = saved.revision + 1,
+            updated_at = NOW()
+        WHERE jsonb_typeof(saved.profile -> 'employees') = 'array'
+          AND EXISTS (
+              SELECT 1 FROM jsonb_array_elements(saved.profile -> 'employees') AS roster(person)
+              WHERE jsonb_typeof(person) = 'object'
+                AND jsonb_typeof(person -> 'inactive_from') = 'string'
+                AND person ->> 'inactive_from' <> ''
+                AND (person ->> 'inactive_from'
+                     <= to_char((NOW() AT TIME ZONE 'Asia/Jerusalem')::date, 'YYYY-MM-DD')
+                     OR person ->> 'notes' LIKE 'לא זמין/ה:%'));
+        INSERT INTO deployment_state (key, value)
+        VALUES ('migration:roster_switch_off', 'done')
+        ON CONFLICT (key) DO NOTHING;
+    END IF;
+END $$;
+
+COMMIT;
 """

@@ -121,11 +121,14 @@ class WorkspaceRoutes:
         """What a signed-in visitor can do with the session they hold."""
         service, boss, visitor = self._service, self._boss, self._visitor
         throttle = self._throttle
+        own_manager = self._guards.own_manager()
 
         @router.get("/me", response_model=TeamView)
         def me(session: dict = Depends(visitor)) -> dict:
             """The current workspace, shaped by the visitor's role."""
-            return service.describe(session["team_id"], session["role"])
+            return service.describe(
+                session["team_id"], session["role"], session.get("commander"),
+            )
 
         @router.post("/logout")
         def logout(response: Response) -> dict:
@@ -139,8 +142,12 @@ class WorkspaceRoutes:
 
         @router.post("/password")
         def change_password(
-            request: PasswordChangeRequest, session: dict = Depends(boss)
+            request: PasswordChangeRequest,
+            session: dict = Depends(own_manager),
         ) -> dict:
+            """The manager's own password. A commander inside the workplace
+            is refused: the operator issues theirs, and the manager's is the
+            manager's (D43)."""
             # The same key as the login: both verify the boss password.
             throttle.attempt(
                 "boss:%s" % session["team_id"],

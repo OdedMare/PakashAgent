@@ -13,6 +13,10 @@ def _required(request: GenerateRequest) -> list:
     return [item.model_dump() for item in request.required_assignments]
 
 
+def _staffing(request) -> list:
+    return [item.model_dump() for item in request.staffing_overrides]
+
+
 class GenerationRoutes(RouteGroup):
     def register(self, router: APIRouter) -> None:
         self._register_steps(router)
@@ -32,6 +36,7 @@ class GenerationRoutes(RouteGroup):
                 ends_on=request.ends_on,
                 instructions=request.instructions,
                 required_assignments=_required(request),
+                staffing_overrides=_staffing(request),
             )
 
         @router.post("/generate/start", response_model=Schedule)
@@ -48,6 +53,7 @@ class GenerationRoutes(RouteGroup):
                 instructions=request.instructions,
                 required_assignments=_required(request),
                 shifts=request.shifts,
+                staffing_overrides=_staffing(request),
             )
 
         @router.post("/generate/{schedule_id}/next", response_model=Schedule)
@@ -119,6 +125,7 @@ class GenerationRoutes(RouteGroup):
                 starts_on=request.starts_on, ends_on=request.ends_on,
                 instructions=request.instructions, shifts=request.shifts,
                 keep_existing=request.keep_existing,
+                staffing_overrides=_staffing(request),
             )
 
         @router.post("/blank", response_model=Schedule)

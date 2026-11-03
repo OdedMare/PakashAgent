@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  commanderLogin,
+  commanderLogout,
+  commanderMe,
   currentWorkspace,
+  enterComplexTeam,
+  leaveComplexTeam,
   employeeSignIn,
   errorStatus,
   loginTeam,
@@ -12,7 +17,7 @@ import {
   openMemberLink,
   rotateMemberLink,
 } from "@/services/api";
-import type { TeamView } from "@/types";
+import type { CommanderView, TeamView } from "@/types";
 
 /** The workspace session lives in an HttpOnly cookie, which this code cannot
  *  read by design. So "am I logged in?" is answered by asking the server —
@@ -24,6 +29,20 @@ import type { TeamView } from "@/types";
  *  would flash it at a boss who is already signed in. */
 interface WorkspaceState {
   workspace: TeamView | null | undefined;
+  /** The מכלול commander's own session (D43), separate from the team one:
+   *  `undefined` not asked yet, `null` none. */
+  commander: CommanderView | null | undefined;
+  commanderLogin: (complexId: string, password: string) => Promise<void>;
+  /** The commander chose to work inside a משמרת. The מכלול screen may hold
+   *  a משמרת session of its own (its agent, statistics and changes pages),
+   *  so a commander-marked session alone does not mean "inside". */
+  inside: boolean;
+  /** Open one workplace with a manager's powers. */
+  enterTeam: (teamId: string) => Promise<void>;
+  /** Back from a workplace to the combined board. */
+  leaveTeam: () => Promise<void>;
+  /** Sign the commander out altogether. */
+  commanderLogout: () => Promise<void>;
   busy: boolean;
   error: string | null;
   login: (teamId: string, password: string) => Promise<void>;
@@ -43,10 +62,37 @@ interface WorkspaceState {
   clearError: () => void;
 }
 
+/** Which משמרת the מכלול commander chose to work inside, for this tab only.
+ *  The signed cookie cannot say it: the מכלול screen's own agent, statistics
+ *  and changes pages hold a משמרת session too. A per-tab convenience — lost,
+ *  it only means a reload shows the מכלול screen. */
+const INSIDE_KEY = "pakash-commander-inside";
+
+function rememberInside(teamId: string | null) {
+  try {
+    if (teamId) sessionStorage.setItem(INSIDE_KEY, teamId);
+    else sessionStorage.removeItem(INSIDE_KEY);
+  } catch {
+    // Storage refused (a private window): nothing to remember.
+  }
+}
+
+function wasInside(teamId: string | undefined): boolean {
+  try {
+    return Boolean(teamId) && sessionStorage.getItem(INSIDE_KEY) === teamId;
+  } catch {
+    return false;
+  }
+}
+
 export function useWorkspace(): WorkspaceState {
   const [workspace, setWorkspace] = useState<TeamView | null | undefined>(
     undefined,
   );
+  const [commander, setCommander] = useState<CommanderView | null | undefined>(
+    undefined,
+  );
+  const [inside, setInside] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,8 +101,12 @@ export function useWorkspace(): WorkspaceState {
     // showing: the login screen IS the response to it. Resolved to null
     // rather than caught around the setState so the state update happens in
     // one place, off the synchronous path of whatever called this.
-    const current = await currentWorkspace().catch(() => null);
+    const [current, chief] = await Promise.all([
+      currentWorkspace().catch(() => null),
+      commanderMe().catch(() => null),
+    ]);
     setWorkspace(current);
+    setCommander(chief);
   }, []);
 
   const run = useCallback(
@@ -111,6 +161,36 @@ export function useWorkspace(): WorkspaceState {
 
   const clearError = useCallback(() => setError(null), []);
 
+  const loginCommander = useCallback(
+    async (complexId: string, password: string) => {
+      await run(() => commanderLogin(complexId, password));
+    },
+    [run],
+  );
+
+  const enterTeam = useCallback(
+    async (teamId: string) => {
+      await run(() => enterComplexTeam(teamId));
+      rememberInside(teamId);
+      setInside(true);
+    },
+    [run],
+  );
+
+  const leaveTeam = useCallback(async () => {
+    await run(() => leaveComplexTeam());
+    rememberInside(null);
+    setInside(false);
+  }, [run]);
+
+  const logoutCommander = useCallback(async () => {
+    await commanderLogout().catch(() => undefined);
+    setCommander(null);
+    rememberInside(null);
+    setInside(false);
+    await refresh();
+  }, [refresh]);
+
   // The session is an HttpOnly cookie this code cannot read, so the first
   // render has to ask the server who it is talking to. `cancelled` guards the
   // unmount race: a component gone before the answer arrives must not set
@@ -118,11 +198,17 @@ export function useWorkspace(): WorkspaceState {
   // rather than theoretical.
   useEffect(() => {
     let cancelled = false;
-    currentWorkspace()
-      .catch(() => null)
-      .then((current) => {
-        if (!cancelled) setWorkspace(current);
-      });
+    Promise.all([
+      currentWorkspace().catch(() => null),
+      commanderMe().catch(() => null),
+    ]).then(([current, chief]) => {
+      if (cancelled) return;
+      setWorkspace(current);
+      setCommander(chief);
+      // A reload inside a משמרת resumes there; one on the מכלול screen
+      // stays there.
+      setInside(Boolean(current?.commander) && wasInside(current?.id));
+    });
     return () => {
       cancelled = true;
     };
@@ -149,6 +235,12 @@ export function useWorkspace(): WorkspaceState {
 
   return {
     workspace,
+    commander,
+    inside,
+    commanderLogin: loginCommander,
+    enterTeam,
+    leaveTeam,
+    commanderLogout: logoutCommander,
     busy,
     error,
     login,
