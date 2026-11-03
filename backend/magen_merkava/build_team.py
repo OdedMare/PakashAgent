@@ -4,7 +4,7 @@
   * את האנשים — תפקיד אלחוט, תא, סוג שירות, כשירות, הערות
   * את סוגי המשמרות — לכל תא בוקר 08:00-20:00 ולילה 20:00-08:00, עם התקינה מהלוח
   * את הסבב — סדירים (חובה, קבע) 12/2; מילואים, אע"צ והצ"ח עד 4 ימים בשבוע
-  אילוצים לא נכתבים כאן — מגדירים אותם אחר כך במערכת.
+  * אילוץ אחד: מי שחסום, לא יכול להגיע או לא בפול — לא זמין כלל
 
 את השיבוץ עצמו בונים אחר כך מהמסך של המנהל.
 
@@ -55,6 +55,8 @@ COMPETENCE = {1: "high", 2: "medium", 3: "weak"}
 ROLE = "אלחוט"                 # התפקיד של כולם
 RESERVE_DAYS_PER_WEEK = 4      # מילואים, אע"צ והצ"ח: עד 4 ימים בשבוע
 FOUR_DAYS = {"מילואים", 'אע"צ', 'הצ"ח'}
+# האילוץ היחיד: חסומים / לא יכולים להגיע / לא בפול -> לא זמינים כלל (לא פעילים מתחילת הקריאה)
+UNAVAILABLE_FLAGS = {"blocked", "unavailable", "not_in_pool"}
 CYCLE_ID = "sadir"             # סדירים (חובה, קבע): סבב 12/2
 CYCLE = {"id": CYCLE_ID, "name": "12/2", "base_days": 12, "home_days": 2, "groups": ["א", "ב"]}
 
@@ -110,8 +112,9 @@ def notes(p: dict) -> str:
     return " | ".join(parts)
 
 
-def build_employees() -> list[dict]:
-    """כולם בתפקיד אלחוט, כל אחד במשמרות של התא שלו. בלי אילוצים — מגדירים אחר כך."""
+def build_employees(start: dt.date) -> list[dict]:
+    """כולם בתפקיד אלחוט, כל אחד במשמרות של התא שלו.
+    אילוץ אחד בלבד: מי שחסום, לא יכול להגיע או לא בפול — לא זמין כלל."""
     people, next_group = [], {}
     for p in ROSTER:
         if p["cab"] is None:
@@ -137,6 +140,9 @@ def build_employees() -> list[dict]:
             index = next_group.get(cab, 0)
             next_group[cab] = index + 1
             person.update(exit_pattern=f"cycle:{CYCLE_ID}", rotation_group=CYCLE["groups"][index % 2])
+        if set(p["flags"]) & UNAVAILABLE_FLAGS:
+            person["inactive_from"] = start.isoformat()
+            person["notes"] = "לא זמין/ה | " + person["notes"]
         people.append(person)
     return people
 
@@ -146,7 +152,7 @@ def build_profile(start: dt.date) -> dict:
         "workplace": {"name": TEAM_NAME, "rotation_mode": "round", "planning_horizon": "שבוע",
                       "day_cycles": [dict(CYCLE, anchor_date=start.isoformat())]},
         "shifts": build_shifts(),
-        "employees": build_employees(),
+        "employees": build_employees(start),
         "rules": [],
         "summary": "צוות אלחוט בקריאת מגן מרכבה. שתי משמרות ביממה, 08:00-20:00 ו-20:00-08:00, כל תא לפי התקינה בלוח. "
                    "סדירים בסבב 12/2; מילואים, אע\"צ והצ\"ח עד 4 ימים בשבוע.",
@@ -185,9 +191,10 @@ def report(profile: dict) -> None:
         print(f"  {s['name']:16} {s['start_time']}-{s['end_time']}  {s['headcount']} אנשים")
     sadir = [p for p in people if p["exit_pattern"].startswith("cycle:")]
     print(f"אנשים: {len(people)} — סדירים בסבב {cycle['name']} (מ-{cycle['anchor_date']}): {len(sadir)}, "
-          f"מילואים/אע\"צ/הצ\"ח עד {RESERVE_DAYS_PER_WEEK} ימים בשבוע: {len(people) - len(sadir)}")
+          f"מילואים/אע\"צ/הצ\"ח עד {RESERVE_DAYS_PER_WEEK} ימים בשבוע: {len(people) - len(sadir)}, "
+          f"לא זמינים: {sum(1 for p in people if p.get('inactive_from'))}")
     for p in people:
-        track = f"12/2 קבוצה {p['rotation_group']}" if p in sadir else f"עד {p['reserve_days_per_week']} ימים בשבוע"
+        track = ("[לא זמין] " if p.get("inactive_from") else "") + (f"12/2 קבוצה {p['rotation_group']}" if p in sadir else f"עד {p['reserve_days_per_week']} ימים בשבוע")
         cab = p["eligible_shifts"][0].split(" · ")[0] if p["eligible_shifts"] else "-"
         print(f"  {cab:8} {p['name']:24} {p['competence'] or 'לא מדורג':7} {track}")
 

@@ -53,7 +53,7 @@ ROSTER = [
     P(name="עומר שירזי", cab="ת'", service="מילואים", source="110", sheet_assignment="ת'", competency=1, level=2, note="מוכן להגיע רק בחירום מלא", flags=["emergency_only"]),
     P(name="מקסים דוסטרה", cab="ת'", service="מילואים", source="110", sheet_assignment="ת'", competency=1, level=1, note="", flags=[]),
     P(name="לירון אילי", cab="ת'", service="מילואים", source="110", sheet_assignment="ת'", competency=1, level=1, note="", flags=[]),
-    P(name="איתי בבאי", cab="ת'", service="מילואים", source='שב"כ', sheet_assignment="ת'", competency=2, level=1, note='חסום שב"כ, יכול בעיקר שישי שבת', flags=["fri_sat_only"]),
+    P(name="איתי בבאי", cab="ת'", service="מילואים", source='שב"כ', sheet_assignment="ת'", competency=2, level=1, note='חסום שב"כ, יכול בעיקר שישי שבת', flags=["blocked", "fri_sat_only"]),
     P(name="גבי סיני", cab="ת'", service="מילואים", source="110", sheet_assignment="ת'", competency=1, level=1, note="", flags=[]),
     P(name="נעה אורן", cab="ת'", service="מילואים", source="110", sheet_assignment="ת'", competency=1, level=1, note="", flags=[]),
     P(name="מאור אגאי", cab="ת'", service="מילואים", source="110", sheet_assignment="ת'", competency=1, level=1, note="", flags=[]),
