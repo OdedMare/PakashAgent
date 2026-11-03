@@ -6,7 +6,7 @@ WORKDIR /app
 
 COPY pyproject.toml ./
 COPY app ./app
-# Standalone shift builder for the Magen Merkava radio team -- run it with
+# Builds the Magen Merkava radio team (people, shifts, constraints) -- run
 # `cd /app/magen_merkava && python build_team.py` inside the container.
 COPY magen_merkava ./magen_merkava
 
