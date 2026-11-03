@@ -78,6 +78,12 @@ def _phases(model: Model, time_limit: float, workers: int):
     last phase, which weighs wishes and fairness. Lexicographic in fact, not
     only in the weights, so a hard week never trades a seat for evenness.
 
+    When phase one leaves seats empty, a gaps phase keeps its coverage and
+    moves the empty seats to the end of the plan (`Model.gaps`), so a short
+    team fills the schedule in order and stops where it runs out; the gaps
+    it settles are a ceiling for every later phase too, so evenness never
+    scatters them back across the week.
+
     A rebuild that keeps a board (D37) adds a phase between the two. Phase
     one keeps as much of the board as the best coverage allows; the middle
     phase holds those rows where they are and weighs everything else, so
@@ -98,6 +104,15 @@ def _phases(model: Model, time_limit: float, workers: int):
     first, found = _coverage_phase(model, coverage, kept, share, workers)
     phases = {"coverage": _phase(first, found, share)}
     model.cp.Add(coverage <= _value(first, coverage))
+    gaps = sum(model.gaps)
+    if model.gaps and _value(first, gaps):
+        # Seats stay empty: move them to the end of the plan (`Model.gaps`).
+        # A board's kept rows stay kept; only what moves anyway is reordered.
+        if kept is not None:
+            model.cp.Add(kept >= _value(first, kept))
+        first, found = _gaps_phase(model, gaps, first, found, share / 2, workers)
+        phases["gaps"] = _phase(first, found, share / 2)
+        model.cp.Add(gaps <= _value(first, gaps))
     model.cp.Minimize(model.cost())
     _hint(model, first)
     start = (first, found)
@@ -157,6 +172,16 @@ def _coverage_phase(model: Model, coverage, kept, seconds: float, workers: int):
     if found not in _STATUS:
         raise AgentError("פותר האילוצים לא הצליח לבנות סידור (%s)" % solver.StatusName(found))
     return solver, found
+
+
+def _gaps_phase(model: Model, gaps, first, found, seconds: float, workers: int):
+    """The seats that must stay empty, as late in the plan as they can be.
+    Starts from phase one's answer and falls back to it if it finds nothing."""
+    _hint(model, first)
+    model.cp.Minimize(gaps)
+    solver = _solver(seconds, workers)
+    status = solver.Solve(model.cp)
+    return (solver, status) if status in _STATUS else (first, found)
 
 
 def _held_phase(model: Model, first, seconds: float, workers: int):
