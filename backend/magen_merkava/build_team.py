@@ -1,9 +1,10 @@
 """בונה את צוות האלחוט — מגן מרכבה במערכת משמרות זהב.
 
 הסקריפט לא משבץ משמרות. הוא פותח צוות במערכת ומגדיר בו:
-  * את האנשים — תא, סוג שירות, כשירות, הערות, מי לא פעיל
+  * את האנשים — תפקיד אלחוט, תא, סוג שירות, כשירות, הערות
   * את סוגי המשמרות — לכל תא בוקר 08:00-20:00 ולילה 20:00-08:00, עם התקינה מהלוח
-  * את האילוצים — אילוצים קבועים לאנשים (בלי לילות, רק שישי-שבת) וכללים במילים
+  * את הסבב — סדירים (חובה, קבע) 12/2; מילואים, אע"צ והצ"ח עד 4 ימים בשבוע
+  אילוצים לא נכתבים כאן — מגדירים אותם אחר כך במערכת.
 
 את השיבוץ עצמו בונים אחר כך מהמסך של המנהל.
 
@@ -51,8 +52,11 @@ CABS = {
 SERVICE = {"מילואים": "reserve", 'הצ"ח': "hatzach", 'אע"צ': "civilian", "חובה": "standard", "קבע": "standard"}
 COMPETENCE = {1: "high", 2: "medium", 3: "weak"}
 
-# מי לא פעיל במערכת (inactive_from = היום) — אפשר להחזיר אותו מהמסך
-INACTIVE_FLAGS = {"blocked", "unavailable", "not_in_pool", "under_review", "refuser"}
+ROLE = "אלחוט"                 # התפקיד של כולם
+RESERVE_DAYS_PER_WEEK = 4      # מילואים, אע"צ והצ"ח: עד 4 ימים בשבוע
+FOUR_DAYS = {"מילואים", 'אע"צ', 'הצ"ח'}
+CYCLE_ID = "sadir"             # סדירים (חובה, קבע): סבב 12/2
+CYCLE = {"id": CYCLE_ID, "name": "12/2", "base_days": 12, "home_days": 2, "groups": ["א", "ב"]}
 
 
 def shift_name(cab: str, part: str) -> str:
@@ -70,7 +74,7 @@ def build_shifts() -> list[dict]:
                 "end_time": NIGHT_START if day else DAY_START,
                 "days": ALL_DAYS,
                 "headcount": headcount,
-                "allowed_roles": [cab],
+                "allowed_roles": [ROLE],
                 "is_night": not day,
                 "shift_type": "overlap" if cab == "חפיפות" else "regular",
                 "purpose": "לילה ראשון בלבד — אחריו אנשי הסיבוב עוברים לתא הבא שלהם" if cab == "ס'" else "",
@@ -106,82 +110,46 @@ def notes(p: dict) -> str:
     return " | ".join(parts)
 
 
-def recurring(p: dict, eligible: list[str]) -> list[dict]:
-    flags, rows = set(p["flags"]), []
-    nights = [s for s in eligible if s.endswith("לילה")]
-    if "no_nights" in flags and nights:
-        rows.append({"days": ALL_DAYS, "shifts": nights, "available": False, "is_hard": True,
-                     "reason": p["note"] or "בלי לילות"})
-    if "fri_sat_only" in flags and eligible:
-        rows.append({"days": ALL_DAYS[:5], "shifts": eligible, "available": False, "is_hard": True,
-                     "reason": p["note"] or "רק שישי-שבת"})
-    return rows
-
-
-def build_employees(today: dt.date, start: dt.date | None, full_emergency: bool) -> list[dict]:
-    people = []
+def build_employees() -> list[dict]:
+    """כולם בתפקיד אלחוט, כל אחד במשמרות של התא שלו. בלי אילוצים — מגדירים אחר כך."""
+    people, next_group = [], {}
     for p in ROSTER:
         if p["cab"] is None:
             continue  # לא בלוח המשמרות (דולב — מפקדת שמע)
-        eligible = cab_shifts(p["cab"]) + cab_shifts(p.get("then_cab"))
-        flags = set(p["flags"])
         person = {
             "name": p["name"],
-            "role": p["cab"],
-            "eligible_shifts": eligible,
+            "role": ROLE,
+            "eligible_shifts": cab_shifts(p["cab"]) + cab_shifts(p.get("then_cab")),
             "service_type": SERVICE.get(p["service"], "standard"),
-            "exit_pattern": "none",
             "competence": competence(p),
             "notes": notes(p),
-            "recurring_constraints": recurring(p, eligible),
         }
-        if p.get("then_cab"):
-            person["qualifications"] = [{"role": "ס'", "last_active": ""}, {"role": p["then_cab"], "last_active": ""}]
-        inactive = flags & INACTIVE_FLAGS or ("emergency_only" in flags and not full_emergency)
-        if inactive:
-            person["inactive_from"] = today.isoformat()
-        elif "first_72h_only" in flags and start:
-            person["inactive_from"] = (start + dt.timedelta(days=3)).isoformat()
+        if p["service"] in FOUR_DAYS or not p["service"]:
+            # המערכת מגבילה ימים בשבוע רק למילואים, אז אע"צ והצ"ח נשמרים כמילואים
+            # וסוג השירות האמיתי נשאר בהערות
+            if p["service"] and p["service"] != "מילואים":
+                person["notes"] += f" | סוג שירות: {p['service']}"
+            person.update(service_type="reserve", exit_pattern="none",
+                          reserve_days_per_week=RESERVE_DAYS_PER_WEEK)
+        else:
+            # סדירים בסבב 12/2: חצי מכל תא בקבוצה א' וחצי בקבוצה ב', כדי שלא כולם ייצאו יחד
+            cab = p.get("then_cab") or p["cab"]
+            index = next_group.get(cab, 0)
+            next_group[cab] = index + 1
+            person.update(exit_pattern=f"cycle:{CYCLE_ID}", rotation_group=CYCLE["groups"][index % 2])
         people.append(person)
     return people
 
 
-def build_rules() -> list[dict]:
-    rules = [
-        {"text": "כל אחד עובד רק במשמרות של התא שלו.", "priority": "hard"},
-        {"text": "אין שתי משמרות ברצף — לפחות 12 שעות מנוחה בין משמרות.", "priority": "hard"},
-        {"text": "משמרת ס' · לילה פועלת רק בלילה הראשון של הקריאה. אחריו אנשי הסיבוב עוברים לתא הבא שלהם "
-                 "(זוהר גולרוך ואלישי בטסאן ל-ד', אליצפן ריינהיאן ושר דלהים ל-ע', ספיר ניסני ל-מ', נעה כהן ל-א').",
-         "priority": "hard"},
-        {"text": "בכל משמרת בכל תא צריך לפחות אחד ברמה גבוהה.", "priority": "soft"},
-        {"text": "כל אחד נשאר כמה שאפשר באותו סוג משמרת — יום או לילה.", "priority": "soft"},
-        {"text": "חלוקה שווה של משמרות בין אנשי אותו תא.", "priority": "soft"},
-    ]
-    for p in ROSTER:
-        flags, name = set(p["flags"]), p["name"]
-        if p["cab"] is None or flags & INACTIVE_FLAGS:
-            continue
-        if flags & {"not_certified", "unknown_person"} or p["level"] == 3:
-            rules.append({"text": f"{name} משובץ/ת רק כשבאותה משמרת יש איש צוות מנוסה (רמה 1-2) מהתא.",
-                          "priority": "hard"})
-        if "first_72h_only" in flags:
-            rules.append({"text": f"{name} זמין/ה רק ב-72 השעות הראשונות של הקריאה.", "priority": "hard"})
-        if "uncertain" in flags or "conditional" in flags:
-            rules.append({"text": f"להעדיף לא לשבץ את {name} ({p['note']}).", "priority": "soft"})
-    return rules
-
-
-def build_profile(start: dt.date | None, full_emergency: bool) -> dict:
-    today = dt.date.today()
+def build_profile(start: dt.date) -> dict:
     return {
-        "workplace": {"name": TEAM_NAME, "rotation_mode": "round", "planning_horizon": "שבוע"},
+        "workplace": {"name": TEAM_NAME, "rotation_mode": "round", "planning_horizon": "שבוע",
+                      "day_cycles": [dict(CYCLE, anchor_date=start.isoformat())]},
         "shifts": build_shifts(),
-        "employees": build_employees(today, start, full_emergency),
-        "rules": build_rules(),
-        "audit_policy": {"max_weekly_hours": 84, "max_consecutive_days": 14, "min_rest_hours": 12},
-        "unit_policy": {"max_weak_per_shift": 1},
-        "rest_policy": "משמרות של 12 שעות; לפחות 12 שעות מנוחה בין משמרות.",
-        "summary": "צוות אלחוט בקריאת מגן מרכבה. שתי משמרות ביממה, 08:00-20:00 ו-20:00-08:00, כל תא לפי התקינה בלוח.",
+        "employees": build_employees(),
+        "rules": [],
+        "summary": "צוות אלחוט בקריאת מגן מרכבה. שתי משמרות ביממה, 08:00-20:00 ו-20:00-08:00, כל תא לפי התקינה בלוח. "
+                   "סדירים בסבב 12/2; מילואים, אע\"צ והצ\"ח עד 4 ימים בשבוע.",
     }
 
 
@@ -210,18 +178,18 @@ def send(profile: dict, url: str, admin_password: str, team_password: str, name:
 
 def report(profile: dict) -> None:
     people = profile["employees"]
-    active = [p for p in people if "inactive_from" not in p or p["inactive_from"] > dt.date.today().isoformat()]
+    cycle = profile["workplace"]["day_cycles"][0]
     print(f"צוות: {profile['workplace']['name']}")
     print(f"משמרות: {len(profile['shifts'])}")
     for s in profile["shifts"]:
         print(f"  {s['name']:16} {s['start_time']}-{s['end_time']}  {s['headcount']} אנשים")
-    print(f"אנשים: {len(people)} (פעילים: {len(active)})")
+    sadir = [p for p in people if p["exit_pattern"].startswith("cycle:")]
+    print(f"אנשים: {len(people)} — סדירים בסבב {cycle['name']} (מ-{cycle['anchor_date']}): {len(sadir)}, "
+          f"מילואים/אע\"צ/הצ\"ח עד {RESERVE_DAYS_PER_WEEK} ימים בשבוע: {len(people) - len(sadir)}")
     for p in people:
-        status = "" if p in active else f"  [לא פעיל מ-{p['inactive_from']}]"
-        print(f"  {p['role']:8} {p['name']:24} {p['competence'] or 'לא מדורג':7}{status}")
-    print(f"כללים: {len(profile['rules'])}")
-    for r in profile["rules"]:
-        print(f"  ({'חובה' if r['priority'] == 'hard' else 'העדפה'}) {r['text']}")
+        track = f"12/2 קבוצה {p['rotation_group']}" if p in sadir else f"עד {p['reserve_days_per_week']} ימים בשבוע"
+        cab = p["eligible_shifts"][0].split(" · ")[0] if p["eligible_shifts"] else "-"
+        print(f"  {cab:8} {p['name']:24} {p['competence'] or 'לא מדורג':7} {track}")
 
 
 def main() -> int:
@@ -232,14 +200,13 @@ def main() -> int:
                     help="סיסמת קונסולת המפעיל (/admin)")
     ap.add_argument("--team-password", help="הסיסמה שתהיה למנהל הצוות החדש")
     ap.add_argument("--name", default=TEAM_NAME, help="שם הצוות")
-    ap.add_argument("--start", type=dt.date.fromisoformat,
-                    help="תאריך תחילת הקריאה (YYYY-MM-DD) — קובע מתי נגמרות 72 השעות הראשונות")
-    ap.add_argument("--full-emergency", action="store_true", help='להשאיר פעיל גם את מי שמגיע "רק בחירום מלא"')
+    ap.add_argument("--start", type=dt.date.fromisoformat, default=dt.date.today(),
+                    help="היום הראשון של סבב ה-12/2 (YYYY-MM-DD). ברירת מחדל: היום")
     ap.add_argument("--dry-run", action="store_true", help="רק להדפיס מה ייבנה, בלי לשלוח לשרת")
     ap.add_argument("--out", help="לשמור את הפרופיל לקובץ JSON")
     args = ap.parse_args()
 
-    profile = build_profile(args.start, args.full_emergency)
+    profile = build_profile(args.start)
     profile["workplace"]["name"] = args.name
     report(profile)
     if args.out:
