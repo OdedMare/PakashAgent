@@ -718,6 +718,7 @@ function Tile({
  *  which is the reason the codes are strings and not an enum. */
 const WARNING_LABELS: Record<string, string> = {
   over_hours: "חריגה בשעות",
+  reserve_days: "מילואים מעל ימי השבוע",
   consecutive: "ימים ברצף",
   short_rest: "מנוחה קצרה",
   double_booked: "שיבוץ כפול",

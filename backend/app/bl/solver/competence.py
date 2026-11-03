@@ -33,6 +33,7 @@ import datetime
 from typing import Dict, List, Optional, Tuple
 
 from app.bl.audit import counts_toward_staffing
+from app.bl.audit.unit_policy import reserve_days
 from app.bl.solver.model import Model
 from app.bl.solver.rows import text
 
@@ -57,17 +58,6 @@ def apply_competence(model: Model) -> None:
 
 
 # -- reservists ------------------------------------------------------------
-
-
-def reserve_days(person: dict) -> Optional[int]:
-    """The days a week this person comes, or None when nothing caps them."""
-    if text(person.get("service_type")) != "reserve":
-        return None
-    try:
-        days = int(person.get("reserve_days_per_week") or 0)
-    except (TypeError, ValueError):
-        return None
-    return days if 1 <= days <= 7 else None
 
 
 def reserve_minimum(person: dict) -> Optional[int]:

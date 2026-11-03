@@ -1,18 +1,20 @@
 """The unit's staffing standard (`unit_policy.py`): weak crews, weekly
-shift limits and stale qualifications. Warnings only, like every check."""
+shift limits, a reservist's days a week and stale qualifications.
+Warnings only, like every check."""
 
 from collections import Counter
 from typing import Dict, List
 
 from app.bl.audit.checks.base import AuditCheck, AuditInput
 from app.bl.audit.codes import (
-    QUALIFICATION_EXPIRED, SEVERITY_NOTICE, SEVERITY_WARNING, WEAK_CREW,
+    QUALIFICATION_EXPIRED, RESERVE_DAYS, SEVERITY_NOTICE, SEVERITY_WARNING, WEAK_CREW,
     WEEKLY_SHIFTS, warning,
 )
 from app.bl.audit.roster import index_people
 from app.bl.audit.staffing_rules import required_roles
 from app.bl.audit.unit_policy import (
-    is_weak, max_weak, qualification_expired, role_needs, unit_week, weekly_limits,
+    is_weak, max_weak, qualification_expired, reserve_days, role_needs, unit_week,
+    weekly_limits,
 )
 from app.bl.shared import parse_date
 
@@ -21,7 +23,7 @@ class UnitStandardCheck(AuditCheck):
     def run(self, data: AuditInput) -> List[dict]:
         people = index_people(data.employees)
         return self._weak(data, people) + self._weekly(data, people) \
-            + self._stale(data, people)
+            + self._reserve(data, people) + self._stale(data, people)
 
     @staticmethod
     def _weak(data: AuditInput, people: Dict[str, dict]) -> List[dict]:
@@ -60,6 +62,29 @@ class UnitStandardCheck(AuditCheck):
                     "%s שובץ/ה ל-%d משמרות בשבוע שמתחיל ב-%s, מתחת למינימום (%d)."
                     % (name, count, week.isoformat(), low),
                     employee=name, details={"week": week.isoformat(), "shifts": count, "min": low}))
+        return warnings
+
+    @staticmethod
+    def _reserve(data: AuditInput, people: Dict[str, dict]) -> List[dict]:
+        """A reservist on more distinct days in a Sunday–Saturday week than
+        `reserve_days_per_week`. The solver never builds one; a pin, a hand
+        placement or a cover picked in the chat can."""
+        worked: Dict[tuple, set] = {}
+        for row in data.rows:
+            day = parse_date(row["date"])
+            if day and reserve_days(people.get(row["employee"])) is not None:
+                worked.setdefault((row["employee"], unit_week(day)), set()).add(day)
+        warnings = []
+        for (name, week), days in sorted(worked.items()):
+            cap = reserve_days(people.get(name))
+            if len(days) > cap:
+                warnings.append(warning(
+                    RESERVE_DAYS, SEVERITY_WARNING,
+                    "%s (מילואים) משובץ/ת %d ימים בשבוע שמתחיל ב-%s, מעל %d הימים שהוא/היא מגיע/ה."
+                    % (name, len(days), week.isoformat(), cap),
+                    # Dated on the first day past the cap: the day to move.
+                    employee=name, date=sorted(days)[cap].isoformat(),
+                    details={"week": week.isoformat(), "days": len(days), "max": cap}))
         return warnings
 
     @staticmethod

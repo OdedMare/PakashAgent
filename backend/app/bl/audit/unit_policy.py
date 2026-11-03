@@ -73,6 +73,21 @@ def is_reservist(person: Optional[dict]) -> bool:
     return text((person or {}).get("service_type")) == "reserve"
 
 
+def reserve_days(person: Optional[dict]) -> Optional[int]:
+    """The days a week this reservist comes (`reserve_days_per_week`, 1–7),
+    or None when nothing caps them. The solver's hard cap and the audit's
+    warning both read it here, so a week the solver would refuse is one the
+    audit reports when it got there another way (a pin, a hand placement,
+    a cover chosen in the chat)."""
+    if not is_reservist(person):
+        return None
+    try:
+        days = int((person or {}).get("reserve_days_per_week") or 0)
+    except (TypeError, ValueError):
+        return None
+    return days if 1 <= days <= 7 else None
+
+
 def weekly_limits(profile: Optional[dict], person: Optional[dict]) -> Tuple[int, Optional[int]]:
     """(min, max) shifts per week for this person; max None means no cap."""
     policy = unit_policy(profile)

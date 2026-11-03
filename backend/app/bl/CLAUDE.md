@@ -399,6 +399,10 @@ Recomputes the countable facts and returns warnings:
 - assignments that contradict a known unavailability
 - unfilled and overstaffed slots, a missing role or shift commander
 - a placement against the rotation (`cross_rotation`)
+- a reservist on more days in a Sunday–Saturday week than their
+  `reserve_days_per_week` (`reserve_days`) — the solver never builds one, but a
+  pin, a hand placement or a cover picked in the chat can, and the picker and
+  the replacement covers read this same warning
 
 The codes live in `audit/codes.py`; each check is a module under
 `audit/checks/`.

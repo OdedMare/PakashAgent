@@ -19,6 +19,7 @@ CROSS_ROTATION = "cross_rotation"
 FALLBACK_ROLE = "fallback_role"
 WEAK_CREW = "weak_crew"
 WEEKLY_SHIFTS = "weekly_shifts"
+RESERVE_DAYS = "reserve_days"
 QUALIFICATION_EXPIRED = "qualification_expired"
 
 # Severity is advice about presentation, not authority. `warning` is a thing

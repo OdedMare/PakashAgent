@@ -168,3 +168,57 @@ def test_roster_keeps_minimum_and_block_only_for_reservists():
 
     assert (rows[0]["reserve_min_days"], rows[0]["reserve_consecutive"]) == (2, True)
     assert (rows[1]["reserve_min_days"], rows[1]["reserve_consecutive"]) == (None, False)
+
+
+def _rows(name, dates, shift=MORNING):
+    return [{"employee": name, "shift": shift, "date": day} for day in dates]
+
+
+def test_the_audit_warns_when_a_reservist_passes_their_week():
+    """The solver never builds this week; a pin, a hand placement or a chat
+    cover can, and the audit must say so."""
+    from app.bl.audit import audit
+    profile = _profile([_person("מילואימניק", service_type="reserve", reserve_days_per_week=2)])
+    rows = _rows("מילואימניק", ["2026-08-30", "2026-08-31", "2026-09-01"])
+
+    found = [w for w in audit(rows, profile["shifts"], profile["employees"], profile=profile)
+             if w["code"] == "reserve_days"]
+
+    assert len(found) == 1
+    assert found[0]["details"] == {"week": "2026-08-30", "days": 3, "max": 2}
+
+
+def test_the_audit_counts_days_not_shifts_and_resets_on_sunday():
+    from app.bl.audit import audit
+    profile = _profile([_person("מילואימניק", service_type="reserve", reserve_days_per_week=2)],
+                       (MORNING, EVENING))
+    # Two shifts on one day, then Saturday and the next Sunday: never 3 days in one week.
+    rows = _rows("מילואימניק", ["2026-08-31"]) + _rows("מילואימניק", ["2026-08-31"], EVENING) \
+        + _rows("מילואימניק", ["2026-09-05", "2026-09-06"])
+
+    found = [w for w in audit(rows, profile["shifts"], profile["employees"], profile=profile)
+             if w["code"] == "reserve_days"]
+
+    assert found == []
+
+
+def test_a_pin_past_the_week_is_reported_in_the_build():
+    people = [_person("דנה"), _person("יוסי", "ב"),
+              _person("מילואימניק", service_type="reserve", reserve_days_per_week=1)]
+    pinned = _rows("מילואימניק", ["2026-08-31", "2026-09-01"])
+    result = generate_span(_profile(people), "2026-08-31", "2026-09-02",
+                           required_assignments=pinned)
+
+    assert [w for w in result["warnings"] if w["code"] == "reserve_days"]
+
+
+def test_the_picker_does_not_offer_a_reservist_whose_week_is_full():
+    from app.bl.placement import check
+    profile = _profile([_person("דנה"), _person("מילואימניק", service_type="reserve",
+                                                  reserve_days_per_week=2)])
+    schedule = {"assignments": _rows("מילואימניק", ["2026-08-31", "2026-09-01"])}
+
+    verdict = check(schedule, profile, "מילואימניק", MORNING, "2026-09-02")
+
+    assert not verdict["ok"]
+    assert any("מילואים" in reason for reason in verdict["reasons"])
