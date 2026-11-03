@@ -259,6 +259,19 @@ def test_a_free_colleague_from_another_post_with_the_same_role_is_a_borrow():
     assert order.index(DANA) < order.index(YOSSI) < order.index(RON)
 
 
+def test_a_borrow_names_the_post_not_each_of_its_shifts():
+    """A post that runs several shifts under one purpose reads as one place."""
+    profile = _posts_profile()
+    profile["shifts"] = [
+        dict(row, purpose="א") if row["name"] == EVENING else row
+        for row in profile["shifts"]
+    ]
+    result = check(_schedule(), profile, "", MORNING, "2026-08-17")
+    yossi = next(row for row in result["candidates"] if row["employee"] == YOSSI)
+    assert yossi["borrowable"] is True
+    assert yossi["borrow_from"] == ["א"]
+
+
 def test_a_colleague_with_another_reason_is_not_offered_as_a_borrow():
     """Borrowing is for somebody free. A recorded absence is not hidden
     behind a "same role" badge."""

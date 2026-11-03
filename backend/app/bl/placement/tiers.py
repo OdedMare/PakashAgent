@@ -34,10 +34,7 @@ class Tiers:
     """The stage of every candidate for one seat, worked out once."""
 
     def __init__(self, schedule: dict, profile: dict, leaving: str, shift_name: str):
-        self._place = {
-            values.text(row.get("name")): _place(row, values.text(row.get("name")))
-            for row in values.shifts(profile) if isinstance(row, dict)
-        }
+        self._place = posts_by_shift(profile)
         here = self._place.get(shift_name) or shift_name
         self._posts = {
             name for name, place in self._place.items() if place == here
@@ -74,6 +71,15 @@ class Tiers:
 
 def _place(row: dict, name: str) -> str:
     return values.text((row or {}).get("purpose")) or name
+
+
+def posts_by_shift(profile: dict) -> Dict[str, str]:
+    """Every shift name and the post it belongs to (its purpose, else itself)."""
+    return {
+        values.text(row.get("name")): _place(row, values.text(row.get("name")))
+        for row in values.shifts(profile)
+        if isinstance(row, dict) and values.text(row.get("name"))
+    }
 
 
 def _listed(value) -> List[str]:

@@ -6,6 +6,7 @@ from app.bl import rotation
 from app.bl.placement import values
 from app.bl.shared import parse_date, person_roles
 from app.bl.placement.context import PlacementContext, effective_rows
+from app.bl.placement.tiers import posts_by_shift
 
 # What "the rotation says nothing about this slot" looks like on the wire. A
 # shape rather than a null so the client renders one branch.
@@ -71,9 +72,12 @@ def employee_options(
         values.text(row.get("name")) for row in values.shifts(profile)
         if values.text(row.get("name"))
     ]
-    crew = _crew_roles(context, shift_name, slot_date)
+    seat = {
+        "roles": _crew_roles(context, shift_name, slot_date),
+        "posts": posts_by_shift(profile),
+    }
     options = [
-        _option(context, person, shift_name, slot_date, day, load, shift_names, crew)
+        _option(context, person, shift_name, slot_date, day, load, shift_names, seat)
         for person in context.employees if values.text(person.get("name"))
     ]
     # A borrow sorts straight after the people who are free: on a short
@@ -103,15 +107,17 @@ def _crew_roles(context, shift_name: str, slot_date: str) -> set:
     return roles
 
 
-def _borrow(option: dict, verdict: dict, person: dict, crew: set) -> dict:
+def _borrow(option: dict, verdict: dict, person: dict, seat: dict) -> dict:
     """Mark somebody free who belongs to another post but holds a role this
     shift's own people hold -- the colleague a short shift can borrow.
 
     Only the roster's "not this shift" stands between them and the seat:
     any other reason (a constraint, rest, a closure) means they are not
-    free, and offering them as a borrow would hide it.
+    free, and offering them as a borrow would hide it. `borrow_from` names
+    the posts they belong to -- a shift's purpose, else the shift
+    (`tiers.py`) -- so "מ־א" reads the same for every shift post א runs.
     """
-    shared = sorted(person_roles(person) & crew)
+    shared = sorted(person_roles(person) & seat["roles"])
     borrowable = bool(
         shared
         and not verdict["eligible"]
@@ -121,12 +127,12 @@ def _borrow(option: dict, verdict: dict, person: dict, crew: set) -> dict:
     )
     option["borrowable"] = borrowable
     option["shared_roles"] = shared if borrowable else []
-    # Their own posts, for the picker to say where they would come from.
-    option["borrow_from"] = option["eligible_shifts"] if borrowable else []
+    posts = [seat["posts"].get(item, item) for item in option["eligible_shifts"]]
+    option["borrow_from"] = list(dict.fromkeys(posts)) if borrowable else []
     return option
 
 
-def _option(context, person, shift_name, slot_date, day, load, shift_names, crew) -> dict:
+def _option(context, person, shift_name, slot_date, day, load, shift_names, seat) -> dict:
     name = values.text(person.get("name"))
     exit_pattern = rotation.exit_pattern(context.profile, person)
     rotation_group = values.text(person.get("rotation_group"))
@@ -156,7 +162,7 @@ def _option(context, person, shift_name, slot_date, day, load, shift_names, crew
             and rotation.holds(context.profile, person, day, shift_name)
         ),
     }
-    return _borrow(option, verdict, person, crew)
+    return _borrow(option, verdict, person, seat)
 
 
 def _personal_label(person: dict, exit_pattern: str) -> str:
