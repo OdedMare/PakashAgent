@@ -171,7 +171,9 @@ python -m benchmarks.solver_bench --save before.json   # solver quality and time
   chat uses it for its zero-model fast path ("who can replace…").
 - `bl/absence/` — **an absence, from sentence to plan, with no model** (D36).
   Reads one person and every date ("בשני ושלישי", "מ-1.11 עד 5.11"), asks once
-  when dates or scope are missing, ranks clean covers so the load spreads
+  when dates or scope are missing, ranks clean covers in stages — the same
+  role from the seat's own post, then the same role from another post, then
+  anyone else (`placement/tiers.py`) — and inside a stage so the load spreads
   evenly (a bare "עד 31.12" runs from today; spans up to 120 days), and hands
   `ChatPlanBuilder.prepare` a model-shaped turn — so the plan
   meets every check a model plan does. Run inline by `start_turn` before the

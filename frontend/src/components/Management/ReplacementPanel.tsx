@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, LoaderCircle, Sparkles, UserRound } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import { DateInput, displayDate } from "@/components/DateInput";
 import { ABSENCE_REASONS, absenceSentence, selectionSentence } from "@/lib/replacement";
@@ -13,9 +13,12 @@ const WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמיש�
 
 /** The replacement tab: who is out, when, and who should cover.
  *
- *  Candidates appear as soon as a person and dates are chosen, already
- *  ordered so the load spreads evenly — the server counts hours, shifts and
- *  nights in the period, including the other covers in the same absence.
+ *  Candidates appear as soon as a person and dates are chosen, in stages:
+ *  the same role from the shift itself, then the same role from another
+ *  place, then anyone else who fits — each under its own heading. Inside a
+ *  stage they are ordered so the load spreads evenly — the server counts
+ *  shifts and nights in the period, including the other covers in the same
+ *  absence.
  *  Nothing here writes. "הכנת תוכנית" sends the choices to the agent as an
  *  ordinary message, which turns them into a plan in code (no model round)
  *  that waits for approval like every other change (D12). */
@@ -64,7 +67,7 @@ export function ReplacementPanel({ employees, today, disabled, onPrepare }: {
   return <section className="replacement-panel" aria-labelledby="replacement-title">
     <header>
       <h3 id="replacement-title">החלפת משמרת</h3>
-      <p>בחרו מי לא זמין/ה ומתי. המועמדים מסודרים כך שהעומס יתחלק הכי שווה.</p>
+      <p>בחרו מי לא זמין/ה ומתי. המחליפים מוצעים בהדרגה: קודם בעל/ת אותו תפקיד מהמשמרת, אחר כך אותו תפקיד ממקום אחר — ובכל שלב מי שהעומס עליו/ה הכי קל.</p>
     </header>
     <div className="replacement-fields">
       <label>מי<select value={employee} onChange={(event) => setEmployee(event.target.value)}>
@@ -99,7 +102,9 @@ export function ReplacementSlotCard({ slot, chosen, disabled, onChoose }: {
   return <section className="conversation-candidates replacement-slot" aria-label={`מחליפים ל${slot.shift} ב${dayLabel(slot.date)}`}>
     <header><strong>{dayLabel(slot.date)} · {slot.shift}</strong>
       <span>{slot.start_time && slot.end_time ? `${slot.start_time}–${slot.end_time}` : ""}</span></header>
-    {slot.candidates.length ? slot.candidates.map((candidate) => <button type="button" key={candidate.employee}
+    {slot.candidates.length ? slot.candidates.map((candidate, index) => <Fragment key={candidate.employee}>
+      <TierHeading label={candidate.tier_label} previous={slot.candidates[index - 1]?.tier_label} />
+      <button type="button"
       aria-pressed={chosen === candidate.employee} disabled={disabled}
       className={chosen === candidate.employee ? "is-chosen" : undefined}
       onClick={() => onChoose(candidate.employee)}>
@@ -108,8 +113,13 @@ export function ReplacementSlotCard({ slot, chosen, disabled, onChoose }: {
         {slot.pick === candidate.employee && slot.picked_by === "fairness" ? <em className="replacement-badge">הכי שווה</em> : null}</strong>
         <small>{candidate.why}</small></span>
       {chosen === candidate.employee ? <Check size={16} aria-hidden="true" /> : null}
-    </button>) : <p>{slot.why || "לא נמצא מחליף שעומד בכל הכללים."} המשמרת תישאר חסרה.</p>}
+    </button></Fragment>) : <p>{slot.why || "לא נמצא מחליף שעומד בכל הכללים."} המשמרת תישאר חסרה.</p>}
   </section>;
+}
+
+/** A stage's heading, once, where the stage begins. */
+export function TierHeading({ label, previous }: { label?: string; previous?: string }) {
+  return label && label !== previous ? <h4 className="replacement-tier">{label}</h4> : null;
 }
 
 function slotKey(slot: { date: string; shift: string }) {

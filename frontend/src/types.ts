@@ -1245,7 +1245,8 @@ export interface ManagerChatMessage {
     suggestions?: string[];
     plan?: ChatPlan;
     results?: { tool: string; ok?: boolean; date?: string; shift?: string; replacing?: string;
-      candidates?: { employee: string; hours?: number; why?: string; requires_exception?: boolean }[] }[];
+      candidates?: { employee: string; hours?: number; why?: string; requires_exception?: boolean;
+        tier?: number; tier_label?: string }[] }[];
     /** Set when code answered the turn without a model round. */
     fast_path?: string;
     question?: { question: string; recommendation: string; why: string; options: { label: string; answer: string }[] } | null;
@@ -1274,9 +1275,14 @@ export interface ReplacementSlot {
   start_time: string;
   end_time: string;
   replacing: string;
-  /** Fairest first: lowest hours, then shifts, then nights in the period,
-   *  counting the other covers in the same absence. */
-  candidates: { employee: string; hours: number; shifts: number; nights: number; why: string }[];
+  /** In stages (`placement/tiers.py`): the same role from this shift (0),
+   *  the same role from another place (1), anyone else (2). Inside a stage
+   *  fairest first: fewest shifts, then nights in the period, counting the
+   *  other covers in the same absence. */
+  candidates: {
+    employee: string; hours: number; shifts: number; nights: number; why: string;
+    tier?: number; tier_label?: string;
+  }[];
   pick: string;
   picked_by: "fairness" | "manager" | "";
   why: string;

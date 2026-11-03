@@ -182,6 +182,9 @@ body:has(.management-workspace.has-drawer) .tutorial-fab { left: auto; right: 20
 .replacement-status { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; color: var(--text-muted); line-height: 1.6; }
 .replacement-error { margin: 0; font-size: 13px; color: var(--danger); }
 .replacement-slot { margin-block: 0; }
+/* A stage of the gradual search: same role from the shift, then from another place. */
+.replacement-tier { margin: 12px 0 0; font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.replacement-tier:first-of-type { margin-top: 2px; }
 .replacement-slot > button.is-chosen, .conversation-candidates > button[aria-pressed="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
 .replacement-badge { margin-inline-start: 8px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-style: normal; font-weight: 600; color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
 .replacement-prepare { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border: 0; border-radius: 12px; background: var(--primary-fill); color: #fff; font: inherit; font-weight: 600; }

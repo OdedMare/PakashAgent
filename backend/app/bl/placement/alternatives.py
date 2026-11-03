@@ -5,6 +5,7 @@ from typing import List, Optional
 from app.bl.placement import values
 from app.bl.shared import parse_date
 from app.bl.placement.context import PlacementContext, effective_rows
+from app.bl.placement.tiers import Tiers
 
 # How many alternatives are worth offering. Past a handful the list stops
 # being an answer and becomes a second grid to read.
@@ -32,8 +33,10 @@ def suggest_alternatives(
     replacement tab -- was paying about half of its time for a list it threw
     away.
 
-    `employees` are sorted lightest week first -- `audit.fairness()`'s
-    arithmetic applied to a choice. `slots` are ordered by distance from the
+    `employees` come in stages (`tiers.py`): the same role from this post,
+    the same role from another, then anyone else -- and inside each stage
+    lightest week first, `audit.fairness()`'s arithmetic applied to a
+    choice. `slots` are ordered by distance from the
     date the manager actually wanted. Both are filtered by re-checking each
     option and keeping only the clean ones.
     """
@@ -60,6 +63,7 @@ def free_employees(
         if row["shift"] == shift_name and row["date"] == slot_date
     }
     load = values.hours_by_employee(context.schedule, context.profile)
+    tiers = Tiers(context.schedule, context.profile, employee, shift_name)
     options = []
     for person in context.employees:
         name = values.text(person.get("name"))
@@ -69,7 +73,7 @@ def free_employees(
             continue
         if not context.clean(name, shift_name, slot_date):
             continue
-        options.append({
+        options.append(tiers.mark({
             "employee": name,
             "hours": load.get(name, 0.0),
             # Said in Hebrew here rather than assembled in the browser: the
@@ -77,8 +81,10 @@ def free_employees(
             "why": "%s פנוי/ה ומוגדר/ת למשמרת (%s שעות בתקופה)." % (
                 name, values.pretty(load.get(name, 0.0))
             ),
-        })
-    options.sort(key=lambda item: (item["hours"], item["employee"]))
+        }))
+    # The stage first, so the cap below never drops a holder of the role
+    # in favour of a lighter stranger.
+    options.sort(key=lambda item: (item["tier"], item["hours"], item["employee"]))
     return options[:_MAX_ALTERNATIVES]
 
 

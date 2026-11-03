@@ -1633,6 +1633,31 @@ sentence that names nobody reaches every משמרת and costs one turn each.
 
 ---
 
+## D43 — A replacement is searched in stages: role and post first *(refines D36)*
+
+The manager's rule for replacing a soldier: first a holder of the same role
+from the shift itself, who is free; then the same role from another place;
+only then anyone else who fits. Ranking every clean cover by load alone
+offered a lighter stranger ahead of the soldier's own crew-mate.
+
+So `placement/tiers.py` puts every candidate in a stage before the load is
+asked: **0** — shares a role with the leaving soldier and belongs to this
+post; **1** — shares the role, from another post; **2** — everyone else the
+placement checks pass. A *post* is the shift's `purpose` when it states one
+(two shifts with one purpose are one place at different hours), else the
+shift itself. Someone *belongs* to it when the period has them on it, or
+their `eligible_shifts` names it — an empty list means "every shift" and
+says nothing about where they belong. A leaving soldier with no role leaves
+no role to match, and the stages are the post alone.
+
+The stage sorts before the candidate cap, so a holder of the role is never
+cut in favour of a lighter stranger; inside a stage the order is the fair
+one it always was. The changes tab and the chat's candidate cards head each
+stage, and the fair pick is the lightest of the earliest stage with a clean
+cover. Stage 2 stays listed so the manager is never left with nothing.
+
+---
+
 ## Open
 
 - *(none)* — the Python version is settled at **3.11** (D30).
