@@ -25,7 +25,7 @@ import { sundayOf } from "./dates";
 import { FilterBar } from "./FilterBar";
 import { GenerateDialog } from "./GenerateDialog";
 import { RangeGrid } from "./RangeGrid";
-import { orderByHours } from "./shiftOrder";
+import { orderByName } from "./shiftOrder";
 import { ShiftEditor } from "./ShiftEditor";
 import { clipTo, mergePeriods } from "./span";
 import { ViewSwitch } from "./ViewSwitch";
@@ -283,18 +283,14 @@ export function Board({
   const { roster, roles, roleOptions, people } = useRosterMaps(overview);
 
   // The filter's shift list reads in the same order the board's rows do —
-  // by the clock. A dropdown that disagrees with the grid beside it is the
+  // א-ב. A dropdown that disagrees with the grid beside it is the
   // same confusion the row order was fixed for, one control over.
   const shiftOptions = useMemo(() => {
     const seen = new Set<string>();
-    const startTimes: Record<string, string> = {};
     for (const slot of (overviewMode ? span : schedule)?.slots ?? []) {
       seen.add(slot.shift_name);
-      if (slot.start_time && !startTimes[slot.shift_name]) {
-        startTimes[slot.shift_name] = slot.start_time;
-      }
     }
-    return orderByHours(Array.from(seen), startTimes);
+    return orderByName(Array.from(seen));
   }, [overviewMode, span, schedule]);
 
   // What the manager has asked to remove, held until they confirm. Nothing

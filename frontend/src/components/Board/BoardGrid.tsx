@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Clock, Trash2, X } from "lucide-react";
+import { ArrowDownAZ, Check, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { buildPalette } from "@/components/Management/palette";
@@ -194,26 +194,11 @@ export function BoardGrid({
     return byDate;
   }, [schedule?.generation.staffing_overrides]);
 
-  // When each shift starts, read off whichever slot in its row carries the
-  // hours: a shift's times come from the vocabulary and hold all week, but a
-  // shift that does not run on Sunday has no Sunday slot to read them from.
-  const startTimes = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const slot of schedule?.slots ?? []) {
-      if (slot.start_time && !map[slot.shift_name]) {
-        map[slot.shift_name] = slot.start_time;
-      }
-    }
-    return map;
-  }, [schedule?.slots]);
-
-  // Shift rows run by the clock, not by the order the slots happened to be
-  // written in — a day happens morning, then noon, then evening, and a board
-  // that opens with those rows shuffled has to be re-read every time. Still
-  // not alphabetical, which would scramble the same sequence differently
-  // (D9); and still the manager's to override, which is what `shiftOrder`
-  // remembers.
-  const order = useShiftOrder({ shifts: index.shifts, startTimes });
+  // Shift rows run א-ב, not in the order the slots happened to be written
+  // in, so a post's shifts sit together (אלחוט יום above אלחוט לילה) and the
+  // board reads the same every time it opens. Still the manager's to
+  // override, which is what `shiftOrder` remembers.
+  const order = useShiftOrder({ shifts: index.shifts });
   const shiftFilter = filters.shift;
   const shifts = useMemo(
     () => order.shifts.filter((name) => !shiftFilter || name === shiftFilter),
@@ -338,7 +323,7 @@ export function BoardGrid({
           </div>
         ) : null}
 
-      {/* A board no longer in clock order says so, and offers the clock
+      {/* A board no longer in א-ב order says so, and offers that order
           back in one click. Shown only while the manager's own order
           actually differs from it: a row nudged and nudged back is not
           something to keep explaining. */}
@@ -351,10 +336,10 @@ export function BoardGrid({
             type="button"
             className="board-order-reset"
             onClick={order.reset}
-            title="להחזיר את השורות לסדר לפי שעת ההתחלה"
+            title="להחזיר את השורות לסדר א-ב"
           >
-            <Clock size={13} />
-            סידור לפי שעות
+            <ArrowDownAZ size={13} />
+            סידור לפי א-ב
           </button>
         </div>
       ) : null}
