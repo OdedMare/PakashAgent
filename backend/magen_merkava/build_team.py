@@ -1,7 +1,7 @@
 """בונה את צוות האלחוט — מגן מרכבה במערכת משמרות זהב.
 
 הסקריפט לא משבץ משמרות. הוא פותח צוות במערכת ומגדיר בו:
-  * את האנשים — תפקיד אלחוט, תא, סוג שירות, כשירות, הערות
+  * את האנשים — תפקיד אלחוט, תא, סוג שירות, כשירות (הערות רק למי שלא זמין)
   * את סוגי המשמרות — לכל תא בוקר 08:00-20:00 ולילה 20:00-08:00, עם התקינה מהלוח
   * את הסבב — סדירים (חובה, קבע) 12/2; מילואים, אע"צ והצ"ח עד 4 ימים בשבוע
   * אילוץ אחד: מי שחסום, לא יכול להגיע או לא בפול — לא זמין כלל
@@ -96,22 +96,6 @@ def competence(p: dict) -> str:
     return COMPETENCE[max(known)] if known else ""
 
 
-def notes(p: dict) -> str:
-    parts = [p["note"]] if p["note"] else []
-    parts.append("כשירות: %s | רמה: %s" % (p["competency"] or "לא ידוע", p["level"] or "לא ידוע"))
-    if p.get("then_cab"):
-        parts.append(f"ס' בלילה הראשון, אחר כך {p['then_cab']}")
-    if p["source"]:
-        parts.append(f"מקור: {p['source']}")
-    if p["sheet_assignment"] and p["sheet_assignment"] != p["cab"]:
-        parts.append(f"בגיליון רשום: {p['sheet_assignment']}")
-    if "rear_cab_only" in p["flags"]:
-        parts.append("מוסמכת רק לתא אחורי")
-    if "verify" in p["flags"]:
-        parts.append("לבדוק שם/פרטים מול הגיליון")
-    return " | ".join(parts)
-
-
 def build_employees(start: dt.date) -> list[dict]:
     """כולם בתפקיד אלחוט, כל אחד במשמרות של התא שלו.
     אילוץ אחד בלבד: מי שחסום, לא יכול להגיע או לא בפול — לא זמין כלל."""
@@ -125,13 +109,10 @@ def build_employees(start: dt.date) -> list[dict]:
             "eligible_shifts": cab_shifts(p["cab"]) + cab_shifts(p.get("then_cab")),
             "service_type": SERVICE.get(p["service"], "standard"),
             "competence": competence(p),
-            "notes": notes(p),
+            "notes": "",  # ריק — חוץ ממי שלא זמין
         }
         if p["service"] in FOUR_DAYS or not p["service"]:
             # המערכת מגבילה ימים בשבוע רק למילואים, אז אע"צ והצ"ח נשמרים כמילואים
-            # וסוג השירות האמיתי נשאר בהערות
-            if p["service"] and p["service"] != "מילואים":
-                person["notes"] += f" | סוג שירות: {p['service']}"
             person.update(service_type="reserve", exit_pattern="none",
                           reserve_days_per_week=RESERVE_DAYS_PER_WEEK)
         else:
@@ -142,7 +123,7 @@ def build_employees(start: dt.date) -> list[dict]:
             person.update(exit_pattern=f"cycle:{CYCLE_ID}", rotation_group=CYCLE["groups"][index % 2])
         if set(p["flags"]) & UNAVAILABLE_FLAGS:
             person["inactive_from"] = start.isoformat()
-            person["notes"] = "לא זמין/ה | " + person["notes"]
+            person["notes"] = "לא זמין/ה: " + p["note"].replace(" (מהלוח)", "").replace("כורדית; ", "")
         people.append(person)
     return people
 
