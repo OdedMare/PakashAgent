@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { DateInput } from "@/components/DateInput";
 import { TimeInput } from "@/components/TimeInput";
 import { cycleOf, cyclePattern, isDayCycle } from "@/lib/dayCycles";
 import type { DayCycle } from "@/types";
@@ -164,6 +165,10 @@ export function ShiftForm({
   const [shiftType, setShiftType] = useState(text(initial?.shift_type) || (onCall ? "on_call" : "regular"));
   const [purpose, setPurpose] = useState(text(initial?.purpose));
   const [requiresManager, setRequiresManager] = useState(Boolean(initial?.requires_shift_manager));
+  const [startsOn, setStartsOn] = useState(text(initial?.starts_on));
+  const [endsOn, setEndsOn] = useState(text(initial?.ends_on));
+  const [temporary, setTemporary] = useState(Boolean(startsOn || endsOn));
+  const ready = Boolean(name.trim()) && (!temporary || Boolean(startsOn && endsOn && startsOn <= endsOn));
 
   return (
     <form className="constraint-form profile-form" onSubmit={(event) => {
@@ -173,6 +178,8 @@ export function ShiftForm({
         name: name.trim(), start_time: start, end_time: end,
         headcount, shift_type: shiftType, is_on_call: shiftType === "on_call", purpose,
         requires_shift_manager: requiresManager,
+        starts_on: temporary ? startsOn : "",
+        ends_on: temporary ? endsOn : "",
       });
     }}>
       <label>
@@ -192,8 +199,19 @@ export function ShiftForm({
       <label><span>ייעוד</span><input value={purpose} maxLength={120} onChange={(event) => setPurpose(event.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></label>
       <label><span>תקן בסיסי</span><input type="number" min={0} max={100} value={headcount} onChange={(event) => setHeadcount(Math.min(100, Math.max(0, Math.floor(Number(event.target.value)) || 0)))} />{headcount === 0 ? <small>תקן 0: המשמרת לא פועלת בימים האלה. תקן לסופ״ש נקבע במסך הגדרת היחידה.</small> : null}</label>
       <label className="profile-check"><input type="checkbox" checked={requiresManager} onChange={(event) => setRequiresManager(event.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
+      <label className="profile-check"><input type="checkbox" checked={temporary} onChange={(event) => setTemporary(event.target.checked)} /><span>משמרת זמנית</span></label>
+      {temporary ? (
+        <fieldset className="profile-time-card">
+          <legend>תקופת הפעילות</legend>
+          <div className="constraint-time-grid">
+            <label><span>מתאריך</span><DateInput value={startsOn} max={endsOn || undefined} required onChange={setStartsOn} /></label>
+            <label><span>עד תאריך</span><DateInput value={endsOn} min={startsOn || undefined} required onChange={setEndsOn} /></label>
+          </div>
+          <small>המשמרת תופיע בלוח רק בתאריכים האלה, כולל יום ההתחלה והסיום.</small>
+        </fieldset>
+      ) : null}
       {children}
-      <FormActions onCancel={onCancel} ready={Boolean(name.trim())} />
+      <FormActions onCancel={onCancel} ready={ready} />
     </form>
   );
 }
