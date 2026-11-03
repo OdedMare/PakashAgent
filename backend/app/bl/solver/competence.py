@@ -25,6 +25,13 @@ times an excess over it, so the solver spreads strong soldiers across shifts
 rather than stacking them, and two weak soldiers on one shift pay extra.
 An unrated soldier counts as the team's average and moves nothing.
 
+**A strong shift keeps weaker soldiers off it.** A shift whose definition
+names `min_competence` prices every placement of a rated soldier below that
+level (`STRONG_SHIFT`), so the solver puts its strong soldiers there first.
+A price, not a bar: coverage is solved first, so a seat with no strong
+soldier free is still filled — and the audit names who is below the level
+on that soldier's own card. An unrated soldier is never below.
+
 Both prices sit below a soft wish and around one shift of evenness
 (`model.py`): balance is worth a shift moving, not a broken request.
 """
@@ -33,7 +40,7 @@ import datetime
 from typing import Dict, List, Optional, Tuple
 
 from app.bl.audit import counts_toward_staffing
-from app.bl.audit.unit_policy import reserve_days
+from app.bl.audit.unit_policy import below_level, reserve_days
 from app.bl.solver.model import Model
 from app.bl.solver.rows import text
 
@@ -44,6 +51,9 @@ BELOW_AVERAGE = 4
 ABOVE_AVERAGE = 1
 # Each weak soldier past the first on one shift.
 WEAK_TOGETHER = 150
+# Each soldier below a strong shift's level: below a soft wish, above
+# several shifts of evenness.
+STRONG_SHIFT = 700
 # Each day a reservist falls short of their weekly minimum: below a soft wish
 # (1000), above several shifts of evenness (10 per tenth of a shift).
 RESERVE_SHORT = 600
@@ -55,6 +65,7 @@ def apply_competence(model: Model) -> None:
         _reserve_minimum(model, name)
         _reserve_block(model, name)
     _balance(model)
+    _strong_shifts(model)
 
 
 # -- reservists ------------------------------------------------------------
@@ -216,6 +227,19 @@ def _balance(model: Model) -> None:
         weak_fixed = sum(1 for name in fixed if strength.get(name) == weak)
         weak_placed = [var for name, var in placed.items() if strength[name] == weak]
         model.price_excess(weak_placed, max(0, 1 - weak_fixed), WEAK_TOGETHER, "", kind="competence")
+
+
+def _strong_shifts(model: Model) -> None:
+    problem = model.problem
+    for (name, index), var in sorted(model.x.items()):
+        slot = problem.slots[index]
+        found = below_level(problem.people.get(name), problem.shifts.get(slot["shift_name"]))
+        if found is not None:
+            model.price(STRONG_SHIFT, var, _BELOW % (
+                name, slot["shift_name"], slot["slot_date"]), kind="competence")
+
+
+_BELOW = "%s שובץ/ה ל%s ב-%s למרות שהמשמרת דורשת רמה מקצועית גבוהה יותר"
 
 
 __all__ = ["LEVELS", "apply_competence", "reserve_days", "strengths", "week_of"]

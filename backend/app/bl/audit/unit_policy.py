@@ -8,6 +8,8 @@ block and no rated, qualified people behaves exactly as before.
 
 Profile shape::
 
+    shift: {"min_competence": "high"}         # a strong shift: medium/high/excellent
+
     unit_policy: {
         "max_weak_per_shift": 1,              # competence "weak" per shift; None = no cap
         "qualification_validity_days": 90,
@@ -69,6 +71,28 @@ def fallbacks(profile: Optional[dict]) -> Dict[str, List[str]]:
 
 def is_weak(person: Optional[dict]) -> bool:
     return text((person or {}).get("competence")) == "weak"
+
+
+# A shift can ask for strong soldiers: `min_competence` on its definition
+# names the lowest רמה מקצועית that belongs there.
+LEVEL_ORDER = ("weak", "medium", "high", "excellent")
+
+
+def required_level(shift: Optional[dict]) -> str:
+    """The lowest level this shift asks for, or "" when it asks for none."""
+    level = text((shift or {}).get("min_competence"))
+    return level if level in LEVEL_ORDER[1:] else ""
+
+
+def below_level(person: Optional[dict], shift: Optional[dict]) -> Optional[Tuple[str, str]]:
+    """(their level, the shift's) when a rated person is below what the shift
+    asks for. An unrated person is never below: the rating is optional, and
+    an unknown is not a weak (the solver counts them as the team's mean)."""
+    need = required_level(shift)
+    have = text((person or {}).get("competence"))
+    if not need or have not in LEVEL_ORDER:
+        return None
+    return (have, need) if LEVEL_ORDER.index(have) < LEVEL_ORDER.index(need) else None
 
 
 def is_reservist(person: Optional[dict]) -> bool:

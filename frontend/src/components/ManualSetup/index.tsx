@@ -24,7 +24,7 @@ import { TimeInput } from "@/components/TimeInput";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import { deleteShiftType, previewDeparture, updateProfile } from "@/services/api";
 import { cyclePattern, isDayCycle } from "@/lib/dayCycles";
-import { SoldierFields } from "@/components/Management/SoldierFields";
+import { ShiftLevelSelect, SoldierFields } from "@/components/Management/SoldierFields";
 import { ExitPatternFields } from "@/components/Management/ExitPatternFields";
 import type { UnitPolicy } from "@/services/api";
 import type { DayCycle, RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
@@ -383,6 +383,7 @@ export function ManualSetup({
           staffing: staffingFor(shift, weekend, closureDays(shift, closure)),
           requires_shift_manager: Boolean(shift.requires_shift_manager),
           allowed_roles: strings(shift.allowed_roles),
+          min_competence: text(shift.min_competence),
         })),
         rules: rules
           .filter((rule) => text(rule.text))
@@ -658,6 +659,7 @@ export function ManualSetup({
                   <Field label="תקן א׳–ה׳"><input type="number" min={0} max={100} value={number(shift.headcount, headcount(shift))} onChange={(e) => edit(setShifts, index, "headcount", seats(e.target.value))} /></Field>
                   <Field label="תקן סופ״ש"><input title={`חל על: ${closureDays(shift, closure).join(", ")}`} type="number" min={0} max={100} value={shift.weekend_headcount === "" || shift.weekend_headcount === undefined ? "" : String(shift.weekend_headcount)} placeholder="כמו באמצע השבוע" onChange={(e) => edit(setShifts, index, "weekend_headcount", e.target.value === "" ? "" : seats(e.target.value))} /></Field>
                   <Field label="ייעוד"><input value={inputText(shift.purpose)} onChange={(e) => edit(setShifts, index, "purpose", e.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></Field>
+                  <Field label="משמרת חזקה (רמה מקצועית)"><ShiftLevelSelect value={text(shift.min_competence)} onChange={(level) => edit(setShifts, index, "min_competence", level)} /></Field>
                 </div>
                 {text(shift.starts_on) && text(shift.ends_on) ? <p className="manual-zero-note">משמרת זמנית: תופיע בסידור רק בטווח התאריכים שנבחר.</p> : null}
                 {offNote(number(shift.headcount, headcount(shift)), shift.weekend_headcount) ? <p className="manual-zero-note">{offNote(number(shift.headcount, headcount(shift)), shift.weekend_headcount)}</p> : null}

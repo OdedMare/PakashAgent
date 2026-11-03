@@ -18,6 +18,7 @@ CROSS_ROTATION = "cross_rotation"
 # The unit's staffing standard (`unit_policy.py`).
 FALLBACK_ROLE = "fallback_role"
 WEAK_CREW = "weak_crew"
+BELOW_LEVEL = "below_level"
 WEEKLY_SHIFTS = "weekly_shifts"
 RESERVE_DAYS = "reserve_days"
 QUALIFICATION_EXPIRED = "qualification_expired"

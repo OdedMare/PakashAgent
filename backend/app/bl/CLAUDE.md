@@ -103,7 +103,11 @@ and the build still completes.
   `competence` levels (weak/medium/high/excellent; optional, unrated counts
   as the mean) — pulls every slot of two or more seats towards the team's
   average strength, a shortfall priced four times an excess, plus a price
-  per extra weak soldier on one shift. Below a soft wish.
+  per extra weak soldier on one shift. Below a soft wish. A **strong shift**
+  (`min_competence` on its definition: medium/high/excellent) prices each
+  rated soldier below that level (`STRONG_SHIFT`), so its seats go to the
+  strong first; coverage still comes first, and the audit's `below_level`
+  names whoever is below it on their own card. Unrated is never below.
 - `fairness.py` rewards closers on their own closure, spreads shifts (not
   hours: on base nobody is on the clock) and nights towards a target per
   person — the demand poured evenly, but never below what someone already

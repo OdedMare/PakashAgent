@@ -234,3 +234,27 @@ def test_the_picker_does_not_offer_a_reservist_whose_week_is_full():
 
     assert not verdict["ok"]
     assert any("מילואים" in reason for reason in verdict["reasons"])
+
+
+def test_a_strong_shift_gets_the_strong_soldiers():
+    people = [_person("חלש1", competence="weak"), _person("חלש2", "ב", competence="medium"),
+              _person("חזק1", competence="high"), _person("חזק2", "ב", competence="excellent")]
+    profile = _profile(people, (MORNING, EVENING))
+    profile["shifts"][0]["min_competence"] = "high"
+    result = generate_span(profile, "2026-08-31", "2026-08-31")
+
+    morning = {row["employee"] for row in result["assignments"] if row["shift"] == MORNING}
+    assert morning == {"חזק1", "חזק2"}
+    assert not [w for w in result["warnings"] if w["code"] == "below_level"]
+
+
+def test_a_strong_shift_is_still_staffed_when_nobody_strong_is_free():
+    people = [_person("חלש1", competence="weak"), _person("חזק1", "ב", competence="high"),
+              _person("לא_מדורג")]
+    profile = _profile(people)
+    profile["shifts"][0]["min_competence"] = "high"
+    result = generate_span(profile, "2026-08-31", "2026-08-31")
+
+    # Two seats, one strong soldier: coverage first, so the unrated soldier
+    # (never "below") takes the other seat rather than the weak one.
+    assert {row["employee"] for row in result["assignments"]} == {"חזק1", "לא_מדורג"}

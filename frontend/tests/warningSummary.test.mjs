@@ -55,6 +55,14 @@ test("the numbers that broke a rule are on the line", () => {
   );
   assert.equal(summary.warningHeadline(warning("over_hours", { hours: 52.5, limit: 48 })), "52.5 ש׳ השבוע (תקרה 48)");
   assert.equal(summary.warningHeadline(warning("consecutive", { days: 13, limit: 11 })), "13 ימים ברצף (מקס׳ 11)");
+  assert.equal(
+    summary.warningHeadline(warning("below_level", { competence: "weak", required: "high" })),
+    "רמה חלשה · המשמרת דורשת גבוהה ומעלה",
+  );
+  assert.equal(
+    summary.warningHeadline(warning("below_level", { competence: "high", required: "excellent" })),
+    "רמה גבוהה · המשמרת דורשת מצטיינת",
+  );
   assert.equal(summary.warningHeadline(warning("cross_rotation", { rotation_group: "ב" })), "בבית לפי הסבב (קבוצה ב)");
 });
 

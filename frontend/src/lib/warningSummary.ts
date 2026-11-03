@@ -48,6 +48,12 @@ export function warningHeadline(warning: ScheduleWarning): string {
       if (days === null) return "יותר מדי ימים ברצף";
       return `${days} ימים ברצף${limit !== null ? ` (מקס׳ ${limit})` : ""}`;
     }
+    case "below_level": {
+      const have = LEVEL_NAMES[text(details.competence)];
+      const need = LEVEL_NAMES[text(details.required)];
+      if (!have || !need) return "רמה מקצועית נמוכה למשמרת חזקה";
+      return `רמה ${have} · המשמרת דורשת ${need}${text(details.required) === "excellent" ? "" : " ומעלה"}`;
+    }
     case "double_booked":
       return "משובץ/ת פעמיים באותה משמרת";
     case "cross_rotation": {
@@ -58,6 +64,14 @@ export function warningHeadline(warning: ScheduleWarning): string {
       return warning.message;
   }
 }
+
+/** רמה מקצועית, as the roster names it. */
+const LEVEL_NAMES: Record<string, string> = {
+  weak: "חלשה",
+  medium: "בינונית",
+  high: "גבוהה",
+  excellent: "מצטיינת",
+};
 
 /** The same line for a recorded constraint the board found on its own —
  *  a hard window the audit has not (yet) reported, e.g. right after a drop. */

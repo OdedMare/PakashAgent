@@ -1,5 +1,6 @@
-"""The unit's staffing standard (`unit_policy.py`): weak crews, weekly
-shift limits, a reservist's days a week and stale qualifications.
+"""The unit's staffing standard (`unit_policy.py`): weak crews, a soldier
+below a strong shift's level, weekly shift limits, a reservist's days a
+week and stale qualifications.
 Warnings only, like every check."""
 
 from collections import Counter
@@ -7,22 +8,25 @@ from typing import Dict, List
 
 from app.bl.audit.checks.base import AuditCheck, AuditInput
 from app.bl.audit.codes import (
-    QUALIFICATION_EXPIRED, RESERVE_DAYS, SEVERITY_NOTICE, SEVERITY_WARNING, WEAK_CREW,
+    BELOW_LEVEL, QUALIFICATION_EXPIRED, RESERVE_DAYS, SEVERITY_NOTICE, SEVERITY_WARNING, WEAK_CREW,
     WEEKLY_SHIFTS, warning,
 )
 from app.bl.audit.roster import index_people
 from app.bl.audit.staffing_rules import required_roles
 from app.bl.audit.unit_policy import (
-    is_weak, max_weak, qualification_expired, reserve_days, role_needs, unit_week,
+    below_level, is_weak, max_weak, qualification_expired, reserve_days, role_needs, unit_week,
     weekly_limits,
 )
 from app.bl.shared import parse_date
+
+LEVEL_NAMES = {"weak": "חלשה", "medium": "בינונית", "high": "גבוהה", "excellent": "מצטיינת"}
 
 
 class UnitStandardCheck(AuditCheck):
     def run(self, data: AuditInput) -> List[dict]:
         people = index_people(data.employees)
-        return self._weak(data, people) + self._weekly(data, people) \
+        return self._weak(data, people) + self._level(data, people) \
+            + self._weekly(data, people) \
             + self._reserve(data, people) + self._stale(data, people)
 
     @staticmethod
@@ -39,6 +43,25 @@ class UnitStandardCheck(AuditCheck):
                     date=date, shift=shift, details={"weak": count, "allowed": cap})
             for (date, shift), count in sorted(weak.items()) if count > cap
         ]
+
+    @staticmethod
+    def _level(data: AuditInput, people: Dict[str, dict]) -> List[dict]:
+        """A rated soldier on a shift that asks for a higher רמה מקצועית
+        (`min_competence`). Named on the soldier, so their own card says
+        it, rather than on the cell like a weak crew."""
+        warnings = []
+        for row in data.rows:
+            found = below_level(people.get(row["employee"]), data.shift_index.get(row["shift"]))
+            if found is None:
+                continue
+            have, need = found
+            warnings.append(warning(
+                BELOW_LEVEL, SEVERITY_WARNING,
+                "%s (רמה מקצועית %s) משובץ/ת ל%s בתאריך %s, משמרת חזקה שדורשת רמה %s לפחות."
+                % (row["employee"], LEVEL_NAMES[have], row["shift"], row["date"], LEVEL_NAMES[need]),
+                employee=row["employee"], date=row["date"], shift=row["shift"],
+                details={"competence": have, "required": need}))
+        return warnings
 
     @staticmethod
     def _weekly(data: AuditInput, people: Dict[str, dict]) -> List[dict]:

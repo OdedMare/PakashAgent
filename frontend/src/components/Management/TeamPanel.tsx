@@ -22,7 +22,7 @@ import type { Constraint, DayCycle, ShiftStats } from "@/types";
 
 import { ConfirmDeparture } from "./ConfirmDeparture";
 import { buildPalette, colorStyle } from "./palette";
-import { soldierSummary } from "./SoldierFields";
+import { SHIFT_LEVEL_LABELS, soldierSummary } from "./SoldierFields";
 import {
   SOURCE_LABELS,
   SERVICE_TYPE_LABELS,
@@ -346,6 +346,7 @@ export function TeamPanel({
                     {text(shift.start_time) || "—"}–{text(shift.end_time) || "—"}
                     {` · ${SHIFT_TYPE_LABELS[text(shift.shift_type)] ?? (Boolean(shift.is_on_call) ? "כוננות" : "רגילה")}`}
                     {shift.requires_shift_manager ? " · נדרש מפקד/ת" : ""}
+                    {text(shift.min_competence) ? ` · משמרת חזקה (${SHIFT_LEVEL_LABELS[text(shift.min_competence)] ?? ""})` : ""}
                   </span>
                 </span>
                 <span className="roster-load">תקן {shiftHeadcount(shift)}{weekendHeadcount(shift) ? ` · סופ״ש ${weekendHeadcount(shift)}` : ""}</span>

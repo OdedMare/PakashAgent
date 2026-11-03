@@ -19,6 +19,24 @@ export const COMPETENCE_LABELS: Record<string, string> = {
   excellent: "מצטיין/ת",
 };
 
+/** A strong shift: the lowest רמה מקצועית that belongs on it
+ *  (`min_competence`). The solver puts stronger soldiers there first and the
+ *  board names anybody below it on their own card. */
+export const SHIFT_LEVEL_LABELS: Record<string, string> = {
+  "": "כל רמה",
+  medium: "בינונית ומעלה",
+  high: "גבוהה ומעלה",
+  excellent: "מצטיינים בלבד",
+};
+
+export function ShiftLevelSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <select value={value} onChange={(event) => onChange(event.target.value)}>
+      {Object.entries(SHIFT_LEVEL_LABELS).map(([level, label]) => <option key={level} value={level}>{label}</option>)}
+    </select>
+  );
+}
+
 export const RESERVE_CALL_LABELS: Record<string, string> = {
   order: "צו",
   days: "ימי מילואים",

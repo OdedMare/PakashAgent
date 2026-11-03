@@ -220,7 +220,8 @@ one hover away — but a justification is read once, when the placement is made,
 and the grid is read every day.
 A flagged card says *why* on its face: a red last line names the rule and
 the number that broke it ("אילוץ 12:00–20:00 · מילואים", "רק 6 ש׳ מנוחה
-(נדרש 8)"), worded from the warning's `details` by `lib/warningSummary.ts`,
+(נדרש 8)", "רמה חלשה · המשמרת דורשת גבוהה ומעלה" on a strong shift),
+worded from the warning's `details` by `lib/warningSummary.ts`,
 with `+N` for further findings and every audit sentence on the hover. A
 constraint the board finds itself (`blockingConstraint`) stands in until the
 audit reports the same one.

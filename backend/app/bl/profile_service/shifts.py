@@ -7,6 +7,8 @@ from app.bl.profile_service.validation import named_rows, text, text_list, valid
 from app.common.errors import AgentError
 
 _SHIFT_TYPES = ("regular", "overlap", "on_call")
+# The lowest רמה מקצועית a strong shift asks for; "" asks for none.
+_LEVELS = ("", "medium", "high", "excellent")
 
 
 def shifts(rows: Any) -> List[dict]:
@@ -37,6 +39,9 @@ def _shift(row: dict) -> dict:
     )
     if shift_type not in _SHIFT_TYPES:
         raise AgentError("סוג המשמרת אינו תקין")
+    level = text(row.get("min_competence"))
+    if level not in _LEVELS:
+        raise AgentError("הרמה המקצועית שהמשמרת דורשת אינה תקינה")
     row.update({
         "shift_type": shift_type,
         "purpose": text(row.get("purpose")),
@@ -44,6 +49,7 @@ def _shift(row: dict) -> dict:
         "requires_shift_manager": bool(row.get("requires_shift_manager")),
         # The roles qualified to stand this shift; empty restricts nobody.
         "allowed_roles": list(dict.fromkeys(text_list(row.get("allowed_roles") or []))),
+        "min_competence": level,
     })
     return row
 

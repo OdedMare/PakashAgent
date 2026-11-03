@@ -236,3 +236,24 @@ def test_the_service_previews_without_writing_and_applies_on_request():
     assert saved["unit_policy"]["max_weak_per_shift"] == 1
     assert {person["name"] for person in saved["employees"]} == {"דנה כהן", "יוסי לוי"}
     assert saved["employees"][0]["competence"] == "excellent"
+
+
+def test_a_soldier_below_a_strong_shifts_level_is_named_on_their_own_warning():
+    people = [_person("חלש", ["אלחוט"], competence="weak"), _person("חזק", ["אלחוט"], competence="high"),
+              _person("לא_מדורג", ["אלחוט"], competence="")]
+    profile = _profile(people, [], headcount=3)
+    profile["shifts"][0]["min_competence"] = "high"
+    rows = [{"employee": name, "shift": DAY, "date": "2026-11-08"} for name in ("חלש", "חזק", "לא_מדורג")]
+    found = [w for w in audit(rows, profile["shifts"], people, profile=profile) if w["code"] == "below_level"]
+
+    assert [w["employee"] for w in found] == ["חלש"]
+    assert found[0]["severity"] == "warning"
+    assert found[0]["details"] == {"competence": "weak", "required": "high"}
+    assert "משמרת חזקה" in found[0]["message"]
+
+
+def test_a_shift_with_no_level_flags_nobody():
+    people = [_person("חלש", ["אלחוט"], competence="weak")]
+    profile = _profile(people, [])
+    rows = [{"employee": "חלש", "shift": DAY, "date": "2026-11-08"}]
+    assert not [w for w in audit(rows, profile["shifts"], people, profile=profile) if w["code"] == "below_level"]
