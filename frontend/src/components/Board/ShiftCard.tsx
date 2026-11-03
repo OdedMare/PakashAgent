@@ -212,6 +212,17 @@ export function ShiftCard({
             <ShieldCheck size={11} /> מפקד/ת
           </span>
         ) : null}
+        {/* A note about the soldier, kept in the roster. Visual: the card
+            says there is something to know and the hover says what. */}
+        {person.note ? (
+          <span
+            className="board-card-note"
+            title={`הערה: ${person.note}`}
+            aria-label={`הערה: ${person.note}`}
+          >
+            !
+          </span>
+        ) : null}
         {person.is_overlap ? (
           <span
             className="board-card-overlap"
@@ -306,6 +317,7 @@ function identityTitle(assignment: Assignment, person: CardPerson): string {
     .filter(Boolean)
     .join(" · ");
   const lines = [`${assignment.employee}${who ? ` — ${who}` : ""}`];
+  if (person.note) lines.push(`הערה: ${person.note}`);
   if (assignment.reason) lines.push(`סיבת השיבוץ: ${assignment.reason}`);
   return lines.join("\n");
 }

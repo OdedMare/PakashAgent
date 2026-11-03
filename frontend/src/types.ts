@@ -428,6 +428,9 @@ export interface Assignment {
  *  describes the person, and it reads the same on every shift they hold. */
 export interface CardPerson {
   role: string;
+  /** The soldier's note from the roster, shown on the card as "!". Empty
+   *  when there is none. */
+  note?: string;
   /** `exit_pattern` and `rotation_group` already rendered together — "סבב א",
    *  "תלתון ג", "חמשושים" for somebody with no group. Empty when the roster
    *  says nothing. */

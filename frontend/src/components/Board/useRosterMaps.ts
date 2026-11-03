@@ -42,6 +42,7 @@ export function useRosterMaps(overview: ManagementOverview | undefined) {
       if (!name) continue;
       map[name] = {
         role: typeof row.role === "string" ? row.role.trim() : "",
+        note: typeof row.notes === "string" ? row.notes.trim() : "",
         rotation: rotationLabel(row.exit_pattern, row.rotation_group, overview?.profile?.workplace?.day_cycles),
         is_shift_manager: Boolean(row.is_shift_manager),
         is_overlap: row.service_type === "overlap",

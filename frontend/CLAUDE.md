@@ -204,7 +204,10 @@ colours, which mean something specific on this grid.
 **A board card says who is standing there, not why** (`Board/ShiftCard.tsx`).
 Name, role, rotation — `exit_pattern` and `rotation_group` rendered as one
 phrase by `Board/person.ts`, since a group is what makes somebody rotate at
-all — plus badges for **מפקד/ת** and **נחפף/ת**. An overlap (נחפף/ת) card drops
+all — plus badges for **מפקד/ת** and **נחפף/ת**. A soldier with a roster note carries a ringed
+**!** whose hover is the note; setup's "הערות לחייל/ת לתצוגה בלבד"
+(`workplace.notes_visual_only`) keeps notes on the board only — the build is
+then not told about them (`scheduler/directives.semantic_sources` skips them). An overlap (נחפף/ת) card drops
 the per-name hue for one shared violet with a thick inline-start bar,
 diagonal stripes and a solid badge, so a trainee never reads as a filled
 seat; alarm styling still wins. The command badge reads off

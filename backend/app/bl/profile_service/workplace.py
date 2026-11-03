@@ -47,6 +47,8 @@ def workplace(value: Any) -> dict:
         "first_closure_group": first_group,
         "first_closure_date": first_date,
         "general_exit_schedule": text(result.get("general_exit_schedule")),
+        # Soldiers' notes shown on the board only, never handed to the solver.
+        "notes_visual_only": result.get("notes_visual_only") is True,
         "enabled_exit_patterns": _enabled_patterns(result),
         "rotation_a_unavailability": _rotation_rules(
             result.get("rotation_a_unavailability") or []

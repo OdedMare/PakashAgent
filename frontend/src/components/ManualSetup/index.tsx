@@ -82,6 +82,9 @@ export function ManualSetup({
   const profile = workspace.profile ?? {};
   const initialWorkplace = record(profile.workplace);
   const [unitName, setUnitName] = useState(text(initialWorkplace.name) || workspace.name);
+  // Soldiers' notes as something to read on the board only: the build is
+  // then not told about them at all.
+  const [notesVisualOnly, setNotesVisualOnly] = useState(initialWorkplace.notes_visual_only === true);
   const [planningHorizon, setPlanningHorizon] = useState(text(initialWorkplace.planning_horizon) || "שבוע");
   const [operatingDays, setOperatingDays] = useState<string[]>(
     strings(initialWorkplace.operating_days).length
@@ -300,6 +303,7 @@ export function ManualSetup({
           rotation_presence: rotationPresence,
           day_cycles: dayCycles,
           general_exit_schedule: generalExitSchedule.trim(),
+          notes_visual_only: notesVisualOnly,
           enabled_exit_patterns: [...availableExitPatterns],
           rotation_a_unavailability: rotationAUnavailability.map((rule) => ({
             days: strings(rule.days),
@@ -515,6 +519,10 @@ export function ManualSetup({
         </SetupSection>
 
         <SetupSection tour="setup-people" icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">
+          <label className="manual-check">
+            <input type="checkbox" checked={notesVisualOnly} onChange={(e) => setNotesVisualOnly(e.target.checked)} />
+            <span>הערות לחייל/ת לתצוגה בלבד — מוצגות בלוח כסימן קריאה (!) ולא נלקחות בחשבון בשיבוץ</span>
+          </label>
           <RosterView
             people={rosterPeople}
             services={SERVICE_TYPES}
@@ -580,7 +588,7 @@ export function ManualSetup({
                   onChange={(field, value) => edit(setEmployees, index, field, value)}
                 />
                 <PersonStandard person={person} onChange={(key, value) => edit(setEmployees, index, key, value)} />
-                <Field label="הערות לחייל/ת"><textarea value={inputText(person.notes)} onChange={(e) => edit(setEmployees, index, "notes", e.target.value)} rows={2} placeholder="מידע קבוע שכדאי לקחת בחשבון בשיבוץ" /></Field>
+                <Field label="הערות לחייל/ת"><textarea value={inputText(person.notes)} onChange={(e) => edit(setEmployees, index, "notes", e.target.value)} rows={2} placeholder={notesVisualOnly ? "מוצג בלוח בלבד, לא משפיע על השיבוץ" : "מידע קבוע שכדאי לקחת בחשבון בשיבוץ"} /></Field>
               </article>
               );
             }}

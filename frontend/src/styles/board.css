@@ -1055,6 +1055,23 @@
   color: var(--status-soft);
 }
 
+/* A soldier's note: a small ringed "!" in the card's own ink, so it reads
+   on any person hue and never borrows the warning colour, which means the
+   placement breaks something. The hover carries the note itself. */
+.board-card-note {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.05em;
+  height: 1.05em;
+  border: 1.5px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: help;
+}
+
 .board-card-grip {
   display: none;
 }
