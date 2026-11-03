@@ -1636,3 +1636,50 @@ sentence that names nobody reaches every משמרת and costs one turn each.
 ## Open
 
 - *(none)* — the Python version is settled at **3.11** (D30).
+
+## D47 — A reserve unit's staffing standard is structured, and its roster comes in from its own app *(extends D34)*
+
+A reserve unit moving over from its own roster app (groups א–ח, each staffing
+its own 12-hour day and night shifts) brought four rules this product could
+not state, and a roster it should not have to retype.
+
+**The standard lives in one profile block, `unit_policy`, and on each
+person** (`bl/audit/unit_policy.py`, read by the solver and the audit alike):
+
+- **Role counts.** A role listed N times in a shift's `required_roles`
+  needs N holders, and one person fills one role seat (a maximum matching,
+  `cover`). Before, a role was satisfied by any one holder, so "three
+  radio operators" could not be said.
+- **Fallback roles.** `role_fallbacks[role]` names roles whose holders may
+  fill a seat first-hand holders cannot, priced above a soft wish
+  (`solver/staffing.FALLBACK`) and reported as a notice.
+- **The weak per shift.** `max_weak_per_shift` caps people of `competence`
+  "weak" on one shift as a hard constraint, beside the competence balance
+  that already pulls each shift toward the team's average. Competence never
+  changes how many shifts someone gets.
+- **Dated qualifications.** `qualifications: [{role, last_active}]` count as
+  roles held. One older than `qualification_validity_days` (90) is a notice,
+  never a bar: the unit renews it by training, not by being left off.
+- **Shifts per week.** `weekly_shifts` (reservists, `service_type` reserve)
+  and `weekly_shifts_regular` (everyone else) are team-wide defaults beside
+  each reservist's own `reserve_days_per_week`/`reserve_min_days`: the
+  maximum is hard, the minimum priced and applied only to whole weeks of a
+  span, Sunday to Saturday.
+
+None of this is a structured *rule vocabulary* (D2): these are numbers on a
+setup form, like `audit_policy`, not the manager's sentences.
+
+**The roster is imported, not retyped** (`profile_service/roster_csv.py`,
+`roster_import.py`, `POST /api/profile/import-roster`). The app's CSV export
+or paste format is read; each group becomes "קבוצה X' · יום" and "· לילה"
+with the composition the manager types; each person is eligible only for
+their home group's shifts; the app's א/ב/ג become `competence`
+excellent/medium/weak, and מילואים/סדיר become `service_type` reserve/standard.
+This is beside the generic file reader (`importer/unit.py`): that one finds
+names and shifts in any sheet, this one reads one app's columns exactly,
+qualifications and groups included. A preview writes nothing; applying saves through
+`ProfileService.update`, so validation, absorption (D37) and translation
+(D32) run as for any save. Phones and e-mails are dropped (the product holds
+no contact details). A unit with no weekend anchor leaves its people
+ungrouped, which means no rotation, and first setup no longer demands a
+group it would have no cycle for.

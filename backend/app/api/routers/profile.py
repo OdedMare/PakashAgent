@@ -5,7 +5,7 @@ import logging
 
 from fastapi import APIRouter, Depends, File, UploadFile
 
-from app.api.contracts import ProfileUpdate, RotationPreviewRequest
+from app.api.contracts import ProfileUpdate, RosterImportRequest, RotationPreviewRequest
 from app.bl.profile_service.workplace import workplace as checked_workplace
 from app.bl.rotation import weekend_preview
 from app.bl.importer.unit import preview_unit
@@ -42,14 +42,31 @@ def build_router(service, guards, schedules=None) -> APIRouter:
         saved = service.update(team_id, **request.model_dump(exclude_unset=True))
         if schedules is None:
             return saved
+        return dict(saved, absorbed=_absorb(team_id, before, saved))
+
+    @router.post("/import-roster")
+    def import_roster(request: RosterImportRequest, session: dict = Depends(boss)) -> dict:
+        """Another app's unit roster: groups become shifts, people keep
+        their rating, track and dated qualifications. `apply` false is a
+        preview that writes nothing; true saves and absorbs like a save."""
+        team_id = session["team_id"]
+        before = service.current(team_id)
+        options = request.model_dump(exclude={"text", "apply"})
+        result = service.import_roster(team_id, request.text, options, apply=request.apply)
+        if request.apply:
+            result["absorbed"] = _absorb(team_id, before, result["profile"])
+        return result
+
+    def _absorb(team_id: str, before, saved):
+        if schedules is None:
+            return None
         try:
-            absorbed = schedules.absorb_profile_change(team_id, before, saved)
+            return schedules.absorb_profile_change(team_id, before, saved)
         except Exception:
             # The profile is saved either way; a refit that could not start
             # leaves the drafts as they were and the manager can rebuild.
             _log.exception("absorbing a profile change failed")
-            absorbed = None
-        return dict(saved, absorbed=absorbed)
+            return None
 
     @router.post("/rotation-preview")
     def rotation_preview(request: RotationPreviewRequest, session: dict = Depends(boss)) -> dict:

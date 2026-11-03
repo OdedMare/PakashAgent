@@ -22,6 +22,7 @@ saving, D3 has been reversed — re-read it before doing that.
 | `reports.py` | `personal_summary`, `fairness`, `load_history` |
 | `stats.py` | `shift_stats` for the control room's charts |
 | `window.py` | Which facts fall inside a span of dates |
+| `unit_policy.py` | The unit's staffing standard: role counts, fallbacks, a cap on the weak, qualifications, weekly shifts |
 """
 
 from app.bl.audit.auditor import audit

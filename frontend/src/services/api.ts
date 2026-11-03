@@ -415,6 +415,7 @@ export function updateProfile(body: {
   dependencies?: string[];
   training_policy?: Record<string, unknown>;
   audit_policy?: Record<string, unknown>;
+  unit_policy?: UnitPolicy;
   availability_process?: string;
   constraint_deadline?: string;
   casual_worker_policy?: string;
@@ -433,6 +434,47 @@ export function updateProfile(body: {
     body: JSON.stringify(body),
   });
 }
+
+/** The unit's staffing standard (`audit/unit_policy.py`): ratings, stale
+ *  qualifications, fallback roles and shifts per Sunday-to-Saturday week. */
+export interface UnitPolicy {
+  max_weak_per_shift?: number | null;
+  qualification_validity_days?: number;
+  role_fallbacks?: Record<string, string[]>;
+  weekly_shifts?: { min?: number; max?: number };
+  weekly_shifts_regular?: { min?: number; max?: number };
+}
+
+/** Role -> people per shift, for a group's day and night shifts. */
+export type GroupStaffing = { day: Record<string, number>; night: Record<string, number> };
+
+export interface RosterImportReport {
+  read: number;
+  added: number;
+  updated: number;
+  errors: { line: number; error: string }[];
+  groups: { letter: string; label: string; members: number }[];
+  roles: string[];
+  shifts: string[];
+  contact_details_dropped: boolean;
+}
+
+/** Another app's unit roster (its CSV export or paste). `apply` false is a
+ *  preview and writes nothing; true saves it like a profile save. */
+export const importRoster = (body: {
+  text: string;
+  start_time?: string;
+  staffing?: GroupStaffing;
+  group_staffing?: Record<string, GroupStaffing>;
+  groups?: string[];
+  unit_policy?: UnitPolicy;
+  unit_name?: string;
+  expected_revision?: number | null;
+  apply?: boolean;
+}) => request<{ report: RosterImportReport; employees: Record<string, unknown>[]; shifts: Record<string, unknown>[]; absorbed?: ProfileAbsorption | null }>(
+  "/api/profile/import-roster",
+  { method: "POST", body: JSON.stringify(body) },
+);
 
 /** What a profile save fit into the drafts already built: the new soldiers
  *  and shifts, each draft ahead of today now being refit while keeping its

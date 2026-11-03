@@ -58,6 +58,7 @@ from app.api.contracts.management import (  # noqa: F401
 )
 from app.api.contracts.profile import (  # noqa: F401
     ProfileUpdate,
+    RosterImportRequest,
     RotationPreviewRequest,
 )
 from app.api.contracts.generation import (  # noqa: F401

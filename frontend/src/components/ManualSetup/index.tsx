@@ -10,6 +10,7 @@ import {
   Scale,
   ShieldCheck,
   Trash2,
+  Upload,
   Users,
   X,
 } from "lucide-react";
@@ -21,6 +22,7 @@ import { deleteShiftType, updateProfile } from "@/services/api";
 import { cyclePattern, isDayCycle } from "@/lib/dayCycles";
 import { SoldierFields } from "@/components/Management/SoldierFields";
 import { ExitPatternFields } from "@/components/Management/ExitPatternFields";
+import type { UnitPolicy } from "@/services/api";
 import type { DayCycle, RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
 
 import { CompiledSources } from "./CompiledSources";
@@ -29,6 +31,8 @@ import { ExitKinds } from "./ExitKinds";
 import { CheckboxGrid, Field } from "./fields";
 import { CYCLES, CycleSetup, firstGroupAnchor } from "./RotationSetup";
 import type { Cycle } from "./RotationSetup";
+import { RosterImport } from "./RosterImport";
+import { PersonStandard, ShiftRoles, UnitStandard } from "./UnitStandard";
 import { useRotationPreview } from "./useRotationPreview";
 import { ImportUnit } from "./ImportUnit";
 
@@ -143,6 +147,7 @@ export function ManualSetup({
   const [maxWeeklyHours, setMaxWeeklyHours] = useState(number(audit.max_weekly_hours, 168));
   const [maxConsecutiveDays, setMaxConsecutiveDays] = useState(number(audit.max_consecutive_days, 11));
   const [minRestHours, setMinRestHours] = useState(number(audit.min_rest_hours, 8));
+  const [unitPolicy, setUnitPolicy] = useState<UnitPolicy>(() => record(profile.unit_policy) as UnitPolicy);
   // Saved shift types the manager deleted here. They are archived by their
   // own call after the save, which also cleans them out of the roster.
   const [removedShifts, setRemovedShifts] = useState<string[]>([]);
@@ -156,7 +161,10 @@ export function ManualSetup({
   );
   // The roles a shift can be limited to are the ones typed on the roster.
   const roleNames = useMemo(
-    () => [...new Set(employees.filter(named).map((person) => text(person.role)).filter(Boolean))].sort(),
+    () => [...new Set(employees.filter(named).flatMap((person) => [
+      text(person.role),
+      ...rows(person.qualifications).map((row) => text(row.role)),
+    ]).filter(Boolean))].sort(),
     [employees],
   );
   const originalEmployees = useMemo(
@@ -278,6 +286,9 @@ export function ManualSetup({
           reserve_min_days: typeof person.reserve_min_days === "number" ? person.reserve_min_days : null,
           reserve_consecutive: person.reserve_consecutive === true,
           reserve_call: text(person.reserve_call),
+          ...(Array.isArray(person.qualifications)
+            ? { qualifications: rows(person.qualifications).filter((row) => text(row.role)) }
+            : {}),
         })),
         // A deleted saved shift is still sent here: names are identity keys
         // the profile save refuses to drop, so it leaves through
@@ -307,6 +318,7 @@ export function ManualSetup({
           max_consecutive_days: maxConsecutiveDays,
           min_rest_hours: minRestHours,
         },
+        unit_policy: unitPolicy,
         summary: "יחידה צבאית עם מבנה יציאות אישי לכל חייל/ת",
         expected_revision: workspace.profile_revision,
       });
@@ -456,6 +468,10 @@ export function ManualSetup({
           ) : null}
         </SetupSection>
 
+        <SetupSection icon={<Upload />} title="ייבוא מאפליקציית משמרות של יחידה" hint="רשימת האנשים, הקבוצות והכשירויות מקובץ ה-CSV של האפליקציה הקודמת. הייבוא שומר מיד; שינויים שלא נשמרו בטופס הזה יאבדו.">
+          <RosterImport unitName={unitName} unitPolicy={unitPolicy} revision={workspace.profile_revision} onImported={onDone} />
+        </SetupSection>
+
         <SetupSection tour="setup-people" icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">
           <div className="manual-list">
             {employees.map((person, index) => (
@@ -498,6 +514,7 @@ export function ManualSetup({
                   reserveCall={text(person.reserve_call)}
                   onChange={(field, value) => edit(setEmployees, index, field, value)}
                 />
+                <PersonStandard person={person} onChange={(key, value) => edit(setEmployees, index, key, value)} />
                 <Field label="הערות לחייל/ת"><textarea value={inputText(person.notes)} onChange={(e) => edit(setEmployees, index, "notes", e.target.value)} rows={2} placeholder="מידע קבוע שכדאי לקחת בחשבון בשיבוץ" /></Field>
               </article>
             ))}
@@ -522,6 +539,11 @@ export function ManualSetup({
                 <label className="manual-check"><input type="checkbox" checked={Boolean(shift.requires_shift_manager)} onChange={(e) => edit(setShifts, index, "requires_shift_manager", e.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
                 <CheckboxGrid label="ימים" values={DAYS} selected={strings(shift.days)} onChange={(value) => edit(setShifts, index, "days", value)} />
                 <RoleOptions roles={roleNames} selected={strings(shift.allowed_roles)} onChange={(value) => edit(setShifts, index, "allowed_roles", value)} />
+                <ShiftRoles shift={shift} roles={roleNames} onChange={(staffing) => {
+                  edit(setShifts, index, "staffing", staffing);
+                  const seats = strings(rows(staffing).find((group) => strings(group.days).length === 0)?.required_roles).length;
+                  if (seats > number(shift.headcount, headcount(shift))) edit(setShifts, index, "headcount", seats);
+                }} />
                 <button type="button" className="icon-button subtle manual-delete" aria-label="מחיקת סוג משמרת" title={originalShifts.has(text(shift.name)) ? "סידורים קיימים נשארים כפי שהם; הבנייה הבאה לא תכלול את המשמרת" : undefined} onClick={() => {
                   const name = text(shift.name);
                   if (originalShifts.has(name)) {
@@ -547,6 +569,10 @@ export function ManualSetup({
             ))}
           </div>
           <button type="button" className="ghost-button" onClick={() => setRules((current) => [...current, { text: "", priority: "hard" }])}><Plus size={16} /> הוספת כלל קבוע</button>
+        </SetupSection>
+
+        <SetupSection icon={<ShieldCheck />} title="תקן היחידה" hint="דירוג, תוקף כשירויות, תפקידים חלופיים ומספר משמרות בשבוע. ריק = ללא הגבלה.">
+          <UnitStandard policy={unitPolicy} roles={roleNames} onChange={setUnitPolicy} />
         </SetupSection>
 
         <SetupSection tour="setup-limits" icon={<Scale />} title="גבולות עומס ומנוחה" hint="בדיקות אלה מציפות חריגות ומסייעות לשיבוץ; הן אינן חוסמות החלטת מפקד.">

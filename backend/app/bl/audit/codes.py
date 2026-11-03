@@ -15,6 +15,11 @@ OVERSTAFFED = "overstaffed"
 MISSING_ROLE = "missing_role"
 MISSING_COMMANDER = "missing_commander"
 CROSS_ROTATION = "cross_rotation"
+# The unit's staffing standard (`unit_policy.py`).
+FALLBACK_ROLE = "fallback_role"
+WEAK_CREW = "weak_crew"
+WEEKLY_SHIFTS = "weekly_shifts"
+QUALIFICATION_EXPIRED = "qualification_expired"
 
 # Severity is advice about presentation, not authority. `warning` is a thing
 # the manager should look at; `notice` is a thing worth mentioning. Neither

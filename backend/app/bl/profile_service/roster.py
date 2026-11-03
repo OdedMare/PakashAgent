@@ -4,6 +4,7 @@ import datetime
 import re
 from typing import Any, List
 
+from app.bl.profile_service import unit as unit_rules
 from app.bl.profile_service.validation import named_rows, text, text_list, valid_time
 from app.bl.rotation.vocabulary import groups_for
 from app.bl.shared import HEBREW_WEEKDAYS, weekday_key
@@ -34,6 +35,7 @@ def employees(rows: Any, default_exit_pattern: str = "round") -> List[dict]:
 
 
 def _employee(row: dict, default_exit_pattern: str) -> dict:
+    raw = dict(row)
     if row.get("inactive_from"):
         try:
             row["inactive_from"] = datetime.date.fromisoformat(row["inactive_from"]).isoformat()
@@ -66,6 +68,8 @@ def _employee(row: dict, default_exit_pattern: str) -> dict:
         "is_casual": service_type == "reserve",
         "recurring_constraints": recurring,
     })
+    row.pop("qualifications", None)
+    row.update(unit_rules.person_fields(dict(raw)))
     if not isinstance(row.get("counts_toward_staffing"), bool):
         row["counts_toward_staffing"] = service_type != "overlap"
     return row
@@ -239,10 +243,21 @@ def validate_first_profile(profile: dict) -> None:
         raise AgentError("יש להזין שם יחידה")
     if not profile.get("employees"):
         raise AgentError("יש להוסיף לפחות איש צוות אחד")
+    workplace = profile.get("workplace") or {}
     if any(
         person.get("exit_pattern") in _GROUPED and not text(person.get("rotation_group"))
+        and _anchored(workplace, person["exit_pattern"])
         for person in profile.get("employees") or []
     ):
         raise AgentError("יש לבחור קבוצת סבב, תלתון, רבעון או חמישון לכל איש צוות מתאים")
     if not profile.get("shifts"):
         raise AgentError("יש להוסיף לפחות סוג משמרת אחד")
+
+
+def _anchored(workplace: dict, pattern: str) -> bool:
+    """Whether the unit runs this weekend cycle at all. A unit with no
+    closure anchor (a reserve unit on 12-hour shifts, no weekend rotation)
+    leaves its people ungrouped, which means no rotation."""
+    if pattern == "round" and text(workplace.get("first_closure_date")):
+        return True
+    return bool(text(workplace.get("%s_first_closure_date" % pattern)))
