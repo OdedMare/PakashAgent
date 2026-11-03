@@ -74,6 +74,7 @@ def _effective_availability(
         + closure_availability(profile, start, end, keys)
         + _recurring_rows(profile, start, end, keys)
         + _inactive_rows(profile, start, end)
+        + _disabled_reserve_rows(profile, start, end)
         + explicit
     )
 
@@ -88,6 +89,19 @@ def _inactive_rows(profile, start, end):
             result.append(dict(employee=person["name"], date=day.isoformat(), shift="",
                                available=False, is_hard=True, reason="סיום עבודה", source="retirement"))
     return result
+
+
+def _disabled_reserve_rows(profile, start, end):
+    """Block every reservist when the unit-wide reserve switch is off."""
+    if (profile.get("workplace") or {}).get("reserve_enabled") is not False:
+        return []
+    return [
+        dict(employee=person["name"], date=day.isoformat(), shift="",
+             available=False, is_hard=True, reason="המילואים כבויים", source="reserve")
+        for person in profile.get("employees") or []
+        if person.get("service_type") == "reserve"
+        for day in dates_between(start, end)
+    ]
 
 
 def _explicit_rows(rows: Any, start, end) -> List[dict]:

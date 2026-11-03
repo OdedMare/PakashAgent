@@ -37,6 +37,9 @@ export interface WorkplaceProfile {
     quint_first_closure_date?: string;
     general_exit_schedule?: string;
     enabled_exit_patterns?: Array<"triplet" | "quad" | "quint" | "hamshushim" | "shushim">;
+    /** Whether reservists participate in new schedules. Missing means the
+     *  legacy behaviour: enabled when reservists exist. */
+    reserve_enabled?: boolean;
     rotation_closure_windows?: RotationClosureWindow[];
     rotation_presence?: RotationPresenceRule[];
     day_cycles?: DayCycle[];

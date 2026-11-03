@@ -25,7 +25,8 @@ def unit_policy(value: Any) -> dict:
         text(role): [item for item in text_list(others) if item != text(role)]
         for role, others in fallbacks.items() if text(role) and isinstance(others, list)
     }
-    for key in ("weekly_shifts", "weekly_shifts_regular"):
+    for key in ("weekly_shifts", "weekly_shifts_regular",
+                "weekly_shifts_officers", "weekly_shifts_ncos"):
         if value.get(key):
             result[key] = _limits(value[key])
     return result

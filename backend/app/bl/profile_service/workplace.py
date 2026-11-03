@@ -39,6 +39,8 @@ def workplace(value: Any) -> dict:
         raise AgentError("קבוצת הסגירה הראשונה אינה מתאימה למבנה הסבב")
     first_date = text(result.get("first_closure_date"))
     _check_date(first_date, "תאריך הסגירה הראשונה אינו תקין")
+    if "reserve_enabled" in result and type(result["reserve_enabled"]) is not bool:
+        raise AgentError("הפעלת המילואים חייבת להיות ערך בוליאני")
     result.update({
         "name": text(result.get("name")),
         "planning_horizon": text(result.get("planning_horizon")) or "שבוע",

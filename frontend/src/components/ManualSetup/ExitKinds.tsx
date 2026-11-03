@@ -37,10 +37,10 @@ const KINDS: { kind: Kind; title: string; detail: string; patterns: string[] }[]
   { kind: "days", title: "ימים בבסיס / ימים בבית", detail: "11/3, 12/2, שבוע־שבוע או כל מחזור ימים אחר.", patterns: [] },
   { kind: "every_weekend", title: "כל סופ״ש בבית", detail: "חמשושים או שושים — יוצאים כל שבוע.", patterns: WEEKLY.map((item) => item.pattern) },
   { kind: "personal", title: "סגירה אישית 1 ל־N", detail: "חייל/ת אחד/ת שסוגר/ת שבת אחת מכל כמה, בלי קבוצה. למשל מפקד 1ל5.", patterns: ["personal"] },
-  { kind: "reserve", title: "מילואים — כמה ימים בשבוע", detail: "הסידור בוחר את הימים לפי הצורך, עם מינימום ורצף לפי מה שהגדרתם.", patterns: [] },
+  { kind: "reserve", title: "מילואים — כמה ימים בשבוע", detail: "פעיל: המילואימניקים מגיעים ונכללים בשיבוץ. כבוי: הסידור מתעלם מהם.", patterns: [] },
 ];
 
-export function ExitKinds({ enabled, used, counts, dayCyclesOn, reserveOn, onEnabled, onDayCycles, onReserve }: {
+export function ExitKinds({ enabled, used, counts, dayCyclesOn, reserveOn, reserveBusy, onEnabled, onDayCycles, onReserve }: {
   enabled: Set<string>;
   /** Patterns somebody on the roster is on: locked on. */
   used: Set<string>;
@@ -48,6 +48,7 @@ export function ExitKinds({ enabled, used, counts, dayCyclesOn, reserveOn, onEna
   counts: Record<string, number>;
   dayCyclesOn: boolean;
   reserveOn: boolean;
+  reserveBusy: boolean;
   onEnabled: (patterns: Set<string>) => void;
   onDayCycles: (on: boolean) => void;
   onReserve: (on: boolean) => void;
@@ -55,7 +56,7 @@ export function ExitKinds({ enabled, used, counts, dayCyclesOn, reserveOn, onEna
   const isOn = (kind: Kind, patterns: string[]) => kind === "days" ? dayCyclesOn : kind === "reserve" ? reserveOn
     : patterns.some((pattern) => enabled.has(pattern));
   const lockedKind = (kind: Kind, patterns: string[]) => kind === "days" ? (counts.days ?? 0) > 0
-    : kind === "reserve" ? (counts.reserve ?? 0) > 0 : patterns.some((pattern) => used.has(pattern));
+    : kind === "reserve" ? false : patterns.some((pattern) => used.has(pattern));
   const people = (kind: Kind, patterns: string[]) => kind === "days" || kind === "reserve" ? counts[kind] ?? 0
     : patterns.reduce((sum, pattern) => sum + (counts[pattern] ?? 0), 0);
 
@@ -82,10 +83,11 @@ export function ExitKinds({ enabled, used, counts, dayCyclesOn, reserveOn, onEna
         {KINDS.map(({ kind, title, detail, patterns }) => {
           const on = isOn(kind, patterns);
           const locked = on && lockedKind(kind, patterns);
+          const checking = kind === "reserve" && reserveBusy;
           const count = people(kind, patterns);
           return (
-            <label key={kind} className={`exit-kind${on ? " is-selected" : ""}`} title={locked ? "יש אנשי צוות במבנה הזה" : undefined}>
-              <input type="checkbox" checked={on} disabled={locked} onChange={(event) => toggle(kind, patterns, event.target.checked)} />
+            <label key={kind} className={`exit-kind${on ? " is-selected" : ""}`} title={checking ? "בודק שיבוצים עתידיים…" : locked ? "יש אנשי צוות במבנה הזה" : undefined}>
+              <input type="checkbox" checked={on} disabled={locked || checking} onChange={(event) => toggle(kind, patterns, event.target.checked)} />
               <strong>{title}</strong>
               <span>{detail}</span>
               {count ? <em>{count === 1 ? "איש צוות אחד" : `${count} אנשי צוות`}</em> : null}

@@ -13,7 +13,8 @@ export function UnitStandard({ policy, roles, onChange }: {
   roles: string[];
   onChange: (policy: UnitPolicy) => void;
 }) {
-  const limits = (key: "weekly_shifts" | "weekly_shifts_regular", bound: "min" | "max", value: string) => {
+  type WeeklyKey = "weekly_shifts" | "weekly_shifts_regular" | "weekly_shifts_officers" | "weekly_shifts_ncos";
+  const limits = (key: WeeklyKey, bound: "min" | "max", value: string) => {
     const current = { ...(policy[key] ?? {}) };
     if (value === "") delete current[bound];
     else current[bound] = Math.max(0, Math.min(14, Number(value) || 0));
@@ -35,8 +36,10 @@ export function UnitStandard({ policy, roles, onChange }: {
       <div className="manual-grid three">
         <Field label="מילואים · מינ׳ משמרות בשבוע"><input type="number" min={0} value={policy.weekly_shifts?.min ?? ""} onChange={(e) => limits("weekly_shifts", "min", e.target.value)} /></Field>
         <Field label="מילואים · מקס׳ משמרות בשבוע"><input type="number" min={0} value={policy.weekly_shifts?.max ?? ""} onChange={(e) => limits("weekly_shifts", "max", e.target.value)} /></Field>
-        <Field label="שאר הסגל · מינ׳ משמרות בשבוע"><input type="number" min={0} value={policy.weekly_shifts_regular?.min ?? ""} onChange={(e) => limits("weekly_shifts_regular", "min", e.target.value)} /></Field>
-        <Field label="שאר הסגל · מקס׳ משמרות בשבוע"><input type="number" min={0} value={policy.weekly_shifts_regular?.max ?? ""} onChange={(e) => limits("weekly_shifts_regular", "max", e.target.value)} /></Field>
+        <Field label="קצינים · מינ׳ משמרות בשבוע"><input type="number" min={0} value={policy.weekly_shifts_officers?.min ?? policy.weekly_shifts_regular?.min ?? ""} onChange={(e) => limits("weekly_shifts_officers", "min", e.target.value)} /></Field>
+        <Field label="קצינים · מקס׳ משמרות בשבוע"><input type="number" min={0} value={policy.weekly_shifts_officers?.max ?? policy.weekly_shifts_regular?.max ?? ""} onChange={(e) => limits("weekly_shifts_officers", "max", e.target.value)} /></Field>
+        <Field label="נגדים · מינ׳ משמרות בשבוע"><input type="number" min={0} value={policy.weekly_shifts_ncos?.min ?? policy.weekly_shifts_regular?.min ?? ""} onChange={(e) => limits("weekly_shifts_ncos", "min", e.target.value)} /></Field>
+        <Field label="נגדים · מקס׳ משמרות בשבוע"><input type="number" min={0} value={policy.weekly_shifts_ncos?.max ?? policy.weekly_shifts_regular?.max ?? ""} onChange={(e) => limits("weekly_shifts_ncos", "max", e.target.value)} /></Field>
       </div>
       {roles.length > 1 ? (
         <div className="manual-list compact">

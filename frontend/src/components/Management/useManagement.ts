@@ -197,6 +197,7 @@ export function useManagement(): ManagementState {
   );
   const [busy, setBusy] = useState(false);
   const overviewToken = useRef(0);
+  const overviewRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [generation, setGeneration] = useState<GenerationProgress | null>(null);
   // A build is running and this browser is watching it. Kept apart from
@@ -239,6 +240,10 @@ export function useManagement(): ManagementState {
   const [gaps, setGaps] = useState<ProfileGaps | null>(null);
 
   const refresh = useCallback(async (required = false) => {
+    if (overviewRefreshTimer.current) {
+      clearTimeout(overviewRefreshTimer.current);
+      overviewRefreshTimer.current = null;
+    }
     const token = ++overviewToken.current;
     const next = await scheduleOverview().catch((reason) => {
       if (required) throw reason;
@@ -246,6 +251,19 @@ export function useManagement(): ManagementState {
     });
     if (next && token === overviewToken.current) setOverview(next);
   }, []);
+
+  /** Coalesce rapid per-cell writes into one full overview read.
+   *
+   *  The write response already carries the freshly audited schedule, so the
+   *  grid can update immediately. Stats and history follow once the manager
+   *  pauses instead of making every click wait for the same schedule again. */
+  const deferRefresh = useCallback(() => {
+    if (overviewRefreshTimer.current) clearTimeout(overviewRefreshTimer.current);
+    overviewRefreshTimer.current = setTimeout(() => {
+      overviewRefreshTimer.current = null;
+      void refresh();
+    }, 750);
+  }, [refresh]);
 
   /** Run a write, surface its Hebrew error, and re-read the world after.
    *
@@ -255,7 +273,11 @@ export function useManagement(): ManagementState {
   const run = useCallback(
     async <T,>(
       action: () => Promise<T>,
-      options?: { quiet?: boolean },
+      options?: {
+        quiet?: boolean;
+        apply?: (result: T) => void;
+        deferRefresh?: boolean;
+      },
     ): Promise<T | null> => {
       setBusy(true);
       setError(null);
@@ -264,7 +286,9 @@ export function useManagement(): ManagementState {
         // A build that succeeded answers the refusal, whatever filled the
         // gap in the meantime.
         setGaps(null);
-        await refresh();
+        options?.apply?.(result);
+        if (options?.deferRefresh) deferRefresh();
+        else await refresh();
         return result;
       } catch (reason) {
         // Every write funnels through here, so both building buttons get the
@@ -284,7 +308,7 @@ export function useManagement(): ManagementState {
         setBusy(false);
       }
     },
-    [refresh],
+    [deferRefresh, refresh],
   );
 
   /** Watch a build to its end, leaving the rest of the area usable.
@@ -475,7 +499,13 @@ export function useManagement(): ManagementState {
       reason?: string;
       schedule_id?: string;
     }) => {
-      await run(() => assignEmployee(withPeriod(input)), { quiet: true });
+      await run(() => assignEmployee(withPeriod(input)), {
+        quiet: true,
+        apply: (schedule) => setOverview((current) =>
+          current ? { ...current, schedule } : current
+        ),
+        deferRefresh: true,
+      });
     },
     [run, withPeriod],
   );
@@ -692,6 +722,10 @@ export function useManagement(): ManagementState {
   useEffect(() => () => {
     watching.current?.abort();
     watching.current = null;
+    if (overviewRefreshTimer.current) {
+      clearTimeout(overviewRefreshTimer.current);
+      overviewRefreshTimer.current = null;
+    }
   }, []);
 
   return {

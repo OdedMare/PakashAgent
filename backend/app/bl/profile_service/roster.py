@@ -15,6 +15,7 @@ from app.common.errors import AgentError
 # neither changes how the solver places them — only how they are labelled
 # and coloured on the board.
 _SERVICE_TYPES = ("standard", "overlap", "reserve", "civilian", "hatzach")
+_RANK_GROUPS = ("officer", "nco")
 _EXIT_PATTERNS = ("round", "triplet", "quad", "quint", "hamshushim", "shushim",
                   "none", "daily", "personal")
 # Patterns one person carries alone (`rotation/personal.py`): no group.
@@ -44,6 +45,9 @@ def _employee(row: dict, default_exit_pattern: str) -> dict:
     service_type = text(row.get("service_type")) or "standard"
     if service_type not in _SERVICE_TYPES:
         raise AgentError("סוג כוח האדם אינו תקין")
+    rank_group = text(row.get("rank_group"))
+    if rank_group and rank_group not in _RANK_GROUPS:
+        raise AgentError("דרג התקן אינו תקין")
     exit_pattern = text(row.get("exit_pattern")) or default_exit_pattern
     if exit_pattern not in _EXIT_PATTERNS and not _DAY_CYCLE.match(exit_pattern):
         raise AgentError("מבנה היציאות של איש הצוות אינו תקין")
@@ -55,6 +59,7 @@ def _employee(row: dict, default_exit_pattern: str) -> dict:
     row.update(_personal_fields(row, exit_pattern))
     row.update({
         "service_type": service_type,
+        "rank_group": rank_group,
         "exit_pattern": exit_pattern,
         # Kept for every pattern, because a group is what makes one rotate:
         # a חמשושים person *with* a group goes out on their group's weekends.
@@ -195,6 +200,7 @@ def employee_item(item: dict) -> dict:
         "can_train": bool(item.get("can_train")),
         "notes": item.get("notes") or "",
         "competence": item.get("competence") or "",
+        **({"rank_group": item.get("rank_group") or ""} if "rank_group" in item else {}),
         **{key: item[key] for key in ("service_type", "reserve_days_per_week", "reserve_min_days",
                                  "reserve_consecutive", "reserve_call", "daily_days",
                                  "daily_start", "daily_end", "closure_every", "closure_from")

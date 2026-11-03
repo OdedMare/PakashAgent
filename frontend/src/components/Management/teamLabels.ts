@@ -47,6 +47,11 @@ export const SERVICE_TYPE_LABELS: Record<string, string> = {
   hatzach: "הצ״ח",
 };
 
+export const RANK_GROUP_LABELS: Record<string, string> = {
+  officer: "קצונה",
+  nco: "נגדים",
+};
+
 export const EXIT_PATTERN_LABELS: Record<string, string> = {
   none: "בלי יציאות",
   daily: "יומי",

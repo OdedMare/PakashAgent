@@ -37,13 +37,28 @@ def test_an_absence_until_the_end_of_the_year_is_every_day_from_today():
 @pytest.mark.parametrize("sentence, scope", [
     ("עודד חולה בשני ושלישי תחליף אותו מהלוח", "dates"),
     ("עודד טס לחול אל תשבץ", "ask_dates"),
+    ("שים אי זמינות לעודד ליום אחד", "ask_dates"),
     ("ירין עמלקית היא לא יכולה לעבוד בשישי", "ask_scope"),
     ("ירין עמלקית לא יכולה לעבוד בכל יום שישי", "recurring"),
     ("עודד לא זמין ב-27.10", "dates"),
+    ("שים אי זמינות לעודד ל-27.10", "dates"),
 ])
 def test_the_three_shapes_a_manager_types_are_told_apart(sentence, scope):
     found = read(sentence, ROSTER, ["בוקר"], TODAY, WEEK)
     assert found["scope"] == scope
+
+
+def test_one_day_unavailability_is_one_constraint_without_a_model_round():
+    repo, llm, service, chat_id, schedule_id = setup([])
+    message = converse(
+        service, repo, chat_id, schedule_id,
+        "שים אי זמינות לדנה ל-2026-10-05",
+    )
+    assert message["status"] == "pending"
+    assert [row["date"] for row in message["payload"]["plan"]["constraints"]] == [
+        "2026-10-05",
+    ]
+    assert not llm.calls
 
 
 @pytest.mark.parametrize("sentence", [

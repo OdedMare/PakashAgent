@@ -443,6 +443,8 @@ export interface UnitPolicy {
   role_fallbacks?: Record<string, string[]>;
   weekly_shifts?: { min?: number; max?: number };
   weekly_shifts_regular?: { min?: number; max?: number };
+  weekly_shifts_officers?: { min?: number; max?: number };
+  weekly_shifts_ncos?: { min?: number; max?: number };
 }
 
 /** Role -> people per shift, for a group's day and night shifts. */

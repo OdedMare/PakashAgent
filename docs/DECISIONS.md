@@ -1660,9 +1660,11 @@ person** (`bl/audit/unit_policy.py`, read by the solver and the audit alike):
 - **Dated qualifications.** `qualifications: [{role, last_active}]` count as
   roles held. One older than `qualification_validity_days` (90) is a notice,
   never a bar: the unit renews it by training, not by being left off.
-- **Shifts per week.** `weekly_shifts` (reservists, `service_type` reserve)
-  and `weekly_shifts_regular` (everyone else) are team-wide defaults beside
-  each reservist's own `reserve_days_per_week`/`reserve_min_days`: the
+- **Shifts per week.** `weekly_shifts` (reservists, `service_type` reserve),
+  `weekly_shifts_officers` and `weekly_shifts_ncos` (selected by each person's
+  optional `rank_group`) are team-wide defaults beside the legacy
+  `weekly_shifts_regular` fallback and each reservist's own
+  `reserve_days_per_week`/`reserve_min_days`: the
   maximum is hard, the minimum priced and applied only to whole weeks of a
   span, Sunday to Saturday.
 

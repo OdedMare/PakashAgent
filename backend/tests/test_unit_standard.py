@@ -94,9 +94,19 @@ def test_weekly_maximum_is_never_exceeded():
 
 
 def test_regulars_have_their_own_weekly_limits():
-    policy = {"weekly_shifts": {"min": 2, "max": 3}, "weekly_shifts_regular": {"min": 4, "max": 5}}
+    policy = {"weekly_shifts": {"min": 2, "max": 3}, "weekly_shifts_regular": {"min": 4, "max": 5},
+              "weekly_shifts_officers": {"min": 5, "max": 6},
+              "weekly_shifts_ncos": {"min": 3, "max": 4}}
     assert weekly_limits({"unit_policy": policy}, {"service_type": "standard"}) == (4, 5)
+    assert weekly_limits({"unit_policy": policy}, {"service_type": "standard", "rank_group": "officer"}) == (5, 6)
+    assert weekly_limits({"unit_policy": policy}, {"service_type": "standard", "rank_group": "nco"}) == (3, 4)
+    assert weekly_limits({"unit_policy": policy}, {"service_type": "reserve", "rank_group": "officer"}) == (2, 3)
     assert weekly_limits({"unit_policy": policy}, {"service_type": "reserve"}) == (2, 3)
+    assert weekly_limits({"unit_policy": {"weekly_shifts": {"max": 2}}},
+                         {"rank_group": "nco"}) == (0, 2)
+    assert weekly_limits({"unit_policy": {"weekly_shifts_regular": {"min": 2, "max": 5},
+                                          "weekly_shifts_ncos": {"min": 3}}},
+                         {"rank_group": "nco"}) == (3, 5)
     assert weekly_limits({}, {}) == (0, None)
 
 
@@ -130,11 +140,16 @@ def test_qualifications_and_unit_policy_are_validated():
     saved = roster.employees([{"name": "דנה", "service_type": "standard",
                                "qualifications": [{"role": "טקסט", "last_active": "2026-09-01"}]}])
     assert saved[0]["qualifications"] == [{"role": "טקסט", "last_active": "2026-09-01"}]
+    assert roster.employees([{"name": "יוסי", "rank_group": "nco"}])[0]["rank_group"] == "nco"
+    with pytest.raises(AgentError):
+        roster.employees([{"name": "יוסי", "rank_group": "soldier"}])
     with pytest.raises(AgentError):
         roster.employees([{"name": "דנה", "qualifications": [{"role": "טקסט", "last_active": "1.9"}]}])
     with pytest.raises(AgentError):
         unit_policy({"weekly_shifts": {"min": 5, "max": 2}})
-    assert unit_policy({"max_weak_per_shift": "1"})["max_weak_per_shift"] == 1
+    policy = unit_policy({"max_weak_per_shift": "1", "weekly_shifts_ncos": {"min": 2, "max": 4}})
+    assert policy["max_weak_per_shift"] == 1
+    assert policy["weekly_shifts_ncos"] == {"min": 2, "max": 4}
 
 
 def test_a_first_profile_without_any_weekend_cycle_needs_no_groups():

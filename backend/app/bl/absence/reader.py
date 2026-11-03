@@ -16,7 +16,7 @@ from app.bl.absence.selections import strip_selections
 _STRONG = (
     r"חול(?:ה|ים|ות)", r"מחלה", r"בחופש(?:ה)?", r"חופש(?:ה)?", r"מילואים",
     r"טס(?:ה|ים)?", r"[בל]חו\"?ל", r"[בל]חו״ל", r"נוסע(?:ת)?\s+[לב]", r"בהשתלמות",
-    r"לא\s+מגיע(?:ה)?",
+    r"לא\s+מגיע(?:ה)?", r"אי[-־\s]+זמינות",
 )
 # Saying somebody must not be placed: an absence only when dates come with it,
 # since "לא יכולה לעבוד עם דנה" is a pairing wish, not a day off.

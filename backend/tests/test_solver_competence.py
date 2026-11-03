@@ -39,6 +39,18 @@ def test_a_reservist_works_no_more_days_than_they_come():
     assert len(result["assignments"]) == 6
 
 
+def test_reservists_are_ignored_when_the_unit_switch_is_off():
+    people = [_person("דנה"), _person("יוסי", "ב"),
+              _person("מילואימניק", service_type="reserve", reserve_days_per_week=3)]
+    profile = _profile(people)
+    profile["workplace"]["reserve_enabled"] = False
+
+    result = generate_span(profile, "2026-08-31", "2026-09-02")
+
+    assert not _worked(result, "מילואימניק")
+    assert len(result["assignments"]) == 6
+
+
 def test_the_cap_is_per_sunday_week_and_counts_fixed_days():
     people = [_person("דנה"), _person("יוסי", "ב"),
               _person("מילואימניק", service_type="reserve", reserve_days_per_week=1)]

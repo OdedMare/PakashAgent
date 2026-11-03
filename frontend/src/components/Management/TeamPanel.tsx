@@ -26,6 +26,7 @@ import { soldierSummary } from "./SoldierFields";
 import {
   SOURCE_LABELS,
   SERVICE_TYPE_LABELS,
+  RANK_GROUP_LABELS,
   SHIFT_TYPE_LABELS,
   formatWindow,
   text,
@@ -188,6 +189,7 @@ export function TeamPanel({
                     {person ? ` · ${exitPatternLabel(person, dayCycles)}` : ""}
                     {text(person?.rotation_group) ? ` ${text(person?.rotation_group)}` : ""}
                     {text(person?.service_type) ? ` · ${SERVICE_TYPE_LABELS[text(person?.service_type)] ?? text(person?.service_type)}` : ""}
+                    {text(person?.rank_group) ? ` · ${RANK_GROUP_LABELS[text(person?.rank_group)] ?? text(person?.rank_group)}` : ""}
                   </span>
                   {text(person?.inactive_from) ? <span className="roster-note">מסיים/ת · {displayDate(text(person?.inactive_from))}</span> : null}
                   {person?.is_shift_manager ? <span className="roster-capability">מפקד/ת משמרת</span> : null}

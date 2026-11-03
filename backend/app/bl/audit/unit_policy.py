@@ -13,7 +13,9 @@ Profile shape::
         "qualification_validity_days": 90,
         "role_fallbacks": {"קב\"ר גיאוגרפי": ["קב\"ר מודיעיני"]},
         "weekly_shifts": {"min": 2, "max": 4},          # service_type "reserve"
-        "weekly_shifts_regular": {"min": 3, "max": 5},  # everyone else
+        "weekly_shifts_officers": {"min": 3, "max": 5},
+        "weekly_shifts_ncos": {"min": 3, "max": 5},
+        "weekly_shifts_regular": {"min": 3, "max": 5},  # legacy/default regular staff
     }
 
     employee: {"competence": "weak"|..., "service_type": "reserve"|...,
@@ -91,8 +93,18 @@ def reserve_days(person: Optional[dict]) -> Optional[int]:
 def weekly_limits(profile: Optional[dict], person: Optional[dict]) -> Tuple[int, Optional[int]]:
     """(min, max) shifts per week for this person; max None means no cap."""
     policy = unit_policy(profile)
-    block = None if is_reservist(person) else policy.get("weekly_shifts_regular")
-    if not isinstance(block, dict):
+    rank = text((person or {}).get("rank_group"))
+    key = "weekly_shifts" if is_reservist(person) else {
+        "officer": "weekly_shifts_officers",
+        "nco": "weekly_shifts_ncos",
+    }.get(rank, "weekly_shifts_regular")
+    block = policy.get(key)
+    if key not in ("weekly_shifts", "weekly_shifts_regular"):
+        regular = policy.get("weekly_shifts_regular")
+        block = dict(regular) if isinstance(regular, dict) else {}
+        if isinstance(policy.get(key), dict):
+            block.update(policy[key])
+    if not isinstance(block, dict) or not block:
         block = policy.get("weekly_shifts")
     if not isinstance(block, dict):
         return 0, None

@@ -21,7 +21,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { TimeInput } from "@/components/TimeInput";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
-import { deleteShiftType, updateProfile } from "@/services/api";
+import { deleteShiftType, previewDeparture, updateProfile } from "@/services/api";
 import { cyclePattern, isDayCycle } from "@/lib/dayCycles";
 import { SoldierFields } from "@/components/Management/SoldierFields";
 import { ExitPatternFields } from "@/components/Management/ExitPatternFields";
@@ -40,6 +40,7 @@ import { RosterImport } from "./RosterImport";
 import { PersonStandard, ShiftRoles, UnitStandard } from "./UnitStandard";
 import { useRotationPreview } from "./useRotationPreview";
 import { ImportUnit } from "./ImportUnit";
+import { reserveFutureWarning } from "./reserveWarning";
 
 const DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 const WEEKEND = ["שישי", "שבת"];
@@ -50,6 +51,7 @@ const SERVICE_TYPES = {
   civilian: "אע״צ",
   hatzach: "הצ״ח",
 } as const;
+const RANK_GROUPS = { officer: "קצונה", nco: "נגדים" } as const;
 const SHIFT_TYPES = {
   regular: "רגילה",
   overlap: "חפיפה",
@@ -146,7 +148,12 @@ export function ManualSetup({
     return [...new Set([...configured, ...used, ...round])];
   });
   const [dayCyclesOn, setDayCyclesOn] = useState(() => (profile.workplace?.day_cycles ?? []).length > 0);
-  const [reserveOn, setReserveOn] = useState(() => rows(profile.employees).some((person) => person.service_type === "reserve"));
+  const [reserveOn, setReserveOn] = useState(() =>
+    typeof initialWorkplace.reserve_enabled === "boolean"
+      ? initialWorkplace.reserve_enabled
+      : rows(profile.employees).some((person) => person.service_type === "reserve"),
+  );
+  const [reserveChecking, setReserveChecking] = useState(false);
   const [rotationAUnavailability, setRotationAUnavailability] = useState<Row[]>(
     rows(initialWorkplace.rotation_a_unavailability),
   );
@@ -183,6 +190,26 @@ export function ManualSetup({
     () => new Set(rows(profile.employees).map((row) => text(row.name))),
     [profile.employees],
   );
+  const toggleReserve = async (on: boolean) => {
+    if (on) return setReserveOn(true);
+    if (reserveChecking) return;
+    const reservists = employees
+      .filter((person) => person.service_type === "reserve" && !person.inactive_from && originalEmployees.has(text(person.name)))
+      .map((person) => text(person.name));
+    if (!reservists.length) return setReserveOn(false);
+    setReserveChecking(true);
+    setError("");
+    try {
+      const warning = reserveFutureWarning(await Promise.all(
+        reservists.map((employee) => previewDeparture({ employee })),
+      ));
+      if (!warning || window.confirm(`${warning}\n\nלכבות את המילואים בכל זאת?`)) setReserveOn(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "לא ניתן לבדוק שיבוצים עתידיים של מילואימניקים");
+    } finally {
+      setReserveChecking(false);
+    }
+  };
   const originalShifts = useMemo(
     () => new Set(rows(profile.shifts).map((row) => text(row.name))),
     [profile.shifts],
@@ -305,6 +332,7 @@ export function ManualSetup({
           general_exit_schedule: generalExitSchedule.trim(),
           notes_visual_only: notesVisualOnly,
           enabled_exit_patterns: [...availableExitPatterns],
+          reserve_enabled: reserveOn,
           rotation_a_unavailability: rotationAUnavailability.map((rule) => ({
             days: strings(rule.days),
             shifts: strings(rule.shifts),
@@ -450,9 +478,10 @@ export function ManualSetup({
             counts={exitCounts}
             dayCyclesOn={dayCyclesOn || dayCycles.length > 0}
             reserveOn={reserveOn}
+            reserveBusy={reserveChecking}
             onEnabled={(next) => setEnabledExitPatterns([...next])}
             onDayCycles={setDayCyclesOn}
-            onReserve={setReserveOn}
+            onReserve={(on) => void toggleReserve(on)}
           />
 
           {preview.error ? <p className="rotation-derived-note is-warning" role="status">{preview.error}</p> : null}
@@ -537,7 +566,7 @@ export function ManualSetup({
                     <button type="button" className="manual-row-summary" aria-expanded={false} onClick={() => toggleFold(key)}>
                       <ChevronDown size={15} aria-hidden="true" />
                       <strong>{key}</strong>
-                      <span>{[text(person.role), rosterPeople[index].exitLabel, SERVICE_TYPES[rosterPeople[index].service as keyof typeof SERVICE_TYPES]].filter(Boolean).join(" · ")}</span>
+                      <span>{[text(person.role), RANK_GROUPS[text(person.rank_group) as keyof typeof RANK_GROUPS], rosterPeople[index].exitLabel, SERVICE_TYPES[rosterPeople[index].service as keyof typeof SERVICE_TYPES]].filter(Boolean).join(" · ")}</span>
                     </button>
                   </article>
                 );
@@ -566,6 +595,12 @@ export function ManualSetup({
                       edit(setEmployees, index, "service_type", e.target.value);
                       edit(setEmployees, index, "counts_toward_staffing", e.target.value !== "overlap");
                     }}>{Object.entries(SERVICE_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+                  </Field>
+                  <Field label="דרג בתקן">
+                    <select value={text(person.rank_group)} onChange={(e) => edit(setEmployees, index, "rank_group", e.target.value)}>
+                      <option value="">לא מוגדר</option>
+                      {Object.entries(RANK_GROUPS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
                   </Field>
                 </div>
                 <div className="manual-row-foot">

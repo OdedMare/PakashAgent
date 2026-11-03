@@ -254,6 +254,8 @@ re-ask answered questions or invent a person's return-to-work date.
   `closure_every` (2–8) starting with the weekend of `closure_from`
   (YYYY-MM-DD) and is home every other weekend — a single commander on 1ל5
   is `personal` with `closure_every: 5`, not a חמישון group.
+  `rank_group` is optional and separates the unit standard into `officer`
+  (קצונה) and `nco` (נגדים); do not infer it from a person's role.
   Optional soldier fields: `competence` — `weak`/`medium`/`high`/`excellent`
   (חלש/בינוני/גבוה/מצטיין), or `""` for not rated; the solver balances each
   shift by it so the weaker soldiers are not staffed together. To raise or
