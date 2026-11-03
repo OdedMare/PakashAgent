@@ -3,7 +3,7 @@
 הסקריפט לא משבץ משמרות. הוא פותח צוות במערכת ומגדיר בו:
   * את האנשים — תפקיד אלחוט, תא, סוג שירות, כשירות (הערות רק למי שלא זמין)
   * את סוגי המשמרות — לכל תא בוקר 08:00-20:00 ולילה 20:00-08:00, עם התקינה מהלוח
-  * את הסבב — סדירים (חובה, קבע) 12/2; מילואים, אע"צ והצ"ח עד 4 ימים בשבוע
+  * את הסבב — סדיר, אע"צ והצ"ח 12/2; מילואים עד 4 ימים בשבוע
   * אילוץ אחד: מי שחסום, לא יכול להגיע או לא בפול — לא זמין כלל
 
 את השיבוץ עצמו בונים אחר כך מהמסך של המנהל.
@@ -53,9 +53,9 @@ SERVICE = {"מילואים": "reserve", 'הצ"ח': "hatzach", 'אע"צ': "civili
 COMPETENCE = {1: "high", 2: "medium", 3: "weak"}
 
 ROLE = "אלחוט"                 # התפקיד של כולם
-RESERVE_DAYS_PER_WEEK = 4      # מילואים, אע"צ והצ"ח: עד 4 ימים בשבוע
-FOUR_DAYS = {"מילואים", 'אע"צ', 'הצ"ח'}
-CYCLE_ID = "sadir"             # סדירים (חובה, קבע, סדיר): סבב 12/2
+RESERVE_DAYS_PER_WEEK = 4      # מילואים: עד 4 ימים בשבוע
+FOUR_DAYS = {"מילואים"}
+CYCLE_ID = "sadir"             # סדיר, אע"צ והצ"ח: סבב 12/2
 CYCLE = {"id": CYCLE_ID, "name": "12/2", "base_days": 12, "home_days": 2, "groups": ["א", "ב"]}
 
 
@@ -108,11 +108,10 @@ def build_employees(start: dt.date) -> list[dict]:
             "notes": "",  # ריק — חוץ ממי שלא זמין
         }
         if p["service"] in FOUR_DAYS:
-            # המערכת מגבילה ימים בשבוע רק למילואים, אז אע"צ והצ"ח נשמרים כמילואים
             person.update(service_type="reserve", exit_pattern="none",
                           reserve_days_per_week=RESERVE_DAYS_PER_WEEK)
         else:
-            # סדירים בסבב 12/2: חצי מכל תא בקבוצה א' וחצי בקבוצה ב', כדי שלא כולם ייצאו יחד
+            # סדיר, אע"צ והצ"ח בסבב 12/2: חצי מכל תא בקבוצה א' וחצי בקבוצה ב', כדי שלא כולם ייצאו יחד
             cab = p["then_cab"] or p["cab"]
             index = next_group.get(cab, 0)
             next_group[cab] = index + 1
@@ -132,7 +131,7 @@ def build_profile(start: dt.date) -> dict:
         "employees": build_employees(start),
         "rules": [],
         "summary": "צוות אלחוט בקריאת מגן מרכבה. שתי משמרות ביממה, 08:00-20:00 ו-20:00-08:00, כל תא לפי התקינה בלוח. "
-                   "סדירים בסבב 12/2; מילואים, אע\"צ והצ\"ח עד 4 ימים בשבוע.",
+                   "סדיר, אע\"צ והצ\"ח בסבב 12/2; מילואים עד 4 ימים בשבוע.",
     }
 
 
@@ -167,8 +166,8 @@ def report(profile: dict) -> None:
     for s in profile["shifts"]:
         print(f"  {s['name']:16} {s['start_time']}-{s['end_time']}  {s['headcount']} אנשים")
     sadir = [p for p in people if p["exit_pattern"].startswith("cycle:")]
-    print(f"אנשים: {len(people)} — סדירים בסבב {cycle['name']} (מ-{cycle['anchor_date']}): {len(sadir)}, "
-          f"מילואים/אע\"צ/הצ\"ח עד {RESERVE_DAYS_PER_WEEK} ימים בשבוע: {len(people) - len(sadir)}, "
+    print(f"אנשים: {len(people)} — סדיר/אע\"צ/הצ\"ח בסבב {cycle['name']} (מ-{cycle['anchor_date']}): {len(sadir)}, "
+          f"מילואים עד {RESERVE_DAYS_PER_WEEK} ימים בשבוע: {len(people) - len(sadir)}, "
           f"לא זמינים: {sum(1 for p in people if p.get('inactive_from'))}")
     for p in people:
         track = ("[לא זמין] " if p.get("inactive_from") else "") + (f"12/2 קבוצה {p['rotation_group']}" if p in sadir else f"עד {p['reserve_days_per_week']} ימים בשבוע")
