@@ -9,7 +9,8 @@
  *  call-up type, and competence — in place of that drawer, and two optional
  *  ones for a reservist whose days change week to week: a minimum the
  *  solver tries to reach, and whether the days must run in one block. The
- *  solver picks which days. */
+ *  solver picks which days. אע״צ and הצ״ח see competence directly too,
+ *  not folded into the drawer. */
 
 export const COMPETENCE_LABELS: Record<string, string> = {
   weak: "חלש/ה",
@@ -98,6 +99,16 @@ export function SoldierFields({
           <span>הימים ברצף (בלי ימים בודדים באמצע השבוע)</span>
         </label>
         <small>מספר הימים הוא תקרה קשיחה לכל שבוע (ראשון–שבת). המינימום הוא יעד: הסידור ישבץ לפחות כך, אלא אם אין משמרות פנויות או שהחייל/ת לא זמין/ה. את הימים עצמם בוחר הסידור לפי הצורך.</small>
+      </fieldset>
+    );
+  }
+
+  if (serviceType === "civilian" || serviceType === "hatzach") {
+    return (
+      <fieldset className="soldier-reserve">
+        <legend>{serviceType === "civilian" ? "פרטי אע״צ" : "פרטי הצ״ח"}</legend>
+        <div className="soldier-grid">{competenceField}</div>
+        <small>לא חובה. הסידור יאזן את המשמרות כך שבעלי כשירות חלשה יחסית לא ישובצו יחד.</small>
       </fieldset>
     );
   }
