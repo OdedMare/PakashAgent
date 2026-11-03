@@ -437,6 +437,10 @@ export interface CardPerson {
    *  by default does not count toward its staffing, which is exactly the
    *  thing a manager must not have to hover to discover. */
   is_overlap: boolean;
+  /** A status the card wears in its own shared colour, so a manager reads
+   *  who in a cell is מילואים, אע״צ or הצ״ח without hovering. Empty for
+   *  תקן and for נחפף/ת, which has its own treatment above. */
+  status: "" | "reserve" | "civilian" | "hatzach";
   /** Whether this person fills one of a slot's seats.
    *
    *  Usually the opposite of `is_overlap`, and deliberately its own field

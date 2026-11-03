@@ -2,7 +2,7 @@ import { useMemo } from "react";
 
 import type { CardPerson, ManagementOverview } from "@/types";
 
-import { fillsASeat, rotationLabel } from "./person";
+import { cardStatus, fillsASeat, rotationLabel } from "./person";
 
 /** The roster as the board reads it: names, each person's role, the role
  *  list the filters offer, and who each person is for the card's identity
@@ -45,6 +45,7 @@ export function useRosterMaps(overview: ManagementOverview | undefined) {
         rotation: rotationLabel(row.exit_pattern, row.rotation_group, overview?.profile?.workplace?.day_cycles),
         is_shift_manager: Boolean(row.is_shift_manager),
         is_overlap: row.service_type === "overlap",
+        status: cardStatus(row.service_type),
         counts_toward_staffing: fillsASeat(row),
       };
     }

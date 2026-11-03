@@ -9,7 +9,11 @@ from app.bl.rotation.vocabulary import groups_for
 from app.bl.shared import HEBREW_WEEKDAYS, weekday_key
 from app.common.errors import AgentError
 
-_SERVICE_TYPES = ("standard", "overlap", "reserve")
+# civilian = אע״צ (אזרח עובד צה״ל), hatzach = הצ״ח. Both sit beside reserve
+# (מילואים) as a status of the person; neither takes reserve days, and
+# neither changes how the solver places them — only how they are labelled
+# and coloured on the board.
+_SERVICE_TYPES = ("standard", "overlap", "reserve", "civilian", "hatzach")
 _EXIT_PATTERNS = ("round", "triplet", "quad", "quint", "hamshushim", "shushim",
                   "none", "daily", "personal")
 # Patterns one person carries alone (`rotation/personal.py`): no group.

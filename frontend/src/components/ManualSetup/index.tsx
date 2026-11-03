@@ -38,6 +38,8 @@ const SERVICE_TYPES = {
   standard: "תקן",
   overlap: "נחפף/ת",
   reserve: "מילואים",
+  civilian: "אע״צ",
+  hatzach: "הצ״ח",
 } as const;
 const SHIFT_TYPES = {
   regular: "רגילה",

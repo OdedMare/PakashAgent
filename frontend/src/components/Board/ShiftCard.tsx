@@ -12,6 +12,8 @@ import {
 import { colorStyle } from "@/components/Management/palette";
 import type { Assignment, CardPerson, ScheduleWarning, Slot } from "@/types";
 
+import { STATUS_LABELS } from "./person";
+
 /** One assignment, as a card the manager can read without hovering.
  *
  *  The card answers **who is standing here**, not why the agent put them
@@ -94,6 +96,9 @@ export function ShiftCard({
   const manual = assignment.source === "manager";
   // An alarm still out-shouts everything, overlap included.
   const overlap = person.is_overlap && !alarming;
+  // מילואים / אע״צ / הצ״ח each wear one shared colour across the grid, the
+  // same way overlap does; an alarm and overlap both still win over it.
+  const tint = person.status && !alarming && !overlap ? person.status : "";
 
   return (
     <div
@@ -103,6 +108,7 @@ export function ShiftCard({
         blocked ? "is-blocked" : "",
         manual ? "is-manual" : "",
         overlap ? "is-overlap" : "",
+        tint ? `is-status is-status-${tint}` : "",
         status === "draft" ? "is-draft" : "is-published",
         touched ? `is-touched is-touched-${touched}` : "",
         dimmed ? "is-dragging" : "",
@@ -115,7 +121,7 @@ export function ShiftCard({
       // a decorative colour, and the cleanest way is for there to be none.
       // An overlap card gets none either: it wears one shared colour so a
       // person being handed over to reads as such across the whole grid.
-      style={alarming || overlap ? undefined : colorStyle(hue, dark)}
+      style={alarming || overlap || tint ? undefined : colorStyle(hue, dark)}
       draggable={draggable}
       onDragStart={(event) => {
         // Some browsers refuse to start a drag without transfer data set.
@@ -214,6 +220,11 @@ export function ShiftCard({
             <Users size={11} /> נחפף/ת
           </span>
         ) : null}
+        {person.status ? (
+          <span className="board-card-status" title={STATUS_LABELS[person.status]}>
+            {STATUS_LABELS[person.status]}
+          </span>
+        ) : null}
         {alarming ? (
           <span
             className="board-card-alarm"
@@ -290,6 +301,7 @@ function identityTitle(assignment: Assignment, person: CardPerson): string {
     person.rotation,
     person.is_shift_manager ? "מפקד/ת" : "",
     person.is_overlap ? "נחפף/ת" : "",
+    person.status ? STATUS_LABELS[person.status] : "",
   ]
     .filter(Boolean)
     .join(" · ");
@@ -306,6 +318,7 @@ function ariaWho(assignment: Assignment, person: CardPerson): string {
     person.rotation,
     person.is_shift_manager ? "מפקד/ת" : "",
     person.is_overlap ? "נחפף/ת" : "",
+    person.status ? STATUS_LABELS[person.status] : "",
   ]
     .filter(Boolean)
     .join(", ");

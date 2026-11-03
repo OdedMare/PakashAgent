@@ -27,6 +27,20 @@ const PATTERN_LABELS: Record<string, string> = {
   personal: "סגירה אישית",
 };
 
+/** The board's word for each coloured status, matching TeamPanel's labels. */
+export const STATUS_LABELS: Record<Exclude<CardPerson["status"], "">, string> = {
+  reserve: "מילואים",
+  civilian: "אע״צ",
+  hatzach: "הצ״ח",
+};
+
+/** A roster `service_type` as the card's coloured status, or "" for none. */
+export function cardStatus(serviceType: unknown): CardPerson["status"] {
+  return serviceType === "reserve" || serviceType === "civilian" || serviceType === "hatzach"
+    ? serviceType
+    : "";
+}
+
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -62,6 +76,7 @@ export const EMPTY_PERSON: CardPerson = {
   rotation: "",
   is_shift_manager: false,
   is_overlap: false,
+  status: "",
   // Somebody the roster no longer carries is still standing on that Tuesday
   // and still one of the people who were on it. Counting them out would make
   // a past week that was fully staffed read as short of the people who

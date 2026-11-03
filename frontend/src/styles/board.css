@@ -1025,6 +1025,36 @@
   opacity: 0.82;
 }
 
+/* מעמד: מילואים, אע״צ and הצ״ח each get one shared colour across the grid
+   instead of the per-name hue, with a solid inline-start bar (no stripes —
+   those stay overlap's), so a manager sees at a glance who in a cell is
+   which. */
+.board-card.is-status-reserve { --status-hue: var(--hue-teal); --status-soft: var(--hue-teal-soft); }
+.board-card.is-status-civilian { --status-hue: var(--hue-blue); --status-soft: var(--hue-blue-soft); }
+.board-card.is-status-hatzach { --status-hue: var(--hue-pink); --status-soft: var(--hue-pink-soft); }
+
+.board-card.is-status {
+  color: var(--status-hue);
+  border: 1.5px solid var(--status-hue);
+  border-inline-start-width: 6px;
+  background: var(--status-soft);
+}
+
+.board-card-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-weight: 650;
+}
+
+.board-card.is-status .board-card-status {
+  background: var(--status-hue);
+  border-color: var(--status-hue);
+  color: var(--status-soft);
+}
+
 .board-card-grip {
   display: none;
 }

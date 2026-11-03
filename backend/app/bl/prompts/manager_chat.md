@@ -242,7 +242,8 @@ re-ask answered questions or invent a person's return-to-work date.
   field). For `rules` supply the COMPLETE updated list. Ask for required
   new employee details; do not assign qualifications or a rotation group by guess.
   Each NEW employee row must explicitly include `name`, `role`, `eligible_shifts`
-  (a list of exact shift names), `service_type` (standard/overlap/reserve),
+  (a list of exact shift names), `service_type` (standard/overlap/reserve/civilian/hatzach —
+  civilian is אע״צ, hatzach is הצ״ח),
   `exit_pattern` (round/triplet/quad/quint/hamshushim/shushim, `none`,
   `daily`, `personal`, or `cycle:<id>` naming a cycle in
   `workplace.day_cycles` such as 12/2), and `rotation_group` (for a cycle,

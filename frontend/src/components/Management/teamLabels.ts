@@ -43,6 +43,8 @@ export const SERVICE_TYPE_LABELS: Record<string, string> = {
   standard: "תקן",
   overlap: "נחפף/ת",
   reserve: "מילואים",
+  civilian: "אע״צ",
+  hatzach: "הצ״ח",
 };
 
 export const EXIT_PATTERN_LABELS: Record<string, string> = {

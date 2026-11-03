@@ -96,7 +96,7 @@ export function EmployeeForm({
         <label><span>מעמד</span><select value={serviceType} onChange={(event) => {
           setServiceType(event.target.value);
           if (event.target.value === "overlap") setCountsTowardStaffing(false);
-        }}><option value="standard">תקן</option><option value="overlap">נחפף/ת</option><option value="reserve">מילואים</option></select></label>
+        }}><option value="standard">תקן</option><option value="overlap">נחפף/ת</option><option value="reserve">מילואים</option><option value="civilian">אע״צ</option><option value="hatzach">הצ״ח</option></select></label>
       </div>
       <ExitPatternFields pattern={exitPattern} person={exitFields} onChange={(field, value) => setExitFields((current) => ({ ...current, [field]: value }))} />
       <SoldierFields
