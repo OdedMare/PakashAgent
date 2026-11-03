@@ -1,9 +1,9 @@
 "use client";
 
-import { ChevronDown, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { ChevronDown, ChevronsDownUp, ChevronsUpDown, Search, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { GROUPINGS, groupRoster } from "./rosterGroups";
+import { GROUPINGS, groupRoster, matchesSearch } from "./rosterGroups";
 import type { RosterGrouping, RosterPerson } from "./rosterGroups";
 
 const STORE = "pakash.setup.roster";
@@ -35,6 +35,8 @@ export function RosterView({
   const [grouping, setGrouping] = useState<RosterGrouping>(stored.grouping);
   const [shownServices, setShownServices] = useState<string[]>(stored.services);
   const [closed, setClosed] = useState<Set<string>>(new Set());
+  // Not remembered: a search is for now, and a stale one would hide people.
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     try { window.localStorage.setItem(STORE, JSON.stringify({ grouping, services: shownServices })); } catch { /* storage unavailable */ }
@@ -42,8 +44,9 @@ export function RosterView({
   }, [grouping, shownServices, onFilter]);
 
   const groups = useMemo(
-    () => groupRoster(people, grouping, services, shiftNames, (person) => !shownServices.length || shownServices.includes(person.service)),
-    [people, grouping, services, shiftNames, shownServices],
+    () => groupRoster(people, grouping, services, shiftNames, (person) =>
+      (!shownServices.length || shownServices.includes(person.service)) && matchesSearch(person, query)),
+    [people, grouping, services, shiftNames, shownServices, query],
   );
   const shownCount = new Set(groups.flatMap((group) => group.indices)).size;
   const counts = useMemo(() => {
@@ -63,6 +66,18 @@ export function RosterView({
 
   return (
     <>
+      <div className="roster-search">
+        <Search size={16} aria-hidden="true" />
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => { if (event.key === "Escape") setQuery(""); }}
+          placeholder="חיפוש לפי שם, תפקיד, כשירות, משמרת, קבוצה או הערה"
+          aria-label="חיפוש חייל/ת"
+        />
+        {query ? <button type="button" className="icon-button subtle" aria-label="ניקוי החיפוש" onClick={() => setQuery("")}><X size={15} /></button> : null}
+      </div>
       <div className="roster-toolbar" role="toolbar" aria-label="תצוגת כוח האדם">
         <label className="roster-grouping">
           <span>קיבוץ לפי</span>
@@ -88,7 +103,7 @@ export function RosterView({
         {actions}
       </div>
 
-      {shownServices.length && shownCount < people.length ? (
+      {(shownServices.length || query.trim()) && shownCount < people.length ? (
         <p className="roster-filter-note" role="status">מוצגים {shownCount} מתוך {people.length}. השאר לא נמחקו — הם רק מוסתרים, ונשמרים כרגיל.</p>
       ) : null}
 
@@ -104,7 +119,7 @@ export function RosterView({
           {closed.has(group.key) ? null : <div className="manual-list">{group.indices.map((index) => card(index, group.key))}</div>}
         </section>
       ))}
-      {!groups.length ? <p className="roster-filter-note">אין אנשי צוות במעמד שנבחר.</p> : null}
+      {!groups.length ? <p className="roster-filter-note">{query.trim() ? `לא נמצא חייל/ת שמתאים/ה ל"${query.trim()}".` : "אין אנשי צוות במעמד שנבחר."}</p> : null}
     </>
   );
 }

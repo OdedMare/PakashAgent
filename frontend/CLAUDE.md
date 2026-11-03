@@ -176,7 +176,10 @@ section folds from the chevron on its header; the roster
 (`ManualSetup/RosterView.tsx`, arithmetic in `rosterGroups.ts`) groups by
 מעמד, נספר בתקן, משמרת (someone allowed on two shifts is under both) or
 מבנה יציאות, each group folds, and the status chips narrow it to, say, only
-מילואים. A soldier's card folds to one line. All of this only hides: hidden
+מילואים. A search box above them finds a soldier by name, role,
+competence, status, rotation, shift, qualification or note — every word
+typed, in any order, ignoring niqqud and geresh — and is not remembered.
+A soldier's card folds to one line. All of this only hides: hidden
 rows stay in the form and save with the rest, and a soldier added while one
 status is shown takes that status. The grouping and filter are a habit,
 remembered per browser; nothing is written to the server.

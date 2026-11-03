@@ -21,6 +21,9 @@ export type RosterPerson = {
   shifts: string[];
   exitKey: string;
   exitLabel: string;
+  /** Everything a search may find the person by: name, role, status,
+   *  rotation, shifts, qualifications, notes. */
+  searchText: string;
 };
 
 export type RosterGroup = { key: string; label: string; indices: number[] };
@@ -64,4 +67,24 @@ export function groupRoster(
     }
   }
   return [...groups.values()].filter((group) => group.indices.length);
+}
+
+/** Hebrew read loosely: niqqud, geresh and gershayim (in every spelling) and
+ *  case are ignored, so "מפקד" finds "מְפַקֵּד" and "הצח" finds "הצ״ח". */
+export function normalizeSearch(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[\u0591-\u05C7]/g, "")
+    .replace(/["'`\u05F3\u05F4\u2018\u2019\u201C\u201D]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Every word typed must appear somewhere on the person, in any order. An
+ *  empty query, or a row with no name yet (just added), always matches. */
+export function matchesSearch(person: Pick<RosterPerson, "searchText">, query: string): boolean {
+  const words = normalizeSearch(query).split(" ").filter(Boolean);
+  if (!words.length) return true;
+  const haystack = normalizeSearch(person.searchText);
+  return !haystack || words.every((word) => haystack.includes(word));
 }

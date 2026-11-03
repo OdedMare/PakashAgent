@@ -214,6 +214,19 @@ export function ManualSetup({
       shifts: strings(person.eligible_shifts),
       exitKey: `${pattern}|${group}`,
       exitLabel: [patternLabel(pattern, dayCycles), group && `קבוצה ${group}`].filter(Boolean).join(" · "),
+      searchText: text(person.name) ? [
+        text(person.name),
+        text(person.role),
+        text(person.competence),
+        SERVICE_TYPES[(text(person.service_type) || "standard") as keyof typeof SERVICE_TYPES] ?? "",
+        patternLabel(pattern, dayCycles),
+        group && `קבוצה ${group}`,
+        ...strings(person.eligible_shifts),
+        ...rows(person.qualifications).map((row) => text(row.role)),
+        person.is_shift_manager ? "מפקד משמרת" : "",
+        person.can_train ? "חופף" : "",
+        text(person.notes),
+      ].join(" ") : "",
     };
   }), [employees, rotationMode, dayCycles]);
   const foldKey = (person: Row) => text(person.name);

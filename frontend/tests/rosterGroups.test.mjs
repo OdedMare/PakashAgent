@@ -12,7 +12,7 @@ const roster = await import(`data:text/javascript,${encodeURIComponent(outputTex
 
 const services = { standard: "תקן", overlap: "נחפף/ת", reserve: "מילואים" };
 const shifts = ["בוקר", "ערב", "לילה"];
-const person = (service, shiftList, counts = true, exitKey = "round|א") => ({ service, counts, shifts: shiftList, exitKey, exitLabel: exitKey });
+const person = (service, shiftList, counts = true, exitKey = "round|א") => ({ service, counts, shifts: shiftList, exitKey, exitLabel: exitKey, searchText: "" });
 const people = [
   person("standard", ["בוקר"]),
   person("reserve", ["ערב", "לילה"], true, "triplet|ב"),
@@ -44,4 +44,16 @@ test("staffing splits who fills the quota from who does not", () => {
 test("exit groups are by pattern and group letter", () => {
   const groups = roster.groupRoster(people, "exit", services, shifts, all);
   assert.deepEqual(groups.map((g) => [g.key, g.indices]), [["round|א", [0, 2, 3]], ["triplet|ב", [1]]]);
+});
+
+test("a search matches every word, anywhere on the person, Hebrew read loosely", () => {
+  const dana = { searchText: "דנה כהן קשרית מילואים בוקר הצ״ח מְפַקֶּדֶת" };
+  assert.ok(roster.matchesSearch(dana, "כהן"));
+  assert.ok(roster.matchesSearch(dana, "מילואים דנה"));
+  assert.ok(roster.matchesSearch(dana, "הצח"));
+  assert.ok(roster.matchesSearch(dana, "מפקדת"));
+  assert.ok(roster.matchesSearch(dana, "  "));
+  assert.ok(!roster.matchesSearch(dana, "דנה לילה"));
+  // A row just added has no name yet and must not vanish behind a search.
+  assert.ok(roster.matchesSearch({ searchText: "" }, "דנה"));
 });

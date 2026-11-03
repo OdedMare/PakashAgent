@@ -259,3 +259,9 @@
 @media (prefers-reduced-motion: reduce) {
   .manual-section-toggle svg, .roster-group-head svg, .manual-row-summary svg { transition: none; }
 }
+
+.roster-search { display: flex; align-items: center; gap: 0.45rem; min-height: 44px; padding-inline: 0.7rem 0.25rem; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
+.roster-search:focus-within { outline: 2px solid var(--primary); outline-offset: 1px; }
+.roster-search > svg { flex: none; color: var(--text-muted); }
+.roster-search input { flex: 1; min-width: 0; min-height: 42px; padding: 0; color: var(--text); background: none; border: 0; outline: none; font: inherit; font-size: 0.85rem; }
+.roster-search input::-webkit-search-cancel-button { display: none; }
