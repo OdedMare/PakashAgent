@@ -10,62 +10,52 @@
 
 ---
 
-## הרצה בתוך קונטיינר (Docker, בלי compose)
+## הרצה מתוך הקונטיינר
 
-אימג' ה-backend כבר כולל את כל מה שצריך (Python 3.11 + OR-Tools), אז לא צריך להתקין כלום.
-כל הפקודות מתיקיית השורש של הפרויקט (`PakashAgent`).
+הסקריפט נמצא בתוך אימג' ה-backend בתיקייה `/app/magen_merkava`, ואת כל מה שהוא צריך (Python 3.11 + OR-Tools) כבר מותקן שם.
 
-### אפשרות א' — קונטיינר חד-פעמי (הכי פשוט)
-
-1. לבנות את האימג' (פעם אחת, או אחרי שינוי ב-backend):
+### 1. לבנות ולהרים את הקונטיינר
+אחרי `git pull` צריך לבנות את האימג' מחדש, כדי שהסקריפט ייכנס אליו. מתיקיית השורש של הפרויקט:
 
 ```bash
 docker build -t pakash-backend ./backend
 ```
 
-2. להריץ את הסקריפט:
+ואז להרים את הקונטיינר כמו שאתה מרים אותו תמיד.
 
-```bash
-docker run --rm -v "$PWD/tools/magen_merkava:/magen" -w /magen pakash-backend python build_team.py --start 2026-11-04 --days 7 --csv shibutz.csv
-```
-
-מה כל חלק עושה:
-- `--rm` — הקונטיינר נמחק בסוף ההרצה.
-- `-v "$PWD/tools/magen_merkava:/magen"` — מכניס את תיקיית הסקריפט לקונטיינר.
-- `-w /magen` — מריץ מתוך התיקייה הזו.
-- `python build_team.py ...` — מחליף את פקודת ברירת המחדל (השרת) בסקריפט.
-- `--csv shibutz.csv` — הקובץ נשמר אצלך ב-`tools/magen_merkava/shibutz.csv` ונפתח באקסל.
-
-> **Windows (PowerShell):** במקום `$PWD` לכתוב `${PWD}`.
-> **Windows (cmd):** במקום `$PWD` לכתוב `%cd%`.
-
-### אפשרות ב' — בתוך קונטיינר backend שכבר רץ
-
-1. למצוא את שם הקונטיינר:
+### 2. להיכנס לקונטיינר
 
 ```bash
 docker ps
 ```
 
-2. להעתיק את הסקריפט פנימה (במקום `<container>` — השם מהעמודה NAMES):
-
 ```bash
-docker cp tools/magen_merkava <container>:/magen
+docker exec -it <container> bash
 ```
 
-3. להריץ:
+(`<container>` = השם מהעמודה NAMES של `docker ps`. אם אין `bash` — `sh`.)
+
+### 3. להריץ
 
 ```bash
-docker exec -w /magen <container> python build_team.py --start 2026-11-04 --days 7 --csv shibutz.csv
+cd /app/magen_merkava
 ```
-
-4. להוציא את קובץ השיבוץ החוצה:
 
 ```bash
-docker cp <container>:/magen/shibutz.csv ./shibutz.csv
+python build_team.py --start 2026-11-04 --days 7 --csv shibutz.csv
 ```
 
-> אחרי שינוי ב-`roster.py` צריך להעתיק שוב (שלב 2).
+השיבוץ מודפס למסך ונשמר ל-`/app/magen_merkava/shibutz.csv`.
+
+### 4. (רשות) להוציא את קובץ האקסל מהקונטיינר
+מחוץ לקונטיינר:
+
+```bash
+docker cp <container>:/app/magen_merkava/shibutz.csv ./shibutz.csv
+```
+
+> שינית את `roster.py` (מישהו השתחרר / נחסם)? צריך לבנות את האימג' מחדש (שלב 1),
+> או להעתיק רק את הקובץ: `docker cp backend/magen_merkava/roster.py <container>:/app/magen_merkava/roster.py`
 
 ---
 
@@ -75,7 +65,7 @@ docker cp <container>:/magen/shibutz.csv ./shibutz.csv
 
 ```bash
 pip install "ortools>=9.12,<10"
-cd tools/magen_merkava
+cd backend/magen_merkava
 python3 build_team.py --start 2026-11-04 --days 7 --csv shibutz.csv
 ```
 
