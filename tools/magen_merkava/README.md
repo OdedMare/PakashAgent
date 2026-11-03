@@ -10,41 +10,62 @@
 
 ---
 
-## הרצה בתוך הקונטיינר (מומלץ)
+## הרצה בתוך קונטיינר (Docker, בלי compose)
 
 אימג' ה-backend כבר כולל את כל מה שצריך (Python 3.11 + OR-Tools), אז לא צריך להתקין כלום.
+כל הפקודות מתיקיית השורש של הפרויקט (`PakashAgent`).
 
-### 1. להרים את הקונטיינרים
+### אפשרות א' — קונטיינר חד-פעמי (הכי פשוט)
 
-מתיקיית השורש של הפרויקט (`PakashAgent`):
+1. לבנות את האימג' (פעם אחת, או אחרי שינוי ב-backend):
 
 ```bash
-docker compose up -d --build
+docker build -t pakash-backend ./backend
 ```
 
-### 2. להריץ את הסקריפט
+2. להריץ את הסקריפט:
 
 ```bash
-docker compose run --rm --no-deps -v "$PWD/tools/magen_merkava:/magen" -w /magen backend python build_team.py --start 2026-11-04 --days 7 --csv shibutz.csv
+docker run --rm -v "$PWD/tools/magen_merkava:/magen" -w /magen pakash-backend python build_team.py --start 2026-11-04 --days 7 --csv shibutz.csv
 ```
 
 מה כל חלק עושה:
-- `run --rm` — מריץ קונטיינר חד-פעמי מאימג' ה-backend ומוחק אותו בסוף.
-- `--no-deps` — לא צריך את מסד הנתונים בשביל הסקריפט.
+- `--rm` — הקונטיינר נמחק בסוף ההרצה.
 - `-v "$PWD/tools/magen_merkava:/magen"` — מכניס את תיקיית הסקריפט לקונטיינר.
 - `-w /magen` — מריץ מתוך התיקייה הזו.
+- `python build_team.py ...` — מחליף את פקודת ברירת המחדל (השרת) בסקריפט.
 - `--csv shibutz.csv` — הקובץ נשמר אצלך ב-`tools/magen_merkava/shibutz.csv` ונפתח באקסל.
 
 > **Windows (PowerShell):** במקום `$PWD` לכתוב `${PWD}`.
 > **Windows (cmd):** במקום `$PWD` לכתוב `%cd%`.
 
-### אפשרות נוספת — בתוך קונטיינר שכבר רץ
+### אפשרות ב' — בתוך קונטיינר backend שכבר רץ
+
+1. למצוא את שם הקונטיינר:
 
 ```bash
-docker compose cp tools/magen_merkava backend:/magen
-docker compose exec -w /magen backend python build_team.py --start 2026-11-04 --days 7 --csv shibutz.csv
-docker compose cp backend:/magen/shibutz.csv ./shibutz.csv
+docker ps
 ```
+
+2. להעתיק את הסקריפט פנימה (במקום `<container>` — השם מהעמודה NAMES):
+
+```bash
+docker cp tools/magen_merkava <container>:/magen
+```
+
+3. להריץ:
+
+```bash
+docker exec -w /magen <container> python build_team.py --start 2026-11-04 --days 7 --csv shibutz.csv
+```
+
+4. להוציא את קובץ השיבוץ החוצה:
+
+```bash
+docker cp <container>:/magen/shibutz.csv ./shibutz.csv
+```
+
+> אחרי שינוי ב-`roster.py` צריך להעתיק שוב (שלב 2).
 
 ---
 
