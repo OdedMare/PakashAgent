@@ -30,6 +30,16 @@ returns to the corner and every 25 seconds there, never while the chat is
 open, and the chat uses that guard as its avatar, greeting and working
 indicator. All motion stops under `prefers-reduced-motion`.
 
+**One field, everywhere.** Every text input, select and textarea gets one
+box from `styles/tokens.css` — 44px, the strong border, `--radius-sm`, the
+surface behind it, the blue focus ring — through a `:where()` rule with no
+specificity, sized by the `--control-*` tokens (16px text on a phone, so iOS
+does not zoom). Do not restate it on a screen: a form's class sets layout
+only (width, flex, grid). Override it only for something that is not a
+field — a search inside a bar, the chat composer, a toolbar filter chip. A
+label above a field is a `<span>` inside `.manual-field`, `.soldier-field`
+or a `.constraint-form` label, or `.field-label`: one muted 0.74rem/650.
+
 **Every date and time field can be picked as well as typed.** `DateInput`
 adds a calendar button over the browser's own picker; `TimeInput` is typed
 24-hour `HH:MM` plus a clock button with an hour/minute list (`pickers.ts`,
@@ -52,7 +62,7 @@ and the third of them is not an edit at all:
   that collects the manager's reason, and that dialog is what applies the move
   ([D12](../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
   Dragging is a faster way to say what you want, not a way around saying why
-  ([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-),
+  ([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34),
   [D8](../docs/DECISIONS.md#d8--two-reasons-both-required)).
 - **Filling an empty cell writes immediately** — the `+` on a cell opens an
   employee picker and the choice is saved
@@ -62,13 +72,10 @@ and the third of them is not an edit at all:
   boss build a week without the agent at all.
 - **Dragging a shift *row* writes nothing at all** — it is not a third
   gesture on the schedule but a change to the order the board is read in
-  (`Board/shiftOrder.ts`). The rows default to **the clock**, earliest start
-  first, because that is the sequence the day actually happens in; the order
-  the slots were written in carried no meaning a manager could see, and
-  alphabetising would scramble the same sequence differently
-  ([D9](../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)). A shift
-  with no hours cannot be placed on a clock, so those keep their declared
-  order and sit last. The manager can drag or nudge the rows into any other
+  (`Board/shiftOrder.ts`). The rows default to **א-ב** (Hebrew collation), so the shifts of
+  one post sit together — אלחוט יום directly above אלחוט לילה — instead of
+  being split between the top (day) and bottom (night) of the board. The
+  shift filter and the מכלול view use the same order. The manager can drag or nudge the rows into any other
   order, remembered per browser, and put them back with one click. Because
   nothing is written, this works on a published board too, where every write
   is refused.
@@ -113,6 +120,19 @@ a second answer to a question that must have exactly one. The Sunday a
 closure hands over on reads dimmer and says `חילוף` — the group is in for
 that morning and out for the rest of the day.
 
+**The rotation section opens on one question: "איך יוצאים אצלכם?"**
+(`ManualSetup/ExitKinds.tsx`). The manager ticks the kinds of exits the
+unit has — none, daily, weekend groups (2–5 groups: סבב, תלתון, רבעון,
+חמישון), days on base / at home, every weekend home (חמשושים/שושים), a
+personal 1 ל־N, reservists — and only those open their questions below and
+appear in each soldier's pattern list. What is ticked is saved as
+`enabled_exit_patterns`; a pattern somebody is on stays on. A soldier's own
+questions (daily days and hours, a personal 1 ל־N and its first weekend)
+render under their pattern (`Management/ExitPatternFields.tsx`). A
+reservist's coming week is set from the team list (`Management/ReserveWeek.tsx`):
+each day cycles רגיל → עדיף שלא → לא יכול/ה, stored as whole-day
+availability rows, and the solver picks the days.
+
 **A cycle is typed once, in the team setup screen** (`ManualSetup/`, the
 sliders icon). The server-wide model, solver and database settings are not
 on the team screen at all: they live in the operator console's "מערכת" tab.
@@ -148,6 +168,19 @@ marked `closure: true` whose days are worked out per shift at save time
 (the first day only for a shift still running when the closure opens, the
 Sunday only for one starting before the handover).
 
+**The setup screen folds, and the roster can be read in groups.** Every
+section folds from the chevron on its header; the roster
+(`ManualSetup/RosterView.tsx`, arithmetic in `rosterGroups.ts`) groups by
+מעמד, נספר בתקן, משמרת (someone allowed on two shifts is under both) or
+מבנה יציאות, each group folds, and the status chips narrow it to, say, only
+מילואים. A search box above them finds a soldier by name, role,
+competence, status, rotation, shift, qualification or note — every word
+typed, in any order, ignoring niqqud and geresh — and is not remembered.
+A soldier's card folds to one line. All of this only hides: hidden
+rows stay in the form and save with the rest, and a soldier added while one
+status is shown takes that status. The grouping and filter are a habit,
+remembered per browser; nothing is written to the server.
+
 **Taking a week back is two different acts.** *ניקוי* empties the
 assignments and keeps the shift rows, so the week can be filled in again
 immediately; *מחיקה* removes the period and returns the week to the state
@@ -171,7 +204,10 @@ colours, which mean something specific on this grid.
 **A board card says who is standing there, not why** (`Board/ShiftCard.tsx`).
 Name, role, rotation — `exit_pattern` and `rotation_group` rendered as one
 phrase by `Board/person.ts`, since a group is what makes somebody rotate at
-all — plus badges for **מפקד/ת** and **נחפף/ת**. An overlap (נחפף/ת) card drops
+all — plus badges for **מפקד/ת** and **נחפף/ת**. A soldier with a roster note carries a ringed
+**!** whose hover is the note; setup's "הערות לחייל/ת לתצוגה בלבד"
+(`workplace.notes_visual_only`) keeps notes on the board only — the build is
+then not told about them (`scheduler/directives.semantic_sources` skips them). An overlap (נחפף/ת) card drops
 the per-name hue for one shared violet with a thick inline-start bar,
 diagonal stripes and a solid badge, so a trainee never reads as a filled
 seat; alarm styling still wins. The command badge reads off
@@ -182,6 +218,13 @@ hold the card's last line; it is still written on every path and still
 [D8](../docs/DECISIONS.md#d8--two-reasons-both-required)'s record, and it is
 one hover away — but a justification is read once, when the placement is made,
 and the grid is read every day.
+A flagged card says *why* on its face: a red last line names the rule and
+the number that broke it ("אילוץ 12:00–20:00 · מילואים", "רק 6 ש׳ מנוחה
+(נדרש 8)", "רמה חלשה · המשמרת דורשת גבוהה ומעלה" on a strong shift),
+worded from the warning's `details` by `lib/warningSummary.ts`,
+with `+N` for further findings and every audit sentence on the hover. A
+constraint the board finds itself (`blockingConstraint`) stands in until the
+audit reports the same one.
 
 **The placement dialog ranks people, not just lists them**
 (`Board/ShiftEditor.tsx`, fed by `POST /api/schedule/check`). Each
@@ -201,7 +244,8 @@ profile comes from the setup form.
 | Surface | Purpose |
 |---|---|
 | Workspace gate | Pick the team, then the manager or worker door — `src/components/Workspace/`. No team creation here (D28) |
-| Operator console | `/admin` — צוות משמרות זהב: every team with its counts, open (name + password)/rename/suspend/delete, and the system settings ("מערכת", the only place they are edited) — `src/components/Admin/` |
+| Operator console | `/admin` — צוות משמרות זהב: every team with its counts, open (name + password)/rename/suspend/delete, the מכלולים tab (link existing teams, issue the מפקד מכלול password, D43), and the system settings ("מערכת", the only place they are edited) — `src/components/Admin/` |
+| Commander area | The מפקד מכלול's control room (D43, D46), built as the משמרת's own: the same sidebar, `WeekNav`/`ViewSwitch` head, tiles, `board-filters` bar (`CommanderFilters`: משמרת, shift type, soldier, "רק חוסרים" — hides, never recounts) and `board-card`s, every משמרת as a band with its own "סוכן" and "כניסה לניהול". The agent is the resizable drawer beside the board, opened from the guard (`CommanderChat`): a tab per משמרת, each a full `AgentChat` over `commanderChatRoutes(id)` (`useManagerChat` takes the routes), and "כל המכלול", whose sentence is routed by `POST /api/complex/route` (or to the משמרות picked under "שליחה אל") and sent to each one's agent at once; their answers and plans show as cards, each approved on its own. "סטטיסטיקות"/"שינויים" are the משמרת's own `Stats`/`ChangesPanel` (`UnitTools`, after `enterComplexTeam`); a changes pick goes to that משמרת's chat tab. "תורנויות" (`DutiesView`, `DutyForm`, `DutyTypes`, `useDuties`) is drawn on the board's grid: tiles, a filter bar (kind, משמרת, soldier, "רק פנויים"), a row per kind, each soldier a card in their מכלול colour; "רישום תורנות שכבר נעשתה" records one that counts without blocking; "מלא בהוגנות" draws the server's proposal (dashed blue, each removable) until "אישור" (`DutySuggestionBar`); "מאזן" is `DutyBalancePanel` (D44). `CommanderNotices` tells the משמרת's own commander what changed. Inside a משמרת the board's day heads name who is on duty, and `lib/constraints.ts` paints a duty with no hours as the whole day — `src/components/Complex/` |
 | Member area | The employee's read-only surface — `MemberArea.tsx` |
 | Unit setup | The structured profile form — roster, shift vocabulary, staffing, rotations, rules — and what code made of each sentence (`CompiledSources.tsx`, D32) — `src/components/ManualSetup/` |
 | Guide | The first-run tour, the help panel and the `/tutorial` page, narrated by the two guards — `src/components/Guide/`, `src/app/tutorial/` |
@@ -210,7 +254,7 @@ profile comes from the setup form.
 | Schedule | The living grid for a period, RTL — `Management/Calendar.tsx` |
 | Manager chat | **The** agent: every instruction, question and plan, optionally focused on one day; opened from the guard in the board's corner — `Management/AgentChat.tsx` |
 | Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `Board/ConfirmDrop.tsx` |
-| Changes tab | "שינויים" — `Management/ChangesPanel.tsx`, three actions. **החלפת משמרת**: who is out and when → covers ranked so the load spreads evenly; the picks go to the chat as a plan (D36) — `ReplacementPanel.tsx`, reads only; its wording is shared with the chat cards in `lib/replacement.ts` and read back by the server. **הוספת חייל** / **הוספת משמרת**: the roster's own `EmployeeForm`/`ShiftForm`, saved through `saveProfile`, after which the server fits the newcomer into every draft from today on, keeping the board (D37) |
+| Changes tab | "שינויים" — `Management/ChangesPanel.tsx`, three actions. **החלפת משמרת**: who is out and when → covers offered in stages, each under its own heading: the same role from that shift, then the same role from another place (a shift's `purpose` when set, else the shift), then anyone else who fits; inside a stage the load spreads evenly (`placement/tiers.py`); the picks go to the chat as a plan (D36) — `ReplacementPanel.tsx`, reads only; its wording is shared with the chat cards in `lib/replacement.ts` and read back by the server. **הוספת חייל** / **הוספת משמרת**: the roster's own `EmployeeForm`/`ShiftForm`, saved through `saveProfile`, after which the server fits the newcomer into every draft from today on, keeping the board (D37) |
 | Import | A file in, in any shape (D42) — `Management/ImportSchedule.tsx`, opened from the board toolbar, an empty week, or the paperclip in the chat composer. Every correction (layout fields, an alternative reading, a name or shift mapping, a description for the agent) re-sends the file to be re-read; only its confirm stores |
 | Preferences | What the agent remembers, all of it visible — `Management/Preferences.tsx` |
 | Employee view | **Read-only** schedule — `MemberArea` renders the same `Calendar` with `readOnly` |
@@ -346,7 +390,7 @@ impression.
   (`keep_existing_names` refuses a removal outright). The person moves to
   "עובדים שסיימו", where "החזרה לסגל" clears the date; vacated shifts stay
   vacated.
-- **Switching a soldier off is not a departure** (D43). The switch on each
+- **Switching a soldier off is not a departure** (D49). The switch on each
   roster card (and "דולק/ת בשיבוץ" in setup) saves `on_duty` through
   `saveProfile`. Off keeps the person listed — dimmed, not draggable, out of
   the replacement tab — and out of every build; the server vacates their
@@ -421,6 +465,13 @@ one on screen and names any published week it left alone.
 - **The member share link is `/team/<token>`.** `MemberEntry` exchanges the
   token for a cookie and then `replaceState`s it out of the URL, so the
   credential stops travelling in the address bar and the back stack.
+- **A מכלול commander has a cookie of their own** (`pakash_commander`, D43).
+  `useWorkspace` asks `/api/complex/me` beside `/api/workspace/me`: with no
+  team session and a commander session the gate renders `CommanderArea`;
+  entering a משמרת hands back an ordinary boss session marked `commander`,
+  so `BossSurface` renders as for its own commander, under `CommanderBar`.
+  On screen a team inside a מכלול is a **משמרת** and its manager a **מפקד/ת
+  משמרת**; the login door says so.
 - **This routing is not the access control.** The backend guards every route
   independently; a visitor who forced past the component still gets a 401.
 
@@ -436,7 +487,7 @@ Never assume a Latin-script fallback.
 Warnings render as **non-blocking inline banners** on the schedule. They never
 gate a save, never block confirmation, and never present as errors. A schedule
 with warnings is a valid schedule the boss may knowingly accept
-([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)).
 An overlapping operational duty is not an advisory warning: the placement
 check marks it `blocking`, the confirmation action is disabled, and the server
 also refuses the write.

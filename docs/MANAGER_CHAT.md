@@ -105,7 +105,7 @@ with the conversation. Stop discards any late response;
 it does not interrupt an HTTP completion already running at the provider.
 
 **The reply streams in.** Each model round is read as a stream
-(`dal/llm/streaming.py`); `bl/chat_draft.py` reads the `reply` string out of
+(`dal/llm/streaming.py`); `bl/chat/draft.py` reads the `reply` string out of
 the JSON as it is written and saves it on the working message as
 `payload.draft` a few times a second. Every saved check, draft and finished
 turn also publishes a bare `chat` signal on the manager's existing SSE line
@@ -137,7 +137,7 @@ sent as an ordinary new message.
 
 **Follow-ups and openers.** A finished answer may carry up to three
 `suggestions`, offered as one-click next messages. Any that reads as approval
-or execution is dropped in code (`chat_schema.suggestions`), so a click on an
+or execution is dropped in code (`suggestions` in `chat/schema.py`), so a click on an
 idea can never confirm a plan. The empty conversation opens with starters built
 from the board itself — empty shifts and requests waiting for an answer —
 before the general ones. Turning a plan down asks, optionally, what did not
@@ -175,7 +175,7 @@ cache, like a build started from the board.
 
 ## Code and verification
 
-`backend/app/bl/manager_chat.py` orchestrates the conversation and calls
+`backend/app/bl/chat/service.py` (`ManagerChatService`) orchestrates the conversation and calls
 the existing tools and services. `backend/app/dal/repository/chat.py` owns
 the private transcripts, turn idempotency and approval transaction.
 `frontend/src/components/Management/AgentChat.tsx` renders the conversation;
@@ -224,7 +224,7 @@ state and invalidate proposals whose underlying facts changed.
   removal with no named replacement is filled by the solver: every seat a
   `changes` plan leaves empty is solved over the touched dates, the rest of
   the day pinned and the person who left a hard `avoid`, and its picks join the
-  plan as `assign` operations listed under the reply (`bl/chat_vacancies.py`;
+  plan as `assign` operations listed under the reply (`bl/chat/vacancies.py`;
   `leave_vacant` keeps the seat empty). The model never picks the person. Candidate selection and answers to clarification questions are
   distinct from approval of a prepared plan.
 - **No unsolicited rule exceptions.** If nobody fits, explain the uncovered
@@ -279,31 +279,41 @@ paths, so reproduce and verify the defect on both relevant entry points.
 
 ### Verified implementation gaps
 
-> **Status:** recorded at the interview; several are since closed. Departure
-> is an effective `inactive_from` date (`retire` plans, the roster's
-> "הוצאה מהסגל"); shift restructuring is the chat's vocabulary rebuild
-> (`bl/chat_lifecycle.py`); deleting a shift type archives it; the full-period
-> `Scheduler.generate` is gone, and every build goes through the solver
-> (D34). The remaining bullets are kept as written.
+> **Status:** recorded at the interview and kept as written, each marked
+> with where it stands now. The full-period `Scheduler.generate` is gone,
+> and every build goes through the solver (D34); deleting a shift type
+> archives it.
 
-- `profile_service.validation.keep_existing_names` rejects removal of employee
+- *Closed — departure is an effective `inactive_from` date (`retire` plans,
+  the roster's "הוצאה מהסגל"); the guard stays.*
+  `profile_service.validation.keep_existing_names` rejects removal of employee
   and shift names. Departures and replacement of a shift vocabulary need explicit
   lifecycle/migration operations, rather than dropping the identity guard on
   every profile edit.
-- `CHAT_SCHEMA`, `ChatPlan` and `ManagerChatService.apply` support one plan kind
+- *Closed — `prepare_retirement` and `prepare_structure` (`bl/chat/lifecycle.py`)
+  carry the profile change and the schedule changes in one approval; still one
+  plan kind per approval.*
+  `CHAT_SCHEMA`, `ChatPlan` and `ManagerChatService.apply` support one plan kind
   at a time. Retirement and shift restructuring require a profile change plus
   schedule changes in the same approval transaction.
-- Existing generation retains saved slot definitions. Generation preparation
+- *Closed — the chat's vocabulary rebuild migrates a draft to the new shift
+  structure, keeping rows where they fit, and a profile save that adds a
+  shift extends every draft ahead of today (D37).*
+  Existing generation retains saved slot definitions. Generation preparation
   refused assignments with new shift names outside the saved grid, while
   `_commit_generation` replaces slots only for a newly created period. Updating
   the profile alone cannot migrate an existing draft to the new shift structure.
-- `start_chat_turn` supersedes pending proposals when any message is sent.
+- *Closed — `start_turn` reads an approval sentence (`approval_text`) and
+  applies the pending plan before anything supersedes it.*
+  `start_chat_turn` supersedes pending proposals when any message is sent.
   Conversational approval must resolve its target before that transition; it
   cannot be implemented just by telling the model that "yes" means Apply.
-- The prompt currently allows proposing rule exceptions without an explicit
+- *Closed — `manager_chat.md` now allows an exception only on a current,
+  explicit request, and otherwise offers compliant options.*
+  The prompt currently allows proposing rule exceptions without an explicit
   current request. Replacement recommendations need the agreed compliant-only
   default across prompt, tool results and proposal validation.
-- Conversation context currently carries the latest 32 messages, with selective
+- *Still true.* Conversation context currently carries the latest 32 messages, with selective
   summaries of older plans/checks. Long-running tasks need explicit unresolved
   details and selected candidates if they would otherwise fall out of that window.
 

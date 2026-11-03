@@ -115,6 +115,34 @@ def test_headcount_follows_the_matching_day_group():
     assert by_date == {"2026-08-20": 3, "2026-08-21": 1}
 
 
+def test_dated_staffing_override_changes_only_that_shift_and_date():
+    profile = dict(PROFILE, staffing_overrides=[{
+        "date": "2026-08-18", "shift": MORNING, "headcount": 3,
+    }])
+
+    slots = build_slots(profile, "2026-08-17", "2026-08-19")
+    morning = {
+        slot["slot_date"]: slot["headcount"]
+        for slot in slots if slot["shift_name"] == MORNING
+    }
+
+    assert morning == {
+        "2026-08-17": 1, "2026-08-18": 3, "2026-08-19": 1,
+    }
+
+
+def test_dated_zero_keeps_the_special_shift_visible_but_requires_no_seats():
+    profile = dict(PROFILE, staffing_overrides=[{
+        "date": "2026-08-18", "shift": MORNING, "headcount": 0,
+    }])
+
+    slots = build_slots(profile, "2026-08-18", "2026-08-18")
+
+    assert [(slot["shift_name"], slot["headcount"]) for slot in slots] == [
+        (MORNING, 0),
+    ]
+
+
 def test_an_inverted_or_oversized_period_is_refused():
     with pytest.raises(AgentError):
         build_slots(PROFILE, "2026-08-20", "2026-08-17")

@@ -6,7 +6,7 @@ import datetime
 import json
 from unittest import mock
 
-import app.bl.chat_tools as chat_tools
+import app.bl.chat.tools as chat_tools
 from tests.test_manager_chat import converse, setup, turn
 from tests.test_schedule_api import MORNING, TEAM
 
@@ -73,8 +73,8 @@ def test_a_constraint_naming_a_role_is_recorded_for_every_holder():
 
 
 def test_an_unknown_role_is_refused_with_the_real_roles_named():
-    from app.bl.chat_constraints import normalize_constraints
-    from app.bl.chat_contract import RejectedPlan
+    from app.bl.chat.constraints import normalize_constraints
+    from app.bl.chat.contract import RejectedPlan
     profile = {"employees": [{"name": "דנה", "role": "מפתח"}], "shifts": []}
     try:
         normalize_constraints([dict(employee="", role="מעצב", date="2026-10-19", shift="")],

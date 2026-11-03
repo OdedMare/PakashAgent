@@ -6,7 +6,8 @@ it recorded (`dal/repository/jobs.py`). `change_log.actor` is read from here,
 so every write path records it without each call site passing it along.
 
 An actor is `boss:<manager_id>` (or `boss` before that browser has one),
-`employee:<name>`, `member` or `admin`; empty means the system itself -- a
+`commander:<complex_id>` (D43), `employee:<name>`, `member` or `admin`;
+empty means the system itself -- a
 job queued with no request behind it.
 """
 
@@ -35,6 +36,9 @@ def actor_of(session: dict, manager: Optional[dict] = None) -> str:
     cookie, which tells one manager's browser from another's; it counts only
     for the team the session is for."""
     role = session.get("role") or ""
+    if role == "boss" and session.get("commander"):
+        # The commander of a מכלול inside one of its workplaces (D43).
+        return "commander:" + session["commander"]
     if role == "boss":
         if manager and manager.get("team_id") == session.get("team_id") \
                 and manager.get("manager_id"):

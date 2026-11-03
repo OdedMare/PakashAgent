@@ -185,6 +185,7 @@ def test_rotation_a_schedule_and_optional_patterns_share_the_workplace_profile()
     result = ProfileService(repo).update("team", workplace={
         "name": "פלוגה",
         "enabled_exit_patterns": ["triplet", "hamshushim"],
+        "reserve_enabled": False,
         "rotation_a_unavailability": [{
             "days": ["שני"], "shifts": ["בוקר"],
             "start_time": "08:00", "end_time": "12:00",
@@ -194,11 +195,15 @@ def test_rotation_a_schedule_and_optional_patterns_share_the_workplace_profile()
 
     workplace = result["workplace"]
     assert workplace["enabled_exit_patterns"] == ["triplet", "hamshushim"]
+    assert workplace["reserve_enabled"] is False
     assert workplace["rotation_a_unavailability"] == [{
         "days": ["שני"], "shifts": ["בוקר"],
         "start_time": "08:00", "end_time": "12:00",
         "reason": "יציאה קבועה",
     }]
+
+    with pytest.raises(AgentError):
+        ProfileService(repo).update("team", workplace={"reserve_enabled": "no"})
 
 
 def test_round_and_triplet_anchors_are_saved_and_validated_separately():

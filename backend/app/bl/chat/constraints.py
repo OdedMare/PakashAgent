@@ -1,0 +1,256 @@
+"""Validated constraint edits and feedback from the same audit as the board."""
+
+import datetime
+
+from app.bl.audit import constraint_conflicts
+from app.bl.audit.roster import index_shifts, rows_of
+from app.bl.chat.contract import RejectedPlan, audit_plan
+from app.bl.shared import out_of_service, person_roles, warning_key
+from app.bl.scheduler.availability import effective_availability
+from app.bl.simulate.hypothetical import schedule_rows
+from app.bl.tools.values import iso
+
+
+# Words a model writes for "the whole day"; setup and the audit spell it "".
+_WHOLE_DAY = frozenset({"כל היום", "יום שלם", "כל המשמרות", "הכל", "all", "all day", "*"})
+# How many rows one plan may hold once a `role` row is expanded to its holders.
+_MAX_EXPANDED = 1500
+
+
+def normalize_constraints(offered, profile, saved):
+    """Validated constraint edits. A refusal names the row and the value, so
+    the model can repair the one row instead of resending the same plan."""
+    if not isinstance(offered, list) or len(offered) > 126:
+        raise RejectedPlan("אפשר לעדכן עד 126 אילוצים בתוכנית אחת")
+    offered = _by_role(offered, profile)
+    names = [row["name"] for row in profile.get("employees") or []]
+    shifts = [row["name"] for row in profile.get("shifts") or []]
+    by_id = {row["id"]: row for row in saved}
+    result, seen = [], {}
+    for number, row in enumerate(offered, 1):
+        if not isinstance(row, dict) or row.get("action", "set") not in ("set", "remove"):
+            raise RejectedPlan("אילוץ %d: הפעולה חייבת להיות set או remove" % number)
+        if row.get("action") == "remove":
+            item = _removal(number, row, by_id)
+        else:
+            item = _setting(number, row, names, shifts)
+        key = _key(item)
+        if key in seen:
+            if seen[key] == item:
+                continue
+            raise RejectedPlan(
+                "אילוץ %d: כבר יש בתוכנית עדכון אחר ל-%s בתאריך %s%s. יש להשאיר עדכון אחד"
+                % (number, item["employee"], item["date"],
+                   " במשמרת " + item["shift"] if item["shift"] else " (כל היום)")
+            )
+        seen[key] = item
+        result.append(item)
+    return result
+
+
+def _by_role(offered, profile):
+    """A row naming a `role` instead of an employee, as one row per holder.
+
+    "חופש בשני לכל המפתחים" is one sentence; spelling it out person by person
+    is how a model on a hundred-person roster misses somebody. The role is
+    matched against the roster's own roles, and an unknown one is refused
+    with the real ones named, so the next round can repair it.
+    """
+    people = profile.get("employees") or []
+    result = []
+    for number, row in enumerate(offered, 1):
+        role = (row.get("role") or "").strip() if isinstance(row, dict) else ""
+        if not role or (row.get("employee") or "").strip() or row.get("action") == "remove":
+            result.append(row)
+            continue
+        holders = [person["name"] for person in people if role in person_roles(person)
+                   and not out_of_service(person, row.get("date") or "")]
+        if not holders:
+            roles = sorted({item for person in people for item in person_roles(person)})
+            raise RejectedPlan(
+                "אילוץ %d: אין בצוות אנשים בתפקיד \"%s\". התפקידים הקיימים: %s"
+                % (number, role, ", ".join(roles))
+            )
+        result += [dict(row, employee=name, role="") for name in holders]
+    if len(result) > _MAX_EXPANDED:
+        raise RejectedPlan("אפשר לעדכן עד %d אילוצים בתוכנית אחת" % _MAX_EXPANDED)
+    return result
+
+
+def _removal(number, row, by_id):
+    before = by_id.get(row.get("id"))
+    if not before:
+        raise RejectedPlan(
+            "אילוץ %d: האילוץ להסרה (מזהה \"%s\") לא נמצא בצוות. קראו constraints_report "
+            "והשתמשו במזהה שנשמר" % (number, row.get("id") or "")
+        )
+    return dict(action="remove", id=before["id"], employee=before["employee"],
+                date=iso(before["constraint_date"]), shift=before.get("shift_name") or "",
+                available=bool(before.get("available")), is_hard=before.get("is_hard", True),
+                start_time=before.get("start_time") or "", end_time=before.get("end_time") or "",
+                reason=before.get("reason") or "",
+                constraint_type=before.get("constraint_type") or "availability")
+
+
+def _setting(number, row, names, shifts):
+    employee = (row.get("employee") or "").strip()
+    if employee not in names:
+        raise RejectedPlan(
+            "אילוץ %d: העובד \"%s\" לא נמצא בצוות. יש להשתמש בשם המדויק מתוך: %s"
+            % (number, employee, ", ".join(names))
+        )
+    shift = (row.get("shift") or "").strip()
+    shift = "" if shift.lower() in _WHOLE_DAY else shift
+    if shift not in shifts and shift:
+        raise RejectedPlan(
+            "אילוץ %d: המשמרת \"%s\" לא מוכרת. יש להשתמש בשם מדויק מתוך: %s, "
+            "או במחרוזת ריקה לכל היום" % (number, shift, ", ".join(shifts))
+        )
+    try:
+        date = datetime.date.fromisoformat((row.get("date") or "").strip()).isoformat()
+    except (ValueError, TypeError):
+        raise RejectedPlan(
+            "אילוץ %d: התאריך \"%s\" אינו תקין. יש לכתוב תאריך מלא בפורמט YYYY-MM-DD"
+            % (number, row.get("date") or "")
+        )
+    times = {key: _clock(number, row.get(key)) for key in ("start_time", "end_time")}
+    if any(key in row and not isinstance(row[key], bool) for key in ("available", "is_hard")):
+        raise RejectedPlan(
+            "אילוץ %d: available ו-is_hard חייבים להיות true או false" % number
+        )
+    constraint_type = row.get("constraint_type") or "availability"
+    if constraint_type not in ("availability", "duty"):
+        raise RejectedPlan("אילוץ %d: constraint_type חייב להיות availability או duty" % number)
+    if constraint_type == "duty":
+        if shift:
+            raise RejectedPlan("תורנות %d: יש להשאיר shift ריק; החפיפה נקבעת לפי השעות" % number)
+        if not times["start_time"] or not times["end_time"]:
+            raise RejectedPlan("תורנות %d: צריך לציין start_time וגם end_time" % number)
+        if row.get("available") is True or row.get("is_hard") is False:
+            raise RejectedPlan("תורנות %d חייבת להיות חסומה וקשיחה" % number)
+    return dict(action="set", employee=employee, date=date, shift=shift,
+                available=row.get("available", False), is_hard=row.get("is_hard", True),
+                reason=row.get("reason") or "", constraint_type=constraint_type, **times)
+
+
+def _clock(number, value):
+    """"8", "8:00" and "08:00:00" are the same hour; anything else is refused."""
+    if not value:
+        return ""
+    text = str(value).strip()
+    if text.isdigit() and len(text) <= 2:
+        text += ":00"
+    try:
+        hours, minutes = text.split(":")[:2]
+        return datetime.time(int(hours), int(minutes)).strftime("%H:%M")
+    except (ValueError, TypeError):
+        raise RejectedPlan(
+            "אילוץ %d: השעה \"%s\" אינה תקינה. יש לכתוב HH:MM, או להשאיר ריק ליום שלם"
+            % (number, value)
+        )
+
+
+def edited_availability(saved, offered):
+    rows = {_key(dict(
+        row, date=iso(row["constraint_date"]), shift=row.get("shift_name") or "",
+    )): row for row in saved}
+    for item in offered:
+        key = _key(item)
+        if item.get("action") == "remove":
+            rows.pop(key, None)
+        else:
+            rows[key] = dict(item, constraint_date=item["date"], shift_name=item.get("shift") or "", source="agent")
+    return list(rows.values())
+
+
+def _key(row):
+    constraint_type = row.get("constraint_type") or "availability"
+    if constraint_type == "duty":
+        return (constraint_type, row["employee"], row["date"],
+                row.get("start_time") or "", row.get("end_time") or "")
+    return (constraint_type, row["employee"], row["date"], row.get("shift") or "")
+
+
+def affected_periods(repository, team_id, constraints):
+    dates = {row["date"] for row in constraints}
+    dates.update(
+        (datetime.date.fromisoformat(row["date"]) + datetime.timedelta(days=1)).isoformat()
+        for row in constraints if row.get("constraint_type") == "duty"
+    )
+    return [repository.get_schedule(row["id"], team_id) for row in repository.list_schedules(team_id)
+            if any(iso(row["starts_on"]) <= date <= iso(row["ends_on"]) for date in dates)]
+
+
+def constraint_facts(profile, periods, saved, first, last, employee=""):
+    effective = effective_availability(profile, saved, first, last)
+    ids = {_key(dict(row, date=iso(row["constraint_date"]),
+                     shift=row.get("shift_name") or "")): row.get("id", "") for row in saved}
+    shifts = index_shifts(profile.get("shifts"))
+    assignments = []
+    for period in periods:
+        assignments.extend(dict(row, schedule_id=period["id"]) for row in
+                           rows_of(schedule_rows(period), shifts, period.get("slots")))
+    result = []
+    for item in effective:
+        if employee and item["employee"] != employee:
+            continue
+        matches = [row for row in assignments if row["employee"] == item["employee"] and (
+            item.get("constraint_type") == "duty"
+            or row["date"] == item["date"] and (not item["shift"] or row["shift"] == item["shift"])
+        )]
+        conflicts = [dict(date=row["date"], shift=row["shift"], schedule_id=row["schedule_id"])
+                     for row in matches if constraint_conflicts(row, item)]
+        covered = any(iso(period["starts_on"]) <= item["date"] <= iso(period["ends_on"]) for period in periods)
+        unknown_hours = bool(item.get("start_time") or item.get("end_time")) and any(
+            row["start"] is None or row["end"] is None for row in matches)
+        status = "conflict" if conflicts else "unchecked" if not covered or unknown_hours else "honored"
+        result.append(dict(item, id=ids.get(_key(item), ""),
+                           status=status, conflicts=conflicts))
+    return sorted(result, key=lambda row: (not bool(row["id"]), row["date"], row["employee"], row["shift"]))
+
+
+def constraints_report(repository, team_id, arguments, visible_week="", focused_id=""):
+    first, last = arguments.get("starts_on") or "", arguments.get("ends_on") or ""
+    period_id = arguments.get("schedule_id") or (focused_id if not first and not arguments.get("day") else "")
+    if period_id and not first:
+        period = repository.get_schedule(period_id, team_id)
+        first, last = iso(period["starts_on"]), iso(period["ends_on"])
+    elif not first:
+        first = arguments.get("day") or visible_week or ""
+        if not first:
+            raise RejectedPlan("בחרו שבוע או ציינו טווח תאריכים לדוח האילוצים")
+        last = first if arguments.get("day") else (datetime.date.fromisoformat(first) + datetime.timedelta(days=6)).isoformat()
+    if not last or first > last or (datetime.date.fromisoformat(last) - datetime.date.fromisoformat(first)).days > 92:
+        raise RejectedPlan("דוח אילוצים דורש טווח מלא של עד 93 ימים")
+    employee = arguments.get("employee") or ""
+    profile = repository.team_profile(team_id) or {}
+    if employee and employee not in {row["name"] for row in profile.get("employees") or []}:
+        raise RejectedPlan("העובד לא נמצא בצוות. השתמשו בשם המלא")
+    periods = [repository.get_schedule(row["id"], team_id) for row in repository.list_schedules(team_id)
+               if iso(row["starts_on"]) <= last and first <= iso(row["ends_on"])]
+    saved = repository.availability(team_id, first, last)
+    facts = constraint_facts(profile, periods, saved, first, last, employee)
+    pending = [row for row in repository.list_requests(team_id, status="pending")
+               if first <= iso(row["constraint_date"]) <= last and (not employee or row["employee"] == employee)]
+    return dict(tool="constraints_report", ok=True, starts_on=first, ends_on=last,
+                constraints=facts[:200], total=len(facts), truncated=len(facts) > 200,
+                pending_requests=pending[:100], pending_total=len(pending),
+                summary={status: sum(row["status"] == status for row in facts) for status in ("conflict", "honored", "unchecked")})
+
+
+def constraint_impact(profile, periods, saved, offered):
+    updated = edited_availability(saved, offered)
+    feedback, warnings = [], []
+    for date in sorted({row["date"] for row in offered}):
+        facts = constraint_facts(profile, periods, updated, date, date)
+        for item in (row for row in offered if row["date"] == date):
+            if item.get("action") == "remove":
+                feedback.append(dict(item, status="removed", conflicts=[]))
+                continue
+            fact = next(row for row in facts if _key(row) == _key(item))
+            feedback.append(fact)
+    for period in periods:
+        before = {warning_key(row) for row in audit_plan(profile, period, schedule_rows(period), saved, [])}
+        warnings.extend(dict(row, schedule_id=period["id"]) for row in
+                        audit_plan(profile, period, schedule_rows(period), updated, []) if warning_key(row) not in before)
+    return feedback, warnings

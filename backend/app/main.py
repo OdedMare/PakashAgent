@@ -2,34 +2,40 @@
 
 import logging
 import os
+import re
 import secrets
 import threading
+from typing import Optional
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.api.dependencies import Guards
 from app.api.routers import (
-    admin, employee, health, profile, schedules, settings,
-    workspace,
+    admin, complex as complex_router, employee, health, profile, schedules,
+    settings, workspace,
 )
 from app import worker as job_worker
 from app.bl.admin_service import AdminService
+from app.bl.complex_duties import ComplexDutyService
+from app.bl.complex_service import ComplexService, describe_action
 from app.bl.compiled_sources import SourceCompiler
 from app.bl.employee_service import EmployeeService
 from app.bl.profile_service import ProfileService
 from app.bl.schedule_service import ScheduleService
 from app.bl.workspace_service import WorkspaceService
-from app.bl.manager_chat import ManagerChatService
+from app.bl.chat.service import ManagerChatService
 from app.api.routers import manager_chat, replacements
 from app.common.config import Settings
 from app.common.errors import AppError, error_payload
-from app.common.events import TeamEvents
+from app.common.events import COMMANDER, TeamEvents
 from app.common.logging_setup import QUIET_401_METHODS, configure_logging
 from app.common.actor import acting_as, actor_of
 from app.common.sessions import (
-    ADMIN_COOKIE_NAME, COOKIE_NAME, MANAGER_COOKIE_NAME, read, read_admin,
+    ADMIN_COOKIE_NAME, COMMANDER_COOKIE_NAME, COOKIE_NAME, MANAGER_COOKIE_NAME,
+    ROLE_BOSS, read, read_admin, read_commander,
 )
 from app.common.throttle import LoginThrottle
 from app.dal.notify import PostgresSignals
@@ -79,7 +85,11 @@ session_secret = session_key(env, store, repository)
 # The guards ask the database whether a team is still active, so a team the
 # operator suspended or deleted stops working under cookies already issued
 # (D28). Cached briefly per team inside `Guards`.
-guards = Guards(session_secret, team_active=repository.team_is_active)
+guards = Guards(
+    session_secret, team_active=repository.team_is_active,
+    team_in_complex=repository.team_in_complex,
+    complex_active=repository.complex_is_active,
+)
 # One throttle for every password check in the process. Keys are namespaced
 # (`boss:`, `employee:`, `settings:`), so sharing it couples nothing.
 login_throttle = LoginThrottle(shared=repository)
@@ -96,6 +106,24 @@ if not admin_password:
         "the operator console is locked."
     )
 admin_service = AdminService(repository, workspace_service, admin_password, store=store)
+# A מכלול (D43): workplaces under one commander, whose password the
+# operator issues.
+complex_service = ComplexService(repository, workspace_service, schedule_service)
+
+
+def _tell_about_duty(team_id: str, complex_id: str, action: str) -> None:
+    """A duty the commander set or cancelled reaches the soldier's team
+    commander like any other commander write (D43). Never fails the write."""
+    try:
+        complex_service.record(team_id, complex_id, action)
+        team_events.publish(team_id, COMMANDER)
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("commander notice not recorded: %s", exc)
+
+
+complex_duty_service = ComplexDutyService(
+    repository, complex_service, notify=_tell_about_duty, schedules=schedule_service,
+)
 
 
 def startup() -> None:
@@ -156,7 +184,8 @@ async def bind_model_team(request: Request, call_next):
     """Carry the signed workspace into the cross-process LLM quota, and who
     is acting into the change log (`common/actor.py`)."""
     try:
-        session = read(session_secret, request.cookies.get(COOKIE_NAME)) or {}
+        session = _commander_in_path(request) or \
+            read(session_secret, request.cookies.get(COOKIE_NAME)) or {}
         manager = read(session_secret, request.cookies.get(MANAGER_COOKIE_NAME))
         actor = actor_of(session, manager) if session else (
             "admin" if read_admin(session_secret, request.cookies.get(ADMIN_COOKIE_NAME))
@@ -167,7 +196,51 @@ async def bind_model_team(request: Request, call_next):
         # database down, `/api/health` must still answer and say so.
         session, actor = {}, ""
     with model_team(session.get("team_id", "")), acting_as(actor):
-        return await call_next(request)
+        response = await call_next(request)
+    if session.get("commander") and response.status_code < 400:
+        await _tell_the_manager(request, session)
+    return response
+
+
+_COMMANDER_CHAT = re.compile(r"^/api/complex/teams/([^/]+)(/chats.*)$")
+
+
+def _commander_in_path(request: Request) -> Optional[dict]:
+    """The commander's chat with one משמרת (`/api/complex/teams/<id>/chats`)
+    names its team in the path, not the cookie: bill that team's model
+    quota and log its writes as the commander's. Only for these lines --
+    the route's own guard still refuses a team outside the מכלול."""
+    found = _COMMANDER_CHAT.match(request.url.path)
+    commander = found and read_commander(
+        session_secret, request.cookies.get(COMMANDER_COOKIE_NAME))
+    if not commander:
+        return None
+    return {"team_id": found.group(1), "role": ROLE_BOSS,
+            "commander": commander["complex_id"]}
+
+
+async def _tell_the_manager(request: Request, session: dict) -> None:
+    """A commander's write inside a workplace is told to its manager (D43):
+    a notice row, and a signal that wakes the manager's open screen. Never
+    fails the request that caused it -- the write already happened."""
+    path = request.url.path
+    chat = _COMMANDER_CHAT.match(path)
+    if chat:
+        # The same conversation as `/api/agent/chats`, reached from the
+        # מכלול screen: told in the same words.
+        path = "/api/agent" + chat.group(2)
+    action = describe_action(request.method, path)
+    if action is None or not path.startswith("/api/") \
+            or path.startswith("/api/complex"):
+        return
+    try:
+        await run_in_threadpool(
+            complex_service.record,
+            session["team_id"], session["commander"], action,
+        )
+        team_events.publish(session["team_id"], COMMANDER)
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("commander notice not recorded: %s", exc)
 
 app.include_router(health.build_router(repository))
 app.include_router(
@@ -179,12 +252,21 @@ app.include_router(
 app.include_router(
     admin.build_router(
         admin_service, guards, session_secret, env.admin_session_hours,
-        login_throttle,
+        login_throttle, complexes=complex_service,
+    )
+)
+app.include_router(
+    complex_router.build_router(
+        complex_service, guards, session_secret, env.session_days,
+        login_throttle, duties=complex_duty_service,
     )
 )
 app.include_router(schedules.build_router(schedule_service, guards))
 app.include_router(profile.build_router(profile_service, guards, schedule_service))
 app.include_router(manager_chat.build_router(manager_chat_service, repository, guards))
+app.include_router(
+    manager_chat.build_commander_router(manager_chat_service, repository, guards)
+)
 app.include_router(replacements.build_router(manager_chat_service, guards))
 app.include_router(
     settings.build_router(

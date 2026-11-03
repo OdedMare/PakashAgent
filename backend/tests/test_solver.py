@@ -458,3 +458,70 @@ def test_a_counted_member_whose_role_no_shift_names_is_still_not_placed():
     profile["employees"][2]["counts_toward_staffing"] = True
 
     assert _shadowed(generate_span(profile, "2026-08-16", "2026-08-22")) == []
+
+
+def test_phase_two_gets_the_time_phase_one_did_not_use():
+    """Coverage is proven in a fraction of its share; the rest goes to the
+    phase that weighs wishes and fairness, not to waste."""
+    people = [{"name": name} for name in ("אבי", "בני", "גדי", "דני", "הדר", "ורד")]
+    result = generate_span(_plain(people, headcount=2), "2026-09-01", "2026-09-14",
+                           time_limit=2.0)
+
+    phases = result["metrics"]["phases"]
+    assert phases["coverage"]["status"] == "optimal"
+    assert phases["coverage"]["limit_ms"] <= 600
+    assert phases["balance"]["limit_ms"] >= 2000 - phases["coverage"]["wall_ms"] - 50
+    assert phases["balance"]["limit_ms"] > 1400
+
+
+def test_metrics_say_how_far_the_answer_may_be_from_optimal():
+    result = generate_span(_plain([{"name": "אבי"}, {"name": "בני"}]), "2026-09-01", "2026-09-03")
+
+    metrics = result["metrics"]
+    for phase in metrics["phases"].values():
+        assert phase["gap"] == phase["objective"] - phase["bound"] >= 0
+        assert {"wall_ms", "conflicts", "branches", "gap_pct"} <= set(phase)
+    assert metrics["bound"] <= metrics["objective"]
+    assert metrics["solver_ms"] == sum(p["wall_ms"] for p in metrics["phases"].values())
+    if metrics["solver_status"] == "optimal":
+        assert metrics["gap_pct"] == 0
+
+
+def test_a_rebuild_that_keeps_a_board_reports_its_held_phase_too():
+    profile = _plain([{"name": name} for name in ("אבי", "בני", "גדי", "דני")], headcount=2)
+    board = generate_span(profile, "2026-09-01", "2026-09-07", time_limit=1.0)["assignments"]
+
+    result = generate_span(profile, "2026-09-01", "2026-09-07", keep=board, time_limit=2.0)
+
+    phases = result["metrics"]["phases"]
+    assert set(phases) == {"coverage", "held", "balance"}
+    assert phases["balance"]["limit_ms"] >= 800
+
+
+def test_a_short_team_fills_the_plan_in_order_and_leaves_the_gaps_at_the_end():
+    """Four people capped at 48 hours a week cannot hold three shifts a day
+    for a week. The seats left empty should be the last ones — Sunday to
+    Thursday full, the gaps together at the end — not a full day, an empty
+    night and a full day again scattered across the week."""
+    shifts = [("בוקר", "07:00", "15:00"), ("ערב", "15:00", "23:00"), ("לילה", "23:00", "07:00")]
+    profile = {
+        "workplace": {"name": "יחידה"},
+        "audit_policy": {"max_weekly_hours": 48},
+        "employees": [{"name": name} for name in ["אבי", "בני", "גדי", "דני"]],
+        "shifts": [{"name": name, "start_time": start, "end_time": end, "days": [],
+                    "staffing": [{"days": [], "headcount": 2, "required_roles": []}]}
+                   for name, start, end in shifts],
+    }
+
+    result = generate_span(profile, "2026-11-08", "2026-11-14")
+
+    filled = {}
+    for row in result["assignments"]:
+        filled[(row["date"], row["shift"])] = filled.get((row["date"], row["shift"]), 0) + 1
+    order = [(slot["slot_date"], slot["shift_name"]) for slot in sorted(
+        result["slots"], key=lambda slot: (slot["slot_date"], [s[0] for s in shifts].index(slot["shift_name"])))]
+    seats = [filled.get(key, 0) for key in order]
+    first_gap = next(number for number, seat in enumerate(seats) if seat < 2)
+    assert first_gap >= 12
+    assert all(seat == 2 for seat in seats[:first_gap])
+    assert sum(seats[first_gap + 1:]) <= 2

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { CommanderArea, CommanderBar } from "@/components/Complex";
 import { CrewLoading } from "@/components/Crew";
 import { Employee } from "@/components/Employee";
 import { Management } from "@/components/Management";
@@ -24,8 +25,23 @@ export function Workspace({ memberToken }: { memberToken?: string }) {
 
   // The first `me` call has not answered yet. Rendering the login screen here
   // would flash it at a boss who is already signed in.
-  if (workspace === undefined) {
+  if (workspace === undefined || state.commander === undefined) {
     return <CrewLoading label="רגע, מכינים הכול…" />;
+  }
+
+  // The מכלול commander between משמרות (D43): the combined board. Once they
+  // enter one, the team session below takes over. A manager's own session
+  // in this browser still wins, as it did before the מכלול existed.
+  const ownTeam = Boolean(workspace && !workspace.commander);
+  if (state.commander && !ownTeam && !state.inside) {
+    return (
+      <CommanderArea
+        commander={state.commander}
+        busy={state.busy}
+        onEnter={state.enterTeam}
+        onLogout={state.commanderLogout}
+      />
+    );
   }
 
   if (workspace === null) {
@@ -35,6 +51,7 @@ export function Workspace({ memberToken }: { memberToken?: string }) {
         error={state.error}
         onLogin={state.login}
         onEmployeeLogin={state.employeeLogin}
+        onCommanderLogin={state.commanderLogin}
         onDismissError={state.clearError}
       />
     );
@@ -64,34 +81,51 @@ function BossSurface({
 }) {
   const [editingSetup, setEditingSetup] = useState(false);
   const taught = Boolean(workspace.profile);
+  // The commander inside a workplace (D43): the same screens, under a strip
+  // that says so and leads back. Signing out signs the commander out.
+  const commanding = Boolean(workspace.commander);
+  const bar = commanding ? (
+    <CommanderBar
+      complexName={workspace.complex?.name ?? ""}
+      teamName={workspace.name}
+      busy={state.busy}
+      onBack={() => void state.leaveTeam()}
+    />
+  ) : null;
 
   if (!taught || editingSetup) {
     return (
-      <ManualSetup
-        workspace={workspace}
-        onCancel={taught ? () => setEditingSetup(false) : undefined}
-        onDone={async () => {
-          setEditingSetup(false);
-          await state.refresh();
-        }}
-      />
+      <>
+        {bar}
+        <ManualSetup
+          workspace={workspace}
+          onCancel={taught ? () => setEditingSetup(false) : undefined}
+          onDone={async () => {
+            setEditingSetup(false);
+            await state.refresh();
+          }}
+        />
+      </>
     );
   }
 
   return (
-    <Management
-      workspace={workspace}
-      busy={state.busy}
-      onLogout={state.logout}
-      onRotateLink={state.rotateLink}
-      onOpenManualSetup={async () => {
-        // The profile and its revision were read at sign-in; the board,
-        // the chat and the roster have saved over it since. Setup reads its
-        // form from them once, on mount, and names the revision on save.
-        await state.refresh();
-        setEditingSetup(true);
-      }}
-    />
+    <>
+      {bar}
+      <Management
+        workspace={workspace}
+        busy={state.busy}
+        onLogout={commanding ? state.commanderLogout : state.logout}
+        onRotateLink={state.rotateLink}
+        onOpenManualSetup={async () => {
+          // The profile and its revision were read at sign-in; the board,
+          // the chat and the roster have saved over it since. Setup reads its
+          // form from them once, on mount, and names the revision on save.
+          await state.refresh();
+          setEditingSetup(true);
+        }}
+      />
+    </>
   );
 }
 

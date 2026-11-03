@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 
-from app.bl.scheduler import build_slots, plan_spans
+from app.bl.scheduler import build_slots, plan_spans, with_staffing_overrides
 from app.bl.schedule_service.constants import ACTION_GENERATED, ACTION_OPENED
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.generation.job import GenerationJob
@@ -32,6 +32,7 @@ class PeriodBuilder:
         ends_on: Optional[str] = None,
         instructions: str = "",
         required_assignments: Optional[List[dict]] = None,
+        staffing_overrides: Optional[List[dict]] = None,
     ) -> dict:
         """Solve a period in this request and store it as a draft.
 
@@ -42,6 +43,10 @@ class PeriodBuilder:
         """
         profile = self._gate.buildable_profile(team_id)
         starts_on, ends_on = _bounds(starts_on, ends_on)
+        profile = with_staffing_overrides(profile, staffing_overrides)
+        _require_staffing_slots(
+            staffing_overrides, build_slots(profile, starts_on, ends_on),
+        )
         result = self._scheduler.generate_verified(
             profile, starts_on, ends_on,
             availability=self._repository.availability(team_id, starts_on, ends_on),
@@ -49,6 +54,7 @@ class PeriodBuilder:
             instructions=instructions,
             required_assignments=required_assignments,
             preferences=self._context.active_preferences(team_id),
+            duties=self._history.duties(team_id, starts_on, ends_on),
         )
         schedule_id = self._store(team_id, starts_on, ends_on, result)
         self._repository.append_change(
@@ -100,6 +106,7 @@ class PeriodBuilder:
         build_from: Optional[str] = None,
         build_through: Optional[str] = None,
         shifts: Optional[List[str]] = None,
+        staffing_overrides: Optional[List[dict]] = None,
     ) -> dict:
         """Open a persistent range job; each later request generates one span.
 
@@ -110,8 +117,10 @@ class PeriodBuilder:
         """
         profile = self._gate.buildable_profile(team_id)
         starts_on, ends_on = _bounds(starts_on, ends_on)
+        profile = with_staffing_overrides(profile, staffing_overrides)
         first, last = _build_range(starts_on, ends_on, build_from, build_through)
         slots = build_slots(profile, starts_on, ends_on)
+        _require_staffing_slots(staffing_overrides, slots)
         if not slots:
             raise AgentError(
                 "לא ניתן לבנות סידור: לא הוגדרו משמרות לתקופה הזו"
@@ -131,6 +140,7 @@ class PeriodBuilder:
             instructions=instructions,
             required=required_assignments or [],
             shifts=chosen,
+            staffing_overrides=staffing_overrides,
         )
         schedule = self._repository.set_generation(
             schedule["id"], team_id, job.to_dict()
@@ -182,6 +192,16 @@ def _bounds(starts_on: Optional[str], ends_on: Optional[str]) -> tuple:
     if not starts_on or not ends_on:
         return week_bounds()
     return starts_on, ends_on
+
+
+def _require_staffing_slots(overrides: Optional[List[dict]], slots: List[dict]) -> None:
+    available = {(slot["shift_name"], slot["slot_date"]) for slot in slots}
+    keys = [(row.get("shift"), row.get("date")) for row in overrides or []]
+    requested = set(keys)
+    if len(keys) != len(requested):
+        raise AgentError("אותה משמרת ותאריך הוגדרו יותר מפעם אחת")
+    if not requested.issubset(available):
+        raise AgentError("תקינה מיוחדת הוגדרה למשמרת שאינה פועלת בתאריך שנבחר")
 
 
 def _build_range(

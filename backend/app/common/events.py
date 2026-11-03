@@ -28,6 +28,8 @@ REQUESTS = "requests"
 SWAPS = "swaps"
 # A manager-chat turn moved: a check finished, the draft grew, or it ended.
 CHAT = "chat"
+# The commander of the workplace's מכלול changed something in it (D43).
+COMMANDER = "commander"
 
 _Subscriber = Tuple[asyncio.AbstractEventLoop, "asyncio.Queue[str]"]
 

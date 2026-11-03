@@ -13,6 +13,14 @@ class RequiredAssignment(BaseModel):
     date: str = Field(min_length=1, max_length=20)
 
 
+class StaffingOverride(BaseModel):
+    """One date whose required seats differ from the shift's normal staffing."""
+
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    shift: str = Field(min_length=1, max_length=200)
+    headcount: int = Field(ge=0, le=100)
+
+
 class GenerateRequest(BaseModel):
     """Build a period. Omitted dates mean the current week."""
 
@@ -29,6 +37,7 @@ class GenerateRequest(BaseModel):
     )
     # Only these shift types are built ("only the nights"); empty means all.
     shifts: List[str] = Field(default=[], max_length=50)
+    staffing_overrides: List[StaffingOverride] = Field(default=[], max_length=100)
 
 
 class GenerateDayRequest(BaseModel):
@@ -49,6 +58,7 @@ class GenerateRangeRequest(BaseModel):
     keep_existing: bool = False
     # Only these shift types are rebuilt; rows on the others stand.
     shifts: List[str] = Field(default=[], max_length=50)
+    staffing_overrides: List[StaffingOverride] = Field(default=[], max_length=100)
 
 
 class BlankRequest(BaseModel):

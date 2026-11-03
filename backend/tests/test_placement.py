@@ -388,3 +388,18 @@ def test_shift_names_come_from_the_profile(shift):
     """
     result = check(_schedule(), PROFILE, YOSSI, shift, "2026-08-17")
     assert result["blocking"] is False
+
+
+def test_alternatives_without_nearby_slots_offer_the_same_colleagues():
+    """The replacement tab asks only who could cover; skipping the second
+    half must not change the first."""
+    schedule = _schedule([_assignment("a1", RON, MORNING, "2026-08-17")])
+    full = suggest_alternatives(
+        schedule, PROFILE, RON, MORNING, "2026-08-17", moving_assignment_id="a1",
+    )
+    lean = suggest_alternatives(
+        schedule, PROFILE, RON, MORNING, "2026-08-17", moving_assignment_id="a1",
+        nearby=False,
+    )
+    assert full["slots"] and lean["slots"] == []
+    assert lean["employees"] == full["employees"]

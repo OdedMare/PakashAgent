@@ -8,7 +8,7 @@
  *  Steps point at `data-tour` attributes on real elements rather than at
  *  class names, so restyling a screen cannot silently detach the tour. */
 
-export type Surface = "setup" | "manager" | "employee" | "member";
+export type Surface = "setup" | "manager" | "employee" | "member" | "commander";
 
 export interface TourStep {
   /** The `data-tour` value of the element to spotlight. */
@@ -26,6 +26,32 @@ export interface TourStep {
 }
 
 export const TOURS: Partial<Record<Surface, TourStep[]>> = {
+  // The מכלול commander's combined board (D43).
+  commander: [
+    {
+      target: "cmd-nav",
+      title: "המכלול כולו, במקום אחד",
+      body: "‘סוכן המכלול’ פותח את הסוכן ליד הלוח — כמו אצל מפקד המשמרת. ב‘כל המכלול’ הודעה אחת נשלחת לסוכן של כל משמרת שהיא נוגעת בה, וכל תוכנית מאושרת בנפרד; לכל משמרת יש גם לשונית שיחה משלה. ‘לוח המכלול’ מציג את כל המשמרות זו לצד זו, ‘תורנויות’ משבץ חיילים מכל המשמרות — ידנית או ב‘מלא בהוגנות’, במרווחים גדולים — ו‘סטטיסטיקות’ ו‘שינויים’ הם הכלים של כל משמרת. מתחת — רשימת המשמרות.",
+    },
+    {
+      target: "cmd-coverage",
+      title: "מצב המכלול במבט אחד",
+      body: "איוש, מקומות פתוחים, משמרות שפורסמו וחיילים משובצים — סכום של כל המשמרות בטווח שעל המסך.",
+      optional: true,
+    },
+    {
+      target: "cmd-focus",
+      title: "סינון הלוח",
+      body: "משמרת, סוג משמרת, חייל אחד או ‘רק חוסרים’ — למשל רק הלילות, או רק איפה שחסרים אנשים. גם לחיצה על שם סוג משמרת בלוח מסננת לפיו. הסינון משנה רק את התצוגה; האריחים למעלה ממשיכים לספור הכול.",
+      optional: true,
+    },
+    {
+      target: "cmd-grid",
+      title: "הלוח קורא, המשמרת עורכת",
+      body: "כל משמרת עם החוקים, האילוצים והסולבר שלה. משנים דרך הסוכן — ‘סוכן’ בראש כל משמרת פותח את השיחה שלה — או ב‘כניסה לניהול’, עם כל הכלים של מפקד המשמרת. כל שינוי שלכם נשלח גם למפקד המשמרת.",
+      optional: true,
+    },
+  ],
   setup: [
     {
       target: "setup-workplace",
@@ -286,6 +312,31 @@ export const GLOSSARY: GlossaryEntry[] = [
     audience: ["manager", "team"],
   },
   {
+    term: "מכלול",
+    definition: "כמה משמרות עצמאיות שמתחברות למשמרת אחת גדולה. לכל משמרת מפקד, חוקים ואילוצים משלה; מעליהן מפקד המכלול. צוות משמרות זהב פותח מכלול ומנפיק את סיסמת המפקד.",
+    audience: ["manager"],
+  },
+  {
+    term: "מפקד/ת מכלול",
+    definition: "רואה את כל משמרות המכלול בלוח אחד ונכנס/ת לכל אחת מהן עם כל הכלים של מפקד המשמרת. כל שינוי שלו/ה נשלח למפקד אותה משמרת.",
+    audience: ["manager"],
+  },
+  {
+    term: "תורנות מכלול",
+    definition: "תורנות (מטבח, שמירה…) שמפקד/ת המכלול משבץ/ת אליה חייל/ת ליום שלם. היא חוסמת את החייל/ת לכל היום במשמרת שלו/ה, גם בלילה שלפני שמסתיים בבוקר, ונספרת בהוגנות ובסטטיסטיקה כמשמרת לפי המשקל שלה. רק מפקד/ת המכלול מבטל/ת אותה.",
+    audience: ["manager"],
+  },
+  {
+    term: "מלא בהוגנות",
+    definition: "הצעה של המערכת לכל מקום פנוי בתורנויות: הכי מעט תורנויות ב־8 השבועות האחרונים קודם, אחר כך סופ״ש, מי שאין לו/ה משמרת שהתורנות תחסום, ומי שעבד/ה הכי פחות. מי שבבית, עם אילוץ או בתורנות אחרת לא מוצע. שום דבר לא נשמר עד האישור.",
+    audience: ["manager"],
+  },
+  {
+    term: "רישום תורנות",
+    definition: "תורנות שכבר נעשתה, לפני המערכת או מחוצה לה. נספרת בהוגנות ובסטטיסטיקה ולא חוסמת שום יום.",
+    audience: ["manager"],
+  },
+  {
     term: "כוננות",
     definition: "משמרת כונן, למשל כונן לילה. איך היא נספרת לשעות ולהוגנות נקבע בהגדרת היחידה.",
     audience: ["manager", "team"],
@@ -339,7 +390,7 @@ export const GLOSSARY: GlossaryEntry[] = [
 
 export function glossaryFor(surface: Surface | null): GlossaryEntry[] {
   // Nobody signed in yet: show everything, the visitor may be either.
-  if (surface === null || surface === "setup" || surface === "manager") {
+  if (surface === null || surface === "setup" || surface === "manager" || surface === "commander") {
     return GLOSSARY;
   }
   return GLOSSARY.filter((entry) => entry.audience.includes("team"));

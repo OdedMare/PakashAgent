@@ -10,9 +10,13 @@ import { useEffect, useRef, useState } from "react";
  *  Escape and on any pointer outside it, like the help panel. */
 export function AccountMenu({
   name,
+  role = "מנהל/ת",
   onLogout,
 }: {
   name: string;
+  /** Who is signed in, under the name: a manager, a shift commander, or a
+   *  מכלול commander (D43). */
+  role?: string;
   onLogout?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -63,7 +67,7 @@ export function AccountMenu({
         <div className="account-menu-panel" role="menu" aria-label="אפשרויות חשבון">
           <div className="account-menu-head">
             <strong>{name}</strong>
-            <span>מנהל/ת</span>
+            <span>{role}</span>
           </div>
           {onLogout ? (
             <button

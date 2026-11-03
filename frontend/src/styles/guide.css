@@ -248,6 +248,8 @@ kbd {
 .guide-search input {
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  padding: 0;
   height: 38px;
   border: 0;
   background: none;

@@ -1,5 +1,9 @@
 """Who should cover an absent person's shifts, spread as evenly as possible.
 
+Candidates arrive in stages (`placement/tiers.py`): the same role from the
+seat's own post, then the same role from another post, then anyone else.
+The fair pick is the lightest of the earliest stage that has a clean one.
+
 **No model, no write.** Candidates come from `find_replacements`, which
 already keeps only people the placement checks pass. What this adds is the
 *whole* absence at once: two shifts are not two independent questions,
@@ -13,7 +17,7 @@ stack into a double booking or a short rest.
 from typing import Dict, List, Optional
 
 from app.bl.audit import shift_stats
-from app.bl.chat_contract import GAP_CODES, audit_plan, changed_rows
+from app.bl.chat.contract import GAP_CODES, audit_plan, changed_rows
 from app.bl.shared import iso, warning_key
 from app.bl.tools import ScheduleTools
 
@@ -72,6 +76,9 @@ class AbsenceOptions:
             result = self._tools.run(team_id, "find_replacements", {
                 "schedule_id": schedule["id"], "employee": employee,
                 "shift_name": row["shift"], "slot_date": date,
+                # Only the colleagues are shown; where the absent person could
+                # go instead is no question an absence asks.
+                "include_other_slots": False,
             })
             slot = fill.slot(row, schedule, result.get("candidates") or [],
                              picks.get((date, row["shift"]), ""))
@@ -125,9 +132,11 @@ class _Fill:
     def _ranked(self, candidates: List[dict]) -> List[dict]:
         load = self._load()
         ranked = [dict(item, **load.get(item["employee"], {})) for item in candidates]
-        # Fairness is the number of shifts and nights, not hours (`solver/fairness.py`).
+        # In stages first (`placement/tiers.py`): the same role from this
+        # post, then from another, then anyone else. Inside a stage, fairness
+        # is the number of shifts and nights, not hours (`solver/fairness.py`).
         ranked.sort(key=lambda item: (
-            item.get("shifts", 0), item.get("nights", 0), item["employee"],
+            item.get("tier", 0), item.get("shifts", 0), item.get("nights", 0), item["employee"],
         ))
         for item in ranked:
             item["why"] = "%d משמרות · %d לילות בתקופה" % (

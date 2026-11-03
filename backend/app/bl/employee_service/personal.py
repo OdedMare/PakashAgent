@@ -1,8 +1,10 @@
 """One person's own view: hours, shifts, teammates, and what changed (D16)."""
 
+import datetime
 from typing import Any, Dict, List
 
 from app.bl.audit import personal_summary
+from app.common.time_context import israel_today
 from app.bl.employee_service.values import (
     iso_date, shifts, text, window,
 )
@@ -50,7 +52,21 @@ class PersonalView:
             "changes": changes,
             "unseen": sum(1 for row in changes if row.get("is_new")),
             "shifts": shifts(profile),
+            "duties": self._duties(team_id, employee),
         }
+
+    def _duties(self, team_id: str, employee: str) -> List[dict]:
+        """Their own מכלול duties, from a week back to eight weeks ahead
+        (D44). A duty is set by the מכלול commander for the whole day, so
+        unlike a shift it is shown whether or not a week is published."""
+        reader = getattr(self._repository, "team_complex_duties", None)
+        if reader is None:
+            return []
+        today = israel_today()
+        rows = reader(team_id, (today - datetime.timedelta(days=7)).isoformat(),
+                      (today + datetime.timedelta(days=56)).isoformat(), employee=employee)
+        return [{"duty_date": iso_date(row["duty_date"]), "duty_type": row["duty_type"],
+                 "blocks": bool(row.get("blocks", True))} for row in rows]
 
     def acknowledge(self, team_id: str, employee: str) -> dict:
         """Mark what the employee was just shown as read (D16).

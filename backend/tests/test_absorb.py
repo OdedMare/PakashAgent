@@ -134,6 +134,22 @@ def test_a_range_job_keeping_the_board_adds_the_new_shift_to_the_grid():
     assert _moved(week["assignments"], after["assignments"]) == 0
 
 
+def test_a_temporary_new_shift_is_absorbed_only_inside_its_date_window():
+    service, repo, _ = _service()
+    repo.profiles[TEAM] = _profile(PLATOON)
+    week = _built_week(service)
+    grown = _profile(PLATOON, shifts=(MORNING, EVENING, NIGHT))
+    grown["shifts"][-1].update(starts_on="2026-11-04", ends_on="2026-11-06")
+    repo.profiles[TEAM] = grown
+
+    service.start_range_generation(TEAM, week["id"], "2026-11-03", WEEK[1], keep_existing=True)
+    after = service.generate_next(TEAM, week["id"])
+
+    nights = {row["slot_date"] for row in after["slots"] if row["shift_name"] == NIGHT}
+    assert nights == {"2026-11-04", "2026-11-05", "2026-11-06"}
+    assert len([row for row in after["assignments"] if row["shift"] == NIGHT]) == 6
+
+
 # -- saving the profile ------------------------------------------------------
 
 def test_what_a_save_added_is_new_active_people_and_new_shifts():

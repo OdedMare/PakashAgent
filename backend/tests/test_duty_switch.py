@@ -180,3 +180,12 @@ def test_switching_back_on_fits_the_soldier_into_the_drafts():
     launcher.run_next()
     after = service.get(draft["id"], TEAM)
     assert Counter(row["employee"] for row in after["assignments"])["א"] == 4
+
+
+def test_a_switched_off_reservist_is_owed_no_minimum():
+    from app.bl.solver.competence import reserve_minimum
+
+    reservist = {"name": "א", "service_type": "reserve", "reserve_min_days": 2}
+
+    assert reserve_minimum(reservist) == 2
+    assert reserve_minimum(dict(reservist, on_duty=False)) is None

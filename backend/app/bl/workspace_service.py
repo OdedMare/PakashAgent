@@ -64,7 +64,9 @@ class WorkspaceService:
             if row.get("active", True)
         ]
 
-    def describe(self, team_id: str, role: str) -> dict:
+    def describe(
+        self, team_id: str, role: str, commander: Optional[str] = None,
+    ) -> dict:
         """The workspace as the current visitor is allowed to see it.
 
         The member token is part of a boss's view (it is the link they hand
@@ -75,6 +77,11 @@ class WorkspaceService:
         view = _public(team, role=role, include_token=(role == ROLE_BOSS))
         view["profile_revision"] = self._repository.team_profile_revision(team_id)
         view["profile"] = self._repository.team_profile(team_id)
+        # The מכלול, for a boss only (D43): a member has no use for it.
+        team_complex = getattr(self._repository, "team_complex", None)
+        if role == ROLE_BOSS and team_complex is not None:
+            view["complex"] = team_complex(team_id)
+        view["commander"] = bool(commander)
         return view
 
     def rotate_member_link(self, team_id: str) -> dict:

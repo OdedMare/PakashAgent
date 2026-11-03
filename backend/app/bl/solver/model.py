@@ -41,6 +41,12 @@ SPACING = 4
 BACK_TO_BACK = 50
 # The terms phase one of a solve settles before anything else is weighed.
 COVERAGE = ("unfilled", "role", "manager")
+# When seats must stay empty, the ones left empty are the latest: the
+# schedule is filled in order, shift after shift, and stops where the people
+# run out — rather than a full day, an empty night and a full day again.
+# A seat empty at the k-th slot from the end costs k³ (`Model.gaps`), settled
+# by its own phase after coverage and before anything else, so it never
+# costs a seat and nothing weighed later can scatter the gaps again.
 # Hours are integers in the model: tenths of an hour (the weekly-hours rule);
 # shifts and nights count ten to a unit likewise.
 HOUR_SCALE = 10
@@ -62,6 +68,7 @@ class Model:
             for number, key in enumerate(sorted(problem.legal))
         }
         self.terms: List[Term] = []
+        self.gaps: list = []
         self._worked: Dict[Tuple[str, str], object] = {}
         self.by_slot: Dict[int, Dict[str, cp_model.IntVar]] = {}
         self.by_person: Dict[str, Dict[int, cp_model.IntVar]] = {}

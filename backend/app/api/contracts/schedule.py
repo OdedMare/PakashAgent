@@ -95,6 +95,7 @@ class GenerationProgress(BaseModel):
     engine: str = ""
     # The shift types this build covers ("only the nights"); empty for all.
     shifts: List[str] = []
+    staffing_overrides: List[Dict[str, Any]] = []
     # When a worker last said it was still on this job, UTC ISO-8601. Empty
     # on a job opened before this field existed, which the client reads as
     # "cannot tell" rather than as "stalled".

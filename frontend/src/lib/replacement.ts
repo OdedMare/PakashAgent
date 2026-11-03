@@ -4,7 +4,9 @@
  *  (`bl/absence/selections.py`, `bl/absence/reader.py`) to build the plan
  *  without a model round. Change it here and there together. */
 
-export const ABSENCE_REASONS = ["חולה", "בחופשה", "במילואים", 'בחו"ל', "לא זמין/ה"] as const;
+// "לא זמין/ה" first and the default: most of the time the manager only
+// knows the person is out, not why, and should not have to pick a reason.
+export const ABSENCE_REASONS = ["לא זמין/ה", "חולה", "בחופשה", "במילואים", 'בחו"ל'] as const;
 export type AbsenceReason = typeof ABSENCE_REASONS[number];
 
 export function selectionSentence(employee: string, shift: string, date: string, replacing?: string): string {

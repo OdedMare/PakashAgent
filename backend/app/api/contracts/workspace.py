@@ -42,3 +42,7 @@ class TeamView(Workspace):
     profile: Optional[Dict[str, Any]] = None
     # What a profile save names as `expected_revision` (see ProfileUpdate).
     profile_revision: Optional[int] = None
+    # The מכלול this workplace belongs to, if any: {"id", "name"} (D43).
+    complex: Optional[Dict[str, Any]] = None
+    # True when the boss session is the commander's, not the manager's.
+    commander: bool = False

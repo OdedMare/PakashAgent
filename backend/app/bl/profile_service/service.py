@@ -6,6 +6,8 @@ from typing import Any, Callable, Dict, List, Optional
 from app.bl import compiled_sources
 from app.bl.profile_service import roster
 from app.bl.profile_service import shifts as shift_rules
+from app.bl.profile_service import roster_import
+from app.bl.profile_service import unit as unit_rules
 from app.bl.profile_service import workplace as workplace_rules
 from app.bl.profile_service.retire import retire_shift
 from app.bl.profile_service.validation import keep_existing_names, text, text_list
@@ -18,7 +20,7 @@ _TEXT_SECTIONS = (
     "rest_policy", "weekend_policy", "fairness_policy", "conflict_policy",
     "existing_schedule_source", "summary",
 )
-_OBJECT_SECTIONS = ("training_policy", "audit_policy")
+_OBJECT_SECTIONS = ("training_policy", "audit_policy", "unit_policy")
 
 
 class ProfileService:
@@ -69,6 +71,23 @@ class ProfileService:
         # are translated for the code scheduler by the worker (D32).
         compiled_sources.queue(self._repository, team_id)
         return saved
+
+    def import_roster(self, team_id: str, raw: str, options: Optional[dict] = None,
+                      apply: bool = False) -> dict:
+        """Another app's unit roster, merged into this profile
+        (`roster_import.py`). A preview writes nothing; `apply` saves it."""
+        options = options or {}
+        patch = roster_import.build_patch(raw, self.current(team_id), options)
+        if not apply:
+            return patch
+        unit_name = text(options.get("unit_name"))
+        saved = self.update(
+            team_id, employees=patch["employees"], shifts=patch["shifts"],
+            unit_policy=patch["unit_policy"],
+            workplace={"name": unit_name} if unit_name else None,
+            expected_revision=options.get("expected_revision"),
+        )
+        return dict(patch, profile=saved)
 
     def revision(self, team_id: str) -> Optional[int]:
         """What a save names to refuse a stale edit. A read."""
@@ -186,6 +205,7 @@ def _apply_sections(updated: dict, sections: Dict[str, Any]) -> None:
             raise AgentError("פרטי המדיניות אינם תקינים")
         updated[key] = (
             workplace_rules.audit_policy(sections[key]) if key == "audit_policy"
+            else unit_rules.unit_policy(sections[key]) if key == "unit_policy"
             else dict(sections[key])
         )
     for key in _TEXT_SECTIONS:

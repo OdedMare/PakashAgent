@@ -10,7 +10,7 @@ at their target gains nothing and costs the keep, so it does not. A new
 soldier therefore takes shifts only from whoever carries more than their
 share, and only until the load is even; a new shift is filled without
 reshuffling the rows around it unless coverage demands it. Coverage is
-still settled first (`solve._two_phases`), so a kept row never holds a seat
+still settled first (`solve._phases`), so a kept row never holds a seat
 empty.
 """
 

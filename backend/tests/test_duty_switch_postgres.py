@@ -41,6 +41,11 @@ def _sql(schema, statement, args=()):
             else connection.execute(statement, args)
 
 
+def _roster(schema, team):
+    """Read from the table: the repository keeps a profile cache (D45)."""
+    return _sql(schema, "SELECT profile FROM team_profiles WHERE team_id = %s", (team,))[0][0]["employees"]
+
+
 def test_people_out_of_the_roster_come_back_switched_off_once(schema):
     repository = Repository(SimpleNamespace(get=lambda: _settings(schema)))
     repository.initialize()
@@ -52,20 +57,22 @@ def test_people_out_of_the_roster_come_back_switched_off_once(schema):
         {"name": "יצא", "inactive_from": "2026-01-01", "role": "לוחם"},
         {"name": "יוצא בעתיד", "inactive_from": future},
         {"name": "פעיל"},
+        {"name": "לא בפול", "inactive_from": future, "notes": "לא זמין/ה: לא בפול"},
     ]})
 
     Repository(SimpleNamespace(get=lambda: _settings(schema))).initialize()
 
-    people = {row["name"]: row for row in repository.team_profile(team)["employees"]}
-    assert list(people) == ["יצא", "יוצא בעתיד", "פעיל"]
+    people = {row["name"]: row for row in _roster(schema, team)}
+    assert list(people) == ["יצא", "יוצא בעתיד", "פעיל", "לא בפול"]
     assert people["יצא"] == {"name": "יצא", "role": "לוחם", "on_duty": False}
     assert people["יוצא בעתיד"] == {"name": "יוצא בעתיד", "inactive_from": future}
     assert people["פעיל"] == {"name": "פעיל"}
+    assert people["לא בפול"] == {"name": "לא בפול", "notes": "לא זמין/ה: לא בפול", "on_duty": False}
 
     # Someone taken out after the upgrade stays out across a restart.
     _sql(schema, "UPDATE team_profiles SET profile = %s WHERE team_id = %s", (Jsonb({"employees": [
         {"name": "יצא אחרי", "inactive_from": "2026-01-01"}]}), team))
     Repository(SimpleNamespace(get=lambda: _settings(schema))).initialize()
 
-    assert repository.team_profile(team)["employees"] == [
+    assert _roster(schema, team) == [
         {"name": "יצא אחרי", "inactive_from": "2026-01-01"}]

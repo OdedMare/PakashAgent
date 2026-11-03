@@ -2,6 +2,9 @@
 
 import {
   CalendarClock,
+  ChevronDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Clock3,
   Cpu,
   Plus,
@@ -10,37 +13,55 @@ import {
   Scale,
   ShieldCheck,
   Trash2,
+  Upload,
   Users,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
+import { DateInput } from "@/components/DateInput";
 import { TimeInput } from "@/components/TimeInput";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
-import { deleteShiftType, updateProfile } from "@/services/api";
+import { deleteShiftType, previewDeparture, updateProfile } from "@/services/api";
 import { cyclePattern, isDayCycle } from "@/lib/dayCycles";
+import { ShiftLevelSelect, SoldierFields } from "@/components/Management/SoldierFields";
+import { ExitPatternFields } from "@/components/Management/ExitPatternFields";
+import type { UnitPolicy } from "@/services/api";
 import type { DayCycle, RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
 
 import { CompiledSources } from "./CompiledSources";
 import { DayCycleSetup } from "./DayCycleSetup";
+import { ExitKinds } from "./ExitKinds";
 import { CheckboxGrid, Field } from "./fields";
 import { CYCLES, CycleSetup, firstGroupAnchor } from "./RotationSetup";
+import { RosterView } from "./RosterView";
+import type { RosterPerson } from "./rosterGroups";
 import type { Cycle } from "./RotationSetup";
+import { RosterImport } from "./RosterImport";
+import { PersonStandard, ShiftRoles, UnitStandard } from "./UnitStandard";
 import { useRotationPreview } from "./useRotationPreview";
+import { ImportUnit } from "./ImportUnit";
+import { reserveFutureWarning } from "./reserveWarning";
 
 const DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 const WEEKEND = ["שישי", "שבת"];
 const SERVICE_TYPES = {
-  standard: "תקן",
+  standard: "סדיר",
   overlap: "נחפף/ת",
   reserve: "מילואים",
+  civilian: "אע״צ",
+  hatzach: "הצ״ח",
 } as const;
+const RANK_GROUPS = { officer: "קצונה", nco: "נגדים" } as const;
 const SHIFT_TYPES = {
   regular: "רגילה",
   overlap: "חפיפה",
   on_call: "כוננות",
 } as const;
 const EXIT_PATTERNS = {
+  none: "בלי יציאות",
+  daily: "יומי — הביתה כל יום",
+  personal: "סגירה אישית 1 ל־N",
   round: "סבב א / ב",
   triplet: "תלתון א / ב / ג",
   quad: "רבעון א / ב / ג / ד — שבת אחת מכל ארבע",
@@ -64,6 +85,9 @@ export function ManualSetup({
   const profile = workspace.profile ?? {};
   const initialWorkplace = record(profile.workplace);
   const [unitName, setUnitName] = useState(text(initialWorkplace.name) || workspace.name);
+  // Soldiers' notes as something to read on the board only: the build is
+  // then not told about them at all.
+  const [notesVisualOnly, setNotesVisualOnly] = useState(initialWorkplace.notes_visual_only === true);
   const [planningHorizon, setPlanningHorizon] = useState(text(initialWorkplace.planning_horizon) || "שבוע");
   const [operatingDays, setOperatingDays] = useState<string[]>(
     strings(initialWorkplace.operating_days).length
@@ -118,9 +142,19 @@ export function ManualSetup({
     const configured = strings(initialWorkplace.enabled_exit_patterns);
     const used = rows(profile.employees)
       .map((person) => exitPattern(person, rotationMode))
-      .filter((pattern) => pattern !== "round" && !isDayCycle(pattern));
-    return [...new Set([...configured, ...used])];
+      .filter((pattern) => !isDayCycle(pattern));
+    // A round was always on before the kinds were asked; keep it for a unit
+    // that anchored one.
+    const round = text(initialWorkplace.round_first_closure_date) || text(initialWorkplace.first_closure_date) ? ["round"] : [];
+    return [...new Set([...configured, ...used, ...round])];
   });
+  const [dayCyclesOn, setDayCyclesOn] = useState(() => (profile.workplace?.day_cycles ?? []).length > 0);
+  const [reserveOn, setReserveOn] = useState(() =>
+    typeof initialWorkplace.reserve_enabled === "boolean"
+      ? initialWorkplace.reserve_enabled
+      : rows(profile.employees).some((person) => person.service_type === "reserve"),
+  );
+  const [reserveChecking, setReserveChecking] = useState(false);
   const [rotationAUnavailability, setRotationAUnavailability] = useState<Row[]>(
     rows(initialWorkplace.rotation_a_unavailability),
   );
@@ -129,11 +163,17 @@ export function ManualSetup({
   const [maxWeeklyHours, setMaxWeeklyHours] = useState(number(audit.max_weekly_hours, 168));
   const [maxConsecutiveDays, setMaxConsecutiveDays] = useState(number(audit.max_consecutive_days, 11));
   const [minRestHours, setMinRestHours] = useState(number(audit.min_rest_hours, 8));
+  const [unitPolicy, setUnitPolicy] = useState<UnitPolicy>(() => record(profile.unit_policy) as UnitPolicy);
   // Saved shift types the manager deleted here. They are archived by their
   // own call after the save, which also cleans them out of the roster.
   const [removedShifts, setRemovedShifts] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [importing, setImporting] = useState(false);
+  // Folded soldier cards, by name; a new, unnamed row is always open.
+  const [foldedPeople, setFoldedPeople] = useState<Set<string>>(new Set());
+  const [rosterServices, setRosterServices] = useState<string[]>([]);
+  const onRosterFilter = useCallback((value: string[]) => setRosterServices(value), []);
 
   const shiftNames = useMemo(
     () => shifts.map((shift) => text(shift.name)).filter(Boolean),
@@ -141,26 +181,93 @@ export function ManualSetup({
   );
   // The roles a shift can be limited to are the ones typed on the roster.
   const roleNames = useMemo(
-    () => [...new Set(employees.filter(named).map((person) => text(person.role)).filter(Boolean))].sort(),
+    () => [...new Set(employees.filter(named).flatMap((person) => [
+      text(person.role),
+      ...rows(person.qualifications).map((row) => text(row.role)),
+    ]).filter(Boolean))].sort(),
     [employees],
   );
   const originalEmployees = useMemo(
     () => new Set(rows(profile.employees).map((row) => text(row.name))),
     [profile.employees],
   );
+  const toggleReserve = async (on: boolean) => {
+    if (on) return setReserveOn(true);
+    if (reserveChecking) return;
+    const reservists = employees
+      .filter((person) => person.service_type === "reserve" && !person.inactive_from && originalEmployees.has(text(person.name)))
+      .map((person) => text(person.name));
+    if (!reservists.length) return setReserveOn(false);
+    setReserveChecking(true);
+    setError("");
+    try {
+      const warning = reserveFutureWarning(await Promise.all(
+        reservists.map((employee) => previewDeparture({ employee })),
+      ));
+      if (!warning || window.confirm(`${warning}\n\nלכבות את המילואים בכל זאת?`)) setReserveOn(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "לא ניתן לבדוק שיבוצים עתידיים של מילואימניקים");
+    } finally {
+      setReserveChecking(false);
+    }
+  };
   const originalShifts = useMemo(
     () => new Set(rows(profile.shifts).map((row) => text(row.name))),
     [profile.shifts],
   );
   const usedExitPatterns = useMemo(
-    () => new Set(employees.map((person) => exitPattern(person, rotationMode)).filter((pattern) => pattern !== "round" && !isDayCycle(pattern))),
+    () => new Set(employees.filter(named).map((person) => exitPattern(person, rotationMode)).filter((pattern) => !isDayCycle(pattern))),
     [employees, rotationMode],
   );
+  // People per kind, for the cards that ask how the unit goes home.
+  const exitCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const person of employees.filter(named)) {
+      const pattern = exitPattern(person, rotationMode);
+      const key = isDayCycle(pattern) ? "days" : pattern;
+      counts[key] = (counts[key] ?? 0) + 1;
+      if (person.service_type === "reserve") counts.reserve = (counts.reserve ?? 0) + 1;
+    }
+    return counts;
+  }, [employees, rotationMode]);
   const usedDayCycles = useMemo(
     () => new Set(employees.map((person) => exitPattern(person, rotationMode)).filter(isDayCycle).map((pattern) => pattern.slice("cycle:".length))),
     [employees, rotationMode],
   );
   const groupsOf = (pattern: string) => rotationGroups(pattern, dayCycles);
+  const rosterPeople = useMemo<RosterPerson[]>(() => employees.map((person) => {
+    const pattern = exitPattern(person, rotationMode);
+    const groups = rotationGroups(pattern, dayCycles);
+    const group = groups.includes(text(person.rotation_group)) ? text(person.rotation_group) : groups[0] ?? "";
+    return {
+      service: text(person.service_type) || "standard",
+      counts: person.counts_toward_staffing !== false,
+      shifts: strings(person.eligible_shifts),
+      exitKey: `${pattern}|${group}`,
+      exitLabel: [patternLabel(pattern, dayCycles), group && `קבוצה ${group}`].filter(Boolean).join(" · "),
+      searchText: text(person.name) ? [
+        text(person.name),
+        text(person.role),
+        text(person.competence),
+        SERVICE_TYPES[(text(person.service_type) || "standard") as keyof typeof SERVICE_TYPES] ?? "",
+        patternLabel(pattern, dayCycles),
+        group && `קבוצה ${group}`,
+        ...strings(person.eligible_shifts),
+        ...rows(person.qualifications).map((row) => text(row.role)),
+        person.is_shift_manager ? "מפקד משמרת" : "",
+        person.can_train ? "חופף" : "",
+        text(person.notes),
+      ].join(" ") : "",
+    };
+  }), [employees, rotationMode, dayCycles]);
+  const foldKey = (person: Row) => text(person.name);
+  const namedKeys = employees.map(foldKey).filter(Boolean);
+  const allFolded = namedKeys.length > 0 && namedKeys.every((key) => foldedPeople.has(key));
+  const toggleFold = (key: string) => setFoldedPeople((current) => {
+    const next = new Set(current);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
   // A closure runs to the end of Sunday's first shift by the clock — the
   // handover the server's default closure ends on.
   const handoverEnd = useMemo(() => {
@@ -169,9 +276,12 @@ export function ManualSetup({
     return timed.length ? text(timed[0].end_time) : "";
   }, [shifts]);
   const availableExitPatterns = useMemo(
-    () => new Set(["round", ...enabledExitPatterns, ...usedExitPatterns]),
+    () => new Set([...enabledExitPatterns, ...usedExitPatterns]),
     [enabledExitPatterns, usedExitPatterns],
   );
+  // A new soldier starts on the first kind the unit chose, or on none.
+  const defaultPattern = Object.keys(EXIT_PATTERNS).find((pattern) => availableExitPatterns.has(pattern))
+    ?? (dayCycles[0] ? cyclePattern(dayCycles[0]) : "none");
   // A lettered group cannot be scheduled without its cycle's anchor. The one
   // exception is a round unit on fixed א/ב presence, which has no phase.
   const needsAnchor = (pattern: Cycle) =>
@@ -221,7 +331,9 @@ export function ManualSetup({
           rotation_presence: rotationPresence,
           day_cycles: dayCycles,
           general_exit_schedule: generalExitSchedule.trim(),
-          enabled_exit_patterns: enabledExitPatterns,
+          notes_visual_only: notesVisualOnly,
+          enabled_exit_patterns: [...availableExitPatterns],
+          reserve_enabled: reserveOn,
           rotation_a_unavailability: rotationAUnavailability.map((rule) => ({
             days: strings(rule.days),
             shifts: strings(rule.shifts),
@@ -244,6 +356,14 @@ export function ManualSetup({
           is_shift_manager: Boolean(person.is_shift_manager),
           can_train: Boolean(person.can_train),
           notes: text(person.notes),
+          competence: text(person.competence),
+          reserve_days_per_week: typeof person.reserve_days_per_week === "number" ? person.reserve_days_per_week : null,
+          reserve_min_days: typeof person.reserve_min_days === "number" ? person.reserve_min_days : null,
+          reserve_consecutive: person.reserve_consecutive === true,
+          reserve_call: text(person.reserve_call),
+          ...(Array.isArray(person.qualifications)
+            ? { qualifications: rows(person.qualifications).filter((row) => text(row.role)) }
+            : {}),
         })),
         // A deleted saved shift is still sent here: names are identity keys
         // the profile save refuses to drop, so it leaves through
@@ -256,11 +376,14 @@ export function ManualSetup({
           shift_type: text(shift.shift_type) || "regular",
           start_time: text(shift.start_time),
           end_time: text(shift.end_time),
+          starts_on: text(shift.starts_on),
+          ends_on: text(shift.ends_on),
           days: strings(shift.days),
           headcount: number(shift.headcount, headcount(shift)),
           staffing: staffingFor(shift, weekend, closureDays(shift, closure)),
           requires_shift_manager: Boolean(shift.requires_shift_manager),
           allowed_roles: strings(shift.allowed_roles),
+          min_competence: text(shift.min_competence),
         })),
         rules: rules
           .filter((rule) => text(rule.text))
@@ -273,6 +396,7 @@ export function ManualSetup({
           max_consecutive_days: maxConsecutiveDays,
           min_rest_hours: minRestHours,
         },
+        unit_policy: unitPolicy,
         summary: "יחידה צבאית עם מבנה יציאות אישי לכל חייל/ת",
         expected_revision: workspace.profile_revision,
       });
@@ -298,6 +422,7 @@ export function ManualSetup({
         </div>
         <div className="manual-header-actions">
           <HelpButton />
+          <button type="button" className="ghost-button" disabled={busy} onClick={() => setImporting(true)}>ייבוא הגדרה מאקסל</button>
           {onCancel ? (
             <button type="button" className="ghost-button" onClick={onCancel} disabled={busy}>
               <X size={16} /> ביטול
@@ -312,6 +437,27 @@ export function ManualSetup({
       {error ? <div className="manual-error" role="alert">{error}</div> : null}
 
       <main id="main-content" className="manual-sections">
+        {importing && <ImportUnit teamId={workspace.id} onClose={() => setImporting(false)} onApply={(people, importedShifts) => {
+          setEmployees((current) => {
+            const names = new Set(current.map((p) => text(p.name)));
+            return [...current, ...people.filter((p) => {
+              const name = text(p.name);
+              if (names.has(name)) return false;
+              names.add(name);
+              return true;
+            })];
+          });
+          setShifts((current) => {
+            const merged = [...current];
+            for (const shift of importedShifts) {
+              const index = merged.findIndex((s) => text(s.name) === text(shift.name));
+              if (index < 0) merged.push(shift);
+              else merged[index] = { ...merged[index], ...shift };
+            }
+            return merged;
+          });
+          setImporting(false);
+        }} />}
         <SetupSection tour="setup-workplace" icon={<CalendarClock />} title="היחידה והיציאות הכלליות" hint="מתארים כאן את תמונת היציאות של הצוות; את המבנה האישי מגדירים לכל חייל/ת בנפרד.">
           <div className="manual-grid three">
             <Field label="שם היחידה *">
@@ -329,8 +475,18 @@ export function ManualSetup({
           <CheckboxGrid label="ימי פעילות" values={DAYS} selected={operatingDays} onChange={setOperatingDays} />
         </SetupSection>
 
-        <SetupSection tour="setup-rotations" icon={<Repeat2 />} title="סבבים, תלתונים ומחזורי ימים" hint="לכל סבב ותלתון שלוש שאלות: מתי קבוצה א׳ סוגרת, איזה סוג סבב (11/3, 12/2, 10/4, שבוע־שבוע…), ואילו סופ״שים חריגים. את שאר הקבוצות המערכת מחשבת לבד. מחזור ימים מוגדר בימים בבסיס ובבית. ההגדרות חלות על השיבוץ הבא — סידור קיים לא נבנה מחדש.">
-          <PatternOptions selected={enabledExitPatterns} locked={usedExitPatterns} onChange={setEnabledExitPatterns} />
+        <SetupSection tour="setup-rotations" icon={<Repeat2 />} title="יציאות" hint="קודם בוחרים אילו סוגי יציאות יש ביחידה, ואז עונים רק על השאלות שלהם. את המבנה של כל חייל/ת בוחרים בכוח אדם. ההגדרות חלות על השיבוץ הבא — סידור קיים לא נבנה מחדש.">
+          <ExitKinds
+            enabled={availableExitPatterns}
+            used={usedExitPatterns}
+            counts={exitCounts}
+            dayCyclesOn={dayCyclesOn || dayCycles.length > 0}
+            reserveOn={reserveOn}
+            reserveBusy={reserveChecking}
+            onEnabled={(next) => setEnabledExitPatterns([...next])}
+            onDayCycles={setDayCyclesOn}
+            onReserve={(on) => void toggleReserve(on)}
+          />
 
           {preview.error ? <p className="rotation-derived-note is-warning" role="status">{preview.error}</p> : null}
           <div className="rotation-cycles" aria-label="מחזורי הסגירה">
@@ -353,7 +509,10 @@ export function ManualSetup({
             ))}
           </div>
 
-          <DayCycleSetup cycles={dayCycles} onChange={setDayCycles} used={usedDayCycles} />
+          {dayCyclesOn || dayCycles.length > 0 ? <DayCycleSetup cycles={dayCycles} onChange={setDayCycles} used={usedDayCycles} /> : null}
+          {reserveOn ? <p className="rotation-derived-note">מילואים: בכוח אדם בוחרים מעמד ״מילואים״ לכל מילואימניק/ית, ומגדירים כמה ימים בשבוע, מינימום והאם ברצף. את הימים עצמם בוחר הסידור.</p> : null}
+          {availableExitPatterns.has("personal") ? <p className="rotation-derived-note">סגירה אישית: בכוח אדם בוחרים ״סגירה אישית 1 ל־N״ ומגדירים כל כמה שבתות ומתי הסגירה הראשונה.</p> : null}
+          {availableExitPatterns.has("daily") ? <p className="rotation-derived-note">יומי: בכוח אדם בוחרים ״יומי״ ומגדירים לכל אחד/ת ימי הגעה ושעות.</p> : null}
 
           {/* The older fixed א/ב presence schedule: shown only to a unit that
               still has one, so a new manager meets one way to say "absent". */}
@@ -388,10 +547,41 @@ export function ManualSetup({
           ) : null}
         </SetupSection>
 
+        <SetupSection icon={<Upload />} title="ייבוא מאפליקציית משמרות של יחידה" hint="רשימת האנשים, הקבוצות והכשירויות מקובץ ה-CSV של האפליקציה הקודמת. הייבוא שומר מיד; שינויים שלא נשמרו בטופס הזה יאבדו.">
+          <RosterImport unitName={unitName} unitPolicy={unitPolicy} revision={workspace.profile_revision} onImported={onDone} />
+        </SetupSection>
+
         <SetupSection tour="setup-people" icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">
-          <div className="manual-list">
-            {employees.map((person, index) => (
-              <article className="manual-row" key={`employee-${index}`}>
+          <label className="manual-check">
+            <input type="checkbox" checked={notesVisualOnly} onChange={(e) => setNotesVisualOnly(e.target.checked)} />
+            <span>הערות לחייל/ת לתצוגה בלבד — מוצגות בלוח כסימן קריאה (!) ולא נלקחות בחשבון בשיבוץ</span>
+          </label>
+          <RosterView
+            people={rosterPeople}
+            services={SERVICE_TYPES}
+            shiftNames={shiftNames}
+            onFilter={onRosterFilter}
+            card={(index, groupKey) => {
+              const person = employees[index];
+              const key = foldKey(person);
+              if (key && foldedPeople.has(key)) {
+                return (
+                  <article className="manual-row is-folded" key={`employee-${index}-${groupKey}`}>
+                    <button type="button" className="manual-row-summary" aria-expanded={false} onClick={() => toggleFold(key)}>
+                      <ChevronDown size={15} aria-hidden="true" />
+                      <strong>{key}</strong>
+                      <span>{[text(person.role), RANK_GROUPS[text(person.rank_group) as keyof typeof RANK_GROUPS], rosterPeople[index].exitLabel, SERVICE_TYPES[rosterPeople[index].service as keyof typeof SERVICE_TYPES]].filter(Boolean).join(" · ")}</span>
+                    </button>
+                  </article>
+                );
+              }
+              return (
+              <article className="manual-row" key={`employee-${index}-${groupKey}`}>
+                {key ? (
+                  <button type="button" className="manual-row-summary is-open" aria-expanded onClick={() => toggleFold(key)}>
+                    <ChevronDown size={15} aria-hidden="true" /><strong>{key}</strong><span>סגירת הכרטיס</span>
+                  </button>
+                ) : null}
                 <div className="manual-grid employee-grid">
                   <Field label="שם *"><input value={inputText(person.name)} readOnly={originalEmployees.has(text(person.name))} onChange={(e) => edit(setEmployees, index, "name", e.target.value)} /></Field>
                   <Field label="תפקיד"><input value={inputText(person.role)} onChange={(e) => edit(setEmployees, index, "role", e.target.value)} /></Field>
@@ -399,7 +589,7 @@ export function ManualSetup({
                     <select value={exitPattern(person, rotationMode)} onChange={(e) => {
                       edit(setEmployees, index, "exit_pattern", e.target.value);
                       edit(setEmployees, index, "rotation_group", groupsOf(e.target.value)[0] ?? "");
-                    }}>{Object.entries(EXIT_PATTERNS).filter(([value]) => availableExitPatterns.has(value)).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    }}>{Object.entries(EXIT_PATTERNS).filter(([value]) => availableExitPatterns.has(value) || value === "none").map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                       {dayCycles.map((cycle) => <option key={cycle.id} value={cyclePattern(cycle)}>{cycle.name || "מחזור"} · {cycle.groups.join(" / ")}</option>)}
                     </select>
                   </Field>
@@ -409,6 +599,12 @@ export function ManualSetup({
                       edit(setEmployees, index, "service_type", e.target.value);
                       edit(setEmployees, index, "counts_toward_staffing", e.target.value !== "overlap");
                     }}>{Object.entries(SERVICE_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+                  </Field>
+                  <Field label="דרג בתקן">
+                    <select value={text(person.rank_group)} onChange={(e) => edit(setEmployees, index, "rank_group", e.target.value)}>
+                      <option value="">לא מוגדר</option>
+                      {Object.entries(RANK_GROUPS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
                   </Field>
                 </div>
                 <div className="manual-row-foot">
@@ -421,14 +617,36 @@ export function ManualSetup({
                   </div>
                   <button type="button" className="icon-button subtle" aria-label="מחיקת איש צוות" disabled={originalEmployees.has(text(person.name))} onClick={() => setEmployees((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
                 </div>
-                <Field label="הערות לחייל/ת"><textarea value={inputText(person.notes)} onChange={(e) => edit(setEmployees, index, "notes", e.target.value)} rows={2} placeholder="מידע קבוע שכדאי לקחת בחשבון בשיבוץ" /></Field>
+                <ExitPatternFields pattern={exitPattern(person, rotationMode)} person={person} onChange={(field, value) => edit(setEmployees, index, field, value)} />
+                <SoldierFields
+                  serviceType={text(person.service_type) || "standard"}
+                  competence={text(person.competence)}
+                  reserveDays={typeof person.reserve_days_per_week === "number" ? person.reserve_days_per_week : null}
+                  reserveMinDays={typeof person.reserve_min_days === "number" ? person.reserve_min_days : null}
+                  reserveConsecutive={person.reserve_consecutive === true}
+                  reserveCall={text(person.reserve_call)}
+                  onChange={(field, value) => edit(setEmployees, index, field, value)}
+                />
+                <PersonStandard person={person} onChange={(key, value) => edit(setEmployees, index, key, value)} />
+                <Field label="הערות לחייל/ת"><textarea value={inputText(person.notes)} onChange={(e) => edit(setEmployees, index, "notes", e.target.value)} rows={2} placeholder={notesVisualOnly ? "מוצג בלוח בלבד, לא משפיע על השיבוץ" : "מידע קבוע שכדאי לקחת בחשבון בשיבוץ"} /></Field>
               </article>
-            ))}
-          </div>
-          <button type="button" className="ghost-button" onClick={() => setEmployees((current) => [...current, { name: "", role: "", exit_pattern: rotationMode, rotation_group: "א", service_type: "standard", counts_toward_staffing: true, eligible_shifts: [], is_shift_manager: false, can_train: false, notes: "" }])}><Plus size={16} /> הוספת איש/אשת צוות</button>
+              );
+            }}
+            actions={namedKeys.length ? (
+              <button type="button" className="ghost-button roster-fold-all" onClick={() => setFoldedPeople(allFolded ? new Set() : new Set(namedKeys))}>
+                {allFolded ? <ChevronsUpDown size={15} /> : <ChevronsDownUp size={15} />} {allFolded ? "פתיחת כל הכרטיסים" : "כיווץ כל הכרטיסים"}
+              </button>
+            ) : null}
+          />
+          <button type="button" className="ghost-button" onClick={() => {
+            // Added while one status is shown, the soldier takes it, so the
+            // new row does not vanish behind the filter.
+            const service = rosterServices.length === 1 ? rosterServices[0] : "standard";
+            setEmployees((current) => [...current, { name: "", role: "", exit_pattern: defaultPattern, rotation_group: rotationGroups(defaultPattern, dayCycles)[0] ?? "", service_type: service, counts_toward_staffing: service !== "overlap", eligible_shifts: [], is_shift_manager: false, can_train: false, notes: "" }]);
+          }}><Plus size={16} /> {rosterServices.length === 1 ? `הוספת ${SERVICE_TYPES[rosterServices[0] as keyof typeof SERVICE_TYPES]}` : "הוספת איש/אשת צוות"}</button>
         </SetupSection>
 
-        <SetupSection tour="setup-shifts" icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה. תקן סופ״ש חל כשאחד הסבבים בבית — לפי ימים בבסיס/בבית בסעיף הסבבים.">
+        <SetupSection tour="setup-shifts" icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="תאריכי תוקף ריקים = משמרת קבועה; מילוי שניהם יוצר משמרת זמנית שנעלמת מהלוח מחוץ לטווח. משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה. תקן סופ״ש חל כשאחד הסבבים בבית — לפי ימים בבסיס/בבית בסעיף הסבבים.">
           <div className="manual-list">
             {shifts.map((shift, index) => (
               <article className="manual-row" key={`shift-${index}`}>
@@ -437,13 +655,23 @@ export function ManualSetup({
                   <Field label="סוג"><select value={text(shift.shift_type) || (shift.is_on_call ? "on_call" : "regular")} onChange={(e) => edit(setShifts, index, "shift_type", e.target.value)}>{Object.entries(SHIFT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
                   <Field label="התחלה"><TimeInput value={text(shift.start_time)} onChange={(time) => edit(setShifts, index, "start_time", time)} /></Field>
                   <Field label="סיום"><TimeInput value={text(shift.end_time)} onChange={(time) => edit(setShifts, index, "end_time", time)} /></Field>
-                  <Field label="תקן א׳–ה׳"><input type="number" min={1} max={100} value={number(shift.headcount, headcount(shift))} onChange={(e) => edit(setShifts, index, "headcount", Number(e.target.value) || 1)} /></Field>
-                  <Field label="תקן סופ״ש"><input title={`חל על: ${closureDays(shift, closure).join(", ")}`} type="number" min={1} max={100} value={shift.weekend_headcount === "" || shift.weekend_headcount === undefined ? "" : String(shift.weekend_headcount)} placeholder="כמו באמצע השבוע" onChange={(e) => edit(setShifts, index, "weekend_headcount", e.target.value === "" ? "" : Math.max(1, Number(e.target.value) || 1))} /></Field>
+                  <Field label="פעילה מתאריך (לזמנית)"><DateInput value={text(shift.starts_on)} max={text(shift.ends_on) || undefined} required={Boolean(text(shift.ends_on))} onChange={(date) => edit(setShifts, index, "starts_on", date)} /></Field>
+                  <Field label="פעילה עד תאריך (לזמנית)"><DateInput value={text(shift.ends_on)} min={text(shift.starts_on) || undefined} required={Boolean(text(shift.starts_on))} onChange={(date) => edit(setShifts, index, "ends_on", date)} /></Field>
+                  <Field label="תקן א׳–ה׳"><input type="number" min={0} max={100} value={number(shift.headcount, headcount(shift))} onChange={(e) => edit(setShifts, index, "headcount", seats(e.target.value))} /></Field>
+                  <Field label="תקן סופ״ש"><input title={`חל על: ${closureDays(shift, closure).join(", ")}`} type="number" min={0} max={100} value={shift.weekend_headcount === "" || shift.weekend_headcount === undefined ? "" : String(shift.weekend_headcount)} placeholder="כמו באמצע השבוע" onChange={(e) => edit(setShifts, index, "weekend_headcount", e.target.value === "" ? "" : seats(e.target.value))} /></Field>
                   <Field label="ייעוד"><input value={inputText(shift.purpose)} onChange={(e) => edit(setShifts, index, "purpose", e.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></Field>
+                  <Field label="משמרת חזקה (רמה מקצועית)"><ShiftLevelSelect value={text(shift.min_competence)} onChange={(level) => edit(setShifts, index, "min_competence", level)} /></Field>
                 </div>
+                {text(shift.starts_on) && text(shift.ends_on) ? <p className="manual-zero-note">משמרת זמנית: תופיע בסידור רק בטווח התאריכים שנבחר.</p> : null}
+                {offNote(number(shift.headcount, headcount(shift)), shift.weekend_headcount) ? <p className="manual-zero-note">{offNote(number(shift.headcount, headcount(shift)), shift.weekend_headcount)}</p> : null}
                 <label className="manual-check"><input type="checkbox" checked={Boolean(shift.requires_shift_manager)} onChange={(e) => edit(setShifts, index, "requires_shift_manager", e.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
                 <CheckboxGrid label="ימים" values={DAYS} selected={strings(shift.days)} onChange={(value) => edit(setShifts, index, "days", value)} />
                 <RoleOptions roles={roleNames} selected={strings(shift.allowed_roles)} onChange={(value) => edit(setShifts, index, "allowed_roles", value)} />
+                <ShiftRoles shift={shift} roles={roleNames} onChange={(staffing) => {
+                  edit(setShifts, index, "staffing", staffing);
+                  const seats = strings(rows(staffing).find((group) => strings(group.days).length === 0)?.required_roles).length;
+                  if (seats > number(shift.headcount, headcount(shift))) edit(setShifts, index, "headcount", seats);
+                }} />
                 <button type="button" className="icon-button subtle manual-delete" aria-label="מחיקת סוג משמרת" title={originalShifts.has(text(shift.name)) ? "סידורים קיימים נשארים כפי שהם; הבנייה הבאה לא תכלול את המשמרת" : undefined} onClick={() => {
                   const name = text(shift.name);
                   if (originalShifts.has(name)) {
@@ -471,6 +699,10 @@ export function ManualSetup({
           <button type="button" className="ghost-button" onClick={() => setRules((current) => [...current, { text: "", priority: "hard" }])}><Plus size={16} /> הוספת כלל קבוע</button>
         </SetupSection>
 
+        <SetupSection icon={<ShieldCheck />} title="תקן היחידה" hint="דירוג, תוקף כשירויות, תפקידים חלופיים ומספר משמרות בשבוע. ריק = ללא הגבלה.">
+          <UnitStandard policy={unitPolicy} roles={roleNames} onChange={setUnitPolicy} />
+        </SetupSection>
+
         <SetupSection tour="setup-limits" icon={<Scale />} title="גבולות עומס ומנוחה" hint="בדיקות אלה מציפות חריגות ומסייעות לשיבוץ; הן אינן חוסמות החלטת מפקד.">
           <div className="manual-grid three">
             <Field label="מקסימום שעות בשבוע"><input type="number" min={1} value={maxWeeklyHours} onChange={(e) => setMaxWeeklyHours(Number(e.target.value) || 1)} /></Field>
@@ -492,8 +724,22 @@ export function ManualSetup({
   );
 }
 
+/** One part of the form. Folding it only hides it: its fields stay in
+ *  state and are saved with the rest. */
 function SetupSection({ tour, icon, title, hint, children }: { tour?: string; icon: React.ReactNode; title: string; hint: string; children: React.ReactNode }) {
-  return <section className="manual-section"><header><span>{icon}</span><div data-tour={tour}><h2>{title}</h2><p>{hint}</p></div></header><div className="manual-section-body">{children}</div></section>;
+  const [open, setOpen] = useState(true);
+  return (
+    <section className={`manual-section${open ? "" : " is-closed"}`}>
+      <header>
+        <span>{icon}</span>
+        <div data-tour={tour}><h2>{title}</h2>{open ? <p>{hint}</p> : null}</div>
+        <button type="button" className="icon-button subtle manual-section-toggle" aria-expanded={open} aria-label={open ? `סגירת ${title}` : `פתיחת ${title}`} title={open ? "סגירה" : "פתיחה"} onClick={() => setOpen((value) => !value)}>
+          <ChevronDown size={16} aria-hidden="true" />
+        </button>
+      </header>
+      <div className="manual-section-body" hidden={!open}>{children}</div>
+    </section>
+  );
 }
 
 /** Which roles may stand a shift. A role no longer on the roster stays
@@ -504,13 +750,6 @@ function RoleOptions({ roles, selected, onChange }: { roles: string[]; selected:
     return <fieldset className="manual-checkboxes"><legend>תפקידים מוסמכים</legend><small>הגדירו תפקיד לאנשי הצוות כדי להגביל את המשמרת לתפקידים מסוימים.</small></fieldset>;
   }
   return <fieldset className="manual-checkboxes"><legend>תפקידים מוסמכים</legend>{values.map((value) => <label key={value}><input type="checkbox" checked={selected.includes(value)} onChange={(event) => onChange(event.target.checked ? [...selected, value] : selected.filter((item) => item !== value))} /><span>{value}</span></label>)}<small>{selected.length ? "רק בעלי התפקידים שסומנו ישובצו במשמרת הזו." : "לא סומן תפקיד — כל אנשי הצוות מוסמכים."}</small></fieldset>;
-}
-
-function PatternOptions({ selected, locked, onChange }: { selected: string[]; locked: Set<string>; onChange: (value: string[]) => void }) {
-  return <fieldset className="manual-checkboxes"><legend>מבני יציאה אופציונליים</legend>{Object.entries(EXIT_PATTERNS).filter(([value]) => value !== "round").map(([value, label]) => {
-    const required = locked.has(value);
-    return <label key={value} title={required ? "המבנה משויך כרגע לאיש צוות" : undefined}><input type="checkbox" checked={selected.includes(value)} disabled={required} onChange={(event) => onChange(event.target.checked ? [...selected, value] : selected.filter((item) => item !== value))} /><span>{label}{required ? " · בשימוש" : ""}</span></label>;
-  })}<small>רשות — אפשר להשאיר את כל האפשרויות כבויות.</small></fieldset>;
 }
 
 function edit(setter: React.Dispatch<React.SetStateAction<Row[]>>, index: number, key: string, value: unknown) {
@@ -532,11 +771,25 @@ function exitPattern(row: Row, fallback: "round" | "triplet" = "round"): string 
   if (isDayCycle(value)) return value;
   return value in EXIT_PATTERNS ? value : fallback;
 }
+function patternLabel(pattern: string, cycles: DayCycle[]): string {
+  if (pattern in EXIT_PATTERNS) return EXIT_PATTERNS[pattern as keyof typeof EXIT_PATTERNS];
+  return cycles.find((cycle) => cyclePattern(cycle) === pattern)?.name || "מחזור";
+}
 function rotationGroups(pattern: string, cycles: DayCycle[]): string[] {
   if (pattern in CYCLES) return [...CYCLES[pattern as Cycle].groups];
   return cycles.find((cycle) => cyclePattern(cycle) === pattern)?.groups ?? [];
 }
 function number(value: unknown, fallback: number): number { return typeof value === "number" && Number.isFinite(value) ? value : fallback; }
+/** A headcount typed into a field: a whole number from 0 to 100. */
+function seats(value: string): number { return Math.min(100, Math.max(0, Math.floor(Number(value)) || 0)); }
+/** What a headcount of 0 means, said under the shift: it does not run then. */
+function offNote(weekday: number, weekend: unknown): string {
+  const weekendOff = weekend === 0 || (weekend === "" || weekend === undefined ? weekday === 0 : false);
+  if (weekday === 0 && weekendOff) return "תקן 0 בכל הימים: המשמרת לא תיבנה עד שיוגדר לה תקן.";
+  if (weekday === 0) return "תקן 0 באמצע השבוע: המשמרת פועלת רק בסופ״ש.";
+  if (weekend === 0) return "תקן 0 בסופ״ש: המשמרת לא פועלת בסופ״ש.";
+  return "";
+}
 function named(row: Row): boolean { return Boolean(text(row.name)); }
 /** The weekend's own headcount, or "" when it takes the weekday number.
  *  Read off the staffing group marked as the closure's, or an older one
