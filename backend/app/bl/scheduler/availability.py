@@ -1,6 +1,11 @@
 """Who may work when: dated constraints plus everything the profile implies."""
 
+import copy
 import datetime
+import hashlib
+import json
+import threading
+from collections import OrderedDict
 from typing import Any, List
 
 from app.bl.shared import hebrew_weekday, weekday_key
@@ -12,7 +17,44 @@ from app.bl.scheduler.values import (
 )
 
 
+# Recent answers, by a fingerprint of everything the answer is computed
+# from. One replacement search asks the same question once per shift it
+# covers and again per audit of the plan; on 70 people with a rotation each
+# answer took seconds, and the repeats pushed the request past the proxy.
+_CACHE: "OrderedDict[str, List[dict]]" = OrderedDict()
+_CACHE_SIZE = 16
+_CACHE_LOCK = threading.Lock()
+
+
 def effective_availability(
+    profile: dict, rows: Any, starts_on: str, ends_on: str
+) -> List[dict]:
+    """`_effective_availability`, remembered for identical inputs.
+
+    A pure function of its arguments, so the same profile, rows and dates
+    always give the same list; each caller gets its own copy, so one that
+    edits what it was handed cannot change another's answer.
+    """
+    try:
+        key = hashlib.sha256(json.dumps(
+            [profile, rows, starts_on, ends_on], sort_keys=True, default=str,
+        ).encode("utf-8")).hexdigest()
+    except (TypeError, ValueError):
+        return _effective_availability(profile, rows, starts_on, ends_on)
+    with _CACHE_LOCK:
+        known = _CACHE.get(key)
+        if known is not None:
+            _CACHE.move_to_end(key)
+            return copy.deepcopy(known)
+    found = _effective_availability(profile, rows, starts_on, ends_on)
+    with _CACHE_LOCK:
+        _CACHE[key] = copy.deepcopy(found)
+        while len(_CACHE) > _CACHE_SIZE:
+            _CACHE.popitem(last=False)
+    return found
+
+
+def _effective_availability(
     profile: dict, rows: Any, starts_on: str, ends_on: str
 ) -> List[dict]:
     """Dated constraints plus structured recurring constraints from setup.

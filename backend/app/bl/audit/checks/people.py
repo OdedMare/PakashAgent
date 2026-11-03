@@ -41,10 +41,18 @@ class UnavailableCheck(AuditCheck):
     """Assignments that contradict hard or soft availability windows."""
 
     def run(self, data: AuditInput) -> List[dict]:
+        # A constraint only ever matches its own person's rows, so each row
+        # is checked against that person's constraints alone, in their
+        # original order. Scanning the whole team's list per row was the
+        # cost of every audit on a roster with a rotation's home days.
+        by_person: Dict[str, List[dict]] = {}
+        for item in data.availability:
+            if isinstance(item, dict):
+                by_person.setdefault(text(item.get("employee")), []).append(item)
         warnings = []
         for row in data.rows:
             item = next(
-                (item for item in data.availability
+                (item for item in by_person.get(text(row.get("employee")), [])
                  if constraint_conflicts(row, item)),
                 None,
             )
