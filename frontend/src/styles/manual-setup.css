@@ -223,3 +223,39 @@
 .exit-day input { position: absolute; opacity: 0; pointer-events: none; }
 .exit-day.is-selected { background: var(--primary-soft); border-color: var(--primary); }
 .exit-day:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* Folding the setup: a section, a roster group, one soldier's card. Folding
+   only hides — every field stays in the form and is saved. */
+.manual-section > header { position: relative; }
+.manual-section > header > div { flex: 1; }
+.manual-section-toggle { flex: none; align-self: flex-start; }
+.manual-section-toggle svg, .roster-group-head svg, .manual-row-summary svg { transition: transform 120ms ease; }
+.manual-section.is-closed .manual-section-toggle svg { transform: rotate(90deg); }
+.manual-section.is-closed { grid-template-columns: 1fr; }
+.manual-section.is-closed > header { border-inline-end: 0; border-radius: var(--radius); }
+.manual-section-body[hidden] { display: none; }
+
+.roster-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.roster-grouping { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.78rem; color: var(--text-muted); font-weight: 650; }
+.roster-grouping select { min-height: 44px; padding: 0.45rem 0.65rem; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
+.roster-filter { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.roster-filter .chip-button { min-height: 44px; padding: 0.35rem 0.8rem; color: var(--text); background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 999px; font: inherit; font-size: 0.8rem; font-variant-numeric: tabular-nums; cursor: pointer; }
+.roster-filter .chip-button.is-selected { color: var(--primary); background: var(--primary-soft); border-color: var(--primary); }
+.roster-filter .chip-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.roster-fold-all { min-height: 44px; }
+.roster-filter-note { margin: 0; color: var(--text-muted); font-size: 0.78rem; }
+
+.roster-group { display: grid; gap: 0.55rem; }
+.roster-group-head { display: flex; min-height: 44px; align-items: center; gap: 0.5rem; padding: 0.4rem 0.7rem; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); font: inherit; text-align: start; cursor: pointer; }
+.roster-group-head span { margin-inline-start: auto; padding: 0.1rem 0.55rem; color: var(--text-muted); background: var(--surface); border-radius: 999px; font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.roster-group.is-closed .roster-group-head svg { transform: rotate(90deg); }
+.roster-group-head:focus-visible, .manual-row-summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.manual-row-summary { display: flex; min-height: 44px; align-items: center; gap: 0.5rem; padding: 0; color: var(--text); background: none; border: 0; font: inherit; text-align: start; cursor: pointer; }
+.manual-row-summary span { overflow: hidden; color: var(--text-muted); font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
+.manual-row-summary.is-open { min-height: 32px; }
+.manual-row.is-folded { padding-block: 0.15rem; }
+.manual-row.is-folded .manual-row-summary svg { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) {
+  .manual-section-toggle svg, .roster-group-head svg, .manual-row-summary svg { transition: none; }
+}

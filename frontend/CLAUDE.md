@@ -171,6 +171,16 @@ marked `closure: true` whose days are worked out per shift at save time
 (the first day only for a shift still running when the closure opens, the
 Sunday only for one starting before the handover).
 
+**The setup screen folds, and the roster can be read in groups.** Every
+section folds from the chevron on its header; the roster
+(`ManualSetup/RosterView.tsx`, arithmetic in `rosterGroups.ts`) groups by
+מעמד, נספר בתקן, משמרת (someone allowed on two shifts is under both) or
+מבנה יציאות, each group folds, and the status chips narrow it to, say, only
+מילואים. A soldier's card folds to one line. All of this only hides: hidden
+rows stay in the form and save with the rest, and a soldier added while one
+status is shown takes that status. The grouping and filter are a habit,
+remembered per browser; nothing is written to the server.
+
 **Taking a week back is two different acts.** *ניקוי* empties the
 assignments and keeps the shift rows, so the week can be filled in again
 immediately; *מחיקה* removes the period and returns the week to the state

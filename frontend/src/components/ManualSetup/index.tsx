@@ -2,6 +2,9 @@
 
 import {
   CalendarClock,
+  ChevronDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Clock3,
   Cpu,
   Plus,
@@ -14,7 +17,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { TimeInput } from "@/components/TimeInput";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
@@ -30,6 +33,8 @@ import { DayCycleSetup } from "./DayCycleSetup";
 import { ExitKinds } from "./ExitKinds";
 import { CheckboxGrid, Field } from "./fields";
 import { CYCLES, CycleSetup, firstGroupAnchor } from "./RotationSetup";
+import { RosterView } from "./RosterView";
+import type { RosterPerson } from "./rosterGroups";
 import type { Cycle } from "./RotationSetup";
 import { RosterImport } from "./RosterImport";
 import { PersonStandard, ShiftRoles, UnitStandard } from "./UnitStandard";
@@ -154,6 +159,10 @@ export function ManualSetup({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [importing, setImporting] = useState(false);
+  // Folded soldier cards, by name; a new, unnamed row is always open.
+  const [foldedPeople, setFoldedPeople] = useState<Set<string>>(new Set());
+  const [rosterServices, setRosterServices] = useState<string[]>([]);
+  const onRosterFilter = useCallback((value: string[]) => setRosterServices(value), []);
 
   const shiftNames = useMemo(
     () => shifts.map((shift) => text(shift.name)).filter(Boolean),
@@ -195,6 +204,26 @@ export function ManualSetup({
     [employees, rotationMode],
   );
   const groupsOf = (pattern: string) => rotationGroups(pattern, dayCycles);
+  const rosterPeople = useMemo<RosterPerson[]>(() => employees.map((person) => {
+    const pattern = exitPattern(person, rotationMode);
+    const groups = rotationGroups(pattern, dayCycles);
+    const group = groups.includes(text(person.rotation_group)) ? text(person.rotation_group) : groups[0] ?? "";
+    return {
+      service: text(person.service_type) || "standard",
+      counts: person.counts_toward_staffing !== false,
+      shifts: strings(person.eligible_shifts),
+      exitKey: `${pattern}|${group}`,
+      exitLabel: [patternLabel(pattern, dayCycles), group && `קבוצה ${group}`].filter(Boolean).join(" · "),
+    };
+  }), [employees, rotationMode, dayCycles]);
+  const foldKey = (person: Row) => text(person.name);
+  const namedKeys = employees.map(foldKey).filter(Boolean);
+  const allFolded = namedKeys.length > 0 && namedKeys.every((key) => foldedPeople.has(key));
+  const toggleFold = (key: string) => setFoldedPeople((current) => {
+    const next = new Set(current);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
   // A closure runs to the end of Sunday's first shift by the clock — the
   // handover the server's default closure ends on.
   const handoverEnd = useMemo(() => {
@@ -473,9 +502,32 @@ export function ManualSetup({
         </SetupSection>
 
         <SetupSection tour="setup-people" icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">
-          <div className="manual-list">
-            {employees.map((person, index) => (
-              <article className="manual-row" key={`employee-${index}`}>
+          <RosterView
+            people={rosterPeople}
+            services={SERVICE_TYPES}
+            shiftNames={shiftNames}
+            onFilter={onRosterFilter}
+            card={(index, groupKey) => {
+              const person = employees[index];
+              const key = foldKey(person);
+              if (key && foldedPeople.has(key)) {
+                return (
+                  <article className="manual-row is-folded" key={`employee-${index}-${groupKey}`}>
+                    <button type="button" className="manual-row-summary" aria-expanded={false} onClick={() => toggleFold(key)}>
+                      <ChevronDown size={15} aria-hidden="true" />
+                      <strong>{key}</strong>
+                      <span>{[text(person.role), rosterPeople[index].exitLabel, SERVICE_TYPES[rosterPeople[index].service as keyof typeof SERVICE_TYPES]].filter(Boolean).join(" · ")}</span>
+                    </button>
+                  </article>
+                );
+              }
+              return (
+              <article className="manual-row" key={`employee-${index}-${groupKey}`}>
+                {key ? (
+                  <button type="button" className="manual-row-summary is-open" aria-expanded onClick={() => toggleFold(key)}>
+                    <ChevronDown size={15} aria-hidden="true" /><strong>{key}</strong><span>סגירת הכרטיס</span>
+                  </button>
+                ) : null}
                 <div className="manual-grid employee-grid">
                   <Field label="שם *"><input value={inputText(person.name)} readOnly={originalEmployees.has(text(person.name))} onChange={(e) => edit(setEmployees, index, "name", e.target.value)} /></Field>
                   <Field label="תפקיד"><input value={inputText(person.role)} onChange={(e) => edit(setEmployees, index, "role", e.target.value)} /></Field>
@@ -517,9 +569,20 @@ export function ManualSetup({
                 <PersonStandard person={person} onChange={(key, value) => edit(setEmployees, index, key, value)} />
                 <Field label="הערות לחייל/ת"><textarea value={inputText(person.notes)} onChange={(e) => edit(setEmployees, index, "notes", e.target.value)} rows={2} placeholder="מידע קבוע שכדאי לקחת בחשבון בשיבוץ" /></Field>
               </article>
-            ))}
-          </div>
-          <button type="button" className="ghost-button" onClick={() => setEmployees((current) => [...current, { name: "", role: "", exit_pattern: defaultPattern, rotation_group: rotationGroups(defaultPattern, dayCycles)[0] ?? "", service_type: "standard", counts_toward_staffing: true, eligible_shifts: [], is_shift_manager: false, can_train: false, notes: "" }])}><Plus size={16} /> הוספת איש/אשת צוות</button>
+              );
+            }}
+            actions={namedKeys.length ? (
+              <button type="button" className="ghost-button roster-fold-all" onClick={() => setFoldedPeople(allFolded ? new Set() : new Set(namedKeys))}>
+                {allFolded ? <ChevronsUpDown size={15} /> : <ChevronsDownUp size={15} />} {allFolded ? "פתיחת כל הכרטיסים" : "כיווץ כל הכרטיסים"}
+              </button>
+            ) : null}
+          />
+          <button type="button" className="ghost-button" onClick={() => {
+            // Added while one status is shown, the soldier takes it, so the
+            // new row does not vanish behind the filter.
+            const service = rosterServices.length === 1 ? rosterServices[0] : "standard";
+            setEmployees((current) => [...current, { name: "", role: "", exit_pattern: defaultPattern, rotation_group: rotationGroups(defaultPattern, dayCycles)[0] ?? "", service_type: service, counts_toward_staffing: service !== "overlap", eligible_shifts: [], is_shift_manager: false, can_train: false, notes: "" }]);
+          }}><Plus size={16} /> {rosterServices.length === 1 ? `הוספת ${SERVICE_TYPES[rosterServices[0] as keyof typeof SERVICE_TYPES]}` : "הוספת איש/אשת צוות"}</button>
         </SetupSection>
 
         <SetupSection tour="setup-shifts" icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה. תקן סופ״ש חל כשאחד הסבבים בבית — לפי ימים בבסיס/בבית בסעיף הסבבים.">
@@ -596,8 +659,22 @@ export function ManualSetup({
   );
 }
 
+/** One part of the form. Folding it only hides it: its fields stay in
+ *  state and are saved with the rest. */
 function SetupSection({ tour, icon, title, hint, children }: { tour?: string; icon: React.ReactNode; title: string; hint: string; children: React.ReactNode }) {
-  return <section className="manual-section"><header><span>{icon}</span><div data-tour={tour}><h2>{title}</h2><p>{hint}</p></div></header><div className="manual-section-body">{children}</div></section>;
+  const [open, setOpen] = useState(true);
+  return (
+    <section className={`manual-section${open ? "" : " is-closed"}`}>
+      <header>
+        <span>{icon}</span>
+        <div data-tour={tour}><h2>{title}</h2>{open ? <p>{hint}</p> : null}</div>
+        <button type="button" className="icon-button subtle manual-section-toggle" aria-expanded={open} aria-label={open ? `סגירת ${title}` : `פתיחת ${title}`} title={open ? "סגירה" : "פתיחה"} onClick={() => setOpen((value) => !value)}>
+          <ChevronDown size={16} aria-hidden="true" />
+        </button>
+      </header>
+      <div className="manual-section-body" hidden={!open}>{children}</div>
+    </section>
+  );
 }
 
 /** Which roles may stand a shift. A role no longer on the roster stays
@@ -628,6 +705,10 @@ function exitPattern(row: Row, fallback: "round" | "triplet" = "round"): string 
   // A day cycle is checked against the workplace's cycles on save.
   if (isDayCycle(value)) return value;
   return value in EXIT_PATTERNS ? value : fallback;
+}
+function patternLabel(pattern: string, cycles: DayCycle[]): string {
+  if (pattern in EXIT_PATTERNS) return EXIT_PATTERNS[pattern as keyof typeof EXIT_PATTERNS];
+  return cycles.find((cycle) => cyclePattern(cycle) === pattern)?.name || "מחזור";
 }
 function rotationGroups(pattern: string, cycles: DayCycle[]): string[] {
   if (pattern in CYCLES) return [...CYCLES[pattern as Cycle].groups];
