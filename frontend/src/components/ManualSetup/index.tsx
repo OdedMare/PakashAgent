@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
+import { DateInput } from "@/components/DateInput";
 import { TimeInput } from "@/components/TimeInput";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import { deleteShiftType, previewDeparture, updateProfile } from "@/services/api";
@@ -375,6 +376,8 @@ export function ManualSetup({
           shift_type: text(shift.shift_type) || "regular",
           start_time: text(shift.start_time),
           end_time: text(shift.end_time),
+          starts_on: text(shift.starts_on),
+          ends_on: text(shift.ends_on),
           days: strings(shift.days),
           headcount: number(shift.headcount, headcount(shift)),
           staffing: staffingFor(shift, weekend, closureDays(shift, closure)),
@@ -641,7 +644,7 @@ export function ManualSetup({
           }}><Plus size={16} /> {rosterServices.length === 1 ? `הוספת ${SERVICE_TYPES[rosterServices[0] as keyof typeof SERVICE_TYPES]}` : "הוספת איש/אשת צוות"}</button>
         </SetupSection>
 
-        <SetupSection tour="setup-shifts" icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה. תקן סופ״ש חל כשאחד הסבבים בבית — לפי ימים בבסיס/בבית בסעיף הסבבים.">
+        <SetupSection tour="setup-shifts" icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="תאריכי תוקף ריקים = משמרת קבועה; מילוי שניהם יוצר משמרת זמנית שנעלמת מהלוח מחוץ לטווח. משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה. תקן סופ״ש חל כשאחד הסבבים בבית — לפי ימים בבסיס/בבית בסעיף הסבבים.">
           <div className="manual-list">
             {shifts.map((shift, index) => (
               <article className="manual-row" key={`shift-${index}`}>
@@ -650,10 +653,13 @@ export function ManualSetup({
                   <Field label="סוג"><select value={text(shift.shift_type) || (shift.is_on_call ? "on_call" : "regular")} onChange={(e) => edit(setShifts, index, "shift_type", e.target.value)}>{Object.entries(SHIFT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
                   <Field label="התחלה"><TimeInput value={text(shift.start_time)} onChange={(time) => edit(setShifts, index, "start_time", time)} /></Field>
                   <Field label="סיום"><TimeInput value={text(shift.end_time)} onChange={(time) => edit(setShifts, index, "end_time", time)} /></Field>
+                  <Field label="פעילה מתאריך (לזמנית)"><DateInput value={text(shift.starts_on)} max={text(shift.ends_on) || undefined} required={Boolean(text(shift.ends_on))} onChange={(date) => edit(setShifts, index, "starts_on", date)} /></Field>
+                  <Field label="פעילה עד תאריך (לזמנית)"><DateInput value={text(shift.ends_on)} min={text(shift.starts_on) || undefined} required={Boolean(text(shift.starts_on))} onChange={(date) => edit(setShifts, index, "ends_on", date)} /></Field>
                   <Field label="תקן א׳–ה׳"><input type="number" min={0} max={100} value={number(shift.headcount, headcount(shift))} onChange={(e) => edit(setShifts, index, "headcount", seats(e.target.value))} /></Field>
                   <Field label="תקן סופ״ש"><input title={`חל על: ${closureDays(shift, closure).join(", ")}`} type="number" min={0} max={100} value={shift.weekend_headcount === "" || shift.weekend_headcount === undefined ? "" : String(shift.weekend_headcount)} placeholder="כמו באמצע השבוע" onChange={(e) => edit(setShifts, index, "weekend_headcount", e.target.value === "" ? "" : seats(e.target.value))} /></Field>
                   <Field label="ייעוד"><input value={inputText(shift.purpose)} onChange={(e) => edit(setShifts, index, "purpose", e.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></Field>
                 </div>
+                {text(shift.starts_on) && text(shift.ends_on) ? <p className="manual-zero-note">משמרת זמנית: תופיע בסידור רק בטווח התאריכים שנבחר.</p> : null}
                 {offNote(number(shift.headcount, headcount(shift)), shift.weekend_headcount) ? <p className="manual-zero-note">{offNote(number(shift.headcount, headcount(shift)), shift.weekend_headcount)}</p> : null}
                 <label className="manual-check"><input type="checkbox" checked={Boolean(shift.requires_shift_manager)} onChange={(e) => edit(setShifts, index, "requires_shift_manager", e.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
                 <CheckboxGrid label="ימים" values={DAYS} selected={strings(shift.days)} onChange={(value) => edit(setShifts, index, "days", value)} />

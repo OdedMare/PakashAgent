@@ -51,3 +51,25 @@ def test_the_solver_places_nobody_on_a_day_the_shift_is_off():
     result = generate_span(profile, THURSDAY, SATURDAY)
     assert [row["date"] for row in result["assignments"]] == [THURSDAY]
     assert not [item for item in result["warnings"] if item.get("date") in (FRIDAY, SATURDAY)]
+
+
+def test_a_temporary_shift_opens_slots_only_inside_its_date_window():
+    shift = dict(_shift(1, 1), starts_on="2026-08-19", ends_on=SATURDAY)
+    dates = [slot["slot_date"] for slot in build_slots(
+        {"shifts": [shift]}, "2026-08-17", "2026-08-24",
+    )]
+    assert dates == ["2026-08-19", THURSDAY, FRIDAY, SATURDAY]
+
+
+def test_a_temporary_shift_requires_a_valid_complete_date_window():
+    [saved] = validate_shifts([dict(_shift(1, 1), starts_on=THURSDAY, ends_on=SATURDAY)])
+    assert (saved["starts_on"], saved["ends_on"]) == (THURSDAY, SATURDAY)
+
+    for dates in (
+        {"starts_on": THURSDAY},
+        {"ends_on": SATURDAY},
+        {"starts_on": "not-a-date", "ends_on": SATURDAY},
+        {"starts_on": SATURDAY, "ends_on": THURSDAY},
+    ):
+        with pytest.raises(AgentError):
+            validate_shifts([dict(_shift(1, 1), **dates)])

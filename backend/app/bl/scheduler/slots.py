@@ -27,8 +27,8 @@ def build_slots(profile: dict, starts_on: str, ends_on: str) -> List[dict]:
 
     A shift with no `days` runs every day — setup leaves it empty to
     confirm the days, so an empty list means "not restricted" rather than
-    "never", and treating it as "never" would produce an empty schedule from
-    a profile that looks complete.
+    "never". A shift with `starts_on`/`ends_on` runs only inside that inclusive
+    window; outside it, the grid has no slot to fill.
     """
     start, end = parse_date(starts_on), parse_date(ends_on)
     if start is None or end is None:
@@ -43,13 +43,20 @@ def build_slots(profile: dict, starts_on: str, ends_on: str) -> List[dict]:
         weekday = hebrew_weekday(day)
         for shift in shifts:
             override = _override(profile, shift, day)
-            if runs_on(shift.get("days"), weekday):
+            if _active_on(shift, day) and runs_on(shift.get("days"), weekday):
                 slot = _slot(shift, day, weekday, override)
                 if slot["headcount"] != 0 or override is not None:
                     slots.append(slot)
     # A normal headcount of 0 removes the shift. A dated override stays as a
     # zero-seat slot so the board can show the explicit special-day choice.
     return slots
+
+
+def _active_on(shift: dict, day) -> bool:
+    """A permanent shift, or a temporary one inside its inclusive window."""
+    starts_on = parse_date(shift.get("starts_on"))
+    ends_on = parse_date(shift.get("ends_on"))
+    return (starts_on is None or starts_on <= day) and (ends_on is None or day <= ends_on)
 
 
 def _slot(shift: dict, day, weekday: str, override: Optional[int] = None) -> dict:

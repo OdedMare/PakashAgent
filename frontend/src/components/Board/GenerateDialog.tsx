@@ -510,6 +510,8 @@ type ShiftOption = {
   days: string[];
   staffing: Record<string, unknown>[];
   headcount: number;
+  startsOn: string;
+  endsOn: string;
 };
 
 function shiftOptions(rows: Record<string, unknown>[]): ShiftOption[] {
@@ -527,6 +529,8 @@ function shiftOptions(rows: Record<string, unknown>[]): ShiftOption[] {
     return [{
       name, hours: start && end ? `${start}–${end}` : "", days, staffing,
       headcount: typeof row.headcount === "number" ? row.headcount : 1,
+      startsOn: typeof row.starts_on === "string" ? row.starts_on : "",
+      endsOn: typeof row.ends_on === "string" ? row.ends_on : "",
     }];
   });
 }
@@ -549,7 +553,9 @@ function normalHeadcount(shift: ShiftOption | undefined, date: string): number {
 function shiftsForDate(shifts: ShiftOption[], date: string): ShiftOption[] {
   const weekday = hebrewWeekday(date).replace(/^יום /, "");
   return shifts.filter((shift) =>
-    !shift.days.length || shift.days.some((day) => day.replace(/^יום /, "") === weekday),
+    (!shift.startsOn || shift.startsOn <= date)
+      && (!shift.endsOn || date <= shift.endsOn)
+      && (!shift.days.length || shift.days.some((day) => day.replace(/^יום /, "") === weekday)),
   );
 }
 

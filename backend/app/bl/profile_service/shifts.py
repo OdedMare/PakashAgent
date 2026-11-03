@@ -1,5 +1,6 @@
-"""Validating the shift vocabulary: hours, staffing, and shift type."""
+"""Validating the shift vocabulary: hours, staffing, dates, and shift type."""
 
+import datetime
 from typing import Any, List
 
 from app.bl.profile_service.validation import named_rows, text, text_list, valid_time
@@ -18,6 +19,18 @@ def _shift(row: dict) -> dict:
         if value and not valid_time(value):
             raise AgentError("שעת המשמרת חייבת להיות בפורמט HH:MM")
         row[field] = value
+    for field in ("starts_on", "ends_on"):
+        value = text(row.get(field))
+        if value:
+            try:
+                value = datetime.date.fromisoformat(value).isoformat()
+            except (TypeError, ValueError):
+                raise AgentError("תאריך התוקף של המשמרת אינו תקין")
+        row[field] = value
+    if bool(row["starts_on"]) != bool(row["ends_on"]):
+        raise AgentError("יש להגדיר תאריך התחלה וסיום למשמרת זמנית")
+    if row["starts_on"] and row["ends_on"] < row["starts_on"]:
+        raise AgentError("תאריך סיום המשמרת מוקדם מתאריך ההתחלה")
     row["staffing"] = _staffing(row)
     shift_type = text(row.get("shift_type")) or (
         "on_call" if row.get("is_on_call") else "regular"

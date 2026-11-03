@@ -276,7 +276,10 @@ re-ask answered questions or invent a person's return-to-work date.
   marked `closure: true` is the weekend. `headcount: 0` means the shift does
   not run on those days ("תקן 0 בסופ״ש" → the closure group's headcount 0;
   "only on weekends" → the default group's headcount 0). Send the shift's
-  full `staffing` list when changing it.
+  full `staffing` list when changing it. Optional `starts_on` and `ends_on`
+  make a shift temporary: both are required together and the inclusive ISO
+  date window is the only time it appears in a schedule. Preserve an existing
+  shift's date window unless the manager explicitly changes it.
   Retain EVERY detail the manager supplied, including role, service type,
   command/training flags and notes. Do not omit a supplied detail just because
   the server could default it. Reuse a workplace default only when it is known
