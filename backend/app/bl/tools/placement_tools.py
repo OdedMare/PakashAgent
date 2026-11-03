@@ -85,6 +85,7 @@ class FindReplacements(Tool):
         self, team_id: str, shift_name: str, slot_date: str,
         employee: str = "", schedule_id: str = "",
         include_exceptions: bool = False,
+        include_other_slots: bool = True,
     ) -> dict:
         if not text(slot_date):
             raise AgentError("צריך לציין תאריך")
@@ -101,6 +102,7 @@ class FindReplacements(Tool):
             slot_date=date,
             availability=self._reads.availability(team_id, window(schedule)),
             moving_assignment_id=assignment_id(schedule, leaving, shift, date),
+            nearby=include_other_slots,
         )
         candidates = alternatives.get("employees") or []
         if include_exceptions and not candidates:

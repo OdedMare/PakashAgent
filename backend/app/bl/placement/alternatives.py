@@ -23,8 +23,14 @@ def suggest_alternatives(
     slot_date: str,
     availability: Optional[List[dict]] = None,
     moving_assignment_id: str = "",
+    nearby: bool = True,
 ) -> dict:
     """Who else could take this slot, and where else this person could go.
+
+    `nearby=False` skips the second half. It audits the period once per slot
+    within reach, and a caller that only wants the colleagues -- the
+    replacement tab -- was paying about half of its time for a list it threw
+    away.
 
     `employees` are sorted lightest week first -- `audit.fairness()`'s
     arithmetic applied to a choice. `slots` are ordered by distance from the
@@ -40,7 +46,7 @@ def suggest_alternatives(
     )
     return {
         "employees": free_employees(context, employee, shift_name, slot_date),
-        "slots": nearby_slots(context, employee, shift_name, slot_date),
+        "slots": nearby_slots(context, employee, shift_name, slot_date) if nearby else [],
     }
 
 
