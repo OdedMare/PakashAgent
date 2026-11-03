@@ -187,6 +187,8 @@ body:has(.management-workspace.has-drawer) .tutorial-fab { left: auto; right: 20
 .replacement-tier:first-of-type { margin-top: 2px; }
 .replacement-slot > button.is-chosen, .conversation-candidates > button[aria-pressed="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
 .replacement-badge { margin-inline-start: 8px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-style: normal; font-weight: 600; color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
+.candidate-copy .candidate-warning { display: flex; align-items: flex-start; gap: 5px; color: var(--warning); }
+.candidate-warning svg { flex: none; margin-top: 3px; }
 .replacement-prepare { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 16px; border: 0; border-radius: 12px; background: var(--primary-fill); color: #fff; font: inherit; font-weight: 600; }
 .replacement-prepare:disabled { opacity: 0.5; }
 @media (max-width: 420px) { .replacement-fields { grid-template-columns: 1fr; } }

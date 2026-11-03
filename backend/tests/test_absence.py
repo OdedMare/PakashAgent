@@ -182,6 +182,35 @@ def test_the_replacement_tab_ranks_covers_for_a_range_and_writes_nothing():
     assert not llm.calls and not repo.changes and not repo.availability_rows
 
 
+def test_the_replacement_tab_shows_covers_that_break_rest_hours_with_a_warning():
+    from app.common.sessions import ROLE_BOSS
+
+    repo, _, client = _replacement_client(ROLE_BOSS)
+    night = "לילה"
+    repo.profiles[TEAM]["audit_policy"] = {"min_rest_hours": 10}
+    repo.profiles[TEAM]["shifts"].append({
+        "name": night, "start_time": "15:00", "end_time": "23:00",
+        "days": [], "staffing": [],
+    })
+    schedule_id = next(iter(repo.schedules))
+    repo.add_slots(schedule_id, TEAM, [{
+        "shift_name": night, "slot_date": "2026-10-04", "headcount": 2,
+    }])
+    night_slot = repo.find_slot(schedule_id, TEAM, night, "2026-10-04")
+    for employee in ("יוסי", "רון"):
+        repo.add_assignment(schedule_id, TEAM, night_slot["id"], employee, "שיבוץ קיים")
+
+    slot = client.get("/api/agent/replacements", params=dict(
+        employee="דנה", starts_on="2026-10-05", ends_on="2026-10-05",
+    )).json()["slots"][0]
+
+    assert slot["pick"] == ""
+    assert [row["employee"] for row in slot["candidates"]] == ["יוסי", "רון"]
+    assert all(row["requires_exception"] for row in slot["candidates"])
+    assert all(row["warnings"][0]["code"] == "short_rest" for row in slot["candidates"])
+    assert all("שעות מנוחה" in row["warnings"][0]["message"] for row in slot["candidates"])
+
+
 def test_the_replacement_tab_refuses_strangers_and_members():
     from app.common.sessions import ROLE_BOSS, ROLE_MEMBER
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, LoaderCircle, Sparkles, UserRound } from "lucide-react";
+import { AlertTriangle, Check, LoaderCircle, Sparkles, UserRound } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
 
 import { DateInput, displayDate } from "@/components/DateInput";
@@ -111,7 +111,11 @@ export function ReplacementSlotCard({ slot, chosen, disabled, onChoose }: {
       <span className="candidate-avatar"><UserRound size={17} /></span>
       <span className="candidate-copy"><strong>{candidate.employee}
         {slot.pick === candidate.employee && slot.picked_by === "fairness" ? <em className="replacement-badge">הכי שווה</em> : null}</strong>
-        <small>{candidate.why}</small></span>
+        <small>{candidate.why}</small>
+        {candidate.requires_exception ? <small className="candidate-warning">
+          <AlertTriangle size={13} aria-hidden="true" />
+          {candidate.warnings?.map((warning) => warning.message).join(" · ") || "החלופה דורשת אישור חריגה בתוכנית."}
+        </small> : null}</span>
       {chosen === candidate.employee ? <Check size={16} aria-hidden="true" /> : null}
     </button></Fragment>) : <p>{slot.why || "לא נמצא מחליף שעומד בכל הכללים."} המשמרת תישאר חסרה.</p>}
   </section>;

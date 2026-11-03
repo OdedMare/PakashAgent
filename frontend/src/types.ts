@@ -1282,6 +1282,8 @@ export interface ReplacementSlot {
   candidates: {
     employee: string; hours: number; shifts: number; nights: number; why: string;
     tier?: number; tier_label?: string;
+    requires_exception?: boolean;
+    warnings?: ScheduleWarning[];
   }[];
   pick: string;
   picked_by: "fairness" | "manager" | "";

@@ -76,6 +76,10 @@ class AbsenceOptions:
             result = self._tools.run(team_id, "find_replacements", {
                 "schedule_id": schedule["id"], "employee": employee,
                 "shift_name": row["shift"], "slot_date": date,
+                # The changes tab must still offer a deliberate exception
+                # when nobody fits cleanly; the candidate carries the exact
+                # warning and the resulting plan still requires approval.
+                "include_exceptions": True,
                 # Only the colleagues are shown; where the absent person could
                 # go instead is no question an absence asks.
                 "include_other_slots": False,
