@@ -26,7 +26,7 @@ export function ReplacementPanel({ employees, today, disabled, onPrepare }: {
   onPrepare: (message: string) => void;
 }) {
   const [employee, setEmployee] = useState("");
-  const [reason, setReason] = useState<AbsenceReason>("חולה");
+  const [reason, setReason] = useState<AbsenceReason>(ABSENCE_REASONS[0]);
   // Empty until the manager picks: the dates then default to `today`, which
   // may arrive after the tab first renders.
   const [fromPicked, setFrom] = useState("");
@@ -71,7 +71,7 @@ export function ReplacementPanel({ employees, today, disabled, onPrepare }: {
         <option value="">בחירת עובד/ת…</option>
         {employees.map((name) => <option key={name} value={name}>{name}</option>)}
       </select></label>
-      <label>סיבה<select value={reason} onChange={(event) => setReason(event.target.value as AbsenceReason)}>
+      <label>סיבה (לא חובה)<select value={reason} onChange={(event) => setReason(event.target.value as AbsenceReason)}>
         {ABSENCE_REASONS.map((value) => <option key={value} value={value}>{value}</option>)}
       </select></label>
       <label>מתאריך<DateInput value={from} required onChange={setFrom} /></label>
