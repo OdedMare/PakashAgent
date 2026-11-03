@@ -28,7 +28,7 @@ from psycopg_pool import ConnectionPool
 from app.common.runtime_settings.runtime_settings_store import (
     RuntimeSettingsStore,
 )
-from app.dal import pool_hooks
+from app.dal import pool_hooks, write_marks
 
 # Sized for the threadpool FastAPI runs sync handlers in, not for the model:
 # a request blocked on a 3-minute generation is holding a worker thread, not a
@@ -89,7 +89,10 @@ def _pool_for(settings) -> ConnectionPool:
         _pool = ConnectionPool(
             conninfo=settings.database_url,
             kwargs=dict(
-                row_factory=dict_row, **_credentials(settings)
+                row_factory=dict_row, **_credentials(settings),
+                # Notes which teams each connection wrote for, so the read
+                # cache retires their reads once it commits (D50).
+                cursor_factory=write_marks.TrackingCursor,
             ),
             min_size=_MIN_POOL_SIZE,
             max_size=_MAX_POOL_SIZE,
@@ -147,7 +150,7 @@ def connect(store: RuntimeSettingsStore):
     job = _job_connection.get()
     if job is not None and job[0] is store:
         return _borrow_job_connection(job[1])
-    return _pool_for(store.get()).connection()
+    return write_marks.pooled(_pool_for(store.get()))
 
 
 def in_atomic(store) -> bool:
@@ -178,7 +181,7 @@ def single_statement(store: RuntimeSettingsStore):
         with connect(store) as connection:
             yield connection
         return
-    with _pool_for(store.get()).connection() as connection:
+    with write_marks.pooled(_pool_for(store.get())) as connection:
         # `pool_hooks.reset` turns it off again when the pool takes it back.
         connection.autocommit = True
         yield connection
@@ -218,6 +221,10 @@ def _borrow_job_connection(connection):
     except Exception:
         connection.rollback()
         raise
+    finally:
+        # The job keeps this connection for its whole run, so what it
+        # committed is told now rather than when the pool takes it back.
+        write_marks.flush(connection)
 
 
 @contextmanager

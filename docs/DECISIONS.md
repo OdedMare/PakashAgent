@@ -1749,3 +1749,68 @@ switched off, and the Magen Merkava builder now switches such soldiers off
 instead of ending them; the migration records itself in `deployment_state`, so a
 soldier departed afterwards is never brought back by a restart. The
 departure itself stays, for someone who really left.
+
+---
+
+## D50 — Redis keeps the heavy board reads until the team writes *(amends D35)*
+
+The operator asked to put Redis in front of the board's heavy reads and take
+load off PostgreSQL. Those reads are several queries and a full audit each
+— the management overview, the stats panel, a day, a week, a span of weeks,
+a period by id — and they are read far more often than they change: every
+tab switch, every poll after a write, every member opening the share link.
+
+**PostgreSQL stays the only source of truth** (D35). Redis holds copies
+only, and every key in it may be thrown away at any moment. The throttle,
+the live signals and the model queue stay where D35 put them.
+
+**What is cached** is wrapped at the routes (`api/routers/schedules/`):
+`/overview`, `/current`, `/at`, `/between`, `/stats` and `GET /{id}`, keyed
+by team, the arguments, the role (a member reads published periods only)
+and today's date. The value is stored as the JSON the route returns, so a
+hit and a miss answer the same shape.
+
+**Invalidation is by version, and every write is noticed at the cursor.**
+Finding every write by hand — a route, a job checkpoint, a commander's duty
+written into another team — is how a cache comes to show a board that is no
+longer true, so it is not done by hand:
+
+- Every pooled connection uses `write_marks.TrackingCursor`, which marks a
+  statement that writes (by its first word) with the team of the work in
+  progress (`current_team()`, set per request by the middleware and per
+  job by the worker). With no team in context — the operator console, a
+  commander's route, start-up — the mark is `""`, which means every team.
+  Tables no cached read looks at (the job queue, login attempts, the
+  deployment's shared values, chat turns) are not marked.
+- The marks are told **after the commit and before the response**: when the
+  `connect()`/`single_statement()` block ends, or when a job's borrowed
+  connection commits. Not from the pool's return, which psycopg_pool runs on
+  its own thread a moment later — a screen re-reading right after its own
+  write would otherwise get the old version.
+- Telling touches Redis only. The hub reads the settings it holds
+  (`store.peek()`), never `store.get()`, which polls the shared settings
+  from the database: a read taken inside a write's invalidation is a second
+  connection while the first is being told about, and it deadlocked the
+  pool in testing. A listener's own statements are never told back to it.
+- Each team has a generation counter, and the deployment one more. A cached
+  read's key carries both, so a write retires everything its team cached
+  with one `INCR`. A read that started before a write and finishes after it
+  lands under the old generation, where nobody asks again. A counter Redis
+  evicted starts again from the clock, so it cannot revive an old read.
+
+**Never required, never wrong for long.** With no Redis, a TTL of 0, or a
+command that fails, the read goes to PostgreSQL exactly as before. A write
+that could not reach Redis leaves a debt that bumps the deployment's
+counter before anything cached is trusted again; a fresh process starts
+owing it. `redis_cache_ttl_seconds` (default 300, at most a day) bounds what
+that cannot cover, such as a process that cannot reach Redis while others
+can.
+
+**The connection is the one D33 had**, back in the runtime settings and the
+operator console's "מערכת" tab: URL, host, port, username, password (masked),
+and the key prefix. **Every key starts with the prefix** —
+`<prefix>:cache:read:…` for reads, `<prefix>:cache:generation` and
+`<prefix>:cache:team:<id>:generation` for the counters — so one Redis can
+serve several deployments or other applications, and the panel counts this
+deployment's keys by SCAN under it. A save reaches every replica through
+the shared settings (D39).

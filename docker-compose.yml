@@ -93,6 +93,19 @@ services:
       # seconds per solve and parallel workers. Also editable in the panel.
       PAKASH_SOLVER_TIME_LIMIT_SECONDS: ${PAKASH_SOLVER_TIME_LIMIT_SECONDS:-10}
       PAKASH_SOLVER_WORKERS: ${PAKASH_SOLVER_WORKERS:-8}
+      # Redis for the read cache (D50), shared by the API and the worker so a
+      # job's write retires what the API cached. All empty = off. Host/port/
+      # username override the same parts of the URL; a host alone is enough.
+      # Every key starts with the prefix. Also editable in the settings panel.
+      # `docker compose --profile redis up` starts the one below:
+      # PAKASH_REDIS_URL=redis://redis:6379/0
+      PAKASH_REDIS_URL: ${PAKASH_REDIS_URL:-}
+      PAKASH_REDIS_HOST: ${PAKASH_REDIS_HOST:-}
+      PAKASH_REDIS_PORT: ${PAKASH_REDIS_PORT:-}
+      PAKASH_REDIS_USERNAME: ${PAKASH_REDIS_USERNAME:-}
+      PAKASH_REDIS_PASSWORD: ${PAKASH_REDIS_PASSWORD:-}
+      PAKASH_REDIS_KEY_PREFIX: ${PAKASH_REDIS_KEY_PREFIX:-pakash}
+      PAKASH_REDIS_CACHE_TTL_SECONDS: ${PAKASH_REDIS_CACHE_TTL_SECONDS:-300}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -126,6 +139,13 @@ services:
       PAKASH_LLM_REASONING_EFFORT: ${PAKASH_LLM_REASONING_EFFORT:-}
       PAKASH_SOLVER_TIME_LIMIT_SECONDS: ${PAKASH_SOLVER_TIME_LIMIT_SECONDS:-10}
       PAKASH_SOLVER_WORKERS: ${PAKASH_SOLVER_WORKERS:-8}
+      PAKASH_REDIS_URL: ${PAKASH_REDIS_URL:-}
+      PAKASH_REDIS_HOST: ${PAKASH_REDIS_HOST:-}
+      PAKASH_REDIS_PORT: ${PAKASH_REDIS_PORT:-}
+      PAKASH_REDIS_USERNAME: ${PAKASH_REDIS_USERNAME:-}
+      PAKASH_REDIS_PASSWORD: ${PAKASH_REDIS_PASSWORD:-}
+      PAKASH_REDIS_KEY_PREFIX: ${PAKASH_REDIS_KEY_PREFIX:-pakash}
+      PAKASH_REDIS_CACHE_TTL_SECONDS: ${PAKASH_REDIS_CACHE_TTL_SECONDS:-300}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # Three lanes only take manager chat, so one slow turn does not hold
       # the others; the rest checkpoint one generation span at a time.
@@ -157,6 +177,14 @@ services:
       - "3000:3000"
     depends_on:
       - backend
+
+  # Optional: the read cache's Redis (D50). Started only with
+  # `--profile redis`; the app works the same without it.
+  redis:
+    image: redis:7
+    profiles: ["redis"]
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru"]
 
 volumes:
   pakash-db:

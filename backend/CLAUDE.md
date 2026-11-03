@@ -38,6 +38,9 @@ python -m benchmarks.solver_bench --save before.json   # solver quality and time
   (strict structured outputs first). Model/base URL/API key stay live per
   call; concurrency is held with PostgreSQL advisory locks.
 - `dal/notify.py` — LISTEN/NOTIFY between processes (D35).
+- `common/read_cache.py` + `dal/write_marks.py` — the optional Redis cache
+  of the board's heavy reads (D50), retired per team by every committed
+  write, noticed at the cursor. Keys under `redis_key_prefix`.
 - `dal/repository/` — the only SQL owner. `teams.py` also owns password
   hashing (`scrypt`, stdlib) and the member share token; `throttle.py` the
   shared login-attempt counts (D35).

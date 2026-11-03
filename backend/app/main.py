@@ -37,7 +37,10 @@ from app.common.sessions import (
     ADMIN_COOKIE_NAME, COMMANDER_COOKIE_NAME, COOKIE_NAME, MANAGER_COOKIE_NAME,
     ROLE_BOSS, read, read_admin, read_commander,
 )
+from app.common.read_cache import ReadCache
+from app.common.redis_hub import RedisHub
 from app.common.throttle import LoginThrottle
+from app.dal import write_marks
 from app.dal.notify import PostgresSignals
 from app.common.runtime_settings.runtime_settings_store import (
     RuntimeSettingsStore,
@@ -61,6 +64,12 @@ repository = Repository(store)
 # the processes that mount the same settings file (D39).
 store.share_through(repository)
 llm = OpenAIJsonClient(store)
+# Redis keeps the heavy board reads until the team's data changes (D50).
+# Inert with no URL saved: every read then goes to PostgreSQL. Every write
+# this process commits retires its team's cached reads.
+redis_hub = RedisHub(store)
+read_cache = ReadCache(redis_hub, store)
+write_marks.on_written(read_cache.written)
 workspace_service = WorkspaceService(repository)
 # Handed the settings store, not just the repository: the solver's time limit
 # is read per build, so a value saved in the panel applies to the next build
@@ -105,7 +114,9 @@ if not admin_password:
         "Neither PAKASH_ADMIN_PASSWORD nor PAKASH_SETTINGS_PASSWORD is set; "
         "the operator console is locked."
     )
-admin_service = AdminService(repository, workspace_service, admin_password, store=store)
+admin_service = AdminService(
+    repository, workspace_service, admin_password, store=store, redis=redis_hub,
+)
 # A מכלול (D43): workplaces under one commander, whose password the
 # operator issues.
 complex_service = ComplexService(repository, workspace_service, schedule_service)
@@ -261,7 +272,7 @@ app.include_router(
         login_throttle, duties=complex_duty_service,
     )
 )
-app.include_router(schedules.build_router(schedule_service, guards))
+app.include_router(schedules.build_router(schedule_service, guards, read_cache))
 app.include_router(profile.build_router(profile_service, guards, schedule_service))
 app.include_router(manager_chat.build_router(manager_chat_service, repository, guards))
 app.include_router(
@@ -271,6 +282,7 @@ app.include_router(replacements.build_router(manager_chat_service, guards))
 app.include_router(
     settings.build_router(
         store, llm, guards, env.settings_password, login_throttle,
+        redis=redis_hub,
     )
 )
 app.include_router(

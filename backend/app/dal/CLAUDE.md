@@ -6,6 +6,10 @@ Fetches and sends. Makes no decisions — those live in `bl/`.
   (never creates it).
 - `llm/` — the OpenAI-compatible JSON client. See [llm/CLAUDE.md](llm/CLAUDE.md).
 - `repository/` — the only SQL owner in the codebase.
+- `write_marks.py` — `TrackingCursor` on every pooled connection marks a
+  writing statement with the team in context (`""` = every team); the
+  marks are told to the read cache when the pooled block ends or a job's
+  connection commits — after the commit, before the response (D50).
 - `notify.py` — `PostgresSignals`: `pg_notify` out, one unpooled `LISTEN`
   connection per process in, on a channel named after the schema (D35).
   The manager's live inbox (`common/events.py`) rides on it.
@@ -15,7 +19,9 @@ Fetches and sends. Makes no decisions — those live in `bl/`.
 (`throttle.py`), live signals (`notify.py`) and the model-call limit
 (advisory locks, `llm/model_slots.py`), and what every replica must agree
 on — the generated session key and the panel's settings
-(`deployment.py`, D39). There is no Redis. `initialize()` creates the
+(`deployment.py`, D39). Redis, when configured, is only a cache of reads
+(D50): `write_marks.py` notices every write at the cursor and tells the
+read cache after the commit. `initialize()` creates the
 tables under an advisory lock, so replicas starting together do not race.
 
 ## Connection pooling

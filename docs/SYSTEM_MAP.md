@@ -34,7 +34,7 @@ PostgreSQL הוא המצב המשותף היחיד (D35):
    טבלת login_attempts ל-throttle · LISTEN/NOTIFY לאירועי SSE · advisory locks לתור המודל
 ```
 
-- **אין Redis (D35).** ה-throttle, האירועים ותור המודל עוברים דרך Postgres. אם מסד הנתונים לא עונה, ה-throttle והאירועים חוזרים לזיכרון התהליך.
+- **Redis הוא מטמון בלבד, ואופציונלי (D50).** ה-throttle, האירועים ותור המודל עוברים דרך Postgres (D35). עם Redis מוגדר, הקריאות הכבדות של הלוח (`/overview`, `/stats`, `/at`, `/between`, `/current`, `GET /{id}`) נשמרות ב-Redis (`common/read_cache.py`) עד שהצוות כותב: כל כתיבה מסומנת ב-cursor (`dal/write_marks.py`) ופוסלת אחרי ה-commit את המטמון של הצוות, דרך מונה גרסה. כל המפתחות מתחילים בקידומת שנבחרה (`redis_key_prefix`). בלי Redis הכול נקרא מ-Postgres כרגיל.
 - **תהליכים:** frontend ו-API. ה-worker רץ **בתוך תהליך ה-API כברירת מחדל** (`PAKASH_EMBEDDED_WORKER=0` מכבה), ואפשר להריץ אותו גם בנפרד כ-`python -m app.worker`; ב-`docker-compose.yml` הוא רץ בנפרד. ה-worker מושך jobs מ-Postgres (`FOR UPDATE SKIP LOCKED`) ב-`PAKASH_WORKER_CONCURRENCY` threads (ברירת מחדל 6). `PAKASH_CHAT_WORKERS` מהם (ברירת מחדל 3) שמורים ל-lane `interactive`, שמושך רק `manager_chat`, כך שבנייה ארוכה לא תופסת את כל ה-workers.
 - **סוגי jobs:** `manager_chat`, `generation` (job לכל span, כולל ריענון טיוטות אחרי הוספת חייל או משמרת, D37) ו-`compile_sources`. job מסוג `scan` שנשאר מה-copilot מסתיים בלי לעשות כלום.
 - **שלוש דרגות מודל** (`dal/llm/model_roles.py`): `advanced` לתרגום ההנחיות של הבנייה (flow `scheduler`), `fast` (לא בשימוש פעיל), ו-`default` לכל השאר (צ'אט המנהל הוא flow `planner`).

@@ -209,8 +209,17 @@ cd backend
 **PostgreSQL is the only stateful service.** The login throttle, the
 manager's live inbox (LISTEN/NOTIFY) and the model-call limit
 (`PAKASH_LLM_MAX_CONCURRENCY`, default 4; set 1 for a local Ollama) all go
-through it ([D35](docs/DECISIONS.md)). There is no Redis, and nothing calls
-out but the model server (Opik tracing was removed for air-gapped networks).
+through it ([D35](docs/DECISIONS.md)). Nothing calls out but the model
+server (Opik tracing was removed for air-gapped networks).
+
+**Redis is optional, and only a cache** ([D50](docs/DECISIONS.md)). With a
+URL saved in the operator console ("מערכת" → Redis) or `PAKASH_REDIS_URL`,
+the board's heavy reads — the overview, stats, a day, a week, a span, a
+period — are answered from Redis until that team's data changes. Every
+write, from the API or the worker, retires its team's cached reads once it
+commits, and every key starts with the configured prefix
+(`PAKASH_REDIS_KEY_PREFIX`). Without Redis everything reads PostgreSQL as
+before; `docker compose --profile redis up` starts one.
 A team may use every model slot unless `PAKASH_LLM_TEAM_CONCURRENCY` caps it;
 `PAKASH_LLM_TIMEOUT_SECONDS=0` is a built-in ceiling (300s, builds 900s), so a
 hung call fails instead of holding its slot ([D38](docs/DECISIONS.md)). See
