@@ -56,7 +56,26 @@ ROLE = "אלחוט"                 # התפקיד של כולם
 RESERVE_DAYS_PER_WEEK = 4      # מילואים: עד 4 ימים בשבוע
 FOUR_DAYS = {"מילואים"}
 CYCLE_ID = "sadir"             # סדיר, אע"צ והצ"ח: סבב 12/2
-CYCLE = {"id": CYCLE_ID, "name": "12/2", "base_days": 12, "home_days": 2, "groups": ["א", "ב"]}
+# 12 ימים בבסיס מיום ראשון, יוצאים בשישי ב-08:00 וחוזרים בראשון ב-12:00 ומשתלבים במשמרות.
+# שתי קבוצות בהפרש שבוע — כל סוף שבוע יוצאת חצי מכל תא.
+CYCLE = {"id": CYCLE_ID, "name": "12/2", "base_days": 12, "home_days": 2, "groups": ["א", "ב"],
+         "leave_time": "08:00", "return_time": "12:00"}
+
+
+def cycle_anchor(start: dt.date) -> dt.date:
+    """יום ראשון שבו קבוצה א' מתחילה 12 ימים בבסיס — הראשון שלפני --start (או בו)."""
+    return start - dt.timedelta(days=(start.weekday() + 1) % 7)
+
+
+def first_weekends(start: dt.date) -> dict:
+    """הסופ"ש הראשון שכל קבוצה בבית מ---start והלאה: (יציאה בשישי, חזרה בראשון)."""
+    anchor, result = cycle_anchor(start), {}
+    for index, group in enumerate(CYCLE["groups"]):
+        friday = anchor + dt.timedelta(days=7 * index + CYCLE["base_days"])
+        while friday - dt.timedelta(days=14) >= start - dt.timedelta(days=1):
+            friday -= dt.timedelta(days=14)
+        result[group] = (friday, friday + dt.timedelta(days=2))
+    return result
 
 
 def shift_name(cab: str, part: str) -> str:
@@ -126,7 +145,7 @@ def build_employees(start: dt.date) -> list[dict]:
 def build_profile(start: dt.date) -> dict:
     return {
         "workplace": {"name": TEAM_NAME, "rotation_mode": "round", "planning_horizon": "שבוע",
-                      "day_cycles": [dict(CYCLE, anchor_date=start.isoformat())]},
+                      "day_cycles": [dict(CYCLE, anchor_date=cycle_anchor(start).isoformat())]},
         "shifts": build_shifts(),
         "employees": build_employees(start),
         "rules": [],
@@ -158,7 +177,7 @@ def send(profile: dict, url: str, admin_password: str, team_password: str, name:
     print("כניסה: בוחרים את הצוות במסך הכניסה ומזינים את סיסמת המנהל שבחרת.")
 
 
-def report(profile: dict) -> None:
+def report(profile: dict, start: dt.date) -> None:
     people = profile["employees"]
     cycle = profile["workplace"]["day_cycles"][0]
     print(f"צוות: {profile['workplace']['name']}")
@@ -169,6 +188,8 @@ def report(profile: dict) -> None:
     print(f"אנשים: {len(people)} — סדיר/אע\"צ/הצ\"ח בסבב {cycle['name']} (מ-{cycle['anchor_date']}): {len(sadir)}, "
           f"מילואים עד {RESERVE_DAYS_PER_WEEK} ימים בשבוע: {len(people) - len(sadir)}, "
           f"לא זמינים: {sum(1 for p in people if p.get('inactive_from'))}")
+    for group, (out, back) in first_weekends(start).items():
+        print(f"  קבוצה {group}: יוצאת בשישי {out:%d/%m} ב-08:00, חוזרת בראשון {back:%d/%m} ב-12:00, וכך כל שבועיים")
     for p in people:
         track = ("[לא זמין] " if p.get("inactive_from") else "") + (f"12/2 קבוצה {p['rotation_group']}" if p in sadir else f"עד {p['reserve_days_per_week']} ימים בשבוע")
         cab = p["eligible_shifts"][0].split(" · ")[0] if p["eligible_shifts"] else "-"
@@ -184,14 +205,14 @@ def main() -> int:
     ap.add_argument("--team-password", help="הסיסמה שתהיה למנהל הצוות החדש")
     ap.add_argument("--name", default=TEAM_NAME, help="שם הצוות")
     ap.add_argument("--start", type=dt.date.fromisoformat, default=dt.date.today(),
-                    help="היום הראשון של סבב ה-12/2 (YYYY-MM-DD). ברירת מחדל: היום")
+                    help="תחילת הקריאה (YYYY-MM-DD). סבב ה-12/2 נספר מיום ראשון שלפניו. ברירת מחדל: היום")
     ap.add_argument("--dry-run", action="store_true", help="רק להדפיס מה ייבנה, בלי לשלוח לשרת")
     ap.add_argument("--out", help="לשמור את הפרופיל לקובץ JSON")
     args = ap.parse_args()
 
     profile = build_profile(args.start)
     profile["workplace"]["name"] = args.name
-    report(profile)
+    report(profile, args.start)
     if args.out:
         with open(args.out, "w", encoding="utf-8") as f:
             json.dump(profile, f, ensure_ascii=False, indent=2)
