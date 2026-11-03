@@ -1,4 +1,4 @@
-import { orderByHours } from "@/components/Board/shiftOrder";
+import { orderByName } from "@/components/Board/shiftOrder";
 import type { ComplexBoard, ComplexPeriod } from "@/types";
 
 export type Unit = ComplexBoard["teams"][number];
@@ -68,24 +68,21 @@ export function readCell(unit: Unit, shift: string, day: string): CellReading | 
   };
 }
 
-/** A משמרת's shift types in the order its own board reads them: by the
- *  clock, then any the stored grid has that setup no longer declares. */
+/** A משמרת's shift types in the order its own board reads them: א-ב,
+ *  including any the stored grid has that setup no longer declares. */
 export function shiftsOf(unit: Unit): string[] {
-  const starts: Record<string, string> = {};
   const names: string[] = [];
   for (const shift of unit.shifts) {
-    starts[shift.name] = shift.start_time;
     names.push(shift.name);
   }
   for (const period of unit.periods) {
     for (const slot of period.slots) {
       if (!names.includes(slot.shift_name)) {
         names.push(slot.shift_name);
-        starts[slot.shift_name] = slot.start_time;
       }
     }
   }
-  return orderByHours(names, starts);
+  return orderByName(names);
 }
 
 export interface Figures {

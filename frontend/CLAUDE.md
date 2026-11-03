@@ -72,13 +72,10 @@ and the third of them is not an edit at all:
   boss build a week without the agent at all.
 - **Dragging a shift *row* writes nothing at all** — it is not a third
   gesture on the schedule but a change to the order the board is read in
-  (`Board/shiftOrder.ts`). The rows default to **the clock**, earliest start
-  first, because that is the sequence the day actually happens in; the order
-  the slots were written in carried no meaning a manager could see, and
-  alphabetising would scramble the same sequence differently
-  ([D9](../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)). A shift
-  with no hours cannot be placed on a clock, so those keep their declared
-  order and sit last. The manager can drag or nudge the rows into any other
+  (`Board/shiftOrder.ts`). The rows default to **א-ב** (Hebrew collation), so the shifts of
+  one post sit together — אלחוט יום directly above אלחוט לילה — instead of
+  being split between the top (day) and bottom (night) of the board. The
+  shift filter and the מכלול view use the same order. The manager can drag or nudge the rows into any other
   order, remembered per browser, and put them back with one click. Because
   nothing is written, this works on a published board too, where every write
   is refused.
