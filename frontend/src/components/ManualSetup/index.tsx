@@ -39,7 +39,7 @@ import { ImportUnit } from "./ImportUnit";
 const DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 const WEEKEND = ["שישי", "שבת"];
 const SERVICE_TYPES = {
-  standard: "תקן",
+  standard: "סדיר",
   overlap: "נחפף/ת",
   reserve: "מילואים",
   civilian: "אע״צ",

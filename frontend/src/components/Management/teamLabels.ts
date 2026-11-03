@@ -40,7 +40,7 @@ export const SOURCE_LABELS: Record<string, string> = {
 };
 
 export const SERVICE_TYPE_LABELS: Record<string, string> = {
-  standard: "תקן",
+  standard: "סדיר",
   overlap: "נחפף/ת",
   reserve: "מילואים",
   civilian: "אע״צ",
