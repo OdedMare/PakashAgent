@@ -45,10 +45,26 @@ props.update({
 })
 props["tool_calls"]["items"]["properties"]["tool"]["enum"] += [
     "list_periods", "workload_report", "change_history", "simulate_changes",
-    "constraints_report", "request_inbox", "preference_list",
+    "staffing_scenario", "constraints_report", "request_inbox", "preference_list",
 ]
 props["tool_calls"]["items"]["properties"]["arguments"]["properties"]["operations"] = \
     copy.deepcopy(props["operations"])
+props["tool_calls"]["items"]["properties"]["arguments"]["properties"].update({
+    "reserve_days_per_week": {"type": "integer", "minimum": 1, "maximum": 7},
+    "reserve_min_days": {"type": "integer", "minimum": 1, "maximum": 7},
+    "additional_staff": {"type": "array", "maxItems": 6, "items": {
+        "type": "object", "additionalProperties": False,
+        "required": ["count", "service_type", "role", "eligible_shifts", "competence", "reserve_days_per_week"],
+        "properties": {
+            "count": {"type": "integer", "minimum": 1, "maximum": 20},
+            "service_type": {"type": "string", "enum": ["standard", "reserve", "civilian", "hatzach"]},
+            "role": {"type": "string"},
+            "eligible_shifts": {"type": "array", "items": {"type": "string"}},
+            "competence": {"type": "string", "enum": ["", "weak", "medium", "high", "excellent"]},
+            "reserve_days_per_week": {"type": ["integer", "null"], "minimum": 1, "maximum": 7},
+        },
+    }},
+})
 props["needs_reason"]["enum"] = [False]
 props["reply"]["minLength"] = 1
 props["constraints"]["items"]["properties"]["available"] = {"type": "boolean"}

@@ -18,7 +18,9 @@ from app.common.errors import AppError, ConflictError, NotFoundError, error_payl
 from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 from app.common.time_context import israel_today
 from app.dal.repository.schedules import week_bounds
-from tests.test_schedule_api import _FakeScheduleRepo, _ScriptedLlm, PROFILE, TEAM, SECRET, MORNING
+from tests.test_schedule_api import (
+    EVENING, MORNING, PROFILE, SECRET, TEAM, _FakeScheduleRepo, _ScriptedLlm,
+)
 
 
 class ChatRepo(_FakeScheduleRepo):
@@ -476,6 +478,94 @@ def test_simulation_checks_named_week_and_reports_qualification_conflicts():
     assert result["schedule_id"] == other["id"]
     assert any(row["code"] == "ineligible" for row in result["introduced"])
     assert not repo.assignments(other["id"], TEAM)
+
+
+def test_staffing_scenario_moves_a_real_surplus_into_a_gap_without_writing():
+    repo, _, service, _, schedule_id = setup([])
+    profile = repo.profiles[TEAM]
+    profile["shifts"].append({
+        "name": EVENING, "start_time": "15:00", "end_time": "23:00",
+        "staffing": [{"days": [], "headcount": 1, "required_roles": []}],
+    })
+    profile["employees"][0]["eligible_shifts"] = [MORNING]
+    profile["employees"][1]["eligible_shifts"] = [MORNING, EVENING]
+    repo.assignment_rows[schedule_id] = []
+    slots = repo.replace_slots(schedule_id, TEAM, [
+        {"shift_name": MORNING, "slot_date": "2026-10-05", "headcount": 1},
+        {"shift_name": EVENING, "slot_date": "2026-10-05", "headcount": 1},
+    ])
+    repo.add_assignment(schedule_id, TEAM, slots[0]["id"], "דנה", "שיבוץ קיים")
+    repo.add_assignment(schedule_id, TEAM, slots[0]["id"], "יוסי", "עודף קיים")
+
+    result = service._chat_tools.run(
+        TEAM, "staffing_scenario", {"day": "2026-10-05"}, schedule_id,
+    )
+
+    assert result["simulated"] and result["applied"] is False
+    assert result["coverage"]["current_assigned"] == 1
+    assert result["coverage"]["after_rebalance"] == 2
+    assert result["coverage"]["scenario_gain"] == 0
+    assert result["transfers_from_surplus"] == [{
+        "employee": "יוסי", "from_shift": MORNING, "from_date": "2026-10-05",
+        "to_shift": EVENING, "to_date": "2026-10-05",
+    }]
+    assert [(row["employee"], row["shift"]) for row in repo.assignments(schedule_id, TEAM)] \
+        == [("דנה", MORNING), ("יוסי", MORNING)]
+
+
+def test_staffing_scenario_separates_existing_capacity_from_extra_reserve_days():
+    repo, _, service, _, schedule_id = setup([])
+    profile = repo.profiles[TEAM]
+    profile["employees"] = [{
+        "name": "יוסי", "eligible_shifts": [MORNING], "service_type": "reserve",
+        "reserve_days_per_week": 1, "exit_pattern": "none", "rotation_group": "",
+    }]
+    repo.assignment_rows[schedule_id] = []
+    repo.replace_slots(schedule_id, TEAM, [
+        {"shift_name": MORNING, "slot_date": "2026-10-05", "headcount": 1},
+        {"shift_name": MORNING, "slot_date": "2026-10-06", "headcount": 1},
+    ])
+
+    result = service._chat_tools.run(TEAM, "staffing_scenario", {
+        "day": "2026-10-05", "reserve_days_per_week": 2, "reserve_min_days": 2,
+        "employee": "יוסי",
+    }, schedule_id)
+
+    assert result["coverage"] == {
+        "required": 2, "current_assigned": 0, "current_percent": 0,
+        "after_rebalance": 1, "after_rebalance_percent": 50,
+        "after_scenario": 2, "after_scenario_percent": 100,
+        "delta_from_current": 2, "scenario_gain": 1,
+    }
+    assert result["reserve_changes"][0]["employee"] == "יוסי"
+    assert repo.profiles[TEAM]["employees"][0]["reserve_days_per_week"] == 1
+    assert not repo.assignments(schedule_id, TEAM)
+
+
+def test_staffing_scenario_can_measure_hypothetical_civilian_capacity():
+    repo, _, service, _, schedule_id = setup([])
+    repo.profiles[TEAM]["employees"] = [repo.profiles[TEAM]["employees"][0]]
+    repo.assignment_rows[schedule_id] = []
+    slots = repo.replace_slots(schedule_id, TEAM, [
+        {"shift_name": MORNING, "slot_date": "2026-10-05", "headcount": 2},
+    ])
+    repo.add_assignment(schedule_id, TEAM, slots[0]["id"], "דנה", "שיבוץ קיים")
+
+    result = service._chat_tools.run(TEAM, "staffing_scenario", {
+        "day": "2026-10-05",
+        "additional_staff": [{
+            "count": 1, "service_type": "civilian", "role": "",
+            "eligible_shifts": [MORNING], "competence": "",
+            "reserve_days_per_week": None,
+        }],
+    }, schedule_id)
+
+    assert result["coverage"]["after_rebalance"] == 1
+    assert result["coverage"]["after_scenario"] == 2
+    assert result["coverage"]["scenario_gain"] == 1
+    assert result["gap_summary"]["after_scenario"] == {"slots": 0, "people_short": 0}
+    assert result["additional_staff"][0]["service_type"] == "civilian"
+    assert len(repo.profiles[TEAM]["employees"]) == 1
 
 
 def test_recurring_constraint_profile_plan_preserves_roster_and_employee_details():

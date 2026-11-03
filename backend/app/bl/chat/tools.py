@@ -12,11 +12,12 @@ from app.bl.chat.contract import RejectedPlan, audit_plan, changed_rows, plan_fo
 from app.bl.planner.fallback_answers import FallbackAnswers
 from app.bl.planner.team_answers import TeamAnswers
 from app.bl.prompts import load
-from app.bl.shared import person_roles, warning_key
+from app.bl.shared import iso, person_roles, warning_key
 from app.bl.simulate.hypothetical import schedule_rows
+from app.bl.staffing_scenario import analyze as analyze_staffing
 from app.bl.tools import ScheduleTools, TOOL_DESCRIPTIONS
 from app.bl.tools.schedule_tools import _invalid_date_argument
-from app.bl.shared import iso
+from app.bl.schedule_service.generation.history import AssignmentHistory
 from app.common.errors import AgentError
 from app.common.time_context import israel_today
 
@@ -27,6 +28,7 @@ _EXTRA_DESCRIPTIONS = {
     "workload_report": "השוואת שעות, מספר משמרות וכוננויות בכל טווח תאריכים",
     "change_history": "מה השתנה בסידורים ומדוע",
     "simulate_changes": "בדיקת מה יקרה אם מבצעים כמה שינויים יחד, כולל כיסוי ועומסים; ללא שמירה",
+    "staffing_scenario": "השוואת תרחיש כוח אדם: ימי מילואים, כוח נוסף ואיזון מעודף לחוסר; ללא שמירה",
     "constraints_report": "אילוצים שמורים וקבועים, שעות ועדיפות, בקשות שממתינות לאישור, וכיבוד או התנגשות מול כל הסידורים בטווח",
     "request_inbox": "בקשות אילוץ והחלפות של הצוות, עם מזהים וסטטוסים אמיתיים להחלטת מנהל",
     "preference_list": "כל ההעדפות השמורות של הצוות: פעילות, מוצעות ומושבתות, עם מזהים לעריכה",
@@ -41,6 +43,7 @@ class ManagerChatTools:
         self._tools = ScheduleTools(repository)
         self._fallback = FallbackAnswers(self._tools)
         self._team = TeamAnswers(self._tools)
+        self._history = AssignmentHistory(repository)
 
     @property
     def descriptions(self):
@@ -136,7 +139,7 @@ class ManagerChatTools:
                 return None
             last = (datetime.date.fromisoformat(week) + datetime.timedelta(days=6)).isoformat()
             return dict(arguments, starts_on=week, ends_on=last)
-        if (name not in TOOL_DESCRIPTIONS and name != "simulate_changes") \
+        if (name not in TOOL_DESCRIPTIONS and name not in ("simulate_changes", "staffing_scenario")) \
                 or arguments.get("schedule_id") or has_date:
             return arguments
         if schedule_id:
@@ -144,6 +147,7 @@ class ManagerChatTools:
         needs_week = name in (
             "read_period", "employee_state", "coverage_gaps",
             "publish_readiness", "simulate_changes",
+            "staffing_scenario",
         )
         if needs_week:
             if not context.get("visible_week"):
@@ -209,6 +213,8 @@ class ManagerChatTools:
             return dict(readers[name](), tool=name, ok=True)
         if name == "simulate_changes":
             return self._simulate(team_id, name, arguments, focused_id)
+        if name == "staffing_scenario":
+            return self._staffing_scenario(team_id, name, arguments, focused_id)
         if name == "find_replacements":
             arguments = dict(arguments, include_exceptions=False)
         return self._tools.run(team_id, name, arguments)
@@ -284,3 +290,26 @@ class ManagerChatTools:
                 profile.get("employees") or [], profile=profile,
             ),
         }
+
+    def _staffing_scenario(self, team_id, name, arguments, focused_id):
+        period = self._tools.run(team_id, "read_period", {
+            key: arguments[key]
+            for key in ("schedule_id", "day") if arguments.get(key)
+        }) if arguments.get("schedule_id") or arguments.get("day") else None
+        schedule_id = ((period or {}).get("schedule") or {}).get("id") or focused_id
+        if (period and not period.get("found")) or not schedule_id:
+            return {"tool": name, "ok": False, "error": "יש לבחור סידור קיים או לציין את השבוע"}
+        schedule = self._repo.get_schedule(schedule_id, team_id)
+        first, last = iso(schedule.get("starts_on")), iso(schedule.get("ends_on"))
+        result = analyze_staffing(
+            schedule,
+            self._context.profile(team_id),
+            reserve_days_per_week=arguments.get("reserve_days_per_week"),
+            reserve_min_days=arguments.get("reserve_min_days"),
+            employee=arguments.get("employee") or "",
+            additional_staff=arguments.get("additional_staff") or [],
+            availability=self._context.availability(team_id, schedule),
+            history=self._history.before(team_id, first),
+            duties=self._history.duties(team_id, first, last),
+        )
+        return dict(result, tool=name, ok=True)

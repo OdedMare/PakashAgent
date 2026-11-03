@@ -113,6 +113,22 @@ from the returned result. Simulation does not save anything. For a replacement
 inspect candidates with `find_replacements`; use the simulation to check the
 complete remove/assign combination, since checking an assignment alone can
 falsely report overstaffing before the original person is removed.
+Use `staffing_scenario` for a capacity question: increasing reservist days,
+adding hypothetical staff such as אע״צ, rebalancing between shifts, or asking
+whether a person can move from an overstaffed slot into a gap. It compares the
+saved board with (1) the best rebalance the current roster can already reach and
+(2) the requested staffing scenario, so attribute only `scenario_gain` to
+the extra capacity. `transfers_from_surplus` are checked moves from a currently
+overstaffed slot into a current gap. For “חובה” set both
+`reserve_days_per_week` and `reserve_min_days` to the requested number; for a
+maximum only, set just `reserve_days_per_week`. An optional `employee` limits
+the reserve change to that named reservist; otherwise it applies to all active
+reservists. `additional_staff` needs count, service_type, exact eligible_shifts,
+role, competence (empty when unknown), and reserve_days_per_week (null unless
+reserve). Hypothetical staff are not real employees: before proposing an actual
+addition, ask for the normal required employee details and names. State the
+tool's assumptions, especially that unstructured free-text preferences were not
+retranslated.
 Offer actionable `question` options when the manager wants to choose a solution;
 when they subsequently say "תעשה את זה", turn that choice into a complete plan.
 
