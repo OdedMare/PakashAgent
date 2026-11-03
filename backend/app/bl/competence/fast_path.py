@@ -17,7 +17,7 @@ from app.bl.planner.shaping import plain_question
 from app.common.errors import AppError
 
 _log = logging.getLogger("pakash.chat")
-_ASK = "לא הוגדרה כשירות ל%s. לאיזו רמה לקבוע? חלשה, בינונית, גבוהה או מצטיינת."
+_ASK = "לא הוגדרה רמה מקצועית ל%s. לאיזו רמה לקבוע? חלשה, בינונית, גבוהה או מצטיינת."
 
 
 class CompetenceFastPath:
@@ -72,7 +72,7 @@ class CompetenceFastPath:
     def _ask(self, state, names, read):
         who = " ו".join(names)
         question = dict(plain_question(_ASK % who), options=[
-            {"label": LABELS[level], "answer": "קבע כשירות %s ל%s" % (LABELS[level], who)}
+            {"label": LABELS[level], "answer": "קבע רמה מקצועית %s ל%s" % (LABELS[level], who)}
             for level in reader.LEVELS
         ])
         return self._finish(state, question["question"], "complete", dict(
@@ -83,7 +83,7 @@ class CompetenceFastPath:
     def _plan(self, state, changes, request, held):
         lines = ["%s: מ%s ל%s" % (name, LABELS[before], LABELS[after])
                  for name, (before, after) in changes.items()]
-        reply = "עדכון כשירות — %s. הבנייה הבאה תאזן את המשמרות לפי הכשירות החדשה." % "; ".join(lines)
+        reply = "עדכון רמה מקצועית — %s. הבנייה הבאה תאזן את המשמרות לפי הרמה המקצועית החדשה." % "; ".join(lines)
         if held:
             reply += " %s כבר ברמה הקיצונית ולא שונו." % ", ".join(held)
         patch = dict(employees=[dict(name=name, competence=after)
@@ -113,7 +113,7 @@ class CompetenceFastPath:
 def _unchanged(read, held, people) -> str:
     if held:
         edge = "הגבוהה ביותר" if read.get("step", 0) > 0 else "הנמוכה ביותר"
-        return "הכשירות של %s כבר ברמה %s." % (", ".join(held), edge)
+        return "הרמה המקצועית של %s כבר %s." % (", ".join(held), edge)
     name = read["names"][0]
-    return "הכשירות של %s כבר %s." % (", ".join(read["names"]),
+    return "הרמה המקצועית של %s כבר %s." % (", ".join(read["names"]),
                                        LABELS[people[name].get("competence") or ""])

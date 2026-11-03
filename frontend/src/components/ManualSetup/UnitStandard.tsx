@@ -24,7 +24,7 @@ export function UnitStandard({ policy, roles, onChange }: {
   return (
     <>
       <div className="manual-grid three">
-        <Field label="מקסימום בכשירות חלשה במשמרת">
+        <Field label="מקסימום ברמה מקצועית חלשה במשמרת">
           <input type="number" min={0} placeholder="ללא הגבלה" value={policy.max_weak_per_shift ?? ""}
             onChange={(e) => onChange({ ...policy, max_weak_per_shift: e.target.value === "" ? null : Math.max(0, Number(e.target.value) || 0) })} />
         </Field>

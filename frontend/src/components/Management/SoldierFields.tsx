@@ -47,7 +47,7 @@ export function SoldierFields({
 }) {
   const competenceField = (
     <label className="soldier-field">
-      <span>כשירות</span>
+      <span>רמה מקצועית</span>
       <select value={competence} onChange={(event) => onChange("competence", event.target.value)}>
         <option value="">לא מוגדרת</option>
         {Object.entries(COMPETENCE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -108,7 +108,7 @@ export function SoldierFields({
       <fieldset className="soldier-reserve">
         <legend>{serviceType === "civilian" ? "פרטי אע״צ" : "פרטי הצ״ח"}</legend>
         <div className="soldier-grid">{competenceField}</div>
-        <small>לא חובה. הסידור יאזן את המשמרות כך שבעלי כשירות חלשה יחסית לא ישובצו יחד.</small>
+        <small>לא חובה. הסידור יאזן את המשמרות כך שבעלי רמה מקצועית חלשה יחסית לא ישובצו יחד.</small>
       </fieldset>
     );
   }
@@ -122,12 +122,12 @@ export function SoldierFields({
   );
 }
 
-/** "כשירות גבוה/ה · מילואים 3 ימים, צו" — the roster card's short line. */
+/** "רמה מקצועית: גבוה/ה · מילואים 3 ימים, צו" — the roster card's short line. */
 export function soldierSummary(person: Record<string, unknown> | undefined): string {
   if (!person) return "";
   const parts: string[] = [];
   const competence = typeof person.competence === "string" ? person.competence : "";
-  if (COMPETENCE_LABELS[competence]) parts.push(`כשירות ${COMPETENCE_LABELS[competence]}`);
+  if (COMPETENCE_LABELS[competence]) parts.push(`רמה מקצועית: ${COMPETENCE_LABELS[competence]}`);
   if (person.service_type === "reserve") {
     const days = typeof person.reserve_days_per_week === "number" ? person.reserve_days_per_week : null;
     const least = typeof person.reserve_min_days === "number" ? person.reserve_min_days : null;

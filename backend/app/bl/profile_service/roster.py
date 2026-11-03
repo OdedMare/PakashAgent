@@ -88,7 +88,7 @@ def _soldier_fields(row: dict, service_type: str) -> dict:
     """
     competence = text(row.get("competence"))
     if competence and competence not in COMPETENCE_LEVELS:
-        raise AgentError("רמת הכשירות אינה תקינה (חלש, בינוני, גבוה או מצטיין)")
+        raise AgentError("הרמה המקצועית אינה תקינה (חלש, בינוני, גבוה או מצטיין)")
     fields = {"competence": competence, "reserve_days_per_week": None,
               "reserve_min_days": None, "reserve_consecutive": False, "reserve_call": ""}
     if service_type != "reserve":

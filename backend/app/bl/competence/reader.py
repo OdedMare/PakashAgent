@@ -1,8 +1,8 @@
 """Reading a competence sentence: who, and to which level or which way.
 
 Keyword matching against the workspace's own roster, like `bl/intent/`.
-It never guesses: no "כשירות" in the sentence, or nobody from the roster
-named, and it returns None.
+It never guesses: no "רמה מקצועית" (or the older "כשירות") in the
+sentence, or nobody from the roster named, and it returns None.
 """
 
 import re
@@ -29,8 +29,13 @@ _CLEAR = ("תבטל", "בטל", "לבטל", "תמחק", "מחק", "למחוק", 
 _QUESTION = re.compile(r"\?|(?<![א-ת])(?:מה|מי|האם|איזה|איזו|אילו|למה|כמה|מתי)(?![א-ת])")
 
 
+# "רמה מקצועית" is the field's name on screen; "כשירות" is what it was called
+# before, and managers still say it.
+_TOPIC = re.compile(r"כשיר|רמ(?:ה|ת|תו|תה)\s+(?:ה)?מקצועי")
+
+
 def mentions(text: str) -> bool:
-    return "כשיר" in (text or "") and not _QUESTION.search(text or "")
+    return bool(_TOPIC.search(text or "")) and not _QUESTION.search(text or "")
 
 
 def read(text: str, roster: List[str]) -> Optional[dict]:

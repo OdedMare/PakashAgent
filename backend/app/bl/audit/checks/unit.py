@@ -34,7 +34,7 @@ class UnitStandardCheck(AuditCheck):
                        if is_weak(people.get(row["employee"])))
         return [
             warning(WEAK_CREW, SEVERITY_WARNING,
-                    "במשמרת %s בתאריך %s משובצים %d בעלי כשירות חלשה (המותר: %d)."
+                    "במשמרת %s בתאריך %s משובצים %d בעלי רמה מקצועית חלשה (המותר: %d)."
                     % (shift, date, count, cap),
                     date=date, shift=shift, details={"weak": count, "allowed": cap})
             for (date, shift), count in sorted(weak.items()) if count > cap

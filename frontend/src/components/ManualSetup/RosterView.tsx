@@ -73,7 +73,7 @@ export function RosterView({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => { if (event.key === "Escape") setQuery(""); }}
-          placeholder="חיפוש לפי שם, תפקיד, כשירות, משמרת, קבוצה או הערה"
+          placeholder="חיפוש לפי שם, תפקיד, רמה מקצועית, משמרת, קבוצה או הערה"
           aria-label="חיפוש חייל/ת"
         />
         {query ? <button type="button" className="icon-button subtle" aria-label="ניקוי החיפוש" onClick={() => setQuery("")}><X size={15} /></button> : null}

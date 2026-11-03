@@ -14,6 +14,8 @@ ROSTER = ["דנה", "יוסי", "דן"]
     ("הכשירות של דנה מצטיינת", dict(names=["דנה"], level="excellent")),
     ("תעלה את הכשירות של דן לגבוהה", dict(names=["דן"], level="high")),
     ("קבע כשירות חלשה לדנה", dict(names=["דנה"], level="weak")),
+    ("קבע רמה מקצועית גבוהה לדנה", dict(names=["דנה"], level="high")),
+    ("תעלה את הרמה המקצועית של יוסי", dict(names=["יוסי"], step=1)),
     ("תמחק את הכשירות של יוסי", dict(names=["יוסי"], level="")),
 ])
 def test_a_competence_sentence_is_read(sentence, expected):
@@ -25,6 +27,7 @@ def test_a_competence_sentence_is_read(sentence, expected):
     "תעלה את הכשירות",                    # nobody named
     "האם יוסי בכשירות גבוהה?",            # a question
     "מי בכשירות חלשה",
+    "מה הרמה המקצועית של יוסי",
     "תעלה ותוריד כשירות ליוסי",           # both ways
 ])
 def test_anything_else_is_left_to_the_model(sentence):

@@ -256,7 +256,9 @@ re-ask answered questions or invent a person's return-to-work date.
   is `personal` with `closure_every: 5`, not a חמישון group.
   `rank_group` is optional and separates the unit standard into `officer`
   (קצונה) and `nco` (נגדים); do not infer it from a person's role.
-  Optional soldier fields: `competence` — `weak`/`medium`/`high`/`excellent`
+  Optional soldier fields: `competence` — shown to the manager as "רמה מקצועית"
+  (formerly "כשירות"; call it רמה מקצועית in replies) —
+  `weak`/`medium`/`high`/`excellent`
   (חלש/בינוני/גבוה/מצטיין), or `""` for not rated; the solver balances each
   shift by it so the weaker soldiers are not staffed together. To raise or
   lower it, send only `{"name": ..., "competence": ...}` one level up or down
