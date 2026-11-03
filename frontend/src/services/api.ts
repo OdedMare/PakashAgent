@@ -368,11 +368,15 @@ export function updateProfile(body: {
 }
 
 /** What a profile save fit into the drafts already built: the new soldiers
- *  and shifts, each draft ahead of today now being refit while keeping its
+ *  (or soldiers switched back on) and shifts, each draft ahead of today now being refit while keeping its
  *  rows, and the weeks left alone (published, or busy) with the reason. */
 export interface ProfileAbsorption {
   employees: string[];
   shifts: string[];
+  /** Soldiers this save switched off, and how many of their draft shifts
+   *  from today on were vacated for the refit to fill. */
+  switched_off?: string[];
+  vacated?: number;
   schedules: { schedule_id: string; starts_on: string; ends_on: string }[];
   skipped: { schedule_id: string; starts_on: string; ends_on: string; reason: string }[];
 }

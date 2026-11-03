@@ -9,7 +9,7 @@ import type { DayCycle } from "@/types";
 import { ConfirmDeparture } from "./ConfirmDeparture";
 import { DepartureCovers } from "./DepartureCovers";
 import { ReplacementPanel } from "./ReplacementPanel";
-import { EmployeeForm, ShiftForm } from "./TeamPanel";
+import { EmployeeForm, isOff, ShiftForm } from "./TeamPanel";
 
 type Action = "replace" | "soldier" | "remove" | "shift";
 
@@ -138,7 +138,7 @@ export function ChangesPanel({
 
       {action === "replace" ? (
         <ReplacementPanel
-          employees={activeEmployees}
+          employees={activeEmployees.filter((name) => !isOff(employees.find((row) => nameOf(row) === name)))}
           today={today}
           disabled={disabled}
           onPrepare={onPrepare}

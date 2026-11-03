@@ -120,7 +120,9 @@ soldier takes shifts only from whoever is above their share, and a new shift
 is filled around the rows already there. A range job with `keep_existing`
 does this per span and first adds the shift's slots to the stored grid;
 `schedule_service/generation/absorb.py` opens one on every draft ahead of
-today when a profile save adds a person or a shift. A draft with nothing on
+today when a profile save adds a person or a shift, or switches one off
+(`on_duty: false`, D43: their rows from today are vacated and logged first;
+an off soldier is hard-unavailable on every date of every build). A draft with nothing on
 it is not solved, but a new shift still gets its empty rows there.
 
 **A build can be narrowed to some shift types** (`generation/shift_filter.py`):

@@ -346,6 +346,12 @@ impression.
   (`keep_existing_names` refuses a removal outright). The person moves to
   "עובדים שסיימו", where "החזרה לסגל" clears the date; vacated shifts stay
   vacated.
+- **Switching a soldier off is not a departure** (D43). The switch on each
+  roster card (and "דולק/ת בשיבוץ" in setup) saves `on_duty` through
+  `saveProfile`. Off keeps the person listed — dimmed, not draggable, out of
+  the replacement tab — and out of every build; the server vacates their
+  draft shifts from today and refits. On again fits them in like a new
+  soldier.
 - **Every stored preference is on screen.** `Preferences` lists suggested,
   active and archived rows and lets the manager reword, approve, archive or
   delete any of them — a preference they cannot see is a rule they never

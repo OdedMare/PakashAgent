@@ -14,7 +14,7 @@ from app.bl.chat_lifecycle import (
 )
 from app.bl.chat_management import prepare_management
 from app.bl.chat_vacancies import fill_vacancies
-from app.bl.shared import warning_key
+from app.bl.shared import out_of_service, switched_off, warning_key
 from app.bl.schedule_service.generation.history import AssignmentHistory
 from app.bl.scheduler import Scheduler
 from app.bl.shared import iso
@@ -190,8 +190,10 @@ class ChatPlanBuilder:
         people = {row["name"]: row for row in profile.get("employees") or []}
         for row in turn.get("operations") or []:
             person = people.get(row.get("employee"), {})
-            if row.get("action") == "assign" and person.get("inactive_from") \
-                    and (row.get("date") or "") >= person["inactive_from"]:
+            if row.get("action") == "assign" and switched_off(person):
+                raise RejectedPlan("%s כבוי/ה ולא משתתף/ת בשיבוץ. יש לבחור מחליף פעיל"
+                                   % row.get("employee"))
+            if row.get("action") == "assign" and out_of_service(person, row.get("date") or ""):
                 raise RejectedPlan("העובד סיים את העבודה לפני המשמרת. יש לבחור מחליף פעיל")
         turn = self._require_selected_replacements(
             team_id, turn, state, profile, schedule_id, request, choices,

@@ -50,6 +50,9 @@ def _employee(row: dict, default_exit_pattern: str) -> dict:
         "eligible_shifts": text_list(row.get("eligible_shifts") or []),
         "is_trainee": service_type == "overlap",
         "is_casual": service_type == "reserve",
+        # The on/off switch: off keeps the soldier on the roster and out of
+        # every build. Anything but an explicit false is on.
+        "on_duty": row.get("on_duty") is not False,
         "recurring_constraints": recurring,
     })
     if not isinstance(row.get("counts_toward_staffing"), bool):

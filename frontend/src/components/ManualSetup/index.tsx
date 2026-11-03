@@ -412,6 +412,7 @@ export function ManualSetup({
                   </Field>
                 </div>
                 <div className="manual-row-foot">
+                  <label className="manual-check" title="כבוי/ה — לא נלקח/ת בחשבון בשיבוץ כלל"><input type="checkbox" checked={person.on_duty !== false} onChange={(e) => edit(setEmployees, index, "on_duty", e.target.checked)} /><span>דולק/ת בשיבוץ</span></label>
                   <label className="manual-check"><input type="checkbox" checked={person.counts_toward_staffing !== false} onChange={(e) => edit(setEmployees, index, "counts_toward_staffing", e.target.checked)} /><span>נספר/ת בתקן</span></label>
                   <label className="manual-check"><input type="checkbox" checked={Boolean(person.is_shift_manager)} onChange={(e) => edit(setEmployees, index, "is_shift_manager", e.target.checked)} /><span>מוסמך/ת כמפקד/ת משמרת</span></label>
                   <label className="manual-check"><input type="checkbox" checked={Boolean(person.can_train)} onChange={(e) => edit(setEmployees, index, "can_train", e.target.checked)} /><span>מוסמך/ת לחפוף</span></label>

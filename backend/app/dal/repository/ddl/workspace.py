@@ -76,3 +76,49 @@ ALTER TABLE team_profiles ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEF
 COMMIT;
 
 """
+
+# Once per database: whoever had been taken out of the roster (an
+# `inactive_from` on or before today, Israel time) comes back to it switched
+# off (`on_duty: false`). Reservists come and go, and the on/off switch is
+# how a unit now says so; a departure stays available for whoever really
+# left. Marked done in `deployment_state`, so a soldier taken out after the
+# upgrade is never brought back by a restart. Appended after
+# `DEPLOYMENT_DDL`, which creates that table.
+ROSTER_SWITCH_DDL = """
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM deployment_state WHERE key = 'migration:roster_switch_off'
+    ) THEN
+        UPDATE team_profiles AS saved
+        SET profile = jsonb_set(saved.profile, '{employees}', (
+                SELECT jsonb_agg(
+                    CASE WHEN jsonb_typeof(person) = 'object'
+                              AND jsonb_typeof(person -> 'inactive_from') = 'string'
+                              AND person ->> 'inactive_from' <> ''
+                              AND person ->> 'inactive_from'
+                                  <= to_char((NOW() AT TIME ZONE 'Asia/Jerusalem')::date, 'YYYY-MM-DD')
+                         THEN (person - 'inactive_from') || '{"on_duty": false}'::jsonb
+                         ELSE person END
+                    ORDER BY position)
+                FROM jsonb_array_elements(saved.profile -> 'employees')
+                     WITH ORDINALITY AS roster(person, position)
+            )),
+            revision = saved.revision + 1,
+            updated_at = NOW()
+        WHERE jsonb_typeof(saved.profile -> 'employees') = 'array'
+          AND EXISTS (
+              SELECT 1 FROM jsonb_array_elements(saved.profile -> 'employees') AS roster(person)
+              WHERE jsonb_typeof(person) = 'object'
+                AND jsonb_typeof(person -> 'inactive_from') = 'string'
+                AND person ->> 'inactive_from' <> ''
+                AND person ->> 'inactive_from'
+                    <= to_char((NOW() AT TIME ZONE 'Asia/Jerusalem')::date, 'YYYY-MM-DD'));
+        INSERT INTO deployment_state (key, value)
+        VALUES ('migration:roster_switch_off', 'done')
+        ON CONFLICT (key) DO NOTHING;
+    END IF;
+END $$;
+
+COMMIT;
+"""

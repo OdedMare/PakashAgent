@@ -3,13 +3,16 @@
 import datetime
 from typing import Any, List
 
-from app.bl.shared import hebrew_weekday, weekday_key
+from app.bl.shared import hebrew_weekday, switched_off, weekday_key
 from app.bl.scheduler.rotation_rows import (
     closure_availability, overridden, rotation_availability,
 )
 from app.bl.scheduler.values import (
     bounded, bounded_rows, date_text, dates_between, named, parse_date,
 )
+
+# Why a switched-off soldier is unavailable on every date of a build.
+OFF_DUTY_REASON = "כבוי/ה — לא משתתף/ת בשיבוץ"
 
 
 def effective_availability(
@@ -39,6 +42,11 @@ def effective_availability(
 def _inactive_rows(profile, start, end):
     result = []
     for person in profile.get("employees") or []:
+        if switched_off(person):
+            result += [dict(employee=person["name"], date=day.isoformat(), shift="",
+                            available=False, is_hard=True, reason=OFF_DUTY_REASON,
+                            source="off_duty") for day in dates_between(start, end)]
+            continue
         first = parse_date(person.get("inactive_from") or "")
         if first is None or first > end:
             continue

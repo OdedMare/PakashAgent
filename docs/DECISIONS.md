@@ -1388,6 +1388,36 @@ or splitting. Colours carry no meaning to the importer.
 
 ---
 
+## D43 — A soldier can be switched off without leaving *(beside the departure)*
+
+Reservists come and go week by week, and a departure (`inactive_from`) was
+the wrong tool for that: it reads as "left", archives the person, and
+taking them back meant undoing it. Every roster card now carries an on/off
+switch, stored as `on_duty` on the person. Only an explicit `false` is off;
+a row that never had the field is on.
+
+**Off means not taken into account at all.** The build marks the person
+hard-unavailable on every date (`scheduler/availability.py`, reason
+"כבוי/ה — לא משתתף/ת בשיבוץ"), so the solver never makes a variable for
+them and fairness gives them no target. The placement check, a hand
+placement, a chat plan and a role expanded to its holders refuse them
+(`shared.out_of_service`).
+
+**Switching is a profile save, absorbed like D37.** Switching off vacates
+the person's rows in each draft from today on — hand-placed ones too, each
+logged with the reason "החייל/ת כובה/תה ברשימת כוח האדם" — and refits the
+draft around the gap with `keep_existing`. Switching on reads as a new
+soldier and fits them in. A published week, or one with a build already
+running, is left as it is and named, as for any absorbed save.
+
+**Existing teams were migrated once.** Whoever was out of the roster on
+the day of the upgrade (an `inactive_from` on or before today) came back
+switched off; the migration records itself in `deployment_state`, so a
+soldier departed afterwards is never brought back by a restart. The
+departure itself stays, for someone who really left.
+
+---
+
 ## Open
 
 - *(none)* — the Python version is settled at **3.11** (D30).

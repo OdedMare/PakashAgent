@@ -101,6 +101,15 @@ export function TeamPanel({
     [stats?.by_employee],
   );
   const archived = employees.filter((row) => row.inactive_from && today && text(row.inactive_from) <= today);
+  const offCount = names.filter((name) => isOff(employees.find((row) => text(row.name) === name))).length;
+  /** The on/off switch. Off keeps the soldier on the roster and out of every
+   *  build; the server frees their draft shifts from today and refits around
+   *  the gap. On again, they are fit in like a new soldier. */
+  const toggleDuty = (name: string) => onSaveProfile?.({
+    employees: employees.map((row) => text(row.name) === name
+      ? { ...row, on_duty: isOff(row) }
+      : row),
+  });
   /** Undo a departure. Only the end date goes; vacated shifts stay vacated. */
   const restore = (name: string) => onSaveProfile?.({
     employees: employees.map((row) => {
@@ -117,7 +126,13 @@ export function TeamPanel({
           <UserRound size={15} />
           כוח אדם
           <span className="panel-count">{names.length}</span>
+          {offCount ? <span className="panel-count is-off" title="כבויים — לא נלקחים בחשבון בשיבוץ">{offCount} כבויים</span> : null}
         </h3>
+        {onSaveProfile && names.length ? (
+          <p className="roster-help">
+            המתג ליד כל חייל/ת קובע אם הוא/היא בשיבוץ. כבוי/ה — לא נלקח/ת בחשבון כלל, והמשמרות שלו/ה בטיוטות מהיום מתפנות ומשובצות מחדש.
+          </p>
+        ) : null}
         {draggable && names.length ? (
           <p className="roster-help">
             גררו עובד או עובדת אל משמרת פנויה בלוח.
@@ -133,18 +148,20 @@ export function TeamPanel({
                 (!row.available || Boolean(row.start_time || row.end_time)),
             ).length;
             const load = loadByName.get(name);
+            const off = isOff(person);
+            const canDrag = draggable && !off;
             return (
               <li
                 key={name}
-                className={`roster-card${draggable ? " is-draggable" : ""}`}
-                draggable={draggable}
+                className={`roster-card${canDrag ? " is-draggable" : ""}${off ? " is-off" : ""}`}
+                draggable={canDrag}
                 onDragStart={(event) => {
-                  if (!draggable) return;
+                  if (!canDrag) return;
                   event.dataTransfer.setData(EMPLOYEE_DRAG_TYPE, name);
                   event.dataTransfer.setData("text/plain", name);
                   event.dataTransfer.effectAllowed = "copy";
                 }}
-                title={draggable ? `גרירת ${name} למשמרת` : undefined}
+                title={canDrag ? `גרירת ${name} למשמרת` : undefined}
               >
                 <span
                   className="roster-avatar"
@@ -161,6 +178,7 @@ export function TeamPanel({
                     {text(person?.rotation_group) ? ` ${text(person?.rotation_group)}` : ""}
                     {text(person?.service_type) ? ` · ${SERVICE_TYPE_LABELS[text(person?.service_type)] ?? text(person?.service_type)}` : ""}
                   </span>
+                  {off ? <span className="roster-note roster-off-note">כבוי/ה — לא נלקח/ת בחשבון בשיבוץ</span> : null}
                   {text(person?.inactive_from) ? <span className="roster-note">מסיים/ת · {displayDate(text(person?.inactive_from))}</span> : null}
                   {person?.is_shift_manager ? <span className="roster-capability">מפקד/ת משמרת</span> : null}
                   {person?.can_train ? <span className="roster-capability">מוסמך/ת לחפוף</span> : null}
@@ -177,8 +195,11 @@ export function TeamPanel({
                     </span>
                   ) : null}
                 </span>
-                {draggable ? (
+                {canDrag ? (
                   <GripVertical className="roster-grip" size={17} aria-hidden="true" />
+                ) : null}
+                {onSaveProfile ? (
+                  <DutySwitch name={name} on={!off} onToggle={() => toggleDuty(name)} />
                 ) : null}
                 {onSaveProfile ? (
                   <button
@@ -972,4 +993,27 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+/** Off is only ever an explicit `on_duty: false`; a row that never had the
+ *  field is on, like every soldier saved before the switch existed. */
+export function isOff(person: Record<string, unknown> | undefined): boolean {
+  return person?.on_duty === false;
+}
+
+function DutySwitch({ name, on, onToggle }: { name: string; on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      className={`duty-switch${on ? " is-on" : ""}`}
+      onClick={onToggle}
+      aria-label={`${name} בשיבוץ`}
+      title={on ? `כיבוי ${name}: לא ייכלל/תיכלל בשיבוץ` : `הדלקת ${name}: ייכלל/תיכלל בשיבוץ`}
+    >
+      <span className="duty-switch-track" aria-hidden="true"><span className="duty-switch-thumb" /></span>
+      <span className="duty-switch-label">{on ? "דולק" : "כבוי"}</span>
+    </button>
+  );
 }

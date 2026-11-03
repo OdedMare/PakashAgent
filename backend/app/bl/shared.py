@@ -51,6 +51,23 @@ def employees(profile: dict) -> list[dict]:
     return dict_items((profile or {}).get("employees"))
 
 
+def switched_off(person: Any) -> bool:
+    """A soldier the manager switched off: still on the roster, out of every build.
+
+    Reservists come and go, so `on_duty` is a switch rather than a departure:
+    missing or true means on; only an explicit false takes them out.
+    """
+    return isinstance(person, dict) and person.get("on_duty") is False
+
+
+def out_of_service(person: Any, date: str = "") -> bool:
+    """Whether this person may not be placed on `date`: switched off, or gone by then."""
+    if switched_off(person):
+        return True
+    ended = text(person.get("inactive_from")) if isinstance(person, dict) else ""
+    return bool(date and ended and date >= ended)
+
+
 def shifts(profile: dict) -> list[dict]:
     return dict_items((profile or {}).get("shifts"))
 

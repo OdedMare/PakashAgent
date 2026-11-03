@@ -5,7 +5,7 @@ import datetime
 from app.bl.audit import constraint_conflicts
 from app.bl.audit.roster import index_shifts, rows_of
 from app.bl.chat_contract import RejectedPlan, audit_plan
-from app.bl.shared import person_roles, warning_key
+from app.bl.shared import out_of_service, person_roles, warning_key
 from app.bl.scheduler.availability import effective_availability
 from app.bl.simulate.hypothetical import schedule_rows
 from app.bl.tools.values import iso
@@ -64,8 +64,7 @@ def _by_role(offered, profile):
             result.append(row)
             continue
         holders = [person["name"] for person in people if role in person_roles(person)
-                   and not (person.get("inactive_from")
-                            and (row.get("date") or "") >= person["inactive_from"])]
+                   and not out_of_service(person, row.get("date") or "")]
         if not holders:
             roles = sorted({item for person in people for item in person_roles(person)})
             raise RejectedPlan(
