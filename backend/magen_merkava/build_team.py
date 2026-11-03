@@ -49,15 +49,13 @@ CABS = {
     "חפיפות": (3, ("יום",)),
 }
 
-SERVICE = {"מילואים": "reserve", 'הצ"ח': "hatzach", 'אע"צ': "civilian", "חובה": "standard", "קבע": "standard"}
+SERVICE = {"מילואים": "reserve", 'הצ"ח': "hatzach", 'אע"צ': "civilian", "סדיר": "standard"}
 COMPETENCE = {1: "high", 2: "medium", 3: "weak"}
 
 ROLE = "אלחוט"                 # התפקיד של כולם
 RESERVE_DAYS_PER_WEEK = 4      # מילואים, אע"צ והצ"ח: עד 4 ימים בשבוע
 FOUR_DAYS = {"מילואים", 'אע"צ', 'הצ"ח'}
-# האילוץ היחיד: חסומים / לא יכולים להגיע / לא בפול -> לא זמינים כלל (לא פעילים מתחילת הקריאה)
-UNAVAILABLE_FLAGS = {"blocked", "unavailable", "not_in_pool"}
-CYCLE_ID = "sadir"             # סדירים (חובה, קבע): סבב 12/2
+CYCLE_ID = "sadir"             # סדירים (חובה, קבע, סדיר): סבב 12/2
 CYCLE = {"id": CYCLE_ID, "name": "12/2", "base_days": 12, "home_days": 2, "groups": ["א", "ב"]}
 
 
@@ -101,29 +99,27 @@ def build_employees(start: dt.date) -> list[dict]:
     אילוץ אחד בלבד: מי שחסום, לא יכול להגיע או לא בפול — לא זמין כלל."""
     people, next_group = [], {}
     for p in ROSTER:
-        if p["cab"] is None:
-            continue  # לא בלוח המשמרות (דולב — מפקדת שמע)
         person = {
             "name": p["name"],
             "role": ROLE,
-            "eligible_shifts": cab_shifts(p["cab"]) + cab_shifts(p.get("then_cab")),
+            "eligible_shifts": cab_shifts(p["cab"]) + cab_shifts(p["then_cab"]),
             "service_type": SERVICE.get(p["service"], "standard"),
             "competence": competence(p),
             "notes": "",  # ריק — חוץ ממי שלא זמין
         }
-        if p["service"] in FOUR_DAYS or not p["service"]:
+        if p["service"] in FOUR_DAYS:
             # המערכת מגבילה ימים בשבוע רק למילואים, אז אע"צ והצ"ח נשמרים כמילואים
             person.update(service_type="reserve", exit_pattern="none",
                           reserve_days_per_week=RESERVE_DAYS_PER_WEEK)
         else:
             # סדירים בסבב 12/2: חצי מכל תא בקבוצה א' וחצי בקבוצה ב', כדי שלא כולם ייצאו יחד
-            cab = p.get("then_cab") or p["cab"]
+            cab = p["then_cab"] or p["cab"]
             index = next_group.get(cab, 0)
             next_group[cab] = index + 1
             person.update(exit_pattern=f"cycle:{CYCLE_ID}", rotation_group=CYCLE["groups"][index % 2])
-        if set(p["flags"]) & UNAVAILABLE_FLAGS:
+        if p["unavailable"]:  # האילוץ היחיד: חסום / לא יכול להגיע / לא בפול -> לא זמין כלל
             person["inactive_from"] = start.isoformat()
-            person["notes"] = "לא זמין/ה: " + p["note"].replace(" (מהלוח)", "").replace("כורדית; ", "")
+            person["notes"] = "לא זמין/ה: " + p["unavailable"]
         people.append(person)
     return people
 
