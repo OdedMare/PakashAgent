@@ -25,6 +25,9 @@ def unit_policy(value: Any) -> dict:
         text(role): [item for item in text_list(others) if item != text(role)]
         for role, others in fallbacks.items() if text(role) and isinstance(others, list)
     }
+    overflow = value.get("weekly_shifts_overflow")
+    if overflow is not None and overflow != "":
+        result["weekly_shifts_overflow"] = min(7, _count(overflow, "החריגה המותרת במשמרות בשבוע"))
     for key in ("weekly_shifts", "weekly_shifts_regular",
                 "weekly_shifts_officers", "weekly_shifts_ncos"):
         if value.get(key):

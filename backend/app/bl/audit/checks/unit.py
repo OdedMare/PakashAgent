@@ -3,6 +3,7 @@ below a strong shift's level, weekly shift limits, a reservist's days a
 week and stale qualifications.
 Warnings only, like every check."""
 
+import datetime
 from collections import Counter
 from typing import Dict, List
 
@@ -15,7 +16,7 @@ from app.bl.audit.roster import index_people
 from app.bl.audit.staffing_rules import required_roles
 from app.bl.audit.unit_policy import (
     below_level, is_weak, max_weak, qualification_expired, reserve_days, role_needs, unit_week,
-    weekly_limits,
+    weekly_limits, weekly_overflow,
 )
 from app.bl.shared import parse_date
 
@@ -65,26 +66,26 @@ class UnitStandardCheck(AuditCheck):
 
     @staticmethod
     def _weekly(data: AuditInput, people: Dict[str, dict]) -> List[dict]:
-        counts = Counter()
+        """Past the weekly `max`, one warning on each shift over it — the
+        shift to move — saying whether it is still within the allowed
+        overflow. Under the `min`, one notice for the week."""
+        weeks: Dict[tuple, List[dict]] = {}
         for row in data.rows:
             day = parse_date(row["date"])
             if day:
-                counts[(row["employee"], unit_week(day))] += 1
+                weeks.setdefault((row["employee"], unit_week(day)), []).append(row)
+        overflow = weekly_overflow(data.profile)
         warnings = []
-        for (name, week), count in sorted(counts.items()):
+        for (name, week), rows in sorted(weeks.items()):
             low, high = weekly_limits(data.profile, people.get(name))
-            if high is not None and count > high:
-                warnings.append(warning(
-                    WEEKLY_SHIFTS, SEVERITY_WARNING,
-                    "%s שובץ/ה ל-%d משמרות בשבוע שמתחיל ב-%s, מעל המקסימום (%d)."
-                    % (name, count, week.isoformat(), high),
-                    employee=name, details={"week": week.isoformat(), "shifts": count, "max": high}))
-            elif count < low:
+            if high is not None and len(rows) > high:
+                warnings += _over_max(name, week, rows, high, overflow)
+            elif len(rows) < low:
                 warnings.append(warning(
                     WEEKLY_SHIFTS, SEVERITY_NOTICE,
                     "%s שובץ/ה ל-%d משמרות בשבוע שמתחיל ב-%s, מתחת למינימום (%d)."
-                    % (name, count, week.isoformat(), low),
-                    employee=name, details={"week": week.isoformat(), "shifts": count, "min": low}))
+                    % (name, len(rows), week.isoformat(), low),
+                    employee=name, details={"week": week.isoformat(), "shifts": len(rows), "min": low}))
         return warnings
 
     @staticmethod
@@ -135,3 +136,20 @@ class UnitStandardCheck(AuditCheck):
 
 
 __all__ = ["UnitStandardCheck"]
+
+
+def _over_max(name: str, week, rows: List[dict], high: int, overflow: int) -> List[dict]:
+    ordered = sorted(rows, key=lambda row: (row["date"], row["start"] is None,
+                                            row["start"] or datetime.datetime.min))
+    warnings = []
+    for count, row in enumerate(ordered[high:], start=high + 1):
+        within = count <= high + overflow
+        warnings.append(warning(
+            WEEKLY_SHIFTS, SEVERITY_WARNING,
+            "%s שובץ/ה ל%s בתאריך %s: משמרת %d בשבוע שמתחיל ב-%s, מעל המקסימום (%d)%s."
+            % (name, row["shift"], row["date"], count, week.isoformat(), high,
+               "" if within else " וגם מעבר לחריגה המותרת"),
+            employee=name, date=row["date"], shift=row["shift"],
+            details={"week": week.isoformat(), "shifts": len(rows), "max": high,
+                     "overflow": overflow, "count": count, "within_overflow": within}))
+    return warnings

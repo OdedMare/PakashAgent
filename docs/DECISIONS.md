@@ -1667,7 +1667,13 @@ person** (`bl/audit/unit_policy.py`, read by the solver and the audit alike):
   `weekly_shifts_regular` fallback and each reservist's own
   `reserve_days_per_week`/`reserve_min_days`: the
   maximum is hard, the minimum priced and applied only to whole weeks of a
-  span, Sunday to Saturday.
+  span, Sunday to Saturday. `weekly_shifts_overflow` (team-wide, 0 unless
+  set) lets the solver go that many shifts past a maximum, each one priced
+  above everything but coverage so it is taken only for a seat nobody else
+  could fill, and noted in the build; past it the seat stays empty. The
+  audit's `weekly_shifts` warns on each shift over the maximum, dated on
+  that shift so its card says so, and says when it is past the overflow too
+  (a hand placement can be).
 
 None of this is a structured *rule vocabulary* (D2): these are numbers on a
 setup form, like `audit_policy`, not the manager's sentences.

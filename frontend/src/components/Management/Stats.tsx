@@ -719,6 +719,7 @@ function Tile({
 const WARNING_LABELS: Record<string, string> = {
   over_hours: "חריגה בשעות",
   reserve_days: "מילואים מעל ימי השבוע",
+  weekly_shifts: "משמרות בשבוע מחוץ לטווח",
   consecutive: "ימים ברצף",
   short_rest: "מנוחה קצרה",
   double_booked: "שיבוץ כפול",

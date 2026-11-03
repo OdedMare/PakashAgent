@@ -42,6 +42,14 @@ export function warningHeadline(warning: ScheduleWarning): string {
       if (total === null) return "חריגה בשעות השבועיות";
       return `${hours(total)} ש׳ השבוע${limit !== null ? ` (תקרה ${hours(limit)})` : ""}`;
     }
+    case "weekly_shifts": {
+      const count = num(details.count);
+      const max = num(details.max);
+      if (count === null || max === null) return warning.message;
+      return details.within_overflow === false
+        ? `משמרת ${count} השבוע · מעבר לחריגה המותרת (מקס׳ ${max})`
+        : `משמרת ${count} השבוע · חריגה מהמקס׳ (${max})`;
+    }
     case "consecutive": {
       const days = num(details.days);
       const limit = num(details.limit);

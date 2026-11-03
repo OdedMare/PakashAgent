@@ -6,9 +6,12 @@
   price; a seat still empty is a missing role.
 - **The weak.** No more people of competence "weak" on one shift than
   `max_weak_per_shift`. Hard: placing nobody stays feasible.
-- **Weekly shifts.** At most `max` shifts per Sunday-to-Saturday week (hard), and at least
-  `min` in every whole week of the span (priced, since leave and closures
-  can make it impossible).
+- **Weekly shifts.** At most `max` shifts per Sunday-to-Saturday week, plus
+  the unit's `weekly_shifts_overflow` (hard: past that the seat stays
+  empty). Each shift over `max` is priced, so coverage settles first and an
+  overflow is taken only for a seat nobody else could fill; its note and the
+  audit's warning on that shift say so. At least `min` in every whole week
+  of the span (priced, since leave and closures can make it impossible).
 """
 
 import datetime
@@ -16,6 +19,7 @@ import datetime
 from app.bl.audit import counts_toward_staffing
 from app.bl.audit.unit_policy import (
     cover, fallbacks, held_roles, is_weak, max_weak, role_needs, unit_week, weekly_limits,
+    weekly_overflow,
 )
 from app.bl.solver.model import MISSING_ROLE, Model
 
@@ -24,6 +28,9 @@ from app.bl.solver.model import MISSING_ROLE, Model
 FALLBACK = 3_000
 # A week short of its minimum outweighs a wish; it is the unit's standard.
 UNDER_MIN = 1_500
+# A shift past the weekly maximum, within the allowed overflow: dearer than
+# anything but coverage, so it is spent only on a seat that needed it.
+OVER_MAX = 10_000
 
 
 def apply_staffing(model: Model) -> None:
@@ -34,8 +41,9 @@ def apply_staffing(model: Model) -> None:
         _role_seats(model, index, backups)
         if cap is not None:
             _weak_cap(model, index, cap)
+    overflow = weekly_overflow(problem.profile)
     for name in problem.staff:
-        _weekly_shifts(model, name)
+        _weekly_shifts(model, name, overflow)
 
 
 def _role_seats(model: Model, index: int, backups: dict) -> None:
@@ -82,7 +90,7 @@ def _weak_cap(model: Model, index: int, cap: int) -> None:
     model.at_most(model.on_slot(index, weak), cap - fixed)
 
 
-def _weekly_shifts(model: Model, name: str) -> None:
+def _weekly_shifts(model: Model, name: str, overflow: int = 0) -> None:
     problem = model.problem
     low, high = weekly_limits(problem.profile, problem.people[name])
     if not low and high is None:
@@ -97,7 +105,12 @@ def _weekly_shifts(model: Model, name: str) -> None:
         fixed = sum(1 for row in problem.fixed if row["employee"] == name
                     and unit_week(datetime.date.fromisoformat(row["date"])) == week)
         if high is not None:
-            model.at_most(variables, high - fixed)
+            model.at_most(variables, high + overflow - fixed)
+            if overflow:
+                model.price_excess(
+                    variables, max(0, high - fixed), OVER_MAX,
+                    "%s שובץ/ה מעל המקסימום של %d משמרות בשבוע שמתחיל ב-%s, כדי שמשמרת לא תישאר ריקה."
+                    % (name, high, week.isoformat()), kind="over_max")
         wanted = min(low, len(variables)) - fixed
         if wanted > 0 and len(days.get(week, ())) == 7:
             short = model.cp.NewIntVar(0, wanted, "under_%s" % name)

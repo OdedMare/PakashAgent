@@ -93,6 +93,40 @@ def test_weekly_maximum_is_never_exceeded():
     assert sum(load.values()) == 6  # 7 seats, 3 people × 2: one stays short
 
 
+def test_the_weekly_maximum_takes_the_allowed_overflow_then_leaves_seats_empty():
+    """Max 4 and one over it: alone on a daily shift, a reservist works five
+    of seven days, the fifth with a warning on that shift; two stay empty."""
+    people = [_person("מ", ["אלחוט"], service_type="reserve", exit_pattern="none")]
+    policy = {"weekly_shifts": {"max": 4}, "weekly_shifts_overflow": 1}
+    result = generate_span(_profile(people, ["אלחוט"], policy), "2026-11-08", "2026-11-14")
+    assert len(result["assignments"]) == 5
+    over = [item for item in result["warnings"] if item["code"] == "weekly_shifts"]
+    assert len(over) == 1 and over[0]["details"]["count"] == 5 and over[0]["details"]["within_overflow"]
+    assert over[0]["date"] and over[0]["shift"] == DAY
+    assert any("מעל המקסימום של 4 משמרות" in note for note in result["notes"])
+    assert any("מיצו את מקסימום המשמרות בשבוע" in note for note in result["notes"])
+
+
+def test_the_overflow_is_taken_only_when_a_seat_needs_it():
+    people = [_person("p%d" % n, ["אלחוט"]) for n in range(2)]
+    policy = {"weekly_shifts": {"max": 4}, "weekly_shifts_overflow": 1}
+    result = generate_span(_profile(people, ["אלחוט"], policy), "2026-11-08", "2026-11-14")
+    load = Counter(row["employee"] for row in result["assignments"])
+    assert sum(load.values()) == 7 and max(load.values()) == 4
+    assert not [item for item in result["warnings"] if item["code"] == "weekly_shifts"]
+    assert not any("מעל המקסימום" in note for note in result["notes"])
+
+
+def test_each_shift_past_the_weekly_maximum_is_warned_on_its_own():
+    people = [_person("ד", ["אלחוט"])]
+    profile = _profile(people, ["אלחוט"], {"weekly_shifts": {"max": 4}, "weekly_shifts_overflow": 1})
+    rows = [{"employee": "ד", "shift": DAY, "date": "2026-11-%02d" % day} for day in range(8, 15)]
+    over = [item for item in audit(rows, profile["shifts"], people, profile=profile)
+            if item["code"] == "weekly_shifts"]
+    assert [item["date"] for item in over] == ["2026-11-12", "2026-11-13", "2026-11-14"]
+    assert [item["details"]["within_overflow"] for item in over] == [True, False, False]
+
+
 def test_regulars_have_their_own_weekly_limits():
     policy = {"weekly_shifts": {"min": 2, "max": 3}, "weekly_shifts_regular": {"min": 4, "max": 5},
               "weekly_shifts_officers": {"min": 5, "max": 6},
@@ -150,6 +184,9 @@ def test_qualifications_and_unit_policy_are_validated():
     policy = unit_policy({"max_weak_per_shift": "1", "weekly_shifts_ncos": {"min": 2, "max": 4}})
     assert policy["max_weak_per_shift"] == 1
     assert policy["weekly_shifts_ncos"] == {"min": 2, "max": 4}
+    assert unit_policy({"weekly_shifts_overflow": "1"})["weekly_shifts_overflow"] == 1
+    with pytest.raises(AgentError):
+        unit_policy({"weekly_shifts_overflow": -1})
 
 
 def test_a_first_profile_without_any_weekend_cycle_needs_no_groups():

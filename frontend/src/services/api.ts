@@ -445,6 +445,8 @@ export interface UnitPolicy {
   weekly_shifts_regular?: { min?: number; max?: number };
   weekly_shifts_officers?: { min?: number; max?: number };
   weekly_shifts_ncos?: { min?: number; max?: number };
+  /** Shifts a week past `max`, each one only to fill a seat and each warned on. */
+  weekly_shifts_overflow?: number;
 }
 
 /** Role -> people per shift, for a group's day and night shifts. */

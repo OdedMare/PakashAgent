@@ -138,6 +138,16 @@ def weekly_limits(profile: Optional[dict], person: Optional[dict]) -> Tuple[int,
     return max(0, low), (max(0, high) if high is not None else None)
 
 
+def weekly_overflow(profile: Optional[dict]) -> int:
+    """Shifts a week a person may take past their weekly `max`
+    (`weekly_shifts_overflow`, 0 unless set): each one only when a seat
+    would otherwise stay empty, and each one warned on."""
+    value = unit_policy(profile).get("weekly_shifts_overflow")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0
+    return max(0, int(value))
+
+
 def held_roles(person: Optional[dict]) -> Set[str]:
     """Every role a person may fill first-hand: `role`, `roles`, qualifications."""
     return person_roles(person or {})

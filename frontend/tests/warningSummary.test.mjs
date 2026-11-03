@@ -79,3 +79,11 @@ test("a constraint the board found itself is described the same way", () => {
   assert.equal(summary.constraintHeadline(row), "אילוץ \u206608:00–14:00\u2069 · מילואים");
   assert.equal(summary.constraintSentence("דנה", row), "דנה — נרשם/ה אילוץ למשמרת הזו, בשעות \u206608:00–14:00\u2069, סיבה: מילואים.");
 });
+
+test("a shift past the weekly maximum says which shift of the week it is", () => {
+  assert.equal(summary.warningHeadline(warning("weekly_shifts", { count: 5, max: 4, within_overflow: true })),
+    "משמרת 5 השבוע · חריגה מהמקס׳ (4)");
+  assert.equal(summary.warningHeadline(warning("weekly_shifts", { count: 6, max: 4, within_overflow: false })),
+    "משמרת 6 השבוע · מעבר לחריגה המותרת (מקס׳ 4)");
+  assert.equal(summary.warningHeadline(warning("weekly_shifts", { min: 2, shifts: 1 }, "מתחת למינימום")), "מתחת למינימום");
+});

@@ -10,7 +10,7 @@ roster against it, from the same tests the solver ran:
   serving, another hard availability, a hard `avoid`;
 - the finished schedule for what the rules then ruled out — already on an
   overlapping shift, too little rest beside another shift, a run of days
-  or the weekly hours it would break;
+  or the weekly hours, or the weekly shift maximum, it would break;
 - a hard request naming the person (`max_count`, `not_together`, ...) when
   none of those applies, and otherwise "free": somebody who could have
   stood there and was not placed, which points at the time limit.
@@ -24,6 +24,7 @@ from typing import Dict, List, Optional
 
 from app.bl.audit import counts_toward_staffing
 from app.bl.audit.roster import iso_week
+from app.bl.audit.unit_policy import weekly_limits, weekly_overflow
 from app.bl.audit.values import number
 from app.bl.schedule_requests import covers
 from app.bl.solver.competence import reserve_days, week_of
@@ -41,6 +42,7 @@ LABELS = {
     "consecutive": "יחרגו מרצף הימים המותר",
     "hours": "יחרגו משעות העבודה השבועיות",
     "reserve": "מיצו את ימי המילואים בשבוע",
+    "weekly": "מיצו את מקסימום המשמרות בשבוע (כולל החריגה המותרת)",
     "request": "מוגבלים בבקשה מחייבת אחרת",
     "free": "פנויים ולא שובצו (ייתכן שזמן הפתרון לא הספיק)",
 }
@@ -139,6 +141,8 @@ class _Board:
             return "hours"
         if _reserve_spent(self.problem.people[name], rows, slot["slot_date"]):
             return "reserve"
+        if self._weekly_full(name, rows, slot["slot_date"]):
+            return "weekly"
         if any(request["is_hard"] and request["kind"] in _BOUNDING
                and name in request["employees"] + request["partners"]
                and covers(request, slot["shift_name"], slot["slot_date"])
@@ -157,6 +161,14 @@ class _Board:
                 length += 1
                 probe += datetime.timedelta(days=step)
         return length
+
+    def _weekly_full(self, name: str, rows: List[dict], day: str) -> bool:
+        """Already at the weekly maximum plus the allowed overflow."""
+        _, high = weekly_limits(self.problem.profile, self.problem.people[name])
+        if high is None:
+            return False
+        carried = sum(1 for row in rows if week_of(row["date"]) == week_of(day))
+        return carried >= high + weekly_overflow(self.problem.profile)
 
     def _hours(self, name: str, rows: List[dict], slot: dict, times: dict) -> bool:
         limit = number(self.problem.people[name].get("max_weekly_hours"), 0.0) \
