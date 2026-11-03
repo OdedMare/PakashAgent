@@ -2102,7 +2102,13 @@ def test_checking_a_placement_calls_no_model():
     assert response.status_code == 200
     body = response.json()
     assert body["ok"] is True
-    assert {"exit_pattern", "is_overlap"} <= set(body["candidates"][0])
+    # The contract keeps every field the picker filters and colours on; a
+    # field `bl/placement` computes but the response model omits never
+    # reaches the browser.
+    assert {
+        "exit_pattern", "is_overlap", "eligible_shifts", "rotation_group",
+        "borrowable", "borrow_from", "shared_roles",
+    } <= set(body["candidates"][0])
 
 
 def test_a_check_that_warns_still_returns_200_and_never_blocks():

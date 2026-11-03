@@ -1572,6 +1572,13 @@
 .board-candidate.is-available > svg { color: var(--success); }
 .board-candidate.is-unavailable > svg { color: var(--warning); }
 .board-candidate.is-overlap { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); }
+/* A borrow — free, same role, another post — reads in teal: not the green
+   of "this post's and free", not the amber of a real conflict. */
+.board-candidate.is-borrow {
+  background: var(--hue-teal-soft);
+  border-color: color-mix(in srgb, var(--hue-teal) 55%, var(--border));
+}
+.board-candidate.is-borrow > svg { color: var(--hue-teal); }
 .board-candidate.is-selected { border-color: var(--primary); box-shadow: var(--focus); }
 
 .board-candidate-copy {
@@ -1606,6 +1613,14 @@
   color: var(--text-soft);
   background: var(--surface-3);
 }
+
+.board-candidate-badge.is-borrow {
+  color: var(--hue-teal);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--hue-teal) 45%, transparent);
+}
+
+.board-availability-borrow { color: var(--hue-teal); }
 
 .board-candidate-badge.is-overlap {
   color: var(--warning);

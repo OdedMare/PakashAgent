@@ -65,8 +65,16 @@ class PlacementCandidate(BaseModel):
     can_train: bool = False
     is_overlap: bool = False
     exit_pattern: str = ""
+    eligible_shifts: List[str] = []
+    rotation_group: str = ""
     rotation: str = ""
     closing: bool = False
+    # Free, from another post, holding a role this shift's own people hold:
+    # the colleague a short shift can borrow. `borrow_from` names their
+    # posts and `shared_roles` the role in common; both empty otherwise.
+    borrowable: bool = False
+    borrow_from: List[str] = []
+    shared_roles: List[str] = []
 
 
 class PlacementCheck(BaseModel):

@@ -17,6 +17,7 @@ type ExitPatternFilter = (typeof EXIT_PATTERN_FILTERS)[number][0];
 
 const FLAG_FILTERS = [
   ["available", "פנויים בלבד"],
+  ["borrow", "אותו תפקיד מעמדה אחרת"],
   ["closing", "בסגירה עכשיו"],
   ["manager", "מפקדים"],
   ["trainer", "מוסמכים לחפוף"],
@@ -71,6 +72,7 @@ export function matchesFilter(
   if (filter.role && roles[candidate.employee] !== filter.role) return false;
   return filter.flags.every((flag) => {
     if (flag === "available") return candidate.available;
+    if (flag === "borrow") return Boolean(candidate.borrowable);
     if (flag === "closing") return Boolean(candidate.closing);
     if (flag === "manager") return candidate.is_shift_manager;
     if (flag === "trainer") return candidate.can_train;

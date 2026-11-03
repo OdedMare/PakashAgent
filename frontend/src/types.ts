@@ -576,6 +576,14 @@ export interface PlacementCandidate {
    *  picker puts them first: "who is free" and "whose weekend is it" are
    *  different questions, and only one of them is on the grid. */
   closing?: boolean;
+  /** Free, from another post, and holding a role this shift's own people
+   *  hold — the colleague a short shift can borrow. Only the roster's "not
+   *  this shift" stands in the way; anything else and this stays false. */
+  borrowable?: boolean;
+  /** The posts a borrow would come from ("א"). Empty unless `borrowable`. */
+  borrow_from?: string[];
+  /** The role they share with this shift's people. Empty unless `borrowable`. */
+  shared_roles?: string[];
 }
 
 /** One date the rotation speaks for.

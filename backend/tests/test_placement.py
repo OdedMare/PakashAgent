@@ -223,6 +223,63 @@ def test_manual_picker_lists_the_shift_types_each_person_can_work():
     assert by_name["מיכל"]["rotation_group"] == "א"
 
 
+def _posts_profile():
+    """Two posts, each with its own driver and its own guard: the roster
+    keeps everyone to their post, and the roles name the trade."""
+    return dict(PROFILE, employees=[
+        {"name": DANA, "eligible_shifts": [MORNING], "roles": ["נהג"]},
+        {"name": YOSSI, "eligible_shifts": [EVENING], "roles": ["נהג"]},
+        {"name": RON, "eligible_shifts": [EVENING], "roles": ["שומר"]},
+        {"name": "מיכל", "eligible_shifts": [EVENING], "roles": ["נהג"],
+         "service_type": "overlap"},
+    ])
+
+
+def test_a_free_colleague_from_another_post_with_the_same_role_is_a_borrow():
+    """The short shift's next answer: free, same role, another post."""
+    result = check(_schedule(), _posts_profile(), "", MORNING, "2026-08-17")
+    by_name = {row["employee"]: row for row in result["candidates"]}
+
+    yossi = by_name[YOSSI]
+    assert yossi["available"] is False  # still not this post's, and says so
+    assert yossi["borrowable"] is True
+    assert yossi["borrow_from"] == [EVENING]
+    assert yossi["shared_roles"] == ["נהג"]
+
+    # A different role is not "the same role-holder".
+    assert by_name[RON]["borrowable"] is False
+    assert by_name[RON]["borrow_from"] == [] and by_name[RON]["shared_roles"] == []
+    # A trainee fills no seat, so there is nothing to borrow.
+    assert by_name["מיכל"]["borrowable"] is False
+    # The post's own people are simply free, not borrowed.
+    assert by_name[DANA]["available"] is True
+    assert by_name[DANA]["borrowable"] is False
+
+    order = [row["employee"] for row in result["candidates"]]
+    assert order.index(DANA) < order.index(YOSSI) < order.index(RON)
+
+
+def test_a_colleague_with_another_reason_is_not_offered_as_a_borrow():
+    """Borrowing is for somebody free. A recorded absence is not hidden
+    behind a "same role" badge."""
+    result = check(
+        _schedule(), _posts_profile(), "", MORNING, "2026-08-17",
+        availability=[{
+            "employee": YOSSI, "date": "2026-08-17", "shift": "",
+            "available": False, "reason": "לימודים",
+        }],
+    )
+    yossi = next(row for row in result["candidates"] if row["employee"] == YOSSI)
+    assert yossi["borrowable"] is False
+    assert any("לימודים" in reason for reason in yossi["reasons"])
+
+
+def test_a_roster_without_roles_has_no_borrows():
+    """Without roles there is no "same role" to match on."""
+    result = check(_schedule(), PROFILE, "", EVENING, "2026-08-17")
+    assert not any(row["borrowable"] for row in result["candidates"])
+
+
 def test_an_ineligible_shift_is_reported_first():
     """Eligibility is not an audit warning, and is reported anyway.
 

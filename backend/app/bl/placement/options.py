@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from app.bl import rotation
 from app.bl.placement import values
-from app.bl.shared import parse_date
+from app.bl.shared import parse_date, person_roles
 from app.bl.placement.context import PlacementContext, effective_rows
 
 # What "the rotation says nothing about this slot" looks like on the wire. A
@@ -54,7 +54,9 @@ def employee_options(
     Each option carries the person's rotation and whether they are the ones
     *in* on this slot: "who is free" and "whose weekend is it" are different
     questions, so closers sort to the top of a closure slot, ahead of the
-    fairness ordering that governs an ordinary day.
+    fairness ordering that governs an ordinary day. Somebody from another
+    post who holds this shift's role and is otherwise free is marked
+    `borrowable` and sorts right after the people who are free.
     """
     shift_name, slot_date = values.text(shift_name), values.iso(slot_date)
     context = PlacementContext(
@@ -68,22 +70,67 @@ def employee_options(
         values.text(row.get("name")) for row in values.shifts(profile)
         if values.text(row.get("name"))
     ]
+    crew = _crew_roles(context, shift_name, slot_date)
     options = [
-        _option(context, person, shift_name, slot_date, day, load, shift_names)
+        _option(context, person, shift_name, slot_date, day, load, shift_names, crew)
         for person in context.employees if values.text(person.get("name"))
     ]
+    # A borrow sorts straight after the people who are free: on a short
+    # shift they are the next answer, ahead of anybody with a real conflict.
     options.sort(key=lambda item: (
-        not item["available"], not item["closing"], item["hours"], item["employee"],
+        not item["available"], not item["borrowable"], not item["closing"],
+        item["hours"], item["employee"],
     ))
     return options
 
 
-def _option(context, person, shift_name, slot_date, day, load, shift_names) -> dict:
+def _crew_roles(context, shift_name: str, slot_date: str) -> set:
+    """The roles this shift's own people hold -- what "the same role" means.
+
+    Read off the roster rather than `allowed_roles`, because a unit whose
+    roles name a team (one role per post) and one whose roles name a trade
+    (נהג, חובש) both mean the trade when they say a colleague from another
+    post holds the same role. נחפפים are left out: they fill no seat.
+    """
+    roles: set = set()
+    for person in context.employees:
+        name = values.text(person.get("name"))
+        if not name or values.text(person.get("service_type")) == "overlap":
+            continue
+        if values.is_eligible(context.profile, name, shift_name, slot_date):
+            roles |= person_roles(person)
+    return roles
+
+
+def _borrow(option: dict, verdict: dict, person: dict, crew: set) -> dict:
+    """Mark somebody free who belongs to another post but holds a role this
+    shift's own people hold -- the colleague a short shift can borrow.
+
+    Only the roster's "not this shift" stands between them and the seat:
+    any other reason (a constraint, rest, a closure) means they are not
+    free, and offering them as a borrow would hide it.
+    """
+    shared = sorted(person_roles(person) & crew)
+    borrowable = bool(
+        shared
+        and not verdict["eligible"]
+        and len(verdict["reasons"]) == 1  # the eligibility sentence alone
+        and not verdict["blocking"]
+        and not option["is_overlap"]
+    )
+    option["borrowable"] = borrowable
+    option["shared_roles"] = shared if borrowable else []
+    # Their own posts, for the picker to say where they would come from.
+    option["borrow_from"] = option["eligible_shifts"] if borrowable else []
+    return option
+
+
+def _option(context, person, shift_name, slot_date, day, load, shift_names, crew) -> dict:
     name = values.text(person.get("name"))
     exit_pattern = rotation.exit_pattern(context.profile, person)
     rotation_group = values.text(person.get("rotation_group"))
     verdict = context.verdict(name, shift_name, slot_date)
-    return {
+    option = {
         "employee": name,
         "available": verdict["ok"],
         "reasons": verdict["reasons"],
@@ -108,6 +155,7 @@ def _option(context, person, shift_name, slot_date, day, load, shift_names) -> d
             and rotation.holds(context.profile, person, day, shift_name)
         ),
     }
+    return _borrow(option, verdict, person, crew)
 
 
 def _cycle_of(profile: dict, person: dict) -> str:

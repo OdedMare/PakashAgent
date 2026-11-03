@@ -188,8 +188,15 @@ and the grid is read every day.
 candidate shows availability, rotation and an overlap badge, and the list
 filters (`Board/CandidateFilters.tsx`) by name, exit pattern, rotation group,
 the shift types a person may work (`eligible_shifts`, from the roster), role,
-and free / closing / commander / trainer / no-overlap. The filters narrow
-what the check returned; they never re-check anything. Moving without a mouse (touch, keyboard) is
+and free / same-role-from-another-post / closing / commander / trainer /
+no-overlap. The filters narrow what the check returned; they never re-check
+anything. **A short shift can borrow.** Somebody the roster keeps to another
+post, who holds a role this shift's own people hold and has no reason
+against them except "not this post", arrives `borrowable` with the posts
+they come from (`borrow_from`) and the role in common (`shared_roles`). They
+sort right after the free, read in teal with a "מ־א · נהג" badge — neither
+the green of this post's free people nor the amber of a real conflict — and
+are placed like anyone else (the eligibility warning still shows). Moving without a mouse (touch, keyboard) is
 `useMoveMode` / `useBoardKeys` — the same drop, the same confirmation.
 `FilterBar` hides rows and never changes them; `CoverageBar` keeps reporting
 the whole week from the overview's own audit figures, never a browser count.
