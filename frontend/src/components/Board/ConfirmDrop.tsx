@@ -267,7 +267,7 @@ export function PlacementVerdict({
           means — and under D3 it means both. */}
       <p className="board-verdict-foot">
         {check.blocking
-          ? "לא ניתן להמשיך: התורנות חופפת למשמרת. יש לבחור חייל/ת או משמרת אחרת."
+          ? "לא ניתן להמשיך: החייל/ת אינו/ה זמין/ה למשמרת. יש לבחור חייל/ת או משמרת אחרת."
           : "אפשר להמשיך — ההתראות הרגילות מיידעות ולא חוסמות."}
       </p>
     </div>

@@ -24,10 +24,10 @@ from typing import Dict, List, Optional
 
 from app.bl.audit import counts_toward_staffing
 from app.bl.audit.roster import iso_week
-from app.bl.audit.unit_policy import weekly_limits, weekly_overflow
+from app.bl.audit.unit_policy import reserve_limit_reached, weekly_limits, weekly_overflow
 from app.bl.audit.values import number
 from app.bl.schedule_requests import covers
-from app.bl.solver.competence import reserve_days, week_of
+from app.bl.solver.competence import week_of
 from app.bl.solver.rows import roles
 
 LABELS = {
@@ -180,13 +180,8 @@ class _Board:
 
 
 def _reserve_spent(person: dict, rows: List[dict], day: str) -> bool:
-    """A reservist whose week already holds their stated days, this one not
-    among them."""
-    cap = reserve_days(person)
-    if cap is None:
-        return False
-    worked = {row["date"] for row in rows if week_of(row["date"]) == week_of(day)}
-    return day not in worked and len(worked) >= cap
+    """A reservist whose rolling seven-day limit would be exceeded."""
+    return reserve_limit_reached(person, (row["date"] for row in rows), day)
 
 
 def _clash(rows: List[dict], slot: dict, times: dict, minimum: float) -> Optional[str]:

@@ -831,8 +831,9 @@ export function assignEmployee(body: {
  *  drag is validated, explained in Hebrew, and offered deterministic
  *  alternatives without a token being generated.
  *
- *  Ordinary findings advise and never gate (D3). A duty overlap returns
- *  `blocking: true`, and the write endpoint independently enforces it. */
+ *  Ordinary findings advise and never gate (D3). Hard unavailability and
+ *  duty overlaps return `blocking: true`, and the write endpoint independently
+ *  enforces them. */
 export function checkPlacement(body: {
   employee: string;
   shift_name: string;

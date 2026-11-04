@@ -15,8 +15,8 @@ from app.bl.audit.codes import (
 from app.bl.audit.roster import index_people
 from app.bl.audit.staffing_rules import required_roles
 from app.bl.audit.unit_policy import (
-    below_level, is_weak, max_weak, qualification_expired, reserve_days, role_needs, unit_week,
-    weekly_limits, weekly_overflow,
+    below_level, is_weak, max_weak, qualification_expired, reserve_days, reserve_excesses,
+    role_needs, unit_week, weekly_limits, weekly_overflow,
 )
 from app.bl.shared import parse_date
 
@@ -90,25 +90,25 @@ class UnitStandardCheck(AuditCheck):
 
     @staticmethod
     def _reserve(data: AuditInput, people: Dict[str, dict]) -> List[dict]:
-        """A reservist on more distinct days in a Sunday–Saturday week than
+        """A reservist on more distinct days in any consecutive seven than
         `reserve_days_per_week`. The solver never builds one; a pin, a hand
         placement or a cover picked in the chat can."""
-        worked: Dict[tuple, set] = {}
+        worked: Dict[str, set] = {}
         for row in data.rows:
             day = parse_date(row["date"])
             if day and reserve_days(people.get(row["employee"])) is not None:
-                worked.setdefault((row["employee"], unit_week(day)), set()).add(day)
+                worked.setdefault(row["employee"], set()).add(day)
         warnings = []
-        for (name, week), days in sorted(worked.items()):
+        for name, days in sorted(worked.items()):
             cap = reserve_days(people.get(name))
-            if len(days) > cap:
+            for day, start, count in reserve_excesses(people.get(name), days):
                 warnings.append(warning(
                     RESERVE_DAYS, SEVERITY_WARNING,
-                    "%s (מילואים) משובץ/ת %d ימים בשבוע שמתחיל ב-%s, מעל %d הימים שהוא/היא מגיע/ה."
-                    % (name, len(days), week.isoformat(), cap),
-                    # Dated on the first day past the cap: the day to move.
-                    employee=name, date=sorted(days)[cap].isoformat(),
-                    details={"week": week.isoformat(), "days": len(days), "max": cap}))
+                    "%s (מילואים) משובץ/ת %d ימים בין %s ל-%s, מעל %d הימים שהוא/היא יכול/ה להגיע."
+                    % (name, count, start.isoformat(), day.isoformat(), cap),
+                    employee=name, date=day.isoformat(),
+                    details={"window_start": start.isoformat(), "window_end": day.isoformat(),
+                             "days": count, "max": cap}))
         return warnings
 
     @staticmethod

@@ -5,9 +5,9 @@ different question: not "what is wrong with the schedule as stored" but "what
 would be wrong with it if this move landed", answered *before* the write so
 the board can explain a drag rather than let it fail silently (D3).
 
-**Nothing here blocks.** `check()` returns `blocking: False` on every result.
-The refusal-shaped information arrives before the click rather than as a
-banner after it — same authority, better timing.
+Hard unavailability blocks; every other finding remains advisory. The
+refusal-shaped information arrives before the click rather than as a banner
+after it — same authority, better timing.
 
 The alternatives are the other half: a manager told "דנה has a constraint that
 day — יוסי and רון are both free and qualified" has the answer. Both lists are
