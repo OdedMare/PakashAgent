@@ -59,11 +59,26 @@ def _count(value: Any, label: str) -> int:
     return number
 
 
+# A soldier's own weekly shift limits, over their service type's
+# (`audit/unit_policy.weekly_limits`). Blank is None: the team's numbers.
+PERSON_LIMITS = (("min_weekly_shifts", "מינימום המשמרות בשבוע", 0),
+                 ("max_weekly_shifts", "מקסימום המשמרות בשבוע", 1))
+
+
 def person_fields(row: dict) -> dict:
-    """Dated qualifications, normalised; absent stays absent."""
-    if row.get("qualifications") is None:
-        return {}
-    return {"qualifications": qualifications(row.get("qualifications"))}
+    """Dated qualifications, normalised (absent stays absent), and the
+    soldier's own weekly shift limits."""
+    fields = {}
+    if row.get("qualifications") is not None:
+        fields["qualifications"] = qualifications(row.get("qualifications"))
+    for key, label, least in PERSON_LIMITS:
+        value = row.get(key)
+        fields[key] = None if value is None or value == "" \
+            else min(14, max(least, _count(value, label)))
+    low, high = fields["min_weekly_shifts"], fields["max_weekly_shifts"]
+    if low is not None and high is not None and low > high:
+        raise AgentError("מינימום המשמרות בשבוע של %s גדול מהמקסימום" % (text(row.get("name")) or "החייל/ת"))
+    return fields
 
 
 def qualifications(value: Any) -> List[dict]:
@@ -91,4 +106,4 @@ def _date(value: Any) -> str:
         raise AgentError("תאריך הפעילות האחרונה של כשירות חייב להיות בפורמט YYYY-MM-DD")
 
 
-__all__ = ["person_fields", "qualifications", "unit_policy"]
+__all__ = ["PERSON_LIMITS", "person_fields", "qualifications", "unit_policy"]

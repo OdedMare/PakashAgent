@@ -1674,6 +1674,11 @@ person** (`bl/audit/unit_policy.py`, read by the solver and the audit alike):
   audit's `weekly_shifts` warns on each shift over the maximum, dated on
   that shift so its card says so, and says when it is past the overflow too
   (a hand placement can be).
+  Any soldier may carry their own `min_weekly_shifts` / `max_weekly_shifts`,
+  which win over their service type's, each on its own (blank is the
+  team's). Setup edits the סדיר (`weekly_shifts_regular`) and מילואים
+  (`weekly_shifts`) numbers in "גבולות עומס ומנוחה", and each soldier's in
+  their card; the rest of `unit_policy` still saves through untouched.
 
 None of this is a structured *rule vocabulary* (D2): these are numbers on a
 setup form, like `audit_policy`, not the manager's sentences.

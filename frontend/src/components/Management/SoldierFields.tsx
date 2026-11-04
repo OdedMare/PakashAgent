@@ -84,19 +84,10 @@ export const RESERVE_CALL_LABELS: Record<string, string> = {
   days: "ימי מילואים",
 };
 
-export type SoldierField = "competence" | "reserve_days_per_week" | "reserve_min_days" | "reserve_consecutive" | "reserve_call";
+export type SoldierField = "competence" | "reserve_days_per_week" | "reserve_min_days" | "reserve_consecutive" | "reserve_call"
+  | "min_weekly_shifts" | "max_weekly_shifts";
 
-const dayCount = (days: number) => (days === 1 ? "יום אחד" : `${days} ימים`);
-
-export function SoldierFields({
-  serviceType,
-  competence,
-  reserveDays,
-  reserveMinDays,
-  reserveConsecutive,
-  reserveCall,
-  onChange,
-}: {
+type StatusFieldsProps = {
   serviceType: string;
   competence: string;
   reserveDays: number | null;
@@ -104,7 +95,60 @@ export function SoldierFields({
   reserveConsecutive: boolean;
   reserveCall: string;
   onChange: (field: SoldierField, value: string | number | boolean | null) => void;
-}) {
+};
+
+/** A weekly shift limit typed in a box: a whole number from `least` to 14,
+ *  or null for blank — the soldier is then on their מעמד's number. */
+export function shiftCount(value: string, least = 0): number | null {
+  if (value.trim() === "") return null;
+  const parsed = Math.trunc(Number(value));
+  return Number.isFinite(parsed) ? Math.min(14, Math.max(least, parsed)) : null;
+}
+
+/** The soldier's status fields, then their own weekly minimum and maximum
+ *  of shifts (Sunday–Saturday), over the unit's numbers for their מעמד.
+ *  A נחפף/ת fills no seat and takes none. */
+export function SoldierFields({
+  minShifts,
+  maxShifts,
+  ...props
+}: StatusFieldsProps & { minShifts: number | null; maxShifts: number | null }) {
+  return (
+    <>
+      <SoldierStatusFields {...props} />
+      {props.serviceType === "overlap" ? null : (
+        <fieldset className="soldier-reserve">
+          <legend>משמרות בשבוע</legend>
+          <div className="soldier-grid">
+            <label className="soldier-field">
+              <span>מינימום משמרות</span>
+              <input type="number" min={0} max={14} inputMode="numeric" value={minShifts ?? ""} placeholder="לפי המעמד"
+                onChange={(event) => props.onChange("min_weekly_shifts", shiftCount(event.target.value))} />
+            </label>
+            <label className="soldier-field">
+              <span>מקסימום משמרות</span>
+              <input type="number" min={1} max={14} inputMode="numeric" value={maxShifts ?? ""} placeholder="לפי המעמד"
+                onChange={(event) => props.onChange("max_weekly_shifts", shiftCount(event.target.value, 1))} />
+            </label>
+          </div>
+          <small>לא חובה. שבוע ראשון–שבת. המקסימום נאכף בשיבוץ; המינימום הוא יעד שהסידור ישבץ אלא אם אין משמרות פנויות. ריק = לפי המעמד, כפי שהוגדר בגבולות העומס של היחידה.</small>
+        </fieldset>
+      )}
+    </>
+  );
+}
+
+const dayCount = (days: number) => (days === 1 ? "יום אחד" : `${days} ימים`);
+
+function SoldierStatusFields({
+  serviceType,
+  competence,
+  reserveDays,
+  reserveMinDays,
+  reserveConsecutive,
+  reserveCall,
+  onChange,
+}: StatusFieldsProps) {
   const competenceField = (
     <label className="soldier-field">
       <span>רמה מקצועית</span>

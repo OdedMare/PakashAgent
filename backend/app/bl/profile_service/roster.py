@@ -211,7 +211,8 @@ def employee_item(item: dict) -> dict:
         **({"rank_group": item.get("rank_group") or ""} if "rank_group" in item else {}),
         **{key: item[key] for key in ("service_type", "reserve_days_per_week", "reserve_min_days",
                                  "reserve_consecutive", "reserve_call", "daily_days",
-                                 "daily_start", "daily_end", "closure_every", "closure_from")
+                                 "daily_start", "daily_end", "closure_every", "closure_from",
+                                 "min_weekly_shifts", "max_weekly_shifts")
            if item.get(key) not in (None, "")},
     }
 

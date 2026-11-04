@@ -60,6 +60,10 @@
 .manual-grid { display: grid; gap: 0.75rem; }
 .manual-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .employee-grid { grid-template-columns: minmax(8rem, 1.3fr) minmax(8rem, 1fr) minmax(8rem, 1fr) 6rem 8rem; }
+.limits-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.weekly-shifts { display: grid; gap: 0.6rem; min-width: 0; margin: 0; padding: 0; border: 0; }
+.weekly-shifts legend { margin-bottom: 0.6rem; padding: 0; color: var(--text-muted); font-size: 0.74rem; font-weight: 650; }
+.weekly-shifts small { color: var(--text-muted); font-size: 0.74rem; line-height: 1.55; }
 /* Wraps instead of holding six fixed columns: those needed ~51rem, more than
    the section body has beside its header, and the row was cut off. */
 .shift-grid { grid-template-columns: repeat(auto-fill, minmax(min(9rem, 100%), 1fr)); }
@@ -165,7 +169,7 @@
 @media (max-width: 980px) {
   .manual-section { grid-template-columns: 1fr; }
   .manual-section > header { border-inline-end: 0; border-bottom: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0; }
-  .manual-grid.three, .employee-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .manual-grid.three, .employee-grid, .limits-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .rotation-window-grid, .closure-clock.has-days { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -175,7 +179,7 @@
   .manual-header-actions button { min-height: 44px; flex: 1; justify-content: center; }
   .manual-header-actions .header-help { width: auto; }
   .manual-header-actions .header-help > span { display: inline; }
-  .manual-grid.three, .employee-grid, .manual-rule { grid-template-columns: 1fr; }
+  .manual-grid.three, .employee-grid, .limits-grid, .manual-rule { grid-template-columns: 1fr; }
   .manual-row-foot { align-items: flex-start; flex-direction: column; }
   .rotation-pair { grid-template-columns: 1fr; }
   .rotation-pair > svg { transform: rotate(90deg); }
