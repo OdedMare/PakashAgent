@@ -38,7 +38,6 @@ tables which module owns what. `importer/` reads the workplace's own files in an
 | `directive_agent/` | **Translating the manager's words for the solver.** A bounded tool loop; code validates the answer, keeps every source that translated whole, reports the rest, and writes nothing |
 | `compiled_sources/` | **Standing sentences translated once and kept** (D32): keys, time anchoring, the cache port, the worker's compiler. No model, no SQL |
 | `audit/unit_policy.py` + `solver/staffing.py` | **A unit's staffing standard** (D47): role counts, fallback roles, a cap on the weak, dated qualifications, shifts per week |
-| `profile_service/roster_import.py` | **Another app's unit roster in** (D47): groups → day/night shifts, people → their home group. Preview writes nothing |
 | `schedule_requests.py` | **Structured scheduling requests** (`avoid`, `prefer`, `max_count`, `not_together`, `min_rest`, `max_consecutive`, `balance`, `requires_with`) and their one validator |
 
 ## The division that defines this layer

@@ -38,21 +38,3 @@ class RotationPreviewRequest(BaseModel):
     shifts: List[Dict[str, Any]] = []
     start: Optional[str] = None
     weeks: int = 8
-
-
-class RosterImportRequest(BaseModel):
-    """Another app's unit roster (its CSV export or paste format).
-
-    `staffing` is each group's shift composition, {"day": {role: n},
-    "night": {role: n}}; `group_staffing` overrides it per group letter.
-    `apply` false previews and writes nothing."""
-
-    text: str
-    start_time: str = "08:00"
-    staffing: Optional[Dict[str, Dict[str, int]]] = None
-    group_staffing: Optional[Dict[str, Dict[str, Dict[str, int]]]] = None
-    groups: Optional[List[str]] = None
-    unit_policy: Optional[Dict[str, Any]] = None
-    unit_name: Optional[str] = None
-    expected_revision: Optional[int] = None
-    apply: bool = False

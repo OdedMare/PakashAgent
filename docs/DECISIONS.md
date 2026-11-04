@@ -1678,19 +1678,12 @@ person** (`bl/audit/unit_policy.py`, read by the solver and the audit alike):
 None of this is a structured *rule vocabulary* (D2): these are numbers on a
 setup form, like `audit_policy`, not the manager's sentences.
 
-**The roster is imported, not retyped** (`profile_service/roster_csv.py`,
-`roster_import.py`, `POST /api/profile/import-roster`). The app's CSV export
-or paste format is read; each group becomes "קבוצה X' · יום" and "· לילה"
-with the composition the manager types; each person is eligible only for
-their home group's shifts; the app's א/ב/ג become `competence`
-excellent/medium/weak, and מילואים/סדיר become `service_type` reserve/standard.
-This is beside the generic file reader (`importer/unit.py`): that one finds
-names and shifts in any sheet, this one reads one app's columns exactly,
-qualifications and groups included. A preview writes nothing; applying saves through
-`ProfileService.update`, so validation, absorption (D37) and translation
-(D32) run as for any save. Phones and e-mails are dropped (the product holds
-no contact details). A unit with no weekend anchor leaves its people
-ungrouped, which means no rotation, and first setup no longer demands a
+**The roster import from the unit's own app was removed.** It read that
+app's CSV export or paste format (`POST /api/profile/import-roster`) and
+saved it as a profile. It is gone from the setup screen and the API; a
+roster is typed in setup, or read from any sheet by the generic unit reader
+(`importer/unit.py`). A unit with no weekend anchor leaves its people
+ungrouped, which means no rotation, and first setup does not demand a
 group it would have no cycle for.
 
 ---

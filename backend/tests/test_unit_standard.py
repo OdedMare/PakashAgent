@@ -9,8 +9,6 @@ import pytest
 from app.bl.audit import audit
 from app.bl.audit.unit_policy import cover, qualification_expired, weekly_limits
 from app.bl.profile_service import roster
-from app.bl.profile_service.roster_csv import read_rows
-from app.bl.profile_service.roster_import import build_patch
 from app.bl.profile_service.unit import unit_policy
 from app.bl.solver import generate_day, generate_span
 from app.common.errors import AgentError
@@ -192,89 +190,6 @@ def test_qualifications_and_unit_policy_are_validated():
 def test_a_first_profile_without_any_weekend_cycle_needs_no_groups():
     profile = _profile([_person("דנה", ["טקסט"])], ["טקסט"])
     roster.validate_first_profile(profile)
-
-
-# -- importing the other app's roster ---------------------------------------
-
-EXPORT = (
-    "﻿\"שם\",\"סוג שירות\",\"דירוג\",\"טלפון\",\"מייל\",\"קבוצת בית\",\"תפקיד\",\"סטטוס\",\"כשיר/ה ל…\",\"הערות\"\r\n"
-    "\"דנה כהן\",\"מילואים\",\"א\",\"050-1\",\"d@x\",\"קבוצה א'\",\"אלחוט\",\"פעיל/ה\",\"א/אלחוט/2026-09-01; א/טקסט/\",\"\"\r\n"
-    "\"יוסי לוי\",\"סדיר\",\"ג\",\"\",\"\",\"קבוצה ב'\",\"טקסט\",\"בפטור / חופשה\",\"ב/טקסט/2026-10-01\",\"חו\"\"ל\"\r\n"
-)
-
-
-def test_the_csv_export_is_read_without_contact_details():
-    rows = read_rows(EXPORT)
-    assert [row["name"] for row in rows] == ["דנה כהן", "יוסי לוי"]
-    assert rows[0]["rating"] == "A" and rows[1]["track"] == "sadir"
-    assert rows[1]["status"] == "leave"
-    assert rows[0]["quals"] == [("א", "אלחוט", "2026-09-01"), ("א", "טקסט", "")]
-    assert all("phone" not in row and "email" not in row for row in rows)
-
-
-def test_the_paste_format_is_read_too():
-    rows = read_rows("שם\tטלפון\tקבוצה\tתפקיד\tדירוג\n"
-                     "רון\t050\tא\tאלחוט\tב\nבלי דירוג\t\tב\tטקסט\tז\n")
-    assert rows[0]["group"] == "א" and rows[0]["role"] == "אלחוט"
-    assert rows[1]["error"]
-
-
-def test_groups_become_shifts_and_people_stay_in_their_home_group():
-    staffing = {"day": {"אלחוט": 3, "טקסט": 1}, "night": {"אלחוט": 2}}
-    patch = build_patch(EXPORT, {}, {"staffing": staffing}, today=datetime.date(2026, 11, 3))
-    shifts = {shift["name"]: shift for shift in patch["shifts"]}
-    assert set(shifts) == {"קבוצה א' · יום", "קבוצה א' · לילה", "קבוצה ב' · יום", "קבוצה ב' · לילה"}
-    day = shifts["קבוצה א' · יום"]
-    assert day["start_time"] == "08:00" and day["end_time"] == "20:00"
-    assert sorted(day["staffing"][0]["required_roles"]) == ["אלחוט"] * 3 + ["טקסט"]
-    assert day["staffing"][0]["headcount"] == 4
-    dana, yossi = patch["employees"]
-    assert dana["eligible_shifts"] == ["קבוצה א' · יום", "קבוצה א' · לילה"]
-    assert dana["qualifications"] == [{"role": "אלחוט", "last_active": "2026-09-01"},
-                                      {"role": "טקסט", "last_active": ""}]
-    # On leave in the unit's app: kept on the roster, switched off (D49).
-    assert yossi["on_duty"] is False and not yossi.get("inactive_from")
-    assert yossi["service_type"] == "standard" and dana["on_duty"] is True
-    assert dana["service_type"] == "reserve" and dana["competence"] == "excellent"
-    assert yossi["competence"] == "weak"
-    # What the import builds is a profile the setup validation accepts.
-    roster.employees(patch["employees"])
-    roster.validate_first_profile(dict(patch, workplace={"name": "יחידה"}))
-
-
-def test_importing_again_updates_people_by_name():
-    first = build_patch(EXPORT, {}, today=datetime.date(2026, 11, 3))
-    again = build_patch(EXPORT, {"employees": first["employees"], "shifts": first["shifts"]},
-                        today=datetime.date(2026, 11, 3))
-    assert again["report"]["added"] == 0 and len(again["employees"]) == 2
-    assert len(again["shifts"]) == len(first["shifts"])
-
-
-def test_an_imported_unit_can_be_scheduled():
-    raw = "\n".join("א%d\t\tא\tאלחוט\tב" % n for n in range(8))
-    patch = build_patch(raw, {}, {"staffing": {"day": {"אלחוט": 2}, "night": {"אלחוט": 2}}})
-    profile = dict(patch, workplace={"name": "יחידה"})
-    result = generate_span(profile, "2026-11-08", "2026-11-09")
-    assert len(result["assignments"]) == 8
-
-
-def test_the_service_previews_without_writing_and_applies_on_request():
-    from app.bl.profile_service import ProfileService
-    from tests.test_profile_service import _Repo
-
-    repo = _Repo()
-    repo.profile = None
-    service = ProfileService(repo)
-    preview = service.import_roster("team", EXPORT, {"unit_policy": {"max_weak_per_shift": 1}})
-    assert repo.profile is None and preview["report"]["added"] == 2
-
-    saved = service.import_roster("team", EXPORT, {"unit_name": "יחידה 619",
-                                                   "unit_policy": {"max_weak_per_shift": 1}},
-                                  apply=True)["profile"]
-    assert saved["workplace"]["name"] == "יחידה 619"
-    assert saved["unit_policy"]["max_weak_per_shift"] == 1
-    assert {person["name"] for person in saved["employees"]} == {"דנה כהן", "יוסי לוי"}
-    assert saved["employees"][0]["competence"] == "excellent"
 
 
 def test_a_soldier_below_a_strong_shifts_level_is_named_on_their_own_warning():
