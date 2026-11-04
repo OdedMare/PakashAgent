@@ -386,11 +386,18 @@ body:has(.manual-setup) .tutorial-fab {
 
 /* Dialogs share one shell; the scrim separates them from the workspace. */
 .modal-backdrop,
-.modal-backdrop.settings-backdrop,
-.manager-drawer-backdrop {
+.modal-backdrop.settings-backdrop {
   background: rgba(0, 0, 0, 0.38);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
+}
+
+/* The drawer's sheet sits over the board on a narrow window (half a screen),
+   and the board must stay sharp behind it: a light dim, never a blur. */
+.manager-drawer-backdrop {
+  background: rgba(0, 0, 0, 0.22);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 .modal,
