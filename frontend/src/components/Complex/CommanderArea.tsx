@@ -95,7 +95,8 @@ export function CommanderArea({
   const { workspace: workspaceRef, share: chatShare, resizing, handle: resizeHandle } = useChatSplit();
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      if (window.matchMedia("(min-width: 900px)").matches) setDrawerOpen(true);
+      // Below 1100px the drawer is a sheet over the board, so it waits to be opened.
+      if (window.matchMedia("(min-width: 1100px)").matches) setDrawerOpen(true);
     });
     return () => cancelAnimationFrame(frame);
   }, []);
