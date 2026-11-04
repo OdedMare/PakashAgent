@@ -174,14 +174,19 @@ marked `closure: true` whose days are worked out per shift at save time
 Sunday only for one starting before the handover).
 
 **The setup screen folds, and the roster can be read in groups.** Every
-section folds from the chevron on its header; the roster
+section folds from its header, and "כיווץ הכל" / "פתיחת הכל" in the screen's
+header folds or opens them all at once; a folded section shows a one-line
+summary (the unit's name, the exit kinds, the shift names…) in place of its
+hint, and which sections are folded is remembered per browser
+(`ManualSetup/useCollapsed.ts`). The roster
 (`ManualSetup/RosterView.tsx`, arithmetic in `rosterGroups.ts`) groups by
 מעמד, נספר בתקן, משמרת (someone allowed on two shifts is under both) or
 מבנה יציאות, each group folds, and the status chips narrow it to, say, only
 מילואים. A search box above them finds a soldier by name, role,
 competence, status, rotation, shift, qualification or note — every word
 typed, in any order, ignoring niqqud and geresh — and is not remembered.
-A soldier's card folds to one line. All of this only hides: hidden
+A soldier's card folds to one line, and so does a shift's card (hours,
+headcount, purpose), each list with its own fold-all button. All of this only hides: hidden
 rows stay in the form and save with the rest, and a soldier added while one
 status is shown takes that status. The grouping and filter are a habit,
 remembered per browser; nothing is written to the server.

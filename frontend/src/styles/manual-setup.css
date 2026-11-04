@@ -265,3 +265,8 @@
 .roster-search > svg { flex: none; color: var(--text-muted); }
 .roster-search input { flex: 1; min-width: 0; min-height: 42px; padding: 0; color: var(--text); background: none; border: 0; outline: none; font: inherit; font-size: 0.85rem; }
 .roster-search input::-webkit-search-cancel-button { display: none; }
+
+/* The whole section header folds it; a folded one says in a line what is in it. */
+.manual-section > header { cursor: pointer; }
+.manual-section > header > div { min-width: 0; }
+.manual-section-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

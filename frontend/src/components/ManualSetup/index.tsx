@@ -38,6 +38,7 @@ import { RosterView } from "./RosterView";
 import type { RosterPerson } from "./rosterGroups";
 import type { Cycle } from "./RotationSetup";
 import { PersonStandard, ShiftRoles } from "./UnitStandard";
+import { useCollapsed } from "./useCollapsed";
 import { useRotationPreview } from "./useRotationPreview";
 import { ImportUnit } from "./ImportUnit";
 import { reserveFutureWarning } from "./reserveWarning";
@@ -162,6 +163,9 @@ export function ManualSetup({
   const [importing, setImporting] = useState(false);
   // Folded soldier cards, by name; a new, unnamed row is always open.
   const [foldedPeople, setFoldedPeople] = useState<Set<string>>(new Set());
+  // Folded shift cards, by name, the same way.
+  const [foldedShifts, setFoldedShifts] = useState<Set<string>>(new Set());
+  const sections = useCollapsed(SECTION_IDS);
   const [rosterServices, setRosterServices] = useState<string[]>([]);
   const onRosterFilter = useCallback((value: string[]) => setRosterServices(value), []);
 
@@ -250,6 +254,14 @@ export function ManualSetup({
       ].join(" ") : "",
     };
   }), [employees, rotationMode, dayCycles]);
+  const namedShifts = shifts.map((shift) => text(shift.name)).filter(Boolean);
+  const allShiftsFolded = namedShifts.length > 0 && namedShifts.every((key) => foldedShifts.has(key));
+  const toggleShiftFold = (key: string) => setFoldedShifts((current) => {
+    const next = new Set(current);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+  const section = (id: SectionId) => ({ open: !sections.isCollapsed(id), onToggle: () => sections.toggle(id) });
   const foldKey = (person: Row) => text(person.name);
   const namedKeys = employees.map(foldKey).filter(Boolean);
   const allFolded = namedKeys.length > 0 && namedKeys.every((key) => foldedPeople.has(key));
@@ -415,6 +427,9 @@ export function ManualSetup({
         </div>
         <div className="manual-header-actions">
           <HelpButton />
+          <button type="button" className="ghost-button" onClick={sections.toggleAll} aria-pressed={sections.allCollapsed}>
+            {sections.allCollapsed ? <ChevronsUpDown size={16} /> : <ChevronsDownUp size={16} />} {sections.allCollapsed ? "פתיחת הכל" : "כיווץ הכל"}
+          </button>
           <button type="button" className="ghost-button" disabled={busy} onClick={() => setImporting(true)}>ייבוא הגדרה מאקסל</button>
           {onCancel ? (
             <button type="button" className="ghost-button" onClick={onCancel} disabled={busy}>
@@ -451,7 +466,7 @@ export function ManualSetup({
           });
           setImporting(false);
         }} />}
-        <SetupSection tour="setup-workplace" icon={<CalendarClock />} title="היחידה" hint="שם היחידה, אורך הסידור וימי הפעילות. את מבנה היציאות מגדירים בסעיף היציאות ולכל חייל/ת בנפרד.">
+        <SetupSection {...section("workplace")} summary={[unitName.trim() || "ללא שם", planningHorizon, `${operatingDays.length} ימי פעילות`].join(" · ")} tour="setup-workplace" icon={<CalendarClock />} title="היחידה" hint="שם היחידה, אורך הסידור וימי הפעילות. את מבנה היציאות מגדירים בסעיף היציאות ולכל חייל/ת בנפרד.">
           <div className="manual-grid three">
             <Field label="שם היחידה *">
               <input value={unitName} onChange={(event) => setUnitName(event.target.value)} maxLength={120} required />
@@ -465,7 +480,7 @@ export function ManualSetup({
           <CheckboxGrid label="ימי פעילות" values={DAYS} selected={operatingDays} onChange={setOperatingDays} />
         </SetupSection>
 
-        <SetupSection tour="setup-rotations" icon={<Repeat2 />} title="יציאות" hint="קודם בוחרים אילו סוגי יציאות יש ביחידה, ואז עונים רק על השאלות שלהם. את המבנה של כל חייל/ת בוחרים בכוח אדם. ההגדרות חלות על השיבוץ הבא — סידור קיים לא נבנה מחדש.">
+        <SetupSection {...section("rotations")} summary={[...Object.entries(EXIT_PATTERNS).filter(([value]) => availableExitPatterns.has(value)).map(([, label]) => label.split(" — ")[0]), ...(dayCyclesOn ? [`${dayCycles.length} מחזורי ימים`] : [])].join(" · ") || "לא נבחרו יציאות"} tour="setup-rotations" icon={<Repeat2 />} title="יציאות" hint="קודם בוחרים אילו סוגי יציאות יש ביחידה, ואז עונים רק על השאלות שלהם. את המבנה של כל חייל/ת בוחרים בכוח אדם. ההגדרות חלות על השיבוץ הבא — סידור קיים לא נבנה מחדש.">
           <ExitKinds
             enabled={availableExitPatterns}
             used={usedExitPatterns}
@@ -537,7 +552,7 @@ export function ManualSetup({
           ) : null}
         </SetupSection>
 
-        <SetupSection tour="setup-people" icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">
+        <SetupSection {...section("people")} summary={`${employees.filter(named).length} אנשי צוות`} tour="setup-people" icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">
           <label className="manual-check">
             <input type="checkbox" checked={notesVisualOnly} onChange={(e) => setNotesVisualOnly(e.target.checked)} />
             <span>הערות לחייל/ת לתצוגה בלבד — מוצגות בלוח כסימן קריאה (!) ולא נלקחות בחשבון בשיבוץ</span>
@@ -626,10 +641,28 @@ export function ManualSetup({
           }}><Plus size={16} /> {rosterServices.length === 1 ? `הוספת ${STATUS_LABELS[rosterServices[0]]}` : "הוספת איש/אשת צוות"}</button>
         </SetupSection>
 
-        <SetupSection tour="setup-shifts" icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="תאריכי תוקף ריקים = משמרת קבועה; מילוי שניהם יוצר משמרת זמנית שנעלמת מהלוח מחוץ לטווח. משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה. תקן סופ״ש חל כשאחד הסבבים בבית — לפי ימים בבסיס/בבית בסעיף הסבבים.">
+        <SetupSection {...section("shifts")} summary={namedShifts.join(" · ") || "אין משמרות"} tour="setup-shifts" icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="תאריכי תוקף ריקים = משמרת קבועה; מילוי שניהם יוצר משמרת זמנית שנעלמת מהלוח מחוץ לטווח. משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה. תקן סופ״ש חל כשאחד הסבבים בבית — לפי ימים בבסיס/בבית בסעיף הסבבים.">
           <div className="manual-list">
-            {shifts.map((shift, index) => (
+            {shifts.map((shift, index) => {
+              const key = text(shift.name);
+              if (key && foldedShifts.has(key)) {
+                return (
+                  <article className="manual-row is-folded" key={`shift-${index}`}>
+                    <button type="button" className="manual-row-summary" aria-expanded={false} onClick={() => toggleShiftFold(key)}>
+                      <ChevronDown size={15} aria-hidden="true" />
+                      <strong>{key}</strong>
+                      <span>{[text(shift.start_time) && text(shift.end_time) ? `${text(shift.start_time)}–${text(shift.end_time)}` : "", `תקן ${number(shift.headcount, headcount(shift))}`, text(shift.purpose)].filter(Boolean).join(" · ")}</span>
+                    </button>
+                  </article>
+                );
+              }
+              return (
               <article className="manual-row" key={`shift-${index}`}>
+                {key ? (
+                  <button type="button" className="manual-row-summary is-open" aria-expanded onClick={() => toggleShiftFold(key)}>
+                    <ChevronDown size={15} aria-hidden="true" /><strong>{key}</strong><span>סגירת הכרטיס</span>
+                  </button>
+                ) : null}
                 <div className="manual-grid shift-grid">
                   <Field label="שם המשמרת *"><input value={inputText(shift.name)} readOnly={originalShifts.has(text(shift.name))} onChange={(e) => edit(setShifts, index, "name", e.target.value)} /></Field>
                   <Field label="סוג"><select value={text(shift.shift_type) || (shift.is_on_call ? "on_call" : "regular")} onChange={(e) => edit(setShifts, index, "shift_type", e.target.value)}>{Object.entries(SHIFT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
@@ -661,12 +694,18 @@ export function ManualSetup({
                   setShifts((current) => current.filter((_, row) => row !== index));
                 }}><Trash2 size={15} /></button>
               </article>
-            ))}
+              );
+            })}
           </div>
+          {namedShifts.length ? (
+            <button type="button" className="ghost-button roster-fold-all" onClick={() => setFoldedShifts(allShiftsFolded ? new Set() : new Set(namedShifts))}>
+              {allShiftsFolded ? <ChevronsUpDown size={15} /> : <ChevronsDownUp size={15} />} {allShiftsFolded ? "פתיחת כל המשמרות" : "כיווץ כל המשמרות"}
+            </button>
+          ) : null}
           <button type="button" className="ghost-button" onClick={() => setShifts((current) => [...current, { name: "", shift_type: "regular", start_time: "", end_time: "", headcount: 1, purpose: "", days: DAYS }])}><Plus size={16} /> הוספת סוג משמרת</button>
         </SetupSection>
 
-        <SetupSection tour="setup-rules" icon={<ShieldCheck />} title="כללים קבועים" hint="כלל קשיח הוא חובה; כלל רך הוא העדפה שהמערכת מנסה לכבד.">
+        <SetupSection {...section("rules")} summary={`${rules.filter((rule) => text(rule.text)).length} כללים`} tour="setup-rules" icon={<ShieldCheck />} title="כללים קבועים" hint="כלל קשיח הוא חובה; כלל רך הוא העדפה שהמערכת מנסה לכבד.">
           <div className="manual-list compact">
             {rules.map((rule, index) => (
               <div className="manual-rule" key={index}>
@@ -679,7 +718,7 @@ export function ManualSetup({
           <button type="button" className="ghost-button" onClick={() => setRules((current) => [...current, { text: "", priority: "hard" }])}><Plus size={16} /> הוספת כלל קבוע</button>
         </SetupSection>
 
-        <SetupSection tour="setup-limits" icon={<Scale />} title="גבולות עומס ומנוחה" hint="בדיקות אלה מציפות חריגות ומסייעות לשיבוץ; הן אינן חוסמות החלטת מפקד.">
+        <SetupSection {...section("limits")} summary={`עד ${maxWeeklyHours} שעות בשבוע · עד ${maxConsecutiveDays} ימים רצופים · ${minRestHours} שעות מנוחה`} tour="setup-limits" icon={<Scale />} title="גבולות עומס ומנוחה" hint="בדיקות אלה מציפות חריגות ומסייעות לשיבוץ; הן אינן חוסמות החלטת מפקד.">
           <div className="manual-grid three">
             <Field label="מקסימום שעות בשבוע"><input type="number" min={1} value={maxWeeklyHours} onChange={(e) => setMaxWeeklyHours(Number(e.target.value) || 1)} /></Field>
             <Field label="מקסימום ימים רצופים"><input type="number" min={1} value={maxConsecutiveDays} onChange={(e) => setMaxConsecutiveDays(Number(e.target.value) || 1)} /></Field>
@@ -687,7 +726,7 @@ export function ManualSetup({
           </div>
         </SetupSection>
 
-        <SetupSection icon={<Cpu />} title="מה הקוד הבין" hint="אחרי שמירה, כל כלל, מדיניות והערה מתורגמים פעם אחת לשפת השיבוץ בקוד, כדי שבניית סידור לא תצטרך לשאול שוב. מה שלא תורגם יופיע בהערות הבנייה ולא ייאכף.">
+        <SetupSection {...section("compiled")} icon={<Cpu />} title="מה הקוד הבין" hint="אחרי שמירה, כל כלל, מדיניות והערה מתורגמים פעם אחת לשפת השיבוץ בקוד, כדי שבניית סידור לא תצטרך לשאול שוב. מה שלא תורגם יופיע בהערות הבנייה ולא ייאכף.">
           <CompiledSources />
         </SetupSection>
       </main>
@@ -700,16 +739,32 @@ export function ManualSetup({
   );
 }
 
+const SECTION_IDS = ["workplace", "rotations", "people", "shifts", "rules", "limits", "compiled"] as const;
+type SectionId = (typeof SECTION_IDS)[number];
+
+type SetupSectionProps = {
+  tour?: string;
+  icon: React.ReactNode;
+  title: string;
+  hint: string;
+  /** One line said in place of the hint while the section is folded. */
+  summary?: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+};
+
 /** One part of the form. Folding it only hides it: its fields stay in
- *  state and are saved with the rest. */
-function SetupSection({ tour, icon, title, hint, children }: { tour?: string; icon: React.ReactNode; title: string; hint: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(true);
+ *  state and are saved with the rest. Whether it is folded is held by the
+ *  screen (`useCollapsed`), so one header button can fold them all. The
+ *  whole header toggles; the button is what the keyboard reaches. */
+function SetupSection({ tour, icon, title, hint, summary, open, onToggle, children }: SetupSectionProps) {
   return (
     <section className={`manual-section${open ? "" : " is-closed"}`}>
-      <header>
+      <header onClick={onToggle}>
         <span>{icon}</span>
-        <div data-tour={tour}><h2>{title}</h2>{open ? <p>{hint}</p> : null}</div>
-        <button type="button" className="icon-button subtle manual-section-toggle" aria-expanded={open} aria-label={open ? `סגירת ${title}` : `פתיחת ${title}`} title={open ? "סגירה" : "פתיחה"} onClick={() => setOpen((value) => !value)}>
+        <div data-tour={tour}><h2>{title}</h2>{open ? <p>{hint}</p> : summary ? <p className="manual-section-summary">{summary}</p> : null}</div>
+        <button type="button" className="icon-button subtle manual-section-toggle" aria-expanded={open} aria-label={open ? `סגירת ${title}` : `פתיחת ${title}`} title={open ? "סגירה" : "פתיחה"}>
           <ChevronDown size={16} aria-hidden="true" />
         </button>
       </header>
