@@ -80,9 +80,9 @@ class PlacementCandidate(BaseModel):
 class PlacementCheck(BaseModel):
     """What `bl/placement.py` makes of a proposed placement.
 
-    Ordinary audit findings remain advisory (D3). A blocking operational duty
-    is different: the person is already occupied, so `blocking` is true and
-    every write path refuses the placement.
+    Ordinary audit findings remain advisory (D3). Hard unavailability and an
+    operational duty are different: `blocking` is true and every write path
+    refuses the placement.
     """
 
     ok: bool = True

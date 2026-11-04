@@ -21,9 +21,8 @@ import type { Assignment, PlacementCheck } from "@/types";
  *  never has to phrase anything to an AI to find out that דנה has a
  *  constraint that day.
  *
- *  Ordinary findings remain advisory (D3). An operational duty is a physical
- *  overlap, so the same check marks it blocking and the server also refuses
- *  the write.
+ *  Ordinary findings remain advisory (D3). Hard unavailability marks the
+ *  check as blocking, and the server also refuses the write.
  */
 export function ConfirmDrop({
   assignment,

@@ -117,7 +117,7 @@ class ScheduleReader:
         **No model call.** This is `bl/placement.py` handed the stored
         schedule, and it is what makes the board work with the agent
         unavailable. Ordinary audit findings do not gate the write that
-        follows (D3); an operational duty overlap is marked blocking and is
+        follows (D3); hard unavailability is marked blocking and is
         independently enforced by every write path.
         """
         schedule = self._context.require_schedule(team_id, schedule_id)
