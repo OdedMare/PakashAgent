@@ -19,6 +19,7 @@ import {
 import { useCallback, useMemo, useState } from "react";
 
 import { DateInput } from "@/components/DateInput";
+import { MultiSelect } from "@/components/MultiSelect";
 import { TimeInput } from "@/components/TimeInput";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import { deleteShiftType, previewDeparture, updateProfile } from "@/services/api";
@@ -521,7 +522,7 @@ export function ManualSetup({
                       <button type="button" className="icon-button subtle" aria-label={`מחיקת תקופת אי־זמינות ${index + 1}`} onClick={() => setRotationAUnavailability((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
                     </div>
                     <CheckboxGrid label="ימים שבהם סבב א׳ אינו זמין" values={DAYS} selected={strings(rule.days)} onChange={(value) => edit(setRotationAUnavailability, index, "days", value)} />
-                    {shiftNames.length ? <CheckboxGrid label="משמרות (ללא בחירה = כל המשמרות)" values={shiftNames} selected={strings(rule.shifts)} onChange={(value) => edit(setRotationAUnavailability, index, "shifts", value)} /> : null}
+                    {shiftNames.length ? <MultiSelect label="משמרות" values={shiftNames} selected={strings(rule.shifts)} onChange={(value) => edit(setRotationAUnavailability, index, "shifts", value)} placeholder="כל המשמרות" /> : null}
                     <div className="manual-grid three">
                       <Field label="משעה (רשות)"><TimeInput value={inputText(rule.start_time)} onChange={(time) => edit(setRotationAUnavailability, index, "start_time", time)} /></Field>
                       <Field label="עד שעה (רשות)"><TimeInput value={inputText(rule.end_time)} onChange={(time) => edit(setRotationAUnavailability, index, "end_time", time)} /></Field>
@@ -593,9 +594,7 @@ export function ManualSetup({
                   <label className="manual-check"><input type="checkbox" checked={person.counts_toward_staffing !== false} onChange={(e) => edit(setEmployees, index, "counts_toward_staffing", e.target.checked)} /><span>נספר/ת בתקן</span></label>
                   <label className="manual-check"><input type="checkbox" checked={Boolean(person.is_shift_manager)} onChange={(e) => edit(setEmployees, index, "is_shift_manager", e.target.checked)} /><span>מוסמך/ת כמפקד/ת משמרת</span></label>
                   <label className="manual-check"><input type="checkbox" checked={Boolean(person.can_train)} onChange={(e) => edit(setEmployees, index, "can_train", e.target.checked)} /><span>מוסמך/ת לחפוף</span></label>
-                  <div className="manual-shift-picks" aria-label="משמרות מותרות">
-                    {shiftNames.map((shift) => <label key={shift}><input type="checkbox" checked={strings(person.eligible_shifts).includes(shift)} onChange={(e) => toggleRowList(setEmployees, index, "eligible_shifts", shift, e.target.checked)} /><span>{shift}</span></label>)}
-                  </div>
+                  {shiftNames.length ? <MultiSelect className="manual-shift-picks" label="משמרות מותרות" values={shiftNames} selected={strings(person.eligible_shifts)} onChange={(value) => edit(setEmployees, index, "eligible_shifts", value)} placeholder="לא נבחרו משמרות" /> : null}
                   <button type="button" className="icon-button subtle" aria-label="מחיקת איש צוות" disabled={originalEmployees.has(text(person.name))} onClick={() => setEmployees((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
                 </div>
                 <ExitPatternFields pattern={exitPattern(person, rotationMode)} person={person} onChange={(field, value) => edit(setEmployees, index, field, value)} />
@@ -731,10 +730,6 @@ function RoleOptions({ roles, selected, onChange }: { roles: string[]; selected:
 
 function edit(setter: React.Dispatch<React.SetStateAction<Row[]>>, index: number, key: string, value: unknown) {
   setter((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, [key]: value } : row));
-}
-
-function toggleRowList(setter: React.Dispatch<React.SetStateAction<Row[]>>, index: number, key: string, value: string, checked: boolean) {
-  setter((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, [key]: checked ? [...strings(row[key]), value] : strings(row[key]).filter((item) => item !== value) } : row));
 }
 
 function record(value: unknown): Row { return value && typeof value === "object" && !Array.isArray(value) ? value as Row : {}; }

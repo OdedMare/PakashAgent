@@ -47,6 +47,11 @@ adds a calendar button over the browser's own picker; `TimeInput` is typed
 browsers and show AM/PM in others. Use them rather than a bare `<input
 type="date|time">`.
 
+**Shift types are picked from a scrolling multi-select** (`MultiSelect.tsx`,
+styles in `styles/pickers.css`): a field that reads back the choice and a
+list that keeps its own height, rather than a checkbox per shift — a unit
+with many shifts made that wall longer than the form around it.
+
 `next.config.ts` proxies `/api/*` to FastAPI, so the browser sees one origin
 and there is no CORS setup.
 

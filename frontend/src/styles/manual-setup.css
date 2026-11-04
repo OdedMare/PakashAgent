@@ -76,15 +76,15 @@
 .manual-checkboxes { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0; padding: 0; border: 0; }
 .manual-checkboxes legend { width: 100%; margin-bottom: 0.2rem; }
 .manual-checkboxes small { width: 100%; color: var(--text-muted); font-size: 0.72rem; }
-.manual-checkboxes label, .manual-shift-picks label { display: inline-flex; min-height: 38px; align-items: center; gap: 0.35rem; padding: 0.35rem 0.65rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; font-size: 0.78rem; }
+.manual-checkboxes label { display: inline-flex; min-height: 38px; align-items: center; gap: 0.35rem; padding: 0.35rem 0.65rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; font-size: 0.78rem; }
 .manual-checkboxes label:has(input:disabled) { opacity: 0.72; }
-.manual-checkboxes input, .manual-shift-picks input, .manual-check input { accent-color: var(--primary); }
+.manual-checkboxes input, .manual-check input { accent-color: var(--primary); }
 
 .manual-list { display: grid; gap: 0.65rem; }
 .manual-row { position: relative; display: grid; gap: 0.7rem; padding: 0.8rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .manual-row-foot { display: flex; align-items: center; gap: 0.75rem; }
 .manual-check { display: inline-flex; min-height: 44px; align-items: center; gap: 0.4rem; white-space: nowrap; font-size: 0.8rem; }
-.manual-shift-picks { display: flex; flex: 1; flex-wrap: wrap; gap: 0.35rem; }
+.manual-shift-picks { flex: 1; min-width: 12rem; }
 .manual-delete { position: absolute; inset-block-end: 0.65rem; inset-inline-end: 0.65rem; }
 .icon-button:disabled { opacity: 0.35; cursor: not-allowed; }
 

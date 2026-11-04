@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { DateInput, shortDate } from "@/components/DateInput";
 import { TimeInput } from "@/components/TimeInput";
+import { MultiSelect } from "@/components/MultiSelect";
 import type { RotationClosureWindow, RotationPresenceRule, RotationWeekend } from "@/types";
 
 import { ShapePicker, WindowFields } from "./ClosureShape";
@@ -180,7 +181,7 @@ function PresenceRules({ pattern, label, groups, presence, onPresence, shiftName
             <Field label="הערה"><input value={row.reason} onChange={(event) => editPresence(index, { reason: event.target.value })} /></Field>
           </div>
           <CheckboxGrid label="ימים" values={DAYS} selected={row.days} onChange={(days) => editPresence(index, { days })} />
-          {shiftNames.length ? <CheckboxGrid label="משמרות" values={shiftNames} selected={row.shifts} onChange={(shifts) => editPresence(index, { shifts })} /> : null}
+          {shiftNames.length ? <MultiSelect label="משמרות" values={shiftNames} selected={row.shifts} onChange={(shifts) => editPresence(index, { shifts })} placeholder="כל המשמרות" /> : null}
           <div className="manual-grid rotation-window-grid">
             <Field label="משעה (רשות)"><TimeInput value={row.start_time} onChange={(time) => editPresence(index, { start_time: time })} /></Field>
             <Field label="עד שעה (רשות)"><TimeInput value={row.end_time} onChange={(time) => editPresence(index, { end_time: time })} /></Field>

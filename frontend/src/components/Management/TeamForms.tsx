@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { DateInput } from "@/components/DateInput";
+import { MultiSelect } from "@/components/MultiSelect";
 import { TimeInput } from "@/components/TimeInput";
 import { cycleOf, cyclePattern, isDayCycle } from "@/lib/dayCycles";
 import type { DayCycle } from "@/types";
@@ -121,21 +122,13 @@ export function EmployeeForm({
       <label className="profile-check"><input type="checkbox" checked={canTrain} onChange={(event) => setCanTrain(event.target.checked)} /><span>מוסמך/ת לחפוף</span></label>
       <label><span>הערות לחייל/ת</span><textarea value={notes} maxLength={200} rows={3} onChange={(event) => setNotes(event.target.value)} placeholder="מידע קבוע שכדאי לקחת בחשבון בשיבוץ" /></label>
       {shiftNames.length ? (
-        <fieldset className="profile-checkboxes">
-          <legend>משמרות שהעובד/ת יכול/ה לבצע</legend>
-          {shiftNames.map((shift) => (
-            <label key={shift}>
-              <input
-                type="checkbox"
-                checked={eligible.includes(shift)}
-                onChange={(event) => setEligible(event.target.checked
-                  ? [...eligible, shift]
-                  : eligible.filter((name_) => name_ !== shift))}
-              />
-              <span>{shift}</span>
-            </label>
-          ))}
-        </fieldset>
+        <MultiSelect
+          label="משמרות שהעובד/ת יכול/ה לבצע"
+          values={shiftNames}
+          selected={eligible}
+          onChange={setEligible}
+          placeholder="לא נבחרו משמרות"
+        />
       ) : null}
       <FormActions onCancel={onCancel} ready={Boolean(name.trim())} />
     </form>
