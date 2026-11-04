@@ -37,6 +37,7 @@ tables which module owns what. `importer/` reads the workplace's own files in an
 | `shared.py` | Small helpers several packages read: text and date coercion, Hebrew weekdays, `role_qualified`/`allowed_roles`, `resume` (a clarification joined to its request) |
 | `directive_agent/` | **Translating the manager's words for the solver.** A bounded tool loop; code validates the answer, keeps every source that translated whole, reports the rest, and writes nothing |
 | `compiled_sources/` | **Standing sentences translated once and kept** (D32): keys, time anchoring, the cache port, the worker's compiler. No model, no SQL |
+| `qualification.py` | **Whether a person's dated כשירות still stands, for the setup screen.** Pure arithmetic: each qualification's `last_active` or the last shift worked, whichever is later, plus the unit's validity; undated rows are left out. Colours; restricts nobody |
 | `audit/unit_policy.py` + `solver/staffing.py` | **A unit's staffing standard** (D47): role counts, fallback roles, a cap on the weak, dated qualifications, shifts per week |
 | `schedule_requests.py` | **Structured scheduling requests** (`avoid`, `prefer`, `max_count`, `not_together`, `min_rest`, `max_consecutive`, `balance`, `requires_with`) and their one validator |
 

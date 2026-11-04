@@ -67,6 +67,20 @@ class AssignmentRepository(RepositoryBase):
         """
         return self._all(SCHEDULE_ASSIGNMENTS, (schedule_id, team_id))
 
+    def last_shift_dates(self, team_id: str, through: str) -> dict:
+        """Each person's latest shift on or before `through`, as ISO dates.
+
+        What keeps a qualification alive (`bl/qualification.py`): a shift
+        on the board that has already happened, in any period."""
+        rows = self._all("""
+            SELECT a.employee, MAX(s.slot_date) AS last_shift
+            FROM assignments a
+            JOIN shift_slots s ON s.id = a.slot_id
+            WHERE a.team_id=%s AND s.slot_date <= %s
+            GROUP BY a.employee
+        """, (team_id, through))
+        return {row["employee"]: str(row["last_shift"]) for row in rows}
+
     def replace_assignments(
         self, schedule_id: str, team_id: str, assignments: List[dict]
     ) -> List[dict]:

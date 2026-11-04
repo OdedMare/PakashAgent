@@ -1661,6 +1661,11 @@ person** (`bl/audit/unit_policy.py`, read by the solver and the audit alike):
 - **Dated qualifications.** `qualifications: [{role, last_active}]` count as
   roles held. One older than `qualification_validity_days` (90) is a notice,
   never a bar: the unit renews it by training, not by being left off.
+  Working a shift renews it too: the window runs from the later of
+  `last_active` and the person's last shift worked (the setup screen reads
+  every period, `bl/qualification.py`; the audit, the shifts earlier in the
+  period it is auditing), so nobody retypes the date after every shift.
+  The setup screen colours a person by it — only one with a dated row.
 - **Shifts per week.** `weekly_shifts` (reservists, `service_type` reserve),
   `weekly_shifts_officers` and `weekly_shifts_ncos` (selected by each person's
   optional `rank_group`) are team-wide defaults beside the legacy

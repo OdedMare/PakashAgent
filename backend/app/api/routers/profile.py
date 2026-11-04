@@ -5,7 +5,7 @@ import logging
 
 from fastapi import APIRouter, Depends, File, UploadFile
 
-from app.api.contracts import ProfileUpdate, RotationPreviewRequest
+from app.api.contracts import ProfileUpdate, QualificationPreviewRequest, RotationPreviewRequest
 from app.bl.profile_service.workplace import workplace as checked_workplace
 from app.bl.rotation import weekend_preview
 from app.bl.importer.unit import preview_unit
@@ -74,6 +74,16 @@ def build_router(service, guards, schedules=None) -> APIRouter:
             pattern: weekend_preview(profile, pattern, start, weeks)
             for pattern in ("round", "triplet", "quad", "quint")
         }}
+
+    @router.post("/qualification-preview")
+    def qualification_preview(request: QualificationPreviewRequest, session: dict = Depends(boss)) -> dict:
+        """Who is still qualified (כשיר/ה) today, from the unsaved roster on
+        the setup screen: each dated qualification runs from the later of
+        its typed date and the person's last worked shift. Writes nothing."""
+        today = israel_today()
+        return {"today": today.isoformat(), "people": service.qualifications(
+            session["team_id"], request.employees, today, request.days,
+        )}
 
     @router.delete("/shifts/{name}")
     def delete_shift(name: str, session: dict = Depends(boss)) -> dict:

@@ -106,3 +106,21 @@ def test_a_queued_job_carries_who_queued_it(repo):
     with acting_as("boss:m1"):
         job = repo.enqueue_copilot_job(team["id"], "key", "scan", {})
     assert job["payload"]["actor"] == "boss:m1"
+
+
+def test_last_shift_dates_count_only_shifts_already_worked(repo):
+    # What keeps a qualification (כשירות) alive: the latest past shift, in
+    # any period; a shift still ahead has not been worked yet.
+    team = repo.create_team("משמרת א", "sod-gadol")
+    first = repo.create_schedule(team["id"], "2026-10-04", "2026-10-10")
+    second = repo.create_schedule(team["id"], "2026-10-11", "2026-10-17")
+    early, = repo.add_slots(first["id"], team["id"], [{"shift_name": "בוקר", "slot_date": "2026-10-05"}])
+    late, ahead = repo.add_slots(second["id"], team["id"], [
+        {"shift_name": "בוקר", "slot_date": "2026-10-12"},
+        {"shift_name": "בוקר", "slot_date": "2026-10-16"},
+    ])
+    repo.add_assignment(first["id"], team["id"], early["id"], "דנה", "מוסמכת")
+    repo.add_assignment(second["id"], team["id"], late["id"], "דנה", "מוסמכת")
+    repo.add_assignment(second["id"], team["id"], ahead["id"], "מאיה", "מוסמכת")
+
+    assert repo.last_shift_dates(team["id"], "2026-10-14") == {"דנה": "2026-10-12"}

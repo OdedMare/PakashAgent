@@ -459,6 +459,18 @@ export function updateProfile(body: {
   });
 }
 
+/** Who is still qualified (כשיר/ה) today, from the unsaved roster: the
+ *  server reads each person's last worked shift and counts the unit's
+ *  validity from the later of that and each typed date. Only people with a
+ *  dated qualification come back. Writes nothing. */
+export const qualificationPreview = (
+  body: { employees: { name: string; qualifications: unknown }[] },
+  signal?: AbortSignal,
+) => request<{ today: string; people: Record<string, import("@/types").QualificationStanding> }>(
+  "/api/profile/qualification-preview",
+  { method: "POST", body: JSON.stringify(body), signal },
+);
+
 /** The unit's staffing standard (`audit/unit_policy.py`): ratings, stale
  *  qualifications, fallback roles and shifts per Sunday-to-Saturday week. */
 export interface UnitPolicy {

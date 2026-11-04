@@ -39,6 +39,7 @@ import type { RosterPerson } from "./rosterGroups";
 import type { Cycle } from "./RotationSetup";
 import { PersonStandard, ShiftRoles } from "./UnitStandard";
 import { useCollapsed } from "./useCollapsed";
+import { useQualification } from "./useQualification";
 import { useRotationPreview } from "./useRotationPreview";
 import { ImportUnit } from "./ImportUnit";
 import { reserveFutureWarning } from "./reserveWarning";
@@ -315,6 +316,16 @@ export function ManualSetup({
   };
   const timedShifts = shifts.filter(named).map((shift) => ({ name: text(shift.name), start_time: text(shift.start_time), end_time: text(shift.end_time) }));
   const preview = useRotationPreview(rotation, timedShifts);
+  // Coloured by the server, from the dates typed here and the shifts worked.
+  const qualifications = useQualification(employees.map((person) => ({
+    name: text(person.name),
+    qualifications: (Array.isArray(person.qualifications) ? person.qualifications as Row[] : [])
+      .map((row) => ({ role: text(row.role), last_active: text(row.last_active) })),
+  })));
+  const qualificationClass = (person: Row) => {
+    const standing = qualifications[text(person.name)];
+    return standing ? ` qualification-${standing.status}` : "";
+  };
 
   useGuideSurface("setup");
 
@@ -567,7 +578,7 @@ export function ManualSetup({
               const key = foldKey(person);
               if (key && foldedPeople.has(key)) {
                 return (
-                  <article className="manual-row is-folded" key={`employee-${index}-${groupKey}`}>
+                  <article className={`manual-row is-folded${qualificationClass(person)}`} key={`employee-${index}-${groupKey}`}>
                     <button type="button" className="manual-row-summary" aria-expanded={false} onClick={() => toggleFold(key)}>
                       <ChevronDown size={15} aria-hidden="true" />
                       <strong>{key}</strong>
@@ -577,7 +588,7 @@ export function ManualSetup({
                 );
               }
               return (
-              <article className="manual-row" key={`employee-${index}-${groupKey}`}>
+              <article className={`manual-row${qualificationClass(person)}`} key={`employee-${index}-${groupKey}`}>
                 {key ? (
                   <button type="button" className="manual-row-summary is-open" aria-expanded onClick={() => toggleFold(key)}>
                     <ChevronDown size={15} aria-hidden="true" /><strong>{key}</strong><span>סגירת הכרטיס</span>
@@ -622,7 +633,7 @@ export function ManualSetup({
                   reserveCall={text(person.reserve_call)}
                   onChange={(field, value) => edit(setEmployees, index, field, value)}
                 />
-                <PersonStandard person={person} onChange={(key, value) => edit(setEmployees, index, key, value)} />
+                <PersonStandard person={person} standing={qualifications[text(person.name)]} onChange={(key, value) => edit(setEmployees, index, key, value)} />
                 <Field label="הערות לחייל/ת"><textarea value={inputText(person.notes)} onChange={(e) => edit(setEmployees, index, "notes", e.target.value)} rows={2} placeholder={notesVisualOnly ? "מוצג בלוח בלבד, לא משפיע על השיבוץ" : "מידע קבוע שכדאי לקחת בחשבון בשיבוץ"} /></Field>
               </article>
               );

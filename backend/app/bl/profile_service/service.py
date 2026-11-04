@@ -3,7 +3,7 @@
 import copy
 from typing import Any, Callable, Dict, List, Optional
 
-from app.bl import compiled_sources
+from app.bl import compiled_sources, qualification
 from app.bl.profile_service import roster
 from app.bl.profile_service import shifts as shift_rules
 from app.bl.profile_service import unit as unit_rules
@@ -78,6 +78,12 @@ class ProfileService:
     def current(self, team_id: str) -> Optional[dict]:
         """The saved profile, or None before the first save. A read."""
         return self._repository.team_profile(team_id)
+
+    def qualifications(self, team_id: str, employees: List[dict], today, days=None) -> dict:
+        """Each dated person's כשירות on `today`, from the setup screen's
+        unsaved rows and the shifts they have actually worked. A read."""
+        worked = self._repository.last_shift_dates(team_id, today.isoformat())
+        return qualification.standings(self.current(team_id), employees, worked, today, days)
 
     def delete_shift(self, team_id: str, name: str) -> dict:
         """Archive a shift type; existing schedules keep their rows."""

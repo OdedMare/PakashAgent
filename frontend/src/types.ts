@@ -1524,3 +1524,13 @@ export interface DutyBalance {
   types: { duty_type_id: string; duty: string; filled: number; required: number; weight: number }[];
   spread: { most: number; least: number; gap: number };
 }
+
+/** One person's dated qualifications as the server computed them
+ *  (`bl/qualification.py`): each runs from the later of its typed date and
+ *  the person's last worked shift. `status` is the worst of the rows. */
+export type QualificationStatus = "valid" | "expiring" | "expired";
+export interface QualificationStanding {
+  status: QualificationStatus;
+  last_shift: string | null;
+  rows: { role: string; last_active: string; valid_until: string; days_left: number; status: QualificationStatus }[];
+}

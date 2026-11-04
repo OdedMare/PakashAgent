@@ -215,18 +215,21 @@ def unit_week(day: datetime.date) -> datetime.date:
 
 
 def qualification_expired(profile: Optional[dict], person: Optional[dict], role: str,
-                          on: datetime.date) -> bool:
+                          on: datetime.date, worked: Optional[datetime.date] = None) -> bool:
     """True when every qualification this person has for `role` is stale.
 
     A role with no qualification row never expires: the unit did not ask
     to track it. A qualification with no last-active date is stale, as in
-    the unit's own sheet.
+    the unit's own sheet. `worked`, the person's last shift before `on`,
+    keeps every qualification alive like a typed date does.
     """
     rows = [row for row in (person or {}).get("qualifications") or []
             if isinstance(row, dict) and text(row.get("role")) == role]
     if not rows:
         return False
     limit = validity_days(profile)
+    if worked is not None and worked <= on and (on - worked).days <= limit:
+        return False
     for row in rows:
         try:
             last = datetime.date.fromisoformat(text(row.get("last_active")))

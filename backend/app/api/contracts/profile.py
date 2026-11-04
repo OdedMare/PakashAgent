@@ -38,3 +38,11 @@ class RotationPreviewRequest(BaseModel):
     shifts: List[Dict[str, Any]] = []
     start: Optional[str] = None
     weeks: int = 8
+
+
+class QualificationPreviewRequest(BaseModel):
+    """The setup screen's unsaved roster, to colour it by qualification.
+    `days` is the unit's validity window; omitted, the saved one is used."""
+
+    employees: List[Dict[str, Any]] = []
+    days: Optional[int] = None

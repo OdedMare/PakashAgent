@@ -191,6 +191,16 @@ rows stay in the form and save with the rest, and a soldier added while one
 status is shown takes that status. The grouping and filter are a habit,
 remembered per browser; nothing is written to the server.
 
+**A soldier card is coloured by their dated qualifications (כשירות).** Only
+a person with a dated row ("פעילות אחרונה") is coloured — green while every
+qualification holds, orange in its last seven days, red once one has lapsed —
+and each row carries a badge saying until when. The date is never retyped
+after a shift: `POST /api/profile/qualification-preview`
+(`ManualSetup/useQualification.ts`, debounced like the rotation strip) counts
+the unit's `qualification_validity_days` from the later of the typed date and
+the person's last shift already worked on the board (`bl/qualification.py`).
+It colours; it does not restrict who the solver may place.
+
 **Taking a week back is two different acts.** *ניקוי* empties the
 assignments and keeps the shift rows, so the week can be filled in again
 immediately; *מחיקה* removes the period and returns the week to the state

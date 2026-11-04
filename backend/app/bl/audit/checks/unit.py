@@ -114,16 +114,24 @@ class UnitStandardCheck(AuditCheck):
     @staticmethod
     def _stale(data: AuditInput, people: Dict[str, dict]) -> List[dict]:
         """A person placed where their only qualification for a required
-        role there has lapsed. Reported once per person and role."""
-        seen, warnings = set(), []
+        role there has lapsed. Reported once per person and role. A shift
+        the person worked earlier in the period keeps it alive."""
+        seen, warnings, worked = set(), [], {}
         for row in sorted(data.rows, key=lambda item: item["date"]):
             day, person = parse_date(row["date"]), people.get(row["employee"])
             if not day or not person:
                 continue
+            # (latest day worked, the one before it): two rows on one day
+            # must both see the last shift before that day.
+            latest, prior = worked.get(row["employee"], (None, None))
+            if latest is None or day > latest:
+                latest, prior = day, latest
+                worked[row["employee"]] = (latest, prior)
+            before = prior
             needed = role_needs(required_roles(data.shifts, row["shift"], day, data.slots))
             for role in sorted(needed):
                 key = (row["employee"], role)
-                if key in seen or not qualification_expired(data.profile, person, role, day):
+                if key in seen or not qualification_expired(data.profile, person, role, day, before):
                     continue
                 seen.add(key)
                 warnings.append(warning(
