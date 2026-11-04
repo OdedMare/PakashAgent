@@ -607,6 +607,7 @@ export function Management({
               ) : null}
             </header>
             {overview ? (
+              <>
               <TeamPanel
                 today={overview.today}
                 employees={overview.employees}
@@ -623,6 +624,8 @@ export function Management({
                 onPreviewDeparture={state.previewDeparture}
                 onDepart={state.depart}
               />
+              <Preferences busy={state.busy} />
+              </>
             ) : (
               <div className="manager-analytics-loading" aria-busy="true">
                 <CrewStage label="טוען את פרטי הצוות…" />
@@ -719,12 +722,6 @@ export function Management({
               count={requests.rows.length}
               onClick={openRequests}
             />
-            <ManagerTab
-              active={section === "team"}
-              icon={<Users size={15} />}
-              label="צוות"
-              onClick={() => setSection("team")}
-            />
             {/* Desktop hides the drawer head, so the way out lives here.
                 Closing hands the whole width back to the board. */}
             <button
@@ -812,26 +809,6 @@ export function Management({
           />
           </> : null}
 
-          {section === "team" ? <>
-          <Preferences busy={state.busy} />
-          <TeamPanel
-            today={overview?.today}
-            employees={overview?.employees ?? []}
-            shifts={overview?.shifts ?? []}
-            constraints={overview?.availability ?? []}
-            stats={overview?.stats}
-            dark={theme === "dark"}
-            rotationMode={overview?.profile?.workplace?.rotation_mode}
-            dayCycles={overview?.profile?.workplace?.day_cycles}
-            draggable={schedule?.status === "draft" && !state.busy}
-            onAdd={state.addConstraint}
-            onRemove={state.removeConstraint}
-            onSaveProfile={state.saveProfile}
-            onDeleteShift={state.deleteShift}
-            onPreviewDeparture={state.previewDeparture}
-            onDepart={state.depart}
-          />
-          </> : null}
 
           </div>
         </aside>
@@ -870,7 +847,7 @@ function inWeek(date: string, weekStart: string): boolean {
   const offset = (new Date(`${date}T00:00:00`).getTime() - new Date(`${weekStart}T00:00:00`).getTime()) / 86_400_000;
   return offset >= 0 && offset < 7;
 }
-type ManagerSection = "agent" | "replace" | "requests" | "team";
+type ManagerSection = "agent" | "replace" | "requests";
 
 /** Roster names still on the active roster on `today`. */
 export function activeEmployees(employees: Record<string, unknown>[], today: string): string[] {

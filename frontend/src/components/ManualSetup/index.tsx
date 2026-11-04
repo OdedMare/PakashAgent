@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  CalendarClock,
   ChevronDown,
   ChevronsDownUp,
   ChevronsUpDown,
@@ -16,7 +15,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 
 import { DateInput } from "@/components/DateInput";
 import { MultiSelect } from "@/components/MultiSelect";
@@ -24,7 +23,7 @@ import { TimeInput } from "@/components/TimeInput";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import { deleteShiftType, previewDeparture, updateProfile } from "@/services/api";
 import { cyclePattern, isDayCycle } from "@/lib/dayCycles";
-import { STATUS_LABELS, ShiftLevelSelect, SoldierFields, statusFields, statusOf } from "@/components/Management/SoldierFields";
+import { STATUS_LABELS, ShiftLevelSelect, SoldierFields, shiftCount, statusFields, statusOf } from "@/components/Management/SoldierFields";
 import { ExitPatternFields } from "@/components/Management/ExitPatternFields";
 import type { UnitPolicy } from "@/services/api";
 import type { DayCycle, RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
@@ -77,16 +76,16 @@ export function ManualSetup({
 }) {
   const profile = workspace.profile ?? {};
   const initialWorkplace = record(profile.workplace);
-  const [unitName, setUnitName] = useState(text(initialWorkplace.name) || workspace.name);
+  // The unit's name, horizon and operating days are not edited in setup;
+  // what the profile holds is saved back unchanged.
+  const unitName = text(initialWorkplace.name) || workspace.name;
   // Soldiers' notes as something to read on the board only: the build is
   // then not told about them at all.
   const [notesVisualOnly, setNotesVisualOnly] = useState(initialWorkplace.notes_visual_only === true);
-  const [planningHorizon, setPlanningHorizon] = useState(text(initialWorkplace.planning_horizon) || "שבוע");
-  const [operatingDays, setOperatingDays] = useState<string[]>(
-    strings(initialWorkplace.operating_days).length
-      ? strings(initialWorkplace.operating_days)
-      : DAYS,
-  );
+  const planningHorizon = text(initialWorkplace.planning_horizon) || "שבוע";
+  const operatingDays = strings(initialWorkplace.operating_days).length
+    ? strings(initialWorkplace.operating_days)
+    : DAYS;
   const [rotationMode] = useState<"round" | "triplet">(
     initialWorkplace.rotation_mode === "triplet" ? "triplet" : "round",
   );
@@ -153,9 +152,9 @@ export function ManualSetup({
   const [maxWeeklyHours, setMaxWeeklyHours] = useState(number(audit.max_weekly_hours, 168));
   const [maxConsecutiveDays, setMaxConsecutiveDays] = useState(number(audit.max_consecutive_days, 11));
   const [minRestHours, setMinRestHours] = useState(number(audit.min_rest_hours, 8));
-  // The unit standard is no longer edited here; what a unit already saved
-  // is carried through untouched so a save does not erase it.
-  const unitPolicy = useMemo<UnitPolicy>(() => record(profile.unit_policy) as UnitPolicy, [profile.unit_policy]);
+  // The rest of the unit standard is not edited here and is carried through
+  // a save untouched; only the weekly shifts of סדיר and מילואים are.
+  const [unitPolicy, setUnitPolicy] = useState<UnitPolicy>(() => record(profile.unit_policy) as UnitPolicy);
   // Saved shift types the manager deleted here. They are archived by their
   // own call after the save, which also cleans them out of the roster.
   const [removedShifts, setRemovedShifts] = useState<string[]>([]);
@@ -477,20 +476,6 @@ export function ManualSetup({
           });
           setImporting(false);
         }} />}
-        <SetupSection {...section("workplace")} summary={[unitName.trim() || "ללא שם", planningHorizon, `${operatingDays.length} ימי פעילות`].join(" · ")} tour="setup-workplace" icon={<CalendarClock />} title="היחידה" hint="שם היחידה, אורך הסידור וימי הפעילות. את מבנה היציאות מגדירים בסעיף היציאות ולכל חייל/ת בנפרד.">
-          <div className="manual-grid three">
-            <Field label="שם היחידה *">
-              <input value={unitName} onChange={(event) => setUnitName(event.target.value)} maxLength={120} required />
-            </Field>
-            <Field label="אורך סידור">
-              <select value={planningHorizon} onChange={(event) => setPlanningHorizon(event.target.value)}>
-                <option value="שבוע">שבוע</option><option value="שבועיים">שבועיים</option><option value="חודש">חודש</option>
-              </select>
-            </Field>
-          </div>
-          <CheckboxGrid label="ימי פעילות" values={DAYS} selected={operatingDays} onChange={setOperatingDays} />
-        </SetupSection>
-
         <SetupSection {...section("rotations")} summary={[...Object.entries(EXIT_PATTERNS).filter(([value]) => availableExitPatterns.has(value)).map(([, label]) => label.split(" — ")[0]), ...(dayCyclesOn ? [`${dayCycles.length} מחזורי ימים`] : [])].join(" · ") || "לא נבחרו יציאות"} tour="setup-rotations" icon={<Repeat2 />} title="יציאות" hint="קודם בוחרים אילו סוגי יציאות יש ביחידה, ואז עונים רק על השאלות שלהם. את המבנה של כל חייל/ת בוחרים בכוח אדם. ההגדרות חלות על השיבוץ הבא — סידור קיים לא נבנה מחדש.">
           <ExitKinds
             enabled={availableExitPatterns}
@@ -631,6 +616,8 @@ export function ManualSetup({
                   reserveMinDays={typeof person.reserve_min_days === "number" ? person.reserve_min_days : null}
                   reserveConsecutive={person.reserve_consecutive === true}
                   reserveCall={text(person.reserve_call)}
+                  minShifts={typeof person.min_weekly_shifts === "number" ? person.min_weekly_shifts : null}
+                  maxShifts={typeof person.max_weekly_shifts === "number" ? person.max_weekly_shifts : null}
                   onChange={(field, value) => edit(setEmployees, index, field, value)}
                 />
                 <PersonStandard person={person} standing={qualifications[text(person.name)]} onChange={(key, value) => edit(setEmployees, index, key, value)} />
@@ -735,6 +722,7 @@ export function ManualSetup({
             <Field label="מקסימום ימים רצופים"><input type="number" min={1} value={maxConsecutiveDays} onChange={(e) => setMaxConsecutiveDays(Number(e.target.value) || 1)} /></Field>
             <Field label="מינימום מנוחה בין משמרות"><input type="number" min={0} value={minRestHours} onChange={(e) => setMinRestHours(Number(e.target.value) || 0)} /></Field>
           </div>
+          <WeeklyShifts policy={unitPolicy} onChange={setUnitPolicy} />
         </SetupSection>
 
         <SetupSection {...section("compiled")} icon={<Cpu />} title="מה הקוד הבין" hint="אחרי שמירה, כל כלל, מדיניות והערה מתורגמים פעם אחת לשפת השיבוץ בקוד, כדי שבניית סידור לא תצטרך לשאול שוב. מה שלא תורגם יופיע בהערות הבנייה ולא ייאכף.">
@@ -750,8 +738,45 @@ export function ManualSetup({
   );
 }
 
-const SECTION_IDS = ["workplace", "rotations", "people", "shifts", "rules", "limits", "compiled"] as const;
+const SECTION_IDS = ["rotations", "people", "shifts", "rules", "limits", "compiled"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
+
+/** Shifts a week (Sunday–Saturday) for סדיר and for מילואים, the unit
+ *  standard's `weekly_shifts_regular` and `weekly_shifts`. A standard
+ *  officer or NCO takes the regulars' unless the standard names their own;
+ *  a soldier's own numbers in כוח אדם win over both. */
+const WEEKLY_SHIFT_GROUPS = [
+  { key: "weekly_shifts_regular", label: "סדיר" },
+  { key: "weekly_shifts", label: "מילואים" },
+] as const;
+
+function WeeklyShifts({ policy, onChange }: { policy: UnitPolicy; onChange: React.Dispatch<React.SetStateAction<UnitPolicy>> }) {
+  const set = (key: (typeof WEEKLY_SHIFT_GROUPS)[number]["key"], bound: "min" | "max", value: number | null) =>
+    onChange((current) => {
+      const block: { min?: number; max?: number } = { ...(current[key] ?? {}) };
+      if (value === null) delete block[bound];
+      else block[bound] = value;
+      return { ...current, [key]: block };
+    });
+  return (
+    <fieldset className="weekly-shifts">
+      <legend>משמרות בשבוע לפי מעמד</legend>
+      <div className="manual-grid limits-grid">
+        {WEEKLY_SHIFT_GROUPS.map(({ key, label }) => (
+          <Fragment key={key}>
+            <Field label={`${label} · מינימום`}>
+              <input type="number" min={0} max={14} inputMode="numeric" value={policy[key]?.min ?? ""} placeholder="ללא" onChange={(e) => set(key, "min", shiftCount(e.target.value))} />
+            </Field>
+            <Field label={`${label} · מקסימום`}>
+              <input type="number" min={1} max={14} inputMode="numeric" value={policy[key]?.max ?? ""} placeholder="ללא" onChange={(e) => set(key, "max", shiftCount(e.target.value, 1))} />
+            </Field>
+          </Fragment>
+        ))}
+      </div>
+      <small>שבוע ראשון–שבת. המקסימום נאכף בשיבוץ; המינימום מועדף על פני איזון ובקשות רכות, ומה שלא הושג מופיע בהערות הבנייה. מספר שמוגדר לחייל/ת בכוח אדם גובר. ריק = ללא מגבלה.</small>
+    </fieldset>
+  );
+}
 
 type SetupSectionProps = {
   tour?: string;

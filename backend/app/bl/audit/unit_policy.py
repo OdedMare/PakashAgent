@@ -21,7 +21,8 @@ Profile shape::
     }
 
     employee: {"competence": "weak"|..., "service_type": "reserve"|...,
-               "qualifications": [{"role": "אלחוט", "last_active": "2026-09-01"}]}
+               "qualifications": [{"role": "אלחוט", "last_active": "2026-09-01"}],
+               "min_weekly_shifts": 2, "max_weekly_shifts": 4}  # over the team's
 
 `competence` and `service_type` are the roster's own fields (the solver's
 competence balance and reservist days read them too, `solver/competence.py`);
@@ -170,7 +171,23 @@ def _reserve_date(value) -> Optional[datetime.date]:
 
 
 def weekly_limits(profile: Optional[dict], person: Optional[dict]) -> Tuple[int, Optional[int]]:
-    """(min, max) shifts per week for this person; max None means no cap."""
+    """(min, max) shifts per week for this person; max None means no cap.
+
+    The soldier's own `min_weekly_shifts` / `max_weekly_shifts` win, each
+    on its own; what they leave blank comes from their service type."""
+    low, high = _team_limits(profile, person)
+    own_low, own_high = (_whole((person or {}).get(key))
+                         for key in ("min_weekly_shifts", "max_weekly_shifts"))
+    return (low if own_low is None else own_low), (high if own_high is None else own_high)
+
+
+def _whole(value) -> Optional[int]:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return max(0, int(value))
+
+
+def _team_limits(profile: Optional[dict], person: Optional[dict]) -> Tuple[int, Optional[int]]:
     policy = unit_policy(profile)
     rank = text((person or {}).get("rank_group"))
     key = "weekly_shifts" if is_reservist(person) else {

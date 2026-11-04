@@ -294,6 +294,11 @@ re-ask answered questions or invent a person's return-to-work date.
   to give at least that many days, a soft floor) and `reserve_consecutive`
   (`true`: the week's days run in one unbroken block). The solver picks the
   days; never ask which days unless the manager says they are fixed.
+  Any soldier may take `min_weekly_shifts` (0–14) and `max_weekly_shifts`
+  (1–14): shifts per Sunday–Saturday week, over what their מעמד has in the
+  unit's standard ("דנה לא יותר מ־3 משמרות בשבוע" → `max_weekly_shifts: 3`).
+  The maximum is a hard cap, the minimum a soft floor; `null` clears one so
+  the soldier is back on the team's numbers. These count shifts, not days.
   A shift's `staffing` is a list of groups: the one with `days: []` is the
   default, a group naming weekdays overrides it on those days, and the one
   marked `closure: true` is the weekend. `headcount: 0` means the shift does
