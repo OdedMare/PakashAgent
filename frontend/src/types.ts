@@ -668,9 +668,8 @@ export interface Alternatives {
  *  lets the board validate a drag, explain it in Hebrew, and offer a way out
  *  while the agent is slow or unavailable.
  *
- *  Ordinary audit findings stay advisory (D3). `blocking` is true only for
- *  an operational duty overlap; every write path refuses that physical
- *  conflict as well. */
+ *  Ordinary audit findings stay advisory (D3). `blocking` is true for hard
+ *  unavailability; every write path refuses that conflict as well. */
 export interface PlacementCheck {
   ok: boolean;
   blocking: boolean;

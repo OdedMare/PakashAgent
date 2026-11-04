@@ -2,11 +2,11 @@
 
 **A reservist comes a stated number of days a week.** `reserve_days_per_week`
 on a `service_type: reserve` soldier is a hard cap on the days they work in
-each Sunday–Saturday week, counting the days already fixed in it (the rest
-of the draft, the last two weeks). A standard-service officer or NCO
-(`rank_group`) can be given the same three fields — five days a week, say —
-and is held to them the same way. Like every other hard rule here, a limit
-made negative by fixed rows is clamped at zero, so the model stays feasible.
+any seven consecutive days, counting the days already fixed in that window
+(the rest of the draft, the last two weeks). Like every other hard rule here,
+a limit made negative by fixed rows is clamped at zero, so the model stays
+feasible. A standard-service officer or NCO (`rank_group`) can be given the
+same three fields — five days a week, say — and is held to them the same way.
 
 **A reservist can be owed a minimum, and a block.** `reserve_min_days` is a
 soft floor on the same week: each day short of it is priced below a soft
@@ -102,21 +102,24 @@ def week_of(day: str) -> str:
 def _reserve_days(model: Model, name: str) -> None:
     problem = model.problem
     limit = reserve_days(problem.people[name])
-    if limit is None:
+    if limit is None or not problem.dates:
         return
-    fixed: Dict[str, set] = {}
-    for row in problem.fixed:
-        if row["employee"] == name:
-            fixed.setdefault(week_of(row["date"]), set()).add(row["date"])
-    weeks: Dict[str, List] = {}
+    fixed = _fixed_days(problem, name)
+    flags = {}
     for day in problem.dates:
-        if day in fixed.get(week_of(day), set()):
+        if day in fixed:
             continue
         flag = model.worked(name, day)
         if flag is not None:
-            weeks.setdefault(week_of(day), []).append(flag)
-    for week, flags in weeks.items():
-        model.at_most(flags, limit - len(fixed.get(week, set())))
+            flags[day] = flag
+    start = datetime.date.fromisoformat(problem.dates[0]) - datetime.timedelta(days=6)
+    last = datetime.date.fromisoformat(problem.dates[-1])
+    while start <= last:
+        window = [(start + datetime.timedelta(days=offset)).isoformat() for offset in range(7)]
+        variables = [flags[day] for day in window if day in flags]
+        if variables:
+            model.at_most(variables, limit - len(fixed.intersection(window)))
+        start += datetime.timedelta(days=1)
 
 
 def _fixed_days(problem, name: str) -> set:

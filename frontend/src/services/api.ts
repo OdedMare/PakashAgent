@@ -476,34 +476,6 @@ export interface UnitPolicy {
 /** Role -> people per shift, for a group's day and night shifts. */
 export type GroupStaffing = { day: Record<string, number>; night: Record<string, number> };
 
-export interface RosterImportReport {
-  read: number;
-  added: number;
-  updated: number;
-  errors: { line: number; error: string }[];
-  groups: { letter: string; label: string; members: number }[];
-  roles: string[];
-  shifts: string[];
-  contact_details_dropped: boolean;
-}
-
-/** Another app's unit roster (its CSV export or paste). `apply` false is a
- *  preview and writes nothing; true saves it like a profile save. */
-export const importRoster = (body: {
-  text: string;
-  start_time?: string;
-  staffing?: GroupStaffing;
-  group_staffing?: Record<string, GroupStaffing>;
-  groups?: string[];
-  unit_policy?: UnitPolicy;
-  unit_name?: string;
-  expected_revision?: number | null;
-  apply?: boolean;
-}) => request<{ report: RosterImportReport; employees: Record<string, unknown>[]; shifts: Record<string, unknown>[]; absorbed?: ProfileAbsorption | null }>(
-  "/api/profile/import-roster",
-  { method: "POST", body: JSON.stringify(body) },
-);
-
 /** What a profile save fit into the drafts already built: the new soldiers
  *  (or soldiers switched back on) and shifts, each draft ahead of today now being refit while keeping its
  *  rows, and the weeks left alone (published, or busy) with the reason. */
@@ -831,8 +803,9 @@ export function assignEmployee(body: {
  *  drag is validated, explained in Hebrew, and offered deterministic
  *  alternatives without a token being generated.
  *
- *  Ordinary findings advise and never gate (D3). A duty overlap returns
- *  `blocking: true`, and the write endpoint independently enforces it. */
+ *  Ordinary findings advise and never gate (D3). Hard unavailability and
+ *  duty overlaps return `blocking: true`, and the write endpoint independently
+ *  enforces them. */
 export function checkPlacement(body: {
   employee: string;
   shift_name: string;

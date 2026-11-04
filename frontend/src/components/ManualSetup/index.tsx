@@ -13,7 +13,6 @@ import {
   Scale,
   ShieldCheck,
   Trash2,
-  Upload,
   Users,
   X,
 } from "lucide-react";
@@ -37,7 +36,6 @@ import { CYCLES, CycleSetup, firstGroupAnchor } from "./RotationSetup";
 import { RosterView } from "./RosterView";
 import type { RosterPerson } from "./rosterGroups";
 import type { Cycle } from "./RotationSetup";
-import { RosterImport } from "./RosterImport";
 import { PersonStandard, ShiftRoles } from "./UnitStandard";
 import { useRotationPreview } from "./useRotationPreview";
 import { ImportUnit } from "./ImportUnit";
@@ -536,10 +534,6 @@ export function ManualSetup({
               <p className="rotation-derived-note">הגדרה ישנה: סבב ב׳ זמין בדיוק בזמנים שסבב א׳ אינו זמין. מחיקת כל התקופות תחזיר את הסבב לחישוב לפי העוגן והשעות שלמעלה.</p>
             </>
           ) : null}
-        </SetupSection>
-
-        <SetupSection icon={<Upload />} title="ייבוא מאפליקציית משמרות של יחידה" hint="רשימת האנשים, הקבוצות והכשירויות מקובץ ה-CSV של האפליקציה הקודמת. הייבוא שומר מיד; שינויים שלא נשמרו בטופס הזה יאבדו.">
-          <RosterImport unitName={unitName} unitPolicy={unitPolicy} revision={workspace.profile_revision} onImported={onDone} />
         </SetupSection>
 
         <SetupSection tour="setup-people" icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">

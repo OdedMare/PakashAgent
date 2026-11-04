@@ -32,9 +32,9 @@ the days a week a reservist, or a standard officer or NCO, comes
 
 import datetime
 from collections import Counter
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-from app.bl.shared import number, person_roles, text
+from app.bl.shared import number, parse_date, person_roles, text
 
 DEFAULT_VALIDITY_DAYS = 90
 
@@ -130,6 +130,43 @@ def reserve_days(person: Optional[dict]) -> Optional[int]:
     except (TypeError, ValueError):
         return None
     return days if 1 <= days <= 7 else None
+
+
+def reserve_limit_reached(person: Optional[dict], worked: Iterable, day) -> bool:
+    """Whether adding `day` would exceed the reservist's cap in any
+    seven-consecutive-day window containing it."""
+    cap, target = reserve_days(person), _reserve_date(day)
+    if cap is None or target is None:
+        return False
+    dates = {parsed for parsed in (_reserve_date(value) for value in worked) if parsed is not None}
+    if target in dates:
+        return False
+    for offset in range(7):
+        start = target - datetime.timedelta(days=offset)
+        end = start + datetime.timedelta(days=6)
+        if sum(start <= worked_day <= end for worked_day in dates) >= cap:
+            return True
+    return False
+
+
+def reserve_excesses(person: Optional[dict], worked: Iterable) -> List[Tuple[datetime.date, datetime.date, int]]:
+    """(offending day, window start, worked days) for each day beyond the
+    cap, choosing the later assignments as the ones to move."""
+    cap = reserve_days(person)
+    if cap is None:
+        return []
+    dates = sorted({parsed for parsed in (_reserve_date(value) for value in worked) if parsed is not None})
+    seen, excesses = [], []
+    for day in dates:
+        recent = [earlier for earlier in seen if (day - earlier).days <= 6]
+        if len(recent) >= cap:
+            excesses.append((day, day - datetime.timedelta(days=6), len(recent) + 1))
+        seen.append(day)
+    return excesses
+
+
+def _reserve_date(value) -> Optional[datetime.date]:
+    return value if isinstance(value, datetime.date) else parse_date(value)
 
 
 def weekly_limits(profile: Optional[dict], person: Optional[dict]) -> Tuple[int, Optional[int]]:

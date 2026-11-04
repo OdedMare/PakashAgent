@@ -39,6 +39,14 @@ def test_a_reservist_works_no_more_days_than_they_come():
     assert len(result["assignments"]) == 6
 
 
+def test_the_cap_does_not_reset_mid_span_on_sunday():
+    people = [_reservist(reserve_days_per_week=4, exit_pattern="none")]
+
+    result = generate_span(_one_seat(people), "2026-11-04", "2026-11-10")
+
+    assert len(_worked(result, "מילואימניק")) == 4
+
+
 def test_reservists_are_ignored_when_the_unit_switch_is_off():
     people = [_person("דנה"), _person("יוסי", "ב"),
               _person("מילואימניק", service_type="reserve", reserve_days_per_week=3)]
@@ -230,21 +238,24 @@ def test_the_audit_warns_when_a_reservist_passes_their_week():
              if w["code"] == "reserve_days"]
 
     assert len(found) == 1
-    assert found[0]["details"] == {"week": "2026-08-30", "days": 3, "max": 2}
+    assert found[0]["details"] == {
+        "window_start": "2026-08-26", "window_end": "2026-09-01", "days": 3, "max": 2,
+    }
 
 
-def test_the_audit_counts_days_not_shifts_and_resets_on_sunday():
+def test_the_audit_counts_days_not_shifts_and_does_not_reset_on_sunday():
     from app.bl.audit import audit
     profile = _profile([_person("מילואימניק", service_type="reserve", reserve_days_per_week=2)],
                        (MORNING, EVENING))
-    # Two shifts on one day, then Saturday and the next Sunday: never 3 days in one week.
+    # Two shifts on one day still count once; Sunday remains in the same rolling seven days.
     rows = _rows("מילואימניק", ["2026-08-31"]) + _rows("מילואימניק", ["2026-08-31"], EVENING) \
         + _rows("מילואימניק", ["2026-09-05", "2026-09-06"])
 
     found = [w for w in audit(rows, profile["shifts"], profile["employees"], profile=profile)
              if w["code"] == "reserve_days"]
 
-    assert found == []
+    assert len(found) == 1
+    assert found[0]["date"] == "2026-09-06"
 
 
 def test_a_pin_past_the_week_is_reported_in_the_build():

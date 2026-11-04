@@ -71,8 +71,8 @@ import { AgentTouchBar } from "./AgentTouchBar";
  *    consequences shown before the click rather than after.
  *  - **Filling an empty cell writes immediately** (D18), because it takes
  *    nothing from anybody.
- *  - **Warnings never block** (D3). Every save button here is live whatever
- *    the audit found.
+ *  - **Ordinary warnings remain advisory** (D3). Hard unavailability blocks;
+ *    every other audit finding still leaves the save button live.
  *  - **A draft is not published by editing it.** Publishing stays the
  *    separate, deliberate act it was.
  */

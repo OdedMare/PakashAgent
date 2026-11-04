@@ -6,7 +6,6 @@ from typing import Any, Callable, Dict, List, Optional
 from app.bl import compiled_sources
 from app.bl.profile_service import roster
 from app.bl.profile_service import shifts as shift_rules
-from app.bl.profile_service import roster_import
 from app.bl.profile_service import unit as unit_rules
 from app.bl.profile_service import workplace as workplace_rules
 from app.bl.profile_service.retire import retire_shift
@@ -71,23 +70,6 @@ class ProfileService:
         # are translated for the code scheduler by the worker (D32).
         compiled_sources.queue(self._repository, team_id)
         return saved
-
-    def import_roster(self, team_id: str, raw: str, options: Optional[dict] = None,
-                      apply: bool = False) -> dict:
-        """Another app's unit roster, merged into this profile
-        (`roster_import.py`). A preview writes nothing; `apply` saves it."""
-        options = options or {}
-        patch = roster_import.build_patch(raw, self.current(team_id), options)
-        if not apply:
-            return patch
-        unit_name = text(options.get("unit_name"))
-        saved = self.update(
-            team_id, employees=patch["employees"], shifts=patch["shifts"],
-            unit_policy=patch["unit_policy"],
-            workplace={"name": unit_name} if unit_name else None,
-            expected_revision=options.get("expected_revision"),
-        )
-        return dict(patch, profile=saved)
 
     def revision(self, team_id: str) -> Optional[int]:
         """What a save names to refuse a stale edit. A read."""

@@ -6,8 +6,8 @@ Three things here are the point of the feature and are asserted directly:
   so a member's cookie is refused whichever URL it is aimed at (D5).
 - **One workspace cannot reach another's schedule**, even holding its id
   (D10). A cross-team miss reads as "not found", never as "not yours".
-- **Warnings never block.** A schedule that breaks every rule still returns
-  200 and still renders (D3).
+- **Ordinary warnings remain advisory.** Hard unavailability is the one
+  placement invariant; other rule breaks still return 200 and render (D3).
 """
 
 from types import SimpleNamespace
@@ -1450,6 +1450,59 @@ def test_a_manual_assignment_is_recorded_in_the_change_log():
     assert placed["reason"] == "כיסוי בוקר"
 
 
+@pytest.mark.parametrize("service_type", ["standard", "reserve"])
+def test_hard_unavailability_vacates_and_blocks_standard_and_reserve_soldiers(service_type):
+    app, repo = _build_app([])
+    repo.profiles[TEAM] = copy.deepcopy(PROFILE)
+    repo.profiles[TEAM]["employees"][0]["service_type"] = service_type
+    client = _client(app)
+    schedule = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    placed = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "schedule_id": schedule["id"],
+    })
+    assert placed.status_code == 200
+
+    constraint = client.post("/api/schedule/constraints", json={
+        "employee": "דנה", "constraint_date": "2026-08-17",
+        "reason": "לא זמינה", "is_hard": True,
+    })
+    assert constraint.status_code == 200
+    assert repo.assignments(schedule["id"], TEAM) == []
+
+    check = client.post("/api/schedule/check", json={
+        "employee": "דנה", "shift_name": MORNING,
+        "slot_date": "2026-08-17", "schedule_id": schedule["id"],
+    })
+    assert check.json()["blocking"] is True
+    refused = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "schedule_id": schedule["id"],
+    })
+    assert refused.status_code == 409
+    assert "אינו/ה זמין/ה" in refused.json()["detail"]
+
+
+def test_soft_unavailability_still_allows_a_manual_override():
+    app, _ = _build_app([])
+    client = _client(app)
+    schedule = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    client.post("/api/schedule/constraints", json={
+        "employee": "דנה", "constraint_date": "2026-08-17",
+        "reason": "עדיף שלא", "is_hard": False,
+    })
+
+    response = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "schedule_id": schedule["id"],
+    })
+    assert response.status_code == 200
+
+
 def test_assigning_the_same_person_twice_changes_nothing():
     """The table is UNIQUE (slot_id, employee) and the insert does nothing on
     conflict, so a double click is a success that added no duplicate."""
@@ -2070,8 +2123,7 @@ def test_an_invalid_constraint_time_is_rejected():
     assert response.status_code == 422
 
 
-def test_a_recorded_constraint_shows_up_as_a_warning_when_contradicted():
-    """The audit reads a constraint with no shift as covering the whole day."""
+def test_a_recorded_hard_constraint_vacates_an_existing_assignment():
     app, _ = _build_app()
     client = _client(app)
     body = client.post("/api/schedule/generate", json={
@@ -2083,8 +2135,8 @@ def test_a_recorded_constraint_shows_up_as_a_warning_when_contradicted():
         "reason": "מילואים",
     })
     body = client.get("/api/schedule/%s" % body["id"]).json()
-    codes = {warning["code"] for warning in body["warnings"]}
-    assert "unavailable" in codes
+    assert body["assignments"] == []
+    assert any(warning["code"] == "unfilled" for warning in body["warnings"])
 
 
 def test_restating_a_constraint_replaces_rather_than_duplicates():
@@ -2201,13 +2253,7 @@ def test_checking_a_placement_calls_no_model():
     } <= set(body["candidates"][0])
 
 
-def test_a_check_that_warns_still_returns_200_and_never_blocks():
-    """Warnings inform; they do not become a 4xx (D3).
-
-    The same rule the audit follows everywhere else in this router, asserted
-    on the one route whose entire job is reporting problems — the most
-    tempting place to turn a warning into a rejection.
-    """
+def test_a_check_returns_200_and_marks_hard_unavailability_as_blocking():
     app, repo = _build_app([])
     client = _client(app)
     client.post("/api/schedule/blank", json={
@@ -2222,7 +2268,7 @@ def test_a_check_that_warns_still_returns_200_and_never_blocks():
     assert response.status_code == 200
     body = response.json()
     assert body["ok"] is False
-    assert body["blocking"] is False
+    assert body["blocking"] is True
     assert body["reasons"], "a refusal-shaped answer with no reason given"
 
 

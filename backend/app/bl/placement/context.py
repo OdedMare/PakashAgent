@@ -63,7 +63,8 @@ class PlacementContext:
         # voice describing the same fact.
         reasons = [values.text(row.get("message")) for row in caused]
         blocking = any(
-            (row.get("details") or {}).get("constraint_type") == "duty"
+            row.get("code") == "unavailable"
+            and (row.get("details") or {}).get("is_hard", True) is not False
             for row in caused
         )
         eligible = values.is_eligible(self.profile, employee, shift_name, slot_date)
@@ -77,8 +78,8 @@ class PlacementContext:
             ))
         return {
             "ok": not reasons,
-            # Always false. Stated rather than omitted so a caller reading
-            # this contract sees that refusing is not on the table (D3).
+            # Hard unavailability is an invariant; all other findings remain
+            # advisory and can still be accepted by the manager (D3).
             "blocking": blocking,
             "reasons": reasons,
             "warnings": caused,

@@ -8,7 +8,7 @@ Two shapes are load-bearing here:
   on the calendar goes through exactly the same two steps as a sentence typed
   at the agent — the gesture is a proposal, not an edit.
 - **Every response carrying a schedule carries its warnings.** They are
-  advisory and never gate anything
+  advisory; hard unavailability is enforced separately
   ([D3](../../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)):
   a schedule with warnings is still a `200` and still renders.
 

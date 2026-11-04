@@ -7,8 +7,7 @@ property being tested as much as any individual case.
 
 Three things here are the point of the feature and are asserted directly:
 
-- **It never blocks.** Every result carries `blocking: False`, whatever it
-  found (D3).
+- **Hard unavailability blocks.** Every other finding remains advisory (D3).
 - **It reports only what the placement causes.** A schedule already carrying
   a warning does not attribute it to an unrelated drag.
 - **The alternatives are real.** Everything offered is re-checked, so an
@@ -130,14 +129,24 @@ def test_a_free_slot_and_a_qualified_person_is_ok():
     assert result["alternatives"] == {"employees": [], "slots": []}
 
 
-def test_ordinary_findings_remain_advisory():
-    """D3 still applies to every finding except an operational duty."""
-    schedule = _schedule([_assignment("a1", DANA, MORNING, "2026-08-17")])
+def test_hard_unavailability_blocks_the_placement():
     result = check(
-        schedule, PROFILE, DANA, MORNING, "2026-08-17",
+        _schedule(), PROFILE, DANA, MORNING, "2026-08-17",
         availability=[{
             "employee": DANA, "date": "2026-08-17", "shift": "",
             "available": False, "reason": "חופשה",
+        }],
+    )
+    assert result["ok"] is False
+    assert result["blocking"] is True
+
+
+def test_soft_unavailability_remains_advisory():
+    result = check(
+        _schedule(), PROFILE, DANA, MORNING, "2026-08-17",
+        availability=[{
+            "employee": DANA, "date": "2026-08-17", "shift": "",
+            "available": False, "is_hard": False, "reason": "עדיף שלא",
         }],
     )
     assert result["ok"] is False

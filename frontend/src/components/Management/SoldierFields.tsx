@@ -6,7 +6,7 @@
  *  Competence is optional for everyone and lives under "פרמטרים מתקדמים":
  *  the solver balances each shift by it so the weaker soldiers are not
  *  staffed together. Choosing "מילואים" opens the three questions a
- *  reservist owes — days a week (a hard cap per Sunday–Saturday week),
+ *  reservist owes — days a week (a hard cap in any seven consecutive days),
  *  call-up type, and competence — in place of that drawer, and two optional
  *  ones for a reservist whose days change week to week: a minimum the
  *  solver tries to reach, and whether the days must run in one block. The
@@ -161,7 +161,7 @@ export function SoldierFields({
           <input type="checkbox" checked={reserveConsecutive} onChange={(event) => onChange("reserve_consecutive", event.target.checked)} />
           <span>הימים ברצף (בלי ימים בודדים באמצע השבוע)</span>
         </label>
-        <small>{reserve ? "" : "לא חובה. "}מספר הימים הוא תקרה קשיחה לכל שבוע (ראשון–שבת). המינימום הוא יעד: הסידור ישבץ לפחות כך, אלא אם אין משמרות פנויות או שהחייל/ת לא זמין/ה. את הימים עצמם בוחר הסידור לפי הצורך.</small>
+        <small>{reserve ? "" : "לא חובה. "}מספר הימים הוא תקרה קשיחה בכל 7 ימים רצופים. המינימום הוא יעד לשבוע ראשון–שבת: הסידור ישבץ לפחות כך, אלא אם אין משמרות פנויות או שהחייל/ת לא זמין/ה. את הימים עצמם בוחר הסידור לפי הצורך.</small>
       </fieldset>
     );
   }
