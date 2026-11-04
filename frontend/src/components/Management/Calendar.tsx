@@ -369,12 +369,11 @@ function Person({
 
 /** Choose who goes into a cell.
  *
- *  Lists the whole roster rather than filtering to who is "available": the
- *  audit reports conflicts and never blocks (D3), so hiding a person here
- *  would be the grid quietly enforcing what the product decided not to
- *  enforce. Somebody already on this slot is dropped, because assigning them
- *  twice conflicts silently server-side and would look like nothing
- *  happened. */
+ *  Lists the whole roster rather than hiding unavailable people: choosing one
+ *  lets the placement check explain why a hard constraint blocks them and
+ *  offer alternatives. Somebody already on this slot is dropped, because
+ *  assigning them twice conflicts silently server-side and would look like
+ *  nothing happened. */
 function EmployeePicker({
   employees,
   taken,

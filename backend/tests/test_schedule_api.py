@@ -6,8 +6,8 @@ Three things here are the point of the feature and are asserted directly:
   so a member's cookie is refused whichever URL it is aimed at (D5).
 - **One workspace cannot reach another's schedule**, even holding its id
   (D10). A cross-team miss reads as "not found", never as "not yours".
-- **Warnings never block.** A schedule that breaks every rule still returns
-  200 and still renders (D3).
+- **Ordinary warnings remain advisory.** Hard unavailability is the one
+  placement invariant; other rule breaks still return 200 and render (D3).
 """
 
 from types import SimpleNamespace
