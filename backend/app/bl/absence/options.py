@@ -41,7 +41,8 @@ class AbsenceOptions:
         self._tools = ScheduleTools(repository)
 
     def build(self, team_id: str, employee: str, dates: List[str],
-              chosen: Optional[List[dict]] = None, reason: str = "") -> dict:
+              chosen: Optional[List[dict]] = None, reason: str = "",
+              profile: Optional[dict] = None) -> dict:
         """The affected shifts, their ranked candidates and a fair pick each.
 
         `chosen` are the manager's own picks; they win over the fair one.
@@ -49,7 +50,8 @@ class AbsenceOptions:
         the earliest is planned and the rest are listed in `elsewhere` --
         the absence itself is still saved for every date.
         """
-        profile = self._context.profile(team_id)
+        if profile is None:
+            profile = self._context.profile(team_id)
         found = dict(employee=employee, dates=list(dates), schedule_id="",
                      slots=[], free_dates=list(dates), results=[], error="", elsewhere=[])
         periods = self._periods_with_shifts(team_id, employee, dates)
@@ -67,23 +69,25 @@ class AbsenceOptions:
             key=lambda row: (iso(row["date"]), _start(schedule, row)),
         )
         constraints = absence_constraints(employee, dates, reason or "היעדרות")
-        fill = _Fill(profile, schedule, self._context.snapshot(team_id)["availability"],
+        stored_availability = self._context.availability(team_id, schedule)
+        fill = _Fill(profile, schedule, stored_availability,
                      constraints, [dict(action="remove", employee=employee, date=iso(row["date"]),
                                         shift=row["shift"], reason=reason or "היעדרות") for row in own])
         picks = {(row["date"], row["shift"]): row["employee"] for row in chosen or []}
         for row in own:
             date = iso(row["date"])
-            result = self._tools.run(team_id, "find_replacements", {
-                "schedule_id": schedule["id"], "employee": employee,
-                "shift_name": row["shift"], "slot_date": date,
+            result = self._tools.find_replacements.from_values(
+                schedule, profile, stored_availability,
+                employee=employee, shift_name=row["shift"], slot_date=date,
                 # The changes tab must still offer a deliberate exception
                 # when nobody fits cleanly; the candidate carries the exact
                 # warning and the resulting plan still requires approval.
-                "include_exceptions": True,
+                include_exceptions=True,
                 # Only the colleagues are shown; where the absent person could
                 # go instead is no question an absence asks.
-                "include_other_slots": False,
-            })
+                include_other_slots=False,
+            )
+            result = dict(result, tool="find_replacements", ok=result.get("ok", True))
             slot = fill.slot(row, schedule, result.get("candidates") or [],
                              picks.get((date, row["shift"]), ""))
             found["slots"].append(slot)

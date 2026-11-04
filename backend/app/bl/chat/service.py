@@ -156,7 +156,8 @@ class ManagerChatService:
         sends the manager's picks to the conversation, where they become one
         through the ordinary checks and approval.
         """
-        names = {row.get("name") for row in self._context.profile(team_id).get("employees") or []}
+        profile = self._context.profile(team_id)
+        names = {row.get("name") for row in profile.get("employees") or []}
         if employee not in names:
             raise AppError("העובד לא נמצא בצוות. בחרו שם מהרשימה")
         first = _iso_or_blank(starts_on)
@@ -168,5 +169,5 @@ class ManagerChatService:
         if days > _MAX_ABSENCE_DAYS:
             raise AppError("אפשר לחפש מחליפים לעד %d ימים בכל פעם" % _MAX_ABSENCE_DAYS)
         dates = [(start + datetime.timedelta(days=n)).isoformat() for n in range(days)]
-        found = self._absence.build(team_id, employee, dates)
+        found = self._absence.build(team_id, employee, dates, profile=profile)
         return {key: value for key, value in found.items() if key != "results"}

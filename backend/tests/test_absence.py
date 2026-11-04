@@ -117,6 +117,38 @@ def test_covers_are_spread_so_one_person_does_not_take_the_whole_absence():
     assert not llm.calls
 
 
+def test_replacement_search_loads_one_snapshot_for_all_affected_shifts():
+    repo, _, service, _, schedule_id = setup([])
+    tuesday = dict(id=repo._id("slot"), team_id=TEAM, shift_name=MORNING,
+                   slot_date="2026-10-06", headcount=1)
+    repo.slots[schedule_id].append(tuesday)
+    repo.add_assignment(schedule_id, TEAM, tuesday["id"], "דנה", "שיבוץ קיים")
+
+    calls = {name: 0 for name in (
+        "team_profile", "list_schedules", "get_schedule", "availability",
+    )}
+    for name in calls:
+        original = getattr(repo, name)
+
+        def counted(*args, _name=name, _original=original, **kwargs):
+            calls[_name] += 1
+            return _original(*args, **kwargs)
+
+        setattr(repo, name, counted)
+
+    found = service.replacement_options(
+        TEAM, "דנה", "2026-10-05", "2026-10-06",
+    )
+
+    assert len(found["slots"]) == 2
+    assert calls == {
+        "team_profile": 1,
+        "list_schedules": 1,
+        "get_schedule": 1,
+        "availability": 1,
+    }
+
+
 def test_an_absence_across_periods_plans_the_first_and_saves_every_date(monkeypatch):
     import datetime
     monkeypatch.setattr("app.bl.absence.fast_path.israel_today", lambda: datetime.date(2026, 10, 4))

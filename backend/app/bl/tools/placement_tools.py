@@ -18,9 +18,8 @@ _RANKED_BY = (
 _NO_PERIOD = "אין סידור מאוחסן לתאריך הזה"
 
 
-def _exception_candidates(reads, team_id, schedule, profile, leaving, shift, date):
+def _exception_candidates(schedule, profile, availability, leaving, shift, date):
     candidates = []
-    availability = reads.availability(team_id, window(schedule))
     for person in profile.get("employees") or []:
         name = text(person.get("name"))
         if not name or name == leaving:
@@ -94,6 +93,20 @@ class FindReplacements(Tool):
         if schedule is None:
             return {"found": False, "candidates": [], "reason": _NO_PERIOD}
         profile = self._reads.profile(team_id)
+        return self.from_values(
+            schedule, profile,
+            self._reads.availability(team_id, window(schedule)),
+            employee=employee, shift_name=shift_name, slot_date=slot_date,
+            include_exceptions=include_exceptions,
+            include_other_slots=include_other_slots,
+        )
+
+    def from_values(
+        self, schedule: dict, profile: dict, availability: list,
+        shift_name: str, slot_date: str, employee: str = "",
+        include_exceptions: bool = False, include_other_slots: bool = True,
+    ) -> dict:
+        """Find candidates from one already-loaded scheduling snapshot."""
         leaving, shift, date = text(employee), text(shift_name), iso(slot_date)
         alternatives = suggest_alternatives(
             schedule,
@@ -101,14 +114,14 @@ class FindReplacements(Tool):
             employee=leaving,
             shift_name=shift,
             slot_date=date,
-            availability=self._reads.availability(team_id, window(schedule)),
+            availability=availability,
             moving_assignment_id=assignment_id(schedule, leaving, shift, date),
             nearby=include_other_slots,
         )
         candidates = alternatives.get("employees") or []
         if include_exceptions and not candidates:
             candidates = _exception_candidates(
-                self._reads, team_id, schedule, profile, leaving, shift, date,
+                schedule, profile, availability, leaving, shift, date,
             )
         return {
             "found": True,
