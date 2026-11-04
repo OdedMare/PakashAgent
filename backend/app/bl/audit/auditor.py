@@ -4,6 +4,7 @@ from typing import List, Optional, Sequence
 
 from app.bl.audit.checks import DEFAULT_CHECKS, AuditCheck, AuditInput
 from app.bl.audit.codes import severity_rank
+from app.bl.audit.staffing_rules import indexed_grid
 
 
 class Auditor:
@@ -12,8 +13,9 @@ class Auditor:
 
     def run(self, data: AuditInput) -> List[dict]:
         warnings: List[dict] = []
-        for check in self._checks:
-            warnings.extend(check.run(data))
+        with indexed_grid(data.slots):
+            for check in self._checks:
+                warnings.extend(check.run(data))
         # Sorted for a stable render: a list that reorders itself between two
         # identical audits looks like the schedule changed when it did not.
         warnings.sort(key=lambda item: (

@@ -12,7 +12,7 @@ from app.bl.audit.codes import SEVERITY_NOTICE, SEVERITY_WARNING, severity_rank
 from app.bl.audit.constraints import constraint_conflicts
 from app.bl.audit.duty_stats import add_duties
 from app.bl.audit.roster import index_shifts, rows_of
-from app.bl.audit.staffing_rules import checked_slots, required_headcount, seat_counts
+from app.bl.audit.staffing_rules import checked_slots, indexed_grid, required_headcount, seat_counts
 from app.bl.audit.values import person_name, slot_date, text
 from app.bl.shared import parse_date
 from app.bl.shared import hebrew_weekday
@@ -52,7 +52,7 @@ def shift_stats(
         "total_shifts": len(rows),
         "total_nights": sum(1 for row in rows if row["is_night"]),
         "people_working": len(set(row["employee"] for row in rows)),
-        "coverage": coverage(everyone, shifts or [], slots, employees or [], profile or {}),
+        "coverage": _coverage(everyone, shifts or [], slots, employees or [], profile or {}),
         "by_shift": _by_shift(rows, shift_index),
         "by_day": _by_day(rows, slots),
         "by_employee": _by_employee(rows, people, warnings),
@@ -83,6 +83,11 @@ def _conflicts(warnings: List[dict]) -> List[dict]:
         item for item in warnings
         if isinstance(item, dict) and item.get("severity") == SEVERITY_WARNING
     ]
+
+
+def _coverage(rows, shifts, slots, employees, profile):
+    with indexed_grid(slots):
+        return coverage(rows, shifts, slots, employees, profile)
 
 
 def coverage(

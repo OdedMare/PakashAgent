@@ -64,28 +64,38 @@ def free_employees(
     }
     load = values.hours_by_employee(context.schedule, context.profile)
     tiers = Tiers(context.schedule, context.profile, employee, shift_name)
+    # Ranked before checking: the order (stage, hours, name) needs no audit,
+    # so the placement check -- two audits each -- runs only until the cap
+    # is reached instead of once for every soldier on the roster.
+    ranked = sorted(
+        (
+            tiers.mark({"employee": name, "hours": load.get(name, 0.0)})
+            for name in _names(context)
+            if name != employee and name not in taken
+        ),
+        key=lambda item: (item["tier"], item["hours"], item["employee"]),
+    )
     options = []
-    for person in context.employees:
-        name = values.text(person.get("name"))
-        if not name or name == employee or name in taken:
-            continue
+    for option in ranked:
+        name = option["employee"]
         if not values.is_eligible(context.profile, name, shift_name, slot_date):
             continue
         if not context.clean(name, shift_name, slot_date):
             continue
-        options.append(tiers.mark({
-            "employee": name,
-            "hours": load.get(name, 0.0),
-            # Said in Hebrew here rather than assembled in the browser: the
-            # product's copy is Hebrew data throughout.
-            "why": "%s פנוי/ה ומוגדר/ת למשמרת (%s שעות בתקופה)." % (
-                name, values.pretty(load.get(name, 0.0))
-            ),
-        }))
-    # The stage first, so the cap below never drops a holder of the role
-    # in favour of a lighter stranger.
-    options.sort(key=lambda item: (item["tier"], item["hours"], item["employee"]))
-    return options[:_MAX_ALTERNATIVES]
+        # Said in Hebrew here rather than assembled in the browser: the
+        # product's copy is Hebrew data throughout.
+        option["why"] = "%s פנוי/ה ומוגדר/ת למשמרת (%s שעות בתקופה)." % (
+            name, values.pretty(option["hours"])
+        )
+        options.append(option)
+        if len(options) == _MAX_ALTERNATIVES:
+            break
+    return options
+
+
+def _names(context: PlacementContext) -> List[str]:
+    names = (values.text(person.get("name")) for person in context.employees)
+    return list(dict.fromkeys(name for name in names if name))
 
 
 def nearby_slots(
