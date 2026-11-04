@@ -129,6 +129,26 @@ def normalized(key: str, value):
     return normalize(value) if normalize else value
 
 
+_CONNECTION = ("redis_url", "redis_host", "redis_port", "redis_username", "redis_password")
+
+
+def env_when_unset(settings, env) -> None:
+    """With no Redis saved (no URL and no host), take the connection from env.
+
+    Every save writes every field, so a deployment that saved anything --
+    a model, a timeout -- before `PAKASH_REDIS_URL` was set held an empty
+    URL in its file and its shared row, and the env value was never read
+    again. An empty saved connection now means "the env's". To keep the
+    env's Redis but stop caching, set the TTL to 0.
+    """
+    if getattr(settings, "redis_url", "") or getattr(settings, "redis_host", ""):
+        return
+    values = from_env(env)
+    if values["redis_url"] or values["redis_host"]:
+        for key in _CONNECTION:
+            setattr(settings, key, values[key])
+
+
 def from_env(env) -> dict:
     """Every Redis field from the environment, never failing the boot."""
     values = {"redis_password": env.redis_password or ""}

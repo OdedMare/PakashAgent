@@ -1814,3 +1814,10 @@ and the key prefix. **Every key starts with the prefix** —
 serve several deployments or other applications, and the panel counts this
 deployment's keys by SCAN under it. A save reaches every replica through
 the shared settings (D39).
+
+**An empty saved connection means the env's.** Every save writes every
+field, so a deployment that saved anything before `PAKASH_REDIS_URL` was set
+held an empty URL in its file and its shared row, and the env value was
+never read again. With no URL and no host saved, the connection fields come
+from env (`redis_fields.env_when_unset`); one saved in the panel still wins.
+To keep the env's Redis but stop caching, set the TTL to 0.

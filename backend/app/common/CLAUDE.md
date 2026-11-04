@@ -86,7 +86,7 @@ AiSummryIO.
 | `PAKASH_SOLVER_TIME_LIMIT_SECONDS` / `PAKASH_SOLVER_WORKERS` | The constraint solver's wall time per solve (default 10s) and parallel workers (default 8). Live-editable; chat builds read them too |
 | `PAKASH_LLM_MAX_CONCURRENCY` | Model calls in flight across every process (default 4; 1 for a local Ollama) |
 | `PAKASH_LLM_TEAM_CONCURRENCY` | How many of those one team may hold; 0 (default) = all of them |
-| `PAKASH_REDIS_URL` / `_HOST` / `_PORT` / `_USERNAME` / `_PASSWORD` | The read cache's Redis (D50); all empty = off. Host, port and username override the URL's. Live-editable |
+| `PAKASH_REDIS_URL` / `_HOST` / `_PORT` / `_USERNAME` / `_PASSWORD` | The read cache's Redis (D50); all empty = off. Host, port and username override the URL's. Live-editable; used whenever no URL or host is saved in the panel |
 | `PAKASH_REDIS_KEY_PREFIX` | Every key this app writes starts with it (default `pakash`) |
 | `PAKASH_REDIS_CACHE_TTL_SECONDS` | How long a cached read may live (default 300, max a day); 0 turns the cache off. Writes retire reads at once either way |
 

@@ -49,6 +49,7 @@ _POSITIVE_INTS = ("llm_max_concurrency", "solver_workers")
 class RuntimeSettingsStore:
     def __init__(self, env: Settings):
         self._path = Path(env.runtime_settings_file)
+        self._env = env
         self._settings = RuntimeSettings(
             # Env values get the same normalization as UI edits, so a
             # jdbc: URL works however it is supplied.
@@ -209,6 +210,7 @@ class RuntimeSettingsStore:
                     raise
                 continue
             setattr(settings, key, value)
+        redis_fields.env_when_unset(settings, self._env)
 
 
 def _normalized(key: str, value, patch: dict, settings):
