@@ -3,7 +3,9 @@
 **A reservist comes a stated number of days a week.** `reserve_days_per_week`
 on a `service_type: reserve` soldier is a hard cap on the days they work in
 each Sunday–Saturday week, counting the days already fixed in it (the rest
-of the draft, the last two weeks). Like every other hard rule here, a limit
+of the draft, the last two weeks). A standard-service officer or NCO
+(`rank_group`) can be given the same three fields — five days a week, say —
+and is held to them the same way. Like every other hard rule here, a limit
 made negative by fixed rows is clamped at zero, so the model stays feasible.
 
 **A reservist can be owed a minimum, and a block.** `reserve_min_days` is a
@@ -40,7 +42,7 @@ import datetime
 from typing import Dict, List, Optional, Tuple
 
 from app.bl.audit import counts_toward_staffing
-from app.bl.audit.unit_policy import below_level, reserve_days
+from app.bl.audit.unit_policy import below_level, comes_days_a_week, reserve_days
 from app.bl.solver.model import Model
 from app.bl.shared import switched_off
 from app.bl.solver.rows import text
@@ -75,7 +77,7 @@ def apply_competence(model: Model) -> None:
 def reserve_minimum(person: dict) -> Optional[int]:
     """The fewest days a week this reservist should come, or None. A
     reservist switched off (D49) is owed nothing: they are not coming."""
-    if text(person.get("service_type")) != "reserve" or switched_off(person):
+    if not comes_days_a_week(person) or switched_off(person):
         return None
     try:
         days = int(person.get("reserve_min_days") or 0)
@@ -88,8 +90,7 @@ def reserve_minimum(person: dict) -> Optional[int]:
 
 
 def reserve_consecutive(person: dict) -> bool:
-    return text(person.get("service_type")) == "reserve" \
-        and person.get("reserve_consecutive") is True
+    return comes_days_a_week(person) and person.get("reserve_consecutive") is True
 
 
 def week_of(day: str) -> str:
@@ -146,7 +147,7 @@ def _reserve_minimum(model: Model, name: str) -> None:
         short = model.cp.NewIntVar(0, owed, "reserve_short")
         model.cp.Add(short >= owed - sum(flags))
         model.price(RESERVE_SHORT, short,
-                    "%s (מילואים) שובץ/ה לפחות מ-%d ימים בשבוע שמתחיל ב-%s" % (name, least, sunday),
+                    "%s שובץ/ה לפחות מ-%d הימים שלו/ה בשבוע שמתחיל ב-%s" % (name, least, sunday),
                     "reserve")
 
 

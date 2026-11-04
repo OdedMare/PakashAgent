@@ -8,7 +8,7 @@ import { cycleOf, cyclePattern, isDayCycle } from "@/lib/dayCycles";
 import type { DayCycle } from "@/types";
 
 import { ExitPatternFields } from "./ExitPatternFields";
-import { ShiftLevelSelect, SoldierFields } from "./SoldierFields";
+import { STATUS_LABELS, ShiftLevelSelect, SoldierFields, statusFields, statusOf } from "./SoldierFields";
 import {
   EXIT_PATTERN_LABELS,
   text,
@@ -50,8 +50,8 @@ export function EmployeeForm({
     closure_from: text(initial?.closure_from),
   }));
   const [rotationGroup, setRotationGroup] = useState(text(initial?.rotation_group) || groups[0] || "");
-  const [serviceType, setServiceType] = useState(text(initial?.service_type) || "standard");
-  const [rankGroup, setRankGroup] = useState(text(initial?.rank_group));
+  // מעמד: the service type and, for a standard soldier, the rank, as one choice.
+  const [status, setStatus] = useState(statusOf(text(initial?.service_type), text(initial?.rank_group)));
   const [countsTowardStaffing, setCountsTowardStaffing] = useState(initial?.counts_toward_staffing !== false);
   const [isShiftManager, setIsShiftManager] = useState(Boolean(initial?.is_shift_manager));
   const [canTrain, setCanTrain] = useState(Boolean(initial?.can_train));
@@ -74,7 +74,7 @@ export function EmployeeForm({
     <form className="constraint-form profile-form" onSubmit={(event) => {
       event.preventDefault();
       if (!name.trim()) return;
-      onSubmit({ ...exitFields, name: name.trim(), role: role.trim(), eligible_shifts: eligible, exit_pattern: exitPattern, rotation_group: rotationGroup, service_type: serviceType, rank_group: rankGroup, counts_toward_staffing: countsTowardStaffing, is_shift_manager: isShiftManager, can_train: canTrain, notes: notes.trim(), competence, reserve_days_per_week: reserveDays, reserve_min_days: reserveMinDays, reserve_consecutive: reserveConsecutive, reserve_call: reserveCall });
+      onSubmit({ ...exitFields, name: name.trim(), role: role.trim(), eligible_shifts: eligible, exit_pattern: exitPattern, rotation_group: rotationGroup, ...statusFields(status), counts_toward_staffing: countsTowardStaffing, is_shift_manager: isShiftManager, can_train: canTrain, notes: notes.trim(), competence, reserve_days_per_week: reserveDays, reserve_min_days: reserveMinDays, reserve_consecutive: reserveConsecutive, reserve_call: reserveCall });
     }}>
       <label>
         <span>שם *</span>
@@ -95,15 +95,14 @@ export function EmployeeForm({
           {isDayCycle(exitPattern) && !cycleOf(dayCycles, exitPattern) ? <option value={exitPattern}>מחזור שהוסר</option> : null}
         </select></label>
         {groups.length ? <label><span>קבוצה</span><select value={rotationGroup} onChange={(event) => setRotationGroup(event.target.value)}>{groups.map((group) => <option key={group}>{group}</option>)}</select></label> : null}
-        <label><span>מעמד</span><select value={serviceType} onChange={(event) => {
-          setServiceType(event.target.value);
+        <label><span>מעמד</span><select value={status} onChange={(event) => {
+          setStatus(event.target.value);
           if (event.target.value === "overlap") setCountsTowardStaffing(false);
-        }}><option value="standard">סדיר</option><option value="overlap">נחפף/ת</option><option value="reserve">מילואים</option><option value="civilian">אע״צ</option><option value="hatzach">הצ״ח</option></select></label>
-        <label><span>דרג בתקן</span><select value={rankGroup} onChange={(event) => setRankGroup(event.target.value)}><option value="">לא מוגדר</option><option value="officer">קצונה</option><option value="nco">נגדים</option></select></label>
+        }}>{Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       </div>
       <ExitPatternFields pattern={exitPattern} person={exitFields} onChange={(field, value) => setExitFields((current) => ({ ...current, [field]: value }))} />
       <SoldierFields
-        serviceType={serviceType}
+        serviceType={status}
         competence={competence}
         reserveDays={reserveDays}
         reserveMinDays={reserveMinDays}

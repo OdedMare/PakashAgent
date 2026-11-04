@@ -68,6 +68,16 @@ def test_a_standard_soldier_ignores_reserve_days():
     assert len(_worked(result, "דנה")) == 3
 
 
+@pytest.mark.parametrize("rank", ["officer", "nco"])
+def test_a_standard_officer_or_nco_works_no_more_days_than_they_come(rank):
+    people = [_person("דנה"), _person("יוסי", "ב"), _person("רון", "ב"),
+              _person("מפקד", rank_group=rank, reserve_days_per_week=1)]
+    result = generate_span(_profile(people), "2026-08-31", "2026-09-02")
+
+    assert len(_worked(result, "מפקד")) == 1
+    assert len(result["assignments"]) == 6
+
+
 def test_weak_soldiers_are_not_staffed_together():
     people = [_person("חלש1", competence="weak"), _person("חלש2", "ב", competence="weak"),
               _person("חזק1", competence="excellent"), _person("חזק2", "ב", competence="excellent")]
@@ -91,6 +101,21 @@ def test_roster_keeps_reserve_answers_only_for_reservists():
         == (3, "order", "high")
     assert (rows[1]["reserve_days_per_week"], rows[1]["reserve_call"], rows[1]["competence"]) \
         == (None, "", "")
+
+
+def test_roster_keeps_days_a_week_for_a_standard_officer_or_nco():
+    rows = employees([
+        {"name": "א", "service_type": "standard", "rank_group": "officer",
+         "reserve_days_per_week": 5, "reserve_min_days": 4, "reserve_consecutive": True,
+         "reserve_call": "order"},
+        {"name": "ב", "rank_group": "nco", "reserve_days_per_week": "5"},
+        {"name": "ג", "service_type": "overlap", "rank_group": "nco", "reserve_days_per_week": 5},
+    ])
+
+    assert (rows[0]["reserve_days_per_week"], rows[0]["reserve_min_days"],
+            rows[0]["reserve_consecutive"], rows[0]["reserve_call"]) == (5, 4, True, "")
+    assert rows[1]["reserve_days_per_week"] == 5
+    assert rows[2]["reserve_days_per_week"] is None
 
 
 @pytest.mark.parametrize("field", [
@@ -131,6 +156,14 @@ def test_a_reservist_with_a_minimum_comes_that_many_days():
     result = generate_span(_one_seat(people), *WEEK)
 
     assert len(_worked(result, "מילואימניק")) == 3
+
+
+def test_an_officer_with_a_minimum_comes_that_many_days():
+    people = _regulars() + [_person("קצין", "ב", rank_group="officer",
+                                    reserve_days_per_week=3, reserve_min_days=3)]
+    result = generate_span(_one_seat(people), *WEEK)
+
+    assert len(_worked(result, "קצין")) == 3
 
 
 def test_without_a_minimum_evenness_decides():

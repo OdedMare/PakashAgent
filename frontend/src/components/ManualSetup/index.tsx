@@ -24,7 +24,7 @@ import { TimeInput } from "@/components/TimeInput";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import { deleteShiftType, previewDeparture, updateProfile } from "@/services/api";
 import { cyclePattern, isDayCycle } from "@/lib/dayCycles";
-import { ShiftLevelSelect, SoldierFields } from "@/components/Management/SoldierFields";
+import { STATUS_LABELS, ShiftLevelSelect, SoldierFields, statusFields, statusOf } from "@/components/Management/SoldierFields";
 import { ExitPatternFields } from "@/components/Management/ExitPatternFields";
 import type { UnitPolicy } from "@/services/api";
 import type { DayCycle, RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
@@ -38,21 +38,13 @@ import { RosterView } from "./RosterView";
 import type { RosterPerson } from "./rosterGroups";
 import type { Cycle } from "./RotationSetup";
 import { RosterImport } from "./RosterImport";
-import { PersonStandard, ShiftRoles, UnitStandard } from "./UnitStandard";
+import { PersonStandard, ShiftRoles } from "./UnitStandard";
 import { useRotationPreview } from "./useRotationPreview";
 import { ImportUnit } from "./ImportUnit";
 import { reserveFutureWarning } from "./reserveWarning";
 
 const DAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
 const WEEKEND = ["שישי", "שבת"];
-const SERVICE_TYPES = {
-  standard: "סדיר",
-  overlap: "נחפף/ת",
-  reserve: "מילואים",
-  civilian: "אע״צ",
-  hatzach: "הצ״ח",
-} as const;
-const RANK_GROUPS = { officer: "קצונה", nco: "נגדים" } as const;
 const SHIFT_TYPES = {
   regular: "רגילה",
   overlap: "חפיפה",
@@ -122,9 +114,6 @@ export function ManualSetup({
       reason: inputText(row.reason),
     })),
   );
-  const [generalExitSchedule, setGeneralExitSchedule] = useState(
-    inputText(initialWorkplace.general_exit_schedule),
-  );
   const [dayCycles, setDayCycles] = useState<DayCycle[]>(() =>
     (profile.workplace?.day_cycles ?? []).map((cycle) => ({
       ...cycle,
@@ -163,7 +152,9 @@ export function ManualSetup({
   const [maxWeeklyHours, setMaxWeeklyHours] = useState(number(audit.max_weekly_hours, 168));
   const [maxConsecutiveDays, setMaxConsecutiveDays] = useState(number(audit.max_consecutive_days, 11));
   const [minRestHours, setMinRestHours] = useState(number(audit.min_rest_hours, 8));
-  const [unitPolicy, setUnitPolicy] = useState<UnitPolicy>(() => record(profile.unit_policy) as UnitPolicy);
+  // The unit standard is no longer edited here; what a unit already saved
+  // is carried through untouched so a save does not erase it.
+  const unitPolicy = useMemo<UnitPolicy>(() => record(profile.unit_policy) as UnitPolicy, [profile.unit_policy]);
   // Saved shift types the manager deleted here. They are archived by their
   // own call after the save, which also cleans them out of the roster.
   const [removedShifts, setRemovedShifts] = useState<string[]>([]);
@@ -240,7 +231,7 @@ export function ManualSetup({
     const groups = rotationGroups(pattern, dayCycles);
     const group = groups.includes(text(person.rotation_group)) ? text(person.rotation_group) : groups[0] ?? "";
     return {
-      service: text(person.service_type) || "standard",
+      service: statusOf(text(person.service_type), text(person.rank_group)),
       counts: person.counts_toward_staffing !== false,
       shifts: strings(person.eligible_shifts),
       exitKey: `${pattern}|${group}`,
@@ -249,7 +240,7 @@ export function ManualSetup({
         text(person.name),
         text(person.role),
         text(person.competence),
-        SERVICE_TYPES[(text(person.service_type) || "standard") as keyof typeof SERVICE_TYPES] ?? "",
+        STATUS_LABELS[statusOf(text(person.service_type), text(person.rank_group))] ?? "",
         patternLabel(pattern, dayCycles),
         group && `קבוצה ${group}`,
         ...strings(person.eligible_shifts),
@@ -330,7 +321,9 @@ export function ManualSetup({
           ...rotation,
           rotation_presence: rotationPresence,
           day_cycles: dayCycles,
-          general_exit_schedule: generalExitSchedule.trim(),
+          // The free-text "general exits" field is gone from the form; an
+          // old one is cleared so text nobody can see no longer steers builds.
+          general_exit_schedule: "",
           notes_visual_only: notesVisualOnly,
           enabled_exit_patterns: [...availableExitPatterns],
           reserve_enabled: reserveOn,
@@ -351,6 +344,7 @@ export function ManualSetup({
             ? text(person.rotation_group)
             : groupsOf(exitPattern(person, rotationMode))[0] ?? "",
           service_type: text(person.service_type) || "standard",
+          rank_group: text(person.service_type) && text(person.service_type) !== "standard" ? "" : text(person.rank_group),
           counts_toward_staffing: person.counts_toward_staffing !== false,
           eligible_shifts: strings(person.eligible_shifts),
           is_shift_manager: Boolean(person.is_shift_manager),
@@ -458,7 +452,7 @@ export function ManualSetup({
           });
           setImporting(false);
         }} />}
-        <SetupSection tour="setup-workplace" icon={<CalendarClock />} title="היחידה והיציאות הכלליות" hint="מתארים כאן את תמונת היציאות של הצוות; את המבנה האישי מגדירים לכל חייל/ת בנפרד.">
+        <SetupSection tour="setup-workplace" icon={<CalendarClock />} title="היחידה" hint="שם היחידה, אורך הסידור וימי הפעילות. את מבנה היציאות מגדירים בסעיף היציאות ולכל חייל/ת בנפרד.">
           <div className="manual-grid three">
             <Field label="שם היחידה *">
               <input value={unitName} onChange={(event) => setUnitName(event.target.value)} maxLength={120} required />
@@ -469,9 +463,6 @@ export function ManualSetup({
               </select>
             </Field>
           </div>
-          <Field label="היציאות הכלליות של הצוות">
-            <textarea value={generalExitSchedule} onChange={(event) => setGeneralExitSchedule(event.target.value)} rows={3} placeholder="לדוגמה: השבוע צוות א סוגר; חמשושים יוצאים בחמישי ב־10:00 וחוזרים בראשון ב־08:00" />
-          </Field>
           <CheckboxGrid label="ימי פעילות" values={DAYS} selected={operatingDays} onChange={setOperatingDays} />
         </SetupSection>
 
@@ -558,7 +549,7 @@ export function ManualSetup({
           </label>
           <RosterView
             people={rosterPeople}
-            services={SERVICE_TYPES}
+            services={STATUS_LABELS}
             shiftNames={shiftNames}
             onFilter={onRosterFilter}
             card={(index, groupKey) => {
@@ -570,7 +561,7 @@ export function ManualSetup({
                     <button type="button" className="manual-row-summary" aria-expanded={false} onClick={() => toggleFold(key)}>
                       <ChevronDown size={15} aria-hidden="true" />
                       <strong>{key}</strong>
-                      <span>{[text(person.role), RANK_GROUPS[text(person.rank_group) as keyof typeof RANK_GROUPS], rosterPeople[index].exitLabel, SERVICE_TYPES[rosterPeople[index].service as keyof typeof SERVICE_TYPES]].filter(Boolean).join(" · ")}</span>
+                      <span>{[text(person.role), rosterPeople[index].exitLabel, STATUS_LABELS[rosterPeople[index].service]].filter(Boolean).join(" · ")}</span>
                     </button>
                   </article>
                 );
@@ -595,16 +586,12 @@ export function ManualSetup({
                   </Field>
                   {groupsOf(exitPattern(person, rotationMode)).length ? <Field label="קבוצה"><select value={text(person.rotation_group) || groupsOf(exitPattern(person, rotationMode))[0]} onChange={(e) => edit(setEmployees, index, "rotation_group", e.target.value)}>{groupsOf(exitPattern(person, rotationMode)).map((group) => <option key={group}>{group}</option>)}</select></Field> : null}
                   <Field label="מעמד">
-                    <select value={text(person.service_type) || "standard"} onChange={(e) => {
-                      edit(setEmployees, index, "service_type", e.target.value);
+                    <select value={rosterPeople[index].service} onChange={(e) => {
+                      const fields = statusFields(e.target.value);
+                      edit(setEmployees, index, "service_type", fields.service_type);
+                      edit(setEmployees, index, "rank_group", fields.rank_group);
                       edit(setEmployees, index, "counts_toward_staffing", e.target.value !== "overlap");
-                    }}>{Object.entries(SERVICE_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
-                  </Field>
-                  <Field label="דרג בתקן">
-                    <select value={text(person.rank_group)} onChange={(e) => edit(setEmployees, index, "rank_group", e.target.value)}>
-                      <option value="">לא מוגדר</option>
-                      {Object.entries(RANK_GROUPS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                    </select>
+                    }}>{Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
                   </Field>
                 </div>
                 <div className="manual-row-foot">
@@ -619,7 +606,7 @@ export function ManualSetup({
                 </div>
                 <ExitPatternFields pattern={exitPattern(person, rotationMode)} person={person} onChange={(field, value) => edit(setEmployees, index, field, value)} />
                 <SoldierFields
-                  serviceType={text(person.service_type) || "standard"}
+                  serviceType={rosterPeople[index].service}
                   competence={text(person.competence)}
                   reserveDays={typeof person.reserve_days_per_week === "number" ? person.reserve_days_per_week : null}
                   reserveMinDays={typeof person.reserve_min_days === "number" ? person.reserve_min_days : null}
@@ -642,8 +629,8 @@ export function ManualSetup({
             // Added while one status is shown, the soldier takes it, so the
             // new row does not vanish behind the filter.
             const service = rosterServices.length === 1 ? rosterServices[0] : "standard";
-            setEmployees((current) => [...current, { name: "", role: "", exit_pattern: defaultPattern, rotation_group: rotationGroups(defaultPattern, dayCycles)[0] ?? "", service_type: service, counts_toward_staffing: service !== "overlap", eligible_shifts: [], is_shift_manager: false, can_train: false, notes: "" }]);
-          }}><Plus size={16} /> {rosterServices.length === 1 ? `הוספת ${SERVICE_TYPES[rosterServices[0] as keyof typeof SERVICE_TYPES]}` : "הוספת איש/אשת צוות"}</button>
+            setEmployees((current) => [...current, { name: "", role: "", exit_pattern: defaultPattern, rotation_group: rotationGroups(defaultPattern, dayCycles)[0] ?? "", ...statusFields(service), counts_toward_staffing: service !== "overlap", eligible_shifts: [], is_shift_manager: false, can_train: false, notes: "" }]);
+          }}><Plus size={16} /> {rosterServices.length === 1 ? `הוספת ${STATUS_LABELS[rosterServices[0]]}` : "הוספת איש/אשת צוות"}</button>
         </SetupSection>
 
         <SetupSection tour="setup-shifts" icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="תאריכי תוקף ריקים = משמרת קבועה; מילוי שניהם יוצר משמרת זמנית שנעלמת מהלוח מחוץ לטווח. משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה. תקן סופ״ש חל כשאחד הסבבים בבית — לפי ימים בבסיס/בבית בסעיף הסבבים.">
@@ -697,10 +684,6 @@ export function ManualSetup({
             ))}
           </div>
           <button type="button" className="ghost-button" onClick={() => setRules((current) => [...current, { text: "", priority: "hard" }])}><Plus size={16} /> הוספת כלל קבוע</button>
-        </SetupSection>
-
-        <SetupSection icon={<ShieldCheck />} title="תקן היחידה" hint="דירוג, תוקף כשירויות, תפקידים חלופיים ומספר משמרות בשבוע. ריק = ללא הגבלה.">
-          <UnitStandard policy={unitPolicy} roles={roleNames} onChange={setUnitPolicy} />
         </SetupSection>
 
         <SetupSection tour="setup-limits" icon={<Scale />} title="גבולות עומס ומנוחה" hint="בדיקות אלה מציפות חריגות ומסייעות לשיבוץ; הן אינן חוסמות החלטת מפקד.">

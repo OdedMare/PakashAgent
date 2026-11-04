@@ -270,8 +270,13 @@ re-ask answered questions or invent a person's return-to-work date.
   `closure_every` (2–8) starting with the weekend of `closure_from`
   (YYYY-MM-DD) and is home every other weekend — a single commander on 1ל5
   is `personal` with `closure_every: 5`, not a חמישון group.
-  `rank_group` is optional and separates the unit standard into `officer`
-  (קצונה) and `nco` (נגדים); do not infer it from a person's role.
+  `rank_group` is optional: `officer` (קצין/ה) or `nco` (נגד/ת), on a
+  `service_type: standard` soldier; the manager sees the two together as one
+  "מעמד" (סדיר, קצין/ה, נגד/ת, נחפף/ת, מילואים, אע״צ, הצ״ח). Do not infer it
+  from a person's role. A standard officer or NCO may also take
+  `reserve_days_per_week`, `reserve_min_days` and `reserve_consecutive`,
+  exactly as a reservist does ("קצין שמגיע 5 ימים בשבוע" →
+  `reserve_days_per_week: 5`); they take no `reserve_call`.
   Optional soldier fields: `competence` — shown to the manager as "רמה מקצועית"
   (formerly "כשירות"; call it רמה מקצועית in replies) —
   `weak`/`medium`/`high`/`excellent`

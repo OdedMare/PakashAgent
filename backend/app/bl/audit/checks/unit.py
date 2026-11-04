@@ -5,7 +5,7 @@ Warnings only, like every check."""
 
 import datetime
 from collections import Counter
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from app.bl.audit.checks.base import AuditCheck, AuditInput
 from app.bl.audit.codes import (
@@ -18,7 +18,7 @@ from app.bl.audit.unit_policy import (
     below_level, is_weak, max_weak, qualification_expired, reserve_days, role_needs, unit_week,
     weekly_limits, weekly_overflow,
 )
-from app.bl.shared import parse_date
+from app.bl.shared import parse_date, text
 
 LEVEL_NAMES = {"weak": "חלשה", "medium": "בינונית", "high": "גבוהה", "excellent": "מצטיינת"}
 
@@ -104,8 +104,8 @@ class UnitStandardCheck(AuditCheck):
             if len(days) > cap:
                 warnings.append(warning(
                     RESERVE_DAYS, SEVERITY_WARNING,
-                    "%s (מילואים) משובץ/ת %d ימים בשבוע שמתחיל ב-%s, מעל %d הימים שהוא/היא מגיע/ה."
-                    % (name, len(days), week.isoformat(), cap),
+                    "%s (%s) משובץ/ת %d ימים בשבוע שמתחיל ב-%s, מעל %d הימים שהוא/היא מגיע/ה."
+                    % (name, _days_label(people.get(name)), len(days), week.isoformat(), cap),
                     # Dated on the first day past the cap: the day to move.
                     employee=name, date=sorted(days)[cap].isoformat(),
                     details={"week": week.isoformat(), "days": len(days), "max": cap}))
@@ -133,6 +133,13 @@ class UnitStandardCheck(AuditCheck):
                     employee=row["employee"], date=row["date"], shift=row["shift"],
                     details={"role": role}))
         return warnings
+
+
+def _days_label(person: Optional[dict]) -> str:
+    rank = text((person or {}).get("rank_group"))
+    if text((person or {}).get("service_type")) == "reserve" or rank not in ("officer", "nco"):
+        return "מילואים"
+    return "קצין/ה" if rank == "officer" else "נגד/ת"
 
 
 __all__ = ["UnitStandardCheck"]

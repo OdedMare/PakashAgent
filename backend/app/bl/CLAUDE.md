@@ -94,7 +94,8 @@ and the build still completes.
   them; their row's reason names whom they shadow.
 - `requests.py` turns each structured request into a constraint (hard) or
   a priced term (soft), and prices soft availability.
-- `competence.py` caps a reservist (`service_type: reserve`) at
+- `competence.py` caps a reservist (`service_type: reserve`) — or a
+  standard-service officer or NCO (`rank_group`, `unit_policy.comes_days_a_week`) — at
   `reserve_days_per_week` worked days per Sunday–Saturday week (hard, fixed
   days counted), prices each day short of `reserve_min_days` on a week the
   span reaches to its Saturday (`RESERVE_SHORT`, below a wish), keeps a

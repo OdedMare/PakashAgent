@@ -55,7 +55,7 @@ def _employee(row: dict, default_exit_pattern: str) -> dict:
     if not isinstance(recurring, list):
         raise AgentError("האילוצים הקבועים של איש הצוות אינם תקינים")
     _validate_recurring(recurring)
-    row.update(_soldier_fields(row, service_type))
+    row.update(_soldier_fields(row, service_type, rank_group))
     row.update(_personal_fields(row, exit_pattern))
     row.update({
         "service_type": service_type,
@@ -83,29 +83,34 @@ def _employee(row: dict, default_exit_pattern: str) -> dict:
     return row
 
 
-def _soldier_fields(row: dict, service_type: str) -> dict:
-    """Competence for anyone; days a week and call-up type for a reservist.
+def _soldier_fields(row: dict, service_type: str, rank_group: str = "") -> dict:
+    """Competence for anyone; days a week for a reservist and for a
+    standard-service officer or NCO; call-up type for a reservist only.
 
-    A reservist's fields are dropped once they stop being one, so a soldier
-    moved back to standard service is not capped by a week they no longer owe.
+    The days fields are dropped once a person stops being one of those, so a
+    soldier moved back to plain standard service is not capped by a week
+    they no longer owe.
     """
     competence = text(row.get("competence"))
     if competence and competence not in COMPETENCE_LEVELS:
         raise AgentError("הרמה המקצועית אינה תקינה (חלש, בינוני, גבוה או מצטיין)")
     fields = {"competence": competence, "reserve_days_per_week": None,
               "reserve_min_days": None, "reserve_consecutive": False, "reserve_call": ""}
-    if service_type != "reserve":
+    days_a_week = service_type == "reserve" or (service_type == "standard" and rank_group in _RANK_GROUPS)
+    if not days_a_week:
         return fields
-    days = _week_days(row.get("reserve_days_per_week"), "מספר ימי המילואים בשבוע")
-    least = _week_days(row.get("reserve_min_days"), "מינימום ימי המילואים בשבוע")
+    days = _week_days(row.get("reserve_days_per_week"), "מספר הימים בשבוע")
+    least = _week_days(row.get("reserve_min_days"), "מינימום הימים בשבוע")
     if least is not None and days is not None and least > days:
-        raise AgentError("מינימום ימי המילואים בשבוע גדול ממספר הימים שהחייל/ת מגיע/ה")
+        raise AgentError("מינימום הימים בשבוע גדול ממספר הימים שהחייל/ת מגיע/ה")
     fields["reserve_days_per_week"] = days
     fields["reserve_min_days"] = least
     consecutive = row.get("reserve_consecutive")
     if consecutive not in (None, "") and not isinstance(consecutive, bool):
         raise AgentError("reserve_consecutive חייב להיות ערך בוליאני")
     fields["reserve_consecutive"] = bool(consecutive)
+    if service_type != "reserve":
+        return fields
     call = text(row.get("reserve_call"))
     if call and call not in _RESERVE_CALLS:
         raise AgentError("סוג הזימון למילואים אינו תקין (צו או ימי מילואים)")

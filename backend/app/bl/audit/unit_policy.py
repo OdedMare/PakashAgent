@@ -26,7 +26,8 @@ Profile shape::
 `competence` and `service_type` are the roster's own fields (the solver's
 competence balance and reservist days read them too, `solver/competence.py`);
 this module only adds a cap on the weak and team-wide weekly limits beside
-each reservist's own `reserve_days_per_week`.
+the days a week a reservist, or a standard officer or NCO, comes
+(`reserve_days_per_week`).
 """
 
 import datetime
@@ -99,13 +100,30 @@ def is_reservist(person: Optional[dict]) -> bool:
     return text((person or {}).get("service_type")) == "reserve"
 
 
+# Standard-service ranks that come a set number of days a week, as a
+# reservist does: an officer or an NCO who is on base, say, five days.
+DAYS_A_WEEK_RANKS = ("officer", "nco")
+
+
+def comes_days_a_week(person: Optional[dict]) -> bool:
+    """A reservist, or a standard-service officer or NCO: the people whose
+    `reserve_days_per_week` / `reserve_min_days` / `reserve_consecutive`
+    shape their week. The field names say reserve because reservists had
+    them first; the arithmetic is the same for both."""
+    person = person or {}
+    if is_reservist(person):
+        return True
+    return text(person.get("service_type") or "standard") == "standard" \
+        and text(person.get("rank_group")) in DAYS_A_WEEK_RANKS
+
+
 def reserve_days(person: Optional[dict]) -> Optional[int]:
-    """The days a week this reservist comes (`reserve_days_per_week`, 1–7),
-    or None when nothing caps them. The solver's hard cap and the audit's
-    warning both read it here, so a week the solver would refuse is one the
-    audit reports when it got there another way (a pin, a hand placement,
-    a cover chosen in the chat)."""
-    if not is_reservist(person):
+    """The days a week this person comes (`reserve_days_per_week`, 1–7) —
+    a reservist, or a standard officer or NCO — or None when nothing caps
+    them. The solver's hard cap and the audit's warning both read it here,
+    so a week the solver would refuse is one the audit reports when it got
+    there another way (a pin, a hand placement, a cover chosen in the chat)."""
+    if not comes_days_a_week(person):
         return None
     try:
         days = int((person or {}).get("reserve_days_per_week") or 0)

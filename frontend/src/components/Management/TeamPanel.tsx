@@ -22,11 +22,9 @@ import type { Constraint, DayCycle, ShiftStats } from "@/types";
 
 import { ConfirmDeparture } from "./ConfirmDeparture";
 import { buildPalette, colorStyle } from "./palette";
-import { SHIFT_LEVEL_LABELS, soldierSummary } from "./SoldierFields";
+import { SHIFT_LEVEL_LABELS, STATUS_LABELS, soldierSummary, statusOf } from "./SoldierFields";
 import {
   SOURCE_LABELS,
-  SERVICE_TYPE_LABELS,
-  RANK_GROUP_LABELS,
   SHIFT_TYPE_LABELS,
   formatWindow,
   text,
@@ -205,8 +203,7 @@ export function TeamPanel({
                     {text(person?.role) || "ללא תפקיד מוגדר"}
                     {person ? ` · ${exitPatternLabel(person, dayCycles)}` : ""}
                     {text(person?.rotation_group) ? ` ${text(person?.rotation_group)}` : ""}
-                    {text(person?.service_type) ? ` · ${SERVICE_TYPE_LABELS[text(person?.service_type)] ?? text(person?.service_type)}` : ""}
-                    {text(person?.rank_group) ? ` · ${RANK_GROUP_LABELS[text(person?.rank_group)] ?? text(person?.rank_group)}` : ""}
+                    {text(person?.service_type) ? ` · ${STATUS_LABELS[statusOf(person?.service_type, person?.rank_group)] ?? text(person?.service_type)}` : ""}
                   </span>
                   {off ? <span className="roster-note roster-off-note">כבוי/ה — לא נלקח/ת בחשבון בשיבוץ</span> : null}
                   {text(person?.inactive_from) ? <span className="roster-note">מסיים/ת · {displayDate(text(person?.inactive_from))}</span> : null}

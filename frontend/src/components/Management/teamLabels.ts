@@ -39,19 +39,6 @@ export const SOURCE_LABELS: Record<string, string> = {
   complex: "מפקד המכלול",
 };
 
-export const SERVICE_TYPE_LABELS: Record<string, string> = {
-  standard: "סדיר",
-  overlap: "נחפף/ת",
-  reserve: "מילואים",
-  civilian: "אע״צ",
-  hatzach: "הצ״ח",
-};
-
-export const RANK_GROUP_LABELS: Record<string, string> = {
-  officer: "קצונה",
-  nco: "נגדים",
-};
-
 export const EXIT_PATTERN_LABELS: Record<string, string> = {
   none: "בלי יציאות",
   daily: "יומי",
