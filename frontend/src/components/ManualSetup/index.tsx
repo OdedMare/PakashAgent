@@ -330,13 +330,16 @@ export function ManualSetup({
   const timedShifts = shifts.filter(named).map((shift) => ({ name: text(shift.name), start_time: text(shift.start_time), end_time: text(shift.end_time) }));
   const preview = useRotationPreview(rotation, timedShifts);
   // Coloured by the server, from the dates typed here and the shifts worked.
+  // Asked by the saved name: until the save, a renamed soldier's worked
+  // shifts are still stored under it.
+  const historyName = (person: Row) => text(person[SAVED]) || text(person.name);
   const qualifications = useQualification(employees.map((person) => ({
-    name: text(person.name),
+    name: historyName(person),
     qualifications: (Array.isArray(person.qualifications) ? person.qualifications as Row[] : [])
       .map((row) => ({ role: text(row.role), last_active: text(row.last_active) })),
   })));
   const qualificationClass = (person: Row) => {
-    const standing = qualifications[text(person.name)];
+    const standing = qualifications[historyName(person)];
     return standing ? ` qualification-${standing.status}` : "";
   };
 
@@ -663,7 +666,7 @@ export function ManualSetup({
                   maxShifts={typeof person.max_weekly_shifts === "number" ? person.max_weekly_shifts : null}
                   onChange={(field, value) => edit(setEmployees, index, field, value)}
                 />
-                <PersonStandard person={person} standing={qualifications[text(person.name)]} onChange={(key, value) => edit(setEmployees, index, key, value)} />
+                <PersonStandard person={person} standing={qualifications[historyName(person)]} onChange={(key, value) => edit(setEmployees, index, key, value)} />
                 <Field label="הערות לחייל/ת"><textarea value={inputText(person.notes)} onChange={(e) => edit(setEmployees, index, "notes", e.target.value)} rows={2} placeholder={notesVisualOnly ? "מוצג בלוח בלבד, לא משפיע על השיבוץ" : "מידע קבוע שכדאי לקחת בחשבון בשיבוץ"} /></Field>
               </article>
               );
