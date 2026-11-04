@@ -3,6 +3,7 @@
 from app.dal.database import connect, require_schema
 from app.dal.repository.admin import AdminRepository
 from app.dal.repository.identities import IdentityRepository
+from app.dal.repository.identity_changes import IdentityChangeRepository
 from app.dal.repository.chat import ChatRepository
 from app.dal.repository.complexes import ComplexRepository
 from app.dal.repository.complex_duties import ComplexDutyRepository
@@ -23,7 +24,7 @@ class Repository(
     TeamRepository, ScheduleRepository, IdentityRepository,
     ChatRepository, AdminRepository, JobsRepository,
     CompiledSourcesRepository, ThrottleRepository, DeploymentRepository,
-    ComplexRepository, ComplexDutyRepository,
+    ComplexRepository, ComplexDutyRepository, IdentityChangeRepository,
 ):
     """One repository object composed of the per-concern mixins.
 

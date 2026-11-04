@@ -85,6 +85,11 @@ python -m benchmarks.solver_bench --save before.json   # solver quality and time
   more; a profile created here is `complete`, and an older partial one still
   reports its gaps through `profile_gaps`
   ([D22](../docs/DECISIONS.md#d22--the-interview-can-be-ended-early-and-the-profile-says-what-it-owes-️-amends-d18)).
+  A saved name changes only through an explicit rename on the save
+  (`renamed_employees`/`renamed_shifts`, `profile_service/identity.py`),
+  carried through every stored row in one transaction
+  (`dal/repository/identity_changes.py`); `removed_employees` deletes a
+  soldier added by mistake, never one on a published week.
 - `bl/scheduler/` — builds a span: the slot grid (arithmetic), the
   manager's sentences translated by `bl/directive_agent/`, then the solver.
 - `bl/solver/` — **the OR-Tools CP-SAT constraint solver that assigns every

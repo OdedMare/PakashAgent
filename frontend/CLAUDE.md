@@ -159,7 +159,17 @@ still has rows in it. Day cycles (11/3, 12/2, שבוע־שבוע…) are typed i
 starts on base, when each other group starts, and hours in three layers
 (cycle, group, dated change). Its four-week strip is a preview of the nominal
 days only; who is home on a date is answered by the server. The whole screen
-saves in one `updateProfile`. A save that
+saves in one `updateProfile`. A saved soldier's or shift's name can be
+corrected there: each row remembers the name it was loaded under (`_saved`,
+never sent), and an edited one goes out as `renamed_employees` /
+`renamed_shifts` (`{old: new}`), which the server carries through every
+stored row — the board, constraints, requests, swaps, identities — in the
+same transaction, logging a `renamed` entry. A renamed shift's references on
+the form (soldiers' shift picks, rotation rules) follow as it is typed, but
+only to a name no other shift has. The bin on a saved soldier is for one
+added by mistake: `removed_employees` deletes them with their draft rows
+(each logged as `removed`), and is refused for anyone on a published week,
+where "הוצאה מהסגל" is the tool. A save that
 adds a soldier or a shift refits every draft ahead of today, keeping its
 rows (D37); anything else applies to the next build. A shift can list
 `allowed_roles` there — empty restricts nobody; otherwise only people holding

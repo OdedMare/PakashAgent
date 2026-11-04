@@ -69,4 +69,5 @@ const ACTION_LABELS: Record<string, string> = {
   constraint: "אילוץ",
   complex_duty: "תורנות מכלול",
   complex_duty_cancelled: "תורנות מכלול בוטלה",
+  renamed: "שינוי שם",
 };

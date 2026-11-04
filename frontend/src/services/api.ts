@@ -452,6 +452,11 @@ export function updateProfile(body: {
   /** The `profile_revision` the form was loaded at: a save over somebody
    *  else's newer one is refused (409) instead of silently undoing it. */
   expected_revision?: number | null;
+  /** Saved names corrected (`{old: new}`) and soldiers deleted from setup;
+   *  the server carries both through every stored row in the same save. */
+  renamed_employees?: Record<string, string>;
+  renamed_shifts?: Record<string, string>;
+  removed_employees?: string[];
 }): Promise<import("@/types").WorkplaceProfile & { absorbed?: ProfileAbsorption | null }> {
   return request("/api/profile", {
     method: "PUT",

@@ -6,6 +6,7 @@ import logging
 from fastapi import APIRouter, Depends, File, UploadFile
 
 from app.api.contracts import ProfileUpdate, QualificationPreviewRequest, RotationPreviewRequest
+from app.bl.profile_service.identity import IdentityChanges
 from app.bl.profile_service.workplace import workplace as checked_workplace
 from app.bl.rotation import weekend_preview
 from app.bl.importer.unit import preview_unit
@@ -42,6 +43,13 @@ def build_router(service, guards, schedules=None) -> APIRouter:
         saved = service.update(team_id, **request.model_dump(exclude_unset=True))
         if schedules is None:
             return saved
+        # A renamed soldier or shift is not a newcomer: compare against the
+        # profile as it reads after the renames, so a typo fixed in setup
+        # does not refit every draft.
+        before = IdentityChanges.read(
+            before, request.renamed_employees, request.renamed_shifts,
+            request.removed_employees,
+        ).apply(before)
         return dict(saved, absorbed=_absorb(team_id, before, saved))
 
     def _absorb(team_id: str, before, saved):

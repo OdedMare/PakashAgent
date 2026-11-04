@@ -29,6 +29,12 @@ class ProfileUpdate(BaseModel):
     # somebody else has saved over since is refused (409) instead of undoing
     # their edit; omitted, the save is not checked against the form.
     expected_revision: Optional[int] = None
+    # A saved name corrected (`{old: new}`), or a soldier added by mistake
+    # deleted. Carried through every stored row in the same transaction as
+    # the save (`profile_service/identity.py`).
+    renamed_employees: Optional[Dict[str, str]] = None
+    renamed_shifts: Optional[Dict[str, str]] = None
+    removed_employees: Optional[List[str]] = None
 
 
 class RotationPreviewRequest(BaseModel):

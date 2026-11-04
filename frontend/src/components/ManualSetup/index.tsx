@@ -64,6 +64,14 @@ const EXIT_PATTERNS = {
 
 type Row = Record<string, unknown>;
 
+// A saved soldier or shift keeps the name it was loaded under in `SAVED`, so
+// an edited name is sent as an explicit rename (`renamed_employees` /
+// `renamed_shifts`) rather than read as one row gone and a new one added.
+// A shift also keeps `REF`, the name the roster's shift picks and the
+// rotation rules currently use for it; neither key is ever saved.
+const SAVED = "_saved";
+const REF = "_ref";
+
 /** Full first-time or follow-up setup. Saving calls no model. */
 export function ManualSetup({
   workspace,
@@ -123,9 +131,16 @@ export function ManualSetup({
       time_changes: [...(cycle.time_changes ?? [])],
     })),
   );
-  const [employees, setEmployees] = useState<Row[]>(rows(profile.employees));
+  const [employees, setEmployees] = useState<Row[]>(() =>
+    rows(profile.employees).map((person) => ({ ...person, [SAVED]: text(person.name) })),
+  );
   const [shifts, setShifts] = useState<Row[]>(() =>
-    rows(profile.shifts).map((shift) => ({ ...shift, weekend_headcount: weekendHeadcount(shift) })),
+    rows(profile.shifts).map((shift) => ({
+      ...shift,
+      weekend_headcount: weekendHeadcount(shift),
+      [SAVED]: text(shift.name),
+      [REF]: text(shift.name),
+    })),
   );
   const [enabledExitPatterns, setEnabledExitPatterns] = useState<string[]>(() => {
     const configured = strings(initialWorkplace.enabled_exit_patterns);
@@ -181,16 +196,19 @@ export function ManualSetup({
     ]).filter(Boolean))].sort(),
     [employees],
   );
-  const originalEmployees = useMemo(
-    () => new Set(rows(profile.employees).map((row) => text(row.name))),
-    [profile.employees],
-  );
+  // What this save renames and deletes, worked out from the rows' saved names.
+  const renamedEmployees = renames(employees);
+  const renamedShifts = renames(shifts);
+  const removedEmployees = useMemo(() => {
+    const kept = new Set(employees.map((person) => text(person[SAVED])));
+    return rows(profile.employees).map((row) => text(row.name)).filter((name) => name && !kept.has(name));
+  }, [employees, profile.employees]);
   const toggleReserve = async (on: boolean) => {
     if (on) return setReserveOn(true);
     if (reserveChecking) return;
     const reservists = employees
-      .filter((person) => person.service_type === "reserve" && !person.inactive_from && originalEmployees.has(text(person.name)))
-      .map((person) => text(person.name));
+      .filter((person) => person.service_type === "reserve" && !person.inactive_from && text(person[SAVED]))
+      .map((person) => text(person[SAVED]));
     if (!reservists.length) return setReserveOn(false);
     setReserveChecking(true);
     setError("");
@@ -205,10 +223,6 @@ export function ManualSetup({
       setReserveChecking(false);
     }
   };
-  const originalShifts = useMemo(
-    () => new Set(rows(profile.shifts).map((row) => text(row.name))),
-    [profile.shifts],
-  );
   const usedExitPatterns = useMemo(
     () => new Set(employees.filter(named).map((person) => exitPattern(person, rotationMode)).filter((pattern) => !isDayCycle(pattern))),
     [employees, rotationMode],
@@ -328,6 +342,32 @@ export function ManualSetup({
 
   useGuideSurface("setup");
 
+  /** A shift's name typed anew. What names the shift elsewhere on the form
+   *  follows, but only to a name no other shift has: two shifts briefly
+   *  sharing one would make their references indistinguishable. */
+  const renameShift = (index: number, value: string) => {
+    const from = text(shifts[index]?.[REF]);
+    const to = value.trim();
+    const free = Boolean(to) && !shifts.some((shift, row) => row !== index && text(shift.name) === to);
+    setShifts((current) => current.map((shift, row) => row === index
+      ? { ...shift, name: value, ...(free ? { [REF]: to } : {}) }
+      : shift));
+    if (!free || !from || from === to) return;
+    const swap = (names: unknown) => strings(names).map((name) => name === from ? to : name);
+    setEmployees((current) => current.map((person) => ({ ...person, eligible_shifts: swap(person.eligible_shifts) })));
+    setRotationPresence((current) => current.map((rule) => ({ ...rule, shifts: swap(rule.shifts) })));
+    setRotationAUnavailability((current) => current.map((rule) => ({ ...rule, shifts: swap(rule.shifts) })));
+  };
+
+  const removeEmployee = (index: number) => {
+    const saved = text(employees[index]?.[SAVED]);
+    if (saved && !window.confirm(
+      `למחוק את ${saved}? המחיקה מיועדת לחייל/ת שנוסף/ה בטעות: השיבוצים שלו/ה בטיוטות, האילוצים והבקשות יימחקו בשמירה. `
+      + "מי שמשובץ/ת בסידור מפורסם לא יימחק/ה — במקרה כזה אפשר לתקן את השם, או להוציא מהסגל במסך הצוות.",
+    )) return;
+    setEmployees((current) => current.filter((_, row) => row !== index));
+  };
+
   const save = async () => {
     if (!ready || busy) return;
     setBusy(true);
@@ -356,7 +396,7 @@ export function ManualSetup({
             reason: text(rule.reason),
           })),
         },
-        employees: employees.filter(named).map((person) => ({
+        employees: employees.filter(named).map(({ [SAVED]: _saved, ...person }) => ({
           ...person,
           name: text(person.name),
           role: text(person.role),
@@ -384,7 +424,7 @@ export function ManualSetup({
         // the profile save refuses to drop, so it leaves through
         // `deleteShiftType` below.
         shifts: [...shifts, ...rows(profile.shifts).filter((row) => removedShifts.includes(text(row.name)))]
-          .filter(named).map(({ weekend_headcount: weekend, ...shift }) => ({
+          .filter(named).map(({ weekend_headcount: weekend, [SAVED]: _saved, [REF]: _ref, ...shift }) => ({
           ...shift,
           name: text(shift.name),
           purpose: text(shift.purpose),
@@ -413,6 +453,9 @@ export function ManualSetup({
         },
         unit_policy: unitPolicy,
         summary: "יחידה צבאית עם מבנה יציאות אישי לכל חייל/ת",
+        renamed_employees: renamedEmployees,
+        renamed_shifts: renamedShifts,
+        removed_employees: removedEmployees,
         expected_revision: workspace.profile_revision,
       });
       for (const name of removedShifts) {
@@ -580,7 +623,7 @@ export function ManualSetup({
                   </button>
                 ) : null}
                 <div className="manual-grid employee-grid">
-                  <Field label="שם *"><input value={inputText(person.name)} readOnly={originalEmployees.has(text(person.name))} onChange={(e) => edit(setEmployees, index, "name", e.target.value)} /></Field>
+                  <Field label="שם *"><input value={inputText(person.name)} onChange={(e) => edit(setEmployees, index, "name", e.target.value)} /><RenameNote saved={text(person[SAVED])} name={text(person.name)} /></Field>
                   <Field label="תפקיד"><input value={inputText(person.role)} onChange={(e) => edit(setEmployees, index, "role", e.target.value)} /></Field>
                   <Field label="מבנה יציאות">
                     <select value={exitPattern(person, rotationMode)} onChange={(e) => {
@@ -606,7 +649,7 @@ export function ManualSetup({
                   <label className="manual-check"><input type="checkbox" checked={Boolean(person.is_shift_manager)} onChange={(e) => edit(setEmployees, index, "is_shift_manager", e.target.checked)} /><span>מוסמך/ת כמפקד/ת משמרת</span></label>
                   <label className="manual-check"><input type="checkbox" checked={Boolean(person.can_train)} onChange={(e) => edit(setEmployees, index, "can_train", e.target.checked)} /><span>מוסמך/ת לחפוף</span></label>
                   {shiftNames.length ? <MultiSelect className="manual-shift-picks" label="משמרות מותרות" values={shiftNames} selected={strings(person.eligible_shifts)} onChange={(value) => edit(setEmployees, index, "eligible_shifts", value)} placeholder="לא נבחרו משמרות" /> : null}
-                  <button type="button" className="icon-button subtle" aria-label="מחיקת איש צוות" disabled={originalEmployees.has(text(person.name))} onClick={() => setEmployees((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
+                  <button type="button" className="icon-button subtle" aria-label={`מחיקת ${text(person.name) || "איש צוות"}`} title="מחיקה — לחייל/ת שנוסף/ה בטעות" onClick={() => removeEmployee(index)}><Trash2 size={15} /></button>
                 </div>
                 <ExitPatternFields pattern={exitPattern(person, rotationMode)} person={person} onChange={(field, value) => edit(setEmployees, index, field, value)} />
                 <SoldierFields
@@ -662,7 +705,7 @@ export function ManualSetup({
                   </button>
                 ) : null}
                 <div className="manual-grid shift-grid">
-                  <Field label="שם המשמרת *"><input value={inputText(shift.name)} readOnly={originalShifts.has(text(shift.name))} onChange={(e) => edit(setShifts, index, "name", e.target.value)} /></Field>
+                  <Field label="שם המשמרת *"><input value={inputText(shift.name)} onChange={(e) => renameShift(index, e.target.value)} /><RenameNote saved={text(shift[SAVED])} name={text(shift.name)} /></Field>
                   <Field label="סוג"><select value={text(shift.shift_type) || (shift.is_on_call ? "on_call" : "regular")} onChange={(e) => edit(setShifts, index, "shift_type", e.target.value)}>{Object.entries(SHIFT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
                   <Field label="התחלה"><TimeInput value={text(shift.start_time)} onChange={(time) => edit(setShifts, index, "start_time", time)} /></Field>
                   <Field label="סיום"><TimeInput value={text(shift.end_time)} onChange={(time) => edit(setShifts, index, "end_time", time)} /></Field>
@@ -683,9 +726,9 @@ export function ManualSetup({
                   const seats = strings(rows(staffing).find((group) => strings(group.days).length === 0)?.required_roles).length;
                   if (seats > number(shift.headcount, headcount(shift))) edit(setShifts, index, "headcount", seats);
                 }} />
-                <button type="button" className="icon-button subtle manual-delete" aria-label="מחיקת סוג משמרת" title={originalShifts.has(text(shift.name)) ? "סידורים קיימים נשארים כפי שהם; הבנייה הבאה לא תכלול את המשמרת" : undefined} onClick={() => {
-                  const name = text(shift.name);
-                  if (originalShifts.has(name)) {
+                <button type="button" className="icon-button subtle manual-delete" aria-label="מחיקת סוג משמרת" title={text(shift[SAVED]) ? "סידורים קיימים נשארים כפי שהם; הבנייה הבאה לא תכלול את המשמרת" : undefined} onClick={() => {
+                  const name = text(shift[SAVED]);
+                  if (name) {
                     if (!window.confirm(`למחוק את סוג המשמרת ${name}? סידורים שכבר נבנו נשארים כפי שהם, והמחיקה תיכנס לתוקף בשמירה.`)) return;
                     setRemovedShifts((current) => [...current, name]);
                   }
@@ -794,6 +837,12 @@ type SetupSectionProps = {
  *  state and are saved with the rest. Whether it is folded is held by the
  *  screen (`useCollapsed`), so one header button can fold them all. The
  *  whole header toggles; the button is what the keyboard reaches. */
+/** Under a saved name that was edited: what the save will do with it. */
+function RenameNote({ saved, name }: { saved: string; name: string }) {
+  if (!saved || !name || saved === name) return null;
+  return <small className="manual-rename-note" role="status">שם קודם: {saved} · בשמירה השם יתעדכן גם בסידורים, באילוצים ובבקשות</small>;
+}
+
 function SetupSection({ tour, icon, title, hint, summary, open, onToggle, children }: SetupSectionProps) {
   return (
     <section className={`manual-section${open ? "" : " is-closed"}`}>
@@ -817,6 +866,17 @@ function RoleOptions({ roles, selected, onChange }: { roles: string[]; selected:
     return <fieldset className="manual-checkboxes"><legend>תפקידים מוסמכים</legend><small>הגדירו תפקיד לאנשי הצוות כדי להגביל את המשמרת לתפקידים מסוימים.</small></fieldset>;
   }
   return <fieldset className="manual-checkboxes"><legend>תפקידים מוסמכים</legend>{values.map((value) => <label key={value}><input type="checkbox" checked={selected.includes(value)} onChange={(event) => onChange(event.target.checked ? [...selected, value] : selected.filter((item) => item !== value))} /><span>{value}</span></label>)}<small>{selected.length ? "רק בעלי התפקידים שסומנו ישובצו במשמרת הזו." : "לא סומן תפקיד — כל אנשי הצוות מוסמכים."}</small></fieldset>;
+}
+
+/** `{saved name: new name}` for every saved row whose name was edited. */
+function renames(list: Row[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const row of list) {
+    const saved = text(row[SAVED]);
+    const name = text(row.name);
+    if (saved && name && saved !== name) result[saved] = name;
+  }
+  return result;
 }
 
 function edit(setter: React.Dispatch<React.SetStateAction<Row[]>>, index: number, key: string, value: unknown) {

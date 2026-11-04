@@ -8,6 +8,7 @@ from app.bl.profile_service import roster
 from app.bl.profile_service import shifts as shift_rules
 from app.bl.profile_service import unit as unit_rules
 from app.bl.profile_service import workplace as workplace_rules
+from app.bl.profile_service.identity import IdentityChanges
 from app.bl.profile_service.retire import retire_shift
 from app.bl.profile_service.validation import keep_existing_names, text, text_list
 from app.common.errors import (
@@ -37,6 +38,9 @@ class ProfileService:
         rules: Optional[List[dict]] = None,
         dependencies: Optional[List[str]] = None,
         expected_revision: Optional[int] = None,
+        renamed_employees: Optional[Dict[str, str]] = None,
+        renamed_shifts: Optional[Dict[str, str]] = None,
+        removed_employees: Optional[List[str]] = None,
         **sections: Any
     ) -> dict:
         """Merge a patch into the saved profile.
@@ -44,6 +48,11 @@ class ProfileService:
         `expected_revision` is the revision the manager's form was loaded
         at; a save from a form somebody else has saved over since is refused
         rather than quietly undoing their edit.
+
+        `renamed_employees`/`renamed_shifts` (`{old: new}`) and
+        `removed_employees` are the one way a saved name changes or goes
+        (`identity.py`): applied to the saved profile before the patch is
+        merged, and to every stored row in the same transaction.
         """
         revision = self._repository.team_profile_revision(team_id)
         if expected_revision is not None and revision is not None \
@@ -52,24 +61,38 @@ class ProfileService:
         current = self._repository.team_profile(team_id)
         creating = current is None
         current = current or {}
-        updated = _prepare_profile(current, employees, shifts, workplace, rules,
-                                   dependencies, sections)
-        if not creating:
-            # The revision read above, not the client's: the merge was made
-            # from the profile read after it, and nothing may land between.
-            saved = self._repository.update_team_profile(
-                team_id, updated, expected_revision=revision,
-            )
-        else:
-            roster.validate_first_profile(updated)
-            updated["completeness"] = {
-                "complete": True, "missing_topics": [], "open_points": [],
-            }
-            saved = self._repository.create_team_profile(team_id, updated)
+        changes = IdentityChanges.read(current, renamed_employees, renamed_shifts,
+                                       removed_employees)
+        current = changes.apply(current)
+        # Applied to the merge too: a patch written before the rename still
+        # names the old soldier or shift in its references (trainers, a
+        # soldier's shifts), and no row may be left pointing at a name gone.
+        updated = changes.apply(_prepare_profile(
+            current, employees, shifts, workplace, rules, dependencies, sections,
+        ))
+        saved = self._save(team_id, updated, revision, creating, changes)
         # Still no model call here: the rules, policies and notes just saved
         # are translated for the code scheduler by the worker (D32).
         compiled_sources.queue(self._repository, team_id)
         return saved
+
+    def _save(self, team_id, updated, revision, creating, changes) -> dict:
+        if creating:
+            roster.validate_first_profile(updated)
+            updated["completeness"] = {
+                "complete": True, "missing_topics": [], "open_points": [],
+            }
+            return self._repository.create_team_profile(team_id, updated)
+        # The revision read above, not the client's: the merge was made
+        # from the profile read after it, and nothing may land between.
+        if changes:
+            return self._repository.update_team_profile_with_identity_changes(
+                team_id, updated, revision,
+                changes.employees, changes.shifts, changes.removed,
+            )
+        return self._repository.update_team_profile(
+            team_id, updated, expected_revision=revision,
+        )
 
     def revision(self, team_id: str) -> Optional[int]:
         """What a save names to refuse a stale edit. A read."""
