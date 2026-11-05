@@ -7,7 +7,12 @@ import { useEffect, useId, useRef, useState } from "react";
  * closed field reads back what is chosen; the open list keeps its own height
  * and scrolls, so a unit with many shifts no longer pushes the form down with
  * a wall of checkboxes. Clicking an option toggles it and leaves the list
- * open; Escape or a click outside closes it. */
+ * open; Escape or a click outside closes it.
+ *
+ * The closed field says *how much* is chosen — the one name, "הכל", or
+ * "N נבחרו" — never every name joined: a soldier on many shifts made that
+ * line longer than the field. The full choice is on the hover and in the
+ * list, which opens on "בחירת הכל" and "ניקוי". */
 export function MultiSelect({
   label,
   values,
@@ -89,6 +94,12 @@ export function MultiSelect({
   };
 
   const chosen = values.filter((value) => selected.includes(value));
+  const all = values.length > 1 && chosen.length === values.length;
+  const summary = !chosen.length ? placeholder
+    : chosen.length === 1 ? chosen[0]
+    : all ? `הכל (${chosen.length})`
+    : `${chosen.length} נבחרו`;
+  const bulk = (next: string[]) => { onChange(next); trigger.current?.focus(); };
 
   return (
     <div className={`multi-select ${className}`.trim()} ref={root}>
@@ -105,11 +116,11 @@ export function MultiSelect({
         aria-activedescendant={open ? `${id}-option-${active}` : undefined}
         onClick={() => (open ? setOpen(false) : show())}
         onKeyDown={keys}
+        title={chosen.length > 1 ? chosen.join(", ") : undefined}
       >
         <span className={chosen.length ? "multi-select-value" : "multi-select-value is-empty"}>
-          {chosen.length ? chosen.join(", ") : placeholder}
+          {summary}
         </span>
-        {chosen.length ? <span className="multi-select-count">{chosen.length}</span> : null}
         <ChevronDown size={15} aria-hidden="true" />
       </button>
       {open ? (
@@ -121,6 +132,16 @@ export function MultiSelect({
           aria-multiselectable="true"
           aria-labelledby={`${id}-label`}
         >
+          {values.length > 1 ? (
+            <div className="multi-select-bulk" role="presentation">
+              <button type="button" disabled={all} onPointerDown={(event) => event.preventDefault()} onClick={() => bulk([...values])}>
+                בחירת הכל
+              </button>
+              <button type="button" disabled={!chosen.length} onPointerDown={(event) => event.preventDefault()} onClick={() => bulk([])}>
+                ניקוי
+              </button>
+            </div>
+          ) : null}
           {values.length ? values.map((value, index) => {
             const on = selected.includes(value);
             return (
@@ -144,8 +165,8 @@ export function MultiSelect({
               </div>
             );
           }) : <div className="multi-select-none">אין אפשרויות</div>}
-          {chosen.length ? (
-            <button type="button" className="multi-select-clear" onPointerDown={(event) => event.preventDefault()} onClick={() => { onChange([]); trigger.current?.focus(); }}>
+          {values.length === 1 && chosen.length ? (
+            <button type="button" className="multi-select-clear" onPointerDown={(event) => event.preventDefault()} onClick={() => bulk([])}>
               ניקוי הבחירה
             </button>
           ) : null}

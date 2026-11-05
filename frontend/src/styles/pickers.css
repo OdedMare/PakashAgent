@@ -179,18 +179,6 @@
   color: var(--text-muted);
 }
 
-.multi-select-count {
-  flex: none;
-  min-width: 1.4rem;
-  padding: 0.05rem 0.4rem;
-  font-size: 0.72rem;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-  color: var(--primary);
-  background: var(--primary-soft);
-  border-radius: 999px;
-}
 
 .multi-select-list {
   position: absolute;
@@ -254,6 +242,45 @@
   padding: 0.6rem;
   font-size: 0.8rem;
   color: var(--text-muted);
+}
+
+/* "בחירת הכל" and "ניקוי", pinned above the options while the list scrolls. */
+.multi-select-bulk {
+  position: sticky;
+  z-index: 1;
+  top: -0.3rem;
+  display: flex;
+  flex: none;
+  gap: 0.3rem;
+  margin: -0.3rem -0.3rem 0.15rem;
+  padding: 0.3rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.multi-select-bulk button {
+  flex: 1;
+  min-height: 36px;
+  padding: 0 0.6rem;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.multi-select-bulk button:disabled {
+  color: var(--text-muted);
+  background: var(--surface-2);
+  cursor: default;
+}
+
+.multi-select-bulk button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
 }
 
 .multi-select-clear {
