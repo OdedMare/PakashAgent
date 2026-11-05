@@ -125,6 +125,8 @@
 .multi-select {
   position: relative;
   display: grid;
+  /* The field never grows past its column: a long choice ellipsises. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.3rem;
   min-width: 0;
 }

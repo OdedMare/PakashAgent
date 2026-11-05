@@ -32,14 +32,13 @@ import { CompiledSources } from "./CompiledSources";
 import { DayCycleSetup } from "./DayCycleSetup";
 import { ExitKinds } from "./ExitKinds";
 import { CheckboxGrid, Field } from "./fields";
-import { CYCLES, CycleSetup, firstGroupAnchor } from "./RotationSetup";
+import { CYCLES, firstGroupAnchor } from "./RotationSetup";
 import { RosterView } from "./RosterView";
 import type { RosterPerson } from "./rosterGroups";
 import type { Cycle } from "./RotationSetup";
 import { PersonStandard, ShiftRoles } from "./UnitStandard";
 import { useCollapsed } from "./useCollapsed";
 import { useQualification } from "./useQualification";
-import { useRotationPreview } from "./useRotationPreview";
 import { ImportUnit } from "./ImportUnit";
 import { reserveFutureWarning } from "./reserveWarning";
 
@@ -99,7 +98,7 @@ export function ManualSetup({
   );
   // Each cycle is anchored on the weekend its group א closes; an anchor that
   // was stored for another group is read as א's next turn in the same cycle.
-  const [anchors, setAnchors] = useState<Record<Cycle, string>>(() => {
+  const [anchors] = useState<Record<Cycle, string>>(() => {
     const stored = (pattern: Cycle) => firstGroupAnchor(
       pattern,
       text(initialWorkplace[`${pattern}_first_closure_date`])
@@ -223,21 +222,10 @@ export function ManualSetup({
       setReserveChecking(false);
     }
   };
-  const usedExitPatterns = useMemo(
+  const usedExitPatterns = useMemo<Set<string>>(
     () => new Set(employees.filter(named).map((person) => exitPattern(person, rotationMode)).filter((pattern) => !isDayCycle(pattern))),
     [employees, rotationMode],
   );
-  // People per kind, for the cards that ask how the unit goes home.
-  const exitCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const person of employees.filter(named)) {
-      const pattern = exitPattern(person, rotationMode);
-      const key = isDayCycle(pattern) ? "days" : pattern;
-      counts[key] = (counts[key] ?? 0) + 1;
-      if (person.service_type === "reserve") counts.reserve = (counts.reserve ?? 0) + 1;
-    }
-    return counts;
-  }, [employees, rotationMode]);
   const usedDayCycles = useMemo(
     () => new Set(employees.map((person) => exitPattern(person, rotationMode)).filter(isDayCycle).map((pattern) => pattern.slice("cycle:".length))),
     [employees, rotationMode],
@@ -298,17 +286,43 @@ export function ManualSetup({
   // A new soldier starts on the first kind the unit chose, or on none.
   const defaultPattern = Object.keys(EXIT_PATTERNS).find((pattern) => availableExitPatterns.has(pattern))
     ?? (dayCycles[0] ? cyclePattern(dayCycles[0]) : "none");
-  // A lettered group cannot be scheduled without its cycle's anchor. The one
-  // exception is a round unit on fixed א/ב presence, which has no phase.
-  const needsAnchor = (pattern: Cycle) =>
-    employees.some((person) => named(person) && exitPattern(person, rotationMode) === pattern)
-    && !(pattern === "round" && rotationAUnavailability.length > 0
-      && !closureWindows.some((row) => row.pattern === "round"));
-  // The weekend a shift's weekend headcount applies to is the round's
-  // closure — the days one group is home — so it follows the days on base
-  // chosen above rather than a fixed Friday and Saturday.
-  const closure: ClosureBounds = closureWindows.find((row) => row.pattern === "round" && row.group === "א" && !row.starts_on && !row.ends_on)
-    ?? { start_day: -2, start_time: "00:00", end_day: 1, end_time: handoverEnd || "00:00" };
+  // The weekend groups run one cycle: the count of groups chosen on screen,
+  // else the first one enabled (a soldier still on another stays on it).
+  const enabledCycles = (Object.keys(CYCLES) as Cycle[]).filter((pattern) => availableExitPatterns.has(pattern));
+  const [chosenCycle, setChosenCycle] = useState<Cycle | undefined>(undefined);
+  const weekendCycle = chosenCycle && enabledCycles.includes(chosenCycle) ? chosenCycle : enabledCycles[0];
+  const isRegular = (pattern: string) => (row: RotationClosureWindow) => row.pattern === pattern && row.group === "א" && !row.starts_on && !row.ends_on;
+  // The closure stated once: group א's undated window row, which the server
+  // applies to every group in turn. No row is its default, Thursday to the
+  // Sunday handover.
+  const defaultClosure: ClosureBounds = { start_day: -2, start_time: "00:00", end_day: 1, end_time: handoverEnd || "00:00" };
+  const closureOf = (pattern: string | undefined): ClosureBounds => {
+    const row = pattern ? closureWindows.findLast(isRegular(pattern)) : undefined;
+    return row ? { start_day: row.start_day, start_time: row.start_time, end_day: row.end_day, end_time: row.end_time } : defaultClosure;
+  };
+  const setClosure = (patch: Partial<ClosureBounds>) => {
+    if (!weekendCycle) return;
+    const next = { ...closureOf(weekendCycle), ...patch };
+    setClosureWindows((current) => [...current.filter((row) => !isRegular(weekendCycle)(row)), { pattern: weekendCycle, group: "א", starts_on: "", ends_on: "", ...next } as RotationClosureWindow]);
+  };
+  const chooseCycle = (next: Cycle) => {
+    const hours = closureOf(weekendCycle);
+    setChosenCycle(next);
+    setEnabledExitPatterns((current) => [...current.filter((pattern) => !Object.keys(CYCLES).includes(pattern) || usedExitPatterns.has(pattern)), next]);
+    // The closure hours follow the count; a cycle somebody is still on keeps its own.
+    setClosureWindows((current) => [
+      ...current.filter((row) => !isRegular(next)(row) && !(weekendCycle && !usedExitPatterns.has(weekendCycle) && isRegular(weekendCycle)(row))),
+      { pattern: next, group: "א", starts_on: "", ends_on: "", ...hours } as RotationClosureWindow,
+    ]);
+  };
+  // The weekend a shift's weekend headcount applies to is the groups'
+  // closure — the days one group is home — so it follows the hours above
+  // rather than a fixed Friday and Saturday.
+  const closure: ClosureBounds = closureOf(weekendCycle ?? "round");
+  // No date is asked any more: a cycle with no stored anchor starts with
+  // group א closing the coming weekend.
+  const [defaultAnchor] = useState(() => comingSaturday());
+  const anchorOf = (pattern: Cycle) => anchors[pattern] || (availableExitPatterns.has(pattern) ? defaultAnchor : "");
   const ready = Boolean(unitName.trim() && employees.some(named) && shifts.some(named));
   // Every anchor is saved as group א's weekend; the server derives the other
   // groups' turns from it. The old pair stays readable by older deployments
@@ -316,19 +330,17 @@ export function ManualSetup({
   const rotation = {
     rotation_mode: rotationMode,
     first_closure_group: "א",
-    first_closure_date: anchors[rotationMode],
+    first_closure_date: anchorOf(rotationMode),
     round_first_closure_group: "א",
-    round_first_closure_date: anchors.round,
+    round_first_closure_date: anchorOf("round"),
     triplet_first_closure_group: "א",
-    triplet_first_closure_date: anchors.triplet,
+    triplet_first_closure_date: anchorOf("triplet"),
     quad_first_closure_group: "א",
-    quad_first_closure_date: anchors.quad,
+    quad_first_closure_date: anchorOf("quad"),
     quint_first_closure_group: "א",
-    quint_first_closure_date: anchors.quint,
+    quint_first_closure_date: anchorOf("quint"),
     rotation_closure_windows: closureWindows,
   };
-  const timedShifts = shifts.filter(named).map((shift) => ({ name: text(shift.name), start_time: text(shift.start_time), end_time: text(shift.end_time) }));
-  const preview = useRotationPreview(rotation, timedShifts);
   // Coloured by the server, from the dates typed here and the shifts worked.
   // Asked by the saved name: until the save, a renamed soldier's worked
   // shifts are still stored under it.
@@ -526,35 +538,18 @@ export function ManualSetup({
           <ExitKinds
             enabled={availableExitPatterns}
             used={usedExitPatterns}
-            counts={exitCounts}
             dayCyclesOn={dayCyclesOn || dayCycles.length > 0}
+            dayCyclesUsed={usedDayCycles.size > 0}
             reserveOn={reserveOn}
             reserveBusy={reserveChecking}
+            cycle={weekendCycle}
+            window={closureOf(weekendCycle)}
             onEnabled={(next) => setEnabledExitPatterns([...next])}
             onDayCycles={setDayCyclesOn}
             onReserve={(on) => void toggleReserve(on)}
+            onCycle={chooseCycle}
+            onWindow={setClosure}
           />
-
-          {preview.error ? <p className="rotation-derived-note is-warning" role="status">{preview.error}</p> : null}
-          <div className="rotation-cycles" aria-label="מחזורי הסגירה">
-            {(Object.keys(CYCLES) as Cycle[]).filter((pattern) => availableExitPatterns.has(pattern)).map((pattern) => (
-              <CycleSetup
-                key={pattern}
-                pattern={pattern}
-                anchor={anchors[pattern]}
-                onAnchor={(iso) => setAnchors((current) => ({ ...current, [pattern]: iso }))}
-                needsAnchor={needsAnchor(pattern)}
-                windows={closureWindows}
-                onWindows={setClosureWindows}
-                presence={rotationPresence}
-                onPresence={setRotationPresence}
-                shiftNames={shiftNames}
-                handoverEnd={handoverEnd}
-                preview={preview.cycles[pattern]}
-                previewLoading={preview.loading}
-              />
-            ))}
-          </div>
 
           {dayCyclesOn || dayCycles.length > 0 ? <DayCycleSetup cycles={dayCycles} onChange={setDayCycles} used={usedDayCycles} /> : null}
           {reserveOn ? <p className="rotation-derived-note">מילואים: בכוח אדם בוחרים מעמד ״מילואים״ לכל מילואימניק/ית, ומגדירים כמה ימים בשבוע, מינימום והאם ברצף. את הימים עצמם בוחר הסידור.</p> : null}
@@ -972,4 +967,12 @@ function headcount(shift: Row): number {
   const staffing = rows(shift.staffing);
   const base = staffing.find((group) => strings(group.days).length === 0);
   return number(base?.headcount, 1);
+}
+
+/** The Saturday ending this week (today, when today is Saturday). */
+function comingSaturday(): string {
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  today.setUTCDate(today.getUTCDate() + (6 - today.getUTCDay()));
+  return today.toISOString().slice(0, 10);
 }

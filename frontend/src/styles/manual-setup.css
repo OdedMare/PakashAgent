@@ -119,7 +119,6 @@
 .rotation-pair span, .rotation-rule-head span { color: var(--text-muted); font-size: 0.76rem; line-height: 1.5; }
 .rotation-cycles { display: grid; gap: 0.65rem; }
 .rotation-cycle-card { display: grid; gap: 0.75rem; min-width: 0; padding: 0.85rem; background: var(--surface); border: 1px solid var(--border-strong); border-inline-start: 3px solid var(--primary); border-radius: var(--radius-sm); }
-.rotation-cycle-card.is-triplet { border-inline-start-color: var(--accent); }
 .rotation-cycle-card > header, .rotation-block > header { display: flex; flex-direction: column; gap: 0.15rem; }
 .rotation-cycle-card.is-day-cycle { border-inline-start-color: var(--success); }
 /* Day cycles: preset chips and a four-week strip per group. */
@@ -145,7 +144,6 @@
 .rotation-rule { gap: 0.9rem; }
 .rotation-rule-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .rotation-rule-head > div { display: grid; gap: 0.15rem; }
-.rotation-empty, .rotation-derived-note { margin: 0; padding: 0.75rem 0.85rem; color: var(--text-muted); background: var(--surface-2); border-inline-start: 3px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 0.78rem; line-height: 1.55; }
 .rotation-derived-note { border-inline-start-color: var(--primary); }
 .rotation-derived-note.is-warning { color: var(--warning); background: var(--warning-soft); border-inline-start-color: var(--warning); }
 .manual-error { width: min(76rem, calc(100% - 2rem)); margin: 1rem auto 0; padding: 0.75rem 1rem; color: var(--danger); background: var(--danger-soft); border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border)); border-radius: var(--radius-sm); }
@@ -154,41 +152,12 @@
 
 /* The cycle card asks three numbered questions, then shows the server's
    answer for the coming weekends. */
-.rotation-step { display: grid; gap: 0.65rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
-.rotation-step > header { display: flex; align-items: flex-start; gap: 0.6rem; }
-.rotation-step > header > b { display: grid; place-items: center; flex: none; width: 1.6rem; height: 1.6rem; color: var(--primary); background: var(--primary-soft); border-radius: 999px; font-size: 0.8rem; }
-.rotation-step > header > div { display: grid; gap: 0.15rem; }
-.rotation-step > header strong { font-size: 0.88rem; }
-.rotation-step > header span { color: var(--text-muted); font-size: 0.76rem; line-height: 1.5; }
-.rotation-step > .manual-field { max-width: 16rem; }
-.rotation-step > .ghost-button { justify-self: start; }
-.closure-shapes { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.5rem; }
-.closure-shape { position: relative; display: grid; align-content: start; gap: 0.2rem; min-height: 44px; padding: 0.7rem 0.75rem; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); cursor: pointer; }
-.closure-shape input { position: absolute; opacity: 0; pointer-events: none; }
-.closure-shape strong { font-size: 0.84rem; }
-.closure-shape span { color: var(--text-muted); font-size: 0.73rem; line-height: 1.45; }
-.closure-shape.is-selected { background: var(--primary-soft); border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
-.closure-shape:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
-.closure-clock { grid-template-columns: repeat(2, minmax(0, 12rem)); }
-.closure-clock.has-days { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.rotation-sentence { margin: 0; font-size: 0.82rem; line-height: 1.55; }
-.rotation-preview { display: grid; grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr)); gap: 0.45rem; margin: 0; padding: 0; list-style: none; }
-.rotation-preview li { display: grid; gap: 0.1rem; padding: 0.5rem 0.7rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
-.rotation-preview li.is-exception { background: var(--warning-soft); border-color: color-mix(in srgb, var(--warning) 40%, var(--border)); }
-.rotation-preview-date { color: var(--text-muted); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
-.rotation-preview strong { font-size: 0.86rem; }
-.rotation-preview-span { font-size: 0.74rem; font-variant-numeric: tabular-nums; }
-.rotation-preview em { justify-self: start; padding: 0.05rem 0.45rem; color: var(--warning); background: var(--surface); border-radius: 999px; font-size: 0.7rem; font-style: normal; }
-.rotation-advanced { display: grid; gap: 0.65rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
-.rotation-advanced > summary { min-height: 44px; display: flex; align-items: center; color: var(--text-muted); font-size: 0.82rem; cursor: pointer; }
-.rotation-advanced[open] > summary { color: var(--text); }
-.rotation-advanced > .ghost-button { justify-self: start; }
 
 @media (max-width: 980px) {
   .manual-section { grid-template-columns: 1fr; }
   .manual-section > header { border-inline-end: 0; border-bottom: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0; }
   .manual-grid.three, .employee-grid, .limits-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .rotation-window-grid, .closure-clock.has-days { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rotation-window-grid, .manual-grid.exit-closure { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 620px) {
@@ -201,7 +170,7 @@
   .manual-row-foot { align-items: flex-start; flex-direction: column; }
   .rotation-pair { grid-template-columns: 1fr; }
   .rotation-pair > svg { transform: rotate(90deg); }
-  .rotation-window-grid, .closure-clock, .closure-clock.has-days { grid-template-columns: 1fr; }
+  .rotation-window-grid, .manual-grid.exit-closure { grid-template-columns: 1fr; }
   .manual-savebar span { display: none; }
   .manual-savebar button { width: 100%; min-height: 44px; justify-content: center; }
 }
@@ -223,22 +192,10 @@
 }
 .manual-zero-note { margin: 0; color: var(--text-muted); font-size: 0.74rem; }
 
-/* "איך יוצאים אצלכם?" — the kinds a unit has, before any of their questions. */
-.exit-kinds { display: grid; gap: 0.75rem; }
-.exit-kinds-question { margin: 0; line-height: 1.55; }
-.exit-kind-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.5rem; }
-.exit-kind { position: relative; display: grid; align-content: start; gap: 0.25rem; min-height: 44px; padding: 0.75rem 0.85rem; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); cursor: pointer; }
-.exit-kind input { position: absolute; opacity: 0; pointer-events: none; }
-.exit-kind strong { font-size: 0.88rem; }
-.exit-kind strong::before { content: ""; display: inline-block; width: 0.8rem; height: 0.8rem; margin-inline-end: 0.4rem; vertical-align: -0.1rem; border: 1.5px solid var(--border-strong); border-radius: 0.2rem; background: var(--surface); }
-.exit-kind span { color: var(--text-muted); font-size: 0.75rem; line-height: 1.45; }
-.exit-kind em { font-style: normal; font-size: 0.72rem; color: var(--primary); }
-.exit-kind.is-selected { background: var(--primary-soft); border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
-.exit-kind.is-selected strong::before { background: var(--primary-fill, var(--primary)); border-color: var(--primary); }
-.exit-kind:has(input:disabled) { cursor: default; }
-.exit-kind:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
-.exit-subchoice { display: grid; gap: 0.4rem; margin: 0; padding: 0; border: 0; min-width: 0; }
-.exit-subchoice legend { font-weight: 600; font-size: 0.84rem; margin-block-end: 0.4rem; }
+/* "יציאות" — one closed list of kinds, then the closure hours and group count. */
+.exit-setup { display: grid; gap: 0.75rem; max-width: 52rem; }
+.exit-setup > .multi-select { max-width: 30rem; }
+.exit-closure { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .exit-pattern-fields { margin-block-start: 0.5rem; }
 .exit-day-picks { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .exit-day { position: relative; display: grid; place-items: center; min-width: 44px; min-height: 44px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; }

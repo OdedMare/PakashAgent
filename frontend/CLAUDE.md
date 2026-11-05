@@ -125,15 +125,20 @@ a second answer to a question that must have exactly one. The Sunday a
 closure hands over on reads dimmer and says `חילוף` — the group is in for
 that morning and out for the rest of the day.
 
-**The rotation section opens on one question: "איך יוצאים אצלכם?"**
-(`ManualSetup/ExitKinds.tsx`). The manager ticks the kinds of exits the
-unit has — none, daily, weekend groups (2–5 groups: סבב, תלתון, רבעון,
-חמישון), days on base / at home, every weekend home (חמשושים/שושים), a
-personal 1 ל־N, reservists — and only those open their questions below and
-appear in each soldier's pattern list. What is ticked is saved as
-`enabled_exit_patterns`; a pattern somebody is on stays on. A soldier's own
-questions (daily days and hours, a personal 1 ל־N and its first weekend)
-render under their pattern (`Management/ExitPatternFields.tsx`). A
+**The rotation section is four fields** (`ManualSetup/ExitKinds.tsx`): a
+closed multi-select of every kind of exit the unit has — none, daily, weekend
+groups (סבבים), חמשושים, שושים, days on base / at home, a personal 1 ל־N,
+reservists — and, when weekend groups are chosen, when the closure starts
+(day + time), when it ends (day + time) and how many groups take turns (2 סבב,
+3 תלתון, 4 רבעון, 5 חמישון). There is no calendar, no exception weekends and no
+"which date does which group close": an anchor already stored is kept, and a
+cycle without one is saved with group א closing the coming Saturday. The
+closure is group א's one undated window row, which the server applies to every
+group in turn. What is ticked is saved as `enabled_exit_patterns`; a pattern
+somebody is on stays on. Stored exception rows and presence rules are kept and
+saved unchanged but are no longer shown. A soldier's own questions (daily days
+and hours, a personal 1 ל־N and its first weekend) render under their pattern
+(`Management/ExitPatternFields.tsx`). A
 reservist's coming week is set from the team list (`Management/ReserveWeek.tsx`):
 each day cycles רגיל → עדיף שלא → לא יכול/ה, stored as whole-day
 availability rows, and the solver picks the days.
@@ -141,20 +146,10 @@ availability rows, and the solver picks the days.
 **A cycle is typed once, in the team setup screen** (`ManualSetup/`, the
 sliders icon). The server-wide model, solver and database settings are not
 on the team screen at all: they live in the operator console's "מערכת" tab.
-`ManualSetup/RotationSetup.tsx` asks three numbered questions per round,
-triplet and רבעון (four groups, one Saturday in four), for group א only: which weekend it closes (the anchor), which round
-type — a shape from `closureShapes.ts`, named by the day the closure opens
-(11/3 Thursday is the server default and stores no row; 12/2 Friday, 10/4
-Wednesday, שבוע־שבוע from the Sunday handover, or typed days and times are
-one undated window row) — and which weekends differ (dated window rows, one
-weekend or a range, with an optional `note`). The other groups' turns and
-hours are derived by the server. Under the questions, `RotationPreview`
-shows the coming weekends as **the server** computes them from the unsaved
-rows (`POST /api/profile/rotation-preview`), so the setup screen cannot
-disagree with the board. An anchor stored for another group is shown as
-א's next turn in the same cycle. Presence rules stay per group, under
-"מתקדם"; the older fixed א/ב unavailability block shows only to a unit that
-still has rows in it. Day cycles (11/3, 12/2, שבוע־שבוע…) are typed in
+`ManualSetup/RotationSetup.tsx` holds only the lettered cycles and how an
+anchor stored for another group is read as א's next turn; the other groups'
+turns and hours are derived by the server. The older fixed א/ב unavailability
+block shows only to a unit that still has rows in it. Day cycles (11/3, 12/2, שבוע־שבוע…) are typed in
 `ManualSetup/DayCycleSetup.tsx`: days on base and at home, the day group א
 starts on base, when each other group starts, and hours in three layers
 (cycle, group, dated change). Its four-week strip is a preview of the nominal
@@ -176,9 +171,8 @@ rows (D37); anything else applies to the next build. A shift can list
 one of those roles are placed on it. A shift can also ask for a different
 headcount on the weekend, and "weekend" means the round's closure — the days
 one group is home, until the Sunday handover — not a fixed Friday and
-Saturday. The round's type (11/3, 12/2, 10/4, שבוע־שבוע) is chosen on its
-card and sets the day group א's regular closure opens (Thursday, Friday,
-Wednesday, or Sunday at the handover); no row means the server's Thursday. It is saved as a staffing group
+Saturday. The closure start chosen in the rotation section sets its first day; no
+row means the server's Thursday. It is saved as a staffing group
 marked `closure: true` whose days are worked out per shift at save time
 (the first day only for a shift still running when the closure opens, the
 Sunday only for one starting before the handover).
