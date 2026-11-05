@@ -52,6 +52,7 @@ props["tool_calls"]["items"]["properties"]["arguments"]["properties"]["operation
 props["tool_calls"]["items"]["properties"]["arguments"]["properties"].update({
     "reserve_days_per_week": {"type": "integer", "minimum": 1, "maximum": 7},
     "reserve_min_days": {"type": "integer", "minimum": 1, "maximum": 7},
+    "reserve_extra_days": {"type": "integer", "minimum": 1, "maximum": 6},
     "additional_staff": {"type": "array", "maxItems": 6, "items": {
         "type": "object", "additionalProperties": False,
         "required": ["count", "service_type", "role", "eligible_shifts", "competence", "reserve_days_per_week"],

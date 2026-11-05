@@ -2973,6 +2973,27 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
+.board-card.is-touched-simulation.is-simulation-remove {
+  opacity: 0.48;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.board-simulation-ghost {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 6px;
+  align-items: center;
+  padding: 8px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 65%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--primary-soft) 48%, var(--surface));
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+
+.board-simulation-ghost small { grid-column: 2; color: var(--text-muted); }
+
 .board-card.is-touched-answer {
   box-shadow: 0 0 0 2px var(--border-strong);
 }

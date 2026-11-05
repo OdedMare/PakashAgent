@@ -1,24 +1,25 @@
-"""Compare a staffing what-if with the best result the current roster can reach.
+"""Compare a staffing what-if with the current roster's best result.
 
-The solver works on copies only.  This module has no repository and therefore
-cannot save the hypothetical reservist days, extra staff or assignments.
+The solver works on copies only. This module has no repository and therefore
+cannot save hypothetical reservist capacity, extra staff or assignments.
 """
 
 import copy
 from typing import List, Optional
 
-from app.bl.audit import counts_toward_staffing
-from app.bl.shared import iso, number, text
+from app.bl.audit import fairness
+from app.bl.shared import iso, text
 from app.bl.simulate.hypothetical import schedule_rows
-from app.bl.simulate.impact import coverage
+from app.bl.simulate.impact import coverage, workload
 from app.bl.solver.problem import Problem
 from app.bl.solver.solve import solve
+from app.bl.staffing_scenario_impact import (
+    board_delta, gap_summary, reserve_usage, seat_state, transfers, warning_diff,
+)
+from app.bl.staffing_scenario_people import additional_staff as add_staff, reserve_changes
 from app.common.errors import AgentError
 
-_MAX_ADDITIONAL_STAFF = 20
 _MAX_ROWS = 30
-_SERVICE_TYPES = {"standard", "reserve", "civilian", "hatzach"}
-_COMPETENCE = {"", "weak", "medium", "high", "excellent"}
 
 
 def analyze(
@@ -27,6 +28,7 @@ def analyze(
     *,
     reserve_days_per_week: Optional[int] = None,
     reserve_min_days: Optional[int] = None,
+    reserve_extra_days: Optional[int] = None,
     employee: str = "",
     additional_staff: Optional[List[dict]] = None,
     availability: Optional[List[dict]] = None,
@@ -35,12 +37,7 @@ def analyze(
     time_limit: float = 5.0,
     workers: int = 2,
 ) -> dict:
-    """Solve the current roster, then solve the requested staffing scenario.
-
-    The first solve separates capacity already present in the roster from the
-    improvement caused by the hypothetical change.  Both preserve as much of
-    the current board as coverage and the saved rules allow.
-    """
+    """Solve the current roster, then the requested staffing scenario."""
     current_profile = copy.deepcopy(profile or {})
     scenario_profile = copy.deepcopy(current_profile)
     slots = [dict(row, slot_date=iso(row.get("slot_date")))
@@ -48,21 +45,30 @@ def analyze(
     if not slots:
         raise AgentError("אין משמרות בסידור שנבחר")
     before = schedule_rows(schedule)
-    reserve_changes = _reserve_changes(
-        scenario_profile, reserve_days_per_week, reserve_min_days, employee,
+    changed_reserve = reserve_changes(
+        scenario_profile, reserve_days_per_week, reserve_min_days,
+        reserve_extra_days, employee,
     )
-    added = _additional_staff(scenario_profile, additional_staff or [])
-    changed = bool(reserve_changes or added)
-
-    baseline = _solve(
-        current_profile, slots, before, availability, history, duties,
-        time_limit, workers,
+    added = add_staff(scenario_profile, additional_staff or [])
+    changed = any(row["changed"] for row in changed_reserve) or bool(added)
+    baseline = _solve(current_profile, slots, before, availability, history, duties,
+                      time_limit, workers)
+    scenario = _solve(scenario_profile, slots, before, availability, history, duties,
+                      time_limit, workers) if changed else baseline
+    return _report(
+        schedule, current_profile, scenario_profile, slots, before,
+        baseline, scenario, changed_reserve, added, reserve_extra_days, employee,
     )
-    scenario = _solve(
-        scenario_profile, slots, before, availability, history, duties,
-        time_limit, workers,
-    ) if changed else baseline
 
+
+def _solve(profile, slots, keep, availability, history, duties, time_limit, workers):
+    problem = Problem(profile, slots, availability=availability, history=history,
+                      keep=keep, duties=duties)
+    return solve(problem, time_limit=time_limit, workers=workers)
+
+
+def _report(schedule, current_profile, scenario_profile, slots, before,
+            baseline, scenario, changed_reserve, added, extra, employee):
     baseline_coverage = coverage(
         before, baseline["assignments"], slots,
         current_profile.get("employees") or [], current_profile,
@@ -71,236 +77,83 @@ def analyze(
         before, scenario["assignments"], slots,
         scenario_profile.get("employees") or [], scenario_profile,
     )
-    current_gaps, current_over = _seat_state(before, slots, current_profile)
-    balanced_gaps, _ = _seat_state(baseline["assignments"], slots, current_profile)
-    scenario_gaps, _ = _seat_state(scenario["assignments"], slots, scenario_profile)
-    moves, additions, removals = _changes(before, scenario["assignments"])
-    current_gap_keys = {(row["shift"], row["date"]) for row in current_gaps}
-    transfers = _transfers(
-        before, scenario["assignments"], current_over, current_gap_keys,
-    )
-
+    current_gaps, current_over = seat_state(before, slots, current_profile)
+    balanced_gaps, _ = seat_state(baseline["assignments"], slots, current_profile)
+    scenario_gaps, _ = seat_state(scenario["assignments"], slots, scenario_profile)
+    from_current = board_delta(before, scenario["assignments"], _MAX_ROWS)
+    caused = board_delta(baseline["assignments"], scenario["assignments"], _MAX_ROWS)
+    introduced, resolved = warning_diff(baseline.get("warnings"), scenario.get("warnings"))
     return {
-        "simulated": True,
-        "applied": False,
+        "simulated": True, "applied": False,
         "schedule_id": text((schedule or {}).get("id")),
-        "coverage": {
-            "required": scenario_coverage["required"],
-            "current_assigned": scenario_coverage["assigned_before"],
-            "current_percent": scenario_coverage["percent_before"],
-            "after_rebalance": baseline_coverage["assigned_after"],
-            "after_rebalance_percent": baseline_coverage["percent_after"],
-            "after_scenario": scenario_coverage["assigned_after"],
-            "after_scenario_percent": scenario_coverage["percent_after"],
-            "delta_from_current": scenario_coverage["delta"],
-            "scenario_gain": (
-                scenario_coverage["assigned_after"] - baseline_coverage["assigned_after"]
-            ),
-        },
+        "scenario": _scenario(changed_reserve, added, extra, employee),
+        "coverage": _coverage_report(baseline_coverage, scenario_coverage),
         "gaps_current": current_gaps[:_MAX_ROWS],
         "gaps_after_rebalance": balanced_gaps[:_MAX_ROWS],
         "gaps_after_scenario": scenario_gaps[:_MAX_ROWS],
         "gap_summary": {
-            "current": _gap_summary(current_gaps),
-            "after_rebalance": _gap_summary(balanced_gaps),
-            "after_scenario": _gap_summary(scenario_gaps),
+            "current": gap_summary(current_gaps),
+            "after_rebalance": gap_summary(balanced_gaps),
+            "after_scenario": gap_summary(scenario_gaps),
         },
-        "moves": moves[:_MAX_ROWS],
-        "transfers_from_surplus": transfers[:_MAX_ROWS],
-        "assignments_added": additions[:_MAX_ROWS],
-        "assignments_removed": removals[:_MAX_ROWS],
-        "reserve_changes": reserve_changes,
-        "additional_staff": added,
+        "moves": from_current["moves"],
+        "transfers_from_surplus": transfers(
+            before, scenario["assignments"], current_over,
+            {(row["shift"], row["date"]) for row in current_gaps},
+        )[:_MAX_ROWS],
+        "assignments_added": from_current["assignments_added"],
+        "assignments_removed": from_current["assignments_removed"],
+        "board_delta": {"from_current": from_current, "caused_by_scenario": caused},
+        "reserve_changes": reserve_usage(
+            changed_reserve, baseline["assignments"], scenario["assignments"],
+        ),
+        "additional_staff": added, "introduced": introduced, "resolved": resolved,
         "warnings_after": scenario.get("warnings") or [],
-        "notes": scenario.get("notes") or [],
-        "assumptions": [
-            "התרחיש אוכף את התקינה, הכשירויות, הסבבים, המנוחה והאילוצים השמורים.",
-            "עובדי תרחיש הם קיבולת היפותטית בלבד; לפני הוספה אמיתית נדרשים שמות ופרטי עובד מלאים.",
-            "הנחיות טקסט חופשיות והעדפות שלא תורגמו לכלל מובנה אינן מחושבות מחדש בתרחיש.",
-        ],
+        "workload": _workload(current_profile, scenario_profile, baseline, scenario, caused),
+        "notes": scenario.get("notes") or [], "assumptions": _assumptions(),
     }
 
 
-def _solve(profile, slots, keep, availability, history, duties, time_limit, workers):
-    problem = Problem(
-        profile, slots, availability=availability, history=history,
-        keep=keep, duties=duties,
+def _coverage_report(baseline, scenario):
+    return {
+        "required": scenario["required"],
+        "current_assigned": scenario["assigned_before"],
+        "current_percent": scenario["percent_before"],
+        "after_rebalance": baseline["assigned_after"],
+        "after_rebalance_percent": baseline["percent_after"],
+        "after_scenario": scenario["assigned_after"],
+        "after_scenario_percent": scenario["percent_after"],
+        "delta_from_current": scenario["delta"],
+        "scenario_gain": scenario["assigned_after"] - baseline["assigned_after"],
+    }
+
+
+def _scenario(changed_reserve, added, extra, employee):
+    return {
+        "kind": "reserve_capacity" if changed_reserve else "additional_staff" if added else "rebalance",
+        "extra_days": extra,
+        "scope": "employee" if employee else "all_reservists",
+        "employee": text(employee),
+    }
+
+
+def _workload(current_profile, scenario_profile, baseline, scenario, caused):
+    return workload(
+        fairness(baseline["assignments"], current_profile.get("shifts") or [],
+                 current_profile.get("employees") or []),
+        fairness(scenario["assignments"], scenario_profile.get("shifts") or [],
+                 scenario_profile.get("employees") or []),
+        set(caused["affected"]),
     )
-    return solve(problem, time_limit=time_limit, workers=workers)
 
 
-def _reserve_changes(profile, days, minimum, employee):
-    if days is None and minimum is None:
-        return []
-    days = _week_days(days, "מספר ימי המילואים") if days is not None else None
-    minimum = _week_days(minimum, "מינימום ימי המילואים") if minimum is not None else None
-    people = profile.get("employees") or []
-    selected = [row for row in people if text(row.get("service_type")) == "reserve"
-                and (not employee or text(row.get("name")) == text(employee))]
-    if not selected:
-        raise AgentError("לא נמצא איש מילואים מתאים לתרחיש")
-    changes = []
-    for person in selected:
-        cap = days if days is not None else _week_days(
-            person.get("reserve_days_per_week"), "מספר ימי המילואים",
-        )
-        floor = minimum if minimum is not None else person.get("reserve_min_days")
-        if floor not in (None, "") and _week_days(floor, "מינימום ימי המילואים") > cap:
-            raise AgentError("מינימום ימי המילואים אינו יכול להיות גבוה ממספר הימים המרבי")
-        before = {
-            "reserve_days_per_week": person.get("reserve_days_per_week"),
-            "reserve_min_days": person.get("reserve_min_days"),
-        }
-        if days is not None:
-            person["reserve_days_per_week"] = days
-        if minimum is not None:
-            person["reserve_min_days"] = minimum
-        changes.append({
-            "employee": text(person.get("name")), "before": before,
-            "after": {
-                "reserve_days_per_week": person.get("reserve_days_per_week"),
-                "reserve_min_days": person.get("reserve_min_days"),
-            },
-        })
-    return changes
-
-
-def _week_days(value, label):
-    if isinstance(value, bool):
-        raise AgentError(label + " חייב להיות מספר בין 1 ל-7")
-    try:
-        result = int(value)
-    except (TypeError, ValueError) as exc:
-        raise AgentError(label + " חייב להיות מספר בין 1 ל-7") from exc
-    if not 1 <= result <= 7:
-        raise AgentError(label + " חייב להיות מספר בין 1 ל-7")
-    return result
-
-
-def _additional_staff(profile, groups):
-    if not isinstance(groups, list):
-        raise AgentError("תוספת כוח האדם לתרחיש אינה תקינה")
-    shifts = {text(row.get("name")) for row in profile.get("shifts") or []}
-    existing = {text(row.get("name")) for row in profile.get("employees") or []}
-    total, added = 0, []
-    for group_index, raw in enumerate(groups, start=1):
-        if not isinstance(raw, dict):
-            raise AgentError("כל קבוצת כוח אדם בתרחיש חייבת לכלול סוג שירות ומשמרות")
-        try:
-            count = int(raw.get("count") or 0)
-        except (TypeError, ValueError) as exc:
-            raise AgentError("כמות כוח האדם בתרחיש חייבת להיות מספר") from exc
-        service_type = text(raw.get("service_type"))
-        eligible = list(dict.fromkeys(text(item) for item in raw.get("eligible_shifts") or [] if text(item)))
-        competence = text(raw.get("competence"))
-        if count < 1 or total + count > _MAX_ADDITIONAL_STAFF:
-            raise AgentError("אפשר לבדוק עד 20 אנשי צוות נוספים בתרחיש")
-        if service_type not in _SERVICE_TYPES or not eligible or not set(eligible).issubset(shifts):
-            raise AgentError("יש לציין סוג שירות ומשמרות מוכרות לכל כוח אדם נוסף")
-        if competence not in _COMPETENCE:
-            raise AgentError("הרמה המקצועית בתרחיש אינה מוכרת")
-        reserve_days = raw.get("reserve_days_per_week")
-        if service_type == "reserve":
-            reserve_days = _week_days(reserve_days, "מספר ימי המילואים של כוח האדם הנוסף")
-        total += count
-        names = []
-        for member in range(1, count + 1):
-            base = "כוח תרחיש %d-%d" % (group_index, member)
-            name = base
-            suffix = 2
-            while name in existing:
-                name, suffix = "%s (%d)" % (base, suffix), suffix + 1
-            existing.add(name)
-            person = {
-                "name": name,
-                "role": text(raw.get("role")),
-                "eligible_shifts": eligible,
-                "service_type": service_type,
-                "exit_pattern": "none",
-                "rotation_group": "",
-                "counts_toward_staffing": True,
-                "competence": competence,
-            }
-            if service_type == "reserve":
-                person["reserve_days_per_week"] = reserve_days
-            profile.setdefault("employees", []).append(person)
-            names.append(name)
-        added.append({
-            "count": count, "service_type": service_type,
-            "role": text(raw.get("role")), "eligible_shifts": eligible,
-            "competence": competence, "reserve_days_per_week": reserve_days,
-            "scenario_names": names,
-        })
-    return added
-
-
-def _seat_state(rows, slots, profile):
-    people = {text(row.get("name")): row for row in profile.get("employees") or []}
-    counts = {}
-    for row in rows:
-        if counts_toward_staffing(people.get(text(row.get("employee"))), profile):
-            key = (text(row.get("shift")), iso(row.get("date")))
-            counts[key] = counts.get(key, 0) + 1
-    gaps, over = [], set()
-    for slot in slots:
-        key = text(slot.get("shift_name")), iso(slot.get("slot_date"))
-        required = int(number(slot.get("headcount"), 1))
-        assigned = counts.get(key, 0)
-        if assigned < required:
-            gaps.append({
-                "shift": key[0], "date": key[1], "required": required,
-                "assigned": assigned, "missing": required - assigned,
-            })
-        elif assigned > required:
-            over.add(key)
-    gaps.sort(key=lambda row: (-row["missing"], row["date"], row["shift"]))
-    return gaps, over
-
-
-def _changes(before, after):
-    old, new = _by_employee(before), _by_employee(after)
-    moves, additions, removals = [], [], []
-    for employee in sorted(set(old) | set(new)):
-        left = sorted(old.get(employee, set()) - new.get(employee, set()), key=lambda row: (row[1], row[0]))
-        joined = sorted(new.get(employee, set()) - old.get(employee, set()), key=lambda row: (row[1], row[0]))
-        paired = min(len(left), len(joined))
-        moves.extend({
-            "employee": employee,
-            "from_shift": left[index][0], "from_date": left[index][1],
-            "to_shift": joined[index][0], "to_date": joined[index][1],
-        } for index in range(paired))
-        removals.extend({"employee": employee, "shift": shift, "date": date}
-                        for shift, date in left[paired:])
-        additions.extend({"employee": employee, "shift": shift, "date": date}
-                         for shift, date in joined[paired:])
-    return moves, additions, removals
-
-
-def _gap_summary(gaps):
-    return {"slots": len(gaps), "people_short": sum(row["missing"] for row in gaps)}
-
-
-def _transfers(before, after, surplus, gaps):
-    old, new = _by_employee(before), _by_employee(after)
-    result = []
-    for employee in sorted(set(old) | set(new)):
-        sources = sorted((old.get(employee, set()) - new.get(employee, set())).intersection(surplus))
-        targets = sorted((new.get(employee, set()) - old.get(employee, set())).intersection(gaps))
-        result.extend({
-            "employee": employee,
-            "from_shift": source[0], "from_date": source[1],
-            "to_shift": target[0], "to_date": target[1],
-        } for source, target in zip(sources, targets))
-    return result
-
-
-def _by_employee(rows):
-    result = {}
-    for row in rows:
-        name = text(row.get("employee"))
-        if name:
-            result.setdefault(name, set()).add((text(row.get("shift")), iso(row.get("date"))))
-    return result
+def _assumptions():
+    return [
+        "התרחיש אוכף את התקינה, הכשירויות, הסבבים, המנוחה והאילוצים השמורים.",
+        "עובדי תרחיש הם קיבולת היפותטית בלבד; לפני הוספה אמיתית נדרשים שמות ופרטי עובד מלאים.",
+        "תוספת ימי מילואים מגדילה את התקרה בלבד; היא אינה מחייבת לשבץ את כל הימים הנוספים.",
+        "הנחיות טקסט חופשיות והעדפות שלא תורגמו לכלל מובנה אינן מחושבות מחדש בתרחיש.",
+    ]
 
 
 __all__ = ["analyze"]

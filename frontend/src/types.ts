@@ -1229,6 +1229,81 @@ export interface Simulation {
   schedule_id: string;
 }
 
+export interface StaffingScenarioCoverage {
+  required: number;
+  current_assigned: number;
+  current_percent: number;
+  after_rebalance: number;
+  after_rebalance_percent: number;
+  after_scenario: number;
+  after_scenario_percent: number;
+  delta_from_current: number;
+  scenario_gain: number;
+}
+
+export interface StaffingScenarioDelta {
+  moves: { employee: string; from_shift: string; from_date: string; to_shift: string; to_date: string }[];
+  assignments_added: { employee: string; shift: string; date: string }[];
+  assignments_removed: { employee: string; shift: string; date: string }[];
+  operations: Operation[];
+  affected: string[];
+}
+
+export interface ReserveScenarioChange {
+  employee: string;
+  cap_before: number | null;
+  requested_cap: number | null;
+  cap_after: number | null;
+  capped_at_seven: boolean;
+  minimum_unchanged: boolean;
+  changed: boolean;
+  reason: string;
+  days_in_baseline: number;
+  days_in_scenario: number;
+  extra_days_used: number;
+}
+
+export interface StaffingScenarioResult {
+  tool: "staffing_scenario";
+  ok?: boolean;
+  simulated: true;
+  applied: false;
+  schedule_id: string;
+  scenario: { kind: "reserve_capacity" | "additional_staff" | "rebalance"; extra_days: number | null; scope: "employee" | "all_reservists"; employee: string };
+  coverage: StaffingScenarioCoverage;
+  gap_summary: {
+    current: { slots: number; people_short: number };
+    after_rebalance: { slots: number; people_short: number };
+    after_scenario: { slots: number; people_short: number };
+  };
+  board_delta: { from_current: StaffingScenarioDelta; caused_by_scenario: StaffingScenarioDelta };
+  reserve_changes: ReserveScenarioChange[];
+  additional_staff: { count: number; service_type: string; role: string; eligible_shifts: string[]; competence: string; reserve_days_per_week: number | null; scenario_names: string[] }[];
+  introduced: ScheduleWarning[];
+  resolved: ScheduleWarning[];
+  warnings_after: ScheduleWarning[];
+  workload: WorkloadImpact[];
+  assumptions: string[];
+  notes: string[];
+}
+
+export interface ChangeSimulationResult extends Simulation {
+  tool: "simulate_changes";
+  ok?: boolean;
+}
+
+export interface ManagerToolResult {
+  tool: string;
+  ok?: boolean;
+  error?: string;
+  date?: string;
+  shift?: string;
+  replacing?: string;
+  candidates?: { employee: string; hours?: number; why?: string; requires_exception?: boolean; tier?: number; tier_label?: string }[];
+  simulated?: boolean;
+  [key: string]: unknown;
+}
+
 export type PreferenceKind =
   | "staffing"
   | "notification"
@@ -1294,9 +1369,7 @@ export interface ManagerChatMessage {
     /** Up to three next messages the agent offers as one-click follow-ups. */
     suggestions?: string[];
     plan?: ChatPlan;
-    results?: { tool: string; ok?: boolean; date?: string; shift?: string; replacing?: string;
-      candidates?: { employee: string; hours?: number; why?: string; requires_exception?: boolean;
-        tier?: number; tier_label?: string }[] }[];
+    results?: (ManagerToolResult | StaffingScenarioResult | ChangeSimulationResult)[];
     /** Set when code answered the turn without a model round. */
     fast_path?: string;
     question?: { question: string; recommendation: string; why: string; options: { label: string; answer: string }[] } | null;

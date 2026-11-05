@@ -69,6 +69,7 @@ export function ShiftCard({
   warnings,
   draggable,
   touched = null,
+  touchedAction = null,
   dimmed = false,
   picked = false,
   onDragStart,
@@ -94,6 +95,8 @@ export function ShiftCard({
    *  colour, and both of those are older claims on the card than the
    *  agent's attention is. */
   touched?: "proposal" | "simulation" | "answer" | null;
+  /** Whether a simulation adds or removes this exact assignment. */
+  touchedAction?: "assign" | "remove" | "swap" | null;
   /** The card currently being dragged, faded in place so its origin stays
    *  visible while the manager looks for somewhere to drop it. */
   dimmed?: boolean;
@@ -131,6 +134,7 @@ export function ShiftCard({
         tint ? `is-status is-status-${tint}` : "",
         status === "draft" ? "is-draft" : "is-published",
         touched ? `is-touched is-touched-${touched}` : "",
+        touched === "simulation" && touchedAction ? `is-simulation-${touchedAction}` : "",
         dimmed ? "is-dragging" : "",
         picked ? "is-picked" : "",
       ]

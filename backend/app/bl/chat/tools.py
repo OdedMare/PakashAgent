@@ -306,6 +306,7 @@ class ManagerChatTools:
             self._context.profile(team_id),
             reserve_days_per_week=arguments.get("reserve_days_per_week"),
             reserve_min_days=arguments.get("reserve_min_days"),
+            reserve_extra_days=arguments.get("reserve_extra_days"),
             employee=arguments.get("employee") or "",
             additional_staff=arguments.get("additional_staff") or [],
             availability=self._context.availability(team_id, schedule),

@@ -29,7 +29,7 @@ import type { ChecklistItem } from "@/components/Guide";
 import { useTheme } from "@/hooks/useTheme";
 import { CommanderNotices } from "@/components/Complex/CommanderNotices";
 import { ShareLink } from "@/components/Workspace/ShareLink";
-import type { ChatPlan, ManagementOverview, Proposal, TeamView } from "@/types";
+import type { ChatPlan, ManagementOverview, Proposal, Simulation, TeamView } from "@/types";
 
 import { AccountMenu } from "./AccountMenu";
 import { AgentChat } from "./AgentChat";
@@ -93,6 +93,7 @@ export function Management({
   const { workspace: workspaceRef, share: chatShare, resizing, handle: resizeHandle } = useChatSplit();
   const [chatSearch, setChatSearch] = useState("");
   const [chatPreview, setChatPreview] = useState<Proposal | null>(null);
+  const [chatSimulation, setChatSimulation] = useState<Simulation | null>(null);
   const [chatWeek, setChatWeek] = useState<{ date: string; n: number }>();
   // The day the board opened the agent on, if any. Counted like `suggested`
   // so opening the same day twice still focuses the composer.
@@ -661,7 +662,7 @@ export function Management({
             // point at different cells. Read-only: the board produces no
             // operations and there is no path from a highlight to a write.
             agent={{
-              simulation: null,
+              simulation: chatSimulation,
               proposal: chatPreview,
               answer: null,
             }}
@@ -761,6 +762,7 @@ export function Management({
             draft={suggested.text}
             draftKey={suggested.n}
             onPreview={setChatPreview}
+            onSimulation={setChatSimulation}
             onOpenReceipt={(date) => setChatWeek((previous) => ({ date, n: (previous?.n ?? 0) + 1 }))}
             onImport={() => setImportOpen(true)}
           />

@@ -129,6 +129,14 @@ reserve). Hypothetical staff are not real employees: before proposing an actual
 addition, ask for the normal required employee details and names. State the
 tool's assumptions, especially that unstructured free-text preferences were not
 retranslated.
+For a relative request such as "עוד 3 ימי מילואים", use
+`reserve_extra_days: 3`, not an absolute `reserve_days_per_week`. Leave
+`employee` empty for every `service_type: reserve` soldier, or name the one
+reservist when the manager says "רק לעודד". Relative extra days raise only the
+hard maximum and never the minimum; say that clearly. Attribute only
+`coverage.scenario_gain` and `board_delta.caused_by_scenario` to the extra
+capacity. If the manager asks to compare everyone with one named reservist,
+run two `staffing_scenario` calls in the same round and compare their results.
 Offer actionable `question` options when the manager wants to choose a solution;
 when they subsequently say "תעשה את זה", turn that choice into a complete plan.
 

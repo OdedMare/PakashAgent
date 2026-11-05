@@ -353,6 +353,9 @@ export function BoardRow({
                       !item.employee || item.employee === row.employee,
                   )?.origin ?? null
                 }
+                touchedAction={
+                  touched.find((item) => item.origin === "simulation" && item.employee === row.employee)?.action ?? null
+                }
                 dimmed={Boolean(dragging) && dragging?.id === row.id}
                 picked={move.isPicked(row)}
                 onDragStart={() => setDragging(row)}
@@ -365,6 +368,11 @@ export function BoardRow({
                 onOpen={readOnly ? undefined : () => onOpenCard?.(row)}
               />
             ))}
+            {touched.filter((item) => item.origin === "simulation" && item.action === "assign"
+              && item.employee && !cards.some((row) => row.employee === item.employee))
+              .map((item) => <div className="board-simulation-ghost" key={`${item.employee}:${item.date}:${item.shift}`}>
+                <Plus size={12} aria-hidden="true" /><strong>{item.employee}</strong><small>יתווסף בתרחיש</small>
+              </div>)}
 
             {/* Why this cell is lit, in words. The outline says the agent
                 touched it; this says what it said — a highlight the manager

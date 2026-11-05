@@ -542,6 +542,60 @@ def test_staffing_scenario_separates_existing_capacity_from_extra_reserve_days()
     assert not repo.assignments(schedule_id, TEAM)
 
 
+def test_staffing_scenario_adds_relative_reserve_capacity_without_writing():
+    repo, _, service, _, schedule_id = setup([])
+    repo.profiles[TEAM]["employees"] = [{
+        "name": "עודד", "eligible_shifts": [MORNING], "service_type": "reserve",
+        "reserve_days_per_week": 1, "reserve_min_days": 1,
+        "exit_pattern": "none", "rotation_group": "",
+    }]
+    repo.assignment_rows[schedule_id] = []
+    repo.replace_slots(schedule_id, TEAM, [
+        {"shift_name": MORNING, "slot_date": "2026-10-05", "headcount": 1},
+        {"shift_name": MORNING, "slot_date": "2026-10-06", "headcount": 1},
+    ])
+
+    result = service._chat_tools.run(TEAM, "staffing_scenario", {
+        "day": "2026-10-05", "reserve_extra_days": 3, "employee": "עודד",
+    }, schedule_id)
+
+    change = result["reserve_changes"][0]
+    assert (change["cap_before"], change["requested_cap"], change["cap_after"]) == (1, 4, 4)
+    assert change["minimum_unchanged"] and change["days_in_scenario"] == 2
+    assert result["coverage"]["scenario_gain"] == 1
+    assert result["board_delta"]["from_current"]["operations"]
+    assert result["board_delta"]["caused_by_scenario"]["operations"]
+    assert repo.profiles[TEAM]["employees"][0]["reserve_days_per_week"] == 1
+    assert repo.profiles[TEAM]["employees"][0]["reserve_min_days"] == 1
+    assert not repo.assignments(schedule_id, TEAM)
+
+
+def test_relative_reserve_capacity_applies_per_person_and_caps_at_seven():
+    repo, _, service, _, schedule_id = setup([])
+    repo.profiles[TEAM]["employees"] = [
+        {"name": "עודד", "eligible_shifts": [MORNING], "service_type": "reserve",
+         "reserve_days_per_week": 2, "exit_pattern": "none", "rotation_group": ""},
+        {"name": "דנה", "eligible_shifts": [MORNING], "service_type": "reserve",
+         "reserve_days_per_week": 6, "exit_pattern": "none", "rotation_group": ""},
+        {"name": "יוסי", "eligible_shifts": [MORNING], "service_type": "reserve",
+         "reserve_days_per_week": 7, "exit_pattern": "none", "rotation_group": ""},
+        {"name": "רותי", "eligible_shifts": [MORNING], "service_type": "reserve",
+         "exit_pattern": "none", "rotation_group": ""},
+    ]
+
+    result = service._chat_tools.run(TEAM, "staffing_scenario", {
+        "day": "2026-10-05", "reserve_extra_days": 3,
+    }, schedule_id)
+
+    changes = {row["employee"]: row for row in result["reserve_changes"]}
+    assert changes["עודד"]["cap_after"] == 5
+    assert changes["דנה"]["cap_after"] == 7 and changes["דנה"]["capped_at_seven"]
+    assert changes["יוסי"]["cap_after"] == 7 and not changes["יוסי"]["changed"]
+    assert changes["רותי"]["cap_after"] is None and "לא הוגדרה" in changes["רותי"]["reason"]
+    assert [row.get("reserve_days_per_week") for row in repo.profiles[TEAM]["employees"]] \
+        == [2, 6, 7, None]
+
+
 def test_staffing_scenario_can_measure_hypothetical_civilian_capacity():
     repo, _, service, _, schedule_id = setup([])
     repo.profiles[TEAM]["employees"] = [repo.profiles[TEAM]["employees"][0]]

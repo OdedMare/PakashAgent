@@ -6,22 +6,26 @@ import { Guard } from "@/components/Crew";
 import type { Who } from "@/components/Crew";
 import { Markdown } from "@/components/Markdown";
 import { copyText } from "@/lib/clipboard";
-import type { Proposal } from "@/types";
+import type { Proposal, Simulation } from "@/types";
 import { displayDate as formatDate } from "@/components/DateInput";
 import { hebrewWeekday } from "./Calendar";
 import type { useManagerChat } from "./useManagerChat";
 import { ChatPlanCard } from "./ChatPlanCard";
 import { ChatCandidates } from "./ChatCandidates";
+import { ScenarioResultCard } from "./ScenarioResultCard";
+import { ChangeSimulationCard } from "./ChangeSimulationCard";
 import { DismissFeedback, Suggestions, Thinking } from "./ChatLive";
+
+const NO_SIMULATION = () => {};
 
 /** The manager's one agent: every instruction to the scheduling agent goes
  *  through this conversation. The board can open it focused on one day
  *  (`focusDate`); messages then carry that day, and the agent treats requests
  *  that name no date as being about it. */
-export function AgentChat({ who = "him", agent, visibleWeek, focusDate = "", focusKey, employees, starters, draft, draftKey, boardBusy, hidden = false, onClearFocus, onPreview, onOpenReceipt, onImport }: {
+export function AgentChat({ who = "him", agent, visibleWeek, focusDate = "", focusKey, employees, starters, draft, draftKey, boardBusy, hidden = false, onClearFocus, onPreview, onSimulation = NO_SIMULATION, onOpenReceipt, onImport }: {
   who?: Who; agent: ReturnType<typeof useManagerChat>; visibleWeek: string; focusDate?: string; focusKey?: number; employees: string[]; starters: string[];
   draft?: string; draftKey?: number; boardBusy: boolean; hidden?: boolean; onClearFocus?: () => void;
-  onPreview: (proposal: Proposal | null) => void; onOpenReceipt: (date: string) => void;
+  onPreview: (proposal: Proposal | null) => void; onSimulation?: (simulation: Simulation | null) => void; onOpenReceipt: (date: string) => void;
   /** Open the import screen; opening it writes nothing (D7). */
   onImport?: () => void;
 }) {
@@ -166,7 +170,11 @@ export function AgentChat({ who = "him", agent, visibleWeek, focusDate = "", foc
         {feedbackFor === message.id && message.id === last?.id && message.status === "dismissed" ?
           <DismissFeedback disabled={disabled} onAnswer={(value) => void send(value)} onClose={() => setFeedbackFor("")} /> : null}
         {message.role === "assistant" && (message.status === "complete" || message.status === "pending") && message.payload.results ?
-          <ChatCandidates results={message.payload.results} plan={message.payload.plan} disabled={disabled || message.id !== last?.id} onChoose={(value) => void send(value)} /> : null}
+          <><ScenarioResultCard results={message.payload.results} disabled={disabled || message.id !== last?.id}
+            onSimulation={onSimulation} onSend={(value) => void send(value)} />
+          <ChangeSimulationCard results={message.payload.results} disabled={disabled || message.id !== last?.id}
+            onSimulation={onSimulation} onSend={(value) => void send(value)} />
+          <ChatCandidates results={message.payload.results} plan={message.payload.plan} disabled={disabled || message.id !== last?.id} onChoose={(value) => void send(value)} /></> : null}
         {message.payload.question?.options.length ? <div className="conversation-options">{message.payload.question.options.map((option, index) =>
           <button type="button" key={option.label} disabled={disabled || message.id !== last?.id || message.status === "applied"}
             onClick={() => void send(option.answer)}>{index === 0 ? <Sparkles size={12} /> : null}{option.label}</button>)}</div> : null}

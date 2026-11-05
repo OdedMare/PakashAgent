@@ -2,7 +2,7 @@
 
 import { Check, UserRound } from "lucide-react";
 import { Fragment } from "react";
-import type { ManagerChatMessage } from "@/types";
+import type { ManagerChatMessage, ManagerToolResult } from "@/types";
 import { displayDate } from "@/components/DateInput";
 import { selectionSentence } from "@/lib/replacement";
 import { TierHeading } from "./ReplacementPanel";
@@ -16,9 +16,11 @@ export function ChatCandidates({ results, plan, disabled, onChoose }: {
 }) {
   const planned = new Set((plan?.operations ?? []).filter((row) => row.action === "assign")
     .map((row) => `${row.date}:${row.shift}:${row.employee}`));
-  const searches = new Map<string, typeof results[number]>();
-  for (const result of results) if (result.tool === "find_replacements" && result.ok !== false)
+  const searches = new Map<string, ManagerToolResult>();
+  for (const raw of results) if (raw.tool === "find_replacements" && raw.ok !== false) {
+    const result = raw as ManagerToolResult;
     searches.set(`${result.date}:${result.shift}`, result);
+  }
   return <>{[...searches].map(([key, result]) => {
     const candidates = (result.candidates ?? []).filter((row) => !row.requires_exception);
     return <section className="conversation-candidates" key={key} aria-label="מועמדים למשמרת">
