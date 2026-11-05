@@ -17,7 +17,7 @@ stack into a double booking or a short rest.
 from typing import Dict, List, Optional
 
 from app.bl.audit import shift_stats
-from app.bl.chat.contract import GAP_CODES, audit_plan, changed_rows
+from app.bl.chat.contract import GAP_CODES, audit_rows, changed_rows, plan_availability
 from app.bl.shared import iso, warning_key
 from app.bl.tools import ScheduleTools
 
@@ -111,13 +111,24 @@ class AbsenceOptions:
 
 
 class _Fill:
-    """The running hypothetical: removals first, then each pick as it lands."""
+    """The running hypothetical: removals first, then each pick as it lands.
+
+    A pick is checked the way `placement/context.py` checks a candidate:
+    adding one row can only move the warnings about that person and about
+    that slot, so only their rows are audited, before and after. Auditing
+    the whole period per pick is what kept a long absence searching for
+    minutes; the answer is the same.
+    """
 
     def __init__(self, profile, schedule, availability, constraints, removals):
         self._profile, self._schedule = profile, schedule
-        self._availability, self._constraints = availability, constraints
+        self._effective = plan_availability(profile, schedule, availability, constraints)
+        self._grid: Dict[tuple, List[dict]] = {}
+        for slot in schedule.get("slots") or []:
+            key = (slot.get("shift_name"), iso(slot.get("slot_date")))
+            self._grid.setdefault(key, []).append(slot)
         self.operations = list(removals)
-        self._known = self._warnings(self.operations)
+        self._rows = self._apply(self.operations) or []
 
     def slot(self, row: dict, schedule: dict, candidates: List[dict], chosen: str) -> dict:
         date, shift = iso(row["date"]), row["shift"]
@@ -154,27 +165,43 @@ class _Fill:
     def _accept(self, employee: str, shift: str, date: str, force: bool = False) -> bool:
         trial = self.operations + [dict(action="assign", employee=employee, date=date,
                                         shift=shift, reason="")]
-        warnings = self._warnings(trial)
-        if warnings is None or (not force and warnings - self._known):
+        rows = self._apply(trial)
+        if rows is None:
             return False
-        self.operations, self._known = trial, warnings
+        if not force and self._caused(employee, (shift, date), rows):
+            return False
+        self.operations, self._rows = trial, rows
         return True
 
-    def _warnings(self, operations) -> Optional[set]:
+    def _apply(self, operations) -> Optional[List[dict]]:
         try:
-            rows = changed_rows(self._schedule, operations)
+            return changed_rows(self._schedule, operations)
         except Exception:
             return None
+
+    def _caused(self, employee: str, target: tuple, after: List[dict]) -> set:
+        """Warnings the new row brings, read from its person and its slot."""
+        before = self._warnings(self._scope(self._rows, employee, target), target)
+        return self._warnings(self._scope(after, employee, target), target) - before
+
+    @staticmethod
+    def _scope(rows: List[dict], employee: str, target: tuple) -> List[dict]:
+        return [row for row in rows
+                if row["employee"] == employee or (row["shift"], iso(row["date"])) == target]
+
+    def _warnings(self, rows: List[dict], target: tuple) -> set:
+        pairs = {(row["shift"], iso(row["date"])) for row in rows} | {target}
+        slots = self._schedule.get("slots") or []
+        grid = [slot for pair in pairs for slot in self._grid.get(pair, [])]
         return {
-            warning_key(row) for row in audit_plan(
-                self._profile, self._schedule, rows, self._availability, self._constraints,
+            warning_key(row) for row in audit_rows(
+                self._profile, rows, self._effective, grid or slots[:1],
             )
             if row.get("code") not in GAP_CODES and row.get("severity", "warning") == "warning"
         }
 
     def _load(self) -> Dict[str, dict]:
-        rows = changed_rows(self._schedule, self.operations)
-        stats = shift_stats(rows, self._profile.get("shifts") or [],
+        stats = shift_stats(self._rows, self._profile.get("shifts") or [],
                             self._profile.get("employees") or [],
                             slots=self._schedule.get("slots") or [], profile=self._profile)
         return {row["employee"]: dict(hours=row["hours"], shifts=row["shifts"],

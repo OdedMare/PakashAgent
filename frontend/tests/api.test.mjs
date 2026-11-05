@@ -71,7 +71,7 @@ test("replacement search starts once and polls short reads until complete", asyn
 test("changing the form aborts replacement polling", async () => {
   const calls = [];
   const api = loadApi(async (url, options = {}) => {
-    calls.push(url);
+    calls.push([url, options.method ?? "GET"]);
     return response(202, { id: "job-2", status: "queued" });
   });
   const controller = new AbortController();
@@ -82,5 +82,10 @@ test("changing the form aborts replacement polling", async () => {
   controller.abort();
 
   await assert.rejects(pending, (error) => error.name === "AbortError");
-  assert.deepEqual(calls, ["/api/agent/replacements/searches"]);
+  await new Promise(setImmediate);
+  // The abandoned search is released so it cannot hold a worker lane.
+  assert.deepEqual(calls, [
+    ["/api/agent/replacements/searches", "POST"],
+    ["/api/agent/replacements/searches/job-2", "DELETE"],
+  ]);
 });

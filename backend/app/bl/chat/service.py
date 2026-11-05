@@ -181,13 +181,21 @@ class ManagerChatService:
         )
         return {"id": job["id"], "status": job["status"]}
 
+    def cancel_replacement_search(self, team_id, search_id):
+        """The screen moved on (another date, another soldier, closed)."""
+        self._repo.cancel_queued_job(team_id, search_id, REPLACEMENT_JOB)
+
     def replacement_search(self, team_id, search_id):
         """The small polling response; the result appears only when ready."""
-        job = self._repo.get_copilot_job(team_id, search_id)
+        job = self._repo.get_copilot_job(team_id, search_id, kind=REPLACEMENT_JOB)
         answer = {"id": job["id"], "status": job["status"]}
         if job["status"] == "complete":
             result = (job.get("payload") or {}).get("result")
-            if isinstance(result, dict):
+            if isinstance(result, dict) and result.get("refused"):
+                # The search's own Hebrew answer ("too many shifts", "no such
+                # soldier"): said once, not retried into a generic failure.
+                answer.update(status="failed", error=result["refused"])
+            elif isinstance(result, dict):
                 answer["result"] = result
             else:
                 answer.update(

@@ -39,4 +39,8 @@ def build_router(service, guards):
     def read_search(search_id: str, session: dict = Depends(manager)):
         return service.replacement_search(session["team_id"], search_id)
 
+    @router.delete("/searches/{search_id}", status_code=204)
+    def cancel_search(search_id: str, session: dict = Depends(manager)):
+        service.cancel_replacement_search(session["team_id"], search_id)
+
     return router

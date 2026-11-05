@@ -101,24 +101,38 @@ export async function getReplacementOptions(
     body: JSON.stringify({ employee, starts_on: startsOn, ends_on: endsOn }),
     signal,
   });
-  while (search.status === "queued" || search.status === "running") {
-    await waitForReplacementPoll(signal);
-    search = await request<ReplacementSearch>(
-      `/api/agent/replacements/searches/${encodeURIComponent(search.id)}`,
-      { signal },
-    );
+  // Most searches finish in a second or two: look again soon, then ease off.
+  let delay = 200;
+  try {
+    while (search.status === "queued" || search.status === "running") {
+      await waitForReplacementPoll(delay, signal);
+      delay = Math.min(1_000, Math.round(delay * 1.6));
+      search = await request<ReplacementSearch>(
+        `/api/agent/replacements/searches/${encodeURIComponent(search.id)}`,
+        { signal },
+      );
+    }
+  } catch (reason) {
+    // The form moved on: release the job if no worker has started it, so it
+    // does not hold a lane while the search now on screen waits behind it.
+    if (signal?.aborted) {
+      request<void>(`/api/agent/replacements/searches/${encodeURIComponent(search.id)}`, {
+        method: "DELETE",
+      }).catch(() => undefined);
+    }
+    throw reason;
   }
   if (search.status === "complete" && search.result) return search.result;
   throw new Error(search.error || "חיפוש המחליפים נכשל. נסו שוב");
 }
 
-function waitForReplacementPoll(signal?: AbortSignal): Promise<void> {
+function waitForReplacementPoll(delay: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) return Promise.reject(abortError());
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       signal?.removeEventListener("abort", stop);
       resolve();
-    }, 1_000);
+    }, delay);
     function stop() {
       clearTimeout(timer);
       reject(abortError());

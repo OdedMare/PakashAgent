@@ -41,11 +41,11 @@ class JobsRepository(RepositoryBase):
             connection.commit()
         return dict(row) if row else None
 
-    def get_copilot_job(self, team_id, job_id):
+    def get_copilot_job(self, team_id, job_id, kind=None):
         rows = self._all("""
             SELECT id, status, payload FROM copilot_jobs
-            WHERE id=%s AND team_id=%s
-        """, (job_id, team_id))
+            WHERE id=%s AND team_id=%s AND (%s::text IS NULL OR kind=%s)
+        """, (job_id, team_id, kind, kind))
         if not rows:
             raise NotFoundError("החיפוש לא נמצא")
         return rows[0]
@@ -56,6 +56,15 @@ class JobsRepository(RepositoryBase):
             SET payload=jsonb_set(payload, '{result}', %s, true)
             WHERE id=%s
         """, (Jsonb(result), job_id))
+
+    def cancel_queued_job(self, team_id, job_id, kind):
+        """Close a job no worker has started; one already running finishes.
+        A search the screen moved on from would otherwise hold a lane while
+        the one now on screen waits behind it."""
+        self._execute("""
+            UPDATE copilot_jobs SET status='failed', error='cancelled', finished_at=NOW()
+            WHERE id=%s AND team_id=%s AND kind=%s AND status='queued'
+        """, (job_id, team_id, kind))
 
     def queue_generation_job(self, team_id, schedule_id):
         """Resume and enqueue one durable job per unfinished model span."""

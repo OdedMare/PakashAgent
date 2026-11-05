@@ -218,6 +218,16 @@ def add_coverage(plan, profile):
 
 
 def audit_plan(profile, schedule, rows, availability, constraints):
+    return audit_rows(
+        profile, rows, plan_availability(profile, schedule, availability, constraints),
+        schedule.get("slots") or [],
+    )
+
+
+def plan_availability(profile, schedule, availability, constraints):
+    """The stored availability with a plan's constraint edits laid over it,
+    expanded for the period. Separate from `audit_rows` so a caller auditing
+    one plan many times (`absence/options.py`) works it out once."""
     facts = {_constraint_key(dict(
         row, date=iso(row["constraint_date"]), shift=row.get("shift_name") or "",
     )): dict(row, date=iso(row["constraint_date"]), shift=row.get("shift_name") or "")
@@ -228,11 +238,14 @@ def audit_plan(profile, schedule, rows, availability, constraints):
             facts.pop(key, None)
         else:
             facts[key] = row
+    return effective_availability(profile, list(facts.values()), iso(schedule["starts_on"]),
+                                  iso(schedule["ends_on"]))
+
+
+def audit_rows(profile, rows, effective, slots):
     warnings = audit(
         rows, profile.get("shifts") or [], profile.get("employees") or [],
-        effective_availability(profile, list(facts.values()), iso(schedule["starts_on"]),
-                               iso(schedule["ends_on"])),
-        profile, schedule.get("slots") or [],
+        effective, profile, slots,
     )
     for row in rows:
         if not is_eligible(profile, row["employee"], row["shift"], iso(row["date"])):

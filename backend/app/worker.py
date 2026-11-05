@@ -18,7 +18,7 @@ from app.common.events import TeamEvents
 from app.dal.notify import PostgresSignals
 from app.common.activity import track_activity
 from app.common.actor import acting_as
-from app.common.errors import NotFoundError
+from app.common.errors import AppError, NotFoundError
 from app.common.config import Settings
 from app.common.logging_setup import configure_logging
 from app.common.read_cache import ReadCache
@@ -31,6 +31,9 @@ from app.dal.repository import Repository
 
 _log = logging.getLogger("pakash.worker")
 _POLL_SECONDS = max(1, int(os.getenv("PAKASH_COPILOT_POLL_SECONDS", "1")))
+# A manager is watching a spinner on these lanes, so they look again sooner;
+# the claim is one indexed SKIP LOCKED query.
+_INTERACTIVE_POLL_SECONDS = max(0.05, float(os.getenv("PAKASH_INTERACTIVE_POLL_SECONDS", "0.25")))
 # Interactive reads and chat turns get their own lanes so a build never delays
 # the screen; several lanes keep one slow job from holding every manager's.
 _WORKER_CONCURRENCY = max(1, int(os.getenv("PAKASH_WORKER_CONCURRENCY", "6")))
@@ -89,10 +92,15 @@ class JobWorker:
                 progress("קורא את הבקשה ואת הסידור…")
                 self._chat.reply(team_id, payload["manager_id"], payload["chat_id"], payload["message_id"])
         elif job["kind"] == REPLACEMENT_JOB:
-            result = self._chat.replacement_options(
-                team_id, payload["employee"],
-                payload["starts_on"], payload.get("ends_on", ""),
-            )
+            try:
+                result = self._chat.replacement_options(
+                    team_id, payload["employee"],
+                    payload["starts_on"], payload.get("ends_on", ""),
+                )
+            except AppError as exc:
+                # A refusal is the answer, not a fault: retrying it three
+                # times ten seconds apart only delays the same sentence.
+                result = {"refused": str(exc) or "חיפוש המחליפים נכשל. נסו שוב"}
             self._repository.set_copilot_job_result(job["id"], result)
         elif job["kind"] == "generation":
             with track_activity(lambda activity: self._repository.generation_activity(
@@ -164,7 +172,7 @@ def start(worker, stopped: threading.Event) -> list:
                 worker.run_once(lane)
             except Exception:
                 _log.exception("worker connection failed; retrying lane=%s", lane)
-            stopped.wait(_POLL_SECONDS)
+            stopped.wait(_INTERACTIVE_POLL_SECONDS if lane == "interactive" else _POLL_SECONDS)
 
     lanes = ["interactive"] * chat_count + ["background"] * (count - chat_count)
     if count == 1:

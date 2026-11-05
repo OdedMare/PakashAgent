@@ -267,7 +267,9 @@ def test_the_replacement_tab_queues_a_search_and_polls_its_result():
         return row
 
     repo.enqueue_copilot_job = enqueue
-    repo.get_copilot_job = lambda team_id, job_id: jobs[job_id]
+    repo.get_copilot_job = lambda team_id, job_id, kind=None: jobs[job_id]
+    cancelled = []
+    repo.cancel_queued_job = lambda team_id, job_id, kind: cancelled.append((job_id, kind))
 
     started = client.post("/api/agent/replacements/searches", json={
         "employee": "דנה", "starts_on": "2026-10-05", "ends_on": "2026-10-06",
@@ -292,6 +294,16 @@ def test_the_replacement_tab_queues_a_search_and_polls_its_result():
     assert finished.json() == {
         "id": "replacement-job", "status": "complete", "result": result,
     }
+
+    # A refusal is shown in its own words, as a failure.
+    jobs["replacement-job"]["payload"]["result"] = {"refused": "התוכנית גדולה מדי"}
+    refused = client.get("/api/agent/replacements/searches/replacement-job")
+    assert refused.json() == {
+        "id": "replacement-job", "status": "failed", "error": "התוכנית גדולה מדי",
+    }
+
+    assert client.delete("/api/agent/replacements/searches/replacement-job").status_code == 204
+    assert cancelled == [("replacement-job", "replacement_options")]
 
 
 def test_a_code_answered_turn_is_finished_by_the_request_itself():

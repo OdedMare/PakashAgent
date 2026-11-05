@@ -43,11 +43,14 @@ class _Schedules:
 
 
 class _Chat:
-    def __init__(self):
+    def __init__(self, refusal=None):
         self.calls = []
+        self.refusal = refusal
 
     def replacement_options(self, *args):
         self.calls.append(args)
+        if self.refusal:
+            raise self.refusal
         return {"employee": args[1], "slots": []}
 
 
@@ -108,3 +111,19 @@ def test_replacement_search_runs_in_an_interactive_lane_and_saves_its_result():
         ("job-3", {"employee": "דנה", "slots": []}),
     ]
     assert repository.finished == [("job-3", "", False)]
+
+
+def test_a_refused_replacement_search_is_answered_once_not_retried():
+    from app.common.errors import AgentError
+
+    job = {
+        "id": "job-4", "team_id": "team-a", "kind": "replacement_options",
+        "attempts": 1,
+        "payload": {"employee": "דנה", "starts_on": "2026-10-05"},
+    }
+    repository = _Repository([job])
+    chat = _Chat(refusal=AgentError("התוכנית גדולה מדי"))
+
+    assert JobWorker(repository, chat=chat).run_once("interactive") == 1
+    assert repository.results == [("job-4", {"refused": "התוכנית גדולה מדי"})]
+    assert repository.finished == [("job-4", "", False)]

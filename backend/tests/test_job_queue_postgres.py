@@ -102,3 +102,16 @@ def test_a_job_result_is_persisted_and_scoped_to_its_team(repo):
     assert stored["payload"]["result"] == result
     with pytest.raises(NotFoundError):
         repo.get_copilot_job(other["id"], job["id"])
+
+
+def test_a_queued_search_can_be_cancelled_and_a_poll_reads_only_its_kind(repo):
+    team = repo.create_team("משמרת ג", "sod-shlishi")
+    job = repo.enqueue_copilot_job(
+        team["id"], "replacement:cancel", "replacement_options", {"employee": "דנה"},
+    )
+    chat = repo.enqueue_copilot_job(team["id"], "chat:x", "manager_chat", {})
+
+    with pytest.raises(NotFoundError):
+        repo.get_copilot_job(team["id"], chat["id"], kind="replacement_options")
+    repo.cancel_queued_job(team["id"], job["id"], "replacement_options")
+    assert repo.get_copilot_job(team["id"], job["id"])["status"] == "failed"
