@@ -2564,7 +2564,10 @@
 .soldier-advanced[open] > summary { color: var(--text); }
 .soldier-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  /* auto-fill, not auto-fit: a card with one or two fields (הצ״ח, אע״צ, a
+     shift's min/max) keeps them field-sized instead of stretching them
+     across the whole card. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
   gap: 0.5rem;
 }
 .soldier-field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
