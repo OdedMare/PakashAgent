@@ -54,8 +54,7 @@
   border-color: var(--border);
 }
 
-.management-nav-item svg,
-.manager-tab svg {
+.management-nav-item svg {
   color: inherit;
   stroke-width: 1.75;
 }
@@ -67,17 +66,9 @@
   font-weight: 600;
 }
 
-.management-nav-item:hover:not(.is-active),
-.manager-tab:hover:not(.is-active) {
+.management-nav-item:hover:not(.is-active) {
   color: var(--text);
   background: var(--surface-3);
-}
-
-.manager-tab.is-active {
-  color: var(--text);
-  background: var(--surface);
-  box-shadow: var(--shadow-soft);
-  font-weight: 600;
 }
 
 .primary-button,
@@ -483,11 +474,6 @@ body:has(.manual-setup) .tutorial-fab {
 
   .management-workspace.has-drawer .board-dayhead-actions {
     flex-direction: row;
-  }
-
-  .manager-tabs {
-    background: var(--surface-2);
-    gap: 4px;
   }
 
   .sidebar-new-chat {

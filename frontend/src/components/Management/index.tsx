@@ -703,7 +703,8 @@ export function Management({
               <X size={17} />
             </button>
           </div>
-          <div className="manager-tabs" role="group" aria-label="כלי ניהול" data-tour="drawer-tabs">
+          <div className="manager-tabs" data-tour="drawer-tabs">
+            <div className="manager-tabs-track" role="group" aria-label="כלי ניהול">
             <ManagerTab
               active={section === "agent"}
               icon={<Sparkles size={15} />}
@@ -723,6 +724,7 @@ export function Management({
               count={requests.rows.length}
               onClick={openRequests}
             />
+            </div>
             {/* Desktop hides the drawer head, so the way out lives here.
                 Closing hands the whole width back to the board. */}
             <button
@@ -924,7 +926,7 @@ function ManagerTab({
       onClick={onClick}
     >
       {icon}
-      {label}
+      <span>{label}</span>
       {count ? <span className="manager-tab-badge">{count > 9 ? "9+" : count}</span> : null}
     </button>
   );
