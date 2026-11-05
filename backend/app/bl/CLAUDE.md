@@ -328,7 +328,13 @@ what they change — the cycle's own departure and return (a day shift of up
 to three days either way, plus a time), `group_times[group]`, then dated
 `time_changes` matched on the nominal departure day. A home stretch is hard
 unavailability (`closure_status` returns it), so the solver, the audit and
-the picker all read it through the same gate as a closure.
+the picker all read it through the same gate as a closure. A cycle of
+`kind: "weekends"` is a unit's own 1 ל־X (2–8 groups): each Saturday one
+group closes in turn from the anchor's weekend, the others are home from
+Thursday to the Sunday after, and the same three layers move those two
+ends. It lives here, not as another lettered pattern, so X is not capped at
+the חמישון; its `base_days`/`home_days` are derived (7 and 7·(X−1)) and its
+offsets are always empty. The board's closure heads do not name it yet.
 
 Read by four callers, which is the point of it being one module:
 `scheduler/` turns it into hard availability rows and the solver never

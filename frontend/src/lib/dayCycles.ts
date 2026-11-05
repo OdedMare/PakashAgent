@@ -19,7 +19,14 @@ export const DAY_CYCLE_PRESETS: Array<{ label: string; base: number; home: numbe
   { label: "4/3", base: 4, home: 3 },
 ];
 
-export const GROUP_LETTERS = ["א", "ב", "ג", "ד", "ה", "ו"];
+export const GROUP_LETTERS = ["א", "ב", "ג", "ד", "ה", "ו", "ז", "ח"];
+
+/** A 1 ל־X runs 2 to 8 groups, one Saturday each. */
+export const WEEKEND_GROUPS = { min: 2, max: 8 };
+
+export function isWeekends(cycle: Pick<DayCycle, "kind">): boolean {
+  return cycle.kind === "weekends";
+}
 
 export function isDayCycle(pattern: unknown): pattern is string {
   return typeof pattern === "string" && pattern.startsWith(DAY_CYCLE_PREFIX);
@@ -39,9 +46,21 @@ export function cycleName(cycles: DayCycle[] | undefined, pattern: unknown): str
   return cycleOf(cycles, pattern)?.name || "מחזור";
 }
 
-/** The preset a cycle's days match, if any — how the exits list names it. */
-export function presetOf(cycle: Pick<DayCycle, "base_days" | "home_days">) {
+/** The preset a cycle's days match, if any — how the exits list names it.
+ *  A 1 ל־X is never one, even when its derived days read 7/7. */
+export function presetOf(cycle: Pick<DayCycle, "base_days" | "home_days" | "kind">) {
+  if (isWeekends(cycle)) return undefined;
   return DAY_CYCLE_PRESETS.find((preset) => preset.base === cycle.base_days && preset.home === cycle.home_days);
+}
+
+/** A 1 ל־X with `count` groups, in the shape the server saves it. */
+export function weekendDays(count: number): Pick<DayCycle, "groups" | "base_days" | "home_days"> {
+  return { groups: GROUP_LETTERS.slice(0, count), base_days: 7, home_days: 7 * (count - 1) };
+}
+
+/** A new 1 ל־X; the anchor is the Saturday group א closes. */
+export function newWeekendCycle(existing: DayCycle[], count = 6): DayCycle {
+  return { ...newDayCycle(existing), kind: "weekends", name: `1 ל־${count}`, ...weekendDays(count) };
 }
 
 /** A new cycle with the given days; a preset's label names it. */

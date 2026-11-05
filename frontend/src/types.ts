@@ -87,11 +87,15 @@ export interface DayCycleTimeChange extends DayCycleTiming {
   ends_on: string;
 }
 
-/** A day-based cycle — 11/3, 12/2, שבוע־שבוע. A person joins it with
+/** A day-based cycle — 11/3, 12/2, שבוע־שבוע — or, with `kind:
+ *  "weekends"`, a unit's own 1 ל־X: one group per Saturday closes in turn
+ *  and the rest are home Thursday to Sunday. A person joins it with
  *  `exit_pattern = "cycle:<id>"`; the server owns the arithmetic. */
 export interface DayCycle extends DayCycleTiming {
   id: string;
   name: string;
+  /** Missing is "days". A 1 ל־X's days are derived by the server. */
+  kind?: "days" | "weekends";
   base_days: number;
   home_days: number;
   /** The day the first group starts its stretch on base. */

@@ -3,8 +3,9 @@
 /** "יציאות" — the whole rotation question, in four fields.
  *
  *  1. A closed list of every kind of exit the unit has (any number). Day
- *     cycles are items of their own — 11/3, 12/2, שבוע־שבוע… and "other" —
- *     so ticking one creates that cycle and its card asks only the rest.
+ *     cycles are items of their own — 11/3, 12/2, שבוע־שבוע…, a manual
+ *     days-on-base/days-home and a unit's own 1 ל־X — so ticking one
+ *     creates that cycle; its card edits or deletes it.
  *  2–5. For weekend groups only: the round type every earlier screen
  *     offered (11/3, 12/2, 10/4, שבוע־שבוע, other), which fills in when a
  *     closure starts and ends (both editable), and how many groups (סבבים)
@@ -19,7 +20,7 @@
 
 import { MultiSelect } from "@/components/MultiSelect";
 import { TimeInput } from "@/components/TimeInput";
-import { DAY_CYCLE_PRESETS, newDayCycle, presetOf } from "@/lib/dayCycles";
+import { DAY_CYCLE_PRESETS, isWeekends, newDayCycle, newWeekendCycle, presetOf } from "@/lib/dayCycles";
 import type { DayCycle, RotationClosureWindow } from "@/types";
 
 import { DAY_NAMES, SHAPES, shapeLabel, shapeOf, shapeRow } from "./closureShapes";
@@ -46,14 +47,19 @@ const KINDS: { kind: Kind; label: string; patterns: string[] }[] = [
   { kind: "reserve", label: "מילואים", patterns: [] },
 ];
 
-/** One item per preset, then "other" for any days a preset does not name.
- *  A cycle belongs to the preset its days match. */
+/** One item per preset, then the two manual kinds: any days a preset does
+ *  not name, and a 1 ל־X. A cycle belongs to the preset its days match. */
 const OTHER_DAYS = "other";
-const DAY_KINDS: { key: string; label: string; base: number; home: number }[] = [
-  ...DAY_CYCLE_PRESETS.map(({ label, base, home }) => ({ key: label, label: `${label} — ${base} ימים בבסיס, ${home} בבית`, base, home })),
-  { key: OTHER_DAYS, label: "מחזור ימים אחר — ימים בבסיס / ימים בבית", base: 9, home: 5 },
+const WEEKENDS = "weekends";
+const DAY_KINDS: { key: string; label: string; short: string; create: (cycles: DayCycle[]) => DayCycle }[] = [
+  ...DAY_CYCLE_PRESETS.map(({ label, base, home }) => ({
+    key: label, short: label, label: `${label} — ${base} ימים בבסיס, ${home} בבית`,
+    create: (cycles: DayCycle[]) => newDayCycle(cycles, base, home, label),
+  })),
+  { key: OTHER_DAYS, short: "מחזור ימים ידני", label: "מחזור ימים ידני — ימים בבסיס / ימים בבית לבחירה", create: (cycles) => newDayCycle(cycles, 9, 5) },
+  { key: WEEKENDS, short: "סגירה 1 ל־X", label: "סגירה 1 ל־X — כל קבוצה סוגרת שבת אחת מכל X", create: (cycles) => newWeekendCycle(cycles) },
 ];
-const dayKey = (cycle: DayCycle) => presetOf(cycle)?.label ?? OTHER_DAYS;
+const dayKey = (cycle: DayCycle) => isWeekends(cycle) ? WEEKENDS : presetOf(cycle)?.label ?? OTHER_DAYS;
 // The day kinds sit right after the weekend groups.
 const LABELS = [...KINDS.slice(0, 3).map(({ label }) => label), ...DAY_KINDS.map(({ label }) => label), ...KINDS.slice(3).map(({ label }) => label)];
 
@@ -100,15 +106,15 @@ export function ExitKinds({
   ];
   const lockedLabels = [
     ...KINDS.filter(({ kind, patterns }) => isOn(kind, patterns) && locked(kind, patterns)).map(({ label }) => label.split(" — ")[0]),
-    ...DAY_KINDS.filter(({ key }) => dayLocked(key)).map(({ key, label }) => key === OTHER_DAYS ? "מחזור ימים אחר" : label.split(" — ")[0]),
+    ...DAY_KINDS.filter(({ key }) => dayLocked(key)).map(({ short }) => short),
   ];
 
   const change = (labels: string[]) => {
     let cycles = dayCycles;
-    for (const { key, label, base, home } of DAY_KINDS) {
+    for (const { key, label, create } of DAY_KINDS) {
       const want = labels.includes(label);
       if (want === dayOn(key)) continue;
-      if (want) cycles = [...cycles, newDayCycle(cycles, base, home, key === OTHER_DAYS ? undefined : key)];
+      if (want) cycles = [...cycles, create(cycles)];
       // Off removes that kind's cycles nobody is on; one in use stays.
       else cycles = cycles.filter((cycle) => dayKey(cycle) !== key || dayCyclesUsed.has(cycle.id));
     }

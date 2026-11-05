@@ -545,7 +545,7 @@ export function ManualSetup({
             onWindow={setClosure}
           />
 
-          {dayCycles.length ? <DayCycleSetup cycles={dayCycles} onChange={setDayCycles} /> : null}
+          {dayCycles.length ? <DayCycleSetup cycles={dayCycles} onChange={setDayCycles} used={usedDayCycles} /> : null}
           {reserveOn ? <p className="rotation-derived-note">מילואים: בכוח אדם בוחרים מעמד ״מילואים״ לכל מילואימניק/ית, ומגדירים כמה ימים בשבוע, מינימום והאם ברצף. את הימים עצמם בוחר הסידור.</p> : null}
           {availableExitPatterns.has("personal") ? <p className="rotation-derived-note">סגירה אישית: בכוח אדם בוחרים ״סגירה אישית 1 ל־N״ ומגדירים כל כמה שבתות ומתי הסגירה הראשונה.</p> : null}
           {availableExitPatterns.has("daily") ? <p className="rotation-derived-note">יומי: בכוח אדם בוחרים ״יומי״ ומגדירים לכל אחד/ת ימי הגעה ושעות.</p> : null}

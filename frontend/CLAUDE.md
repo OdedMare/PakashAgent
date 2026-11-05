@@ -128,8 +128,9 @@ that morning and out for the rest of the day.
 **The rotation section is a handful of closed lists** (`ManualSetup/ExitKinds.tsx`): a
 closed multi-select of every kind of exit the unit has — none, daily, weekend
 groups (סבבים), every day cycle by name (11/3, 12/2, 10/4, שבוע־שבוע,
-14/7, 21/7, 5/2, 4/3, or "other" days on base / at home — ticking one
-creates that cycle, unticking removes it unless somebody is on it), חמשושים,
+14/7, 21/7, 5/2, 4/3), a manual days on base / at home, and a unit's own
+סגירה 1 ל־X (2–8 groups, `kind: "weekends"`) — ticking one creates that
+cycle, unticking removes it unless somebody is on it — חמשושים,
 שושים, a personal 1 ל־N, reservists — and, when weekend groups are chosen, the round type (a closed
 list of every type the screen offered before: 11/3, 12/2, 10/4, שבוע־שבוע or
 other days and times, from `closureShapes.ts`), which fills in when the
@@ -155,9 +156,10 @@ on the team screen at all: they live in the operator console's "מערכת" tab.
 anchor stored for another group is read as א's next turn; the other groups'
 turns and hours are derived by the server. The older fixed א/ב unavailability
 block shows only to a unit that still has rows in it. The day cycles ticked in that list each get
-a card in `ManualSetup/DayCycleSetup.tsx` with no name, presets or delete
-(the list owns those): the day group א starts on base, how many groups, and
-departure and return; "other" also asks the days on base and at home. When
+a card in `ManualSetup/DayCycleSetup.tsx` that edits and deletes it (the bin
+is off while somebody is on it): its name, the days on base and at home (or
+the X of a 1 ל־X), the anchor, how many groups, and departure and return.
+Buttons under the cards add more manual ones than the list's one each. When
 each other group starts, a group's own hours and dated changes are folded
 under "התאמות לפי קבוצה ותאריך". There is no preview strip: who is home on a
 date is answered by the server. The whole screen

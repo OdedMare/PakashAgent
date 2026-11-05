@@ -10,12 +10,19 @@ A unit may run several of these side by side, so each is stored under its own
 id in `workplace.day_cycles` and a person points at one with
 `exit_pattern = "cycle:<id>"`. Nothing here is guessed: a cycle with no anchor
 produces no home days, and `configuration_errors` refuses to schedule it.
+
+A cycle of `kind = "weekends"` is a unit's own 1 ל־X: X groups take turns
+closing one Saturday each, starting with group א on the weekend of the
+anchor, and every other group is home from Thursday to the Sunday after.
+It is stored here rather than as a fifth lettered pattern so X is not
+capped at the four named ones (סבב…חמישון), and so its hours move with the
+same three layers: `leave_day` shifts the Thursday, `return_day` the Sunday.
 """
 
 import datetime
 from typing import Any, List, Optional, Tuple
 
-from app.bl.rotation.vocabulary import minutes, parse_date, text
+from app.bl.rotation.vocabulary import minutes, parse_date, saturday_of, text
 
 DAY_CYCLE_PREFIX = "cycle:"
 
@@ -40,6 +47,16 @@ def day_cycle(profile: dict, pattern: str) -> Optional[dict]:
         if isinstance(row, dict) and text(row.get("id")) == wanted:
             return row
     return None
+
+
+WEEKENDS = "weekends"
+# A weekend group is nominally home from the Thursday before its Saturday
+# off until the Sunday after it.
+_WEEKEND_LEAVE, _WEEKEND_RETURN = -2, 1
+
+
+def is_weekends(cycle: Optional[dict]) -> bool:
+    return text((cycle or {}).get("kind")) == WEEKENDS
 
 
 def length(cycle: dict) -> int:
@@ -105,6 +122,8 @@ def home_windows(
     few days and to any hour, so a transition day is shared: before the
     departure, or after the return, the group is still on base.
     """
+    if is_weekends(cycle):
+        return _weekend_windows(cycle, group, start, end)
     anchor, days = parse_date(cycle.get("anchor_date")), length(cycle)
     shift = offset(cycle, group)
     base, home = int(cycle.get("base_days") or 0), int(cycle.get("home_days") or 0)
@@ -125,6 +144,36 @@ def home_windows(
                         _at(cycle_start + datetime.timedelta(days=days),
                             when["return_day"], text(when["return_time"]))))
         turn += 1
+    return [window for window in windows
+            if window[0].date() <= end + _DAY and window[1].date() >= start]
+
+
+def closing_group(cycle: dict, saturday: datetime.date) -> Optional[str]:
+    """Which group of a 1 ל־X holds the weekend ending `saturday`."""
+    anchor = parse_date(cycle.get("anchor_date"))
+    groups = [text(item) for item in cycle.get("groups") or []]
+    if anchor is None or not groups:
+        return None
+    return groups[((saturday - saturday_of(anchor)).days // 7) % len(groups)]
+
+
+def _weekend_windows(
+    cycle: dict, group: str, start: datetime.date, end: datetime.date,
+) -> List[Tuple[datetime.datetime, datetime.datetime]]:
+    groups = [text(item) for item in cycle.get("groups") or []]
+    if parse_date(cycle.get("anchor_date")) is None or group not in groups or len(groups) < 2 or start > end:
+        return []
+    reach = datetime.timedelta(days=MAX_DAY_SHIFT + 2)
+    saturday = saturday_of(start - reach)
+    windows = []
+    while saturday <= end + reach:
+        if closing_group(cycle, saturday) != group:
+            leave_day = saturday + datetime.timedelta(days=_WEEKEND_LEAVE)
+            when = timing(cycle, group, leave_day)
+            windows.append((_at(leave_day, when["leave_day"], text(when["leave_time"])),
+                            _at(saturday + datetime.timedelta(days=_WEEKEND_RETURN),
+                                when["return_day"], text(when["return_time"]))))
+        saturday += datetime.timedelta(days=7)
     return [window for window in windows
             if window[0].date() <= end + _DAY and window[1].date() >= start]
 
@@ -179,6 +228,7 @@ def configuration_errors(profile: dict, person: dict) -> List[str]:
     if group not in [text(item) for item in cycle.get("groups") or []]:
         return ["הקבוצה של %s אינה שייכת ל%s" % (name, label(cycle, ""))]
     if parse_date(cycle.get("anchor_date")) is None:
-        return ["לא הוגדר עוגן ל%s (היום שבו קבוצה %s נכנסת לבסיס)"
-                % (label(cycle, ""), text((cycle.get("groups") or [""])[0]))]
+        what = "השבת שבה קבוצה %s סוגרת" if is_weekends(cycle) else "היום שבו קבוצה %s נכנסת לבסיס"
+        return ["לא הוגדר עוגן ל%s (%s)"
+                % (label(cycle, ""), what % text((cycle.get("groups") or [""])[0]))]
     return []

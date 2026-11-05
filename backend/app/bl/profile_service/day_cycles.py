@@ -9,6 +9,9 @@ from app.common.errors import AgentError
 
 _MAX_CYCLE_DAYS = 120
 MAX_DAY_SHIFT = 3
+# A unit's own 1 ל־X: X groups closing one Saturday each in turn.
+WEEKENDS = "weekends"
+WEEKEND_GROUPS = (2, 8)
 _ID = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 
 
@@ -37,12 +40,22 @@ def _cycle(raw: dict, index: int) -> dict:
     cycle_id = text(raw.get("id")) or "c%d" % (index + 1)
     if not _ID.match(cycle_id):
         raise AgentError("מזהה המחזור אינו תקין")
-    base, home = _days(raw.get("base_days"), "ימי בסיס"), _days(raw.get("home_days"), "ימי בית")
-    if base < 1 or home < 1 or base + home > _MAX_CYCLE_DAYS:
-        raise AgentError("מחזור חייב לכלול לפחות יום בסיס ויום בית אחד, ועד %d ימים" % _MAX_CYCLE_DAYS)
+    kind = text(raw.get("kind")) or "days"
+    if kind not in ("days", WEEKENDS):
+        raise AgentError("סוג מחזור היציאות אינו מוכר")
     groups = list(dict.fromkeys(text_list(raw.get("groups") or ["א"])))
     if not groups:
         raise AgentError("למחזור יציאות חייבת להיות לפחות קבוצה אחת")
+    if kind == WEEKENDS:
+        if not WEEKEND_GROUPS[0] <= len(groups) <= WEEKEND_GROUPS[1]:
+            raise AgentError("בסגירה 1 ל־X יש בין %d ל־%d קבוצות" % WEEKEND_GROUPS)
+        # A week per group: X-1 weekends home, one closed. The days are not
+        # a stretch here, only what the screens name the cycle by.
+        base, home = 7, 7 * (len(groups) - 1)
+    else:
+        base, home = _days(raw.get("base_days"), "ימי בסיס"), _days(raw.get("home_days"), "ימי בית")
+        if base < 1 or home < 1 or base + home > _MAX_CYCLE_DAYS:
+            raise AgentError("מחזור חייב לכלול לפחות יום בסיס ויום בית אחד, ועד %d ימים" % _MAX_CYCLE_DAYS)
     anchor = text(raw.get("anchor_date"))
     if anchor:
         try:
@@ -51,17 +64,22 @@ def _cycle(raw: dict, index: int) -> dict:
             raise AgentError("תאריך העוגן של המחזור אינו תקין")
     row = {
         "id": cycle_id,
-        "name": text(raw.get("name")) or "%d/%d" % (base, home),
+        "name": text(raw.get("name")) or ("1 ל־%d" % len(groups) if kind == WEEKENDS else "%d/%d" % (base, home)),
+        "kind": kind,
         "base_days": base,
         "home_days": home,
         "anchor_date": anchor,
         "groups": groups,
-        "offsets": _offsets(raw.get("offsets"), groups, base + home),
+        # A 1 ל־X takes its turns in group order, one weekend each.
+        "offsets": {} if kind == WEEKENDS else _offsets(raw.get("offsets"), groups, base + home),
     }
     row.update(_timing(raw, partial=False))
     row["group_times"] = _group_times(raw.get("group_times"), groups)
     row["time_changes"] = _time_changes(raw.get("time_changes"), groups)
-    _check_stretches(row)
+    if kind == WEEKENDS:
+        _check_weekends(row)
+    else:
+        _check_stretches(row)
     return row
 
 
@@ -145,6 +163,21 @@ def _check_stretches(row: dict) -> None:
             stay = _minutes_between(row["base_days"], when["return_day"], when["return_time"],
                                     when["leave_day"], when["leave_time"])
             if home <= 0 or stay <= 0:
+                raise AgentError("שעות היציאה והחזרה של %s %s אינן משאירות זמן בבית ובבסיס"
+                                 % (row["name"], group))
+
+
+def _check_weekends(row: dict) -> None:
+    """A weekend home still starts before it ends, and leaves part of the week on base."""
+    for group in row["groups"]:
+        base = dict(row, **row["group_times"].get(group, {}))
+        layers = [base] + [dict(base, **change) for change in row["time_changes"]
+                           if change["group"] in ("", group)]
+        for when in layers:
+            # Thursday to Sunday is three days before either end moves.
+            home = _minutes_between(3, when["leave_day"], when["leave_time"],
+                                    when["return_day"], when["return_time"])
+            if home <= 0 or home >= 7 * 1440:
                 raise AgentError("שעות היציאה והחזרה של %s %s אינן משאירות זמן בבית ובבסיס"
                                  % (row["name"], group))
 
