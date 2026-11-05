@@ -6,6 +6,7 @@ under a separate, private, atomic approval. Background replies are read-only.
 
 import datetime
 import logging
+import secrets
 
 from app.bl.absence import AbsenceOptions
 from app.bl.chat.apply import ChatPlanApplier
@@ -26,6 +27,7 @@ _log = logging.getLogger("pakash.chat")
 # A replacement search past this is a departure, which is `retire`;
 # it matches the absence reader's `MAX_DAYS`.
 _MAX_ABSENCE_DAYS = 120
+REPLACEMENT_JOB = "replacement_options"
 # Answers that can be asked for again; a plan still pending may be redone too.
 _REDOABLE = ("complete", "error", "cancelled", "pending")
 # How much of the old answer the model sees so the new one reads differently.
@@ -156,6 +158,48 @@ class ManagerChatService:
         sends the manager's picks to the conversation, where they become one
         through the ordinary checks and approval.
         """
+        profile, dates, _, _ = self._replacement_input(
+            team_id, employee, starts_on, ends_on,
+        )
+        found = self._absence.build(team_id, employee, dates, profile=profile)
+        return {key: value for key, value in found.items() if key != "results"}
+
+    def start_replacement_search(self, team_id, employee, starts_on, ends_on):
+        """Queue the expensive read and return before it starts."""
+        _, _, first, last = self._replacement_input(
+            team_id, employee, starts_on, ends_on,
+        )
+        job = self._repo.enqueue_copilot_job(
+            team_id,
+            "replacement:%s" % secrets.token_hex(16),
+            kind=REPLACEMENT_JOB,
+            payload={
+                "employee": employee,
+                "starts_on": first,
+                "ends_on": last,
+            },
+        )
+        return {"id": job["id"], "status": job["status"]}
+
+    def replacement_search(self, team_id, search_id):
+        """The small polling response; the result appears only when ready."""
+        job = self._repo.get_copilot_job(team_id, search_id)
+        answer = {"id": job["id"], "status": job["status"]}
+        if job["status"] == "complete":
+            result = (job.get("payload") or {}).get("result")
+            if isinstance(result, dict):
+                answer["result"] = result
+            else:
+                answer.update(
+                    status="failed",
+                    error="חיפוש המחליפים הסתיים ללא תוצאה. נסו שוב",
+                )
+        elif job["status"] == "failed":
+            answer["error"] = "חיפוש המחליפים נכשל. נסו שוב"
+        return answer
+
+    def _replacement_input(self, team_id, employee, starts_on, ends_on):
+        """Validate once at launch and again in the worker after a restart."""
         profile = self._context.profile(team_id)
         names = {row.get("name") for row in profile.get("employees") or []}
         if employee not in names:
@@ -169,5 +213,4 @@ class ManagerChatService:
         if days > _MAX_ABSENCE_DAYS:
             raise AppError("אפשר לחפש מחליפים לעד %d ימים בכל פעם" % _MAX_ABSENCE_DAYS)
         dates = [(start + datetime.timedelta(days=n)).isoformat() for n in range(days)]
-        found = self._absence.build(team_id, employee, dates, profile=profile)
-        return {key: value for key, value in found.items() if key != "results"}
+        return profile, dates, first, last

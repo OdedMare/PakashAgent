@@ -111,3 +111,4 @@ from app.api.contracts.preferences import (  # noqa: F401
     PreferenceRequest,
     PreferenceUpdate,
 )
+from app.api.contracts.replacements import ReplacementSearchRequest  # noqa: F401

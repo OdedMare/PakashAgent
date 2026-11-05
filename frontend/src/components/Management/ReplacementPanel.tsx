@@ -44,9 +44,10 @@ export function ReplacementPanel({ employees, today, disabled, onPrepare }: {
   useEffect(() => {
     if (!employee || !from || !to || from > to) return;
     let cancelled = false;
+    const controller = new AbortController();
     const timer = setTimeout(() => {
       setLoading(true); setError("");
-      getReplacementOptions(employee, from, to).then((next) => {
+      getReplacementOptions(employee, from, to, { signal: controller.signal }).then((next) => {
         if (cancelled) return;
         setFound(next);
         setChosen(Object.fromEntries(next.slots.map((slot) => [slotKey(slot), slot.pick])));
@@ -54,7 +55,7 @@ export function ReplacementPanel({ employees, today, disabled, onPrepare }: {
         if (!cancelled) { setFound(null); setError(reason instanceof Error ? reason.message : "לא ניתן לחפש מחליפים"); }
       }).finally(() => { if (!cancelled) setLoading(false); });
     }, 250);
-    return () => { cancelled = true; clearTimeout(timer); };
+    return () => { cancelled = true; controller.abort(); clearTimeout(timer); };
   }, [employee, from, to]);
 
   const prepare = () => {

@@ -37,8 +37,11 @@ export function DepartureCovers({ employee, date, onChange }: {
   useEffect(() => {
     if (!employee || !date) return;
     let live = true;
+    const controller = new AbortController();
     const timer = setTimeout(() => {
-      getReplacementOptions(employee, date, addDays(date, SEARCH_DAYS - 1)).then((next) => {
+      getReplacementOptions(employee, date, addDays(date, SEARCH_DAYS - 1), {
+        signal: controller.signal,
+      }).then((next) => {
         if (!live) return;
         setFound({ key, options: next });
         setChosen(Object.fromEntries(next.slots.map((slot) => [slotKey(slot), slot.pick])));
@@ -46,7 +49,7 @@ export function DepartureCovers({ employee, date, onChange }: {
         if (live) setFound({ key, error: reason instanceof Error ? reason.message : "לא ניתן לחפש מחליפים" });
       });
     }, 250);
-    return () => { live = false; clearTimeout(timer); };
+    return () => { live = false; controller.abort(); clearTimeout(timer); };
   }, [employee, date, key]);
 
   useEffect(() => {

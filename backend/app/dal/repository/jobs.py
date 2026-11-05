@@ -1,4 +1,4 @@
-"""The shared durable queue for chat turns, generation, and translations.
+"""The shared durable queue for chat, replacement searches, generation, and translations.
 
 The table is still called `copilot_jobs`: the copilot that named it is gone,
 and renaming a live table is a migration for no behaviour.
@@ -40,6 +40,22 @@ class JobsRepository(RepositoryBase):
             row = enqueue(connection, team_id, dedupe_key, kind, payload or {})
             connection.commit()
         return dict(row) if row else None
+
+    def get_copilot_job(self, team_id, job_id):
+        rows = self._all("""
+            SELECT id, status, payload FROM copilot_jobs
+            WHERE id=%s AND team_id=%s
+        """, (job_id, team_id))
+        if not rows:
+            raise NotFoundError("החיפוש לא נמצא")
+        return rows[0]
+
+    def set_copilot_job_result(self, job_id, result):
+        self._execute("""
+            UPDATE copilot_jobs
+            SET payload=jsonb_set(payload, '{result}', %s, true)
+            WHERE id=%s
+        """, (Jsonb(result), job_id))
 
     def queue_generation_job(self, team_id, schedule_id):
         """Resume and enqueue one durable job per unfinished model span."""
@@ -116,8 +132,8 @@ class JobsRepository(RepositoryBase):
 
     def _claim_job(self, connection, lane="any"):
         lane_sql = {
-            "interactive": "AND kind='manager_chat'",
-            "background": "AND kind<>'manager_chat'",
+            "interactive": "AND kind IN ('manager_chat','replacement_options')",
+            "background": "AND kind NOT IN ('manager_chat','replacement_options')",
             "any": "",
         }.get(lane)
         if lane_sql is None:
@@ -129,7 +145,8 @@ class JobsRepository(RepositoryBase):
             WHERE status IN ('queued','running') AND run_after <= NOW()
             %s
             ORDER BY status='running',
-                CASE kind WHEN 'manager_chat' THEN 0 WHEN 'generation' THEN 1 ELSE 2 END,
+                CASE WHEN kind IN ('manager_chat','replacement_options') THEN 0
+                     WHEN kind='generation' THEN 1 ELSE 2 END,
                 run_after, created_at
             LIMIT %d
             FOR UPDATE SKIP LOCKED

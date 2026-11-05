@@ -254,6 +254,46 @@ def test_the_replacement_tab_refuses_strangers_and_members():
         employee="דנה", starts_on="2026-10-05")).status_code == 401
 
 
+def test_the_replacement_tab_queues_a_search_and_polls_its_result():
+    from app.common.sessions import ROLE_BOSS
+
+    repo, _, client = _replacement_client(ROLE_BOSS)
+    jobs = {}
+
+    def enqueue(team_id, key, kind="scan", payload=None):
+        row = dict(id="replacement-job", team_id=team_id, status="queued",
+                   kind=kind, payload=dict(payload or {}))
+        jobs[row["id"]] = row
+        return row
+
+    repo.enqueue_copilot_job = enqueue
+    repo.get_copilot_job = lambda team_id, job_id: jobs[job_id]
+
+    started = client.post("/api/agent/replacements/searches", json={
+        "employee": "דנה", "starts_on": "2026-10-05", "ends_on": "2026-10-06",
+    })
+    assert started.status_code == 202
+    assert started.json() == {"id": "replacement-job", "status": "queued"}
+    assert jobs["replacement-job"]["kind"] == "replacement_options"
+
+    waiting = client.get("/api/agent/replacements/searches/replacement-job")
+    assert waiting.json() == {"id": "replacement-job", "status": "queued"}
+
+    result = {
+        "employee": "דנה", "dates": ["2026-10-05", "2026-10-06"],
+        "schedule_id": "schedule-1", "slots": [], "free_dates": [],
+        "elsewhere": [], "error": "",
+    }
+    jobs["replacement-job"].update(
+        status="complete",
+        payload=dict(jobs["replacement-job"]["payload"], result=result),
+    )
+    finished = client.get("/api/agent/replacements/searches/replacement-job")
+    assert finished.json() == {
+        "id": "replacement-job", "status": "complete", "result": result,
+    }
+
+
 def test_a_code_answered_turn_is_finished_by_the_request_itself():
     repo, llm, service, chat_id, schedule_id = setup([])
     service.start_turn(TEAM, "manager-a", chat_id, dict(

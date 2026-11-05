@@ -82,8 +82,54 @@ export const routeCommanderMessage = (content: string) =>
   });
 // Who could cover one person's absence, fairest first. Reads only: the picks
 // become a plan by being sent to the conversation.
-export const getReplacementOptions = (employee: string, startsOn: string, endsOn: string) =>
-  request<ReplacementOptions>(`/api/agent/replacements?${new URLSearchParams({ employee, starts_on: startsOn, ends_on: endsOn })}`);
+type ReplacementSearch = {
+  id: string;
+  status: "queued" | "running" | "complete" | "failed";
+  result?: ReplacementOptions;
+  error?: string;
+};
+
+export async function getReplacementOptions(
+  employee: string,
+  startsOn: string,
+  endsOn: string,
+  options?: { signal?: AbortSignal },
+): Promise<ReplacementOptions> {
+  const signal = options?.signal;
+  let search = await request<ReplacementSearch>("/api/agent/replacements/searches", {
+    method: "POST",
+    body: JSON.stringify({ employee, starts_on: startsOn, ends_on: endsOn }),
+    signal,
+  });
+  while (search.status === "queued" || search.status === "running") {
+    await waitForReplacementPoll(signal);
+    search = await request<ReplacementSearch>(
+      `/api/agent/replacements/searches/${encodeURIComponent(search.id)}`,
+      { signal },
+    );
+  }
+  if (search.status === "complete" && search.result) return search.result;
+  throw new Error(search.error || "חיפוש המחליפים נכשל. נסו שוב");
+}
+
+function waitForReplacementPoll(signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(abortError());
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", stop);
+      resolve();
+    }, 1_000);
+    function stop() {
+      clearTimeout(timer);
+      reject(abortError());
+    }
+    signal?.addEventListener("abort", stop, { once: true });
+  });
+}
+
+function abortError(): Error {
+  return Object.assign(new Error("Aborted"), { name: "AbortError" });
+}
 
 /** Routes whose 401 is an answer rather than a symptom: the probes that
  *  ask "who am I". */
