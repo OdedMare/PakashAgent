@@ -29,35 +29,6 @@ export function PersonStandard({ person, standing, onChange }: { person: Row; st
   );
 }
 
-/** A shift's role composition: how many of each role sit on it. Stored as
- *  `required_roles` with each role repeated per seat. */
-export function ShiftRoles({ shift, roles, onChange }: { shift: Row; roles: string[]; onChange: (staffing: Row[]) => void }) {
-  const groups = Array.isArray(shift.staffing) ? shift.staffing as Row[] : [];
-  const baseIndex = groups.findIndex((group) => !Array.isArray(group.days) || group.days.length === 0);
-  const base = baseIndex >= 0 ? groups[baseIndex] : { days: [], headcount: 1, required_roles: [] };
-  const required = Array.isArray(base.required_roles) ? base.required_roles as string[] : [];
-  const counts = required.reduce<Record<string, number>>((all, role) => ({ ...all, [role]: (all[role] ?? 0) + 1 }), {});
-  const listed = [...new Set([...roles, ...Object.keys(counts)])];
-  if (!listed.length) return null;
-  const set = (role: string, count: number) => {
-    const next = { ...counts, [role]: Math.max(0, count) };
-    const seats = Object.entries(next).flatMap(([name, n]) => Array.from({ length: n }, () => name));
-    const updated = { ...base, required_roles: seats };
-    onChange(baseIndex >= 0 ? groups.map((group, at) => at === baseIndex ? updated : group) : [updated, ...groups]);
-  };
-  return (
-    <fieldset className="manual-checkboxes">
-      <legend>הרכב תפקידים במשמרת</legend>
-      {listed.map((role) => (
-        <label key={role}>
-          <span>{role}</span>
-          <input type="number" min={0} max={20} style={{ width: "4em" }} value={counts[role] ?? 0} onChange={(e) => set(role, Number(e.target.value) || 0)} />
-        </label>
-      ))}
-    </fieldset>
-  );
-}
-
 /** One qualification's state in words, coloured like the card. */
 function QualificationBadge({ row }: { row?: QualificationStanding["rows"][number] }) {
   if (!row) return null;

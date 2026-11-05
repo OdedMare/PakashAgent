@@ -177,8 +177,12 @@
 }
 
 /* What the code scheduler understood (D32). */
+.manual-compiled-block { display: grid; gap: 0.3rem; min-width: 0; }
+.manual-rule > .manual-compiled-block { grid-column: 1 / -1; }
+.manual-day-picks { max-width: 30rem; }
 .manual-compiled { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
 .manual-compiled li { display: grid; grid-template-columns: minmax(0, 8rem) minmax(0, 1fr) auto; gap: 0.35rem 0.75rem; align-items: start; padding: 0.6rem 0.7rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.manual-compiled li.is-bare { display: flex; flex-wrap: wrap; gap: 0.35rem 0.75rem; padding: 0; background: none; border: 0; }
 .manual-compiled-kind { color: var(--text-muted); font-size: 0.78rem; }
 .manual-compiled-text { min-width: 0; overflow-wrap: anywhere; font-size: 0.85rem; }
 .manual-compiled-tag { padding: 0.15rem 0.5rem; font-size: 0.75rem; border-radius: 999px; white-space: nowrap; }
@@ -199,11 +203,6 @@
 .exit-closure { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .exit-closure > .manual-field:first-child { grid-column: 1 / -2; }
 .exit-pattern-fields { margin-block-start: 0.5rem; }
-.exit-day-picks { display: flex; flex-wrap: wrap; gap: 0.3rem; }
-.exit-day { position: relative; display: grid; place-items: center; min-width: 44px; min-height: 44px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; }
-.exit-day input { position: absolute; opacity: 0; pointer-events: none; }
-.exit-day.is-selected { background: var(--primary-soft); border-color: var(--primary); }
-.exit-day:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 /* Folding the setup: a section, a roster group, one soldier's card. Folding
    only hides — every field stays in the form and is saved. */

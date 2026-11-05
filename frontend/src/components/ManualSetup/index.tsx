@@ -28,15 +28,15 @@ import { ExitPatternFields } from "@/components/Management/ExitPatternFields";
 import type { UnitPolicy } from "@/services/api";
 import type { DayCycle, RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
 
-import { CompiledSources } from "./CompiledSources";
+import { CompiledList, useCompiledSources } from "./CompiledSources";
 import { DayCycleSetup } from "./DayCycleSetup";
 import { ExitKinds } from "./ExitKinds";
-import { CheckboxGrid, Field } from "./fields";
+import { Field } from "./fields";
 import { CYCLES, firstGroupAnchor } from "./RotationSetup";
 import { RosterView } from "./RosterView";
 import type { RosterPerson } from "./rosterGroups";
 import type { Cycle } from "./RotationSetup";
-import { PersonStandard, ShiftRoles } from "./UnitStandard";
+import { PersonStandard } from "./UnitStandard";
 import { useCollapsed } from "./useCollapsed";
 import { useQualification } from "./useQualification";
 import { ImportUnit } from "./ImportUnit";
@@ -183,17 +183,10 @@ export function ManualSetup({
   const [rosterServices, setRosterServices] = useState<string[]>([]);
   const onRosterFilter = useCallback((value: string[]) => setRosterServices(value), []);
 
+  const compiled = useCompiledSources();
   const shiftNames = useMemo(
     () => shifts.map((shift) => text(shift.name)).filter(Boolean),
     [shifts],
-  );
-  // The roles a shift can be limited to are the ones typed on the roster.
-  const roleNames = useMemo(
-    () => [...new Set(employees.filter(named).flatMap((person) => [
-      text(person.role),
-      ...rows(person.qualifications).map((row) => text(row.role)),
-    ]).filter(Boolean))].sort(),
-    [employees],
   );
   // What this save renames and deletes, worked out from the rows' saved names.
   const renamedEmployees = renames(employees);
@@ -452,7 +445,8 @@ export function ManualSetup({
           headcount: number(shift.headcount, headcount(shift)),
           staffing: staffingFor(shift, weekend, closureDays(shift, closure)),
           requires_shift_manager: Boolean(shift.requires_shift_manager),
-          allowed_roles: strings(shift.allowed_roles),
+          // Role limits are no longer set in setup; a save clears any stored.
+          allowed_roles: [],
           min_competence: text(shift.min_competence),
         })),
         rules: rules
@@ -574,7 +568,7 @@ export function ManualSetup({
                       <div><strong>תקופת אי־זמינות {index + 1}</strong><span>השארת ימים או משמרות ללא בחירה תחיל את הכלל על כולם.</span></div>
                       <button type="button" className="icon-button subtle" aria-label={`מחיקת תקופת אי־זמינות ${index + 1}`} onClick={() => setRotationAUnavailability((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
                     </div>
-                    <CheckboxGrid label="ימים שבהם סבב א׳ אינו זמין" values={DAYS} selected={strings(rule.days)} onChange={(value) => edit(setRotationAUnavailability, index, "days", value)} />
+                    <MultiSelect label="ימים שבהם סבב א׳ אינו זמין" values={DAYS} selected={strings(rule.days)} onChange={(value) => edit(setRotationAUnavailability, index, "days", value)} placeholder="כל הימים" />
                     {shiftNames.length ? <MultiSelect label="משמרות" values={shiftNames} selected={strings(rule.shifts)} onChange={(value) => edit(setRotationAUnavailability, index, "shifts", value)} placeholder="כל המשמרות" /> : null}
                     <div className="manual-grid three">
                       <Field label="משעה (רשות)"><TimeInput value={inputText(rule.start_time)} onChange={(time) => edit(setRotationAUnavailability, index, "start_time", time)} /></Field>
@@ -664,6 +658,7 @@ export function ManualSetup({
                 />
                 <PersonStandard person={person} standing={qualifications[historyName(person)]} onChange={(key, value) => edit(setEmployees, index, key, value)} />
                 <Field label="הערות לחייל/ת"><textarea value={inputText(person.notes)} onChange={(e) => edit(setEmployees, index, "notes", e.target.value)} rows={2} placeholder={notesVisualOnly ? "מוצג בלוח בלבד, לא משפיע על השיבוץ" : "מידע קבוע שכדאי לקחת בחשבון בשיבוץ"} /></Field>
+                <CompiledList title="מה הקוד הבין" sources={compiled.forPerson(text(person[SAVED]))} />
               </article>
               );
             }}
@@ -718,13 +713,7 @@ export function ManualSetup({
                 {text(shift.starts_on) && text(shift.ends_on) ? <p className="manual-zero-note">משמרת זמנית: תופיע בסידור רק בטווח התאריכים שנבחר.</p> : null}
                 {offNote(number(shift.headcount, headcount(shift)), shift.weekend_headcount) ? <p className="manual-zero-note">{offNote(number(shift.headcount, headcount(shift)), shift.weekend_headcount)}</p> : null}
                 <label className="manual-check"><input type="checkbox" checked={Boolean(shift.requires_shift_manager)} onChange={(e) => edit(setShifts, index, "requires_shift_manager", e.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
-                <CheckboxGrid label="ימים" values={DAYS} selected={strings(shift.days)} onChange={(value) => edit(setShifts, index, "days", value)} />
-                <RoleOptions roles={roleNames} selected={strings(shift.allowed_roles)} onChange={(value) => edit(setShifts, index, "allowed_roles", value)} />
-                <ShiftRoles shift={shift} roles={roleNames} onChange={(staffing) => {
-                  edit(setShifts, index, "staffing", staffing);
-                  const seats = strings(rows(staffing).find((group) => strings(group.days).length === 0)?.required_roles).length;
-                  if (seats > number(shift.headcount, headcount(shift))) edit(setShifts, index, "headcount", seats);
-                }} />
+                <MultiSelect className="manual-day-picks" label="ימים" values={DAYS} selected={strings(shift.days)} onChange={(value) => edit(setShifts, index, "days", value)} placeholder="לא נבחרו ימים" />
                 <button type="button" className="icon-button subtle manual-delete" aria-label="מחיקת סוג משמרת" title={text(shift[SAVED]) ? "סידורים קיימים נשארים כפי שהם; הבנייה הבאה לא תכלול את המשמרת" : undefined} onClick={() => {
                   const name = text(shift[SAVED]);
                   if (name) {
@@ -752,6 +741,7 @@ export function ManualSetup({
                 <input aria-label="ניסוח הכלל" value={inputText(rule.text)} onChange={(e) => edit(setRules, index, "text", e.target.value)} placeholder="לדוגמה: אין לשבץ חפיפה מיד אחרי לילה" />
                 <select aria-label="עוצמת הכלל" value={rule.priority === "soft" ? "soft" : "hard"} onChange={(e) => edit(setRules, index, "priority", e.target.value)}><option value="hard">קשיח</option><option value="soft">העדפה</option></select>
                 <button type="button" className="icon-button subtle" aria-label="מחיקת כלל" onClick={() => setRules((current) => current.filter((_, row) => row !== index))}><Trash2 size={15} /></button>
+                <CompiledList bare sources={compiled.forRule(text(rule.text))} />
               </div>
             ))}
           </div>
@@ -767,9 +757,11 @@ export function ManualSetup({
           <WeeklyShifts policy={unitPolicy} onChange={setUnitPolicy} />
         </SetupSection>
 
-        <SetupSection {...section("compiled")} icon={<Cpu />} title="מה הקוד הבין" hint="אחרי שמירה, כל כלל, מדיניות והערה מתורגמים פעם אחת לשפת השיבוץ בקוד, כדי שבניית סידור לא תצטרך לשאול שוב. מה שלא תורגם יופיע בהערות הבנייה ולא ייאכף.">
-          <CompiledSources />
-        </SetupSection>
+        {compiled.rest.length ? (
+          <SetupSection {...section("compiled")} icon={<Cpu />} title="מה הקוד הבין — מדיניות כללית" hint="מה שלא שייך לחייל/ת או לכלל מסוים. מה שקשור לחייל/ת מופיע על הכרטיס שלו/ה, ומה שקשור לכלל — ליד הכלל.">
+            <CompiledList sources={compiled.rest} />
+          </SetupSection>
+        ) : null}
       </main>
 
       <footer className="manual-savebar" data-tour="setup-save">
@@ -859,14 +851,6 @@ function SetupSection({ tour, icon, title, hint, summary, open, onToggle, childr
 
 /** Which roles may stand a shift. A role no longer on the roster stays
  *  listed while selected, so it can still be cleared. */
-function RoleOptions({ roles, selected, onChange }: { roles: string[]; selected: string[]; onChange: (value: string[]) => void }) {
-  const values = [...new Set([...roles, ...selected])];
-  if (!values.length) {
-    return <fieldset className="manual-checkboxes"><legend>תפקידים מוסמכים</legend><small>הגדירו תפקיד לאנשי הצוות כדי להגביל את המשמרת לתפקידים מסוימים.</small></fieldset>;
-  }
-  return <fieldset className="manual-checkboxes"><legend>תפקידים מוסמכים</legend>{values.map((value) => <label key={value}><input type="checkbox" checked={selected.includes(value)} onChange={(event) => onChange(event.target.checked ? [...selected, value] : selected.filter((item) => item !== value))} /><span>{value}</span></label>)}<small>{selected.length ? "רק בעלי התפקידים שסומנו ישובצו במשמרת הזו." : "לא סומן תפקיד — כל אנשי הצוות מוסמכים."}</small></fieldset>;
-}
-
 /** `{saved name: new name}` for every saved row whose name was edited. */
 function renames(list: Row[]): Record<string, string> {
   const result: Record<string, string> = {};
@@ -934,8 +918,9 @@ function isWeekendGroup(group: Row): boolean {
 function staffingFor(shift: Row, weekend: unknown, weekendDays: string[]): Row[] {
   const groups = rows(shift.staffing);
   const base = groups.find((group) => strings(group.days).length === 0);
-  const roles = Array.isArray(base?.required_roles) ? base.required_roles : [];
-  const others = groups.filter((group) => strings(group.days).length > 0 && !isWeekendGroup(group));
+  // The role composition is no longer set in setup; a save clears it.
+  const roles: string[] = [];
+  const others = groups.filter((group) => strings(group.days).length > 0 && !isWeekendGroup(group)).map((group) => ({ ...group, required_roles: [] }));
   return [
     { days: [], headcount: number(shift.headcount, headcount(shift)), required_roles: roles },
     ...others,

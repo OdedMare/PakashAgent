@@ -1,6 +1,7 @@
 "use client";
 
 import { DateInput } from "@/components/DateInput";
+import { MultiSelect } from "@/components/MultiSelect";
 import { TimeInput } from "@/components/TimeInput";
 
 import { WEEKDAYS } from "./teamLabels";
@@ -23,14 +24,7 @@ export function ExitPatternFields({ pattern, person, onChange }: {
     return (
       <fieldset className="soldier-reserve exit-pattern-fields">
         <legend>הגעה יומית</legend>
-        <div className="exit-day-picks" role="group" aria-label="ימי הגעה">
-          {WEEKDAYS.map((day) => (
-            <label key={day} className={`exit-day${days.includes(day) ? " is-selected" : ""}`}>
-              <input type="checkbox" checked={days.includes(day)} onChange={(event) => onChange("daily_days", event.target.checked ? WEEKDAYS.filter((item) => item === day || days.includes(item)) : days.filter((item) => item !== day))} />
-              <span>{day.slice(0, 1)}׳</span>
-            </label>
-          ))}
-        </div>
+        <MultiSelect label="ימי הגעה" values={[...WEEKDAYS]} selected={days} onChange={(value) => onChange("daily_days", value)} placeholder="כל ימי הפעילות" />
         <div className="soldier-grid">
           <label className="soldier-field"><span>מגיע/ה בשעה</span><TimeInput value={str(person.daily_start)} onChange={(time) => onChange("daily_start", time)} /></label>
           <label className="soldier-field"><span>הולך/ת הביתה בשעה</span><TimeInput value={str(person.daily_end)} onChange={(time) => onChange("daily_end", time)} /></label>
