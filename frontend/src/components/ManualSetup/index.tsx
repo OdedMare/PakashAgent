@@ -151,7 +151,6 @@ export function ManualSetup({
     const round = text(initialWorkplace.round_first_closure_date) || text(initialWorkplace.first_closure_date) ? ["round"] : [];
     return [...new Set([...configured, ...used, ...round])];
   });
-  const [dayCyclesOn, setDayCyclesOn] = useState(() => (profile.workplace?.day_cycles ?? []).length > 0);
   const [reserveOn, setReserveOn] = useState(() =>
     typeof initialWorkplace.reserve_enabled === "boolean"
       ? initialWorkplace.reserve_enabled
@@ -528,25 +527,25 @@ export function ManualSetup({
           });
           setImporting(false);
         }} />}
-        <SetupSection {...section("rotations")} summary={[...Object.entries(EXIT_PATTERNS).filter(([value]) => availableExitPatterns.has(value)).map(([, label]) => label.split(" — ")[0]), ...(dayCyclesOn ? [`${dayCycles.length} מחזורי ימים`] : [])].join(" · ") || "לא נבחרו יציאות"} tour="setup-rotations" icon={<Repeat2 />} title="יציאות" hint="קודם בוחרים אילו סוגי יציאות יש ביחידה, ואז עונים רק על השאלות שלהם. את המבנה של כל חייל/ת בוחרים בכוח אדם. ההגדרות חלות על השיבוץ הבא — סידור קיים לא נבנה מחדש.">
+        <SetupSection {...section("rotations")} summary={[...Object.entries(EXIT_PATTERNS).filter(([value]) => availableExitPatterns.has(value)).map(([, label]) => label.split(" — ")[0]), ...dayCycles.map((cycle) => cycle.name || `${cycle.base_days}/${cycle.home_days}`)].join(" · ") || "לא נבחרו יציאות"} tour="setup-rotations" icon={<Repeat2 />} title="יציאות" hint="קודם בוחרים אילו סוגי יציאות יש ביחידה, ואז עונים רק על השאלות שלהם. את המבנה של כל חייל/ת בוחרים בכוח אדם. ההגדרות חלות על השיבוץ הבא — סידור קיים לא נבנה מחדש.">
           <ExitKinds
             enabled={availableExitPatterns}
             used={usedExitPatterns}
-            dayCyclesOn={dayCyclesOn || dayCycles.length > 0}
-            dayCyclesUsed={usedDayCycles.size > 0}
+            dayCycles={dayCycles}
+            dayCyclesUsed={usedDayCycles}
             reserveOn={reserveOn}
             reserveBusy={reserveChecking}
             cycle={weekendCycle}
             window={closureOf(weekendCycle)}
             handoverEnd={handoverEnd}
             onEnabled={(next) => setEnabledExitPatterns([...next])}
-            onDayCycles={setDayCyclesOn}
+            onDayCycles={setDayCycles}
             onReserve={(on) => void toggleReserve(on)}
             onCycle={chooseCycle}
             onWindow={setClosure}
           />
 
-          {dayCyclesOn || dayCycles.length > 0 ? <DayCycleSetup cycles={dayCycles} onChange={setDayCycles} used={usedDayCycles} /> : null}
+          {dayCycles.length ? <DayCycleSetup cycles={dayCycles} onChange={setDayCycles} /> : null}
           {reserveOn ? <p className="rotation-derived-note">מילואים: בכוח אדם בוחרים מעמד ״מילואים״ לכל מילואימניק/ית, ומגדירים כמה ימים בשבוע, מינימום והאם ברצף. את הימים עצמם בוחר הסידור.</p> : null}
           {availableExitPatterns.has("personal") ? <p className="rotation-derived-note">סגירה אישית: בכוח אדם בוחרים ״סגירה אישית 1 ל־N״ ומגדירים כל כמה שבתות ומתי הסגירה הראשונה.</p> : null}
           {availableExitPatterns.has("daily") ? <p className="rotation-derived-note">יומי: בכוח אדם בוחרים ״יומי״ ומגדירים לכל אחד/ת ימי הגעה ושעות.</p> : null}

@@ -127,8 +127,10 @@ that morning and out for the rest of the day.
 
 **The rotation section is a handful of closed lists** (`ManualSetup/ExitKinds.tsx`): a
 closed multi-select of every kind of exit the unit has — none, daily, weekend
-groups (סבבים), חמשושים, שושים, days on base / at home, a personal 1 ל־N,
-reservists — and, when weekend groups are chosen, the round type (a closed
+groups (סבבים), every day cycle by name (11/3, 12/2, 10/4, שבוע־שבוע,
+14/7, 21/7, 5/2, 4/3, or "other" days on base / at home — ticking one
+creates that cycle, unticking removes it unless somebody is on it), חמשושים,
+שושים, a personal 1 ל־N, reservists — and, when weekend groups are chosen, the round type (a closed
 list of every type the screen offered before: 11/3, 12/2, 10/4, שבוע־שבוע or
 other days and times, from `closureShapes.ts`), which fills in when the
 closure starts and ends (day + time, both editable; an edit that matches no
@@ -152,11 +154,13 @@ on the team screen at all: they live in the operator console's "מערכת" tab.
 `ManualSetup/RotationSetup.tsx` holds only the lettered cycles and how an
 anchor stored for another group is read as א's next turn; the other groups'
 turns and hours are derived by the server. The older fixed א/ב unavailability
-block shows only to a unit that still has rows in it. Day cycles (11/3, 12/2, שבוע־שבוע…) are typed in
-`ManualSetup/DayCycleSetup.tsx`: days on base and at home, the day group א
-starts on base, when each other group starts, and hours in three layers
-(cycle, group, dated change). Its four-week strip is a preview of the nominal
-days only; who is home on a date is answered by the server. The whole screen
+block shows only to a unit that still has rows in it. The day cycles ticked in that list each get
+a card in `ManualSetup/DayCycleSetup.tsx` with no name, presets or delete
+(the list owns those): the day group א starts on base, how many groups, and
+departure and return; "other" also asks the days on base and at home. When
+each other group starts, a group's own hours and dated changes are folded
+under "התאמות לפי קבוצה ותאריך". There is no preview strip: who is home on a
+date is answered by the server. The whole screen
 saves in one `updateProfile`. A saved soldier's or shift's name can be
 corrected there: each row remembers the name it was loaded under (`_saved`,
 never sent), and an edited one goes out as `renamed_employees` /

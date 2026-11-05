@@ -2,7 +2,9 @@
 
 /** "יציאות" — the whole rotation question, in four fields.
  *
- *  1. A closed list of every kind of exit the unit has (any number).
+ *  1. A closed list of every kind of exit the unit has (any number). Day
+ *     cycles are items of their own — 11/3, 12/2, שבוע־שבוע… and "other" —
+ *     so ticking one creates that cycle and its card asks only the rest.
  *  2–5. For weekend groups only: the round type every earlier screen
  *     offered (11/3, 12/2, 10/4, שבוע־שבוע, other), which fills in when a
  *     closure starts and ends (both editable), and how many groups (סבבים)
@@ -17,14 +19,15 @@
 
 import { MultiSelect } from "@/components/MultiSelect";
 import { TimeInput } from "@/components/TimeInput";
-import type { RotationClosureWindow } from "@/types";
+import { DAY_CYCLE_PRESETS, newDayCycle, presetOf } from "@/lib/dayCycles";
+import type { DayCycle, RotationClosureWindow } from "@/types";
 
 import { DAY_NAMES, SHAPES, shapeLabel, shapeOf, shapeRow } from "./closureShapes";
 import type { Shape } from "./closureShapes";
 import { Field } from "./fields";
 import type { Cycle } from "./RotationSetup";
 
-export type Kind = "none" | "daily" | "weekends" | "hamshushim" | "shushim" | "days" | "personal" | "reserve";
+export type Kind = "none" | "daily" | "weekends" | "hamshushim" | "shushim" | "personal" | "reserve";
 
 export const GROUP_CYCLES: { pattern: Cycle; groups: number; label: string }[] = [
   { pattern: "round", groups: 2, label: "2 — סבב" },
@@ -39,10 +42,20 @@ const KINDS: { kind: Kind; label: string; patterns: string[] }[] = [
   { kind: "weekends", label: "סבבים — קבוצות שסוגרות שבתות בתורות", patterns: GROUP_CYCLES.map((item) => item.pattern) },
   { kind: "hamshushim", label: "חמשושים — כל סופ״ש בבית מחמישי", patterns: ["hamshushim"] },
   { kind: "shushim", label: "שושים — כל סופ״ש בבית משישי", patterns: ["shushim"] },
-  { kind: "days", label: "ימים בבסיס / ימים בבית", patterns: [] },
   { kind: "personal", label: "סגירה אישית 1 ל־N", patterns: ["personal"] },
   { kind: "reserve", label: "מילואים", patterns: [] },
 ];
+
+/** One item per preset, then "other" for any days a preset does not name.
+ *  A cycle belongs to the preset its days match. */
+const OTHER_DAYS = "other";
+const DAY_KINDS: { key: string; label: string; base: number; home: number }[] = [
+  ...DAY_CYCLE_PRESETS.map(({ label, base, home }) => ({ key: label, label: `${label} — ${base} ימים בבסיס, ${home} בבית`, base, home })),
+  { key: OTHER_DAYS, label: "מחזור ימים אחר — ימים בבסיס / ימים בבית", base: 9, home: 5 },
+];
+const dayKey = (cycle: DayCycle) => presetOf(cycle)?.label ?? OTHER_DAYS;
+// The day kinds sit right after the weekend groups.
+const LABELS = [...KINDS.slice(0, 3).map(({ label }) => label), ...DAY_KINDS.map(({ label }) => label), ...KINDS.slice(3).map(({ label }) => label)];
 
 // Closure days are stored as offsets from the closing Saturday: a closure
 // may open as early as the Sunday before it (-6) and end as late as the
@@ -53,15 +66,15 @@ const END_DAYS = [{ value: 0, label: "שבת" }, ...DAY_NAMES.slice(0, 6).map((d
 export type ClosureWindow = Pick<RotationClosureWindow, "start_day" | "start_time" | "end_day" | "end_time">;
 
 export function ExitKinds({
-  enabled, used, dayCyclesOn, dayCyclesUsed, reserveOn, reserveBusy, cycle, window, handoverEnd,
+  enabled, used, dayCycles, dayCyclesUsed, reserveOn, reserveBusy, cycle, window, handoverEnd,
   onEnabled, onDayCycles, onReserve, onCycle, onWindow,
 }: {
   enabled: Set<string>;
   /** Patterns somebody on the roster is on: locked on. */
   used: Set<string>;
-  dayCyclesOn: boolean;
-  /** Somebody is on a day cycle: the kind stays on. */
-  dayCyclesUsed: boolean;
+  dayCycles: DayCycle[];
+  /** Ids of the day cycles somebody is on: those stay. */
+  dayCyclesUsed: Set<string>;
   reserveOn: boolean;
   reserveBusy: boolean;
   /** The weekend-groups cycle chosen, when that kind is on. */
@@ -70,26 +83,42 @@ export function ExitKinds({
   /** When Sunday's first shift ends — where a round type's closure stops. */
   handoverEnd: string;
   onEnabled: (patterns: Set<string>) => void;
-  onDayCycles: (on: boolean) => void;
+  onDayCycles: (cycles: DayCycle[]) => void;
   onReserve: (on: boolean) => void;
   onCycle: (pattern: Cycle) => void;
   onWindow: (patch: Partial<ClosureWindow>) => void;
 }) {
-  const isOn = (kind: Kind, patterns: string[]) => kind === "days" ? dayCyclesOn : kind === "reserve" ? reserveOn
+  const isOn = (kind: Kind, patterns: string[]) => kind === "reserve" ? reserveOn
     : patterns.some((pattern) => enabled.has(pattern));
-  const locked = (kind: Kind, patterns: string[]) => kind === "days" ? dayCyclesUsed
-    : kind === "reserve" ? reserveBusy : patterns.some((pattern) => used.has(pattern));
+  const locked = (kind: Kind, patterns: string[]) => kind === "reserve" ? reserveBusy : patterns.some((pattern) => used.has(pattern));
+  const dayOn = (key: string) => dayCycles.some((cycle) => dayKey(cycle) === key);
+  const dayLocked = (key: string) => dayCycles.some((cycle) => dayKey(cycle) === key && dayCyclesUsed.has(cycle.id));
 
-  const selected = KINDS.filter(({ kind, patterns }) => isOn(kind, patterns)).map(({ label }) => label);
-  const lockedLabels = KINDS.filter(({ kind, patterns }) => isOn(kind, patterns) && locked(kind, patterns)).map(({ label }) => label);
+  const selected = [
+    ...KINDS.filter(({ kind, patterns }) => isOn(kind, patterns)).map(({ label }) => label),
+    ...DAY_KINDS.filter(({ key }) => dayOn(key)).map(({ label }) => label),
+  ];
+  const lockedLabels = [
+    ...KINDS.filter(({ kind, patterns }) => isOn(kind, patterns) && locked(kind, patterns)).map(({ label }) => label.split(" — ")[0]),
+    ...DAY_KINDS.filter(({ key }) => dayLocked(key)).map(({ key, label }) => key === OTHER_DAYS ? "מחזור ימים אחר" : label.split(" — ")[0]),
+  ];
 
   const change = (labels: string[]) => {
+    let cycles = dayCycles;
+    for (const { key, label, base, home } of DAY_KINDS) {
+      const want = labels.includes(label);
+      if (want === dayOn(key)) continue;
+      if (want) cycles = [...cycles, newDayCycle(cycles, base, home, key === OTHER_DAYS ? undefined : key)];
+      // Off removes that kind's cycles nobody is on; one in use stays.
+      else cycles = cycles.filter((cycle) => dayKey(cycle) !== key || dayCyclesUsed.has(cycle.id));
+    }
+    if (cycles !== dayCycles) onDayCycles(cycles);
+
     const next = new Set(enabled);
     for (const { kind, label, patterns } of KINDS) {
       const want = labels.includes(label);
       if (want === isOn(kind, patterns)) continue;
       if (!want && locked(kind, patterns)) continue;
-      if (kind === "days") { onDayCycles(want); continue; }
       if (kind === "reserve") { onReserve(want); continue; }
       // Turning the groups on starts at a סבב; the count below refines it.
       if (want) (kind === "weekends" ? ["round"] : patterns).forEach((pattern) => next.add(pattern));
@@ -112,7 +141,7 @@ export function ExitKinds({
 
   return (
     <div className="exit-setup">
-      <MultiSelect label="סוגי היציאות ביחידה" values={KINDS.map(({ label }) => label)} selected={selected} onChange={change} placeholder="לא נבחרו יציאות" />
+      <MultiSelect label="סוגי היציאות ביחידה" values={LABELS} selected={selected} onChange={change} placeholder="לא נבחרו יציאות" />
       {lockedLabels.length ? <p className="rotation-hint">יש אנשי צוות ב: {lockedLabels.join(" · ")} — אי אפשר להסיר עד שמעבירים אותם.</p> : null}
 
       {cycle ? (
