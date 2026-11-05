@@ -3,8 +3,10 @@
 /** "יציאות" — the whole rotation question, in four fields.
  *
  *  1. A closed list of every kind of exit the unit has (any number).
- *  2–4. For weekend groups only: when a closure starts, when it ends, and
- *     how many groups (סבבים) take turns — 2 = סבב, 3 = תלתון, 4 = רבעון,
+ *  2–5. For weekend groups only: the round type every earlier screen
+ *     offered (11/3, 12/2, 10/4, שבוע־שבוע, other), which fills in when a
+ *     closure starts and ends (both editable), and how many groups (סבבים)
+ *     take turns — 2 = סבב, 3 = תלתון, 4 = רבעון,
  *     5 = חמישון.
  *
  *  No calendar, no exception weekends and no "which date does which group
@@ -17,7 +19,8 @@ import { MultiSelect } from "@/components/MultiSelect";
 import { TimeInput } from "@/components/TimeInput";
 import type { RotationClosureWindow } from "@/types";
 
-import { DAY_NAMES } from "./closureShapes";
+import { DAY_NAMES, SHAPES, shapeLabel, shapeOf, shapeRow } from "./closureShapes";
+import type { Shape } from "./closureShapes";
 import { Field } from "./fields";
 import type { Cycle } from "./RotationSetup";
 
@@ -50,7 +53,7 @@ const END_DAYS = [{ value: 0, label: "שבת" }, ...DAY_NAMES.slice(0, 6).map((d
 export type ClosureWindow = Pick<RotationClosureWindow, "start_day" | "start_time" | "end_day" | "end_time">;
 
 export function ExitKinds({
-  enabled, used, dayCyclesOn, dayCyclesUsed, reserveOn, reserveBusy, cycle, window,
+  enabled, used, dayCyclesOn, dayCyclesUsed, reserveOn, reserveBusy, cycle, window, handoverEnd,
   onEnabled, onDayCycles, onReserve, onCycle, onWindow,
 }: {
   enabled: Set<string>;
@@ -64,6 +67,8 @@ export function ExitKinds({
   /** The weekend-groups cycle chosen, when that kind is on. */
   cycle: Cycle | undefined;
   window: ClosureWindow;
+  /** When Sunday's first shift ends — where a round type's closure stops. */
+  handoverEnd: string;
   onEnabled: (patterns: Set<string>) => void;
   onDayCycles: (on: boolean) => void;
   onReserve: (on: boolean) => void;
@@ -93,6 +98,18 @@ export function ExitKinds({
     onEnabled(next);
   };
 
+  const groups = GROUP_CYCLES.find((item) => item.pattern === cycle)?.groups ?? 2;
+  const shape = shapeOf(window as RotationClosureWindow, handoverEnd);
+  const pickShape = (next: Shape) => {
+    if (next === "custom") return;
+    const row = shapeRow(next, handoverEnd, {}, true)!;
+    onWindow({ start_day: row.start_day, start_time: row.start_time, end_day: row.end_day, end_time: row.end_time });
+  };
+  const shapeText = (item: Shape) => {
+    const { title, detail } = shapeLabel(item, groups);
+    return item === "custom" ? "ימים ושעות אחרים — לפי השדות שמתחת" : `${title} — ${detail.replace(/\.$/, "")}`;
+  };
+
   return (
     <div className="exit-setup">
       <MultiSelect label="סוגי היציאות ביחידה" values={KINDS.map(({ label }) => label)} selected={selected} onChange={change} placeholder="לא נבחרו יציאות" />
@@ -100,6 +117,16 @@ export function ExitKinds({
 
       {cycle ? (
         <div className="manual-grid exit-closure">
+          <Field label="סוג סבב">
+            <select value={shape} onChange={(event) => pickShape(event.target.value as Shape)}>
+              {SHAPES.map((item) => <option key={item} value={item}>{shapeText(item)}</option>)}
+            </select>
+          </Field>
+          <Field label="כמות סבבים">
+            <select value={cycle} onChange={(event) => onCycle(event.target.value as Cycle)}>
+              {GROUP_CYCLES.map((item) => <option key={item.pattern} value={item.pattern}>{item.label}</option>)}
+            </select>
+          </Field>
           <Field label="הסגירה מתחילה ביום">
             <select value={window.start_day} onChange={(event) => onWindow({ start_day: Number(event.target.value) })}>
               {START_DAYS.map((day) => <option key={day.value} value={day.value}>{day.label}</option>)}
@@ -112,11 +139,6 @@ export function ExitKinds({
             </select>
           </Field>
           <Field label="בשעה"><TimeInput value={window.end_time} onChange={(time) => onWindow({ end_time: time })} /></Field>
-          <Field label="כמות סבבים">
-            <select value={cycle} onChange={(event) => onCycle(event.target.value as Cycle)}>
-              {GROUP_CYCLES.map((item) => <option key={item.pattern} value={item.pattern}>{item.label}</option>)}
-            </select>
-          </Field>
         </div>
       ) : null}
     </div>

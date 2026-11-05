@@ -158,6 +158,7 @@
   .manual-section > header { border-inline-end: 0; border-bottom: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0; }
   .manual-grid.three, .employee-grid, .limits-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .rotation-window-grid, .manual-grid.exit-closure { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .manual-grid.exit-closure > .manual-field:first-child { grid-column: 1 / -1; }
 }
 
 @media (max-width: 620px) {
@@ -195,7 +196,8 @@
 /* "יציאות" — one closed list of kinds, then the closure hours and group count. */
 .exit-setup { display: grid; gap: 0.75rem; max-width: 52rem; }
 .exit-setup > .multi-select { max-width: 30rem; }
-.exit-closure { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.exit-closure { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.exit-closure > .manual-field:first-child { grid-column: 1 / -2; }
 .exit-pattern-fields { margin-block-start: 0.5rem; }
 .exit-day-picks { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .exit-day { position: relative; display: grid; place-items: center; min-width: 44px; min-height: 44px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; }

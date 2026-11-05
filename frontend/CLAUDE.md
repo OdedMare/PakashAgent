@@ -125,12 +125,15 @@ a second answer to a question that must have exactly one. The Sunday a
 closure hands over on reads dimmer and says `חילוף` — the group is in for
 that morning and out for the rest of the day.
 
-**The rotation section is four fields** (`ManualSetup/ExitKinds.tsx`): a
+**The rotation section is a handful of closed lists** (`ManualSetup/ExitKinds.tsx`): a
 closed multi-select of every kind of exit the unit has — none, daily, weekend
 groups (סבבים), חמשושים, שושים, days on base / at home, a personal 1 ל־N,
-reservists — and, when weekend groups are chosen, when the closure starts
-(day + time), when it ends (day + time) and how many groups take turns (2 סבב,
-3 תלתון, 4 רבעון, 5 חמישון). There is no calendar, no exception weekends and no
+reservists — and, when weekend groups are chosen, the round type (a closed
+list of every type the screen offered before: 11/3, 12/2, 10/4, שבוע־שבוע or
+other days and times, from `closureShapes.ts`), which fills in when the
+closure starts and ends (day + time, both editable; an edit that matches no
+type reads as "other"), and how many groups take turns (2 סבב, 3 תלתון,
+4 רבעון, 5 חמישון). There is no calendar, no exception weekends and no
 "which date does which group close": an anchor already stored is kept, and a
 cycle without one is saved with group א closing the coming Saturday. The
 closure is group א's one undated window row, which the server applies to every

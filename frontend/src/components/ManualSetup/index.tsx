@@ -544,6 +544,7 @@ export function ManualSetup({
             reserveBusy={reserveChecking}
             cycle={weekendCycle}
             window={closureOf(weekendCycle)}
+            handoverEnd={handoverEnd}
             onEnabled={(next) => setEnabledExitPatterns([...next])}
             onDayCycles={setDayCyclesOn}
             onReserve={(on) => void toggleReserve(on)}
