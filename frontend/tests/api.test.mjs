@@ -9,7 +9,7 @@ import ts from "typescript";
 const testDir = path.dirname(fileURLToPath(import.meta.url));
 
 function loadApi(fetch, timers = { setTimeout, clearTimeout }) {
-  const module = { exports: {} };
+  const loaded = { exports: {} };
   const source = fs.readFileSync(
     path.resolve(testDir, "../src/services/api.ts"), "utf8",
   );
@@ -20,8 +20,8 @@ function loadApi(fetch, timers = { setTimeout, clearTimeout }) {
     },
   }).outputText;
   vm.runInNewContext(code, {
-    module,
-    exports: module.exports,
+    module: loaded,
+    exports: loaded.exports,
     fetch,
     performance: { now: () => 0 },
     console: { debug() {}, error() {} },
@@ -30,7 +30,7 @@ function loadApi(fetch, timers = { setTimeout, clearTimeout }) {
     setTimeout: timers.setTimeout,
     clearTimeout: timers.clearTimeout,
   }, { filename: "api.ts" });
-  return module.exports;
+  return loaded.exports;
 }
 
 function response(status, data) {

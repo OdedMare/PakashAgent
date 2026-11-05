@@ -6,6 +6,7 @@ somebody sits down to use it. Saved here through the same `ProfileService`
 and solved over the period the scenario's guide walks through.
 """
 
+import importlib.util
 import json
 import pathlib
 
@@ -31,15 +32,50 @@ class _Repo:
         return profile
 
 
+def _read(name):
+    return json.loads((_SCENARIOS / name).read_text(encoding="utf-8"))
+
+
+def _save(profile):
+    return ProfileService(_Repo()).update("team", **profile)
+
+
 def _saved(name):
-    raw = json.loads((_SCENARIOS / name).read_text(encoding="utf-8"))
-    return ProfileService(_Repo()).update("team", **raw)
+    return _save(_read(name))
 
 
-@pytest.mark.parametrize("name", sorted(path.name for path in _SCENARIOS.glob("*.json")))
+def _is_split(name):
+    """A split file (`seed_complex.py`) names a base profile to cut into
+    משמרות; it is not a profile itself."""
+    return "base" in _read(name)
+
+
+def _seed_complex():
+    spec = importlib.util.spec_from_file_location(
+        "seed_complex", _SCENARIOS.parent / "seed_complex.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_FILES = sorted(path.name for path in _SCENARIOS.glob("*.json"))
+
+
+@pytest.mark.parametrize("name", [name for name in _FILES if not _is_split(name)])
 def test_a_scenario_saves_through_the_profile_validators(name):
     saved = _saved(name)
     assert saved["employees"] and saved["shifts"]
+
+
+@pytest.mark.parametrize("name", [name for name in _FILES if _is_split(name)])
+def test_every_unit_of_a_split_saves_through_the_profile_validators(name):
+    plan = _read(name)
+    profiles = _seed_complex().split(_read(plan["base"]), plan["units"])
+    assert [unit for unit, _ in profiles] == [unit["name"] for unit in plan["units"]]
+    for unit, profile in profiles:
+        saved = _save(profile)
+        assert saved["workplace"]["name"] == unit
+        assert saved["employees"] and saved["shifts"]
 
 
 def test_unit_619_closes_by_group_and_places_its_trainees():
