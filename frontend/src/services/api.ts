@@ -1,5 +1,18 @@
 import type {
+  AdminComplex,
   AdminOverview,
+  CommanderNotice,
+  CommanderView,
+  ComplexBoard,
+  ComplexSummary,
+  ComplexDuty,
+  DutyApproval,
+  DutyBalance,
+  DutyBoard,
+  DutyConflict,
+  DutyRosterTeam,
+  DutySuggestion,
+  DutyType,
   AdminTeam,
   AdminTeamDetail,
   ChangeLearning,
@@ -15,6 +28,7 @@ import type {
   PreferenceKind,
   PreferenceStatus,
   RosterName,
+  RedisReport,
   RuntimeSettings,
   Schedule,
   ScheduleProgress,
@@ -28,33 +42,112 @@ import type {
   ReplacementOptions,
 } from "@/types";
 
-export const listManagerChats = () => request<ManagerChatSummary[]>("/api/agent/chats");
-export const createManagerChat = () => request<ManagerConversation>("/api/agent/chats", { method: "POST" });
-// `fromMessage` asks for that message and everything after it, not the whole thread.
-export const readManagerChat = (id: string, fromMessage?: string) => request<ManagerConversation>(
-  `/api/agent/chats/${encodeURIComponent(id)}${fromMessage ? `?from_message=${encodeURIComponent(fromMessage)}` : ""}`);
-export const deleteManagerChat = (id: string) => request(`/api/agent/chats/${encodeURIComponent(id)}`, { method: "DELETE" });
-export const sendManagerMessage = (id: string, input: { content: string; request_id: string; schedule_id?: string; visible_week?: string; focus_date?: string; approval_message_id?: string; displayed_plan_id?: string; replaces_message_id?: string }) =>
-  request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/messages`, { method: "POST", body: JSON.stringify(input) });
-// Answer the last request again, replacing the last answer in the thread.
-export const regenerateManagerReply = (id: string, input: { request_id: string; schedule_id?: string; visible_week?: string; focus_date?: string }) =>
-  request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/regenerate`, { method: "POST", body: JSON.stringify(input) });
-export const applyManagerPlan = (id: string, messageId: string, acceptExceptions: boolean) =>
-  request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/apply`, {
-    method: "POST", body: JSON.stringify({ accept_exceptions: acceptExceptions }),
+/** One set of conversation routes. The manager's own live under
+ *  `/api/agent/chats` on the team cookie; a מכלול commander reaches each
+ *  משמרת's under `/api/complex/teams/<id>/chats` on their own cookie (D43),
+ *  so one pane can speak to every משמרת without entering any of them. */
+export function chatRoutes(base = "/api/agent/chats") {
+  const at = (id: string, rest = "") => `${base}/${encodeURIComponent(id)}${rest}`;
+  return {
+    list: () => request<ManagerChatSummary[]>(base),
+    create: () => request<ManagerConversation>(base, { method: "POST" }),
+    // `fromMessage` asks for that message and everything after it, not the whole thread.
+    read: (id: string, fromMessage?: string) => request<ManagerConversation>(
+      at(id, fromMessage ? `?from_message=${encodeURIComponent(fromMessage)}` : "")),
+    remove: (id: string) => request(at(id), { method: "DELETE" }),
+    send: (id: string, input: { content: string; request_id: string; schedule_id?: string; visible_week?: string; focus_date?: string; approval_message_id?: string; displayed_plan_id?: string; replaces_message_id?: string }) =>
+      request<ManagerConversation>(at(id, "/messages"), { method: "POST", body: JSON.stringify(input) }),
+    // Answer the last request again, replacing the last answer in the thread.
+    regenerate: (id: string, input: { request_id: string; schedule_id?: string; visible_week?: string; focus_date?: string }) =>
+      request<ManagerConversation>(at(id, "/regenerate"), { method: "POST", body: JSON.stringify(input) }),
+    apply: (id: string, messageId: string, acceptExceptions: boolean) =>
+      request<ManagerConversation>(at(id, `/messages/${encodeURIComponent(messageId)}/apply`), {
+        method: "POST", body: JSON.stringify({ accept_exceptions: acceptExceptions }),
+      }),
+    dismiss: (id: string, messageId: string) =>
+      request<ManagerConversation>(at(id, `/messages/${encodeURIComponent(messageId)}/dismiss`), { method: "POST" }),
+    stop: (id: string) => request<ManagerConversation>(at(id, "/stop"), { method: "POST" }),
+    /** The live "something moved" stream; only the team cookie has one. */
+    events: base === "/api/agent/chats" ? () => managerEvents() : null,
+  };
+}
+export type ChatRoutes = ReturnType<typeof chatRoutes>;
+export const managerChatRoutes = chatRoutes();
+export const commanderChatRoutes = (teamId: string) =>
+  chatRoutes(`/api/complex/teams/${encodeURIComponent(teamId)}/chats`);
+/** Which of the commander's משמרות a sentence is about — read in code. */
+export const routeCommanderMessage = (content: string) =>
+  request<{ team_ids: string[]; by: "team" | "soldier" | "all" }>("/api/complex/route", {
+    method: "POST", body: JSON.stringify({ content }),
   });
-export const dismissManagerPlan = (id: string, messageId: string) =>
-  request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/dismiss`, { method: "POST" });
 // Who could cover one person's absence, fairest first. Reads only: the picks
 // become a plan by being sent to the conversation.
-export const getReplacementOptions = (employee: string, startsOn: string, endsOn: string) =>
-  request<ReplacementOptions>(`/api/agent/replacements?${new URLSearchParams({ employee, starts_on: startsOn, ends_on: endsOn })}`);
-export const stopManagerReply = (id: string) =>
-  request<ManagerConversation>(`/api/agent/chats/${encodeURIComponent(id)}/stop`, { method: "POST" });
+type ReplacementSearch = {
+  id: string;
+  status: "queued" | "running" | "complete" | "failed";
+  result?: ReplacementOptions;
+  error?: string;
+};
+
+export async function getReplacementOptions(
+  employee: string,
+  startsOn: string,
+  endsOn: string,
+  options?: { signal?: AbortSignal },
+): Promise<ReplacementOptions> {
+  const signal = options?.signal;
+  let search = await request<ReplacementSearch>("/api/agent/replacements/searches", {
+    method: "POST",
+    body: JSON.stringify({ employee, starts_on: startsOn, ends_on: endsOn }),
+    signal,
+  });
+  // Most searches finish in a second or two: look again soon, then ease off.
+  let delay = 200;
+  try {
+    while (search.status === "queued" || search.status === "running") {
+      await waitForReplacementPoll(delay, signal);
+      delay = Math.min(1_000, Math.round(delay * 1.6));
+      search = await request<ReplacementSearch>(
+        `/api/agent/replacements/searches/${encodeURIComponent(search.id)}`,
+        { signal },
+      );
+    }
+  } catch (reason) {
+    // The form moved on: release the job if no worker has started it, so it
+    // does not hold a lane while the search now on screen waits behind it.
+    if (signal?.aborted) {
+      request<void>(`/api/agent/replacements/searches/${encodeURIComponent(search.id)}`, {
+        method: "DELETE",
+      }).catch(() => undefined);
+    }
+    throw reason;
+  }
+  if (search.status === "complete" && search.result) return search.result;
+  throw new Error(search.error || "חיפוש המחליפים נכשל. נסו שוב");
+}
+
+function waitForReplacementPoll(delay: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(abortError());
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", stop);
+      resolve();
+    }, delay);
+    function stop() {
+      clearTimeout(timer);
+      reject(abortError());
+    }
+    signal?.addEventListener("abort", stop, { once: true });
+  });
+}
+
+function abortError(): Error {
+  return Object.assign(new Error("Aborted"), { name: "AbortError" });
+}
 
 /** Routes whose 401 is an answer rather than a symptom: the probes that
  *  ask "who am I". */
-const EXPECTED_401 = ["/api/workspace/me", "/api/employee/me"];
+const EXPECTED_401 = ["/api/workspace/me", "/api/employee/me", "/api/complex/me"];
 
 const sessionLostListeners = new Set<() => void>();
 
@@ -81,6 +174,8 @@ export function onSessionLost(listener: () => void): () => void {
 function signalsSessionLost(method: string, path: string): boolean {
   if (method !== "GET") return false;
   if (path.startsWith("/api/admin/")) return false;
+  // The commander's own cookie, like the operator's, is a separate session.
+  if (path.startsWith("/api/complex/")) return false;
   return !EXPECTED_401.some((probe) => path === probe || path.startsWith(`${probe}?`));
 }
 
@@ -247,6 +342,29 @@ export function probeModels(
 }
 
 
+/** Test a Redis connection and report what is in it under the key prefix.
+ *  A field left out is the saved value; an empty URL means "no Redis", and
+ *  an empty or masked password means the stored one. A failed connection
+ *  still answers 200, with `connected: false` and the reason. */
+export function probeRedis(
+  overrides: {
+    redis_url?: string;
+    redis_host?: string;
+    redis_port?: string;
+    redis_username?: string;
+    redis_password?: string;
+    redis_key_prefix?: string;
+  },
+  password: string,
+): Promise<RedisReport> {
+  return request<RedisReport>("/api/settings/redis", {
+    method: "POST",
+    body: JSON.stringify(overrides),
+    headers: settingsHeaders(password),
+  });
+}
+
+
 // --- the צוות משמרות זהב console (D28) --------------------------------------
 // Its own HttpOnly cookie (`pakash_admin`), so it never disturbs a team
 // session in the same browser. Opening a team happens only here.
@@ -273,6 +391,39 @@ export const adminReleaseIdentity = (id: string, employee: string) =>
 /** Irreversible. The team's name must be typed back. */
 export const adminDeleteTeam = (id: string, confirmName: string) =>
   request<{ status: string }>(`/api/admin/teams/${encodeURIComponent(id)}/delete`, { method: "POST", body: JSON.stringify({ confirm_name: confirmName }) });
+
+// --- a מכלול (D43) ---------------------------------------------------------
+// The operator links existing teams and issues the commander's password; the
+// commander signs in on a cookie of their own and enters a workplace, which
+// hands them an ordinary manager session for it.
+
+export const adminComplexes = () => request<AdminComplex[]>("/api/admin/complexes");
+export const adminCreateComplex = (input: { name: string; password: string; team_ids: string[] }) =>
+  request<AdminComplex>("/api/admin/complexes", { method: "POST", body: JSON.stringify(input) });
+/** Only the keys present are applied; `team_ids` is the whole membership. */
+export const adminUpdateComplex = (id: string, patch: Partial<{ name: string; active: boolean; notes: string; team_ids: string[] }>) =>
+  request<AdminComplex>(`/api/admin/complexes/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+export const adminResetComplexPassword = (id: string, password: string) =>
+  request<{ status: string }>(`/api/admin/complexes/${encodeURIComponent(id)}/password`, { method: "POST", body: JSON.stringify({ password }) });
+/** Removes the grouping only; the teams stay. The name is typed back. */
+export const adminDeleteComplex = (id: string, confirmName: string) =>
+  request<{ status: string }>(`/api/admin/complexes/${encodeURIComponent(id)}/delete`, { method: "POST", body: JSON.stringify({ confirm_name: confirmName }) });
+
+export const listComplexes = () => request<ComplexSummary[]>("/api/complex/list");
+export const commanderLogin = (complexId: string, password: string) =>
+  request<ComplexSummary>("/api/complex/login", { method: "POST", body: JSON.stringify({ complex_id: complexId, password }) });
+export const commanderLogout = () => request<{ status: string }>("/api/complex/logout", { method: "POST" });
+export const commanderMe = () => request<CommanderView>("/api/complex/me");
+export const complexBoard = (start: string, end: string) =>
+  request<ComplexBoard>(`/api/complex/board?${new URLSearchParams({ start, end })}`);
+export const enterComplexTeam = (teamId: string) =>
+  request<ComplexSummary>(`/api/complex/teams/${encodeURIComponent(teamId)}/enter`, { method: "POST" });
+export const leaveComplexTeam = () => request<{ status: string }>("/api/complex/leave", { method: "POST" });
+/** For the workplace's own manager: what the commander changed, unseen. */
+export const commanderNotices = () =>
+  request<{ complex: ComplexSummary | null; notices: CommanderNotice[] }>("/api/complex/notices");
+export const markCommanderNoticesSeen = () =>
+  request<{ status: string }>("/api/complex/notices/seen", { method: "POST" });
 
 /** Teams for the login picker. Served unauthenticated. */
 export function listTeams(): Promise<TeamSummary[]> {
@@ -348,6 +499,7 @@ export function updateProfile(body: {
   dependencies?: string[];
   training_policy?: Record<string, unknown>;
   audit_policy?: Record<string, unknown>;
+  unit_policy?: UnitPolicy;
   availability_process?: string;
   constraint_deadline?: string;
   casual_worker_policy?: string;
@@ -360,6 +512,11 @@ export function updateProfile(body: {
   /** The `profile_revision` the form was loaded at: a save over somebody
    *  else's newer one is refused (409) instead of silently undoing it. */
   expected_revision?: number | null;
+  /** Saved names corrected (`{old: new}`) and soldiers deleted from setup;
+   *  the server carries both through every stored row in the same save. */
+  renamed_employees?: Record<string, string>;
+  renamed_shifts?: Record<string, string>;
+  removed_employees?: string[];
 }): Promise<import("@/types").WorkplaceProfile & { absorbed?: ProfileAbsorption | null }> {
   return request("/api/profile", {
     method: "PUT",
@@ -367,12 +524,45 @@ export function updateProfile(body: {
   });
 }
 
+/** Who is still qualified (כשיר/ה) today, from the unsaved roster: the
+ *  server reads each person's last worked shift and counts the unit's
+ *  validity from the later of that and each typed date. Only people with a
+ *  dated qualification come back. Writes nothing. */
+export const qualificationPreview = (
+  body: { employees: { name: string; qualifications: unknown }[] },
+  signal?: AbortSignal,
+) => request<{ today: string; people: Record<string, import("@/types").QualificationStanding> }>(
+  "/api/profile/qualification-preview",
+  { method: "POST", body: JSON.stringify(body), signal },
+);
+
+/** The unit's staffing standard (`audit/unit_policy.py`): ratings, stale
+ *  qualifications, fallback roles and shifts per Sunday-to-Saturday week. */
+export interface UnitPolicy {
+  max_weak_per_shift?: number | null;
+  qualification_validity_days?: number;
+  role_fallbacks?: Record<string, string[]>;
+  weekly_shifts?: { min?: number; max?: number };
+  weekly_shifts_regular?: { min?: number; max?: number };
+  weekly_shifts_officers?: { min?: number; max?: number };
+  weekly_shifts_ncos?: { min?: number; max?: number };
+  /** Shifts a week past `max`, each one only to fill a seat and each warned on. */
+  weekly_shifts_overflow?: number;
+}
+
+/** Role -> people per shift, for a group's day and night shifts. */
+export type GroupStaffing = { day: Record<string, number>; night: Record<string, number> };
+
 /** What a profile save fit into the drafts already built: the new soldiers
- *  and shifts, each draft ahead of today now being refit while keeping its
+ *  (or soldiers switched back on) and shifts, each draft ahead of today now being refit while keeping its
  *  rows, and the weeks left alone (published, or busy) with the reason. */
 export interface ProfileAbsorption {
   employees: string[];
   shifts: string[];
+  /** Soldiers this save switched off, and how many of their draft shifts
+   *  from today on were vacated for the refit to fill. */
+  switched_off?: string[];
+  vacated?: number;
   schedules: { schedule_id: string; starts_on: string; ends_on: string }[];
   skipped: { schedule_id: string; starts_on: string; ends_on: string; reason: string }[];
 }
@@ -419,6 +609,7 @@ export async function generateSchedule(
     build_through?: string;
     instructions?: string;
     required_assignments?: import("@/types").RequiredAssignment[];
+    staffing_overrides?: import("@/types").StaffingOverride[];
     /** Only these shift types are built; empty or absent means all. */
     shifts?: string[];
   } = {},
@@ -589,6 +780,7 @@ export async function generateScheduleRange(
     instructions?: string;
     shifts?: string[];
     keep_existing?: boolean;
+    staffing_overrides?: import("@/types").StaffingOverride[];
   },
   onProgress?: (schedule: Schedule) => void,
   options?: { signal?: AbortSignal },
@@ -603,6 +795,7 @@ export async function generateScheduleRange(
         instructions: body.instructions ?? "",
         shifts: body.shifts ?? [],
         keep_existing: body.keep_existing ?? false,
+        staffing_overrides: body.staffing_overrides ?? [],
       }),
     },
   );
@@ -687,8 +880,9 @@ export function assignEmployee(body: {
  *  drag is validated, explained in Hebrew, and offered deterministic
  *  alternatives without a token being generated.
  *
- *  Ordinary findings advise and never gate (D3). A duty overlap returns
- *  `blocking: true`, and the write endpoint independently enforces it. */
+ *  Ordinary findings advise and never gate (D3). Hard unavailability and
+ *  duty overlaps return `blocking: true`, and the write endpoint independently
+ *  enforces them. */
 export function checkPlacement(body: {
   employee: string;
   shift_name: string;
@@ -1206,7 +1400,23 @@ export function deletePreference(rowId: string): Promise<{ status: string }> {
  *  which forces a JSON content-type and would break the boundary.
  */
 export async function previewImport(file: File, options: ImportOptions = {}): Promise<ImportPreview> {
-  const path = "/api/schedule/import/preview";
+  return uploadPreview<ImportPreview>("/api/schedule/import/preview", file, options);
+}
+
+export interface UnitImportPreview {
+  filename: string;
+  sheets: { name: string; rows: number; preview: string[][]; recognized: boolean }[];
+  people: { name: string; sources: string[]; existing: string; candidates: string[] }[];
+  shifts: { name: string; start_time: string; end_time: string; headcount: number;
+    sources: string[]; hours_source: string; counts: number[]; existing: Record<string, unknown> | null }[];
+  warnings: string[];
+}
+
+export function previewUnitImport(file: File): Promise<UnitImportPreview> {
+  return uploadPreview<UnitImportPreview>("/api/profile/import/preview", file, {});
+}
+
+async function uploadPreview<T>(path: string, file: File, options: ImportOptions): Promise<T> {
   const body = new FormData();
   body.append("file", file);
   body.append("options", JSON.stringify(options));
@@ -1223,7 +1433,7 @@ export async function previewImport(file: File, options: ImportOptions = {}): Pr
     console.error(`[api] ✗ POST ${path} → ${response.status}`);
     throw apiError(data, response.status);
   }
-  return data as ImportPreview;
+  return data as T;
 }
 
 /** Store the rows the manager approved. With `schedule_id` they are merged
@@ -1239,3 +1449,26 @@ export function confirmImport(body: {
     body: JSON.stringify(body),
   });
 }
+
+// The מכלול's duties (תורנויות), on the commander's cookie.
+export const dutyBoard = (start: string, end: string) =>
+  request<DutyBoard>(`/api/complex/duties?${new URLSearchParams({ start, end })}`);
+export const dutyRoster = () => request<DutyRosterTeam[]>("/api/complex/duty-roster");
+export const createDutyType = (input: { name: string; seats: number; weight: number; days: string[] }) =>
+  request<DutyType>("/api/complex/duty-types", { method: "POST", body: JSON.stringify(input) });
+export const updateDutyType = (id: string, patch: Partial<Omit<DutyType, "id">>) =>
+  request<DutyType>(`/api/complex/duty-types/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+export const deleteDutyType = (id: string) =>
+  request<{ status: string }>(`/api/complex/duty-types/${encodeURIComponent(id)}`, { method: "DELETE" });
+// `blocks: false` records a duty already stood: it counts and blocks nothing.
+export const assignDuty = (input: { duty_type_id: string; team_id: string; employee: string; duty_date: string; note: string; blocks: boolean }) =>
+  request<{ duty: ComplexDuty; conflicts: DutyConflict[] }>("/api/complex/duties", { method: "POST", body: JSON.stringify(input) });
+export const cancelDuty = (id: string) =>
+  request<ComplexDuty>(`/api/complex/duties/${encodeURIComponent(id)}`, { method: "DELETE" });
+// "מלא בהוגנות": a proposal for every open seat. Writes nothing.
+export const suggestDuties = (start: string, end: string) =>
+  request<DutySuggestion>(`/api/complex/duties/suggest?${new URLSearchParams({ start, end })}`, { method: "POST" });
+export const approveDuties = (rows: { duty_type_id: string; team_id: string; employee: string; duty_date: string }[]) =>
+  request<DutyApproval>("/api/complex/duties/approve", { method: "POST", body: JSON.stringify({ rows }) });
+export const dutyBalance = (start: string, end: string) =>
+  request<DutyBalance>(`/api/complex/duties/balance?${new URLSearchParams({ start, end })}`);

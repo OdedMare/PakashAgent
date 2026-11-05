@@ -6,8 +6,8 @@ Three things here are the point of the feature and are asserted directly:
   so a member's cookie is refused whichever URL it is aimed at (D5).
 - **One workspace cannot reach another's schedule**, even holding its id
   (D10). A cross-team miss reads as "not found", never as "not yours".
-- **Warnings never block.** A schedule that breaks every rule still returns
-  200 and still renders (D3).
+- **Ordinary warnings remain advisory.** Hard unavailability is the one
+  placement invariant; other rule breaks still return 200 and render (D3).
 """
 
 from types import SimpleNamespace
@@ -157,6 +157,17 @@ class _FakeScheduleRepo:
             if (slot["shift_name"], slot["slot_date"]) not in stored
         ]
         return self.slots[schedule_id]
+
+    def update_slot_headcounts(self, schedule_id, team_id, slots):
+        self.get_schedule(schedule_id, team_id)
+        changes = {
+            (slot["shift_name"], slot["slot_date"]): slot["headcount"]
+            for slot in slots
+        }
+        for slot in self.slots[schedule_id]:
+            key = slot["shift_name"], slot["slot_date"]
+            if key in changes:
+                slot["headcount"] = changes[key]
 
     def find_slot(self, schedule_id, team_id, shift_name, slot_date):
         self.get_schedule(schedule_id, team_id)
@@ -309,7 +320,10 @@ class _FakeScheduleRepo:
                 previous if r.get("constraint_type") == "duty" else starts_on
             )]
         if ends_on:
-            rows = [r for r in rows if r["constraint_date"] <= ends_on]
+            following = (datetime.date.fromisoformat(ends_on) + datetime.timedelta(days=1)).isoformat()
+            rows = [r for r in rows if r["constraint_date"] <= (
+                following if r.get("constraint_type") == "duty" else ends_on
+            )]
         if employee:
             rows = [r for r in rows if r["employee"] == employee]
         return rows
@@ -509,6 +523,24 @@ def test_progressive_generation_supports_one_specific_date():
     assert len(finished["assignments"]) == 1
 
 
+def test_progressive_generation_uses_and_returns_special_day_staffing():
+    app, _ = _build_app()
+    client = _client(app)
+    override = {"date": "2026-08-17", "shift": MORNING, "headcount": 2}
+
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+        "staffing_overrides": [override],
+    }).json()
+    finished = client.post(
+        "/api/schedule/generate/%s/next" % started["id"]
+    ).json()
+
+    assert started["generation"]["staffing_overrides"] == [override]
+    assert started["slots"][0]["headcount"] == 2
+    assert len(finished["assignments"]) == 2
+
+
 def test_generation_run_returns_before_the_solve_and_is_polled_with_get():
     launcher = _DeferredLauncher()
     app, repo = _build_app(launch=launcher)
@@ -644,6 +676,37 @@ def test_a_run_of_days_is_built_inside_an_existing_draft():
     }
     assert {row["employee"] for row in built["assignments"]
             if row["date"] == "2026-08-21"} == {"יוסי"}
+
+
+def test_rebuilding_an_existing_day_updates_its_special_staffing():
+    app, _ = _build_app()
+    client = _client(app)
+    opened = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+    override = {"date": "2026-08-17", "shift": MORNING, "headcount": 2}
+
+    prepared = client.post(
+        "/api/schedule/generate/%s/range/start" % opened["id"],
+        json={
+            "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+            "staffing_overrides": [override],
+        },
+    ).json()
+    built = client.post(
+        "/api/schedule/generate/%s/next" % opened["id"]
+    ).json()
+
+    assert prepared["slots"][0]["headcount"] == 2
+    assert prepared["generation"]["staffing_overrides"] == [override]
+    assert len(built["assignments"]) == 2
+
+    reset = client.post(
+        "/api/schedule/generate/%s/range/start" % opened["id"],
+        json={"starts_on": "2026-08-17", "ends_on": "2026-08-17"},
+    ).json()
+    assert reset["slots"][0]["headcount"] == 1
+    assert reset["generation"]["staffing_overrides"] == []
 
 
 def test_a_run_of_days_is_refused_on_a_published_period_and_off_its_dates():
@@ -1387,6 +1450,59 @@ def test_a_manual_assignment_is_recorded_in_the_change_log():
     assert placed["reason"] == "כיסוי בוקר"
 
 
+@pytest.mark.parametrize("service_type", ["standard", "reserve"])
+def test_hard_unavailability_vacates_and_blocks_standard_and_reserve_soldiers(service_type):
+    app, repo = _build_app([])
+    repo.profiles[TEAM] = copy.deepcopy(PROFILE)
+    repo.profiles[TEAM]["employees"][0]["service_type"] = service_type
+    client = _client(app)
+    schedule = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    placed = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "schedule_id": schedule["id"],
+    })
+    assert placed.status_code == 200
+
+    constraint = client.post("/api/schedule/constraints", json={
+        "employee": "דנה", "constraint_date": "2026-08-17",
+        "reason": "לא זמינה", "is_hard": True,
+    })
+    assert constraint.status_code == 200
+    assert repo.assignments(schedule["id"], TEAM) == []
+
+    check = client.post("/api/schedule/check", json={
+        "employee": "דנה", "shift_name": MORNING,
+        "slot_date": "2026-08-17", "schedule_id": schedule["id"],
+    })
+    assert check.json()["blocking"] is True
+    refused = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "schedule_id": schedule["id"],
+    })
+    assert refused.status_code == 409
+    assert "אינו/ה זמין/ה" in refused.json()["detail"]
+
+
+def test_soft_unavailability_still_allows_a_manual_override():
+    app, _ = _build_app([])
+    client = _client(app)
+    schedule = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    client.post("/api/schedule/constraints", json={
+        "employee": "דנה", "constraint_date": "2026-08-17",
+        "reason": "עדיף שלא", "is_hard": False,
+    })
+
+    response = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "schedule_id": schedule["id"],
+    })
+    assert response.status_code == 200
+
+
 def test_assigning_the_same_person_twice_changes_nothing():
     """The table is UNIQUE (slot_id, employee) and the insert does nothing on
     conflict, so a double click is a success that added no duplicate."""
@@ -1962,6 +2078,33 @@ def test_a_duty_is_recorded_and_blocks_manual_placement_even_across_midnight():
     assert "תורנות חוסמת" in assigned.json()["detail"]
 
 
+def test_a_complex_duty_blocks_manual_placement_for_the_whole_day():
+    app, repo = _build_app([])
+    client = _client(app)
+    schedule = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    # As `records.availability()` projects a מכלול duty: no hours.
+    repo.availability_rows.append({
+        "id": "complex-duty-1", "team_id": TEAM, "employee": "דנה",
+        "constraint_date": "2026-08-18", "shift_name": "", "available": False,
+        "start_time": "", "end_time": "", "is_hard": True, "reason": "מטבח",
+        "source": "complex", "constraint_type": "duty",
+    })
+
+    assigned = client.post("/api/schedule/assign", json={
+        "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-18",
+        "schedule_id": schedule["id"],
+    })
+    assert assigned.status_code == 409
+    assert "בתורנות מטבח של המכלול" in assigned.json()["detail"]
+
+    assert client.post("/api/schedule/assign", json={
+        "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-17",
+        "schedule_id": schedule["id"],
+    }).status_code == 200
+
+
 def test_a_duty_requires_both_clock_bounds():
     app, _ = _build_app([])
     response = _client(app).post("/api/schedule/constraints", json={
@@ -1980,8 +2123,7 @@ def test_an_invalid_constraint_time_is_rejected():
     assert response.status_code == 422
 
 
-def test_a_recorded_constraint_shows_up_as_a_warning_when_contradicted():
-    """The audit reads a constraint with no shift as covering the whole day."""
+def test_a_recorded_hard_constraint_vacates_an_existing_assignment():
     app, _ = _build_app()
     client = _client(app)
     body = client.post("/api/schedule/generate", json={
@@ -1993,8 +2135,8 @@ def test_a_recorded_constraint_shows_up_as_a_warning_when_contradicted():
         "reason": "מילואים",
     })
     body = client.get("/api/schedule/%s" % body["id"]).json()
-    codes = {warning["code"] for warning in body["warnings"]}
-    assert "unavailable" in codes
+    assert body["assignments"] == []
+    assert any(warning["code"] == "unfilled" for warning in body["warnings"])
 
 
 def test_restating_a_constraint_replaces_rather_than_duplicates():
@@ -2102,16 +2244,16 @@ def test_checking_a_placement_calls_no_model():
     assert response.status_code == 200
     body = response.json()
     assert body["ok"] is True
-    assert {"exit_pattern", "is_overlap"} <= set(body["candidates"][0])
+    # The contract keeps every field the picker filters and colours on; a
+    # field `bl/placement` computes but the response model omits never
+    # reaches the browser.
+    assert {
+        "exit_pattern", "is_overlap", "eligible_shifts", "rotation_group",
+        "borrowable", "borrow_from", "shared_roles",
+    } <= set(body["candidates"][0])
 
 
-def test_a_check_that_warns_still_returns_200_and_never_blocks():
-    """Warnings inform; they do not become a 4xx (D3).
-
-    The same rule the audit follows everywhere else in this router, asserted
-    on the one route whose entire job is reporting problems — the most
-    tempting place to turn a warning into a rejection.
-    """
+def test_a_check_returns_200_and_marks_hard_unavailability_as_blocking():
     app, repo = _build_app([])
     client = _client(app)
     client.post("/api/schedule/blank", json={
@@ -2126,7 +2268,7 @@ def test_a_check_that_warns_still_returns_200_and_never_blocks():
     assert response.status_code == 200
     body = response.json()
     assert body["ok"] is False
-    assert body["blocking"] is False
+    assert body["blocking"] is True
     assert body["reasons"], "a refusal-shaped answer with no reason given"
 
 

@@ -59,6 +59,14 @@ class ScheduleContext:
             for row in self.availability(team_id, schedule)
         ]
 
+    def complex_duties(self, team_id: str, start: str, end: str) -> List[dict]:
+        """The team's מכלול duties over a span, for the stats; none for a
+        team outside a מכלול or a repository that holds none."""
+        reader = getattr(self._repository, "team_complex_duties", None)
+        if reader is None or not start or not end:
+            return []
+        return reader(team_id, start, end)
+
     def active_preferences(self, team_id: str) -> List[dict]:
         """Confirmed standing context for every scheduling model call."""
         if not hasattr(self._repository, "preferences"):

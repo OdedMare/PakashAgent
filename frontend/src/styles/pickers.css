@@ -118,3 +118,190 @@
 .stats-field .picker-field {
   display: inline-block;
 }
+
+/* MultiSelect: a closed field that reads back the choice, and a list under it
+   that keeps its own height and scrolls. Used for shift types, where a unit
+   with many shifts made the checkbox wall longer than the form around it. */
+.multi-select {
+  position: relative;
+  display: grid;
+  /* The field never grows past its column: a long choice ellipsises. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.multi-select-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--control-height);
+  padding: var(--control-pad-y) var(--control-pad-x);
+  font: inherit;
+  font-size: var(--control-font-size);
+  text-align: start;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.multi-select-trigger:focus-visible,
+.multi-select-trigger[aria-expanded="true"] {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: var(--focus);
+}
+
+.multi-select-trigger > svg {
+  flex: none;
+  color: var(--text-muted);
+  transition: transform 120ms ease;
+}
+
+.multi-select-trigger[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+
+.multi-select-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.multi-select-value.is-empty {
+  color: var(--text-muted);
+}
+
+
+.multi-select-list {
+  position: absolute;
+  z-index: 30;
+  inset-block-start: calc(100% + 4px);
+  inset-inline: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 14rem;
+  padding: 0.3rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+
+.multi-select-list.is-flipped {
+  inset-block-start: auto;
+  inset-block-end: calc(100% + 4px);
+}
+
+.multi-select-option {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 44px;
+  padding: 0 0.6rem;
+  font-size: 0.86rem;
+  color: var(--text);
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.multi-select-option.is-active {
+  background: var(--surface-3);
+}
+
+.multi-select-box {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+}
+
+.multi-select-option[aria-selected="true"] .multi-select-box {
+  color: #fff;
+  background: var(--primary-fill);
+  border-color: var(--primary-fill);
+}
+
+.multi-select-none {
+  padding: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* "בחירת הכל" and "ניקוי", pinned above the options while the list scrolls. */
+.multi-select-bulk {
+  position: sticky;
+  z-index: 1;
+  top: -0.3rem;
+  display: flex;
+  flex: none;
+  gap: 0.3rem;
+  margin: -0.3rem -0.3rem 0.15rem;
+  padding: 0.3rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.multi-select-bulk button {
+  flex: 1;
+  min-height: 36px;
+  padding: 0 0.6rem;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.multi-select-bulk button:disabled {
+  color: var(--text-muted);
+  background: var(--surface-2);
+  cursor: default;
+}
+
+.multi-select-bulk button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.multi-select-clear {
+  flex: none;
+  min-height: 36px;
+  margin-top: 0.15rem;
+  padding: 0 0.6rem;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--primary);
+  text-align: start;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .multi-select-trigger,
+  .multi-select-trigger > svg {
+    transition: none;
+  }
+}

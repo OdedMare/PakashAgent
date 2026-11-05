@@ -23,7 +23,23 @@ const PATTERN_LABELS: Record<string, string> = {
   quint: "חמישון",
   hamshushim: "חמשושים",
   shushim: "שושים",
+  daily: "יומי",
+  personal: "סגירה אישית",
 };
+
+/** The board's word for each coloured status, matching TeamPanel's labels. */
+export const STATUS_LABELS: Record<Exclude<CardPerson["status"], "">, string> = {
+  reserve: "מילואים",
+  civilian: "אע״צ",
+  hatzach: "הצ״ח",
+};
+
+/** A roster `service_type` as the card's coloured status, or "" for none. */
+export function cardStatus(serviceType: unknown): CardPerson["status"] {
+  return serviceType === "reserve" || serviceType === "civilian" || serviceType === "hatzach"
+    ? serviceType
+    : "";
+}
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -37,6 +53,7 @@ export function rotationLabel(pattern: unknown, group: unknown, cycles?: DayCycl
   // out of a partial row; it must not invent one out of an empty row, or
   // every person the roster is silent about would be labelled "סבב".
   if (!text(pattern) && !arm) return "";
+  if (text(pattern) === "none") return "";
   // The same fallback `TeamPanel.exitPatternLabel` applies to a row whose
   // pattern was never written: an "ה" arm only exists in a חמישון, a "ד" arm
   // in a רבעון and a "ג" arm in a triplet, so the group names the cycle when the cycle does not
@@ -59,6 +76,7 @@ export const EMPTY_PERSON: CardPerson = {
   rotation: "",
   is_shift_manager: false,
   is_overlap: false,
+  status: "",
   // Somebody the roster no longer carries is still standing on that Tuesday
   // and still one of the people who were on it. Counting them out would make
   // a past week that was fully staffed read as short of the people who

@@ -20,6 +20,8 @@ AiSummryIO.
   logs at DEBUG and is dropped from uvicorn's access log unless the level is
   DEBUG; a refused POST (a wrong password) still warns.
 - `errors.py` — `AgentError`, the Hebrew-facing error type everything raises.
+- `actor.py` — who is acting, for the change log's `actor`: set per request
+  from the signed cookies, and per job from the request that queued it.
 - `throttle.py` — `LoginThrottle`: every password check (boss login,
   employee login, change password, settings password) runs through
   `attempt()`, which locks an account for 15 minutes after 5 wrong guesses.
@@ -39,6 +41,14 @@ AiSummryIO.
   (`shared.py`, D39) and polled on the same cadence, so replicas with no
   shared disk agree too — everything but the `database_*` fields, which
   are what the poll connects with and so stay in the file and env.
+- `redis_hub.py` — the one Redis connection a process shares, built from the
+  live settings (URL, host, port, username, password, `redis_key_prefix`);
+  `key()` puts every key under the prefix, `probe()` feeds the panel's
+  connection test. `None` when unset or unreachable, never a failure.
+- `read_cache.py` — `ReadCache` (D50): the board's heavy reads kept in Redis
+  under per-team generation counters, retired by every committed write
+  (`dal/write_marks.py`). No Redis or a TTL of 0 = every read goes to
+  PostgreSQL.
 - `time_context.py` — Israel-local time, and the minute-precision clock line
   that closes every prompt's user turn (after the context, so it does not cut
   the server's prefix cache).
@@ -76,6 +86,9 @@ AiSummryIO.
 | `PAKASH_SOLVER_TIME_LIMIT_SECONDS` / `PAKASH_SOLVER_WORKERS` | The constraint solver's wall time per solve (default 10s) and parallel workers (default 8). Live-editable; chat builds read them too |
 | `PAKASH_LLM_MAX_CONCURRENCY` | Model calls in flight across every process (default 4; 1 for a local Ollama) |
 | `PAKASH_LLM_TEAM_CONCURRENCY` | How many of those one team may hold; 0 (default) = all of them |
+| `PAKASH_REDIS_URL` / `_HOST` / `_PORT` / `_USERNAME` / `_PASSWORD` | The read cache's Redis (D50); all empty = off. Host, port and username override the URL's. Live-editable; used whenever no URL or host is saved in the panel |
+| `PAKASH_REDIS_KEY_PREFIX` | Every key this app writes starts with it (default `pakash`) |
+| `PAKASH_REDIS_CACHE_TTL_SECONDS` | How long a cached read may live (default 300, max a day); 0 turns the cache off. Writes retire reads at once either way |
 
 ## Rules
 

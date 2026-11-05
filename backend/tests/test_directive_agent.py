@@ -205,6 +205,13 @@ def test_only_soft_rules_and_preferences_are_not_binding():
     assert hard["rule"]["binding"] is True
 
 
+def test_notes_kept_visual_only_are_not_a_source():
+    employees = [{"name": "דנה", "notes": "לא בלילות"}]
+    assert "employee_notes" in _sources(dict(_profile(), employees=employees))
+    visual = dict(_profile(), employees=employees, workplace={"notes_visual_only": True})
+    assert "employee_notes" not in _sources(visual)
+
+
 def _unresolved(source_id, reason="לא ניתן לבטא בבקשה"):
     return {"source_id": source_id, "reason": reason}
 

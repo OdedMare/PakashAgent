@@ -12,13 +12,15 @@ from fastapi.testclient import TestClient
 
 from app.api.dependencies import Guards
 from app.api.routers.manager_chat import build_router
-from app.bl.manager_chat import ManagerChatService
+from app.bl.chat.service import ManagerChatService
 from app.bl.schedule_service import ScheduleService
 from app.common.errors import AppError, ConflictError, NotFoundError, error_payload
 from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 from app.common.time_context import israel_today
 from app.dal.repository.schedules import week_bounds
-from tests.test_schedule_api import _FakeScheduleRepo, _ScriptedLlm, PROFILE, TEAM, SECRET, MORNING
+from tests.test_schedule_api import (
+    EVENING, MORNING, PROFILE, SECRET, TEAM, _FakeScheduleRepo, _ScriptedLlm,
+)
 
 
 class ChatRepo(_FakeScheduleRepo):
@@ -26,6 +28,7 @@ class ChatRepo(_FakeScheduleRepo):
         super().__init__()
         self.profiles = {TEAM: copy.deepcopy(PROFILE)}
         self.chats = {}
+        self.change_plans = {}
         self.progress = []
 
     def create_chat(self, team_id, manager_id):
@@ -42,6 +45,13 @@ class ChatRepo(_FakeScheduleRepo):
         ids = [row["id"] for row in chat["messages"]]
         if from_message in ids:
             chat["messages"] = chat["messages"][ids.index(from_message):]
+        for row in chat["messages"]:
+            plan_id = row.get("plan_id")
+            if plan_id:
+                row["payload"]["plan_id"] = plan_id
+                row["payload"]["plan"] = copy.deepcopy(
+                    self.change_plans[plan_id]["body"]
+                )
         return chat
 
     def list_chats(self, team_id, manager_id):
@@ -60,10 +70,15 @@ class ChatRepo(_FakeScheduleRepo):
             index = next(i for i, row in enumerate(rows) if row["id"] == replace_from)
             if any(row["status"] == "applied" or row["payload"].get("receipt") for row in rows[index:]):
                 raise ConflictError("כבר אושר")
+            for row in rows[index:]:
+                if row.get("plan_id"):
+                    self.change_plans[row["plan_id"]]["status"] = "superseded"
             del rows[index:]
         for row in self.chats[chat_id]["messages"]:
             if row["status"] == "pending":
                 row["status"] = "superseded"
+                if row.get("plan_id"):
+                    self.change_plans[row["plan_id"]]["status"] = "superseded"
         message_id = self._id("message")
         self.chats[chat_id]["messages"] += [
             dict(id=self._id("user"), role="user", content=content, status="complete", payload={}, request_id=request_id),
@@ -74,7 +89,67 @@ class ChatRepo(_FakeScheduleRepo):
     def finish_chat_turn(self, chat_id, message_id, content, status, payload):
         for row in self.chats[chat_id]["messages"]:
             if row["id"] == message_id and row["status"] == "working":
+                payload = copy.deepcopy(payload)
+                plan = payload.pop("plan", None)
+                if plan is not None:
+                    plan_id = self._id("plan")
+                    self.change_plans[plan_id] = dict(
+                        id=plan_id, team_id=self.chats[chat_id]["team_id"],
+                        source="chat", source_ref=message_id,
+                        status="pending", body=plan, receipt=None,
+                    )
+                    payload["plan_id"] = plan_id
+                    row["plan_id"] = plan_id
                 row.update(content=content, status=status, payload=payload)
+
+    def ensure_chat_change_plan(self, team_id, manager_id, chat_id, message_id):
+        chat = self.chats.get(chat_id)
+        if not chat or (chat["team_id"], chat["manager_id"]) != (team_id, manager_id):
+            raise NotFoundError("השיחה לא נמצאה")
+        row = next(
+            (row for row in chat["messages"] if row["id"] == message_id), None,
+        )
+        if row is None:
+            raise NotFoundError("ההצעה לא נמצאה")
+        if row.get("plan_id"):
+            return row["plan_id"]
+        plan = row["payload"].pop("plan", None)
+        if not plan:
+            raise ConflictError("אין תוכנית")
+        plan_id = self._id("plan")
+        self.change_plans[plan_id] = dict(
+            id=plan_id, team_id=team_id, source="chat", source_ref=message_id,
+            status="pending", body=plan, receipt=None,
+        )
+        row["plan_id"] = plan_id
+        row["payload"]["plan_id"] = plan_id
+        return plan_id
+
+    @contextmanager
+    def change_plan_approval(self, team_id, plan_id):
+        plan = self.change_plans[plan_id]
+        if plan["team_id"] != team_id or plan["status"] not in ("pending", "applied"):
+            raise ConflictError("תוכנית ישנה")
+        before = copy.deepcopy(self.__dict__)
+        try:
+            yield copy.deepcopy(plan)
+        except Exception:
+            self.__dict__.update(before)
+            raise
+
+    def lock_chat_plan_source(self, team_id, manager_id, chat_id, message_id, plan_id):
+        chat = self.chats[chat_id]
+        if (chat["team_id"], chat["manager_id"]) != (team_id, manager_id):
+            raise NotFoundError("השיחה לא נמצאה")
+        row = next(row for row in chat["messages"] if row["id"] == message_id)
+        if row.get("plan_id") != plan_id or row["status"] not in ("pending", "applied"):
+            raise ConflictError("הצעה ישנה")
+        return copy.deepcopy(row)
+
+    def mark_change_plan_applied(self, plan_id, team_id, receipt):
+        plan = self.change_plans[plan_id]
+        if plan["team_id"] == team_id and plan["status"] == "pending":
+            plan.update(status="applied", receipt=copy.deepcopy(receipt))
 
     def chat_turn_draft(self, chat_id, message_id, draft):
         self.drafts = getattr(self, "drafts", []) + [draft]
@@ -180,12 +255,21 @@ def test_sickness_preview_writes_nothing_then_click_applies_plan_and_absence_onc
     repo, llm, service, chat_id, schedule_id = setup([sickness()])
     message = converse(service, repo, chat_id, schedule_id)
     assert message["status"] == "pending"
+    plan_id = message["payload"]["plan_id"]
+    stored_message = next(
+        row for row in repo.chats[chat_id]["messages"]
+        if row["id"] == message["id"]
+    )
+    assert "plan" not in stored_message["payload"]
+    assert repo.change_plans[plan_id]["body"] == message["payload"]["plan"]
     assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "דנה"
     assert not repo.availability_rows and not repo.changes
     service.apply(TEAM, "manager-a", chat_id, message["id"], True)
     assert [row["employee"] for row in repo.assignments(schedule_id, TEAM)] == ["יוסי"]
     assert repo.availability_rows[0]["available"] is False
     assert repo.availability_rows[0]["reason"] == "מחלה"
+    assert repo.change_plans[plan_id]["status"] == "applied"
+    assert repo.change_plans[plan_id]["receipt"]["schedule_id"] == schedule_id
     change_count = len(repo.changes)
     service.apply(TEAM, "manager-a", chat_id, message["id"], True)
     assert len(repo.changes) == change_count
@@ -476,6 +560,148 @@ def test_simulation_checks_named_week_and_reports_qualification_conflicts():
     assert result["schedule_id"] == other["id"]
     assert any(row["code"] == "ineligible" for row in result["introduced"])
     assert not repo.assignments(other["id"], TEAM)
+
+
+def test_staffing_scenario_moves_a_real_surplus_into_a_gap_without_writing():
+    repo, _, service, _, schedule_id = setup([])
+    profile = repo.profiles[TEAM]
+    profile["shifts"].append({
+        "name": EVENING, "start_time": "15:00", "end_time": "23:00",
+        "staffing": [{"days": [], "headcount": 1, "required_roles": []}],
+    })
+    profile["employees"][0]["eligible_shifts"] = [MORNING]
+    profile["employees"][1]["eligible_shifts"] = [MORNING, EVENING]
+    repo.assignment_rows[schedule_id] = []
+    slots = repo.replace_slots(schedule_id, TEAM, [
+        {"shift_name": MORNING, "slot_date": "2026-10-05", "headcount": 1},
+        {"shift_name": EVENING, "slot_date": "2026-10-05", "headcount": 1},
+    ])
+    repo.add_assignment(schedule_id, TEAM, slots[0]["id"], "דנה", "שיבוץ קיים")
+    repo.add_assignment(schedule_id, TEAM, slots[0]["id"], "יוסי", "עודף קיים")
+
+    result = service._chat_tools.run(
+        TEAM, "staffing_scenario", {"day": "2026-10-05"}, schedule_id,
+    )
+
+    assert result["simulated"] and result["applied"] is False
+    assert result["coverage"]["current_assigned"] == 1
+    assert result["coverage"]["after_rebalance"] == 2
+    assert result["coverage"]["scenario_gain"] == 0
+    assert result["transfers_from_surplus"] == [{
+        "employee": "יוסי", "from_shift": MORNING, "from_date": "2026-10-05",
+        "to_shift": EVENING, "to_date": "2026-10-05",
+    }]
+    assert [(row["employee"], row["shift"]) for row in repo.assignments(schedule_id, TEAM)] \
+        == [("דנה", MORNING), ("יוסי", MORNING)]
+
+
+def test_staffing_scenario_separates_existing_capacity_from_extra_reserve_days():
+    repo, _, service, _, schedule_id = setup([])
+    profile = repo.profiles[TEAM]
+    profile["employees"] = [{
+        "name": "יוסי", "eligible_shifts": [MORNING], "service_type": "reserve",
+        "reserve_days_per_week": 1, "exit_pattern": "none", "rotation_group": "",
+    }]
+    repo.assignment_rows[schedule_id] = []
+    repo.replace_slots(schedule_id, TEAM, [
+        {"shift_name": MORNING, "slot_date": "2026-10-05", "headcount": 1},
+        {"shift_name": MORNING, "slot_date": "2026-10-06", "headcount": 1},
+    ])
+
+    result = service._chat_tools.run(TEAM, "staffing_scenario", {
+        "day": "2026-10-05", "reserve_days_per_week": 2, "reserve_min_days": 2,
+        "employee": "יוסי",
+    }, schedule_id)
+
+    assert result["coverage"] == {
+        "required": 2, "current_assigned": 0, "current_percent": 0,
+        "after_rebalance": 1, "after_rebalance_percent": 50,
+        "after_scenario": 2, "after_scenario_percent": 100,
+        "delta_from_current": 2, "scenario_gain": 1,
+    }
+    assert result["reserve_changes"][0]["employee"] == "יוסי"
+    assert repo.profiles[TEAM]["employees"][0]["reserve_days_per_week"] == 1
+    assert not repo.assignments(schedule_id, TEAM)
+
+
+def test_staffing_scenario_adds_relative_reserve_capacity_without_writing():
+    repo, _, service, _, schedule_id = setup([])
+    repo.profiles[TEAM]["employees"] = [{
+        "name": "עודד", "eligible_shifts": [MORNING], "service_type": "reserve",
+        "reserve_days_per_week": 1, "reserve_min_days": 1,
+        "exit_pattern": "none", "rotation_group": "",
+    }]
+    repo.assignment_rows[schedule_id] = []
+    repo.replace_slots(schedule_id, TEAM, [
+        {"shift_name": MORNING, "slot_date": "2026-10-05", "headcount": 1},
+        {"shift_name": MORNING, "slot_date": "2026-10-06", "headcount": 1},
+    ])
+
+    result = service._chat_tools.run(TEAM, "staffing_scenario", {
+        "day": "2026-10-05", "reserve_extra_days": 3, "employee": "עודד",
+    }, schedule_id)
+
+    change = result["reserve_changes"][0]
+    assert (change["cap_before"], change["requested_cap"], change["cap_after"]) == (1, 4, 4)
+    assert change["minimum_unchanged"] and change["days_in_scenario"] == 2
+    assert result["coverage"]["scenario_gain"] == 1
+    assert result["board_delta"]["from_current"]["operations"]
+    assert result["board_delta"]["caused_by_scenario"]["operations"]
+    assert repo.profiles[TEAM]["employees"][0]["reserve_days_per_week"] == 1
+    assert repo.profiles[TEAM]["employees"][0]["reserve_min_days"] == 1
+    assert not repo.assignments(schedule_id, TEAM)
+
+
+def test_relative_reserve_capacity_applies_per_person_and_caps_at_seven():
+    repo, _, service, _, schedule_id = setup([])
+    repo.profiles[TEAM]["employees"] = [
+        {"name": "עודד", "eligible_shifts": [MORNING], "service_type": "reserve",
+         "reserve_days_per_week": 2, "exit_pattern": "none", "rotation_group": ""},
+        {"name": "דנה", "eligible_shifts": [MORNING], "service_type": "reserve",
+         "reserve_days_per_week": 6, "exit_pattern": "none", "rotation_group": ""},
+        {"name": "יוסי", "eligible_shifts": [MORNING], "service_type": "reserve",
+         "reserve_days_per_week": 7, "exit_pattern": "none", "rotation_group": ""},
+        {"name": "רותי", "eligible_shifts": [MORNING], "service_type": "reserve",
+         "exit_pattern": "none", "rotation_group": ""},
+    ]
+
+    result = service._chat_tools.run(TEAM, "staffing_scenario", {
+        "day": "2026-10-05", "reserve_extra_days": 3,
+    }, schedule_id)
+
+    changes = {row["employee"]: row for row in result["reserve_changes"]}
+    assert changes["עודד"]["cap_after"] == 5
+    assert changes["דנה"]["cap_after"] == 7 and changes["דנה"]["capped_at_seven"]
+    assert changes["יוסי"]["cap_after"] == 7 and not changes["יוסי"]["changed"]
+    assert changes["רותי"]["cap_after"] is None and "לא הוגדרה" in changes["רותי"]["reason"]
+    assert [row.get("reserve_days_per_week") for row in repo.profiles[TEAM]["employees"]] \
+        == [2, 6, 7, None]
+
+
+def test_staffing_scenario_can_measure_hypothetical_civilian_capacity():
+    repo, _, service, _, schedule_id = setup([])
+    repo.profiles[TEAM]["employees"] = [repo.profiles[TEAM]["employees"][0]]
+    repo.assignment_rows[schedule_id] = []
+    slots = repo.replace_slots(schedule_id, TEAM, [
+        {"shift_name": MORNING, "slot_date": "2026-10-05", "headcount": 2},
+    ])
+    repo.add_assignment(schedule_id, TEAM, slots[0]["id"], "דנה", "שיבוץ קיים")
+
+    result = service._chat_tools.run(TEAM, "staffing_scenario", {
+        "day": "2026-10-05",
+        "additional_staff": [{
+            "count": 1, "service_type": "civilian", "role": "",
+            "eligible_shifts": [MORNING], "competence": "",
+            "reserve_days_per_week": None,
+        }],
+    }, schedule_id)
+
+    assert result["coverage"]["after_rebalance"] == 1
+    assert result["coverage"]["after_scenario"] == 2
+    assert result["coverage"]["scenario_gain"] == 1
+    assert result["gap_summary"]["after_scenario"] == {"slots": 0, "people_short": 0}
+    assert result["additional_staff"][0]["service_type"] == "civilian"
+    assert len(repo.profiles[TEAM]["employees"]) == 1
 
 
 def test_recurring_constraint_profile_plan_preserves_roster_and_employee_details():

@@ -13,6 +13,7 @@ from app.bl.audit.checks.people import (
 )
 from app.bl.audit.checks.rotation import CrossRotationCheck
 from app.bl.audit.checks.staffing import StaffingCheck
+from app.bl.audit.checks.unit import UnitStandardCheck
 
 DEFAULT_CHECKS = (
     DoubleBookedCheck(),
@@ -22,6 +23,7 @@ DEFAULT_CHECKS = (
     ShortRestCheck(),
     StaffingCheck(),
     CrossRotationCheck(),
+    UnitStandardCheck(),
 )
 
 __all__ = ["AuditCheck", "AuditInput", "DEFAULT_CHECKS"]

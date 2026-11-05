@@ -27,8 +27,9 @@ import type { Who } from "@/components/Crew";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import type { ChecklistItem } from "@/components/Guide";
 import { useTheme } from "@/hooks/useTheme";
+import { CommanderNotices } from "@/components/Complex/CommanderNotices";
 import { ShareLink } from "@/components/Workspace/ShareLink";
-import type { ChatPlan, ManagementOverview, Proposal, TeamView } from "@/types";
+import type { ChatPlan, ManagementOverview, Proposal, Simulation, TeamView } from "@/types";
 
 import { AccountMenu } from "./AccountMenu";
 import { AgentChat } from "./AgentChat";
@@ -92,6 +93,7 @@ export function Management({
   const { workspace: workspaceRef, share: chatShare, resizing, handle: resizeHandle } = useChatSplit();
   const [chatSearch, setChatSearch] = useState("");
   const [chatPreview, setChatPreview] = useState<Proposal | null>(null);
+  const [chatSimulation, setChatSimulation] = useState<Simulation | null>(null);
   const [chatWeek, setChatWeek] = useState<{ date: string; n: number }>();
   // The day the board opened the agent on, if any. Counted like `suggested`
   // so opening the same day twice still focuses the composer.
@@ -108,7 +110,8 @@ export function Management({
   }, [refresh]);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      if (window.matchMedia("(min-width: 900px)").matches) setDrawerOpen(true);
+      // Below 1100px the drawer is a sheet over the board, so it waits to be opened.
+      if (window.matchMedia("(min-width: 1100px)").matches) setDrawerOpen(true);
     });
     return () => cancelAnimationFrame(frame);
   }, []);
@@ -319,7 +322,9 @@ export function Management({
             <span className="brand-name">משמרות זהב</span>
             <span>
               {workspace.name}
-              <span className="brand-sub"> · איזור ניהול</span>
+              <span className="brand-sub">
+                {workspace.commander ? " · מפקד מכלול" : " · איזור ניהול"}
+              </span>
             </span>
           </span>
         </div>
@@ -433,6 +438,9 @@ export function Management({
           <HelpButton />
           <AccountMenu
             name={workspace.name}
+            role={workspace.commander
+              ? "מפקד/ת מכלול"
+              : workspace.complex ? "מפקד/ת משמרת" : undefined}
             onLogout={onLogout}
           />
         </div>
@@ -546,6 +554,12 @@ export function Management({
         </div>
       ) : null}
 
+      {/* What the מכלול commander changed here, for this workplace's own
+          manager (D43). The commander, inside, is not shown their own. */}
+      {workspace.complex && !workspace.commander ? (
+        <CommanderNotices onSeen={() => void state.refresh()} />
+      ) : null}
+
       {/* A build refused for a reason the manager can close. Above the board
           because it is about the board they are looking at not existing, and
           beside the error rather than inside it: nothing here is a fault. */}
@@ -595,6 +609,7 @@ export function Management({
               ) : null}
             </header>
             {overview ? (
+              <>
               <TeamPanel
                 today={overview.today}
                 employees={overview.employees}
@@ -611,6 +626,8 @@ export function Management({
                 onPreviewDeparture={state.previewDeparture}
                 onDepart={state.depart}
               />
+              <Preferences busy={state.busy} />
+              </>
             ) : (
               <div className="manager-analytics-loading" aria-busy="true">
                 <CrewStage label="טוען את פרטי הצוות…" />
@@ -645,7 +662,7 @@ export function Management({
             // point at different cells. Read-only: the board produces no
             // operations and there is no path from a highlight to a write.
             agent={{
-              simulation: null,
+              simulation: chatSimulation,
               proposal: chatPreview,
               answer: null,
             }}
@@ -687,7 +704,8 @@ export function Management({
               <X size={17} />
             </button>
           </div>
-          <div className="manager-tabs" role="group" aria-label="כלי ניהול" data-tour="drawer-tabs">
+          <div className="manager-tabs" data-tour="drawer-tabs">
+            <div className="manager-tabs-track" role="group" aria-label="כלי ניהול">
             <ManagerTab
               active={section === "agent"}
               icon={<Sparkles size={15} />}
@@ -707,12 +725,7 @@ export function Management({
               count={requests.rows.length}
               onClick={openRequests}
             />
-            <ManagerTab
-              active={section === "team"}
-              icon={<Users size={15} />}
-              label="צוות"
-              onClick={() => setSection("team")}
-            />
+            </div>
             {/* Desktop hides the drawer head, so the way out lives here.
                 Closing hands the whole width back to the board. */}
             <button
@@ -749,6 +762,7 @@ export function Management({
             draft={suggested.text}
             draftKey={suggested.n}
             onPreview={setChatPreview}
+            onSimulation={setChatSimulation}
             onOpenReceipt={(date) => setChatWeek((previous) => ({ date, n: (previous?.n ?? 0) + 1 }))}
             onImport={() => setImportOpen(true)}
           />
@@ -800,26 +814,6 @@ export function Management({
           />
           </> : null}
 
-          {section === "team" ? <>
-          <Preferences busy={state.busy} />
-          <TeamPanel
-            today={overview?.today}
-            employees={overview?.employees ?? []}
-            shifts={overview?.shifts ?? []}
-            constraints={overview?.availability ?? []}
-            stats={overview?.stats}
-            dark={theme === "dark"}
-            rotationMode={overview?.profile?.workplace?.rotation_mode}
-            dayCycles={overview?.profile?.workplace?.day_cycles}
-            draggable={schedule?.status === "draft" && !state.busy}
-            onAdd={state.addConstraint}
-            onRemove={state.removeConstraint}
-            onSaveProfile={state.saveProfile}
-            onDeleteShift={state.deleteShift}
-            onPreviewDeparture={state.previewDeparture}
-            onDepart={state.depart}
-          />
-          </> : null}
 
           </div>
         </aside>
@@ -858,10 +852,10 @@ function inWeek(date: string, weekStart: string): boolean {
   const offset = (new Date(`${date}T00:00:00`).getTime() - new Date(`${weekStart}T00:00:00`).getTime()) / 86_400_000;
   return offset >= 0 && offset < 7;
 }
-type ManagerSection = "agent" | "replace" | "requests" | "team";
+type ManagerSection = "agent" | "replace" | "requests";
 
 /** Roster names still on the active roster on `today`. */
-function activeEmployees(employees: Record<string, unknown>[], today: string): string[] {
+export function activeEmployees(employees: Record<string, unknown>[], today: string): string[] {
   return employees
     .filter((person) => !person.inactive_from || !today || String(person.inactive_from) > today)
     .map((person) => String(person.name ?? ""))
@@ -934,7 +928,7 @@ function ManagerTab({
       onClick={onClick}
     >
       {icon}
-      {label}
+      <span>{label}</span>
       {count ? <span className="manager-tab-badge">{count > 9 ? "9+" : count}</span> : null}
     </button>
   );

@@ -1,4 +1,4 @@
-"""Always-running durable job worker: chat turns, builds, translations.
+"""Always-running durable job worker: chat, replacement searches, builds, translations.
 
 Run with ``python -m app.worker``. PostgreSQL owns claiming and deduplication,
 so restarting this process or running two copies cannot execute one job twice.
@@ -13,23 +13,29 @@ import time
 from app.bl.compiled_sources import SourceCompiler
 from app.bl.compiled_sources.compiler import JOB_KIND as COMPILE_SOURCES
 from app.bl.schedule_service import ScheduleService
-from app.bl.manager_chat import ManagerChatService
+from app.bl.chat.service import ManagerChatService, REPLACEMENT_JOB
 from app.common.events import TeamEvents
 from app.dal.notify import PostgresSignals
 from app.common.activity import track_activity
 from app.common.actor import acting_as
-from app.common.errors import NotFoundError
+from app.common.errors import AppError, NotFoundError
 from app.common.config import Settings
 from app.common.logging_setup import configure_logging
+from app.common.read_cache import ReadCache
+from app.common.redis_hub import RedisHub
 from app.common.runtime_settings.runtime_settings_store import RuntimeSettingsStore
 from app.dal.llm.openai_client import OpenAIJsonClient
 from app.dal.llm.team_context import model_team
+from app.dal import write_marks
 from app.dal.repository import Repository
 
 _log = logging.getLogger("pakash.worker")
 _POLL_SECONDS = max(1, int(os.getenv("PAKASH_COPILOT_POLL_SECONDS", "1")))
-# Chat turns get their own lanes so a build never delays an answer; several
-# of them so one slow (or stuck) turn does not hold every other manager's.
+# A manager is watching a spinner on these lanes, so they look again sooner;
+# the claim is one indexed SKIP LOCKED query.
+_INTERACTIVE_POLL_SECONDS = max(0.05, float(os.getenv("PAKASH_INTERACTIVE_POLL_SECONDS", "0.25")))
+# Interactive reads and chat turns get their own lanes so a build never delays
+# the screen; several lanes keep one slow job from holding every manager's.
 _WORKER_CONCURRENCY = max(1, int(os.getenv("PAKASH_WORKER_CONCURRENCY", "6")))
 _CHAT_WORKERS = max(1, int(os.getenv("PAKASH_CHAT_WORKERS", "3")))
 # Finished jobs are deleted after this many days, checked once an hour.
@@ -85,6 +91,17 @@ class JobWorker:
             with track_activity(progress):
                 progress("קורא את הבקשה ואת הסידור…")
                 self._chat.reply(team_id, payload["manager_id"], payload["chat_id"], payload["message_id"])
+        elif job["kind"] == REPLACEMENT_JOB:
+            try:
+                result = self._chat.replacement_options(
+                    team_id, payload["employee"],
+                    payload["starts_on"], payload.get("ends_on", ""),
+                )
+            except AppError as exc:
+                # A refusal is the answer, not a fault: retrying it three
+                # times ten seconds apart only delays the same sentence.
+                result = {"refused": str(exc) or "חיפוש המחליפים נכשל. נסו שוב"}
+            self._repository.set_copilot_job_result(job["id"], result)
         elif job["kind"] == "generation":
             with track_activity(lambda activity: self._repository.generation_activity(
                     payload["schedule_id"], team_id, activity)):
@@ -108,8 +125,9 @@ class JobWorker:
 
     def _fail(self, job):
         # A build's failure is on its span, where the banner reads it, and a
-        # translation's next build retries what is missing. Only a chat turn
-        # would otherwise be left "working" forever.
+        # translation's next build retries what is missing. A replacement
+        # search exposes the failed job directly; only a chat turn would
+        # otherwise be left "working" forever.
         if job["kind"] == "manager_chat":
             payload = job["payload"]
             self._repository.finish_chat_turn(payload["chat_id"], payload["message_id"],
@@ -124,6 +142,8 @@ def _build():
     # job on: a database not ready yet is simply asked again by `get()`.
     store.share_through(repository)
     store.pull_shared()
+    # What a job writes retires its team's cached reads in the API (D50).
+    write_marks.on_written(ReadCache(RedisHub(store), store).written)
     llm = OpenAIJsonClient(store)
     schedules = ScheduleService(repository, llm, settings=store)
     return repository, JobWorker(
@@ -152,7 +172,7 @@ def start(worker, stopped: threading.Event) -> list:
                 worker.run_once(lane)
             except Exception:
                 _log.exception("worker connection failed; retrying lane=%s", lane)
-            stopped.wait(_POLL_SECONDS)
+            stopped.wait(_INTERACTIVE_POLL_SECONDS if lane == "interactive" else _POLL_SECONDS)
 
     lanes = ["interactive"] * chat_count + ["background"] * (count - chat_count)
     if count == 1:

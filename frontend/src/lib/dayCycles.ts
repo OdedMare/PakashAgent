@@ -3,8 +3,8 @@ import type { DayCycle } from "@/types";
 /** Day-based cycles as the setup screens name them.
  *
  *  The arithmetic of who is home on which date lives in the server
- *  (`bl/rotation/day_cycles.py`); the only date math here is the setup
- *  preview, the same way the weekend cycles preview their anchor. */
+ *  (`bl/rotation/day_cycles.py`); the only date math here names the
+ *  transition weekdays on the setup screen. */
 
 export const DAY_CYCLE_PREFIX = "cycle:";
 
@@ -39,12 +39,18 @@ export function cycleName(cycles: DayCycle[] | undefined, pattern: unknown): str
   return cycleOf(cycles, pattern)?.name || "מחזור";
 }
 
-export function newDayCycle(existing: DayCycle[]): DayCycle {
+/** The preset a cycle's days match, if any — how the exits list names it. */
+export function presetOf(cycle: Pick<DayCycle, "base_days" | "home_days">) {
+  return DAY_CYCLE_PRESETS.find((preset) => preset.base === cycle.base_days && preset.home === cycle.home_days);
+}
+
+/** A new cycle with the given days; a preset's label names it. */
+export function newDayCycle(existing: DayCycle[], base = 11, home = 3, name = `${base}/${home}`): DayCycle {
   const used = new Set(existing.map((cycle) => cycle.id));
   let index = existing.length + 1;
   while (used.has(`c${index}`)) index += 1;
   return {
-    id: `c${index}`, name: "11/3", base_days: 11, home_days: 3, anchor_date: "",
+    id: `c${index}`, name, base_days: base, home_days: home, anchor_date: "",
     groups: ["א", "ב"], offsets: {}, leave_day: 0, leave_time: "", return_day: 0,
     return_time: "", group_times: {}, time_changes: [],
   };
@@ -61,13 +67,4 @@ export function defaultOffset(cycle: DayCycle, group: string): number {
 export function groupOffset(cycle: DayCycle, group: string): number {
   const stated = cycle.offsets?.[group];
   return typeof stated === "number" ? stated : defaultOffset(cycle, group);
-}
-
-/** Setup preview only: whether `group` is nominally home on day `n` after
- *  the anchor. Hours and dated changes are applied by the server. */
-export function nominallyHome(cycle: DayCycle, group: string, n: number): boolean {
-  const length = cycle.base_days + cycle.home_days;
-  if (!length) return false;
-  const position = (((n - groupOffset(cycle, group)) % length) + length) % length;
-  return position >= cycle.base_days;
 }

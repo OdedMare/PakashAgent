@@ -4,7 +4,7 @@ from typing import Dict, List
 
 from app.bl.audit.staffing_rules import counts_toward_staffing
 from app.bl.audit.stats import shift_stats
-from app.bl.shared import employees, iso, role_qualified, shifts, text
+from app.bl.shared import employees, iso, out_of_service, role_qualified, shifts, text
 
 
 def pretty(hours: float) -> str:
@@ -49,7 +49,7 @@ def is_eligible(profile: dict, employee: str, shift_name: str, date: str = "") -
     for person in employees(profile):
         if text(person.get("name")) != employee:
             continue
-        if date and person.get("inactive_from") and date >= person["inactive_from"]:
+        if out_of_service(person, date):
             return False
         declared = {text(row.get("name")): row for row in shifts(profile)}
         if shift_name not in declared and shift_name in (person.get("archived_eligible_shifts") or []):

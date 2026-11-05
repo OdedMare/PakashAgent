@@ -38,9 +38,9 @@ _GROUPS = (
 )
 
 
-def build_router(service, guards) -> APIRouter:
+def build_router(service, guards, cache=None) -> APIRouter:
     router = APIRouter(prefix="/api/schedule", tags=["schedule"])
     boss, visitor = guards.boss(), guards.visitor()
     for group in _GROUPS:
-        group(service, boss, visitor).register(router)
+        group(service, boss, visitor, cache).register(router)
     return router

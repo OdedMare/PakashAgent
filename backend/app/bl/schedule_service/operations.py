@@ -10,7 +10,7 @@ in a long method.
 from typing import Callable, Dict, List, Optional
 
 from app.bl.changes import OP_ASSIGN, OP_REMOVE, OP_SWAP
-from app.bl.audit import constraint_conflicts
+from app.bl.audit import constraint_conflicts, is_whole_day
 from app.bl.scheduler.availability import effective_availability
 from app.bl.schedule_service.constants import (
     ACTION_ASSIGNED,
@@ -23,10 +23,10 @@ from app.bl.schedule_service.rows import (
 from app.common.errors import ConflictError
 
 
-def assert_no_blocking_duty(
+def assert_no_hard_constraint(
     repository, team_id: str, schedule: dict, employee: str, slot: dict,
 ) -> None:
-    """Refuse a placement that overlaps a hard operational duty."""
+    """Refuse a placement that contradicts any hard availability row."""
     starts_on, ends_on = window(schedule)
     profile = repository.team_profile(team_id) or {}
     availability = effective_availability(
@@ -43,16 +43,27 @@ def assert_no_blocking_duty(
         "start_time": slot.get("start_time") or "",
         "end_time": slot.get("end_time") or "",
     }
-    duty = next((
+    blocked = next((
         row for row in availability
-        if row.get("constraint_type") == "duty"
+        if row.get("is_hard", True) is not False
         and constraint_conflicts(candidate, row)
     ), None)
-    if duty is not None:
-        reason = (duty.get("reason") or "").strip()
+    if blocked is not None:
+        reason = (blocked.get("reason") or "").strip()
+        if blocked.get("constraint_type") != "duty":
+            raise ConflictError(
+                "%s אינו/ה זמין/ה למשמרת%s. יש לבחור חייל/ת או משמרת אחרת."
+                % (employee, " (%s)" % reason if reason else "")
+            )
+        if is_whole_day(blocked):
+            raise ConflictError(
+                "%s בתורנות%s של המכלול ביום %s ולכן לא ניתן לשבץ אותו/ה למשמרת."
+                % (employee, " " + reason if reason else "",
+                   blocked.get("date") or blocked.get("constraint_date") or "?")
+            )
         raise ConflictError(
             "%s בתורנות חוסמת בשעות %s–%s%s ולכן לא ניתן לשבץ אותו/ה למשמרת."
-            % (employee, duty.get("start_time") or "?", duty.get("end_time") or "?",
+            % (employee, blocked.get("start_time") or "?", blocked.get("end_time") or "?",
                " (%s)" % reason if reason else "")
         )
 
@@ -134,7 +145,7 @@ class OperationApplier:
         )
         if slot is None:
             return 0
-        assert_no_blocking_duty(
+        assert_no_hard_constraint(
             self._repository, team_id, schedule, op.employee, slot,
         )
         self._repository.add_assignment(
@@ -159,10 +170,10 @@ class OperationApplier:
         )
         if first_slot is None or second_slot is None:
             return 0
-        assert_no_blocking_duty(
+        assert_no_hard_constraint(
             self._repository, team_id, schedule, op.employee, second_slot,
         )
-        assert_no_blocking_duty(
+        assert_no_hard_constraint(
             self._repository, team_id, schedule, op.other, first_slot,
         )
         stored_reason = op.own_reason or reason

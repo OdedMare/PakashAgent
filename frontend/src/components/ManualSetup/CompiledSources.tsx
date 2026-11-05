@@ -30,11 +30,14 @@ const KIND_LABELS: Record<string, string> = {
   recurring_constraint: "אילוץ קבוע",
 };
 
-/** What the code scheduler made of every sentence in setup. A read only:
- *  translating happens on save, and a sentence is changed where it is written. */
-export function CompiledSources() {
-  const [sources, setSources] = useState<CompiledSource[] | null>(null);
-  const [failed, setFailed] = useState(false);
+const PERSON_KINDS = new Set(["employee_notes", "employee_availability", "employee_workload", "employee_trainers", "employee_is_trainee", "recurring_constraint"]);
+
+/** What the code scheduler made of every sentence in setup, sorted to where
+ *  each sentence is written: a soldier's on their card (`context` is the
+ *  saved name), a rule's beside the rule, and the rest — the unit's
+ *  policies — on their own. A read only: translating happens on save. */
+export function useCompiledSources() {
+  const [sources, setSources] = useState<CompiledSource[]>([]);
 
   useEffect(() => {
     let polls = 0;
@@ -49,7 +52,7 @@ export function CompiledSources() {
           timer = setTimeout(() => void load(), POLL_MS);
         }
       } catch {
-        if (!stopped) setFailed(true);
+        // Nothing to show; the build's notes still say what was left out.
       }
     };
     void load();
@@ -59,24 +62,31 @@ export function CompiledSources() {
     };
   }, []);
 
-  if (failed) return <p className="manual-compiled-empty">לא ניתן לטעון כרגע את מצב התרגום.</p>;
-  if (sources === null) return <p className="manual-compiled-empty">טוען…</p>;
-  if (!sources.length) {
-    return <p className="manual-compiled-empty">אין כרגע כללים, מדיניות או הערות בשפה חופשית. השיבוץ בקוד לא צריך תרגום.</p>;
-  }
+  const isPerson = (source: CompiledSource) => PERSON_KINDS.has(source.kind);
+  return {
+    forPerson: (name: string) => name ? sources.filter((source) => isPerson(source) && source.context === name) : [],
+    forRule: (text: string) => text ? sources.filter((source) => source.kind === "rule" && readable(source.text).trim() === text) : [],
+    rest: sources.filter((source) => !isPerson(source) && source.kind !== "rule"),
+  };
+}
+
+/** A few translated sentences, each with its status. Nothing when empty. */
+export function CompiledList({ sources, title, bare = false }: { sources: CompiledSource[]; title?: string; /** Status only, for a row that already shows the sentence. */ bare?: boolean }) {
+  if (!sources.length) return null;
   return (
-    <ul className="manual-compiled">
-      {sources.map((source, index) => (
-        <li key={index}>
-          <span className="manual-compiled-kind">
-            {KIND_LABELS[source.kind] ?? source.kind}{source.context ? ` · ${source.context}` : ""}
-          </span>
-          <span className="manual-compiled-text">{readable(source.text)}</span>
-          <Status source={source} />
-          {source.question && !source.expired ? <span className="manual-compiled-question">צריך אישור: {source.question}</span> : null}
-        </li>
-      ))}
-    </ul>
+    <div className="manual-compiled-block">
+      {title ? <span className="field-label">{title}</span> : null}
+      <ul className="manual-compiled">
+        {sources.map((source, index) => (
+          <li key={index} className={bare ? "is-bare" : undefined}>
+            {bare ? null : <span className="manual-compiled-kind">{KIND_LABELS[source.kind] ?? source.kind}</span>}
+            {bare ? null : <span className="manual-compiled-text">{readable(source.text)}</span>}
+            <Status source={source} />
+            {source.question && !source.expired ? <span className="manual-compiled-question">צריך אישור: {source.question}</span> : null}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

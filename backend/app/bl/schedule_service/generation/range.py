@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 
-from app.bl.scheduler import build_slots, plan_spans
+from app.bl.scheduler import build_slots, plan_spans, with_staffing_overrides
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.generation.job import GenerationJob
 from app.bl.schedule_service.generation.shift_filter import chosen_shifts, dates_with
@@ -26,6 +26,7 @@ class RangeBuilder:
         instructions: str = "",
         shifts: Optional[List[str]] = None,
         keep_existing: bool = False,
+        staffing_overrides: Optional[List[dict]] = None,
     ) -> dict:
         """Prepare a run of dates inside an existing draft for generation.
 
@@ -48,10 +49,31 @@ class RangeBuilder:
         schedule = self._repository.get_schedule(schedule_id, team_id)
         if schedule.get("status") != "draft":
             raise AgentError("יש להחזיר את הסידור לטיוטה לפני בניית ימים בו")
+        first, last = iso(starts_on), iso(ends_on)
+        if not first or not last or first > last \
+                or first < iso(schedule.get("starts_on")) \
+                or last > iso(schedule.get("ends_on")):
+            raise AgentError("טווח התאריכים חייב להיות בתוך תקופת הסידור")
+        existing = (schedule.get("generation") or {}).get("staffing_overrides") or []
+        existing_in_range = [
+            row for row in existing if first <= iso(row.get("date")) <= last
+        ]
+        requested = list(staffing_overrides or [])
+        staffing_overrides = [
+            row for row in existing
+            if not first <= iso(row.get("date")) <= last
+        ] + requested
         if keep_existing:
-            schedule = self.extend_grid(team_id, schedule, iso(starts_on), iso(ends_on))
+            schedule = self.extend_grid(team_id, schedule, first, last)
+        if existing_in_range or requested:
+            schedule = self._apply_staffing_overrides(
+                team_id, schedule, staffing_overrides, first, last,
+            )
         chosen = chosen_shifts(shifts, schedule.get("slots") or [])
-        spans = self._spans(team_id, schedule, iso(starts_on), iso(ends_on), chosen)
+        spans = self._spans(
+            team_id, schedule, iso(starts_on), iso(ends_on), chosen,
+            staffing_overrides,
+        )
         job = GenerationJob.open(
             spans,
             total_days=sum(len(span["dates"]) for span in spans),
@@ -59,11 +81,47 @@ class RangeBuilder:
             required=[],
             shifts=chosen,
             keep_existing=keep_existing,
+            staffing_overrides=staffing_overrides,
         )
         return self._context.view(
             self._repository.set_generation(schedule_id, team_id, job.to_dict()),
             team_id,
         )
+
+    def _apply_staffing_overrides(
+        self, team_id: str, schedule: dict, overrides: List[dict],
+        first: str, last: str,
+    ) -> dict:
+        """Sync this run's seats in place so existing assignment ids survive."""
+        keys = [(row.get("shift"), iso(row.get("date"))) for row in overrides]
+        if len(keys) != len(set(keys)):
+            raise AgentError("אותה משמרת ותאריך הוגדרו יותר מפעם אחת")
+        period_first = iso(schedule.get("starts_on"))
+        period_last = iso(schedule.get("ends_on"))
+        if any(not period_first <= date <= period_last for _, date in keys):
+            raise AgentError("אחד מימי התקינה המיוחדת אינו נמצא בתקופת הסידור")
+        profile = with_staffing_overrides(
+            self._gate.buildable_profile(team_id), overrides,
+        )
+        wanted = build_slots(profile, first, last)
+        wanted_keys = {(slot["shift_name"], slot["slot_date"]) for slot in wanted}
+        requested_keys = {
+            (row.get("shift"), iso(row.get("date")))
+            for row in overrides if first <= iso(row.get("date")) <= last
+        }
+        if not requested_keys.issubset(wanted_keys):
+            raise AgentError("תקינה מיוחדת הוגדרה למשמרת שאינה פועלת בתאריך שנבחר")
+        reset = [
+            dict(slot, headcount=0)
+            for slot in schedule.get("slots") or []
+            if first <= iso(slot.get("slot_date")) <= last
+            and (slot.get("shift_name"), iso(slot.get("slot_date"))) not in wanted_keys
+        ]
+        self._repository.update_slot_headcounts(
+            schedule["id"], team_id, wanted + reset,
+        )
+        self._repository.add_slots(schedule["id"], team_id, wanted)
+        return self._repository.get_schedule(schedule["id"], team_id)
 
     def extend_grid(self, team_id: str, schedule: dict, first: str, last: str) -> dict:
         """Add the slots the profile now has on these dates and the stored
@@ -87,7 +145,7 @@ class RangeBuilder:
 
     def _spans(
         self, team_id: str, schedule: dict, first: str, last: str,
-        shifts: List[str],
+        shifts: List[str], overrides: Optional[List[dict]] = None,
     ) -> List[dict]:
         """The spans to ask for: planned from the profile, held to the grid.
 
@@ -101,7 +159,10 @@ class RangeBuilder:
         wanted = sorted(day for day in stored if first <= day <= last)
         if not wanted:
             raise AgentError("אין משמרות בסידור הזה בתאריכים שנבחרו")
-        planned = plan_spans(self._gate.buildable_profile(team_id), wanted[0], wanted[-1])
+        profile = with_staffing_overrides(
+            self._gate.buildable_profile(team_id), overrides,
+        )
+        planned = plan_spans(profile, wanted[0], wanted[-1])
         spans = within(planned, stored)
         if not spans:
             raise AgentError("אף משמרת מוגדרת לא חלה בתאריכים שנבחרו")

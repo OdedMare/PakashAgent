@@ -185,6 +185,7 @@ def test_rotation_a_schedule_and_optional_patterns_share_the_workplace_profile()
     result = ProfileService(repo).update("team", workplace={
         "name": "פלוגה",
         "enabled_exit_patterns": ["triplet", "hamshushim"],
+        "reserve_enabled": False,
         "rotation_a_unavailability": [{
             "days": ["שני"], "shifts": ["בוקר"],
             "start_time": "08:00", "end_time": "12:00",
@@ -194,11 +195,15 @@ def test_rotation_a_schedule_and_optional_patterns_share_the_workplace_profile()
 
     workplace = result["workplace"]
     assert workplace["enabled_exit_patterns"] == ["triplet", "hamshushim"]
+    assert workplace["reserve_enabled"] is False
     assert workplace["rotation_a_unavailability"] == [{
         "days": ["שני"], "shifts": ["בוקר"],
         "start_time": "08:00", "end_time": "12:00",
         "reason": "יציאה קבועה",
     }]
+
+    with pytest.raises(AgentError):
+        ProfileService(repo).update("team", workplace={"reserve_enabled": "no"})
 
 
 def test_round_and_triplet_anchors_are_saved_and_validated_separately():
@@ -349,3 +354,78 @@ def test_a_save_without_a_revision_still_saves():
     repo = _Repo()
     ProfileService(repo).update("team", rules=[{"text": "כלל"}])
     assert [row["text"] for row in repo.profile["rules"]] == ["כלל"]
+
+
+class _RenamingRepo(_Repo):
+    """Records what the transactional save was asked to carry through."""
+
+    def update_team_profile_with_identity_changes(
+            self, team_id, profile, expected_revision, employees, shifts, removed):
+        self.carried = (employees, shifts, removed)
+        return self.update_team_profile(team_id, profile, expected_revision)
+
+
+def test_a_saved_name_is_corrected_through_an_explicit_rename():
+    repo = _RenamingRepo()
+    repo.profile["employees"].append({"name": "יוסי", "trainers": ["דנה"]})
+    repo.profile["employees"][0]["eligible_shifts"] = ["בוקר"]
+    repo.profile["workplace"] = {"rotation_presence": [
+        {"pattern": "round", "group": "א", "days": ["שני"], "shifts": ["בוקר"]}]}
+    saved = ProfileService(repo).update(
+        "team",
+        employees=[{"name": "דנה כהן", "eligible_shifts": ["בוקר מוקדם"]},
+                   {"name": "יוסי", "trainers": ["דנה כהן"]}],
+        shifts=[{"name": "בוקר מוקדם", "start_time": "07:00", "end_time": "15:00"}],
+        renamed_employees={"דנה": "דנה כהן"}, renamed_shifts={"בוקר": "בוקר מוקדם"},
+    )
+    assert [row["name"] for row in saved["employees"]] == ["דנה כהן", "יוסי"]
+    assert saved["shifts"][0]["name"] == "בוקר מוקדם"
+    assert saved["workplace"]["rotation_presence"][0]["shifts"] == ["בוקר מוקדם"]
+    assert repo.carried == ({"דנה": "דנה כהן"}, {"בוקר": "בוקר מוקדם"}, [])
+
+
+def test_a_rename_carries_through_the_profile_even_when_the_patch_omits_it():
+    repo = _RenamingRepo()
+    repo.profile["employees"].append({"name": "יוסי", "trainers": ["דנה"]})
+    saved = ProfileService(repo).update("team", renamed_employees={"דנה": "דנה כהן"})
+    assert [row["name"] for row in saved["employees"]] == ["דנה כהן", "יוסי"]
+    assert saved["employees"][1]["trainers"] == ["דנה כהן"]
+
+
+def test_a_rename_to_an_existing_or_archived_name_is_refused():
+    repo = _RenamingRepo()
+    repo.profile["employees"].append({"name": "יוסי"})
+    repo.profile["archived_shifts"] = [{"name": "לילה"}]
+    with pytest.raises(AgentError):
+        ProfileService(repo).update("team", renamed_employees={"דנה": "יוסי"})
+    with pytest.raises(AgentError):
+        ProfileService(repo).update("team", renamed_shifts={"בוקר": "לילה"})
+    with pytest.raises(AgentError):
+        ProfileService(repo).update("team", renamed_employees={"אף אחד": "חדש"})
+    assert not hasattr(repo, "carried")
+
+
+def test_a_soldier_added_by_mistake_is_deleted_from_the_roster():
+    repo = _RenamingRepo()
+    repo.profile["employees"].append({"name": "יוסי", "trainers": ["דנה"]})
+    saved = ProfileService(repo).update(
+        "team", employees=[{"name": "יוסי"}], removed_employees=["דנה"])
+    assert [row["name"] for row in saved["employees"]] == ["יוסי"]
+    assert repo.carried == ({}, {}, ["דנה"])
+
+
+def test_without_renames_a_save_takes_the_ordinary_path():
+    repo = _RenamingRepo()
+    ProfileService(repo).update("team", renamed_employees={}, removed_employees=[])
+    assert not hasattr(repo, "carried")
+
+
+def test_a_patch_still_naming_the_old_shift_is_carried_to_the_new_one():
+    repo = _RenamingRepo()
+    saved = ProfileService(repo).update(
+        "team",
+        employees=[{"name": "דנה", "eligible_shifts": ["בוקר"]}],
+        shifts=[{"name": "בוקר מוקדם", "start_time": "07:00", "end_time": "15:00"}],
+        renamed_shifts={"בוקר": "בוקר מוקדם"},
+    )
+    assert saved["employees"][0]["eligible_shifts"] == ["בוקר מוקדם"]

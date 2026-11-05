@@ -1,6 +1,6 @@
 """One schedule, prepared once, asked "would this placement warn?" many times."""
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from app.bl.audit import audit
 from app.bl.placement import values
@@ -35,6 +35,17 @@ class PlacementContext:
         self.shifts = values.shifts(profile)
         self.employees = values.employees(profile)
         self.slots = values.slots(schedule)
+        self._rows = values.rows(schedule, drop=moving_assignment_id)
+        self._by_employee: Dict[str, List[dict]] = {}
+        self._by_slot: Dict[tuple, List[dict]] = {}
+        for row in self._rows:
+            self._by_employee.setdefault(row["employee"], []).append(row)
+            self._by_slot.setdefault((row["shift"], row["date"]), []).append(row)
+        self._grid: Dict[tuple, List[dict]] = {}
+        for slot in self.slots or []:
+            if isinstance(slot, dict):
+                key = (values.text(slot.get("shift_name")), values.iso(slot.get("slot_date")))
+                self._grid.setdefault(key, []).append(slot)
 
     def verdict(self, employee: str, shift_name: str, slot_date: str) -> dict:
         """Whether a placement warns, without looking for a way out.
@@ -44,15 +55,16 @@ class PlacementContext:
         stored schedule is the board's standing state, and attributing it to
         the drag would teach the manager to ignore the dialog.
         """
-        before = values.rows(self.schedule, drop=self.moving)
+        before, slots = self._scope(employee, shift_name, slot_date)
         after = before + [{"employee": employee, "shift": shift_name, "date": slot_date}]
-        existing = {warning_key(row) for row in self._audit(before)}
-        caused = [row for row in self._audit(after) if warning_key(row) not in existing]
+        existing = {warning_key(row) for row in self._audit(before, slots)}
+        caused = [row for row in self._audit(after, slots) if warning_key(row) not in existing]
         # `audit.py` writes Hebrew already; rewording it would be a second
         # voice describing the same fact.
         reasons = [values.text(row.get("message")) for row in caused]
         blocking = any(
-            (row.get("details") or {}).get("constraint_type") == "duty"
+            row.get("code") == "unavailable"
+            and (row.get("details") or {}).get("is_hard", True) is not False
             for row in caused
         )
         eligible = values.is_eligible(self.profile, employee, shift_name, slot_date)
@@ -66,8 +78,8 @@ class PlacementContext:
             ))
         return {
             "ok": not reasons,
-            # Always false. Stated rather than omitted so a caller reading
-            # this contract sees that refusing is not on the table (D3).
+            # Hard unavailability is an invariant; all other findings remain
+            # advisory and can still be accepted by the manager (D3).
             "blocking": blocking,
             "reasons": reasons,
             "warnings": caused,
@@ -79,8 +91,32 @@ class PlacementContext:
         alternative, so a candidate is kept only when it introduces nothing."""
         return self.verdict(employee, shift_name, slot_date)["ok"]
 
-    def _audit(self, assignments: List[dict]) -> List[dict]:
+    def _scope(self, employee: str, shift_name: str, slot_date: str):
+        """The rows and grid one placement can change a warning on.
+
+        Every audit check is about one person (hours, rest, runs, rotation,
+        constraints) or one slot (headcount, roles, commander). Adding one
+        row can only move the placed person's warnings and the target
+        slot's, so auditing the person's rows plus everyone on that slot,
+        before and after, yields exactly the warnings a whole-schedule
+        audit would attribute to it. A whole-schedule audit per candidate
+        is what made a 70-person replacement search run for minutes.
+        """
+        target = (shift_name, slot_date)
+        rows = list(self._by_employee.get(employee, []))
+        rows += [row for row in self._by_slot.get(target, []) if row["employee"] != employee]
+        if not self.slots:
+            return rows, self.slots
+        pairs = {(row["shift"], row["date"]) for row in rows} | {target}
+        grid = [slot for pair in pairs for slot in self._grid.get(pair, [])]
+        # An empty grid would make the staffing check grade the rows' own
+        # slots from the profile, which the stored grid never asked for; one
+        # untouched grid slot keeps it reading the grid and reports the same
+        # thing before and after.
+        return rows, grid or self.slots[:1]
+
+    def _audit(self, assignments: List[dict], slots) -> List[dict]:
         return audit(
             assignments, self.shifts, self.employees, self.availability,
-            self.profile, self.slots,
+            self.profile, slots,
         )

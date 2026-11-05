@@ -20,14 +20,16 @@ succeeded in the same call. Add a new guarded migration after its own COMMIT.
 """
 
 from app.dal.repository.ddl.agent import AGENT_DDL
+from app.dal.repository.ddl.change_plans import CHANGE_PLAN_DDL
 from app.dal.repository.ddl.employees import EMPLOYEE_DDL
 from app.dal.repository.ddl.scheduling import SCHEDULING_DDL
-from app.dal.repository.ddl.workspace import WORKSPACE_DDL
+from app.dal.repository.ddl.workspace import ROSTER_SWITCH_DDL, WORKSPACE_DDL
 from app.dal.repository.chat import CHAT_DDL
 from app.dal.repository.deployment import DEPLOYMENT_DDL
 from app.dal.repository.throttle import THROTTLE_DDL
 
-# Applied in this order: every later block references `teams`, and the
-# employee tables reference the scheduling ones.
-SCHEMA = (WORKSPACE_DDL + SCHEDULING_DDL + EMPLOYEE_DDL + AGENT_DDL + CHAT_DDL + THROTTLE_DDL
-          + DEPLOYMENT_DDL)
+# Applied in this order: every later block references `teams`, the
+# employee tables reference the scheduling ones, and the roster switch's
+# one-time migration records itself in `deployment_state`.
+SCHEMA = (WORKSPACE_DDL + SCHEDULING_DDL + CHANGE_PLAN_DDL + EMPLOYEE_DDL + AGENT_DDL + CHAT_DDL + THROTTLE_DDL
+          + DEPLOYMENT_DDL + ROSTER_SWITCH_DDL)

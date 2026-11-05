@@ -30,6 +30,18 @@ _ROW_WITH_SLOT = """
     JOIN shift_slots s ON s.id = a.slot_id
 """
 
+# Every assignment of one schedule; also read by `periods.get_schedule`.
+SCHEDULE_ASSIGNMENTS = """
+    SELECT a.id, a.employee, a.reason, a.slot_id, a.source,
+           a.created_at,
+           s.shift_name AS shift, s.slot_date AS date,
+           s.start_time, s.end_time, s.is_on_call
+    FROM assignments a
+    JOIN shift_slots s ON s.id = a.slot_id
+    WHERE a.schedule_id=%s AND a.team_id=%s
+    ORDER BY s.slot_date, s.start_time, s.shift_name, a.employee
+"""
+
 
 def _require_reasons(assignments: List[dict]) -> None:
     for item in assignments:
@@ -53,16 +65,21 @@ class AssignmentRepository(RepositoryBase):
         Shaped the way `bl/audit` wants its rows -- employee, shift, date --
         so the audit does not have to re-join what SQL already knows.
         """
-        return self._all("""
-            SELECT a.id, a.employee, a.reason, a.slot_id, a.source,
-                   a.created_at,
-                   s.shift_name AS shift, s.slot_date AS date,
-                   s.start_time, s.end_time, s.is_on_call
+        return self._all(SCHEDULE_ASSIGNMENTS, (schedule_id, team_id))
+
+    def last_shift_dates(self, team_id: str, through: str) -> dict:
+        """Each person's latest shift on or before `through`, as ISO dates.
+
+        What keeps a qualification alive (`bl/qualification.py`): a shift
+        on the board that has already happened, in any period."""
+        rows = self._all("""
+            SELECT a.employee, MAX(s.slot_date) AS last_shift
             FROM assignments a
             JOIN shift_slots s ON s.id = a.slot_id
-            WHERE a.schedule_id=%s AND a.team_id=%s
-            ORDER BY s.slot_date, s.start_time, s.shift_name, a.employee
-        """, (schedule_id, team_id))
+            WHERE a.team_id=%s AND s.slot_date <= %s
+            GROUP BY a.employee
+        """, (team_id, through))
+        return {row["employee"]: str(row["last_shift"]) for row in rows}
 
     def replace_assignments(
         self, schedule_id: str, team_id: str, assignments: List[dict]

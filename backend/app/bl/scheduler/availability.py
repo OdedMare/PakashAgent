@@ -1,9 +1,14 @@
 """Who may work when: dated constraints plus everything the profile implies."""
 
+import copy
 import datetime
+import hashlib
+import json
+import threading
+from collections import OrderedDict
 from typing import Any, List
 
-from app.bl.shared import hebrew_weekday, weekday_key
+from app.bl.shared import hebrew_weekday, switched_off, weekday_key
 from app.bl.scheduler.rotation_rows import (
     closure_availability, overridden, rotation_availability,
 )
@@ -11,8 +16,48 @@ from app.bl.scheduler.values import (
     bounded, bounded_rows, date_text, dates_between, named, parse_date,
 )
 
+# Why a switched-off soldier is unavailable on every date of a build.
+OFF_DUTY_REASON = "כבוי/ה — לא משתתף/ת בשיבוץ"
+
+
+# Recent answers, by a fingerprint of everything the answer is computed
+# from. One replacement search asks the same question once per shift it
+# covers and again per audit of the plan; on 70 people with a rotation each
+# answer took seconds, and the repeats pushed the request past the proxy.
+_CACHE: "OrderedDict[str, List[dict]]" = OrderedDict()
+_CACHE_SIZE = 16
+_CACHE_LOCK = threading.Lock()
+
 
 def effective_availability(
+    profile: dict, rows: Any, starts_on: str, ends_on: str
+) -> List[dict]:
+    """`_effective_availability`, remembered for identical inputs.
+
+    A pure function of its arguments, so the same profile, rows and dates
+    always give the same list; each caller gets its own copy, so one that
+    edits what it was handed cannot change another's answer.
+    """
+    try:
+        key = hashlib.sha256(json.dumps(
+            [profile, rows, starts_on, ends_on], sort_keys=True, default=str,
+        ).encode("utf-8")).hexdigest()
+    except (TypeError, ValueError):
+        return _effective_availability(profile, rows, starts_on, ends_on)
+    with _CACHE_LOCK:
+        known = _CACHE.get(key)
+        if known is not None:
+            _CACHE.move_to_end(key)
+            return copy.deepcopy(known)
+    found = _effective_availability(profile, rows, starts_on, ends_on)
+    with _CACHE_LOCK:
+        _CACHE[key] = copy.deepcopy(found)
+        while len(_CACHE) > _CACHE_SIZE:
+            _CACHE.popitem(last=False)
+    return found
+
+
+def _effective_availability(
     profile: dict, rows: Any, starts_on: str, ends_on: str
 ) -> List[dict]:
     """Dated constraints plus structured recurring constraints from setup.
@@ -32,6 +77,7 @@ def effective_availability(
         + closure_availability(profile, start, end, keys)
         + _recurring_rows(profile, start, end, keys)
         + _inactive_rows(profile, start, end)
+        + _disabled_reserve_rows(profile, start, end)
         + explicit
     )
 
@@ -39,6 +85,11 @@ def effective_availability(
 def _inactive_rows(profile, start, end):
     result = []
     for person in profile.get("employees") or []:
+        if switched_off(person):
+            result += [dict(employee=person["name"], date=day.isoformat(), shift="",
+                            available=False, is_hard=True, reason=OFF_DUTY_REASON,
+                            source="off_duty") for day in dates_between(start, end)]
+            continue
         first = parse_date(person.get("inactive_from") or "")
         if first is None or first > end:
             continue
@@ -46,6 +97,19 @@ def _inactive_rows(profile, start, end):
             result.append(dict(employee=person["name"], date=day.isoformat(), shift="",
                                available=False, is_hard=True, reason="סיום עבודה", source="retirement"))
     return result
+
+
+def _disabled_reserve_rows(profile, start, end):
+    """Block every reservist when the unit-wide reserve switch is off."""
+    if (profile.get("workplace") or {}).get("reserve_enabled") is not False:
+        return []
+    return [
+        dict(employee=person["name"], date=day.isoformat(), shift="",
+             available=False, is_hard=True, reason="המילואים כבויים", source="reserve")
+        for person in profile.get("employees") or []
+        if person.get("service_type") == "reserve"
+        for day in dates_between(start, end)
+    ]
 
 
 def _explicit_rows(rows: Any, start, end) -> List[dict]:
@@ -56,10 +120,12 @@ def _explicit_rows(rows: Any, start, end) -> List[dict]:
             continue
         parsed = parse_date(date)
         constraint_type = bounded(row.get("constraint_type")) or "availability"
-        earliest = start - datetime.timedelta(days=1) \
-            if start is not None and constraint_type == "duty" else start
+        # A duty may reach a night shift on either edge: the day before the
+        # span (crossing into its first morning), or the day after it (from
+        # midnight, over the last night).
+        reach = datetime.timedelta(days=1 if constraint_type == "duty" else 0)
         if start is not None and end is not None and (
-            parsed is None or parsed < earliest or parsed > end
+            parsed is None or parsed < start - reach or parsed > end + reach
         ):
             continue
         explicit.append({

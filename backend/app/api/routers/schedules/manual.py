@@ -49,7 +49,8 @@ class ManualRoutes(RouteGroup):
 
             **No model is called on this path** — it is `bl/placement.py`,
             which is what lets the board validate a drag with the agent
-            unavailable (D3). Advice, not a gate: `blocking` is always false.
+            unavailable (D3). Ordinary warnings are advice; hard
+            unavailability returns `blocking: true`.
             """
             return service.check_placement(
                 session["team_id"],

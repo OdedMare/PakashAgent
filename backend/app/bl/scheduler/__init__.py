@@ -21,6 +21,9 @@ store an assignment without a reason (D8).
 
 from app.bl.scheduler.availability import effective_availability
 from app.bl.scheduler.scheduler import Scheduler
-from app.bl.scheduler.slots import build_slots, plan_spans
+from app.bl.scheduler.slots import build_slots, plan_spans, with_staffing_overrides
 
-__all__ = ["Scheduler", "build_slots", "effective_availability", "plan_spans"]
+__all__ = [
+    "Scheduler", "build_slots", "effective_availability", "plan_spans",
+    "with_staffing_overrides",
+]

@@ -6,7 +6,7 @@ from app.bl.schedule_service.constants import ACTION_MOVED, RECENT_CHANGES
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.operations import (
     OperationApplier,
-    assert_no_blocking_duty,
+    assert_no_hard_constraint,
     moved_from,
     nothing_applied,
     preview,
@@ -118,7 +118,7 @@ class ChangeService:
         previous = find_assignment(schedule, assignment_id)
         if previous is None:
             raise NotFoundError("השיבוץ לא נמצא")
-        assert_no_blocking_duty(
+        assert_no_hard_constraint(
             self._repository, team_id, schedule, previous["employee"], slot,
         )
         moved = self._repository.move_assignment(

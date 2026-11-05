@@ -15,6 +15,7 @@ class ProfileUpdate(BaseModel):
     dependencies: Optional[List[str]] = None
     training_policy: Optional[Dict[str, Any]] = None
     audit_policy: Optional[Dict[str, Any]] = None
+    unit_policy: Optional[Dict[str, Any]] = None
     availability_process: Optional[str] = None
     constraint_deadline: Optional[str] = None
     casual_worker_policy: Optional[str] = None
@@ -28,6 +29,12 @@ class ProfileUpdate(BaseModel):
     # somebody else has saved over since is refused (409) instead of undoing
     # their edit; omitted, the save is not checked against the form.
     expected_revision: Optional[int] = None
+    # A saved name corrected (`{old: new}`), or a soldier added by mistake
+    # deleted. Carried through every stored row in the same transaction as
+    # the save (`profile_service/identity.py`).
+    renamed_employees: Optional[Dict[str, str]] = None
+    renamed_shifts: Optional[Dict[str, str]] = None
+    removed_employees: Optional[List[str]] = None
 
 
 class RotationPreviewRequest(BaseModel):
@@ -37,3 +44,11 @@ class RotationPreviewRequest(BaseModel):
     shifts: List[Dict[str, Any]] = []
     start: Optional[str] = None
     weeks: int = 8
+
+
+class QualificationPreviewRequest(BaseModel):
+    """The setup screen's unsaved roster, to colour it by qualification.
+    `days` is the unit's validity window; omitted, the saved one is used."""
+
+    employees: List[Dict[str, Any]] = []
+    days: Optional[int] = None

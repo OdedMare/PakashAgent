@@ -37,13 +37,28 @@ def test_an_absence_until_the_end_of_the_year_is_every_day_from_today():
 @pytest.mark.parametrize("sentence, scope", [
     ("עודד חולה בשני ושלישי תחליף אותו מהלוח", "dates"),
     ("עודד טס לחול אל תשבץ", "ask_dates"),
+    ("שים אי זמינות לעודד ליום אחד", "ask_dates"),
     ("ירין עמלקית היא לא יכולה לעבוד בשישי", "ask_scope"),
     ("ירין עמלקית לא יכולה לעבוד בכל יום שישי", "recurring"),
     ("עודד לא זמין ב-27.10", "dates"),
+    ("שים אי זמינות לעודד ל-27.10", "dates"),
 ])
 def test_the_three_shapes_a_manager_types_are_told_apart(sentence, scope):
     found = read(sentence, ROSTER, ["בוקר"], TODAY, WEEK)
     assert found["scope"] == scope
+
+
+def test_one_day_unavailability_is_one_constraint_without_a_model_round():
+    repo, llm, service, chat_id, schedule_id = setup([])
+    message = converse(
+        service, repo, chat_id, schedule_id,
+        "שים אי זמינות לדנה ל-2026-10-05",
+    )
+    assert message["status"] == "pending"
+    assert [row["date"] for row in message["payload"]["plan"]["constraints"]] == [
+        "2026-10-05",
+    ]
+    assert not llm.calls
 
 
 @pytest.mark.parametrize("sentence", [
@@ -100,6 +115,38 @@ def test_covers_are_spread_so_one_person_does_not_take_the_whole_absence():
     assert sorted(covers) == ["יוסי", "רון"]
     assert not message["payload"]["plan"]["warnings"]
     assert not llm.calls
+
+
+def test_replacement_search_loads_one_snapshot_for_all_affected_shifts():
+    repo, _, service, _, schedule_id = setup([])
+    tuesday = dict(id=repo._id("slot"), team_id=TEAM, shift_name=MORNING,
+                   slot_date="2026-10-06", headcount=1)
+    repo.slots[schedule_id].append(tuesday)
+    repo.add_assignment(schedule_id, TEAM, tuesday["id"], "דנה", "שיבוץ קיים")
+
+    calls = {name: 0 for name in (
+        "team_profile", "list_schedules", "get_schedule", "availability",
+    )}
+    for name in calls:
+        original = getattr(repo, name)
+
+        def counted(*args, _name=name, _original=original, **kwargs):
+            calls[_name] += 1
+            return _original(*args, **kwargs)
+
+        setattr(repo, name, counted)
+
+    found = service.replacement_options(
+        TEAM, "דנה", "2026-10-05", "2026-10-06",
+    )
+
+    assert len(found["slots"]) == 2
+    assert calls == {
+        "team_profile": 1,
+        "list_schedules": 1,
+        "get_schedule": 1,
+        "availability": 1,
+    }
 
 
 def test_an_absence_across_periods_plans_the_first_and_saves_every_date(monkeypatch):
@@ -167,6 +214,35 @@ def test_the_replacement_tab_ranks_covers_for_a_range_and_writes_nothing():
     assert not llm.calls and not repo.changes and not repo.availability_rows
 
 
+def test_the_replacement_tab_shows_covers_that_break_rest_hours_with_a_warning():
+    from app.common.sessions import ROLE_BOSS
+
+    repo, _, client = _replacement_client(ROLE_BOSS)
+    night = "לילה"
+    repo.profiles[TEAM]["audit_policy"] = {"min_rest_hours": 10}
+    repo.profiles[TEAM]["shifts"].append({
+        "name": night, "start_time": "15:00", "end_time": "23:00",
+        "days": [], "staffing": [],
+    })
+    schedule_id = next(iter(repo.schedules))
+    repo.add_slots(schedule_id, TEAM, [{
+        "shift_name": night, "slot_date": "2026-10-04", "headcount": 2,
+    }])
+    night_slot = repo.find_slot(schedule_id, TEAM, night, "2026-10-04")
+    for employee in ("יוסי", "רון"):
+        repo.add_assignment(schedule_id, TEAM, night_slot["id"], employee, "שיבוץ קיים")
+
+    slot = client.get("/api/agent/replacements", params=dict(
+        employee="דנה", starts_on="2026-10-05", ends_on="2026-10-05",
+    )).json()["slots"][0]
+
+    assert slot["pick"] == ""
+    assert [row["employee"] for row in slot["candidates"]] == ["יוסי", "רון"]
+    assert all(row["requires_exception"] for row in slot["candidates"])
+    assert all(row["warnings"][0]["code"] == "short_rest" for row in slot["candidates"])
+    assert all("שעות מנוחה" in row["warnings"][0]["message"] for row in slot["candidates"])
+
+
 def test_the_replacement_tab_refuses_strangers_and_members():
     from app.common.sessions import ROLE_BOSS, ROLE_MEMBER
 
@@ -176,6 +252,58 @@ def test_the_replacement_tab_refuses_strangers_and_members():
     _, _, member = _replacement_client(ROLE_MEMBER)
     assert member.get("/api/agent/replacements", params=dict(
         employee="דנה", starts_on="2026-10-05")).status_code == 401
+
+
+def test_the_replacement_tab_queues_a_search_and_polls_its_result():
+    from app.common.sessions import ROLE_BOSS
+
+    repo, _, client = _replacement_client(ROLE_BOSS)
+    jobs = {}
+
+    def enqueue(team_id, key, kind="scan", payload=None):
+        row = dict(id="replacement-job", team_id=team_id, status="queued",
+                   kind=kind, payload=dict(payload or {}))
+        jobs[row["id"]] = row
+        return row
+
+    repo.enqueue_copilot_job = enqueue
+    repo.get_copilot_job = lambda team_id, job_id, kind=None: jobs[job_id]
+    cancelled = []
+    repo.cancel_queued_job = lambda team_id, job_id, kind: cancelled.append((job_id, kind))
+
+    started = client.post("/api/agent/replacements/searches", json={
+        "employee": "דנה", "starts_on": "2026-10-05", "ends_on": "2026-10-06",
+    })
+    assert started.status_code == 202
+    assert started.json() == {"id": "replacement-job", "status": "queued"}
+    assert jobs["replacement-job"]["kind"] == "replacement_options"
+
+    waiting = client.get("/api/agent/replacements/searches/replacement-job")
+    assert waiting.json() == {"id": "replacement-job", "status": "queued"}
+
+    result = {
+        "employee": "דנה", "dates": ["2026-10-05", "2026-10-06"],
+        "schedule_id": "schedule-1", "slots": [], "free_dates": [],
+        "elsewhere": [], "error": "",
+    }
+    jobs["replacement-job"].update(
+        status="complete",
+        payload=dict(jobs["replacement-job"]["payload"], result=result),
+    )
+    finished = client.get("/api/agent/replacements/searches/replacement-job")
+    assert finished.json() == {
+        "id": "replacement-job", "status": "complete", "result": result,
+    }
+
+    # A refusal is shown in its own words, as a failure.
+    jobs["replacement-job"]["payload"]["result"] = {"refused": "התוכנית גדולה מדי"}
+    refused = client.get("/api/agent/replacements/searches/replacement-job")
+    assert refused.json() == {
+        "id": "replacement-job", "status": "failed", "error": "התוכנית גדולה מדי",
+    }
+
+    assert client.delete("/api/agent/replacements/searches/replacement-job").status_code == 204
+    assert cancelled == [("replacement-job", "replacement_options")]
 
 
 def test_a_code_answered_turn_is_finished_by_the_request_itself():

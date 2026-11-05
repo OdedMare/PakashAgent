@@ -29,6 +29,7 @@ the one thing that stays per group.
 | `closures.py` | One person's closure days; the handover; `holds` |
 | `views.py` | Per-date and per-weekend views |
 | `presence.py` | Group presence and per-slot closure eligibility |
+| `personal.py` | One person's own pattern: none, daily, one weekend in N |
 | `day_cycles.py` | Day-based cycles (11/3, 12/2, שבוע־שבוע…): home stretches per group |
 | `vocabulary.py` | Groups, labels, patterns, date helpers |
 """

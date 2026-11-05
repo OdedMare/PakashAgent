@@ -1,5 +1,9 @@
 """Who should cover an absent person's shifts, spread as evenly as possible.
 
+Candidates arrive in stages (`placement/tiers.py`): the same role from the
+seat's own post, then the same role from another post, then anyone else.
+The fair pick is the lightest of the earliest stage that has a clean one.
+
 **No model, no write.** Candidates come from `find_replacements`, which
 already keeps only people the placement checks pass. What this adds is the
 *whole* absence at once: two shifts are not two independent questions,
@@ -13,7 +17,7 @@ stack into a double booking or a short rest.
 from typing import Dict, List, Optional
 
 from app.bl.audit import shift_stats
-from app.bl.chat_contract import GAP_CODES, audit_plan, changed_rows
+from app.bl.chat.contract import GAP_CODES, audit_rows, changed_rows, plan_availability
 from app.bl.shared import iso, warning_key
 from app.bl.tools import ScheduleTools
 
@@ -37,7 +41,8 @@ class AbsenceOptions:
         self._tools = ScheduleTools(repository)
 
     def build(self, team_id: str, employee: str, dates: List[str],
-              chosen: Optional[List[dict]] = None, reason: str = "") -> dict:
+              chosen: Optional[List[dict]] = None, reason: str = "",
+              profile: Optional[dict] = None) -> dict:
         """The affected shifts, their ranked candidates and a fair pick each.
 
         `chosen` are the manager's own picks; they win over the fair one.
@@ -45,7 +50,8 @@ class AbsenceOptions:
         the earliest is planned and the rest are listed in `elsewhere` --
         the absence itself is still saved for every date.
         """
-        profile = self._context.profile(team_id)
+        if profile is None:
+            profile = self._context.profile(team_id)
         found = dict(employee=employee, dates=list(dates), schedule_id="",
                      slots=[], free_dates=list(dates), results=[], error="", elsewhere=[])
         periods = self._periods_with_shifts(team_id, employee, dates)
@@ -63,16 +69,25 @@ class AbsenceOptions:
             key=lambda row: (iso(row["date"]), _start(schedule, row)),
         )
         constraints = absence_constraints(employee, dates, reason or "היעדרות")
-        fill = _Fill(profile, schedule, self._context.snapshot(team_id)["availability"],
+        stored_availability = self._context.availability(team_id, schedule)
+        fill = _Fill(profile, schedule, stored_availability,
                      constraints, [dict(action="remove", employee=employee, date=iso(row["date"]),
                                         shift=row["shift"], reason=reason or "היעדרות") for row in own])
         picks = {(row["date"], row["shift"]): row["employee"] for row in chosen or []}
         for row in own:
             date = iso(row["date"])
-            result = self._tools.run(team_id, "find_replacements", {
-                "schedule_id": schedule["id"], "employee": employee,
-                "shift_name": row["shift"], "slot_date": date,
-            })
+            result = self._tools.find_replacements.from_values(
+                schedule, profile, stored_availability,
+                employee=employee, shift_name=row["shift"], slot_date=date,
+                # The changes tab must still offer a deliberate exception
+                # when nobody fits cleanly; the candidate carries the exact
+                # warning and the resulting plan still requires approval.
+                include_exceptions=True,
+                # Only the colleagues are shown; where the absent person could
+                # go instead is no question an absence asks.
+                include_other_slots=False,
+            )
+            result = dict(result, tool="find_replacements", ok=result.get("ok", True))
             slot = fill.slot(row, schedule, result.get("candidates") or [],
                              picks.get((date, row["shift"]), ""))
             found["slots"].append(slot)
@@ -96,13 +111,24 @@ class AbsenceOptions:
 
 
 class _Fill:
-    """The running hypothetical: removals first, then each pick as it lands."""
+    """The running hypothetical: removals first, then each pick as it lands.
+
+    A pick is checked the way `placement/context.py` checks a candidate:
+    adding one row can only move the warnings about that person and about
+    that slot, so only their rows are audited, before and after. Auditing
+    the whole period per pick is what kept a long absence searching for
+    minutes; the answer is the same.
+    """
 
     def __init__(self, profile, schedule, availability, constraints, removals):
         self._profile, self._schedule = profile, schedule
-        self._availability, self._constraints = availability, constraints
+        self._effective = plan_availability(profile, schedule, availability, constraints)
+        self._grid: Dict[tuple, List[dict]] = {}
+        for slot in schedule.get("slots") or []:
+            key = (slot.get("shift_name"), iso(slot.get("slot_date")))
+            self._grid.setdefault(key, []).append(slot)
         self.operations = list(removals)
-        self._known = self._warnings(self.operations)
+        self._rows = self._apply(self.operations) or []
 
     def slot(self, row: dict, schedule: dict, candidates: List[dict], chosen: str) -> dict:
         date, shift = iso(row["date"]), row["shift"]
@@ -125,9 +151,11 @@ class _Fill:
     def _ranked(self, candidates: List[dict]) -> List[dict]:
         load = self._load()
         ranked = [dict(item, **load.get(item["employee"], {})) for item in candidates]
-        # Fairness is the number of shifts and nights, not hours (`solver/fairness.py`).
+        # In stages first (`placement/tiers.py`): the same role from this
+        # post, then from another, then anyone else. Inside a stage, fairness
+        # is the number of shifts and nights, not hours (`solver/fairness.py`).
         ranked.sort(key=lambda item: (
-            item.get("shifts", 0), item.get("nights", 0), item["employee"],
+            item.get("tier", 0), item.get("shifts", 0), item.get("nights", 0), item["employee"],
         ))
         for item in ranked:
             item["why"] = "%d משמרות · %d לילות בתקופה" % (
@@ -137,27 +165,43 @@ class _Fill:
     def _accept(self, employee: str, shift: str, date: str, force: bool = False) -> bool:
         trial = self.operations + [dict(action="assign", employee=employee, date=date,
                                         shift=shift, reason="")]
-        warnings = self._warnings(trial)
-        if warnings is None or (not force and warnings - self._known):
+        rows = self._apply(trial)
+        if rows is None:
             return False
-        self.operations, self._known = trial, warnings
+        if not force and self._caused(employee, (shift, date), rows):
+            return False
+        self.operations, self._rows = trial, rows
         return True
 
-    def _warnings(self, operations) -> Optional[set]:
+    def _apply(self, operations) -> Optional[List[dict]]:
         try:
-            rows = changed_rows(self._schedule, operations)
+            return changed_rows(self._schedule, operations)
         except Exception:
             return None
+
+    def _caused(self, employee: str, target: tuple, after: List[dict]) -> set:
+        """Warnings the new row brings, read from its person and its slot."""
+        before = self._warnings(self._scope(self._rows, employee, target), target)
+        return self._warnings(self._scope(after, employee, target), target) - before
+
+    @staticmethod
+    def _scope(rows: List[dict], employee: str, target: tuple) -> List[dict]:
+        return [row for row in rows
+                if row["employee"] == employee or (row["shift"], iso(row["date"])) == target]
+
+    def _warnings(self, rows: List[dict], target: tuple) -> set:
+        pairs = {(row["shift"], iso(row["date"])) for row in rows} | {target}
+        slots = self._schedule.get("slots") or []
+        grid = [slot for pair in pairs for slot in self._grid.get(pair, [])]
         return {
-            warning_key(row) for row in audit_plan(
-                self._profile, self._schedule, rows, self._availability, self._constraints,
+            warning_key(row) for row in audit_rows(
+                self._profile, rows, self._effective, grid or slots[:1],
             )
             if row.get("code") not in GAP_CODES and row.get("severity", "warning") == "warning"
         }
 
     def _load(self) -> Dict[str, dict]:
-        rows = changed_rows(self._schedule, self.operations)
-        stats = shift_stats(rows, self._profile.get("shifts") or [],
+        stats = shift_stats(self._rows, self._profile.get("shifts") or [],
                             self._profile.get("employees") or [],
                             slots=self._schedule.get("slots") or [], profile=self._profile)
         return {row["employee"]: dict(hours=row["hours"], shifts=row["shifts"],

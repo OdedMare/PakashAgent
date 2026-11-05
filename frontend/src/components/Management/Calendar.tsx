@@ -11,6 +11,7 @@ import type {
   Slot,
 } from "@/types";
 import { displayDate } from "@/components/DateInput";
+import { orderByName } from "@/components/Board/shiftOrder";
 import { constraintBlocksSlot } from "@/lib/constraints";
 
 import { buildPalette, colorStyle } from "./palette";
@@ -76,13 +77,11 @@ export function Calendar({
   const [picking, setPicking] = useState<string | null>(null);
 
   const dates = uniqueSorted(schedule.slots.map((slot) => slot.slot_date));
-  // Shift rows keep the order the vocabulary gave them, by first appearance,
-  // rather than being sorted alphabetically — a workplace's shifts have a
-  // natural order (morning, then evening, then on-call) that alphabetising
-  // would scramble.
-  const shifts = uniqueByAppearance(
-    schedule.slots.map((slot) => slot.shift_name),
-  );
+  // Match the manager and complex boards: sorting the full shift name keeps
+  // each post's day and night rows together (e.g. פריצה יום, פריצה לילה).
+  const shifts = orderByName([
+    ...new Set(schedule.slots.map((slot) => slot.shift_name)),
+  ]);
 
   // Colours come from the roster's own order, so ten people get ten distinct
   // hues. Names on the grid that the roster no longer carries still get a
@@ -370,12 +369,11 @@ function Person({
 
 /** Choose who goes into a cell.
  *
- *  Lists the whole roster rather than filtering to who is "available": the
- *  audit reports conflicts and never blocks (D3), so hiding a person here
- *  would be the grid quietly enforcing what the product decided not to
- *  enforce. Somebody already on this slot is dropped, because assigning them
- *  twice conflicts silently server-side and would look like nothing
- *  happened. */
+ *  Lists the whole roster rather than hiding unavailable people: choosing one
+ *  lets the placement check explain why a hard constraint blocks them and
+ *  offer alternatives. Somebody already on this slot is dropped, because
+ *  assigning them twice conflicts silently server-side and would look like
+ *  nothing happened. */
 function EmployeePicker({
   employees,
   taken,
@@ -513,18 +511,6 @@ function missingFrom(
 
 function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values)).sort();
-}
-
-/** Distinct values in the order they first appear. */
-function uniqueByAppearance(values: string[]): string[] {
-  const seen = new Set<string>();
-  const ordered: string[] = [];
-  for (const value of values) {
-    if (seen.has(value)) continue;
-    seen.add(value);
-    ordered.push(value);
-  }
-  return ordered;
 }
 
 /** Hebrew weekday names. Hebrew here is data, not presentation — the source

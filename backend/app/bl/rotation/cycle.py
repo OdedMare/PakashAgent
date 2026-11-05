@@ -3,7 +3,7 @@
 import datetime
 from typing import List, Optional
 
-from app.bl.rotation import day_cycles
+from app.bl.rotation import day_cycles, personal
 from app.bl.rotation.vocabulary import (
     CYCLE_LABELS, GROUPED_PATTERNS, cycle_of_group, groups_for, parse_date,
     people, saturday_of, text,
@@ -102,6 +102,9 @@ def _person_errors(profile: dict, workplace: dict, person: dict, errors: List[st
     name, group = text(person.get("name")), text(person.get("rotation_group"))
     if day_cycles.is_day_cycle(person.get("exit_pattern")):
         errors.extend(day_cycles.configuration_errors(profile, person))
+        return ""
+    if personal.is_personal(person.get("exit_pattern")):
+        errors.extend(personal.configuration_errors(person))
         return ""
     declared = text(person.get("exit_pattern")) or text(workplace.get("rotation_mode"))
     # Total silence is an ordinary civilian roster, not a declared rotation.

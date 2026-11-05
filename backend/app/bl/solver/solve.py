@@ -14,7 +14,10 @@ from ortools.sat.python import cp_model
 
 from app.bl.audit import audit
 from app.bl.schedule_requests import covers
+from app.bl.solver.competence import apply_competence
 from app.bl.solver.cpu_budget import BUDGET
+from app.bl.solver.explain import coverage_notes
+from app.bl.solver import wishes
 from app.bl.solver.fairness import apply_fairness
 from app.bl.solver.model import COVERAGE, Model
 from app.bl.solver.requests import apply_requests
@@ -27,6 +30,11 @@ from app.common.errors import AgentError
 SUMMARY = "השיבוץ נבנה בפותר אילוצים לפי זמינות, כשירות, כללים, בקשות והוגנות."
 _STATUS = {cp_model.OPTIMAL: "optimal", cp_model.FEASIBLE: "feasible"}
 _COLUMNS = ("begins", "ends", "hours", "night", "past")
+# The longest phase one, and with a board the held phase, may each take, as
+# a share of the limit. The last phase takes whatever they left, and never
+# less than its own floor.
+_FIRST_SHARE = 0.3
+_LAST_FLOOR = {False: 0.7, True: 0.4}
 
 
 def solve(problem, time_limit: float = 10.0, workers: int = 8) -> dict:
@@ -35,56 +43,171 @@ def solve(problem, time_limit: float = 10.0, workers: int = 8) -> dict:
     apply_rules(model)
     apply_requests(model)
     apply_fairness(model)
+    apply_competence(model)
     apply_stability(model)
     # Threads are taken from the process's budget, so concurrent solves
     # queue instead of each getting a slice of the time it was promised.
+    base = wishes.snapshot(model)
     with BUDGET.threads(max(1, int(workers))) as granted:
-        solver, status = _two_phases(model, max(0.2, float(time_limit)), granted)
+        solver, status, phases = _phases(model, max(0.2, float(time_limit)), granted)
+        priced = wishes.price_of_wishes(model, base, solver, time_limit * wishes.SHARE, granted)
     chosen = [_row(problem, name, index) for (name, index), var in sorted(model.x.items())
               if solver.Value(var)]
     _shadow_reasons(problem, chosen)
     final = _ordered(problem, problem.pins + chosen)
     warnings = _warnings(problem, final)
-    metrics = _metrics(problem, solver, status, started, final)
+    metrics = _metrics(problem, solver, status, started, final, phases)
     metrics["warnings"] = len(warnings)
-    notes = _notes(solver, model)
+    notes = coverage_notes(problem, chosen) + [priced.get(note, note) for note in _notes(solver, model)]
     if problem.kept_rows:
         metrics.update(absorbed(problem, chosen))
         notes.insert(0, absorbed_note(metrics))
+    if problem.duty_load:
+        notes.append(_duty_note(problem.duty_load))
     return {
         "slots": problem.slots, "assignments": final, "notes": notes,
         "warnings": warnings, "summary": SUMMARY, "metrics": metrics,
     }
 
 
-def _two_phases(model: Model, time_limit: float, workers: int):
+def _phases(model: Model, time_limit: float, workers: int):
     """Coverage first, then everything else without giving any of it back.
 
     Phase one prices only unfilled seats, missing roles and the shift
-    manager; its answer becomes a hint and its coverage a ceiling for phase
-    two, which weighs wishes and fairness. Lexicographic in fact, not only
-    in the weights, so a hard week never trades a seat for evenness.
+    manager; its answer becomes a hint and its coverage a ceiling for the
+    last phase, which weighs wishes and fairness. Lexicographic in fact, not
+    only in the weights, so a hard week never trades a seat for evenness.
 
-    A rebuild that keeps a board starts phase one from that board: blind to
-    it, phase one hands phase two an arbitrary answer, and on a large team
-    phase two runs out of time before it walks back to the rows it keeps."""
+    When phase one leaves seats empty, a gaps phase keeps its coverage and
+    moves the empty seats to the end of the plan (`Model.gaps`), so a short
+    team fills the schedule in order and stops where it runs out; the gaps
+    it settles are a ceiling for every later phase too, so evenness never
+    scatters them back across the week.
+
+    A rebuild that keeps a board (D37) adds a phase between the two. Phase
+    one keeps as much of the board as the best coverage allows; the middle
+    phase holds those rows where they are and weighs everything else, so
+    the change is filled in well around them; the last phase may then move
+    a kept row, and its answer is taken only when it is strictly better than
+    the held one. Without the middle phase the last one started from an
+    arbitrary fill of the change, and within its time limit it often bought
+    an improvement by moving people the best answer keeps in place: the same
+    change moved some people on one build and none on the next.
+
+    The last phase gets whatever the earlier ones left of the limit:
+    coverage is usually proven in milliseconds, and a fixed split threw the
+    rest of its share away. Returns the answer's solver and status, and what
+    each phase did (`_phase`)."""
     coverage = model.cost(COVERAGE)
-    if model.problem.keep:
+    kept = _kept(model)
+    share = time_limit * _FIRST_SHARE
+    first, found = _coverage_phase(model, coverage, kept, share, workers)
+    phases = {"coverage": _phase(first, found, share)}
+    model.cp.Add(coverage <= _value(first, coverage))
+    gaps = sum(model.gaps)
+    if model.gaps and _value(first, gaps):
+        # Seats stay empty: move them to the end of the plan (`Model.gaps`).
+        # A board's kept rows stay kept; only what moves anyway is reordered.
+        if kept is not None:
+            model.cp.Add(kept >= _value(first, kept))
+        first, found = _gaps_phase(model, gaps, first, found, share / 2, workers)
+        phases["gaps"] = _phase(first, found, share / 2)
+        model.cp.Add(gaps <= _value(first, gaps))
+    model.cp.Minimize(model.cost())
+    _hint(model, first)
+    start = (first, found)
+    if kept is not None:
+        held = _held_phase(model, first, share, workers)
+        phases["held"] = _phase(*(held or (None, None)), share)
+        start = held or start
+        _hint(model, start[0])
+    spent = sum(phase["wall_ms"] for phase in phases.values()) / 1000.0
+    remaining = max(time_limit * _LAST_FLOOR[kept is not None], time_limit - spent)
+    last = _solver(remaining, workers)
+    status = last.Solve(model.cp)
+    phases["balance"] = _phase(last, status, remaining)
+    if status not in _STATUS:
+        return start + (phases,)
+    if kept is not None and start[0] is not first and \
+            last.ObjectiveValue() >= start[0].ObjectiveValue():
+        return start + (phases,)
+    return last, status, phases
+
+
+def _phase(solver, status, limit: float) -> dict:
+    """What one phase did: its verdict, the time it was given and took, and
+    how far its answer may be from the best (`gap` in the objective's units,
+    `gap_pct` relative to the answer). A held phase that found nothing is
+    `unknown`."""
+    measured = {"status": "unknown", "limit_ms": int(limit * 1000), "wall_ms": 0}
+    if solver is None:
+        return measured
+    measured.update(status=solver.StatusName(status).lower(),
+                    wall_ms=int(solver.WallTime() * 1000),
+                    conflicts=int(solver.NumConflicts()), branches=int(solver.NumBranches()))
+    if status in _STATUS:
+        measured.update(_gap(solver))
+    return measured
+
+
+def _gap(solver) -> dict:
+    objective = int(round(solver.ObjectiveValue()))
+    bound = int(round(solver.BestObjectiveBound()))
+    gap = max(0, objective - bound)
+    return {"objective": objective, "bound": bound, "gap": gap,
+            "gap_pct": round(100.0 * gap / max(1, abs(objective)), 2)}
+
+
+def _coverage_phase(model: Model, coverage, kept, seconds: float, workers: int):
+    """Phase one: the best coverage; with a board, then the most rows kept."""
+    if kept is None:
+        model.cp.Minimize(coverage)
+    else:
         for key, var in model.x.items():
             model.cp.AddHint(var, key in model.problem.keep)
-    first = _solver(time_limit * 0.3, workers)
-    model.cp.Minimize(coverage)
-    found = first.Solve(model.cp)
+        # One unit of coverage outweighs every kept row.
+        model.cp.Minimize(coverage * (len(model.problem.keep) + 1) - kept)
+    solver = _solver(seconds, workers)
+    found = solver.Solve(model.cp)
     if found not in _STATUS:
-        raise AgentError("פותר האילוצים לא הצליח לבנות סידור (%s)" % first.StatusName(found))
-    model.cp.Add(coverage <= int(round(first.ObjectiveValue())))
+        raise AgentError("פותר האילוצים לא הצליח לבנות סידור (%s)" % solver.StatusName(found))
+    return solver, found
+
+
+def _gaps_phase(model: Model, gaps, first, found, seconds: float, workers: int):
+    """The seats that must stay empty, as late in the plan as they can be.
+    Starts from phase one's answer and falls back to it if it finds nothing."""
+    _hint(model, first)
+    model.cp.Minimize(gaps)
+    solver = _solver(seconds, workers)
+    status = solver.Solve(model.cp)
+    return (solver, status) if status in _STATUS else (first, found)
+
+
+def _held_phase(model: Model, first, seconds: float, workers: int):
+    """The full objective with every kept row phase one kept held in place.
+
+    Solved on a copy, so the hold binds this phase only. None when it finds
+    nothing, and the last phase starts from phase one instead."""
+    held = model.cp.Clone()
+    for key, var in model.x.items():
+        if key in model.problem.keep and first.Value(var):
+            held.Add(held.GetBoolVarFromProtoIndex(var.Index()) == 1)
+    solver = _solver(seconds, workers)
+    status = solver.Solve(held)
+    return (solver, status) if status in _STATUS else None
+
+
+def _hint(model: Model, solver) -> None:
     model.cp.ClearHints()
     for var in model.x.values():
-        model.cp.AddHint(var, first.Value(var))
-    model.cp.Minimize(model.cost())
-    second = _solver(time_limit * 0.7, workers)
-    status = second.Solve(model.cp)
-    return (second, status) if status in _STATUS else (first, found)
+        model.cp.AddHint(var, solver.Value(var))
+
+
+def _kept(model: Model):
+    """How many of the board's rows stand where they were; None without a board."""
+    variables = [model.x[key] for key in sorted(model.problem.keep) if key in model.x]
+    return sum(variables) if variables else None
 
 
 def _solver(seconds: float, workers: int):
@@ -142,9 +265,19 @@ def _ordered(problem, rows: List[dict]) -> List[dict]:
         row["date"], slots.get((row["shift"], row["date"]), 0), order.get(row["employee"], 0)))
 
 
+def _duty_note(load) -> str:
+    """Why someone on מכלול duty got fewer shifts: the duty was counted."""
+    people = ", ".join("%s (%d)" % (name, load[name]) for name in sorted(load))
+    return "תורנויות המכלול נספרו בעומס, כל יום תורנות כמשמרת לפי משקלו: %s" % people
+
+
 def _notes(solver, model: Model) -> List[str]:
+    """Every priced term the answer still pays for, but coverage: an empty
+    seat, role or shift manager is explained from the answer instead
+    (`explain.coverage_notes`), with who could not take it and why."""
     notes = [term.note for term in model.terms
-             if term.note and _value(solver, term.expression) > 0]
+             if term.note and term.kind not in COVERAGE
+             and _value(solver, term.expression) > 0]
     return list(dict.fromkeys(notes))
 
 
@@ -166,7 +299,7 @@ def _warnings(problem, final: List[dict]) -> List[dict]:
     ]
 
 
-def _metrics(problem, solver, status, started, final) -> dict:
+def _metrics(problem, solver, status, started, final, phases) -> dict:
     return {
         "date": problem.dates[0] if problem.dates else "",
         "through": problem.dates[-1] if problem.dates else "",
@@ -178,5 +311,9 @@ def _metrics(problem, solver, status, started, final) -> dict:
         "engine": "solver",
         "solver_status": _STATUS[status],
         "objective": int(solver.ObjectiveValue()),
+        "bound": _gap(solver)["bound"],
+        "gap_pct": _gap(solver)["gap_pct"],
+        "solver_ms": sum(phase["wall_ms"] for phase in phases.values()),
         "variables": len(problem.legal),
+        "phases": phases,
     }

@@ -13,6 +13,7 @@ import pytest
 from psycopg import sql
 
 from app.common.config import Settings
+from app.common.errors import NotFoundError
 from app.dal import database as postgres
 from app.dal.repository import Repository
 
@@ -82,3 +83,35 @@ def test_finished_jobs_past_retention_are_purged_and_open_ones_kept(repo):
         left = {row["dedupe_key"] for row in connection.execute(
             "SELECT dedupe_key FROM copilot_jobs").fetchall()}
     assert left == {"recent", "open"}
+
+
+def test_a_job_result_is_persisted_and_scoped_to_its_team(repo):
+    team = repo.create_team("משמרת א", "sod-gadol")
+    other = repo.create_team("משמרת ב", "sod-acher")
+    job = repo.enqueue_copilot_job(
+        team["id"], "replacement:test", "replacement_options",
+        {"employee": "דנה"},
+    )
+    result = {"employee": "דנה", "slots": []}
+
+    repo.set_copilot_job_result(job["id"], result)
+    repo.finish_copilot_job(job["id"])
+
+    stored = repo.get_copilot_job(team["id"], job["id"])
+    assert stored["status"] == "complete"
+    assert stored["payload"]["result"] == result
+    with pytest.raises(NotFoundError):
+        repo.get_copilot_job(other["id"], job["id"])
+
+
+def test_a_queued_search_can_be_cancelled_and_a_poll_reads_only_its_kind(repo):
+    team = repo.create_team("משמרת ג", "sod-shlishi")
+    job = repo.enqueue_copilot_job(
+        team["id"], "replacement:cancel", "replacement_options", {"employee": "דנה"},
+    )
+    chat = repo.enqueue_copilot_job(team["id"], "chat:x", "manager_chat", {})
+
+    with pytest.raises(NotFoundError):
+        repo.get_copilot_job(team["id"], chat["id"], kind="replacement_options")
+    repo.cancel_queued_job(team["id"], job["id"], "replacement_options")
+    assert repo.get_copilot_job(team["id"], job["id"])["status"] == "failed"

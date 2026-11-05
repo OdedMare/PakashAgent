@@ -5,15 +5,26 @@ routers import from `app.api.contracts` as before.
 """
 
 from app.api.contracts.admin import (  # noqa: F401
+    AdminCreateComplexRequest,
     AdminCreateTeamRequest,
     AdminDeleteRequest,
     AdminLoginRequest,
     AdminPasswordRequest,
     AdminReleaseRequest,
+    AdminUpdateComplexRequest,
     AdminUpdateTeamRequest,
+    CommanderLoginRequest,
+    CommanderRouteRequest,
+)
+from app.api.contracts.complex_duties import (  # noqa: F401
+    DutyApproveRequest,
+    DutyAssignRequest,
+    DutyTypePatch,
+    DutyTypeRequest,
 )
 from app.api.contracts.settings import (  # noqa: F401
     ModelsProbeRequest,
+    RedisProbeRequest,
 )
 from app.api.contracts.workspace import (  # noqa: F401
     CreateTeamRequest,
@@ -48,6 +59,7 @@ from app.api.contracts.management import (  # noqa: F401
 )
 from app.api.contracts.profile import (  # noqa: F401
     ProfileUpdate,
+    QualificationPreviewRequest,
     RotationPreviewRequest,
 )
 from app.api.contracts.generation import (  # noqa: F401
@@ -99,3 +111,4 @@ from app.api.contracts.preferences import (  # noqa: F401
     PreferenceRequest,
     PreferenceUpdate,
 )
+from app.api.contracts.replacements import ReplacementSearchRequest  # noqa: F401

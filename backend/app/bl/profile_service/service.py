@@ -3,10 +3,12 @@
 import copy
 from typing import Any, Callable, Dict, List, Optional
 
-from app.bl import compiled_sources
+from app.bl import compiled_sources, qualification
 from app.bl.profile_service import roster
 from app.bl.profile_service import shifts as shift_rules
+from app.bl.profile_service import unit as unit_rules
 from app.bl.profile_service import workplace as workplace_rules
+from app.bl.profile_service.identity import IdentityChanges
 from app.bl.profile_service.retire import retire_shift
 from app.bl.profile_service.validation import keep_existing_names, text, text_list
 from app.common.errors import (
@@ -18,7 +20,7 @@ _TEXT_SECTIONS = (
     "rest_policy", "weekend_policy", "fairness_policy", "conflict_policy",
     "existing_schedule_source", "summary",
 )
-_OBJECT_SECTIONS = ("training_policy", "audit_policy")
+_OBJECT_SECTIONS = ("training_policy", "audit_policy", "unit_policy")
 
 
 class ProfileService:
@@ -36,6 +38,9 @@ class ProfileService:
         rules: Optional[List[dict]] = None,
         dependencies: Optional[List[str]] = None,
         expected_revision: Optional[int] = None,
+        renamed_employees: Optional[Dict[str, str]] = None,
+        renamed_shifts: Optional[Dict[str, str]] = None,
+        removed_employees: Optional[List[str]] = None,
         **sections: Any
     ) -> dict:
         """Merge a patch into the saved profile.
@@ -43,6 +48,11 @@ class ProfileService:
         `expected_revision` is the revision the manager's form was loaded
         at; a save from a form somebody else has saved over since is refused
         rather than quietly undoing their edit.
+
+        `renamed_employees`/`renamed_shifts` (`{old: new}`) and
+        `removed_employees` are the one way a saved name changes or goes
+        (`identity.py`): applied to the saved profile before the patch is
+        merged, and to every stored row in the same transaction.
         """
         revision = self._repository.team_profile_revision(team_id)
         if expected_revision is not None and revision is not None \
@@ -51,24 +61,38 @@ class ProfileService:
         current = self._repository.team_profile(team_id)
         creating = current is None
         current = current or {}
-        updated = _prepare_profile(current, employees, shifts, workplace, rules,
-                                   dependencies, sections)
-        if not creating:
-            # The revision read above, not the client's: the merge was made
-            # from the profile read after it, and nothing may land between.
-            saved = self._repository.update_team_profile(
-                team_id, updated, expected_revision=revision,
-            )
-        else:
-            roster.validate_first_profile(updated)
-            updated["completeness"] = {
-                "complete": True, "missing_topics": [], "open_points": [],
-            }
-            saved = self._repository.create_team_profile(team_id, updated)
+        changes = IdentityChanges.read(current, renamed_employees, renamed_shifts,
+                                       removed_employees)
+        current = changes.apply(current)
+        # Applied to the merge too: a patch written before the rename still
+        # names the old soldier or shift in its references (trainers, a
+        # soldier's shifts), and no row may be left pointing at a name gone.
+        updated = changes.apply(_prepare_profile(
+            current, employees, shifts, workplace, rules, dependencies, sections,
+        ))
+        saved = self._save(team_id, updated, revision, creating, changes)
         # Still no model call here: the rules, policies and notes just saved
         # are translated for the code scheduler by the worker (D32).
         compiled_sources.queue(self._repository, team_id)
         return saved
+
+    def _save(self, team_id, updated, revision, creating, changes) -> dict:
+        if creating:
+            roster.validate_first_profile(updated)
+            updated["completeness"] = {
+                "complete": True, "missing_topics": [], "open_points": [],
+            }
+            return self._repository.create_team_profile(team_id, updated)
+        # The revision read above, not the client's: the merge was made
+        # from the profile read after it, and nothing may land between.
+        if changes:
+            return self._repository.update_team_profile_with_identity_changes(
+                team_id, updated, revision,
+                changes.employees, changes.shifts, changes.removed,
+            )
+        return self._repository.update_team_profile(
+            team_id, updated, expected_revision=revision,
+        )
 
     def revision(self, team_id: str) -> Optional[int]:
         """What a save names to refuse a stale edit. A read."""
@@ -77,6 +101,12 @@ class ProfileService:
     def current(self, team_id: str) -> Optional[dict]:
         """The saved profile, or None before the first save. A read."""
         return self._repository.team_profile(team_id)
+
+    def qualifications(self, team_id: str, employees: List[dict], today, days=None) -> dict:
+        """Each dated person's כשירות on `today`, from the setup screen's
+        unsaved rows and the shifts they have actually worked. A read."""
+        worked = self._repository.last_shift_dates(team_id, today.isoformat())
+        return qualification.standings(self.current(team_id), employees, worked, today, days)
 
     def delete_shift(self, team_id: str, name: str) -> dict:
         """Archive a shift type; existing schedules keep their rows."""
@@ -186,6 +216,7 @@ def _apply_sections(updated: dict, sections: Dict[str, Any]) -> None:
             raise AgentError("פרטי המדיניות אינם תקינים")
         updated[key] = (
             workplace_rules.audit_policy(sections[key]) if key == "audit_policy"
+            else unit_rules.unit_policy(sections[key]) if key == "unit_policy"
             else dict(sections[key])
         )
     for key in _TEXT_SECTIONS:

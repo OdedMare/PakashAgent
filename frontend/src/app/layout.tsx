@@ -2,6 +2,17 @@ import type { Metadata } from "next";
 import { GuideProvider } from "@/components/Guide";
 import "@/styles/globals.css";
 
+const themeScript = `
+(() => {
+  const systemTheme = () => matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  try {
+    const stored = localStorage.getItem("pakash.theme");
+    document.documentElement.dataset.theme = stored === "light" || stored === "dark" ? stored : systemTheme();
+  } catch {
+    document.documentElement.dataset.theme = systemTheme();
+  }
+})();`;
+
 export const metadata: Metadata = {
   title: "משמרות זהב — שיבוצים צבאיים",
   description: "מערכת להגדרה ולניהול ידני של שיבוצים צבאיים",
@@ -11,8 +22,9 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="he" dir="rtl">
+    <html lang="he" dir="rtl" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         {/* A plain <link> rather than next/font: next/font fetches at build
             time, and an image built without network would fail outright,
             where this just falls back to system faces. The lint rule below

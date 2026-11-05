@@ -8,6 +8,8 @@ anywhere is how a coverage bar reads 100% directly above a warning saying the
 cell is short.
 """
 
+import contextlib
+import contextvars
 import datetime
 from typing import Dict, Iterator, List, Optional
 
@@ -76,9 +78,39 @@ def checked_slots(rows: List[dict], slots: Optional[List[dict]]) -> set:
     return {pair for pair in pairs if pair[0] and pair[1]}
 
 
+# The grid indexed by `(date, shift)` for the length of one audit. Every
+# check asks the three questions below once per row or slot, and a scan of
+# the whole grid each time made a long period's audit quadratic in its
+# slots: a 12-week replacement search spent most of its minute here.
+_INDEX: contextvars.ContextVar = contextvars.ContextVar("grid_index", default=None)
+
+
+@contextlib.contextmanager
+def indexed_grid(slots: Optional[List[dict]]):
+    """Answer `_grid_slots` from a dict while the caller holds `slots` fixed.
+
+    Scoped to a `with` block rather than cached on the list, so a grid
+    edited between two audits is never read from a stale index.
+    """
+    index: Dict[tuple, List[dict]] = {}
+    for slot in slots or []:
+        if isinstance(slot, dict):
+            key = (slot_date(slot), text(slot.get("shift_name")))
+            index.setdefault(key, []).append(slot)
+    token = _INDEX.set((slots, index))
+    try:
+        yield
+    finally:
+        _INDEX.reset(token)
+
+
 def _grid_slots(
     slots: Optional[List[dict]], shift_name: str, date: str
 ) -> Iterator[dict]:
+    held = _INDEX.get()
+    if held is not None and held[0] is slots:
+        yield from held[1].get((date, shift_name), ())
+        return
     for slot in slots or []:
         if not isinstance(slot, dict):
             continue

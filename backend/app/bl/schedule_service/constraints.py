@@ -3,8 +3,9 @@
 import datetime
 from typing import Any, List, Optional
 
-from app.bl.schedule_service.constants import ACTION_CONSTRAINT
-from app.bl.schedule_service.rows import text
+from app.bl.audit import constraint_conflicts
+from app.bl.schedule_service.constants import ACTION_CONSTRAINT, ACTION_REMOVED
+from app.bl.schedule_service.rows import iso, text
 from app.common.errors import AgentError
 from app.dal.repository.schedules import SOURCE_MANAGER
 
@@ -60,6 +61,7 @@ class ConstraintService:
                 end_time=end_time,
                 is_hard=is_hard, reason=reason, source=source,
             )
+        row = dict(row, constraint_date=constraint_date, constraint_type=constraint_type)
         self._repository.append_change(
             team_id, ACTION_CONSTRAINT,
             employee=employee, slot_date=constraint_date,
@@ -67,7 +69,25 @@ class ConstraintService:
             agent_reason="תורנות חוסמת נרשמה" if constraint_type == "duty"
             else _constraint_note(available, is_hard),
         )
+        if row.get("is_hard", True) is not False:
+            self._remove_conflicting_assignments(team_id, row)
         return row
+
+    def _remove_conflicting_assignments(self, team_id: str, constraint: dict) -> None:
+        """A hard constraint immediately vacates every conflicting stored row."""
+        for period in self._repository.list_schedules(team_id):
+            schedule = self._repository.get_schedule(period["id"], team_id)
+            for row in schedule.get("assignments") or []:
+                candidate = dict(row, date=iso(row.get("date")))
+                if not constraint_conflicts(candidate, constraint):
+                    continue
+                self._repository.remove_assignment(row["id"], team_id)
+                self._repository.append_change(
+                    team_id, ACTION_REMOVED, schedule_id=schedule["id"],
+                    employee=row["employee"], slot_date=iso(row.get("date")),
+                    shift_name=row.get("shift") or "", reason=constraint.get("reason") or "",
+                    agent_reason="הוסר אוטומטית בגלל אי־זמינות קשיחה",
+                )
 
     def constraints(
         self,

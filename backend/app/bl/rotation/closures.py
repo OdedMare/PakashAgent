@@ -3,6 +3,7 @@
 import datetime
 from typing import List, Optional, Tuple
 
+from app.bl.rotation import personal
 from app.bl.rotation.cycle import cycle, group_for_saturday
 from app.bl.rotation.vocabulary import (
     CLOSURE_LEAD_DAYS, GROUPED_PATTERNS, HANDOVER_TAIL_DAYS, cycle_of_group,
@@ -52,6 +53,8 @@ def closure_days(
     lead = CLOSURE_LEAD_DAYS.get(pattern)
     if start > end or lead is None:
         return []
+    if pattern == "personal":
+        return personal.closure_days(person, start, end, handover_shifts(profile), lead)
     group = text(person.get("rotation_group"))
     every_weekend = not group and pattern not in GROUPED_PATTERNS
     state, lookup = (None, "") if every_weekend else _cycle_for(profile, pattern, group)

@@ -50,3 +50,13 @@ class RuntimeSettings:
     # parallel workers. Read per build, so a saved change applies next time.
     solver_time_limit_seconds: float = 10.0
     solver_workers: int = 8
+    # The read cache (`common/read_cache.py`, D50). Empty URL and host = off,
+    # and every read goes to PostgreSQL as before. Explicit parts are written
+    # over the URL's own (`redis_connection_url`).
+    redis_url: str = ""
+    redis_host: str = ""
+    redis_port: Optional[int] = None
+    redis_username: str = ""
+    redis_password: str = ""
+    redis_key_prefix: str = "pakash"
+    redis_cache_ttl_seconds: int = 300

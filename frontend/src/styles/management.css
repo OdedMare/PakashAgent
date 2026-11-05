@@ -746,22 +746,6 @@
 .constraint-form textarea,
 .modal-field input {
   flex: 1;
-  font: inherit;
-  font-size: 0.86rem;
-  padding: 0.45rem 0.6rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
-}
-
-.constraint-form input:focus-visible,
-.constraint-form select:focus-visible,
-.constraint-form textarea:focus-visible,
-.modal-field input:focus-visible {
-  outline: none;
-  box-shadow: var(--focus);
-  border-color: var(--primary);
 }
 
 .profile-form input[readonly] {
@@ -804,7 +788,11 @@
 .roster li.roster-card {
   position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  /* One row: avatar, person, then however many controls the card carries
+     (load, grip, the on/off switch, edit, departure), each its own column. */
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: auto;
   gap: 0.55rem;
   padding: 0.55rem;
   border: 1px solid var(--border);
@@ -910,6 +898,90 @@
   gap: 0.2rem;
 }
 
+/* A switched-off soldier: still listed, visibly out of the build. */
+.roster li.roster-card.is-off {
+  border-style: dashed;
+}
+
+.roster li.roster-card.is-off .roster-avatar,
+.roster li.roster-card.is-off .roster-name,
+.roster li.roster-card.is-off .roster-load {
+  opacity: 0.5;
+}
+
+.roster-off-note {
+  font-weight: 600;
+}
+
+.panel-count.is-off {
+  margin-inline-start: 0.35rem;
+}
+
+.duty-switch {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  padding: 0 0.35rem;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.duty-switch:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.duty-switch-track {
+  position: relative;
+  width: 2.1rem;
+  height: 1.25rem;
+  flex: none;
+  background: var(--border-strong);
+  border-radius: 999px;
+  transition: background-color 0.15s ease;
+}
+
+.duty-switch-thumb {
+  position: absolute;
+  top: 0.125rem;
+  inset-inline-start: 0.125rem;
+  width: 1rem;
+  height: 1rem;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  transition: inset-inline-start 0.15s ease;
+}
+
+/* On slides the thumb to the inline end — leftwards in Hebrew, as the
+   system's own mirrored switch does. */
+.duty-switch.is-on .duty-switch-track {
+  background: var(--success);
+}
+
+.duty-switch.is-on .duty-switch-thumb {
+  inset-inline-start: calc(100% - 1.125rem);
+}
+
+.duty-switch.is-on {
+  color: var(--success);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .duty-switch-track,
+  .duty-switch-thumb {
+    transition: none;
+  }
+}
+
 .roster-grip {
   align-self: center;
   color: var(--text-muted);
@@ -973,9 +1045,7 @@
 .constraint-form label {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  font-size: 0.78rem;
-  color: var(--text-muted);
+  gap: 0.35rem;
 }
 
 .profile-form label > small {
@@ -1600,6 +1670,11 @@
   background: var(--hue-violet);
 }
 
+.stats-legend-swatch.is-duty {
+  margin-inline-start: 0.5rem;
+  background: var(--hue-teal);
+}
+
 /* Days: vertical columns, one per date in the period. */
 
 .day-bars {
@@ -1780,6 +1855,25 @@
 
 .load-night {
   color: var(--hue-violet);
+}
+
+/* מכלול duties: a second segment after the shifts, in the load they count
+   as. Teal, like the legend: a duty is load carried, not a finding. */
+.load-track.has-duty {
+  display: flex;
+  gap: 2px;
+}
+
+.load-fill-duty {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  background: var(--hue-teal);
+  border-radius: 999px;
+}
+
+.load-duty {
+  color: var(--hue-teal);
 }
 
 .load-conflict {
@@ -2084,23 +2178,6 @@
 .preferences-add input {
   flex: 1;
   min-width: 0;
-  font: inherit;
-  font-size: 0.83rem;
-  padding: 0.42rem 0.55rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
-}
-
-.preferences-add select {
-  font: inherit;
-  font-size: 0.78rem;
-  padding: 0.42rem 0.4rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
 }
 
 .preferences-group {
@@ -2178,13 +2255,6 @@
 .preferences-edit input {
   flex: 1;
   min-width: 0;
-  font: inherit;
-  font-size: 0.82rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
 }
 
 .preferences-empty {
@@ -2421,7 +2491,7 @@
   border-bottom: 1px solid var(--border);
 }
 
-.import-table select { min-height: 36px; max-width: 14rem; }
+.import-table select { max-width: 14rem; }
 
 .import-status {
   font-size: 0.72rem;
@@ -2442,13 +2512,6 @@
   gap: 0.5rem 0.75rem;
   margin-top: 0.6rem;
   align-items: end;
-}
-
-.import-layout select,
-.import-layout input,
-.import-hint textarea {
-  min-height: 36px;
-  font: inherit;
 }
 
 .import-hint {
@@ -2477,3 +2540,49 @@
 @media (max-width: 640px) {
   .import-layout { grid-template-columns: 1fr; }
 }
+
+/* A soldier's competence and a reservist's questions (`SoldierFields`). */
+.soldier-reserve,
+.soldier-advanced {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.soldier-reserve legend { padding: 0 0.25rem; font-size: 0.78rem; font-weight: 650; }
+.soldier-advanced > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.soldier-advanced[open] > summary { color: var(--text); }
+.soldier-grid {
+  display: grid;
+  /* auto-fill, not auto-fit: a card with one or two fields (הצ״ח, אע״צ, a
+     shift's min/max) keeps them field-sized instead of stretching them
+     across the whole card. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
+  gap: 0.5rem;
+}
+.soldier-field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+.soldier-reserve > small,
+.soldier-advanced > small { color: var(--text-muted); font-size: 0.72rem; line-height: 1.4; }
+
+/* A reservist's coming week: seven days, each cycling free → soft → hard. */
+.reserve-week { display: grid; gap: 0.5rem; margin-block: 0.5rem; padding: 0.75rem; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
+.reserve-week-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+.reserve-week-nav { display: flex; gap: 0.5rem; }
+.reserve-week-nav .is-active { font-weight: 600; text-decoration: underline; }
+.reserve-week-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.3rem; }
+.reserve-day { display: grid; justify-items: center; gap: 0.1rem; min-height: 44px; padding: 0.35rem 0.1rem; background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); cursor: pointer; font: inherit; }
+.reserve-day span, .reserve-day small { font-size: 0.72rem; color: var(--text-muted); }
+.reserve-day.is-soft { border-color: var(--warning); background: var(--warning-soft); }
+.reserve-day.is-hard { border-color: var(--danger); background: var(--danger-soft); }
+.reserve-day:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.reserve-week-hint { color: var(--text-muted); }

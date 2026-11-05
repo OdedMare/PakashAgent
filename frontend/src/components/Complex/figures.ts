@@ -1,0 +1,128 @@
+import { orderByName } from "@/components/Board/shiftOrder";
+import type { ComplexBoard, ComplexPeriod } from "@/types";
+
+export type Unit = ComplexBoard["teams"][number];
+
+/** What the board narrows to. `unit` and `shift` choose rows (and drive
+ *  the tiles); `soldier` (`<unit id>:<name>`) and `gapsOnly` only hide —
+ *  like the משמרת's own `FilterBar`, they never change what is counted. */
+export interface Focus {
+  unit: string | null;
+  shift: string | null;
+  soldier: string | null;
+  gapsOnly: boolean;
+}
+
+export const NO_FOCUS: Focus = { unit: null, shift: null, soldier: null, gapsOnly: false };
+
+/** Every soldier standing somewhere on the board, as `<unit id>:<name>`
+ *  with a label naming the משמרת, sorted by name. */
+export function soldiersOf(units: Unit[]): { value: string; label: string }[] {
+  const seen = new Map<string, string>();
+  for (const unit of units) {
+    for (const period of unit.periods) {
+      for (const row of period.assignments) {
+        seen.set(`${unit.id}:${row.employee}`, `${row.employee} · ${unit.name}`);
+      }
+    }
+  }
+  return [...seen.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "he"));
+}
+
+/** Every shift type of the משמרות on the board, once each. */
+export function allShifts(units: Unit[]): string[] {
+  const names: string[] = [];
+  for (const unit of units) {
+    for (const shift of shiftsOf(unit)) if (!names.includes(shift)) names.push(shift);
+  }
+  return names;
+}
+
+/** One cell of the combined board: the seats the stored grid asks for and
+ *  who stands there. `null` when no period of the משמרת covers the day. */
+export interface CellReading {
+  seats: number;
+  names: string[];
+  /** Of `names`, those who fill a seat — a נחפף/ת does not. */
+  filled: number;
+  shadows: Set<string>;
+  status: ComplexPeriod["status"];
+}
+
+export function readCell(unit: Unit, shift: string, day: string): CellReading | null {
+  const period = unit.periods.find((p) => p.starts_on <= day && day <= p.ends_on);
+  if (!period) return null;
+  const seats = period.slots
+    .filter((slot) => slot.slot_date === day && slot.shift_name === shift)
+    .reduce((sum, slot) => sum + (slot.headcount || 0), 0);
+  const rows = period.assignments.filter((row) => row.date === day && row.shift === shift);
+  const shadows = new Set(rows.filter((row) => row.counts === false).map((row) => row.employee));
+  return {
+    seats,
+    names: rows.map((row) => row.employee),
+    filled: rows.length - shadows.size,
+    shadows,
+    status: period.status,
+  };
+}
+
+/** A משמרת's shift types in the order its own board reads them: א-ב,
+ *  including any the stored grid has that setup no longer declares. */
+export function shiftsOf(unit: Unit): string[] {
+  const names: string[] = [];
+  for (const shift of unit.shifts) {
+    names.push(shift.name);
+  }
+  for (const period of unit.periods) {
+    for (const slot of period.slots) {
+      if (!names.includes(slot.shift_name)) {
+        names.push(slot.shift_name);
+      }
+    }
+  }
+  return orderByName(names);
+}
+
+export interface Figures {
+  seats: number;
+  assigned: number;
+  open: number;
+  soldiers: number;
+  warnings: number;
+  published: number;
+  planned: number;
+  units: number;
+}
+
+/** The tiles' numbers over what is on screen — the משמרות and shift types
+ *  the focus leaves in, and the days the view draws. A reading of the
+ *  stored grids, never a judgement: each משמרת's own audit is where
+ *  coverage is decided. */
+export function figuresOf(units: Unit[], days: string[], focus: Focus): Figures {
+  const figures: Figures = {
+    seats: 0, assigned: 0, open: 0, soldiers: 0, warnings: 0,
+    published: 0, planned: 0, units: units.length,
+  };
+  const people = new Set<string>();
+  for (const unit of units) {
+    const touching = unit.periods.filter((p) => p.starts_on <= days[days.length - 1] && p.ends_on >= days[0]);
+    if (touching.length) figures.planned += 1;
+    if (touching.length && touching.every((p) => p.status === "published")) figures.published += 1;
+    figures.warnings += touching.reduce((sum, p) => sum + p.warnings, 0);
+    for (const shift of shiftsOf(unit)) {
+      if (focus.shift && shift !== focus.shift) continue;
+      for (const day of days) {
+        const cell = readCell(unit, shift, day);
+        if (!cell) continue;
+        figures.seats += cell.seats;
+        figures.assigned += Math.min(cell.filled, cell.seats || cell.filled);
+        figures.open += Math.max(0, cell.seats - cell.filled);
+        cell.names.forEach((name) => people.add(`${unit.id}:${name}`));
+      }
+    }
+  }
+  figures.soldiers = people.size;
+  return figures;
+}

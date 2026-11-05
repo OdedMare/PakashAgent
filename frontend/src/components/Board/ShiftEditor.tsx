@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, CalendarPlus, CheckCircle2, Copy, GraduationCap, MessageSquareText, PencilLine, Repeat2, ShieldCheck, Trash2, X } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, CalendarPlus, CheckCircle2, Copy, GraduationCap, MessageSquareText, PencilLine, Repeat2, ShieldCheck, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { hebrewWeekday } from "@/components/Management/Calendar";
@@ -160,6 +160,7 @@ export function ShiftEditor({
   const canSave = Boolean(
     employee && shiftName && slotDate && slot && !busy && active && !check?.blocking,
   );
+  const borrowCount = check?.candidates.filter((candidate) => candidate.borrowable).length ?? 0;
   const visibleCandidates = check?.candidates.filter((candidate) =>
     matchesFilter(candidate, filter, roles)
   ) ?? [];
@@ -286,7 +287,10 @@ export function ShiftEditor({
             <div className="board-availability" aria-label="זמינות החיילים למשמרת">
               <div className="board-availability-head">
                 <strong>מי פנוי למשמרת</strong>
-                <span>{check.candidates.filter((candidate) => candidate.available).length} מתוך {check.candidates.length} ללא התראה</span>
+                <span>
+                  {check.candidates.filter((candidate) => candidate.available).length} מתוך {check.candidates.length} ללא התראה
+                  {borrowCount ? <span className="board-availability-borrow"> · {borrowCount} בעלי אותו תפקיד מעמדה אחרת</span> : null}
+                </span>
               </div>
               <CandidateFilters
                 candidates={check.candidates}
@@ -301,16 +305,21 @@ export function ShiftEditor({
                   <button
                     type="button"
                     key={candidate.employee}
-                    className={`board-candidate${candidate.employee === employee ? " is-selected" : ""}${candidate.available ? " is-available" : " is-unavailable"}${candidate.is_overlap ? " is-overlap" : ""}`}
+                    className={`board-candidate${candidate.employee === employee ? " is-selected" : ""}${candidate.available ? " is-available" : candidate.borrowable ? " is-borrow" : " is-unavailable"}${candidate.is_overlap ? " is-overlap" : ""}`}
                     onClick={() => setEmployee(candidate.employee)}
                     aria-pressed={candidate.employee === employee}
                     aria-label={candidateDetail(candidate)}
                     data-tooltip={candidateDetail(candidate)}
                   >
-                    {candidate.available ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
+                    {candidate.available ? <CheckCircle2 size={15} /> : candidate.borrowable ? <ArrowLeftRight size={15} /> : <AlertTriangle size={15} />}
                     <span className="board-candidate-copy">
                       <strong>{candidate.employee}</strong>
                     </span>
+                    {candidate.borrowable ? (
+                      <span className="board-candidate-badge is-borrow">
+                        <ArrowLeftRight size={12} aria-hidden="true" /> {borrowLabel(candidate)}
+                      </span>
+                    ) : null}
                     {candidate.closing ? <span className="board-candidate-badge is-closing"><Repeat2 size={12} /> {candidate.rotation || "בסגירה"}</span> : null}
                     {candidate.is_shift_manager ? <span className="board-candidate-badge"><ShieldCheck size={12} /> מפקד/ת</span> : null}
                     {candidate.can_train ? <span className="board-candidate-badge"><GraduationCap size={12} /> מוסמך/ת לחפוף</span> : null}
@@ -319,7 +328,10 @@ export function ShiftEditor({
                 ))}
                 {visibleCandidates.length ? null : <span className="board-candidate-empty">אין חיילים בסינון הזה</span>}
               </div>
-              <small className="board-availability-note">אפשר לבחור חייל/ת עם התראה רגילה; תורנות חוסמת אינה ניתנת לעקיפה.</small>
+              <small className="board-availability-note">
+                אפשר לבחור חייל/ת עם התראה רגילה; תורנות חוסמת אינה ניתנת לעקיפה.
+                {borrowCount ? " בטורקיז: פנויים מעמדה אחרת עם אותו תפקיד — אפשר לשבץ אותם כהשאלה." : ""}
+              </small>
             </div>
           ) : checking ? <p className="board-availability-loading" role="status">בודק מי פנוי למשמרת…</p> : null}
 
@@ -459,7 +471,9 @@ export function ShiftEditor({
 
 function candidateOption(name: string, role: string, check: PlacementCheck | null): string {
   const candidate = check?.candidates.find((row) => row.employee === name);
-  const status = candidate ? (candidate.available ? "פנוי/ה" : "עם התראה") : "";
+  const status = candidate
+    ? (candidate.available ? "פנוי/ה" : candidate.borrowable ? `השאלה ${fromPosts(candidate)}` : "עם התראה")
+    : "";
   return [name, role, status].filter(Boolean).join(" · ");
 }
 
@@ -467,10 +481,27 @@ function formatHours(hours: number): string {
   return `${Number.isInteger(hours) ? hours : hours.toFixed(1)} שעות`;
 }
 
-function candidateDetail(candidate: PlacementCheck["candidates"][number]): string {
+type Candidate = PlacementCheck["candidates"][number];
+
+/** "מ־א" — or "מ־א, ב +1" for somebody whose roster names several posts. */
+function fromPosts(candidate: Candidate): string {
+  const posts = candidate.borrow_from ?? [];
+  if (!posts.length) return "מעמדה אחרת";
+  const shown = posts.slice(0, 2).join(", ");
+  return `מ־${shown}${posts.length > 2 ? ` +${posts.length - 2}` : ""}`;
+}
+
+function borrowLabel(candidate: Candidate): string {
+  const role = (candidate.shared_roles ?? []).join(", ");
+  return [fromPosts(candidate), role].filter(Boolean).join(" · ");
+}
+
+function candidateDetail(candidate: Candidate): string {
   const status = candidate.available
     ? `פנוי/ה · ${formatHours(candidate.hours)} בתקופה`
-    : candidate.reasons.join(" ");
+    : candidate.borrowable
+      ? `פנוי/ה ${fromPosts(candidate)} · אותו תפקיד: ${(candidate.shared_roles ?? []).join(", ")} · ${formatHours(candidate.hours)} בתקופה`
+      : candidate.reasons.join(" ");
   return [candidate.employee, status, candidate.rotation, candidate.is_overlap ? "נחפף/ת — לרוב לא נספר/ת בתקן" : ""]
     .filter(Boolean)
     .join(" · ");

@@ -268,22 +268,6 @@
   font-weight: 600;
 }
 
-.gate-field input,
-.gate-field select {
-  min-height: 2.9rem;
-  padding: 0.7rem 0.8rem;
-  background: var(--surface-3);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  font-size: 0.9rem;
-}
-
-.gate-field input:focus,
-.gate-field select:focus {
-  background: var(--surface);
-  border-color: var(--primary);
-}
-
 .gate-hint {
   color: var(--text-muted);
   font-size: 0.74rem;
@@ -322,7 +306,8 @@
    link under the form: a worker is not a second-class visitor here. */
 .gate-doors {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
   gap: 0.6rem;
 }
 
@@ -393,11 +378,6 @@
 .share-row input {
   flex: 1;
   min-width: 0;
-  padding: 9px 11px;
-  background: var(--surface-2);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  font-size: 13px;
   /* The token is Latin-script inside an RTL document; without this the
      directional characters reorder it on screen and a copy-by-hand of what
      is displayed produces a link that does not work. */

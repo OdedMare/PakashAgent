@@ -3,6 +3,7 @@
 from typing import List, Optional
 
 from app.common.actor import current_actor
+from app.common.change_plan import current_plan_id
 from app.common.errors import AgentError, NotFoundError
 from app.dal.repository.base import RepositoryBase, new_id
 from app.dal.repository.schedule_vocabulary import (
@@ -81,6 +82,19 @@ class AvailabilityRepository(RepositoryBase):
                        start_time, end_time, TRUE AS is_hard, reason,
                        source, created_at, 'duty' AS constraint_type
                 FROM duties
+                UNION ALL
+                -- A מכלול duty holds the soldier for the whole day: no
+                -- hours, which `audit/constraints.py` reads as the day from
+                -- midnight to midnight.
+                SELECT cd.id, cd.team_id, cd.employee,
+                       cd.duty_date AS constraint_date, '' AS shift_name,
+                       FALSE AS available, '' AS start_time, '' AS end_time,
+                       TRUE AS is_hard, dt.name AS reason,
+                       'complex' AS source, cd.created_at,
+                       'duty' AS constraint_type
+                FROM complex_duties cd
+                JOIN complex_duty_types dt ON dt.id = cd.duty_type_id
+                WHERE cd.blocks
             ) AS scheduling_constraints
             WHERE team_id=%s
         """
@@ -90,7 +104,8 @@ class AvailabilityRepository(RepositoryBase):
             query += " AND constraint_date >= %s::date - CASE WHEN constraint_type='duty' THEN 1 ELSE 0 END"
             params.append(starts_on)
         if ends_on:
-            query += " AND constraint_date <= %s"
+            # And the next day's duty may overlap the last night shift.
+            query += " AND constraint_date <= %s::date + CASE WHEN constraint_type='duty' THEN 1 ELSE 0 END"
             params.append(ends_on)
         if employee:
             query += " AND employee=%s"
@@ -122,6 +137,11 @@ class AvailabilityRepository(RepositoryBase):
         """, (row_id, team_id))
 
     def delete_availability(self, row_id: str, team_id: str) -> None:
+        if self._all(
+            "SELECT 1 FROM complex_duties WHERE id=%s AND team_id=%s",
+            (row_id, team_id),
+        ):
+            raise AgentError("תורנות מכלול נקבעת ומבוטלת על ידי מפקד המכלול")
         self._execute(
             "DELETE FROM availability WHERE id=%s AND team_id=%s", (row_id, team_id),
         )
@@ -223,11 +243,11 @@ class ChangeLogRepository(RepositoryBase):
             INSERT INTO change_log (
                 id, team_id, schedule_id, action, employee,
                 replaced_employee, slot_date, shift_name, reason, agent_reason,
-                actor
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                actor, plan_id
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, (row_id, team_id, schedule_id, action, employee,
               replaced_employee, slot_date, shift_name, reason, agent_reason,
-              current_actor()))
+              current_actor(), current_plan_id() or None))
         return self._one(
             "SELECT * FROM change_log WHERE id=%s AND team_id=%s", (row_id, team_id),
         )

@@ -291,6 +291,10 @@ const WELCOME_COPY: Record<Surface, { title: string; body: string }> = {
     title: "זה הסידור של הצוות",
     body: "סיור קצר: מה רואים כאן ואיך נכנסים לאזור האישי.",
   },
+  commander: {
+    title: "ברוכים הבאים ללוח המכלול",
+    body: "סיור קצר: איך רואים את כל המשמרות יחד, מתמקדים בסוג משמרת ונכנסים לנהל משמרת.",
+  },
 };
 
 function WelcomePrompt({

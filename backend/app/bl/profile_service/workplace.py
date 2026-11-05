@@ -8,7 +8,8 @@ from app.bl.profile_service.validation import text, text_list, valid_time
 from app.common.errors import AgentError
 from app.bl.shared import weekday_key
 
-_OPTIONAL_EXIT_PATTERNS = ("triplet", "quad", "quint", "hamshushim", "shushim")
+_OPTIONAL_EXIT_PATTERNS = ("round", "triplet", "quad", "quint", "hamshushim", "shushim",
+                           "none", "daily", "personal")
 _GROUPS = {"round": ("א", "ב"), "triplet": ("א", "ב", "ג"), "quad": ("א", "ב", "ג", "ד"),
            "quint": ("א", "ב", "ג", "ד", "ה")}
 _AUDIT_FIELDS = (
@@ -38,6 +39,8 @@ def workplace(value: Any) -> dict:
         raise AgentError("קבוצת הסגירה הראשונה אינה מתאימה למבנה הסבב")
     first_date = text(result.get("first_closure_date"))
     _check_date(first_date, "תאריך הסגירה הראשונה אינו תקין")
+    if "reserve_enabled" in result and type(result["reserve_enabled"]) is not bool:
+        raise AgentError("הפעלת המילואים חייבת להיות ערך בוליאני")
     result.update({
         "name": text(result.get("name")),
         "planning_horizon": text(result.get("planning_horizon")) or "שבוע",
@@ -46,6 +49,8 @@ def workplace(value: Any) -> dict:
         "first_closure_group": first_group,
         "first_closure_date": first_date,
         "general_exit_schedule": text(result.get("general_exit_schedule")),
+        # Soldiers' notes shown on the board only, never handed to the solver.
+        "notes_visual_only": result.get("notes_visual_only") is True,
         "enabled_exit_patterns": _enabled_patterns(result),
         "rotation_a_unavailability": _rotation_rules(
             result.get("rotation_a_unavailability") or []

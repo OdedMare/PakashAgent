@@ -13,11 +13,12 @@ tables which module owns what. `importer/` reads the workplace's own files in an
 |---|---|
 | `profile_service/` | Structured workplace profile validation and updates |
 | `workspace_service.py` | Workspace rules: entering a team, roles, the share link |
+| `complex_routing.py` | **Which משמרות a commander's chat sentence is about** (D46): a named משמרת, else a named soldier's, else all. No model |
 | `admin_service.py` | **The צוות משמרות זהב console** (D28): operator sign-in, opening, re-capping, suspending and deleting teams |
 | `scheduler/` | Building a span: the grid, translating the manager's words, then the solver |
 | `solver/` | **The OR-Tools CP-SAT constraint solver that assigns every schedule** (D34), and holds the existing board when a change is absorbed (D37). No model |
 | `changes/` | Conversational edits and the change log |
-| `manager_chat.py`, `chat_*.py` | **The agent**: one saved conversation per manager, plans prepared per turn and applied only on approval (see below) |
+| `chat/` | **The agent**: one saved conversation per manager, plans prepared per turn and applied only on approval (see below) |
 | `employee_service/` | Identity claims, the personal view, constraint requests, swaps, the unread-change mark |
 | `learn/` | Candidate rules from the manager's repeated corrections. Proposes only |
 | `schedule_service/` | Persistence and orchestration around all three: propose, confirm, apply |
@@ -28,6 +29,7 @@ tables which module owns what. `importer/` reads the workplace's own files in an
 | `planner/` | The chat's question/tool-call schema and the deterministic no-model answers |
 | `intent/` | **Reading a Hebrew sentence with no model.** Seven shapes; never guesses |
 | `absence/` | **An absence read and planned in code** (D36): dates, one question when needed, the fairest cover per shift; no model, no write |
+| `competence/` | **A competence change read and planned in code**: "תעלה/תוריד כשירות ל…", or a named level; one question when nobody rated them; no model, no write |
 | `simulate/` | **What a change would do.** No model, no repository, persists nothing |
 | `rotation/` | **Whose closure a date is, and who is home on a day cycle.** Pure arithmetic off separate anchors; no model |
 | `placement/` | **What a placement would cost, and what else the manager could do.** No model |
@@ -35,12 +37,14 @@ tables which module owns what. `importer/` reads the workplace's own files in an
 | `shared.py` | Small helpers several packages read: text and date coercion, Hebrew weekdays, `role_qualified`/`allowed_roles`, `resume` (a clarification joined to its request) |
 | `directive_agent/` | **Translating the manager's words for the solver.** A bounded tool loop; code validates the answer, keeps every source that translated whole, reports the rest, and writes nothing |
 | `compiled_sources/` | **Standing sentences translated once and kept** (D32): keys, time anchoring, the cache port, the worker's compiler. No model, no SQL |
+| `qualification.py` | **Whether a person's dated כשירות still stands, for the setup screen.** Pure arithmetic: each qualification's `last_active` or the last shift worked, whichever is later, plus the unit's validity; undated rows are left out. Colours; restricts nobody |
+| `audit/unit_policy.py` + `solver/staffing.py` | **A unit's staffing standard** (D47): role counts, fallback roles, a cap on the weak, dated qualifications, shifts per week |
 | `schedule_requests.py` | **Structured scheduling requests** (`avoid`, `prefer`, `max_count`, `not_together`, `min_rest`, `max_consecutive`, `balance`, `requires_with`) and their one validator |
 
 ## The division that defines this layer
 
 The solver assigns; the model talks; code audits. ([D34](../../../docs/DECISIONS.md),
-amending [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-))
+amending [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34))
 
 Who works which shift is solved by `solver/`, an optimisation over the
 roster, never generated. The model translates the manager's sentences into
@@ -90,6 +94,21 @@ and the build still completes.
   them; their row's reason names whom they shadow.
 - `requests.py` turns each structured request into a constraint (hard) or
   a priced term (soft), and prices soft availability.
+- `competence.py` caps a reservist (`service_type: reserve`) — or a
+  standard-service officer or NCO (`rank_group`, `unit_policy.comes_days_a_week`) — at
+  `reserve_days_per_week` worked days per Sunday–Saturday week (hard, fixed
+  days counted), prices each day short of `reserve_min_days` on a week the
+  span reaches to its Saturday (`RESERVE_SHORT`, below a wish), keeps a
+  `reserve_consecutive` reservist's days in one block (hard; days past the
+  span are left to the next one), and — when the roster rates people at two or more
+  `competence` levels (weak/medium/high/excellent; optional, unrated counts
+  as the mean) — pulls every slot of two or more seats towards the team's
+  average strength, a shortfall priced four times an excess, plus a price
+  per extra weak soldier on one shift. Below a soft wish. A **strong shift**
+  (`min_competence` on its definition: medium/high/excellent) prices each
+  rated soldier below that level (`STRONG_SHIFT`), so its seats go to the
+  strong first; coverage still comes first, and the audit's `below_level`
+  names whoever is below it on their own card. Unrated is never below.
 - `fairness.py` rewards closers on their own closure, spreads shifts (not
   hours: on base nobody is on the clock) and nights towards a target per
   person — the demand poured evenly, but never below what someone already
@@ -97,17 +116,49 @@ and the build still completes.
   not counted at a share they cannot reach — and prices every pair of one
   person's shifts by the square of the hours their gap falls short of 48
   (`SPACING_HOURS`), so the longest and most even rest wins (back-to-back days are charged instead only when
-  shifts carry no clock). Each target is a constant computed before solving
+  shifts carry no clock). A day of מכלול duty in the window counts as its
+  type's `weight` in shifts already carried (`problem._duty_load`); with no
+  duties nothing changes. Each target is a constant computed before solving
   (a target that moved with the answer made optimality unprovable). Both
   the distance from the target and the largest overload are priced, per
   unit of load and independent of team size: one shift of evenness is
   cheaper than a soft wish (`model.py`) and dearer than any one gap.
-- `solve.py` solves in two phases: coverage (unfilled seats, missing roles,
-  the shift manager) first — started from the kept board when a rebuild
-  keeps one (D37) — then, with coverage fixed as a ceiling and the first
-  answer as a hint, everything else. It writes a reason on every row,
+- `solve.py` solves coverage (unfilled seats, missing roles, the shift
+  manager) first, then, with coverage fixed as a ceiling and the first
+  answer as a hint, everything else. A rebuild that keeps a board (D37)
+  adds a phase between them: phase one keeps as much of the board as the
+  best coverage allows, the middle phase holds those rows and fills the
+  change in around them, and the last phase may move a kept row only if
+  its answer is strictly better than the held one — so the same change
+  does not move people on one build and nobody on the next. Phase one (and
+  the held phase) may each take up to 30% of the time limit; the last phase
+  gets whatever they left, so a coverage proven in milliseconds does not
+  waste its share. It writes a reason on every row,
   turns every priced term the answer still pays for into a note, and audits
-  the result.
+  the result. An empty seat, a missing role and a missing shift manager are
+  noted by `explain.py` instead, from the answer: who on the roster could
+  not take it and why — not qualified, home on the rotation, on a duty,
+  absent, a hard `avoid` (`problem.refusal`, the legality tests named), or
+  an overlapping shift, too little rest, a run of days, weekly hours, a
+  reservist's week, another hard request — "free" when nothing applies,
+  which points at the time limit. Names are listed for a reason three or
+  fewer share. A broken soft wish is probed by `wishes.py`: the three
+  costliest are solved again with the wish binding, for 30% of the time
+  limit on top of it, and its note says what keeping it would cost — a
+  seat (only when keeping today's coverage beside it is proven
+  impossible), nothing ("the time limit broke it"), or, as a quick check,
+  another wish or the evenness, rest or closure price it would raise. A
+  probe the clock cuts short adds nothing. Its metrics carry the solver's bound and gap (`bound`,
+  `gap_pct`, `solver_ms`) and one entry per phase under `phases`
+  (`coverage`, `held` with a board, `balance`) — status, time given and
+  taken, conflicts, objective, bound and gap — so whether a team needs more
+  time is read off a build, not guessed.
+
+**The benchmark** (`backend/benchmarks/`, `python -m benchmarks.solver_bench`)
+solves four fixed synthetic teams and measures the answers — unfilled seats,
+wishes broken, spread of shifts and nights, short rests, gap and time — with
+`--save`/`--compare` to put a change to the solver side by side with what it
+replaced. The tests say a schedule is legal; this says whether it got better.
 
 **Spans are up to four weeks** (`slots.plan_spans`). A longer period is
 solved in such blocks, each seeing the rows of the ones before it as fixed.
@@ -120,7 +171,9 @@ soldier takes shifts only from whoever is above their share, and a new shift
 is filled around the rows already there. A range job with `keep_existing`
 does this per span and first adds the shift's slots to the stored grid;
 `schedule_service/generation/absorb.py` opens one on every draft ahead of
-today when a profile save adds a person or a shift. A draft with nothing on
+today when a profile save adds a person or a shift, or switches one off
+(`on_duty: false`, D49: their rows from today are vacated and logged first;
+an off soldier is hard-unavailable on every date of every build). A draft with nothing on
 it is not solved, but a new shift still gets its empty rows there.
 
 **A build can be narrowed to some shift types** (`generation/shift_filter.py`):
@@ -134,24 +187,25 @@ span boundary and keeps every finished one; a hand-placed row on a date not
 yet solved is a pin. `POST /generate` solves a whole period inside the
 request for callers that want the schedule back rather than a job.
 
-## `manager_chat.py` and `chat_*.py` — the agent
+## `chat/` — the agent
 
 The one place the manager talks to the agent; see
 [`docs/MANAGER_CHAT.md`](../../../docs/MANAGER_CHAT.md). A turn runs as a
-`manager_chat` job: `chat_reply.py` first tries the zero-model fast path
-(`chat_tools.team_question` for who works / who did the most / who is away
-when no one is named and the time is, and `chat_tools.replacement_lookup`,
-over `intent/` and `tools/`), then up to
-seven model rounds that may call read-only tools, then `chat_planner.py`
+`manager_chat` job: `chat/reply.py` first tries the zero-model fast path
+(`chat/fast.py`: an absence through `bl/absence/`, then `team_question` in
+`chat/tools.py` for who works / who did the most / who is away when no one
+is named and the time is, then `replacement_lookup`, over `intent/` and
+`tools/`), then up to
+seven model rounds that may call read-only tools, then `chat/planner.py`
 validates and audits the plan the model proposes — changes (a seat a
 removal leaves empty is filled by the solver over the touched dates (D40),
-`chat_vacancies.py`: the other rows are pins, whoever left is a hard
+`chat/vacancies.py`: the other rows are pins, whoever left is a hard
 `avoid`, and only picks on vacated slots join the plan; `leave_vacant`
 keeps a seat empty on request; a model-picked cover for a seat the same
 plan vacates is dropped so the solver fills it), a generation
-preview (the solver, through `chat_generation.py`), a vocabulary rebuild
-(`chat_lifecycle.py`, keeping existing rows where they fit), profile or
-constraint edits (`chat_constraints.py`: up to 126 per plan; a refusal names
+preview (the solver, through `chat/generation.py`), a vocabulary rebuild
+(`chat/lifecycle.py`, keeping existing rows where they fit), profile or
+constraint edits (`chat/constraints.py`: up to 126 per plan; a refusal names
 the row, the offending value and the valid names or shifts so the model can
 repair that one row; whole-day words read as an empty shift, "8" as 08:00,
 an exact repeated row once; a row naming a `role` instead of an employee is one
@@ -160,12 +214,12 @@ or shifts it adds or changes; the rest stay as they are. Before the model loop,
 `bl/absence/` answers an absence in code (D36): a bare "עד X" runs from the
 earliest other day named, or today; spans up to 120 days; shifts in several
 stored periods plan the earliest and list the rest. Nothing is written until the manager
-approves; `chat_apply.py` then applies the stored plan in one transaction,
-after checking the state it was prepared against has not moved. `chat_state.py` gathers
+approves; `chat/apply.py` then applies the stored plan in one transaction,
+after checking the state it was prepared against has not moved. `chat/state.py` gathers
 what a turn starts from — its payload is serialised slowest-changing first
 (profile, schedule … conversation, request) so the server's prefix cache
 survives a new turn, and the schedule in it is written out for the model as
-`schedule_for_chat` (per date and shift: seats and names, no reasons); `chat_draft.py` saves the reply as it streams.
+`schedule_for_chat` (per date and shift: seats and names, no reasons); `chat/draft.py` saves the reply as it streams.
 
 ## `changes/`
 
@@ -256,6 +310,14 @@ Tuesdays" says nothing about א.
 refuses their Thursday (Friday on שושים)–Sunday-handover slots outright;
 the audit warns about one already placed there.
 
+**Some patterns belong to one person** (`rotation/personal.py`): `none`
+(no exits; nothing blocked), `daily` (comes on `daily_days` within
+`daily_start`–`daily_end`; anything outside is refused) and `personal`
+(closes one weekend in `closure_every`, from the weekend of
+`closure_from`, home on the others from Thursday to the Sunday handover).
+They take no group and no shared anchor, and read through the same
+`closure_status` gate as every cycle.
+
 **Day cycles are the other kind** (`rotation/day_cycles.py`): 11/3, 12/2,
 שבוע־שבוע — N days on base, M home, from one anchor day, with each group
 starting a stated number of days after it (spread evenly by default). They
@@ -344,6 +406,10 @@ Recomputes the countable facts and returns warnings:
 - assignments that contradict a known unavailability
 - unfilled and overstaffed slots, a missing role or shift commander
 - a placement against the rotation (`cross_rotation`)
+- a reservist on more days in a Sunday–Saturday week than their
+  `reserve_days_per_week` (`reserve_days`) — the solver never builds one, but a
+  pin, a hand placement or a cover picked in the chat can, and the picker and
+  the replacement covers read this same warning
 
 The codes live in `audit/codes.py`; each check is a module under
 `audit/checks/`.
@@ -356,7 +422,7 @@ whole week, so hours bind nothing until the manager sets a limit and load is
 evened in shifts), so a solved schedule is clean by this measure; a
 hand-edited one may not be, and that is the manager's call. If you find
 yourself giving the audit veto power, re-read
-[D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-) and D34.
+[D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34) and D34.
 
 On-call shifts may weight differently — read the weighting from the profile's
 shift vocabulary rather than assuming.

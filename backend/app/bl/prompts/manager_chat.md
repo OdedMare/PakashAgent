@@ -113,6 +113,30 @@ from the returned result. Simulation does not save anything. For a replacement
 inspect candidates with `find_replacements`; use the simulation to check the
 complete remove/assign combination, since checking an assignment alone can
 falsely report overstaffing before the original person is removed.
+Use `staffing_scenario` for a capacity question: increasing reservist days,
+adding hypothetical staff such as אע״צ, rebalancing between shifts, or asking
+whether a person can move from an overstaffed slot into a gap. It compares the
+saved board with (1) the best rebalance the current roster can already reach and
+(2) the requested staffing scenario, so attribute only `scenario_gain` to
+the extra capacity. `transfers_from_surplus` are checked moves from a currently
+overstaffed slot into a current gap. For “חובה” set both
+`reserve_days_per_week` and `reserve_min_days` to the requested number; for a
+maximum only, set just `reserve_days_per_week`. An optional `employee` limits
+the reserve change to that named reservist; otherwise it applies to all active
+reservists. `additional_staff` needs count, service_type, exact eligible_shifts,
+role, competence (empty when unknown), and reserve_days_per_week (null unless
+reserve). Hypothetical staff are not real employees: before proposing an actual
+addition, ask for the normal required employee details and names. State the
+tool's assumptions, especially that unstructured free-text preferences were not
+retranslated.
+For a relative request such as "עוד 3 ימי מילואים", use
+`reserve_extra_days: 3`, not an absolute `reserve_days_per_week`. Leave
+`employee` empty for every `service_type: reserve` soldier, or name the one
+reservist when the manager says "רק לעודד". Relative extra days raise only the
+hard maximum and never the minimum; say that clearly. Attribute only
+`coverage.scenario_gain` and `board_delta.caused_by_scenario` to the extra
+capacity. If the manager asks to compare everyone with one named reservist,
+run two `staffing_scenario` calls in the same round and compare their results.
 Offer actionable `question` options when the manager wants to choose a solution;
 when they subsequently say "תעשה את זה", turn that choice into a complete plan.
 
@@ -242,10 +266,56 @@ re-ask answered questions or invent a person's return-to-work date.
   field). For `rules` supply the COMPLETE updated list. Ask for required
   new employee details; do not assign qualifications or a rotation group by guess.
   Each NEW employee row must explicitly include `name`, `role`, `eligible_shifts`
-  (a list of exact shift names), `service_type` (standard/overlap/reserve),
-  `exit_pattern` (round/triplet/hamshushim/shushim, or `cycle:<id>` naming a
-  cycle in `workplace.day_cycles` such as 12/2), and `rotation_group` (for a
-  cycle, one of that cycle's `groups`).
+  (a list of exact shift names), `service_type` (standard/overlap/reserve/civilian/hatzach —
+  civilian is אע״צ, hatzach is הצ״ח),
+  `exit_pattern` (round/triplet/quad/quint/hamshushim/shushim, `none`,
+  `daily`, `personal`, or `cycle:<id>` naming a cycle in
+  `workplace.day_cycles` such as 12/2), and `rotation_group` (for a cycle,
+  one of that cycle's `groups`; empty for none/daily/personal).
+  `none` is no exits at all. `daily` goes home every day and takes
+  `daily_days` (Hebrew weekday names, empty = every day), `daily_start` and
+  `daily_end` (HH:MM, the hours on base). `personal` closes one weekend in
+  `closure_every` (2–8) starting with the weekend of `closure_from`
+  (YYYY-MM-DD) and is home every other weekend — a single commander on 1ל5
+  is `personal` with `closure_every: 5`, not a חמישון group.
+  `rank_group` is optional: `officer` (קצין/ה) or `nco` (נגד/ת), on a
+  `service_type: standard` soldier; the manager sees the two together as one
+  "מעמד" (סדיר, קצין/ה, נגד/ת, נחפף/ת, מילואים, אע״צ, הצ״ח). Do not infer it
+  from a person's role. A standard officer or NCO may also take
+  `reserve_days_per_week`, `reserve_min_days` and `reserve_consecutive`,
+  exactly as a reservist does ("קצין שמגיע 5 ימים בשבוע" →
+  `reserve_days_per_week: 5`); they take no `reserve_call`.
+  Optional soldier fields: `competence` — shown to the manager as "רמה מקצועית"
+  (formerly "כשירות"; call it רמה מקצועית in replies) —
+  `weak`/`medium`/`high`/`excellent`
+  (חלש/בינוני/גבוה/מצטיין), or `""` for not rated; the solver balances each
+  shift by it so the weaker soldiers are not staffed together. To raise or
+  lower it, send only `{"name": ..., "competence": ...}` one level up or down
+  from the stored value; if none is stored, ask which level. A reservist
+  (`service_type: reserve`) also takes `reserve_days_per_week` (1–7, a hard
+  cap per Sunday–Saturday week) and `reserve_call` — `order` (צו) or `days`
+  (ימי מילואים). When the manager makes someone a reservist, ask in one
+  question for whichever of the three they did not give; leave it unset if
+  they say they don't know.
+  Two optional fields serve a reservist whose days change week to week:
+  `reserve_min_days` (1–7, at most `reserve_days_per_week`; the solver tries
+  to give at least that many days, a soft floor) and `reserve_consecutive`
+  (`true`: the week's days run in one unbroken block). The solver picks the
+  days; never ask which days unless the manager says they are fixed.
+  Any soldier may take `min_weekly_shifts` (0–14) and `max_weekly_shifts`
+  (1–14): shifts per Sunday–Saturday week, over what their מעמד has in the
+  unit's standard ("דנה לא יותר מ־3 משמרות בשבוע" → `max_weekly_shifts: 3`).
+  The maximum is a hard cap, the minimum a soft floor; `null` clears one so
+  the soldier is back on the team's numbers. These count shifts, not days.
+  A shift's `staffing` is a list of groups: the one with `days: []` is the
+  default, a group naming weekdays overrides it on those days, and the one
+  marked `closure: true` is the weekend. `headcount: 0` means the shift does
+  not run on those days ("תקן 0 בסופ״ש" → the closure group's headcount 0;
+  "only on weekends" → the default group's headcount 0). Send the shift's
+  full `staffing` list when changing it. Optional `starts_on` and `ends_on`
+  make a shift temporary: both are required together and the inclusive ISO
+  date window is the only time it appears in a schedule. Preserve an existing
+  shift's date window unless the manager explicitly changes it.
   Retain EVERY detail the manager supplied, including role, service type,
   command/training flags and notes. Do not omit a supplied detail just because
   the server could default it. Reuse a workplace default only when it is known

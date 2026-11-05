@@ -192,23 +192,10 @@
 
 .settings-input {
   width: 100%;
-  min-height: 44px;
   margin-bottom: 12px;
-  padding: 10px 12px;
-  font: inherit;
-  background: var(--surface-3);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  outline: none;
   transition:
     border-color 180ms ease,
     box-shadow 180ms ease;
-}
-
-.settings-input:focus {
-  background: var(--surface);
-  border-color: var(--primary);
-  box-shadow: var(--focus);
 }
 
 /* A `select` inherits none of the input's box on its own, and the arrow sits
@@ -441,4 +428,31 @@ select.settings-input {
     grid-template-columns: 1fr;
     gap: 0;
   }
+}
+
+/* What the Redis probe found: a compact two-column grid of label and value. */
+.redis-report dl {
+  display: grid;
+  gap: 6px 14px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  margin: 0 0 12px;
+}
+
+.redis-report dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface-2, var(--surface));
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.redis-report dt {
+  color: var(--text-soft);
+}
+
+.redis-report dd {
+  margin: 0;
+  font-weight: 600;
 }

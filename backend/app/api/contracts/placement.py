@@ -65,16 +65,24 @@ class PlacementCandidate(BaseModel):
     can_train: bool = False
     is_overlap: bool = False
     exit_pattern: str = ""
+    eligible_shifts: List[str] = []
+    rotation_group: str = ""
     rotation: str = ""
     closing: bool = False
+    # Free, from another post, holding a role this shift's own people hold:
+    # the colleague a short shift can borrow. `borrow_from` names their
+    # posts and `shared_roles` the role in common; both empty otherwise.
+    borrowable: bool = False
+    borrow_from: List[str] = []
+    shared_roles: List[str] = []
 
 
 class PlacementCheck(BaseModel):
     """What `bl/placement.py` makes of a proposed placement.
 
-    Ordinary audit findings remain advisory (D3). A blocking operational duty
-    is different: the person is already occupied, so `blocking` is true and
-    every write path refuses the placement.
+    Ordinary audit findings remain advisory (D3). Hard unavailability and an
+    operational duty are different: `blocking` is true and every write path
+    refuses the placement.
     """
 
     ok: bool = True

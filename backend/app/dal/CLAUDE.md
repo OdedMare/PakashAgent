@@ -6,6 +6,10 @@ Fetches and sends. Makes no decisions — those live in `bl/`.
   (never creates it).
 - `llm/` — the OpenAI-compatible JSON client. See [llm/CLAUDE.md](llm/CLAUDE.md).
 - `repository/` — the only SQL owner in the codebase.
+- `write_marks.py` — `TrackingCursor` on every pooled connection marks a
+  writing statement with the team in context (`""` = every team); the
+  marks are told to the read cache when the pooled block ends or a job's
+  connection commits — after the commit, before the response (D50).
 - `notify.py` — `PostgresSignals`: `pg_notify` out, one unpooled `LISTEN`
   connection per process in, on a channel named after the schema (D35).
   The manager's live inbox (`common/events.py`) rides on it.
@@ -15,7 +19,9 @@ Fetches and sends. Makes no decisions — those live in `bl/`.
 (`throttle.py`), live signals (`notify.py`) and the model-call limit
 (advisory locks, `llm/model_slots.py`), and what every replica must agree
 on — the generated session key and the panel's settings
-(`deployment.py`, D39). There is no Redis. `initialize()` creates the
+(`deployment.py`, D39). Redis, when configured, is only a cache of reads
+(D50): `write_marks.py` notices every write at the cursor and tells the
+read cache after the commit. `initialize()` creates the
 tables under an advisory lock, so replicas starting together do not race.
 
 ## Connection pooling
@@ -44,6 +50,28 @@ Two properties are load-bearing:
 connection to ask whether the schema exists would put the question after the
 assumption.
 
+**Round trips are the cost to cut, not queries** (D45). Measured with
+0.5 ms per network hop, a one-statement read went from 10 ms to 3 ms and
+`get_schedule` from 35 ms to 6 ms by removing round trips alone:
+
+- `RepositoryBase._all`/`_execute` borrow through `single_statement()`,
+  which runs a pooled connection in **autocommit**: one statement is its own
+  transaction anyway, so `BEGIN`/`COMMIT` are not sent. Inside `atomic()`
+  or a job's bound connection it lends that connection instead, unchanged.
+  A multi-statement write still uses `connect()` and commits itself.
+- `pool_hooks.py`: the checkout health check is skipped for a connection
+  returned in the last `FRESH_SECONDS`, and the return hook resets
+  `autocommit` to off so no later caller inherits it.
+- `get_schedule` sends its three queries in one pipeline.
+- `team_profile()` sends the document only when `(revision, updated_at)`
+  changed since this process last read it (`repository/profile_cache.py`).
+  The row is still read every time, so a save from any process is seen at
+  once; nothing read inside `atomic()` is cached.
+
+**No PgBouncer in transaction mode.** Session advisory locks (job claim,
+model slots), `LISTEN` and the per-connection `search_path` all need a
+session (`docs/SCALING.md`).
+
 `close_pool()` runs on FastAPI shutdown. Without it the pool's worker threads
 outlive the process and Postgres accumulates idle backends across restarts.
 
@@ -59,9 +87,11 @@ Every table is composed in `schema.py` (DDL in `repository/ddl/`, plus
 and rules remain JSON on the team's profile, which is what
 `team_profile()` reads. Manager conversations are separate durable rows: the
 parent carries `team_id` and signed browser `manager_id`; messages belong to that
-parent. Reads and approvals verify the parent owner before accessing messages.
+parent. A pending mutation lives separately in `change_plans`; the message
+references it and the read hydrates the old payload shape for the UI. Reads and
+approvals verify both the conversation owner and the plan's team.
 
-Chat approval uses `database.py:atomic()` to compose existing repository
+Change-plan approval uses `database.py:atomic()` to compose existing repository
 writes in one serializable transaction. Their inner `commit()` calls are deferred
 until the approval's outer transaction succeeds, so a failed later assignment or
 constraint write also rolls back earlier writes and the approval receipt.
@@ -80,7 +110,12 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | Table | Holds |
 |---|---|
 | `teams` | One workspace: name, the boss's password hash, the member share token — plus the operator's controls (D28): `active` (FALSE = suspended) and `notes` |
+| `complexes` | A מכלול (D43): name, the commander's password hash, `active`, `notes`. `teams.complex_id` links a team to at most one; deleting a מכלול leaves its teams standing |
+| `complex_duty_types` | A מכלול's duties (מטבח, שמירה…): seats per day, the weekdays it runs, and `weight` — how many shifts a duty day counts as in fairness and statistics |
+| `complex_duties` | One soldier (`team_id` + roster name) on one duty for one whole day, owned by the מכלול. Projected into the team's `availability()` as a `duty` with no hours, which blocks midnight to midnight; the team's own constraint delete refuses it |
+| `commander_notices` | What a מכלול commander changed inside a team, for that team's own commander: the action in words, a count of folded repeats, `seen_at` |
 | `team_profiles` | One structured workplace profile per team, with a `revision` bumped on every save: a save naming an older one is refused (409) instead of silently undoing another manager's edit |
+| `change_plans` | One immutable proposed mutation, its source, owner, lifecycle status and eventual receipt. `change_log.plan_id` groups the detailed audit rows it produced |
 | `schedules` | One living schedule per period, `draft` or `published` |
 | `shift_slots` | One shift on one date — the thing an assignment points into |
 | `assignments` | person → slot, **with the agent's reason** (`NOT NULL`). `source` records whether the agent generated the row, the manager placed it by hand, or it was imported ([D18](../../../docs/DECISIONS.md#d18--the-boss-can-place-a-shift-without-the-agent-️-completes-d6)) |
@@ -112,7 +147,8 @@ the setup form owns its shape.
   holding another's row id must still get a 404. The team is a required
   argument, not an optional filter.
 - **`admin.py` is the one module whose reads cross teams**, for the operator
-  console (D28). Keep every cross-team query there, name the `teams` columns
+  console (D28) — and `complexes.py` and `complex_duties.py`, whose commander reads cross only the
+  teams of one מכלול, always filtered on `teams.complex_id`. Keep every cross-team query there, name the `teams` columns
   explicitly, and never return a hash.
 - **A cross-team miss is a `NotFoundError`, never a distinct "wrong team".**
   Distinguishing them turns any id-taking endpoint into an oracle for which
@@ -124,7 +160,7 @@ the setup form owns its shape.
 - **A pending constraint request is never an `availability` row.** Promoting one
   is `bl/`'s job and happens only on the manager's approval; writing it here on
   submission would let an employee move the audit's arithmetic by asking, which
-  reverses [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-).
+  reverses [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34).
 - **`change_log` is append-only.** Never update or delete a row. It is the only
   history the system has ([D4](../../../docs/DECISIONS.md#d4--living-schedule-not-versioned)).
 - **`acknowledged_at` and `last_seen_at` are different columns on purpose.**
@@ -142,6 +178,6 @@ the setup form owns its shape.
   meant. `move_assignment` deliberately leaves it alone — dragging a
   hand-placed shift does not make it the agent's.
 - A schedule is edited in place. There are no version rows and no rollback.
-- Shift names are data, not enums — they come from `workplace_profile`.
+- Shift names are data, not enums — they come from the profile (`team_profiles.profile`).
 - SQL lives here and nowhere else. `bl/` never imports `psycopg`.
 - Employee personal details are never written to logs.

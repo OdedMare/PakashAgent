@@ -11,6 +11,7 @@ class _Repository:
         self.lanes = []
         self.finished = []
         self.reconciled = []
+        self.results = []
 
     def list_teams(self):
         return []
@@ -29,6 +30,9 @@ class _Repository:
     def queue_generation_job(self, team_id, schedule_id):
         self.reconciled.append((team_id, schedule_id))
 
+    def set_copilot_job_result(self, job_id, result):
+        self.results.append((job_id, result))
+
 
 class _Schedules:
     def __init__(self):
@@ -36,6 +40,18 @@ class _Schedules:
 
     def run_generation(self, *args):
         self.calls.append(args)
+
+
+class _Chat:
+    def __init__(self, refusal=None):
+        self.calls = []
+        self.refusal = refusal
+
+    def replacement_options(self, *args):
+        self.calls.append(args)
+        if self.refusal:
+            raise self.refusal
+        return {"employee": args[1], "slots": []}
 
 
 def test_worker_claims_only_its_lane():
@@ -75,3 +91,39 @@ def test_a_leftover_copilot_scan_is_finished_without_running_anything():
 
     assert JobWorker(repository).run_once("background") == 1
     assert repository.finished == [("job-2", "", False)]
+
+
+def test_replacement_search_runs_in_an_interactive_lane_and_saves_its_result():
+    job = {
+        "id": "job-3", "team_id": "team-a", "kind": "replacement_options",
+        "attempts": 1,
+        "payload": {
+            "employee": "דנה", "starts_on": "2026-10-05",
+            "ends_on": "2026-10-06",
+        },
+    }
+    repository = _Repository([job])
+    chat = _Chat()
+
+    assert JobWorker(repository, chat=chat).run_once("interactive") == 1
+    assert chat.calls == [("team-a", "דנה", "2026-10-05", "2026-10-06")]
+    assert repository.results == [
+        ("job-3", {"employee": "דנה", "slots": []}),
+    ]
+    assert repository.finished == [("job-3", "", False)]
+
+
+def test_a_refused_replacement_search_is_answered_once_not_retried():
+    from app.common.errors import AgentError
+
+    job = {
+        "id": "job-4", "team_id": "team-a", "kind": "replacement_options",
+        "attempts": 1,
+        "payload": {"employee": "דנה", "starts_on": "2026-10-05"},
+    }
+    repository = _Repository([job])
+    chat = _Chat(refusal=AgentError("התוכנית גדולה מדי"))
+
+    assert JobWorker(repository, chat=chat).run_once("interactive") == 1
+    assert repository.results == [("job-4", {"refused": "התוכנית גדולה מדי"})]
+    assert repository.finished == [("job-4", "", False)]

@@ -4,7 +4,7 @@ from typing import Dict, List
 
 from app.bl.audit.checks.base import AuditCheck, AuditInput
 from app.bl.audit.codes import (
-    MISSING_COMMANDER, MISSING_ROLE, OVERSTAFFED, SEVERITY_NOTICE,
+    FALLBACK_ROLE, MISSING_COMMANDER, MISSING_ROLE, OVERSTAFFED, SEVERITY_NOTICE,
     SEVERITY_WARNING, UNFILLED, warning,
 )
 from app.bl.audit.roster import index_people
@@ -12,7 +12,7 @@ from app.bl.audit.staffing_rules import (
     checked_slots, counted_rows, required_headcount, required_roles,
     requires_shift_manager, seat_counts,
 )
-from app.bl.audit.values import text
+from app.bl.audit.unit_policy import cover, fallbacks, held_roles, role_needs
 from app.bl.shared import parse_date
 
 
@@ -46,16 +46,12 @@ class StaffingCheck(AuditCheck):
         return warnings
 
     @staticmethod
-    def _filled_roles(data: AuditInput, people: Dict[str, dict]) -> Dict[tuple, set]:
-        filled: Dict[tuple, set] = {}
+    def _filled_roles(data: AuditInput, people: Dict[str, dict]) -> Dict[tuple, list]:
+        """Per slot, the roles each counted person on it holds."""
+        filled: Dict[tuple, list] = {}
         for row in counted_rows(data.rows, data.employees, data.profile):
-            person = people.get(row["employee"], {})
-            held = person.get("roles")
-            if not isinstance(held, list):
-                held = [person.get("role")]
-            filled.setdefault((row["date"], row["shift"]), set()).update(
-                text(role) for role in held if text(role)
-            )
+            filled.setdefault((row["date"], row["shift"]), []).append(
+                held_roles(people.get(row["employee"], {})))
         return filled
 
     @staticmethod
@@ -87,19 +83,31 @@ class StaffingCheck(AuditCheck):
 
     @staticmethod
     def _roles(
-        data: AuditInput, filled: Dict[tuple, set], date: str, shift_name: str,
+        data: AuditInput, filled: Dict[tuple, list], date: str, shift_name: str,
     ) -> List[dict]:
-        present = filled.get((date, shift_name), set())
-        return [
+        """A role listed N times needs N holders, one seat each; a holder of
+        a fallback role fills a seat with a notice."""
+        needs = role_needs(required_roles(
+            data.shifts, shift_name, parse_date(date), data.slots))
+        if not needs:
+            return []
+        missing, substituted = cover(
+            filled.get((date, shift_name), []), needs, fallbacks(data.profile))
+        warnings = [
             warning(
                 MISSING_ROLE, SEVERITY_WARNING,
-                "במשמרת %s בתאריך %s חסר התפקיד הנדרש %s."
-                % (shift_name, date, role),
+                "במשמרת %s בתאריך %s חסר התפקיד הנדרש %s%s."
+                % (shift_name, date, role, "" if count == 1 else " (%d)" % count),
                 date=date, shift=shift_name,
-                details={"required_role": role},
+                details=dict({"required_role": role}, **({"missing": count} if count > 1 else {})),
             )
-            for role in required_roles(
-                data.shifts, shift_name, parse_date(date), data.slots
-            )
-            if role not in present
+            for role, count in sorted(missing.items())
         ]
+        if substituted:
+            warnings.append(warning(
+                FALLBACK_ROLE, SEVERITY_NOTICE,
+                "במשמרת %s בתאריך %s %d תפקידים מאוישים בעדיפות שנייה (תפקיד חלופי)."
+                % (shift_name, date, substituted),
+                date=date, shift=shift_name, details={"substituted": substituted},
+            ))
+        return warnings

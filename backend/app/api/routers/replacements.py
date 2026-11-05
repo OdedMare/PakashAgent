@@ -7,6 +7,8 @@ one write path and the one approval (D12/D19), never through this route.
 
 from fastapi import APIRouter, Depends, Query
 
+from app.api.contracts import ReplacementSearchRequest
+
 
 def build_router(service, guards):
     router = APIRouter(prefix="/api/agent/replacements", tags=["manager chat"])
@@ -22,5 +24,23 @@ def build_router(service, guards):
         return service.replacement_options(
             session["team_id"], employee, starts_on, ends_on,
         )
+
+    @router.post("/searches", status_code=202)
+    def start_search(
+        request: ReplacementSearchRequest,
+        session: dict = Depends(manager),
+    ):
+        return service.start_replacement_search(
+            session["team_id"], request.employee,
+            request.starts_on, request.ends_on,
+        )
+
+    @router.get("/searches/{search_id}")
+    def read_search(search_id: str, session: dict = Depends(manager)):
+        return service.replacement_search(session["team_id"], search_id)
+
+    @router.delete("/searches/{search_id}", status_code=204)
+    def cancel_search(search_id: str, session: dict = Depends(manager)):
+        service.cancel_replacement_search(session["team_id"], search_id)
 
     return router

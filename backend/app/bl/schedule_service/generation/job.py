@@ -76,6 +76,7 @@ class GenerationJob:
         required: List[dict],
         shifts: Optional[List[str]] = None,
         keep_existing: bool = False,
+        staffing_overrides: Optional[List[dict]] = None,
     ) -> "GenerationJob":
         """A fresh job, running, with every span pending.
 
@@ -99,6 +100,7 @@ class GenerationJob:
             "required_assignments": required or [],
             "shifts": list(shifts or []),
             "keep_existing": bool(keep_existing),
+            "staffing_overrides": [dict(row) for row in staffing_overrides or []],
             "notes": [],
             "summaries": [],
             "heartbeat": now_stamp(),
