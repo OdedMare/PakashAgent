@@ -147,7 +147,9 @@ history entries were logged since its last answer
 (`history_since_last_reply`), so edits made on the board meanwhile are read
 rather than assumed away.
 
-The Apply button approves the server-stored plan. The server checks its owner
+The Apply button approves a server-stored `change_plans` row. The conversation
+message references that plan rather than owning its JSON; the API hydrates the
+same payload shape for the existing UI. The server checks its owner
 and a snapshot of the profile, availability, preferences and target schedule.
 For a new period it also checks the existing period list. Stale plans must be
 recreated. A new message supersedes the previous pending plan. Repeated Apply
@@ -177,7 +179,9 @@ cache, like a build started from the board.
 
 `backend/app/bl/chat/service.py` (`ManagerChatService`) orchestrates the conversation and calls
 the existing tools and services. `backend/app/dal/repository/chat.py` owns
-the private transcripts, turn idempotency and approval transaction.
+the private transcripts and turn idempotency. `backend/app/bl/change_plans/`
+owns approval, while `backend/app/dal/repository/change_plans.py` owns the
+source-independent plan lifecycle and transaction lock.
 `frontend/src/components/Management/AgentChat.tsx` renders the conversation;
 `useManagerChat.ts` manages history, polling and explicit approval requests.
 

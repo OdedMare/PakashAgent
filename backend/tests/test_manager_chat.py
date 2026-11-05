@@ -28,6 +28,7 @@ class ChatRepo(_FakeScheduleRepo):
         super().__init__()
         self.profiles = {TEAM: copy.deepcopy(PROFILE)}
         self.chats = {}
+        self.change_plans = {}
         self.progress = []
 
     def create_chat(self, team_id, manager_id):
@@ -44,6 +45,13 @@ class ChatRepo(_FakeScheduleRepo):
         ids = [row["id"] for row in chat["messages"]]
         if from_message in ids:
             chat["messages"] = chat["messages"][ids.index(from_message):]
+        for row in chat["messages"]:
+            plan_id = row.get("plan_id")
+            if plan_id:
+                row["payload"]["plan_id"] = plan_id
+                row["payload"]["plan"] = copy.deepcopy(
+                    self.change_plans[plan_id]["body"]
+                )
         return chat
 
     def list_chats(self, team_id, manager_id):
@@ -62,10 +70,15 @@ class ChatRepo(_FakeScheduleRepo):
             index = next(i for i, row in enumerate(rows) if row["id"] == replace_from)
             if any(row["status"] == "applied" or row["payload"].get("receipt") for row in rows[index:]):
                 raise ConflictError("כבר אושר")
+            for row in rows[index:]:
+                if row.get("plan_id"):
+                    self.change_plans[row["plan_id"]]["status"] = "superseded"
             del rows[index:]
         for row in self.chats[chat_id]["messages"]:
             if row["status"] == "pending":
                 row["status"] = "superseded"
+                if row.get("plan_id"):
+                    self.change_plans[row["plan_id"]]["status"] = "superseded"
         message_id = self._id("message")
         self.chats[chat_id]["messages"] += [
             dict(id=self._id("user"), role="user", content=content, status="complete", payload={}, request_id=request_id),
@@ -76,7 +89,67 @@ class ChatRepo(_FakeScheduleRepo):
     def finish_chat_turn(self, chat_id, message_id, content, status, payload):
         for row in self.chats[chat_id]["messages"]:
             if row["id"] == message_id and row["status"] == "working":
+                payload = copy.deepcopy(payload)
+                plan = payload.pop("plan", None)
+                if plan is not None:
+                    plan_id = self._id("plan")
+                    self.change_plans[plan_id] = dict(
+                        id=plan_id, team_id=self.chats[chat_id]["team_id"],
+                        source="chat", source_ref=message_id,
+                        status="pending", body=plan, receipt=None,
+                    )
+                    payload["plan_id"] = plan_id
+                    row["plan_id"] = plan_id
                 row.update(content=content, status=status, payload=payload)
+
+    def ensure_chat_change_plan(self, team_id, manager_id, chat_id, message_id):
+        chat = self.chats.get(chat_id)
+        if not chat or (chat["team_id"], chat["manager_id"]) != (team_id, manager_id):
+            raise NotFoundError("השיחה לא נמצאה")
+        row = next(
+            (row for row in chat["messages"] if row["id"] == message_id), None,
+        )
+        if row is None:
+            raise NotFoundError("ההצעה לא נמצאה")
+        if row.get("plan_id"):
+            return row["plan_id"]
+        plan = row["payload"].pop("plan", None)
+        if not plan:
+            raise ConflictError("אין תוכנית")
+        plan_id = self._id("plan")
+        self.change_plans[plan_id] = dict(
+            id=plan_id, team_id=team_id, source="chat", source_ref=message_id,
+            status="pending", body=plan, receipt=None,
+        )
+        row["plan_id"] = plan_id
+        row["payload"]["plan_id"] = plan_id
+        return plan_id
+
+    @contextmanager
+    def change_plan_approval(self, team_id, plan_id):
+        plan = self.change_plans[plan_id]
+        if plan["team_id"] != team_id or plan["status"] not in ("pending", "applied"):
+            raise ConflictError("תוכנית ישנה")
+        before = copy.deepcopy(self.__dict__)
+        try:
+            yield copy.deepcopy(plan)
+        except Exception:
+            self.__dict__.update(before)
+            raise
+
+    def lock_chat_plan_source(self, team_id, manager_id, chat_id, message_id, plan_id):
+        chat = self.chats[chat_id]
+        if (chat["team_id"], chat["manager_id"]) != (team_id, manager_id):
+            raise NotFoundError("השיחה לא נמצאה")
+        row = next(row for row in chat["messages"] if row["id"] == message_id)
+        if row.get("plan_id") != plan_id or row["status"] not in ("pending", "applied"):
+            raise ConflictError("הצעה ישנה")
+        return copy.deepcopy(row)
+
+    def mark_change_plan_applied(self, plan_id, team_id, receipt):
+        plan = self.change_plans[plan_id]
+        if plan["team_id"] == team_id and plan["status"] == "pending":
+            plan.update(status="applied", receipt=copy.deepcopy(receipt))
 
     def chat_turn_draft(self, chat_id, message_id, draft):
         self.drafts = getattr(self, "drafts", []) + [draft]
@@ -182,12 +255,21 @@ def test_sickness_preview_writes_nothing_then_click_applies_plan_and_absence_onc
     repo, llm, service, chat_id, schedule_id = setup([sickness()])
     message = converse(service, repo, chat_id, schedule_id)
     assert message["status"] == "pending"
+    plan_id = message["payload"]["plan_id"]
+    stored_message = next(
+        row for row in repo.chats[chat_id]["messages"]
+        if row["id"] == message["id"]
+    )
+    assert "plan" not in stored_message["payload"]
+    assert repo.change_plans[plan_id]["body"] == message["payload"]["plan"]
     assert repo.assignments(schedule_id, TEAM)[0]["employee"] == "דנה"
     assert not repo.availability_rows and not repo.changes
     service.apply(TEAM, "manager-a", chat_id, message["id"], True)
     assert [row["employee"] for row in repo.assignments(schedule_id, TEAM)] == ["יוסי"]
     assert repo.availability_rows[0]["available"] is False
     assert repo.availability_rows[0]["reason"] == "מחלה"
+    assert repo.change_plans[plan_id]["status"] == "applied"
+    assert repo.change_plans[plan_id]["receipt"]["schedule_id"] == schedule_id
     change_count = len(repo.changes)
     service.apply(TEAM, "manager-a", chat_id, message["id"], True)
     assert len(repo.changes) == change_count

@@ -1,7 +1,7 @@
 """The agent: one saved conversation per manager (`docs/MANAGER_CHAT.md`).
 
-A turn prepares a plan and writes nothing; `apply.py` applies it on the
-manager's approval, atomically, after checking nothing moved.
+A turn prepares a plan and writes nothing; `apply.py` adapts the conversation
+to the source-independent `bl/change_plans/` approval service.
 
 | Module | Owns |
 |---|---|
@@ -18,7 +18,7 @@ manager's approval, atomically, after checking nothing moved.
 | `lifecycle.py` | Departures, blank periods and shift-grid migrations, prepared read-only |
 | `constraints.py` | Profile and constraint edits: normalising, impact, affected periods |
 | `management.py` | Inbox and preference actions, prepared read-only and applied on approval |
-| `apply.py` | `ChatPlanApplier`: one transaction on approval, after a state check |
+| `apply.py` | The chat adapter: ownership, confirmation message and receipt |
 | `draft.py` | Saving the reply as it streams |
 
 `ManagerChatService` is loaded on first use rather than here: `bl/absence/`

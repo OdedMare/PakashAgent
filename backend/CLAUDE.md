@@ -187,6 +187,10 @@ python -m benchmarks.solver_bench --save before.json   # solver quality and time
   meets every check a model plan does. Run inline by `start_turn` before the
   model loop (`bl/chat/fast.py`); anything it cannot read goes to the model.
   Also behind the read-only replacement tab, `GET /api/agent/replacements`.
+- `bl/change_plans/` — **the write gate for approved plans.** A plan is stored
+  independently of the chat that proposed it; approval rechecks its snapshot,
+  applies it once in one serializable transaction, and correlates every audit
+  row through `plan_id`. `bl/chat/apply.py` is only the conversation adapter.
 - `bl/simulate/` — what a change *would* do, computed in memory. Handed no
   repository, so persisting nothing is a property of the wiring (D20). The
   chat's `simulate_changes` tool reads it.

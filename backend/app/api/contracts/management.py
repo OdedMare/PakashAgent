@@ -48,6 +48,7 @@ class ChangeEntry(BaseModel):
     # Who was acting: `boss:<manager_id>`, `employee:<name>`, `admin`, or
     # empty for the system (and for rows older than the column).
     actor: str = ""
+    plan_id: Optional[str] = None
     created_at: Optional[str] = None
 
 

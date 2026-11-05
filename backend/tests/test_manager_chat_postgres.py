@@ -97,11 +97,16 @@ def test_real_generation_queue_has_one_claimable_job_per_span(real_repo):
 @pytest.mark.parametrize("published", [False, True])
 def test_real_batch_commits_assignments_absence_receipt_and_idempotency(real_repo, published):
     team, period, chat, message, service = seed(real_repo, published)
+    pending = real_repo.get_chat(team, "manager-a", chat)["messages"][-1]
+    plan_id = pending["payload"]["plan_id"]
+    assert real_repo.get_change_plan(plan_id, team)["status"] == "pending"
     service.apply(team, "manager-a", chat, message, True)
     assert [row["employee"] for row in real_repo.assignments(period, team)] == ["יוסי"]
     assert real_repo.availability(team)[0]["employee"] == "דנה"
     assert real_repo.get_chat(team, "manager-a", chat)["messages"][-1]["status"] == "applied"
     assert real_repo.get_schedule(period, team)["status"] == "draft"
+    assert real_repo.get_change_plan(plan_id, team)["status"] == "applied"
+    assert {row["plan_id"] for row in real_repo.change_log(team)} == {plan_id}
     count = len(real_repo.change_log(team))
     service.apply(team, "manager-a", chat, message, True)
     assert len(real_repo.change_log(team)) == count

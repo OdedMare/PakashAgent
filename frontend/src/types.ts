@@ -762,6 +762,7 @@ export interface ChangeEntry {
   shift_name: string;
   reason: string;
   agent_reason: string;
+  plan_id?: string | null;
   created_at: string | null;
 }
 
@@ -1368,6 +1369,7 @@ export interface ManagerChatMessage {
     draft?: string;
     /** Up to three next messages the agent offers as one-click follow-ups. */
     suggestions?: string[];
+    plan_id?: string;
     plan?: ChatPlan;
     results?: (ManagerToolResult | StaffingScenarioResult | ChangeSimulationResult)[];
     /** Set when code answered the turn without a model round. */

@@ -87,9 +87,11 @@ Every table is composed in `schema.py` (DDL in `repository/ddl/`, plus
 and rules remain JSON on the team's profile, which is what
 `team_profile()` reads. Manager conversations are separate durable rows: the
 parent carries `team_id` and signed browser `manager_id`; messages belong to that
-parent. Reads and approvals verify the parent owner before accessing messages.
+parent. A pending mutation lives separately in `change_plans`; the message
+references it and the read hydrates the old payload shape for the UI. Reads and
+approvals verify both the conversation owner and the plan's team.
 
-Chat approval uses `database.py:atomic()` to compose existing repository
+Change-plan approval uses `database.py:atomic()` to compose existing repository
 writes in one serializable transaction. Their inner `commit()` calls are deferred
 until the approval's outer transaction succeeds, so a failed later assignment or
 constraint write also rolls back earlier writes and the approval receipt.
@@ -113,6 +115,7 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | `complex_duties` | One soldier (`team_id` + roster name) on one duty for one whole day, owned by the מכלול. Projected into the team's `availability()` as a `duty` with no hours, which blocks midnight to midnight; the team's own constraint delete refuses it |
 | `commander_notices` | What a מכלול commander changed inside a team, for that team's own commander: the action in words, a count of folded repeats, `seen_at` |
 | `team_profiles` | One structured workplace profile per team, with a `revision` bumped on every save: a save naming an older one is refused (409) instead of silently undoing another manager's edit |
+| `change_plans` | One immutable proposed mutation, its source, owner, lifecycle status and eventual receipt. `change_log.plan_id` groups the detailed audit rows it produced |
 | `schedules` | One living schedule per period, `draft` or `published` |
 | `shift_slots` | One shift on one date — the thing an assignment points into |
 | `assignments` | person → slot, **with the agent's reason** (`NOT NULL`). `source` records whether the agent generated the row, the manager placed it by hand, or it was imported ([D18](../../../docs/DECISIONS.md#d18--the-boss-can-place-a-shift-without-the-agent-️-completes-d6)) |

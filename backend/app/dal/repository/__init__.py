@@ -5,6 +5,7 @@ from app.dal.repository.admin import AdminRepository
 from app.dal.repository.identities import IdentityRepository
 from app.dal.repository.identity_changes import IdentityChangeRepository
 from app.dal.repository.chat import ChatRepository
+from app.dal.repository.change_plans import ChangePlanRepository
 from app.dal.repository.complexes import ComplexRepository
 from app.dal.repository.complex_duties import ComplexDutyRepository
 from app.dal.repository.compiled_sources import CompiledSourcesRepository
@@ -23,6 +24,7 @@ _INITIALIZE_LOCK = "hashtextextended(current_schema() || ':initialize', 0)"
 class Repository(
     TeamRepository, ScheduleRepository, IdentityRepository,
     ChatRepository, AdminRepository, JobsRepository,
+    ChangePlanRepository,
     CompiledSourcesRepository, ThrottleRepository, DeploymentRepository,
     ComplexRepository, ComplexDutyRepository, IdentityChangeRepository,
 ):

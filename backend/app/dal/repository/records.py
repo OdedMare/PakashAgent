@@ -3,6 +3,7 @@
 from typing import List, Optional
 
 from app.common.actor import current_actor
+from app.common.change_plan import current_plan_id
 from app.common.errors import AgentError, NotFoundError
 from app.dal.repository.base import RepositoryBase, new_id
 from app.dal.repository.schedule_vocabulary import (
@@ -242,11 +243,11 @@ class ChangeLogRepository(RepositoryBase):
             INSERT INTO change_log (
                 id, team_id, schedule_id, action, employee,
                 replaced_employee, slot_date, shift_name, reason, agent_reason,
-                actor
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                actor, plan_id
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """, (row_id, team_id, schedule_id, action, employee,
               replaced_employee, slot_date, shift_name, reason, agent_reason,
-              current_actor()))
+              current_actor(), current_plan_id() or None))
         return self._one(
             "SELECT * FROM change_log WHERE id=%s AND team_id=%s", (row_id, team_id),
         )
