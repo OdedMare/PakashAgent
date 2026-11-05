@@ -87,8 +87,10 @@ RETRY_MAX_SECONDS = 15.0
 # generated date. On a month at one call per day that is thirty scans of the
 # team's whole history to compute a tally that was identical every time.
 HISTORY_CACHE_SECONDS = 300
-# Past assignments read for fairness before the scan stops.
-HISTORY_ROW_LIMIT = 300
+# A guard on the past assignments read for fairness. The read is bounded by
+# date (the fairness ledger's window, `solver/ledger.py`); this only stops a
+# runaway history. 300 stopped a team of thirty about a month back.
+HISTORY_ROW_LIMIT = 20000
 # Cached (team, before) entries kept before the cache is dropped.
 HISTORY_CACHE_ENTRIES = 64
 

@@ -555,6 +555,9 @@ function personSummary(row: ShiftStats["by_employee"][number]): string {
     formatHours(row.hours),
   ];
   if (row.on_call) parts.push(`${row.on_call} כוננויות`);
+  if (row.weighted !== undefined && row.weighted !== row.shifts && !row.duties) {
+    parts.push(`עומס משוקלל ${row.weighted}`);
+  }
   if (row.duties) {
     parts.push(`${row.duties} תורנויות מכלול (${row.weekend_duties ?? 0} בסופ״ש)`);
     parts.push(`עומס כולל ${row.load ?? row.shifts}`);

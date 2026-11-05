@@ -17,6 +17,8 @@ schedules the pick may differ from one build to the next.
 | `rules.py` | Seats, roles, the shift manager, נחפפים beside a trainer, rest, runs of days, weekly hours |
 | `requests.py` | Structured requests (`bl/schedule_requests.py`) and soft availability |
 | `fairness.py` | Closers, shifts and nights spread to per-person targets, the longest rest between shifts |
+| `ledger.py` | The fairness ledger: load carried in the eight weeks before the fixed rows (D51) |
+| `continuity.py` | A new week keeps the shape of the last two, among otherwise equal schedules (D53) |
 | `competence.py` | A reservist's days a week (cap, minimum, one block); shifts balanced by competence so the weakest are not staffed together |
 | `stability.py` | Absorbing a change into an existing board: moving as few rows as it needs |
 | `solve.py` | Solving, reasons, notes, warnings and metrics |

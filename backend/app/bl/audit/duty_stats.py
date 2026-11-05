@@ -1,10 +1,11 @@
 """מכלול duties in the stats panel: how many, of which kind, and the load.
 
 A duty day is load the soldier carried outside the team's grid, counted in
-shifts by its type's `weight` -- the same figure the solver evens out
+shifts by its type's `weight` and added to the shifts weighed by their
+load weight (`roster.load_weight`) -- the same figure the solver evens out
 (`solver/problem._duty_load`), so the panel and the build agree on who is
 carrying more. A report like the rest of `shift_stats`: nothing here is a
-quota (D3). With no duties every figure is zero and `load` is `shifts`.
+quota (D3). With no duties every figure is zero and `load` is the weighted shifts.
 """
 
 import datetime
@@ -38,7 +39,9 @@ def add_duties(stats: dict, duties: Optional[List[dict]], employee: str = "") ->
     for item in stats.get("by_employee") or []:
         item.update(people.get(item["employee"], {"duties": 0, "duty_load": 0,
                                                     "weekend_duties": 0}))
-        item["load"] = item["shifts"] + item["duty_load"]
+        # Shifts by their load weight (a night 1.5, `roster.load_weight`),
+        # the figure the solver evens.
+        item["load"] = round(item.get("weighted", item["shifts"]) + item["duty_load"], 2)
     stats["by_employee"] = sorted(
         stats.get("by_employee") or [],
         key=lambda item: (-item["load"], -item["shifts"], -item["hours"], item["employee"]),

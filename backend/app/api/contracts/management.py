@@ -107,13 +107,16 @@ class EmployeeLoad(BaseModel):
     # roster no longer lists.
     exit_pattern: str = ""
     rotation_group: str = ""
+    # `shifts` weighed by each shift's load weight (a night 1.5 by default,
+    # `audit.roster.load_weight`).
+    weighted: float = 0.0
     # מכלול duties in the span: how many, of them on Friday/Saturday, and
-    # their weighted load in shifts. `load` is `shifts` plus `duty_load` --
+    # their weighted load in shifts. `load` is `weighted` plus `duty_load` --
     # what the solver evens out, and what the list is ordered by.
     duties: int = 0
     weekend_duties: int = 0
     duty_load: int = 0
-    load: int = 0
+    load: float = 0
 
 
 class DutyLoad(BaseModel):

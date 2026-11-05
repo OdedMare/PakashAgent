@@ -180,6 +180,7 @@ def _by_employee(
         item = entry(row["employee"])
         item["hours"] = round(item["hours"] + row["hours"], 2)
         item["shifts"] += 1
+        item["weighted"] = round(item["weighted"] + row["load"], 2)
         item["nights"] += bool(row["is_night"])
         item["on_call"] += bool(row["is_on_call"])
         worked.setdefault(row["employee"], set()).add(row["date"])
@@ -196,7 +197,7 @@ def _by_employee(
 
 def _empty_person(name: str) -> dict:
     return {
-        "employee": name, "hours": 0.0, "shifts": 0, "nights": 0,
+        "employee": name, "hours": 0.0, "shifts": 0, "weighted": 0.0, "nights": 0,
         "on_call": 0, "days": 0, "conflicts": 0,
         "exit_pattern": "", "rotation_group": "",
     }

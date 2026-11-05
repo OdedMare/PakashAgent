@@ -832,9 +832,12 @@ export interface EmployeeLoad {
    *  somebody the roster no longer lists. */
   exit_pattern: string;
   rotation_group: string;
+  /** `shifts` weighed by each shift's load weight (a night 1.5 unless setup
+   *  says otherwise). */
+  weighted?: number;
   /** מכלול duties in the span, those on Friday/Saturday, and their load in
-   *  shifts by each type's weight. `load` is `shifts` + `duty_load`: what the
-   *  solver evens out, and what the list is ordered by. Zero without duties. */
+   *  shifts by each type's weight. `load` is `weighted` + `duty_load`: what the
+   *  solver evens out, and what the list is ordered by. */
   duties?: number;
   weekend_duties?: number;
   duty_load?: number;

@@ -24,8 +24,10 @@ of load and do not grow with the team, so one shift of evenness stays
 cheaper than a soft wish however large the team is (`model.py`).
 
 The load counts the rows already fixed (the rest of the draft and the last
-two weeks), so a day rebuilt inside a period, or a period following a heavy
-one, leans away from whoever already carries more. A day of מכלול duty in
+two weeks), and the fairness ledger beyond them (`ledger.py`: eight weeks
+by default, older weeks at half), so a day rebuilt inside a period, or a
+period following a heavy month, leans away from whoever already carries
+more. A day of מכלול duty in
 that window counts as `weight` shifts carried; nights are not charged for
 it. With no duties the spread is exactly what it was. People with no legal
 placement and nothing fixed take no part.
@@ -44,18 +46,33 @@ from app.bl.solver.rules import timed_pairs
 
 def apply_fairness(model: Model) -> None:
     _closers(model)
-    shifts = lambda times: SHIFT_SCALE
-    # A day of מכלול duty is a shift already carried (`problem._duty_load`).
-    duties = {name: SHIFT_SCALE * load for name, load in model.problem.duty_load.items()}
-    _spread(model, shifts, SHIFT_SPREAD, SHIFT_PEAK, "shifts", carried=duties)
+    # A shift counts by its load weight: a night 1.5 unless the manager
+    # chose otherwise (`roster.load_weight`), so whoever carried the nights
+    # carries fewer shifts. Nights are evened on their own as well.
+    shifts = lambda times: load_units(times)
+    # A day of מכלול duty is a shift already carried (`problem._duty_load`),
+    # and the weeks before the fixed rows are carried too (`ledger.py`).
+    problem = model.problem
+    duties = {name: SHIFT_SCALE * load for name, load in problem.duty_load.items()}
+    _spread(model, shifts, SHIFT_SPREAD, SHIFT_PEAK, "shifts",
+            carried=_added(duties, problem.carried(shifts)))
     nights = lambda times: NIGHT_SCALE * int(bool(times["night"]))
-    _spread(model, nights, NIGHT_SPREAD, NIGHT_PEAK, "nights")
+    _spread(model, nights, NIGHT_SPREAD, NIGHT_PEAK, "nights", carried=problem.carried(nights))
     clocked = any(times["begins"] is not None for times in model.problem.times)
     for name in model.problem.people:
         if clocked:
             _spacing(model, name)
         else:
             _back_to_back(model, name)
+
+
+def _added(first: Dict[str, int], second: Dict[str, int]) -> Dict[str, int]:
+    return {name: first.get(name, 0) + second.get(name, 0) for name in set(first) | set(second)}
+
+
+def load_units(times: dict) -> int:
+    """One shift's load in model units: `SHIFT_SCALE` times its weight."""
+    return int(round(SHIFT_SCALE * float(times.get("load", 1.0))))
 
 
 def _closers(model: Model) -> None:

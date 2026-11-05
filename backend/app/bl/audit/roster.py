@@ -61,6 +61,28 @@ def shift_hours(shift: dict) -> float:
     return round((minutes / MINUTES_PER_HOUR) * weight, 2)
 
 
+# How much one shift weighs when load is evened (`solver/fairness.py`), as
+# the manager may choose it. A night weighs more than a day: it costs the
+# night's sleep, and a soldier who carried the nights should carry fewer
+# shifts. The ceiling keeps one night of evenness cheaper than a soft wish
+# (`solver/model.py`), so a wish is never broken to even out one shift.
+LOAD_WEIGHTS = (0.5, 0.75, 1.0, 1.25, 1.5, 1.75)
+NIGHT_LOAD_WEIGHT = 1.5
+
+
+def load_weight(shift: dict) -> float:
+    """The shift's stated `load_weight`, else 1.5 for a night (not an
+    on-call: a night a person is only available is not a night worked)
+    and 1 for everything else."""
+    stated = shift.get("load_weight")
+    if isinstance(stated, (int, float)) and not isinstance(stated, bool) \
+            and float(stated) in LOAD_WEIGHTS:
+        return float(stated)
+    if is_night(shift) and not shift.get("is_on_call"):
+        return NIGHT_LOAD_WEIGHT
+    return 1.0
+
+
 def is_night(shift: dict) -> bool:
     """Count declared nights and overnight/early shifts from their actual times."""
     if shift.get("is_on_call") or shift.get("is_night") or shift.get("is_overnight"):
@@ -98,6 +120,7 @@ def row(item: Any, shift_index: Dict[str, dict]) -> Optional[dict]:
         "hours": shift_hours(shift),
         "is_on_call": bool(shift.get("is_on_call")),
         "is_night": is_night(shift),
+        "load": load_weight(shift),
     }
 
 

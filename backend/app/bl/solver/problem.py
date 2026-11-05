@@ -11,6 +11,7 @@ import datetime
 from typing import Dict, List, Optional
 
 from app.bl import rotation
+from app.bl.solver import ledger
 from app.bl.audit import constraint_conflicts, counts_toward_staffing
 from app.bl.audit.roster import index_shifts, policy, row as timed_row, rows_of
 from app.bl.solver.rows import assignment, eligible, employees, text, unique
@@ -55,6 +56,8 @@ class Problem:
         self.pins = self._pins(required_assignments)
         self.fixed = self._fixed(already_scheduled, history)
         self.duty_load = self._duty_load(duties)
+        self.ledger_weeks = ledger.lookback_weeks(self.profile)
+        self.ledger_rows, self.first_seen, self.ledger_active = self._ledger(history, duties)
         self.legal = {(name, index): True for name in self.people
                       for index in range(len(slots)) if self._legal(name, index)}
         self.keep, self.kept_rows = self._keep(keep)
@@ -122,6 +125,20 @@ class Problem:
             seen.add((name, day))
             load[name] = load.get(name, 0) + max(0, weight)
         return {name: value for name, value in load.items() if value}
+
+    def _ledger(self, history, duties) -> tuple:
+        """Load older than the fixed rows, for the evenness only (`ledger.py`)."""
+        if not self.dates or not self.ledger_weeks:
+            return [], {}, set()
+        rows = [row for row in map(assignment, history or []) if row]
+        timed = lambda row: dict(row, **_times(timed_row(row, self.shifts)))
+        return ledger.window(rows, self.fixed, duties or [], datetime.date.fromisoformat(
+            self.dates[0]), self.ledger_weeks, LOOKBACK_DAYS, timed)
+
+    def carried(self, measure) -> Dict[str, int]:
+        """Each counted person's ledger load in `measure`'s units."""
+        return ledger.carried(self.ledger_rows, self.first_seen, self.ledger_active,
+                              self.staff, self.ledger_weeks, measure)
 
     def _keep(self, keep) -> tuple:
         """The board's rows inside the plan, as {(name, slot): reason}, and
@@ -256,13 +273,15 @@ def _slot_time(slot: dict, shifts: Dict[str, dict]) -> dict:
 
 def _times(timed) -> dict:
     """Start and end as datetimes (None when the shift has no clock), its
-    weighted hours and whether it is a night."""
+    weighted hours, whether it is a night and its load weight
+    (`roster.load_weight`)."""
     if not timed:
-        return {"begins": None, "ends": None, "hours": 0.0, "night": False}
+        return {"begins": None, "ends": None, "hours": 0.0, "night": False, "load": 1.0}
     begins = ends = None
     if timed["day"] is not None and timed["start"] is not None and timed["end"] is not None:
         begins = datetime.datetime.combine(timed["day"], timed["start"].time())
         ends = datetime.datetime.combine(timed["day"], timed["end"].time())
         if timed["end"] <= timed["start"]:
             ends += datetime.timedelta(days=1)
-    return {"begins": begins, "ends": ends, "hours": timed["hours"], "night": timed["is_night"]}
+    return {"begins": begins, "ends": ends, "hours": timed["hours"], "night": timed["is_night"],
+            "load": timed["load"]}

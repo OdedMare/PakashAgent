@@ -23,7 +23,7 @@ import { TimeInput } from "@/components/TimeInput";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import { deleteShiftType, previewDeparture, updateProfile } from "@/services/api";
 import { cyclePattern, isDayCycle } from "@/lib/dayCycles";
-import { STATUS_LABELS, ShiftLevelSelect, SoldierFields, shiftCount, statusFields, statusOf } from "@/components/Management/SoldierFields";
+import { LoadWeightSelect, STATUS_LABELS, ShiftLevelSelect, SoldierFields, loadWeightOf, loadWeightValue, shiftCount, statusFields, statusOf } from "@/components/Management/SoldierFields";
 import { ExitPatternFields } from "@/components/Management/ExitPatternFields";
 import type { UnitPolicy } from "@/services/api";
 import type { DayCycle, RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
@@ -447,6 +447,7 @@ export function ManualSetup({
           // Role limits are no longer set in setup; a save clears any stored.
           allowed_roles: [],
           min_competence: text(shift.min_competence),
+          load_weight: loadWeightOf(loadWeightValue(shift.load_weight)),
         })),
         rules: rules
           .filter((rule) => text(rule.text))
@@ -708,6 +709,7 @@ export function ManualSetup({
                   <Field label="תקן סופ״ש"><input title={`חל על: ${closureDays(shift, closure).join(", ")}`} type="number" min={0} max={100} value={shift.weekend_headcount === "" || shift.weekend_headcount === undefined ? "" : String(shift.weekend_headcount)} placeholder="כמו באמצע השבוע" onChange={(e) => edit(setShifts, index, "weekend_headcount", e.target.value === "" ? "" : seats(e.target.value))} /></Field>
                   <Field label="ייעוד"><input value={inputText(shift.purpose)} onChange={(e) => edit(setShifts, index, "purpose", e.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></Field>
                   <Field label="משמרת חזקה (רמה מקצועית)"><ShiftLevelSelect value={text(shift.min_competence)} onChange={(level) => edit(setShifts, index, "min_competence", level)} /></Field>
+                  <Field label="משקל עומס"><LoadWeightSelect value={loadWeightValue(shift.load_weight)} onChange={(weight) => edit(setShifts, index, "load_weight", loadWeightOf(weight))} /></Field>
                 </div>
                 {text(shift.starts_on) && text(shift.ends_on) ? <p className="manual-zero-note">משמרת זמנית: תופיע בסידור רק בטווח התאריכים שנבחר.</p> : null}
                 {offNote(number(shift.headcount, headcount(shift)), shift.weekend_headcount) ? <p className="manual-zero-note">{offNote(number(shift.headcount, headcount(shift)), shift.weekend_headcount)}</p> : null}

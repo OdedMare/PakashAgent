@@ -12,7 +12,10 @@ from app.bl.schedule_service.constants import (
     HISTORY_ROW_LIMIT,
 )
 from app.bl.schedule_service.rows import iso
-from app.bl.solver.problem import LOOKBACK_DAYS as DUTY_LOOKBACK_DAYS
+from app.bl.solver.ledger import MAX_WEEKS
+
+# The widest window any build looks back over: the fairness ledger's.
+LEDGER_DAYS = MAX_WEEKS * 7
 
 
 class AssignmentHistory:
@@ -51,10 +54,18 @@ class AssignmentHistory:
         return list(rows)
 
     def _read(self, team_id: str, before: str) -> List[dict]:
+        """Every row of the earlier periods inside the fairness ledger's
+        widest window (`solver/ledger.MAX_WEEKS`), newest period first. Bounded
+        by date, not by a count of rows: a count stopped a team of thirty
+        about a month back, short of the eight weeks the ledger evens over.
+        `HISTORY_ROW_LIMIT` is only a guard against a runaway history."""
         rows: List[dict] = []
+        cutoff = _days_before(before, LEDGER_DAYS)
         for period in self._repository.list_schedules(team_id):
             if iso(period["starts_on"]) >= before:
                 continue
+            if cutoff and iso(period.get("ends_on")) and iso(period["ends_on"]) < cutoff:
+                break
             rows.extend(
                 {
                     "employee": row["employee"],
@@ -62,6 +73,7 @@ class AssignmentHistory:
                     "date": iso(row["date"]),
                 }
                 for row in self._repository.assignments(period["id"], team_id)
+                if not cutoff or iso(row["date"]) >= cutoff
             )
             if len(rows) > HISTORY_ROW_LIMIT:
                 break
@@ -69,15 +81,15 @@ class AssignmentHistory:
 
     def duties(self, team_id: str, starts_on: str, ends_on: str) -> List[dict]:
         """The team's מכלול duties a build counts as load (blocking or only
-        recorded): from the fairness lookback before `starts_on` through
-        `ends_on`. Empty for a team outside a מכלול, or a repository that
+        recorded): from the fairness ledger's widest window before
+        `starts_on` through `ends_on`. Empty for a team outside a מכלול, or a repository that
         holds none. Not cached: a duty set a moment ago must count."""
         reader = getattr(self._repository, "team_complex_duties", None)
         if reader is None or not starts_on or not ends_on:
             return []
         try:
             first = datetime.date.fromisoformat(iso(starts_on)) - datetime.timedelta(
-                days=DUTY_LOOKBACK_DAYS)
+                days=LEDGER_DAYS)
         except ValueError:
             return []
         return [
@@ -85,3 +97,10 @@ class AssignmentHistory:
              "weight": row.get("weight", 1)}
             for row in reader(team_id, first.isoformat(), iso(ends_on))
         ]
+
+
+def _days_before(day: str, days: int) -> str:
+    try:
+        return (datetime.date.fromisoformat(iso(day)) - datetime.timedelta(days=days)).isoformat()
+    except (TypeError, ValueError):
+        return ""

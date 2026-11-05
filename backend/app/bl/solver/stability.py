@@ -16,7 +16,8 @@ empty.
 
 from typing import List
 
-from app.bl.solver.model import NIGHT_SCALE, NIGHT_SPREAD, SHIFT_SCALE, SHIFT_SPREAD, Model
+from app.bl.solver.fairness import load_units
+from app.bl.solver.model import NIGHT_SCALE, NIGHT_SPREAD, SHIFT_SPREAD, Model
 
 _KEPT = "שובץ/ה כבר בסידור הקיים; השיבוץ נשמר."
 _ABSORBED = "השינוי הוטמע בסידור הקיים: %d שיבוצים נשמרו, %d הוזזו או התפנו."
@@ -32,8 +33,9 @@ def apply_stability(model: Model) -> None:
 
 def _worth(problem, index: int) -> int:
     """Half of what moving this shift from an overloaded person to an
-    underloaded one gains in evenness (a shift, and a night for a night)."""
-    worth = SHIFT_SCALE * SHIFT_SPREAD
+    underloaded one gains in evenness (a shift by its load weight, and a
+    night for a night)."""
+    worth = load_units(problem.times[index]) * SHIFT_SPREAD
     if problem.times[index]["night"]:
         worth += NIGHT_SCALE * NIGHT_SPREAD
     return worth

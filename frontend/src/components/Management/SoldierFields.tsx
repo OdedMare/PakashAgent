@@ -43,6 +43,38 @@ export function ShiftLevelSelect({ value, onChange }: { value: string; onChange:
   );
 }
 
+/** How much one shift of this kind weighs when the solver evens the load
+ *  (`load_weight`). Empty is the default: 1.5 for a night, 1 for anything
+ *  else (an on-call night counts 1). The list stops at 1.75 so one shift of
+ *  evenness never outweighs a soldier's soft request. */
+export const LOAD_WEIGHT_LABELS: [string, string][] = [
+  ["", "ברירת מחדל (לילה 1.5, אחרת 1)"],
+  ["0.5", "0.5 — קלה"],
+  ["0.75", "0.75"],
+  ["1", "1 — רגילה"],
+  ["1.25", "1.25"],
+  ["1.5", "1.5 — כבדה"],
+  ["1.75", "1.75 — כבדה מאוד"],
+];
+
+/** The stored weight as the select's value: "" for the default. */
+export function loadWeightValue(value: unknown): string {
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : "";
+}
+
+/** The select's value as the profile stores it: null for the default. */
+export function loadWeightOf(value: string): number | null {
+  return value === "" ? null : Number(value);
+}
+
+export function LoadWeightSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <select value={value} onChange={(event) => onChange(event.target.value)}>
+      {LOAD_WEIGHT_LABELS.map(([weight, label]) => <option key={weight} value={weight}>{label}</option>)}
+    </select>
+  );
+}
+
 /** "מעמד" is one choice: the service type and, for a standard soldier,
  *  the rank (`rank_group`). An officer or NCO is stored as
  *  `service_type: "standard"` plus `rank_group`, so the server and the

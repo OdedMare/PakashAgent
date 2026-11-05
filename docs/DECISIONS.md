@@ -1831,3 +1831,71 @@ held an empty URL in its file and its shared row, and the env value was
 never read again. With no URL and no host saved, the connection fields come
 from env (`redis_fields.env_when_unset`); one saved in the panel still wins.
 To keep the env's Redis but stop caching, set the TTL to 0.
+
+## D51 — Fairness remembers eight weeks *(extends D34; amends "the last two weeks")*
+
+The manager asked that fairness look further back than the fortnight the
+solver used to see. A soldier who carried the nights in weeks three to six
+was asked for an even share again as soon as two weeks had passed, and the
+history read stopped after 300 rows — about a month for a team of thirty —
+so a wider window would not even have been read.
+
+**The fixed rows stay as they were.** The last fourteen days still count
+in every rule (rest, runs of days, the week) and in the load. **The
+ledger** (`solver/ledger.py`) carries what is older, into the evenness only:
+eight weeks by default (`audit_policy.fairness_lookback_weeks`, 0 turns it
+off, at most 12), the four weeks before the span whole and the older ones at
+half. It reaches the solver through `carried`, the same entry מכלול duties
+use, so it is never a fixed row and never counted in demand twice.
+
+**Weeks a soldier was not there are filled at the team's own rate.** A
+newcomer, or someone back from a long absence, did not refuse the weeks
+before their first row: for each of those weeks they are credited what the
+team carried per person. Without it, a soldier who joined this week was
+owed every night the others had carried over two months and was handed all
+of them in one build (a test pins exactly that: 6 of 6 nights before, 2 of
+6 after). A soldier with no row anywhere in the window is read the same way.
+
+**The history is read by date.** `AssignmentHistory` reads every earlier
+period back to the ledger's widest window (12 weeks); the row limit is now
+only a guard against a runaway history. מכלול duties are read over the
+same window, and the days older than the fixed rows join the ledger.
+
+## D52 — A shift weighs what the manager says it weighs; a night 1.5 *(amends D34's "an even number of shifts")*
+
+The manager said a night is worth more than a day shift. Load stays counted
+in shifts, not hours (a soldier on base is not on the clock), but each shift
+now counts by its `load_weight` (`audit.roster.load_weight`): 1.5 for a
+night by default (`is_night`, but not an on-call night — a night someone is
+only available is not a night worked), 1 for anything else, or one of
+0.5–1.75 chosen on the shift in setup ("משקל עומס"). Nights are still evened
+on their own as well, so whoever carried the nights both does fewer nights
+next and fewer shifts in all.
+
+**The list stops at 1.75 on purpose.** Moving one shift of the heaviest
+weight from the most loaded soldier to the least loaded saves 975 in the
+objective, nights included; a soft wish costs 1,000. At 2 a wish would be
+broken to even out one night. A test holds the inequality.
+
+The same weight is read wherever load is: the evenness and its capacity
+estimate, the price of keeping a row in place (D37), the ledger (D51), and
+the stats panel, whose `load` is now the weighted shifts plus מכלול duty
+days (`weighted` per person beside the plain count).
+
+## D53 — A new week keeps the shape of the last two, and a rebuild keeps what stands *(extends D37)*
+
+The manager asked that a new schedule resemble the weeks before it rather
+than change everything. Two cases, two answers:
+
+- **Rebuilding days already built** now keeps the existing rows by default:
+  "שמירה על השיבוץ הקיים" in the build dialog starts ticked (D37's held
+  phase does the rest). Unticked, the days are built over as before.
+- **A new week** rewards each placement that repeats the soldier's own
+  pattern — the same shift on the same weekday in each of the last two
+  weeks (`solver/continuity.py`). The reward is the smallest price in the
+  model (30 a week, 60 on `audit_policy.continuity: "high"`, 0 on `"off"`):
+  below one shift of evenness at the lightest weight and below any gap
+  between shifts, so it only chooses among schedules that are otherwise as
+  good. It does not keep whoever carried the nights on them; the evenness
+  and the ledger move them far more strongly. A build reports
+  `continuity_kept` of `continuity_rows` in its metrics.

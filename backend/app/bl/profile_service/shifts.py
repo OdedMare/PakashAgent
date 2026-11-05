@@ -3,6 +3,7 @@
 import datetime
 from typing import Any, List
 
+from app.bl.audit.roster import LOAD_WEIGHTS
 from app.bl.profile_service.validation import named_rows, text, text_list, valid_time
 from app.common.errors import AgentError
 
@@ -50,8 +51,23 @@ def _shift(row: dict) -> dict:
         # The roles qualified to stand this shift; empty restricts nobody.
         "allowed_roles": list(dict.fromkeys(text_list(row.get("allowed_roles") or []))),
         "min_competence": level,
+        "load_weight": _load_weight(row.get("load_weight")),
     })
     return row
+
+
+def _load_weight(value):
+    """One of `LOAD_WEIGHTS`, or None: the default (1.5 a night, else 1)."""
+    if value in (None, ""):
+        return None
+    try:
+        weight = float(value)
+    except (TypeError, ValueError):
+        raise AgentError("משקל העומס של המשמרת חייב להיות מספר")
+    if isinstance(value, bool) or weight not in LOAD_WEIGHTS:
+        raise AgentError("משקל העומס של המשמרת חייב להיות אחד מ: %s"
+                         % ", ".join("%g" % item for item in LOAD_WEIGHTS))
+    return weight
 
 
 def _staffing(row: dict) -> List[dict]:

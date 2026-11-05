@@ -110,7 +110,9 @@ and the build still completes.
   strong first; coverage still comes first, and the audit's `below_level`
   names whoever is below it on their own card. Unrated is never below.
 - `fairness.py` rewards closers on their own closure, spreads shifts (not
-  hours: on base nobody is on the clock) and nights towards a target per
+  hours: on base nobody is on the clock; each shift by its `load_weight`,
+  1.5 for a night unless setup says otherwise — `audit.roster.load_weight`,
+  D52) and nights towards a target per
   person — the demand poured evenly, but never below what someone already
   carries nor above what they can take (`water_fill`), so a part-timer is
   not counted at a share they cannot reach — and prices every pair of one
@@ -118,7 +120,16 @@ and the build still completes.
   (`SPACING_HOURS`), so the longest and most even rest wins (back-to-back days are charged instead only when
   shifts carry no clock). A day of מכלול duty in the window counts as its
   type's `weight` in shifts already carried (`problem._duty_load`); with no
-  duties nothing changes. Each target is a constant computed before solving
+  duties nothing changes. Load older than the fixed rows is carried by
+  `ledger.py` (D51): eight weeks by default (`audit_policy.
+  fairness_lookback_weeks`), the last four whole and older ones at half,
+  and a week someone was not there yet filled at the team's own rate, so a
+  newcomer is not owed what the others carried. It reaches the evenness
+  only, through the same `carried` entry duties use, never the rules.
+  `continuity.py` (D53) rewards a placement that repeats the person's own
+  shift-and-weekday from the last two weeks — the smallest price in the
+  model, so it only chooses among otherwise equal schedules
+  (`audit_policy.continuity`: off/low/high). Each target is a constant computed before solving
   (a target that moved with the answer made optimality unprovable). Both
   the distance from the target and the largest overload are priced, per
   unit of load and independent of team size: one shift of evenness is

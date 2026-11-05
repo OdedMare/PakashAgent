@@ -179,7 +179,9 @@ rows (D37); anything else applies to the next build. Setup no longer
 sets a shift's `allowed_roles` or its role composition (`required_roles`):
 both fields are gone from the card and a save clears any stored. A shift's
 days, like every day choice on the screen (a daily soldier's days, the old
-א/ב block), are a closed multi-select. A shift can also ask for a different
+א/ב block), are a closed multi-select. A shift's "משקל עומס" (`load_weight`, a closed list 0.5–1.75; empty is
+1.5 for a night and 1 otherwise) is how much one of it counts when the load
+is evened (D52). A shift can also ask for a different
 headcount on the weekend, and "weekend" means the round's closure — the days
 one group is home, until the Sunday handover — not a fixed Friday and
 Saturday. The closure start chosen in the rotation section sets its first day; no
@@ -366,7 +368,8 @@ impression.
   both before the click, and takes no list of required shifts because the
   board behind it already is one. "שמירה על השיבוץ הקיים" sends
   `keep_existing`: the built rows stay where they fit and only what a new
-  soldier or shift needs moves (D37). The run is bounded by the period: a build
+  soldier or shift needs moves (D37). It starts ticked (D53): a rebuild
+  keeps the week's shape unless the manager unticks it. The run is bounded by the period: a build
   is one job on one period. On a week with nothing stored, the period is
   still opened as **whole weeks** (`inWholeWeeks`) with the run sent beside
   it as `build_from`/`build_through`. The board finds a week by its Sunday,

@@ -15,6 +15,7 @@ from ortools.sat.python import cp_model
 from app.bl.audit import audit
 from app.bl.schedule_requests import covers
 from app.bl.solver.competence import apply_competence
+from app.bl.solver.continuity import apply_continuity, matched as continuity_matched
 from app.bl.solver.cpu_budget import BUDGET
 from app.bl.solver.explain import coverage_notes
 from app.bl.solver import wishes
@@ -29,7 +30,7 @@ from app.common.errors import AgentError
 
 SUMMARY = "השיבוץ נבנה בפותר אילוצים לפי זמינות, כשירות, כללים, בקשות והוגנות."
 _STATUS = {cp_model.OPTIMAL: "optimal", cp_model.FEASIBLE: "feasible"}
-_COLUMNS = ("begins", "ends", "hours", "night", "past")
+_COLUMNS = ("begins", "ends", "hours", "night", "load", "past")
 # The longest phase one, and with a board the held phase, may each take, as
 # a share of the limit. The last phase takes whatever they left, and never
 # less than its own floor.
@@ -45,6 +46,7 @@ def solve(problem, time_limit: float = 10.0, workers: int = 8) -> dict:
     apply_fairness(model)
     apply_competence(model)
     apply_stability(model)
+    apply_continuity(model)
     # Threads are taken from the process's budget, so concurrent solves
     # queue instead of each getting a slice of the time it was promised.
     base = wishes.snapshot(model)
@@ -58,6 +60,7 @@ def solve(problem, time_limit: float = 10.0, workers: int = 8) -> dict:
     warnings = _warnings(problem, final)
     metrics = _metrics(problem, solver, status, started, final, phases)
     metrics["warnings"] = len(warnings)
+    metrics.update(continuity_matched(problem, chosen))
     notes = coverage_notes(problem, chosen) + [priced.get(note, note) for note in _notes(solver, model)]
     if problem.kept_rows:
         metrics.update(absorbed(problem, chosen))

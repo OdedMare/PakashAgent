@@ -9,7 +9,7 @@ import { cycleOf, cyclePattern, isDayCycle } from "@/lib/dayCycles";
 import type { DayCycle } from "@/types";
 
 import { ExitPatternFields } from "./ExitPatternFields";
-import { STATUS_LABELS, ShiftLevelSelect, SoldierFields, statusFields, statusOf } from "./SoldierFields";
+import { LoadWeightSelect, STATUS_LABELS, ShiftLevelSelect, SoldierFields, loadWeightOf, loadWeightValue, statusFields, statusOf } from "./SoldierFields";
 import {
   EXIT_PATTERN_LABELS,
   text,
@@ -169,6 +169,7 @@ export function ShiftForm({
   const [purpose, setPurpose] = useState(text(initial?.purpose));
   const [requiresManager, setRequiresManager] = useState(Boolean(initial?.requires_shift_manager));
   const [minLevel, setMinLevel] = useState(text(initial?.min_competence));
+  const [loadWeight, setLoadWeight] = useState(loadWeightValue(initial?.load_weight));
   const [startsOn, setStartsOn] = useState(text(initial?.starts_on));
   const [endsOn, setEndsOn] = useState(text(initial?.ends_on));
   const [temporary, setTemporary] = useState(Boolean(startsOn || endsOn));
@@ -183,6 +184,7 @@ export function ShiftForm({
         headcount, shift_type: shiftType, is_on_call: shiftType === "on_call", purpose,
         requires_shift_manager: requiresManager,
         min_competence: minLevel,
+        load_weight: loadWeightOf(loadWeight),
         starts_on: temporary ? startsOn : "",
         ends_on: temporary ? endsOn : "",
       });
@@ -207,6 +209,11 @@ export function ShiftForm({
         <span>משמרת חזקה — רמה מקצועית נדרשת</span>
         <ShiftLevelSelect value={minLevel} onChange={setMinLevel} />
         {minLevel ? <small>חיילים בדירוג נמוך יותר ישובצו כאן רק אם אין ברירה, והכרטיס שלהם יסומן.</small> : null}
+      </label>
+      <label>
+        <span>משקל עומס</span>
+        <LoadWeightSelect value={loadWeight} onChange={setLoadWeight} />
+        <small>כמה משמרת כזו נחשבת באיזון העומס בין החיילים. מי שעשה משמרות כבדות יקבל פחות משמרות.</small>
       </label>
       <label className="profile-check"><input type="checkbox" checked={requiresManager} onChange={(event) => setRequiresManager(event.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
       <label className="profile-check"><input type="checkbox" checked={temporary} onChange={(event) => setTemporary(event.target.checked)} /><span>משמרת זמנית</span></label>

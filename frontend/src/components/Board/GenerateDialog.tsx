@@ -61,7 +61,10 @@ export function GenerateDialog({
   const [startsOn, setStartsOn] = useState(from);
   const [endsOn, setEndsOn] = useState(through);
   const [instructions, setInstructions] = useState("");
-  const [keepExisting, setKeepExisting] = useState(false);
+  // On by default: rebuilding days that are already built keeps what
+  // stands and moves only what the change needs, so the team does not find
+  // a whole new week. The manager unticks it to start the days over.
+  const [keepExisting, setKeepExisting] = useState(true);
   const dates = useMemo(
     () => dateRange(startsOn, endsOn),
     [startsOn, endsOn],
@@ -170,7 +173,7 @@ export function GenerateDialog({
               instructions: instructions.trim(),
               required_assignments: rows.map(({ employee, shift, date }) => ({ employee, shift, date })),
               shifts: chosen,
-              keep_existing: Boolean(period) && keepExisting,
+              keep_existing: Boolean(period) && standing.replaced > 0 && keepExisting,
               staffing_overrides: overrides.map(({ date, shift, headcount }) => ({
                 date, shift, headcount,
               })),
@@ -389,7 +392,7 @@ export function GenerateDialog({
               />
               <span>
                 שמירה על השיבוץ הקיים
-                <small>מזיזים רק את מה שצריך כדי לשלב חייל או משמרת חדשים</small>
+                <small>מזיזים רק את מה שצריך: חייל או משמרת חדשים, הנחיות חדשות או איזון. בטלו את הסימון כדי לבנות את הימים מחדש.</small>
               </span>
             </label>
           ) : null}
