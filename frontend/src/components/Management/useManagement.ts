@@ -27,7 +27,7 @@ import {
   updateProfile,
   deleteShiftType,
 } from "@/services/api";
-import { displayDate } from "@/components/DateInput";
+import { displayDate } from "../dateFormat";
 import type { Departure, DepartureCover } from "@/services/api";
 import type {
   GenerationProgress,

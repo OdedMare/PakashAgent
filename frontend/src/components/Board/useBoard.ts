@@ -211,6 +211,9 @@ export function useBoard(scheduleId?: string, refreshKey?: number): BoardState {
     error: null,
   });
   const spanToken = useRef(0);
+  // A fresh cache per schedule and per refresh: the deps are the point, not
+  // inputs the factory reads, so the linter's "unnecessary" is wrong here.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const reads = useMemo(() => new BoardReadCache(), [scheduleId, refreshKey]);
   const invalidate = useCallback(() => {
     reads.clear();
