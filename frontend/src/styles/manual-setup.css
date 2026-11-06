@@ -245,3 +245,21 @@
 .manual-section > header { cursor: pointer; }
 .manual-section > header > div { min-width: 0; }
 .manual-section-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The calendar button beside the group count: the coming weekends, opened on demand. */
+.rotation-count { display: flex; align-items: flex-end; gap: 0.5rem; min-width: 0; }
+.rotation-count > .manual-field { flex: 1; min-width: 0; }
+.rotation-peek { position: relative; flex: none; }
+.rotation-peek-button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; color: var(--primary); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); cursor: pointer; }
+.rotation-peek-button:hover, .rotation-peek-button.is-open { background: var(--primary-soft); border-color: var(--primary); }
+.rotation-peek-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.rotation-peek-panel { position: absolute; inset-inline-end: 0; top: calc(100% + 0.4rem); z-index: 30; display: grid; gap: 0.6rem; width: min(26rem, calc(100vw - 2rem)); max-height: 60vh; overflow: auto; padding: 0.75rem; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: 0 8px 24px rgb(0 0 0 / 0.16); }
+.rotation-peek-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.86rem; }
+.rotation-preview { display: grid; gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
+.rotation-preview[aria-busy="true"] { opacity: 0.6; }
+.rotation-preview li { display: grid; gap: 0.1rem; padding: 0.5rem 0.7rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.rotation-preview li.is-exception { background: var(--warning-soft); border-color: color-mix(in srgb, var(--warning) 40%, var(--border)); }
+.rotation-preview-date { color: var(--text-muted); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+.rotation-preview strong { font-size: 0.86rem; }
+.rotation-preview-span { font-size: 0.74rem; font-variant-numeric: tabular-nums; }
+.rotation-preview em { justify-self: start; padding: 0.05rem 0.45rem; color: var(--warning); background: var(--surface); border-radius: 999px; font-size: 0.7rem; font-style: normal; }

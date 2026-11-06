@@ -12,9 +12,10 @@
  *     take turns — 2 = סבב, 3 = תלתון, 4 = רבעון,
  *     5 = חמישון.
  *
- *  No calendar, no exception weekends and no "which date does which group
- *  close": which group closes when is derived by the server from an anchor
- *  the screen keeps (or sets to the coming Saturday). What is chosen is saved
+ *  No calendar on the screen, no exception weekends and no "which date does
+ *  which group close": which group closes when is derived by the server from
+ *  an anchor the screen keeps (or sets to the coming Saturday). A calendar
+ *  button beside the group count opens the coming weekends, as the server computes them. What is chosen is saved
  *  as `enabled_exit_patterns`; a pattern somebody is on cannot be switched
  *  off here, so nobody is left on a hidden one. */
 
@@ -73,7 +74,7 @@ export type ClosureWindow = Pick<RotationClosureWindow, "start_day" | "start_tim
 
 export function ExitKinds({
   enabled, used, dayCycles, dayCyclesUsed, reserveOn, reserveBusy, cycle, window, handoverEnd,
-  onEnabled, onDayCycles, onReserve, onCycle, onWindow,
+  onEnabled, onDayCycles, onReserve, onCycle, onWindow, preview,
 }: {
   enabled: Set<string>;
   /** Patterns somebody on the roster is on: locked on. */
@@ -92,6 +93,8 @@ export function ExitKinds({
   onDayCycles: (cycles: DayCycle[]) => void;
   onReserve: (on: boolean) => void;
   onCycle: (pattern: Cycle) => void;
+  /** The calendar button that opens the coming weekends, beside the group count. */
+  preview?: React.ReactNode;
   onWindow: (patch: Partial<ClosureWindow>) => void;
 }) {
   const isOn = (kind: Kind, patterns: string[]) => kind === "reserve" ? reserveOn
@@ -157,11 +160,14 @@ export function ExitKinds({
               {SHAPES.map((item) => <option key={item} value={item}>{shapeText(item)}</option>)}
             </select>
           </Field>
-          <Field label="כמות סבבים">
-            <select value={cycle} onChange={(event) => onCycle(event.target.value as Cycle)}>
-              {GROUP_CYCLES.map((item) => <option key={item.pattern} value={item.pattern}>{item.label}</option>)}
-            </select>
-          </Field>
+          <div className="rotation-count">
+            <Field label="כמות סבבים">
+              <select value={cycle} onChange={(event) => onCycle(event.target.value as Cycle)}>
+                {GROUP_CYCLES.map((item) => <option key={item.pattern} value={item.pattern}>{item.label}</option>)}
+              </select>
+            </Field>
+            {preview}
+          </div>
           <Field label="הסגירה מתחילה ביום">
             <select value={window.start_day} onChange={(event) => onWindow({ start_day: Number(event.target.value) })}>
               {START_DAYS.map((day) => <option key={day.value} value={day.value}>{day.label}</option>)}

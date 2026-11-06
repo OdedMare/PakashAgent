@@ -34,6 +34,7 @@ import { ExitKinds } from "./ExitKinds";
 import { Field } from "./fields";
 import { CYCLES, firstGroupAnchor } from "./RotationSetup";
 import { RosterView } from "./RosterView";
+import { RotationPreviewButton } from "./RotationPreview";
 import type { RosterPerson } from "./rosterGroups";
 import type { Cycle } from "./RotationSetup";
 import { PersonStandard } from "./UnitStandard";
@@ -333,6 +334,7 @@ export function ManualSetup({
     quint_first_closure_date: anchorOf("quint"),
     rotation_closure_windows: closureWindows,
   };
+  const timedShifts = shifts.filter((shift) => text(shift.name)).map((shift) => ({ name: text(shift.name), start_time: text(shift.start_time), end_time: text(shift.end_time) }));
   // Coloured by the server, from the dates typed here and the shifts worked.
   // Asked by the saved name: until the save, a renamed soldier's worked
   // shifts are still stored under it.
@@ -544,6 +546,7 @@ export function ManualSetup({
             onReserve={(on) => void toggleReserve(on)}
             onCycle={chooseCycle}
             onWindow={setClosure}
+            preview={weekendCycle ? <RotationPreviewButton cycle={weekendCycle} workplace={rotation} shifts={timedShifts} /> : null}
           />
 
           {dayCycles.length ? <DayCycleSetup cycles={dayCycles} onChange={setDayCycles} used={usedDayCycles} /> : null}

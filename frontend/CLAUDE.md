@@ -136,9 +136,13 @@ list of every type the screen offered before: 11/3, 12/2, 10/4, שבוע־שבו
 other days and times, from `closureShapes.ts`), which fills in when the
 closure starts and ends (day + time, both editable; an edit that matches no
 type reads as "other"), and how many groups take turns (2 סבב, 3 תלתון,
-4 רבעון, 5 חמישון). There is no calendar, no exception weekends and no
-"which date does which group close": an anchor already stored is kept, and a
-cycle without one is saved with group א closing the coming Saturday. The
+4 רבעון, 5 חמישון). The coming weekends are not on the screen: a small
+calendar button beside the group count (`ManualSetup/RotationPreview.tsx`)
+opens them in a popover, asked from `POST /api/profile/rotation-preview` only
+while it is open, so it renders the server's answer for the unsaved form.
+There are no exception weekends and no "which date does which group close":
+an anchor already stored is kept, and a cycle without one is saved with group
+א closing the coming Saturday. The
 closure is group א's one undated window row, which the server applies to every
 group in turn. What is ticked is saved as `enabled_exit_patterns`; a pattern
 somebody is on stays on. Stored exception rows and presence rules are kept and
