@@ -34,14 +34,18 @@ COLUMNS = ("status", "unfilled_seats", "missing_roles", "warnings", "soft_absenc
 HIGHER_IS_BETTER = ("prefers_met_pct", "min_rest_hours")
 
 
-def run(names: List[str], time_limit: float, workers: int, repeat: int) -> Dict[str, dict]:
+def run(names: List[str], time_limit: float, workers: int, repeat: int,
+        whole: bool = False) -> Dict[str, dict]:
+    """`whole` solves every scenario in one model, a large team included
+    (`solver/chunks.py`), to set a chunked build beside an unchunked one."""
+    options = {"chunk_people": 0} if whole else {}
     results = {}
     for name in names:
         scenario = SCENARIOS[name]()
         runs = [measure(scenario, generate_span(
             scenario.profile, scenario.starts_on, scenario.ends_on,
             availability=scenario.availability, requests=scenario.requests,
-            time_limit=time_limit, workers=workers)) for _ in range(max(1, repeat))]
+            time_limit=time_limit, workers=workers, **options)) for _ in range(max(1, repeat))]
         results[name] = _median(runs)
     return results
 
@@ -91,11 +95,14 @@ def main(argv=None) -> int:
                         help="seconds per solve, as solver_time_limit_seconds (default 10)")
     parser.add_argument("-w", "--workers", type=int, default=8, help="solver threads (default 8)")
     parser.add_argument("-r", "--repeat", type=int, default=1, help="solves per scenario (median)")
+    parser.add_argument("--whole", action="store_true",
+                        help="solve a large team in one model instead of chunks of shifts")
     parser.add_argument("--save", help="write the results to this JSON file")
     parser.add_argument("--compare", help="a JSON file saved earlier to compare against")
     args = parser.parse_args(argv)
 
-    results = run(args.scenario or list(SCENARIOS), args.time_limit, args.workers, args.repeat)
+    results = run(args.scenario or list(SCENARIOS), args.time_limit, args.workers, args.repeat,
+                  args.whole)
     print(table(results))
     if args.save:
         with open(args.save, "w", encoding="utf-8") as handle:

@@ -1899,3 +1899,41 @@ than change everything. Two cases, two answers:
   good. It does not keep whoever carried the nights on them; the evenness
   and the ledger move them far more strongly. A build reports
   `continuity_kept` of `continuity_rows` in its metrics.
+
+
+## D54 — A team of thirty or more is solved in chunks of shifts *(extends D34)*
+
+The manager asked that a large משמרות — thirty people and up — be solved
+in chunks rather than all at once: the shift types in alphabetical order,
+in pairs or more, each chunk scheduled on its own.
+
+One model over every shift of forty people and four weeks does not get far
+inside the time limit; two smaller ones do. `solver/chunks.py` splits the
+span's shift types alphabetically, two to a chunk (a shift left alone joins
+the chunk before it, so no chunk is a single shift), and solves them in
+order. A chunk sees every pin and everything the earlier chunks placed as
+fixed rows — the mechanism a shift-narrowed build already used — so rest,
+runs of days, weekly limits, request limits and the load each person
+carries all cross chunks, and the last chunk evens what the first handed
+out. The time limit is divided by placements to decide, so a chunked build
+takes what a whole one did. The build is answered as one: one audit, one
+set of coverage notes, `metrics.chunks` for each chunk's own numbers.
+
+Measured on the benchmark's `large` team (40 people, 4 shifts, 4 weeks, 4
+threads), whole → chunked:
+
+| limit | shift spread | night spread | short rests | soft absences broken | prefers met |
+|---|---|---|---|---|---|
+| 10s | 20–25 → 11–14 | 19–20 → 5–9 | 36–39 → 15–23 | 14–16 → 5 | 71–77% → 41–71% |
+| 30s | 9 → 4 | 13 → 4 | 8 → 3 | 0 → 1 | 77% → 71% |
+| 60s | 3 → 6 | 6 → 4 | 2 → 0 | 0 → 1 | 77% → 71% |
+
+So at the limits a build actually runs with, chunks are markedly more even
+and better rested; given a minute the whole model catches up, and it stays
+somewhat better at `prefer` wishes that reach across chunks. What a chunk
+cannot see is what a later chunk will need: a soft request counted across
+shifts of two chunks (`balance`, a soft `max_count`) is weighed by each
+with the earlier rows as given, not jointly.
+
+The threshold and chunk size are constants (`chunks.MIN_PEOPLE`,
+`chunks.SHIFTS`) and arguments of `generate_span`; zero solves whole.

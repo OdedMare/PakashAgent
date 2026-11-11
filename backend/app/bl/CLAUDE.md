@@ -171,6 +171,16 @@ wishes broken, spread of shifts and nights, short rests, gap and time — with
 `--save`/`--compare` to put a change to the solver side by side with what it
 replaced. The tests say a schedule is legal; this says whether it got better.
 
+**A large team is solved in chunks of shifts** (`solver/chunks.py`, D54).
+From 30 people on the roster, a span's shift types are taken in alphabetical
+order, two to a chunk (one left alone joins the chunk before it), and each
+chunk is its own solve: what the earlier chunks placed, and every pin,
+stand for it as fixed rows, so rest, limits and load carry across. The
+time limit is shared among the chunks by their placements, and the build
+is audited and reported as one; its metrics list each chunk under
+`chunks`. `generate_span(chunk_people=0)` solves whole, as does the
+benchmark's `--whole`.
+
 **Spans are up to four weeks** (`slots.plan_spans`). A longer period is
 solved in such blocks, each seeing the rows of the ones before it as fixed.
 Progress is still counted in dates.
