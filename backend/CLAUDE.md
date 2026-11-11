@@ -99,7 +99,9 @@ python -m benchmarks.solver_bench --save before.json   # solver quality and time
   blocking checks and every hard request are constraints; coverage is
   solved first, then wishes and fairness (per-person load targets, priced
   below a soft wish). נחפפים are placed beside a trainer and fill no seat.
-  Every row carries a reason. No model call.
+  Every row carries a reason. No model call. A roster of thirty or more is
+  solved in alphabetical chunks of two shift types, each seeing the last
+  (`chunks.py`, D54).
 - `bl/directive_agent/` + `bl/compiled_sources/` — the model's one job in a
   build: translating rules, policies, notes, preferences and the build's
   instruction into structured requests (`bl/schedule_requests.py`), kept

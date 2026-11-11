@@ -39,6 +39,12 @@ _LAST_FLOOR = {False: 0.7, True: 0.4}
 
 
 def solve(problem, time_limit: float = 10.0, workers: int = 8) -> dict:
+    return answer(problem, *search(problem, time_limit, workers))
+
+
+def search(problem, time_limit: float = 10.0, workers: int = 8) -> tuple:
+    """Solve `problem`: the rows chosen (pins left out), the notes of what
+    the answer still pays for, and the solve's metrics."""
     started = time.monotonic()
     model = Model(problem)
     apply_rules(model)
@@ -56,12 +62,19 @@ def solve(problem, time_limit: float = 10.0, workers: int = 8) -> dict:
     chosen = [_row(problem, name, index) for (name, index), var in sorted(model.x.items())
               if solver.Value(var)]
     _shadow_reasons(problem, chosen)
+    notes = [priced.get(note, note) for note in _notes(solver, model)]
+    return chosen, notes, _metrics(problem, solver, status, started, phases)
+
+
+def answer(problem, chosen: List[dict], notes: List[str], metrics: dict) -> dict:
+    """What a build returns, from the rows chosen for `problem`: the audit's
+    warnings, why a seat stayed empty, and what was kept. `chosen` may come
+    from one solve or from several over parts of the grid (`chunks.py`)."""
     final = _ordered(problem, problem.pins + chosen)
     warnings = _warnings(problem, final)
-    metrics = _metrics(problem, solver, status, started, final, phases)
-    metrics["warnings"] = len(warnings)
+    metrics.update(returned=len(final), accepted=len(final), warnings=len(warnings))
     metrics.update(continuity_matched(problem, chosen))
-    notes = coverage_notes(problem, chosen) + [priced.get(note, note) for note in _notes(solver, model)]
+    notes = coverage_notes(problem, chosen) + notes
     if problem.kept_rows:
         metrics.update(absorbed(problem, chosen))
         notes.insert(0, absorbed_note(metrics))
@@ -302,14 +315,13 @@ def _warnings(problem, final: List[dict]) -> List[dict]:
     ]
 
 
-def _metrics(problem, solver, status, started, final, phases) -> dict:
+def _metrics(problem, solver, status, started, phases) -> dict:
     return {
         "date": problem.dates[0] if problem.dates else "",
         "through": problem.dates[-1] if problem.dates else "",
         "status": "complete" if problem.slots else "skipped",
         "duration_ms": int((time.monotonic() - started) * 1000),
-        "returned": len(final), "accepted": len(final), "rejected": 0,
-        "repaired": False,
+        "returned": 0, "accepted": 0, "rejected": 0, "repaired": False,
         "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
         "engine": "solver",
         "solver_status": _STATUS[status],

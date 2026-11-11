@@ -22,14 +22,16 @@ schedules the pick may differ from one build to the next.
 | `competence.py` | A reservist's days a week (cap, minimum, one block); shifts balanced by competence so the weakest are not staffed together |
 | `stability.py` | Absorbing a change into an existing board: moving as few rows as it needs |
 | `solve.py` | Solving, reasons, notes, warnings and metrics |
+| `chunks.py` | A large team solved in chunks of shifts, alphabetically, each seeing the last |
 | `explain.py` | Why an empty seat, role or shift manager stayed empty: who could not take it, and why |
 | `wishes.py` | What honouring a broken soft wish would have cost: a short re-solve with it binding |
 | `cpu_budget.py` | How many solver threads the process runs at once; a solve waits for its share |
 | `rows.py` | Row and roster helpers |
 """
 
-from typing import List, Optional
+from typing import Callable, List, Optional
 
+from app.bl.solver import chunks
 from app.bl.solver.problem import Problem, checked_requests, slots_for
 from app.bl.solver.solve import SUMMARY, solve
 
@@ -48,8 +50,14 @@ def generate_span(
     duties: Optional[List[dict]] = None,
     time_limit: float = 10.0,
     workers: int = 8,
+    chunk_people: int = chunks.MIN_PEOPLE,
+    chunk_shifts: int = chunks.SHIFTS,
+    on_chunk: Optional[Callable[[List[str], List[dict]], None]] = None,
 ) -> dict:
-    """Assign every slot from `starts_on` through `ends_on` in one solve.
+    """Assign every slot from `starts_on` through `ends_on`: in one solve,
+    or for a roster of `chunk_people` or more in chunks of `chunk_shifts`
+    shift types, alphabetically (`chunks.py`; zero for either turns it off).
+    `on_chunk(shifts, rows)` then receives each chunk's rows as it is solved.
 
     `required_assignments` are pins; rows of `already_scheduled` outside the
     span (or on shifts outside `shift_names`) stand as they are, and rows
@@ -65,8 +73,14 @@ def generate_span(
     slots = slots_for(profile, starts_on, ends_on, shift_names)
     if not slots:
         return _empty(starts_on, ends_on)
-    problem = Problem(profile, slots, availability, history, required_assignments,
-                      already_scheduled, requests, keep, duties)
+    inputs = dict(availability=availability, history=history,
+                  required_assignments=required_assignments,
+                  already_scheduled=already_scheduled, requests=requests, keep=keep,
+                  duties=duties)
+    problem = Problem(profile, slots, **inputs)
+    groups = chunks.plan(problem, chunk_people, chunk_shifts)
+    if groups:
+        return chunks.solve_chunks(problem, groups, inputs, time_limit, workers, on_chunk)
     return solve(problem, time_limit, workers)
 
 

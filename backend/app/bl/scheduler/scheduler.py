@@ -48,8 +48,12 @@ class Scheduler:
         shift_names: Optional[List[str]] = None,
         requests: Optional[List[dict]] = None,
         duties: Optional[List[dict]] = None,
+        on_chunk=None,
     ) -> dict:
         """Assign every slot from `starts_on` through `ends_on`.
+
+        `on_chunk(shifts, rows)` is handed each chunk of a large team's
+        build as it is solved (`solver/chunks.py`).
 
         `shift_names` narrows it to those shifts; rows on the others stand.
 
@@ -74,6 +78,7 @@ class Scheduler:
             keep=keep,
             shift_names=shift_names,
             duties=duties,
+            on_chunk=on_chunk,
             **self._limits(),
         )
         if translated["sources"]:
