@@ -5,6 +5,7 @@ import { useState } from "react";
 import { DateInput } from "@/components/DateInput";
 import { MultiSelect } from "@/components/MultiSelect";
 import { TimeInput } from "@/components/TimeInput";
+import { blockedDaysOf, withBlockedDays } from "@/lib/blockedDays";
 import { cycleOf, cyclePattern, isDayCycle } from "@/lib/dayCycles";
 import type { DayCycle } from "@/types";
 
@@ -73,6 +74,10 @@ export function EmployeeForm({
   );
   const [reserveConsecutive, setReserveConsecutive] = useState(initial?.reserve_consecutive === true);
   const [reserveCall, setReserveCall] = useState(text(initial?.reserve_call));
+  // Fixed blocked weekdays live in the recurring constraints (`lib/blockedDays.ts`).
+  const [recurring, setRecurring] = useState<unknown[]>(
+    Array.isArray(initial?.recurring_constraints) ? initial.recurring_constraints : [],
+  );
   const initialEligible = Array.isArray(initial?.eligible_shifts)
     ? initial.eligible_shifts.filter((value): value is string => typeof value === "string")
     : shiftNames;
@@ -82,7 +87,7 @@ export function EmployeeForm({
     <form className="constraint-form profile-form" onSubmit={(event) => {
       event.preventDefault();
       if (!name.trim()) return;
-      onSubmit({ ...exitFields, name: name.trim(), role: role.trim(), eligible_shifts: eligible, exit_pattern: exitPattern, rotation_group: rotationGroup, ...statusFields(status), counts_toward_staffing: countsTowardStaffing, is_shift_manager: isShiftManager, can_train: canTrain, notes: notes.trim(), competence, reserve_days_per_week: reserveDays, reserve_min_days: reserveMinDays, reserve_consecutive: reserveConsecutive, reserve_call: reserveCall, min_weekly_shifts: minShifts, max_weekly_shifts: maxShifts });
+      onSubmit({ ...exitFields, name: name.trim(), role: role.trim(), eligible_shifts: eligible, exit_pattern: exitPattern, rotation_group: rotationGroup, ...statusFields(status), counts_toward_staffing: countsTowardStaffing, is_shift_manager: isShiftManager, can_train: canTrain, notes: notes.trim(), competence, reserve_days_per_week: reserveDays, reserve_min_days: reserveMinDays, reserve_consecutive: reserveConsecutive, reserve_call: reserveCall, recurring_constraints: recurring, min_weekly_shifts: minShifts, max_weekly_shifts: maxShifts });
     }}>
       <label>
         <span>שם *</span>
@@ -116,6 +121,8 @@ export function EmployeeForm({
         reserveMinDays={reserveMinDays}
         reserveConsecutive={reserveConsecutive}
         reserveCall={reserveCall}
+        blockedDays={blockedDaysOf(recurring)}
+        onBlockedDays={(days) => setRecurring((current) => withBlockedDays(current, days))}
         minShifts={minShifts}
         maxShifts={maxShifts}
         onChange={(field, value) => {

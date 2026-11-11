@@ -10,13 +10,17 @@
  *  call-up type, and competence — in place of that drawer, and two optional
  *  ones for a reservist whose days change week to week: a minimum the
  *  solver tries to reach, and whether the days must run in one block. The
- *  solver picks which days. A standard officer or NCO (קצין/ה, נגד/ת under
+ *  solver picks which days, never one of the fixed blocked weekdays ticked
+ *  under them ("לא יכול/ה להגיע ברביעי" — `lib/blockedDays.ts`, stored as a
+ *  recurring constraint). A standard officer or NCO (קצין/ה, נגד/ת under
  *  מעמד) gets the same days questions, without the call-up type: five days
  *  a week, say, like a reservist. אע״צ and הצ״ח see competence directly
  *  too, not folded into the drawer.
  *
  *  `serviceType` is the merged מעמד value (`statusOf`), not the raw
  *  `service_type`. */
+
+import { WEEKDAY_NAMES, blockedDaysOf } from "@/lib/blockedDays";
 
 export const COMPETENCE_LABELS: Record<string, string> = {
   weak: "חלש/ה",
@@ -126,6 +130,10 @@ type StatusFieldsProps = {
   reserveMinDays: number | null;
   reserveConsecutive: boolean;
   reserveCall: string;
+  /** The weekdays they can never come (`blockedDaysOf`), and the setter that
+   *  rewrites the person's `recurring_constraints` (`withBlockedDays`). */
+  blockedDays: string[];
+  onBlockedDays: (days: string[]) => void;
   onChange: (field: SoldierField, value: string | number | boolean | null) => void;
 };
 
@@ -179,6 +187,8 @@ function SoldierStatusFields({
   reserveMinDays,
   reserveConsecutive,
   reserveCall,
+  blockedDays,
+  onBlockedDays,
   onChange,
 }: StatusFieldsProps) {
   const competenceField = (
@@ -237,7 +247,20 @@ function SoldierStatusFields({
           <input type="checkbox" checked={reserveConsecutive} onChange={(event) => onChange("reserve_consecutive", event.target.checked)} />
           <span>הימים ברצף (בלי ימים בודדים באמצע השבוע)</span>
         </label>
-        <small>{reserve ? "" : "לא חובה. "}מספר הימים הוא תקרה קשיחה בכל 7 ימים רצופים. המינימום הוא יעד לשבוע ראשון–שבת: הסידור ישבץ לפחות כך, אלא אם אין משמרות פנויות או שהחייל/ת לא זמין/ה. את הימים עצמם בוחר הסידור לפי הצורך.</small>
+        <fieldset className="profile-checkboxes soldier-blocked-days">
+          <legend>ימים חסומים קבועים — לא יכול/ה להגיע</legend>
+          {WEEKDAY_NAMES.map((day) => (
+            <label key={day}>
+              <input type="checkbox" checked={blockedDays.includes(day)}
+                onChange={(event) => onBlockedDays(event.target.checked ? [...blockedDays, day] : blockedDays.filter((value) => value !== day))} />
+              <span>{day}</span>
+            </label>
+          ))}
+        </fieldset>
+        {blockedDays.length && (reserveMinDays ?? reserveDays ?? 0) > 7 - blockedDays.length ? (
+          <small className="soldier-blocked-warning">נשארו {dayCount(7 - blockedDays.length)} פנויים בשבוע — פחות ממספר הימים שהוגדר למעלה.</small>
+        ) : null}
+        <small>{reserve ? "" : "לא חובה. "}מספר הימים הוא תקרה קשיחה בכל 7 ימים רצופים. המינימום הוא יעד לשבוע ראשון–שבת: הסידור ישבץ לפחות כך, אלא אם אין משמרות פנויות או שהחייל/ת לא זמין/ה. את הימים עצמם בוחר הסידור לפי הצורך, ולעולם לא ביום חסום: יום שסומן חסום בכל שבוע, בכל המשמרות שמתחילות בו.</small>
       </fieldset>
     );
   }
@@ -275,6 +298,8 @@ export function soldierSummary(person: Record<string, unknown> | undefined): str
     const span = days && least && least < days ? `${least}–${days} ימים בשבוע` : days ? `${days} ימים בשבוע` : least ? `לפחות ${least} ימים בשבוע` : "";
     const reserve = [span, person.reserve_consecutive === true ? "ברצף" : "", call ?? ""].filter(Boolean).join(", ");
     if (reserve) parts.push(`${status === "reserve" ? "מילואים" : STATUS_LABELS[status]}: ${reserve}`);
+    const blocked = blockedDaysOf(person.recurring_constraints);
+    if (blocked.length) parts.push(`חסום/ה: ${blocked.join(", ")}`);
   }
   return parts.join(" · ");
 }

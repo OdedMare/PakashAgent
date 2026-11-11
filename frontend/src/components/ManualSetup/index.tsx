@@ -22,6 +22,7 @@ import { MultiSelect } from "@/components/MultiSelect";
 import { TimeInput } from "@/components/TimeInput";
 import { HelpButton, useGuideSurface } from "@/components/Guide";
 import { deleteShiftType, previewDeparture, updateProfile } from "@/services/api";
+import { blockedDaysOf, withBlockedDays } from "@/lib/blockedDays";
 import { cyclePattern, isDayCycle } from "@/lib/dayCycles";
 import { LoadWeightSelect, STATUS_LABELS, ShiftLevelSelect, SoldierFields, loadWeightOf, loadWeightValue, shiftCount, statusFields, statusOf } from "@/components/Management/SoldierFields";
 import { ExitPatternFields } from "@/components/Management/ExitPatternFields";
@@ -652,6 +653,8 @@ export function ManualSetup({
                   reserveMinDays={typeof person.reserve_min_days === "number" ? person.reserve_min_days : null}
                   reserveConsecutive={person.reserve_consecutive === true}
                   reserveCall={text(person.reserve_call)}
+                  blockedDays={blockedDaysOf(person.recurring_constraints)}
+                  onBlockedDays={(days) => edit(setEmployees, index, "recurring_constraints", withBlockedDays(person.recurring_constraints, days))}
                   minShifts={typeof person.min_weekly_shifts === "number" ? person.min_weekly_shifts : null}
                   maxShifts={typeof person.max_weekly_shifts === "number" ? person.max_weekly_shifts : null}
                   onChange={(field, value) => edit(setEmployees, index, field, value)}
