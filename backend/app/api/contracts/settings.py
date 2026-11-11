@@ -52,3 +52,17 @@ class RedisProbeRequest(BaseModel):
     def password(self) -> Optional[str]:
         value = self.redis_password or ""
         return None if not value or value == MASKED_SECRET else value
+
+
+class KnowledgeDocumentRequest(BaseModel):
+    """One of the organization's documents, as the panel saves it (D54)."""
+
+    title: str = ""
+    content: str = ""
+    enabled: bool = True
+
+
+class PromptTextRequest(BaseModel):
+    """A prompt's text as rewritten in the panel (D54)."""
+
+    text: str = ""

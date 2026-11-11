@@ -25,6 +25,7 @@ import type {
   ManagementOverview,
   PlacementCheck,
   Preference,
+  PromptLibrary,
   PreferenceKind,
   PreferenceStatus,
   RosterName,
@@ -364,6 +365,58 @@ export function probeRedis(
   });
 }
 
+// The organization's documents and the editable prompts (D54). Every write
+// answers with the whole library.
+
+export function getLibrary(password: string): Promise<PromptLibrary> {
+  return request<PromptLibrary>("/api/settings/library", {
+    headers: settingsHeaders(password),
+  });
+}
+
+/** Save a document: a new one when `id` is empty, else that one replaced. */
+export function saveDocument(
+  id: string,
+  document: { title: string; content: string; enabled: boolean },
+  password: string,
+): Promise<PromptLibrary> {
+  return request<PromptLibrary>(
+    id ? `/api/settings/library/documents/${encodeURIComponent(id)}`
+      : "/api/settings/library/documents",
+    {
+      method: id ? "PUT" : "POST",
+      body: JSON.stringify(document),
+      headers: settingsHeaders(password),
+    },
+  );
+}
+
+export function deleteDocument(id: string, password: string): Promise<PromptLibrary> {
+  return request<PromptLibrary>(
+    `/api/settings/library/documents/${encodeURIComponent(id)}`,
+    { method: "DELETE", headers: settingsHeaders(password) },
+  );
+}
+
+/** Keep `text` in place of the shipped prompt. The name is a path
+ *  (`shared/hebrew`), so its slash is sent as it is. */
+export function savePrompt(
+  name: string, text: string, password: string,
+): Promise<PromptLibrary> {
+  return request<PromptLibrary>(`/api/settings/library/prompts/${name}`, {
+    method: "PUT",
+    body: JSON.stringify({ text }),
+    headers: settingsHeaders(password),
+  });
+}
+
+/** Back to the shipped text. */
+export function resetPrompt(name: string, password: string): Promise<PromptLibrary> {
+  return request<PromptLibrary>(`/api/settings/library/prompts/${name}`, {
+    method: "DELETE",
+    headers: settingsHeaders(password),
+  });
+}
 
 // --- the צוות משמרות זהב console (D28) --------------------------------------
 // Its own HttpOnly cookie (`pakash_admin`), so it never disturbs a team

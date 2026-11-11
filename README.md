@@ -192,6 +192,12 @@ schedules the manager has published.
 Postgres must be reachable at `PAKASH_DATABASE_URL`; the app creates its own
 tables on startup (the schema itself must already exist).
 
+**The agent speaks the organization's language.** In the operator console,
+*מערכת ← הגדרות המערכת ← מידע ארגוני* holds the organization's own documents
+(terms, roles, tone), read by every agent on every call, and *פרומפטים*
+edits the shipped prompts, with one press back to the default
+([D54](docs/DECISIONS.md)).
+
 **The solver has two settings.** The operator console's *מערכת ← הגדרות
 המערכת ← בניית סידור* sets its wall time per solve (`PAKASH_SOLVER_TIME_LIMIT_SECONDS`, default 10) and its
 parallel workers (`PAKASH_SOLVER_WORKERS`, default 8). It solves coverage

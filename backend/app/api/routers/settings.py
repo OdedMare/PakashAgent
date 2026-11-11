@@ -31,6 +31,7 @@ from typing import Optional
 from fastapi import APIRouter, Cookie, Depends, Header
 
 from app.api.contracts import ModelsProbeRequest, RedisProbeRequest
+from app.api.routers import prompt_library
 from app.common import redis_hub
 from app.common.errors import AppError, ForbiddenError
 from app.common.runtime_settings import redis_fields
@@ -75,7 +76,7 @@ def _settings_guard(guards, password: str, throttle: LoginThrottle):
 
 def build_router(
     store, llm, guards, password: str = "",
-    throttle: Optional[LoginThrottle] = None, redis=None,
+    throttle: Optional[LoginThrottle] = None, redis=None, library=None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api", tags=["settings"])
     unlocked = _settings_guard(guards, password, throttle or LoginThrottle())
@@ -133,6 +134,8 @@ def build_router(
         not an error."""
         return _redis_report(store.get(), request, redis)
 
+    if library is not None:
+        prompt_library.add_routes(router, library, unlocked)
     return router
 
 

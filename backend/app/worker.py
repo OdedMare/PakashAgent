@@ -10,6 +10,7 @@ import signal
 import threading
 import time
 
+from app.bl import prompts
 from app.bl.compiled_sources import SourceCompiler
 from app.bl.compiled_sources.compiler import JOB_KIND as COMPILE_SOURCES
 from app.bl.schedule_service import ScheduleService
@@ -219,6 +220,10 @@ def main() -> None:
 
     signal.signal(signal.SIGTERM, on_signal)
     signal.signal(signal.SIGINT, on_signal)
+    # The wording saved in the panel (D54) steers the jobs run here too.
+    library = prompts.PromptLibrary(repository)
+    prompts.use(library)
+    library.watch(stopped)
     threads = start(worker, stopped)
     while not stopped.wait(_POLL_SECONDS):
         pass

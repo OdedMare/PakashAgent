@@ -1899,3 +1899,36 @@ than change everything. Two cases, two answers:
   good. It does not keep whoever carried the nights on them; the evenness
   and the ledger move them far more strongly. A build reports
   `continuity_kept` of `continuity_rows` in its metrics.
+
+## D54 — The organization's documents and the prompts are edited in the panel *(extends D39)*
+
+The operator asked for two things: that the agent speak the organization's
+own language, from documents they can add to and edit, and that the shipped
+prompts be editable in the UI.
+
+- **Documents** (`bl/prompts/library.py`). Each has a name, text and an
+  on/off switch. Every switched-on document is appended, under an
+  "Organization knowledge" heading, to every prompt `prompts.load` returns:
+  the chat, the change reader, the rule translator, the learner and the
+  import reader. The heading says the documents are background that changes
+  no rule and authorises nothing. A document is capped at 20,000 characters
+  and the switched-on ones at 60,000 together, because they ride on every
+  model call.
+- **Prompts.** Any shipped prompt or shared fragment can be rewritten. The
+  rewrite is read in place of its file, with `<!-- include: -->` lines still
+  resolved; the file stays the default and one press goes back to it. A
+  rewrite that would not compose (a missing or circular include) is refused
+  at save. Each rewrite records a digest of the shipped text it was made
+  from, so the panel can say when a release changed the default under it.
+- **One value in `deployment_state`** (`prompt_library`), polled by version
+  every three seconds from a background thread, so a save reaches every
+  replica and the worker without a restart and no model call waits on the
+  database for its wording. An unreachable database leaves
+  the wording already held in place.
+- **Operator-only and deployment-wide**, behind the settings guard
+  (`/api/settings/library`), like the model connection. Per-team documents
+  were not asked for; they would need the library keyed by team.
+- **The translation cache follows the wording.** `compiler_id` digests the
+  loaded translator prompt, so editing it or any document re-translates
+  each team's standing rules at its next build (D32).
+

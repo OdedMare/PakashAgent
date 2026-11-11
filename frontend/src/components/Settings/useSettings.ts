@@ -5,7 +5,12 @@ import { FormEvent, useState } from "react";
 import { getSettings, probeModels, probeRedis, updateSettings } from "@/services/api";
 import type { RedisReport } from "@/types";
 
-export type SettingsSection = "agent" | "schedule" | "database" | "redis";
+export type SettingsSection =
+  | "agent" | "knowledge" | "prompts" | "schedule" | "database" | "redis";
+
+/** Sections that save each item with its own button, so the form's
+ *  "שמירת שינויים" footer has nothing to do with them. */
+export const SELF_SAVING: SettingsSection[] = ["knowledge", "prompts"];
 
 /** What the backend returns in place of a stored secret, and what it accepts
  *  back to mean "unchanged". Must match `MASKED_SECRET` in
@@ -163,7 +168,7 @@ export function useSettings() {
 
   return {
     activeSection, setActiveSection, loaded, loading, saving, message, error,
-    unlock,
+    unlock, password,
     modelsFor, modelsErrorFor, loadingRole,
     save, loadModels, set, text, checked, secretSaved,
     redisReport, redisTesting, redisError, testRedis,

@@ -18,7 +18,9 @@ from app.api.routers import (
     settings, workspace,
 )
 from app import worker as job_worker
+from app.bl import prompts
 from app.bl.admin_service import AdminService
+from app.bl.prompts import PromptLibrary
 from app.bl.complex_duties import ComplexDutyService
 from app.bl.complex_service import ComplexService, describe_action
 from app.bl.compiled_sources import SourceCompiler
@@ -64,6 +66,10 @@ repository = Repository(store)
 # the processes that mount the same settings file (D39).
 store.share_through(repository)
 llm = OpenAIJsonClient(store)
+# The organization's documents and the prompts rewritten in the panel (D54),
+# read by every agent on its next call.
+prompt_library = PromptLibrary(repository)
+prompts.use(prompt_library)
 # Redis keeps the heavy board reads until the team's data changes (D50).
 # Inert with no URL saved: every read then goes to PostgreSQL. Every write
 # this process commits retires its team's cached reads.
@@ -175,6 +181,8 @@ def _embedded_worker() -> bool:
 async def lifespan(_app):
     startup()
     threads, stopped = [], threading.Event()
+    # Wording saved on another replica reaches this one (D54).
+    prompt_library.watch(stopped)
     if _embedded_worker():
         threads = job_worker.start(job_worker.JobWorker(
             repository, schedules=schedule_service,
@@ -285,7 +293,7 @@ app.include_router(replacements.build_router(manager_chat_service, guards))
 app.include_router(
     settings.build_router(
         store, llm, guards, env.settings_password, login_throttle,
-        redis=redis_hub,
+        redis=redis_hub, library=prompt_library,
     )
 )
 app.include_router(

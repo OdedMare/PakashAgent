@@ -11,7 +11,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { SettingsContent, SettingsNavigation } from "./SettingsSections";
 import type { SettingsController } from "./useSettings";
-import { useSettings } from "./useSettings";
+import { SELF_SAVING, useSettings } from "./useSettings";
 
 /** The system settings inline, for the צוות משמרות זהב console (D28) —
  *  the only place they are reachable from; team screens no longer open them.
@@ -112,7 +112,9 @@ function SettingsWorkspace({ settings }: { settings: SettingsController }) {
         />
         <SettingsContent settings={settings} />
       </div>
-      <SettingsFooter settings={settings} />
+      {SELF_SAVING.includes(settings.activeSection) ? null : (
+        <SettingsFooter settings={settings} />
+      )}
     </form>
   );
 }

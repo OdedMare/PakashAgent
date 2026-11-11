@@ -504,7 +504,11 @@ one on screen and names any published week it left alone.
   HttpOnly cookie, so an operator can also be signed in to a team in the same
   browser; `useAdmin` asks `/api/admin/me` for the same reason `useWorkspace`
   asks `/me`. Its "מערכת" tab renders `SystemSettings`, which unlocks on the
-  operator session with no settings password. Opening a team asks for a name
+  operator session with no settings password. Two of its sections, "מידע
+  ארגוני" and "פרומפטים" (`Settings/KnowledgeSettings.tsx`,
+  `PromptSettings.tsx`, D54), save each document or prompt with its own
+  button through `useLibrary`, so the form's footer is hidden on them.
+  Opening a team asks for a name
   and a password only — headcount is the manager's — and that password is
   shown once on the hand-over card and never again.
 - **The member share link is `/team/<token>`.** `MemberEntry` exchanges the

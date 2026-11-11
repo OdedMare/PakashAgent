@@ -1,5 +1,9 @@
-import { Bot, CalendarRange, Database, RefreshCw, Server } from "lucide-react";
+import {
+  Bot, BookOpenText, CalendarRange, Database, RefreshCw, ScrollText, Server,
+} from "lucide-react";
 
+import { KnowledgeSettings } from "./KnowledgeSettings";
+import { PromptSettings } from "./PromptSettings";
 import { RedisSettings } from "./RedisSettings";
 import {
   SettingsField as Field,
@@ -16,6 +20,18 @@ const SECTIONS = [
     label: "סוכן ומודל",
     description: "מודל, כתובת בסיס ומפתח API",
     icon: Bot,
+  },
+  {
+    id: "knowledge" as const,
+    label: "מידע ארגוני",
+    description: "מסמכים שהסוכן לומד מהם את שפת הארגון",
+    icon: BookOpenText,
+  },
+  {
+    id: "prompts" as const,
+    label: "פרומפטים",
+    description: "עריכת ההנחיות של הסוכן",
+    icon: ScrollText,
   },
   {
     id: "schedule" as const,
@@ -69,6 +85,8 @@ export function SettingsNavigation({
 export function SettingsContent({ settings }: { settings: SettingsController }) {
   const sections = {
     agent: <AgentSettings settings={settings} />,
+    knowledge: <KnowledgeSettings password={settings.password} />,
+    prompts: <PromptSettings password={settings.password} />,
     schedule: <ScheduleSettings settings={settings} />,
     database: <DatabaseSettings settings={settings} />,
     redis: <RedisSettings settings={settings} />,

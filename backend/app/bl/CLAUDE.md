@@ -33,7 +33,7 @@ tables which module owns what. `importer/` reads the workplace's own files in an
 | `simulate/` | **What a change would do.** No model, no repository, persists nothing |
 | `rotation/` | **Whose closure a date is, and who is home on a day cycle.** Pure arithmetic off separate anchors; no model |
 | `placement/` | **What a placement would cost, and what else the manager could do.** No model |
-| `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition |
+| `prompts/` | Prompt text as markdown, `prompts.load(name)`, with `<!-- include: -->` composition. `library.py` (D54) layers the organization's documents and the operator's rewrites over the files |
 | `shared.py` | Small helpers several packages read: text and date coercion, Hebrew weekdays, `role_qualified`/`allowed_roles`, `resume` (a clarification joined to its request) |
 | `directive_agent/` | **Translating the manager's words for the solver.** A bounded tool loop; code validates the answer, keeps every source that translated whole, reports the rest, and writes nothing |
 | `compiled_sources/` | **Standing sentences translated once and kept** (D32): keys, time anchoring, the cache port, the worker's compiler. No model, no SQL |

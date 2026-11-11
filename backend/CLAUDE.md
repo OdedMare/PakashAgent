@@ -198,6 +198,9 @@ python -m benchmarks.solver_bench --save before.json   # solver quality and time
   placement would cost; pure arithmetic the solver, the board and the audit
   share.
 - `bl/prompts/` — prompt text as markdown, loaded by `prompts.load(name)`.
+  `library.py` (D54) puts the operator's wording on top: the organization's
+  documents, appended to every loaded prompt, and rewrites of shipped
+  prompts. Stored in `deployment_state`, edited at `/api/settings/library`.
   Shared fragments compose via `<!-- include: shared/name.md -->`.
 - `api/` — Pydantic HTTP contracts and routers.
 - `main.py` — FastAPI routes, the composition root, and the embedded worker.

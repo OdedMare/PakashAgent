@@ -212,6 +212,43 @@ export interface RedisLiveStatus {
   error: string;
 }
 
+/** One of the organization's documents (D54). Switched on, every agent
+ *  reads it after its own instructions. */
+export interface KnowledgeDocument {
+  id: string;
+  title: string;
+  content: string;
+  enabled: boolean;
+  updated_at: string;
+}
+
+/** A prompt the panel may rewrite. `text` is what the agent reads now;
+ *  `default` is what the release ships. */
+export interface EditablePrompt {
+  name: string;
+  title: string;
+  description: string;
+  text: string;
+  default: string;
+  overridden: boolean;
+  /** The shipped text changed after this rewrite was saved. */
+  default_changed: boolean;
+  updated_at: string;
+}
+
+/** `GET /api/settings/library`, and the answer of every write to it. */
+export interface PromptLibrary {
+  documents: KnowledgeDocument[];
+  knowledge_chars: number;
+  limits: {
+    documents: number;
+    document_chars: number;
+    knowledge_chars: number;
+    prompt_chars: number;
+  };
+  prompts: EditablePrompt[];
+}
+
 /** `POST /api/settings/redis`: a connection tested, and what is in it. */
 export interface RedisReport {
   configured: boolean;

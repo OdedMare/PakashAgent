@@ -456,3 +456,147 @@ select.settings-input {
   margin: 0;
   font-weight: 600;
 }
+
+/* --- the organization's documents and the prompts (D54) ------------------ */
+
+/* A prompt is long, wide text: its editor takes the width a form of short
+   fields does not need. */
+.settings-section.library-wide {
+  max-width: 860px;
+}
+
+.library-intro {
+  margin-top: -10px;
+}
+
+.library-list {
+  display: grid;
+  margin: 0 0 12px;
+  padding: 0;
+  gap: 6px;
+  list-style: none;
+}
+
+.library-list button {
+  display: flex;
+  width: 100%;
+  min-height: 46px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  gap: 12px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  text-align: start;
+}
+
+.library-list button:hover {
+  background: var(--surface-3);
+}
+
+.library-list button.is-open {
+  border-color: var(--primary);
+}
+
+.library-list small,
+.library-count {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.library-empty {
+  margin: 0 0 12px;
+}
+
+.library-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.library-editor {
+  margin-top: 14px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.library-text {
+  display: block;
+  min-height: 180px;
+  padding: 10px 12px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.library-prompt {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  /* Hebrew examples inside an English prompt keep their own direction. */
+  unicode-bidi: plaintext;
+  tab-size: 2;
+}
+
+.library-toggle {
+  display: flex !important;
+  min-height: 44px;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px !important;
+}
+
+.library-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 6px;
+  gap: 10px;
+}
+
+.library-buttons .primary-button {
+  width: auto;
+  min-width: 148px;
+}
+
+.library-buttons .ghost-button {
+  min-height: 44px;
+  padding: 0 16px;
+}
+
+/* The destructive action sits at the far end of the row. */
+.library-buttons .danger-button {
+  min-height: 44px;
+  margin-inline: auto 0;
+}
+
+.library-status {
+  display: flex;
+  align-items: center;
+  margin: 12px 0 0;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.library-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  color: var(--text-soft);
+  background: var(--surface-3);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.library-badge.is-edited {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.settings-note code {
+  font-size: 11px;
+}

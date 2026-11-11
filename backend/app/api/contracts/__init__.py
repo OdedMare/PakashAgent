@@ -23,7 +23,9 @@ from app.api.contracts.complex_duties import (  # noqa: F401
     DutyTypeRequest,
 )
 from app.api.contracts.settings import (  # noqa: F401
+    KnowledgeDocumentRequest,
     ModelsProbeRequest,
+    PromptTextRequest,
     RedisProbeRequest,
 )
 from app.api.contracts.workspace import (  # noqa: F401

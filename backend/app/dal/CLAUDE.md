@@ -131,7 +131,7 @@ same call. Add a new guarded migration after its own `COMMIT`.
 | `manager_chats`, `manager_chat_messages` | One manager's conversations and their turns, with the plan a turn prepared and the receipt of its approval |
 | `copilot_jobs` | The durable job queue: chat turns, generation spans, `compile_sources` (named for the copilot that is gone) — claimed once, retried with backoff |
 | `login_attempts` | Wrong guesses and lockouts per account (D35). Without `team_id`: the account key already names the team, and the operator and settings accounts belong to none |
-| `deployment_state` | Values every process of the deployment shares (D39): the generated session key, the panel's settings. Keyed by name with a `version` to poll; no `team_id`, since it belongs to no team |
+| `deployment_state` | Values every process of the deployment shares (D39): the generated session key, the panel's settings, the organization's documents and rewritten prompts (D54). Keyed by name with a `version` to poll; no `team_id`, since it belongs to no team |
 
 The workplace profile — the mission, the **shift vocabulary** (names, times,
 on-call flags and weighting), the employees, and the rules — lives as JSON on
