@@ -1,0 +1,180 @@
+"""The manual picker's roster, and whose closure a slot falls in."""
+
+from typing import List, Optional
+
+from app.bl import rotation
+from app.bl.placement import values
+from app.bl.shared import parse_date, person_roles
+from app.bl.placement.context import PlacementContext, effective_rows
+from app.bl.placement.tiers import posts_by_shift
+
+# What "the rotation says nothing about this slot" looks like on the wire. A
+# shape rather than a null so the client renders one branch.
+_NO_CLOSURE = {
+    "date": "", "groups": [], "label": "", "employees": [],
+    "until_handover": False,
+}
+
+_PATTERN_LABELS = {
+    "hamshushim": "חמשושים",
+    "shushim": "שושים",
+    "daily": "יומי",
+}
+
+
+def closure_of(profile: dict, slot_date: str, shift_name: str = "") -> dict:
+    """Whose closure this slot falls in, for the dialog to say so.
+
+    The rotation is the one fact about a placement the manager cannot read
+    off the grid. Empty on an ordinary date, on an unanchored cycle, and past
+    the Sunday handover -- all "the rotation has nothing to say here".
+    """
+    day = parse_date(values.iso(slot_date))
+    if day is None:
+        return _NO_CLOSURE
+    found = rotation.by_date(profile, day, day).get(day.isoformat())
+    if not found:
+        return _NO_CLOSURE
+    if found["until_handover"] and values.text(shift_name) not in found["shifts"]:
+        return _NO_CLOSURE
+    return {
+        key: found[key]
+        for key in ("date", "groups", "label", "employees", "until_handover")
+    }
+
+
+def employee_options(
+    schedule: dict,
+    profile: dict,
+    shift_name: str,
+    slot_date: str,
+    availability: Optional[List[dict]] = None,
+    moving_assignment_id: str = "",
+) -> List[dict]:
+    """Every roster member for a manual picker, with a concrete why-not.
+
+    Each option carries the person's rotation and whether they are the ones
+    *in* on this slot: "who is free" and "whose weekend is it" are different
+    questions, so closers sort to the top of a closure slot, ahead of the
+    fairness ordering that governs an ordinary day. Somebody from another
+    post who holds this shift's role and is otherwise free is marked
+    `borrowable` and sorts right after the people who are free.
+    """
+    shift_name, slot_date = values.text(shift_name), values.iso(slot_date)
+    context = PlacementContext(
+        schedule, profile,
+        effective_rows(schedule, profile, availability, slot_date),
+        moving_assignment_id,
+    )
+    load = values.hours_by_employee(schedule, profile)
+    day = parse_date(slot_date)
+    shift_names = [
+        values.text(row.get("name")) for row in values.shifts(profile)
+        if values.text(row.get("name"))
+    ]
+    seat = {
+        "roles": _crew_roles(context, shift_name, slot_date),
+        "posts": posts_by_shift(profile),
+    }
+    options = [
+        _option(context, person, shift_name, slot_date, day, load, shift_names, seat)
+        for person in context.employees if values.text(person.get("name"))
+    ]
+    # A borrow sorts straight after the people who are free: on a short
+    # shift they are the next answer, ahead of anybody with a real conflict.
+    options.sort(key=lambda item: (
+        not item["available"], not item["borrowable"], not item["closing"],
+        item["hours"], item["employee"],
+    ))
+    return options
+
+
+def _crew_roles(context, shift_name: str, slot_date: str) -> set:
+    """The roles this shift's own people hold -- what "the same role" means.
+
+    Read off the roster rather than `allowed_roles`, because a unit whose
+    roles name a team (one role per post) and one whose roles name a trade
+    (נהג, חובש) both mean the trade when they say a colleague from another
+    post holds the same role. נחפפים are left out: they fill no seat.
+    """
+    roles: set = set()
+    for person in context.employees:
+        name = values.text(person.get("name"))
+        if not name or values.text(person.get("service_type")) == "overlap":
+            continue
+        if values.is_eligible(context.profile, name, shift_name, slot_date):
+            roles |= person_roles(person)
+    return roles
+
+
+def _borrow(option: dict, verdict: dict, person: dict, seat: dict) -> dict:
+    """Mark somebody free who belongs to another post but holds a role this
+    shift's own people hold -- the colleague a short shift can borrow.
+
+    Only the roster's "not this shift" stands between them and the seat:
+    any other reason (a constraint, rest, a closure) means they are not
+    free, and offering them as a borrow would hide it. `borrow_from` names
+    the posts they belong to -- a shift's purpose, else the shift
+    (`tiers.py`) -- so "מ־א" reads the same for every shift post א runs.
+    """
+    shared = sorted(person_roles(person) & seat["roles"])
+    borrowable = bool(
+        shared
+        and not verdict["eligible"]
+        and len(verdict["reasons"]) == 1  # the eligibility sentence alone
+        and not verdict["blocking"]
+        and not option["is_overlap"]
+    )
+    option["borrowable"] = borrowable
+    option["shared_roles"] = shared if borrowable else []
+    posts = [seat["posts"].get(item, item) for item in option["eligible_shifts"]]
+    option["borrow_from"] = list(dict.fromkeys(posts)) if borrowable else []
+    return option
+
+
+def _option(context, person, shift_name, slot_date, day, load, shift_names, seat) -> dict:
+    name = values.text(person.get("name"))
+    exit_pattern = rotation.exit_pattern(context.profile, person)
+    rotation_group = values.text(person.get("rotation_group"))
+    verdict = context.verdict(name, shift_name, slot_date)
+    option = {
+        "employee": name,
+        "available": verdict["ok"],
+        "reasons": verdict["reasons"],
+        "hours": load.get(name, 0.0),
+        "is_shift_manager": bool(person.get("is_shift_manager")),
+        "can_train": bool(person.get("can_train")),
+        "is_overlap": values.text(person.get("service_type")) == "overlap",
+        "exit_pattern": exit_pattern,
+        # The shift types the roster lets this person work, so the picker
+        # can narrow to "who can do nights" without a second round trip.
+        "eligible_shifts": [
+            item for item in shift_names
+            if values.is_eligible(context.profile, name, item)
+        ],
+        "rotation_group": rotation_group,
+        "rotation": rotation.label(_cycle_of(context.profile, person), rotation_group, context.profile)
+        or _personal_label(person, exit_pattern),
+        "closing": bool(
+            day is not None
+            # Ungrouped חמשושים/שושים "hold" the weekend they are home for.
+            and (values.text(person.get("rotation_group")) or exit_pattern == "personal")
+            and rotation.holds(context.profile, person, day, shift_name)
+        ),
+    }
+    return _borrow(option, verdict, person, seat)
+
+
+def _personal_label(person: dict, exit_pattern: str) -> str:
+    if exit_pattern == "personal" and person.get("closure_every"):
+        return "סוגר/ת 1 ל-%s" % person["closure_every"]
+    return _PATTERN_LABELS.get(exit_pattern, "")
+
+
+def _cycle_of(profile: dict, person: dict) -> str:
+    """Which cycle a person turns on -- ג, ד and ה name a תלתון, a רבעון or a
+    חמישון, so the label needs the cycle, not just the letter."""
+    pattern = rotation.exit_pattern(profile, person)
+    if pattern in ("round", "triplet", "quad", "quint", "hamshushim", "shushim") or rotation.is_day_cycle(pattern):
+        return pattern
+    return rotation.cycle_of_group(profile, values.text(person.get("rotation_group")))

@@ -135,11 +135,10 @@ def test_an_unprefixed_weekday_names_the_same_day_as_a_prefixed_one():
 
 
 def test_the_stored_grid_outranks_the_current_profile():
-    """An imported week keeps the staffing the file actually ran with.
+    """A stored week keeps the staffing it was built with.
 
-    `commit_import` builds the grid from the sheet's own rows rather than
-    from today's vocabulary (D9), and a profile edited since must not
-    retroactively decide that last month's six-person Tuesday was short.
+    A profile edited since must not retroactively decide that last month's
+    six-person Tuesday was short (D9).
     """
     import datetime
 

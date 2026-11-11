@@ -1,50 +1,24 @@
 "use client";
 
-import {
-  AlertTriangle,
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  Eraser,
-  GripVertical,
-  Moon,
-  Plus,
-  Repeat2,
-  Sparkles,
-  X,
-} from "lucide-react";
+import { ArrowDownAZ, Check, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { hebrewWeekday, isWeekend } from "@/components/Management/Calendar";
 import { buildPalette } from "@/components/Management/palette";
-import { constraintBlocksSlot } from "@/lib/constraints";
-import type {
-  Assignment,
-  CardPerson,
-  Closure,
-  Constraint,
-  Schedule,
-  ScheduleWarning,
-  Slot,
-} from "@/types";
-import { displayDate } from "@/components/DateInput";
+import type { Assignment, CardPerson, Closure, Constraint, Schedule } from "@/types";
 
 import type { AgentTouch } from "./agentTouch";
-import { touchKey } from "./agentTouch";
-import { EMPLOYEE_DRAG_TYPE } from "./dragData";
-import { EMPTY_PERSON } from "./person";
-import type { ScheduleIndex } from "./scheduleIndex";
 import { buildScheduleIndex } from "./scheduleIndex";
-import type { ShiftOrder } from "./shiftOrder";
-import { SHIFT_DRAG_TYPE, useShiftOrder } from "./shiftOrder";
-import { ShiftCard } from "./ShiftCard";
+import { useShiftOrder } from "./shiftOrder";
 import type { BoardFilters } from "./useBoard";
-import { weekDates } from "./useBoard";
-import type { MoveMode } from "./useMoveMode";
 import { useMoveMode } from "./useMoveMode";
+import { BoardRow } from "./BoardRow";
+import { DayHead } from "./DayHead";
 
 /** The week as a board: days across, shifts down, cards inside.
+ *
+ *  The same grid draws a single day: `dates` is one column then, and every
+ *  gesture below works unchanged, because a day is the week with six columns
+ *  put away rather than a second board.
  *
  *  Days are the primary timeline because that is how the manager thinks —
  *  "who is on Tuesday" is the question, and the existing product direction
@@ -68,7 +42,7 @@ import { useMoveMode } from "./useMoveMode";
  */
 export function BoardGrid({
   schedule,
-  weekStart,
+  dates,
   today,
   constraints,
   employees,
@@ -80,13 +54,17 @@ export function BoardGrid({
   touches,
   onDropCard,
   onDropEmployee,
+  onRemoveCard,
   onOpenCard,
   onAddShift,
-  onGenerateDay,
+  onOpenDay,
+  onBuildFrom,
   onClearDay,
+  onOpenDate,
 }: {
   schedule: Schedule | null;
-  weekStart: string;
+  /** The columns to draw, in order: the seven days of a week, or one. */
+  dates: string[];
   today: string;
   constraints: Constraint[];
   employees: string[];
@@ -113,15 +91,25 @@ export function BoardGrid({
     shift_name: string;
     slot_date: string;
   }) => void;
+  /** Remove one assignment by keyboard, touch, or dragging it to the trash. */
+  onRemoveCard?: (assignment: Assignment) => void;
   onOpenCard?: (assignment: Assignment) => void;
   onAddShift?: (input: { shift_name: string; slot_date: string }) => void;
-  onGenerateDay?: (date: string) => void;
+  onOpenDay?: (date: string) => void;
+  /** Ask for a build starting on this day — until Saturday, or until a day
+   *  the manager picks. Opens the build dialog and writes nothing itself.
+   *  Withheld wherever clearing is, and for the same reasons. */
+  onBuildFrom?: (date: string) => void;
   /** Clear one day's shifts. Withheld on a published board, where every
    *  write is refused, and while a build is running on this period. */
   onClearDay?: (date: string) => void;
+  /** Show one column on its own. A change of view and nothing else — which
+   *  is why it is offered on a published board too. */
+  onOpenDate?: (date: string) => void;
 }) {
   const [dragging, setDragging] = useState<Assignment | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  const [overTrash, setOverTrash] = useState(false);
   // The row being dragged to a new position, and the row it is currently
   // over. Separate from the card drag above because they are different acts
   // on different targets: one proposes a change to the week, the other only
@@ -133,7 +121,6 @@ export function BoardGrid({
   // same confirmation (D12).
   const move = useMoveMode();
 
-  const dates = useMemo(() => weekDates(weekStart), [weekStart]);
   const hueOf = useMemo(() => buildPalette(employees), [employees]);
 
   // Bringing today into view on a board wider than the screen.
@@ -163,9 +150,9 @@ export function BoardGrid({
         ? "auto"
         : "smooth",
     });
-    // Re-run when the week changes: paging back to this week should land on
+    // Re-run when the dates change: paging back to this week should land on
     // today again rather than wherever the previous week was scrolled to.
-  }, [showsToday, weekStart]);
+  }, [showsToday, dates]);
 
   // The week bucketed by cell, once. Every lookup below reads from this
   // instead of walking the assignment, slot and warning lists per cell.
@@ -178,6 +165,18 @@ export function BoardGrid({
   // schedule rather than derived here: which group closes on 12/09 is
   // arithmetic the backend already did, and a browser-side cycle would be a
   // second answer to a question that must have exactly one (D3).
+  // Who is on מכלול duty each date (D44), read off the constraints the
+  // board already has: the server projects a duty there with no hours.
+  const duties = useMemo(() => {
+    const byDate = new Map<string, string[]>();
+    for (const row of constraints) {
+      if (row.source !== "complex") continue;
+      const list = byDate.get(row.constraint_date) ?? [];
+      list.push(row.reason ? `${row.employee} · ${row.reason}` : row.employee);
+      byDate.set(row.constraint_date, list);
+    }
+    return byDate;
+  }, [constraints]);
   const closures = useMemo(() => {
     const map = new Map<string, Closure>();
     for (const row of schedule?.closures ?? []) {
@@ -185,27 +184,21 @@ export function BoardGrid({
     }
     return map;
   }, [schedule?.closures]);
-
-  // When each shift starts, read off whichever slot in its row carries the
-  // hours: a shift's times come from the vocabulary and hold all week, but a
-  // shift that does not run on Sunday has no Sunday slot to read them from.
-  const startTimes = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const slot of schedule?.slots ?? []) {
-      if (slot.start_time && !map[slot.shift_name]) {
-        map[slot.shift_name] = slot.start_time;
-      }
+  const specialStaffing = useMemo(() => {
+    const byDate = new Map<string, string[]>();
+    for (const row of schedule?.generation.staffing_overrides ?? []) {
+      const list = byDate.get(row.date) ?? [];
+      list.push(`${row.shift}: תקן ${row.headcount}`);
+      byDate.set(row.date, list);
     }
-    return map;
-  }, [schedule?.slots]);
+    return byDate;
+  }, [schedule?.generation.staffing_overrides]);
 
-  // Shift rows run by the clock, not by the order the slots happened to be
-  // written in — a day happens morning, then noon, then evening, and a board
-  // that opens with those rows shuffled has to be re-read every time. Still
-  // not alphabetical, which would scramble the same sequence differently
-  // (D9); and still the manager's to override, which is what `shiftOrder`
-  // remembers.
-  const order = useShiftOrder({ shifts: index.shifts, startTimes });
+  // Shift rows run א-ב, not in the order the slots happened to be written
+  // in, so a post's shifts sit together (אלחוט יום above אלחוט לילה) and the
+  // board reads the same every time it opens. Still the manager's to
+  // override, which is what `shiftOrder` remembers.
+  const order = useShiftOrder({ shifts: index.shifts });
   const shiftFilter = filters.shift;
   const shifts = useMemo(
     () => order.shifts.filter((name) => !shiftFilter || name === shiftFilter),
@@ -263,29 +256,74 @@ export function BoardGrid({
     onDropCard?.({ assignment: card, shift_name: shift, slot_date: date });
   };
 
+  const removeCard = (card: Assignment) => {
+    setDragging(null);
+    setOver(null);
+    setOverTrash(false);
+    move.cancel();
+    onRemoveCard?.(card);
+  };
+
   return (
-    <div className="board-grid-scroll" ref={scroller}>
-      {/* What a picked-up card is waiting for, said rather than left to be
-          inferred from an outline. It carries no confirm: placing still
-          opens the dialog that collects the reason (D12). */}
-      {move.picked ? (
-        <div className="board-move-bar" role="status">
-          <Check size={14} />
-          <span className="board-move-bar-text">
-            {move.picked.employee} מוכן/ה למעבר — יש לבחור תא יעד.
-          </span>
-          <button
-            type="button"
-            className="board-move-cancel"
-            onClick={move.cancel}
-          >
-            <X size={13} />
-            ביטול
-          </button>
-        </div>
+    <div
+      className="board-grid-wrap"
+      onDragEndCapture={() => setOverTrash(false)}
+    >
+      {dragging ? (
+        <button
+          type="button"
+          className={`board-trash-target${overTrash ? " is-over" : ""}`}
+          onDragOver={(event) => {
+            if (!dragging) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+            setOverTrash(true);
+          }}
+          onDragLeave={() => setOverTrash(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            if (dragging) removeCard(dragging);
+          }}
+          onClick={() => {
+            removeCard(dragging);
+          }}
+          aria-label={`הסרת השיבוץ של ${dragging.employee}`}
+        >
+          <Trash2 size={17} />
+          שחרור כאן להסרת השיבוץ
+        </button>
       ) : null}
 
-      {/* A board no longer in clock order says so, and offers the clock
+      <div className="board-grid-scroll" ref={scroller} data-tour="grid">
+        {/* What a picked-up card is waiting for, said rather than left to be
+            inferred from an outline. It carries no confirm: placing still
+            opens the dialog that collects the reason (D12). */}
+        {move.picked ? (
+          <div className="board-move-bar" role="status">
+            <Check size={14} />
+            <span className="board-move-bar-text">
+              {move.picked.employee} מוכן/ה למעבר — יש לבחור תא יעד.
+            </span>
+            <button
+              type="button"
+              className="board-move-remove"
+              onClick={() => removeCard(move.picked!)}
+            >
+              <Trash2 size={13} />
+              הסרה
+            </button>
+            <button
+              type="button"
+              className="board-move-cancel"
+              onClick={move.cancel}
+            >
+              <X size={13} />
+              ביטול
+            </button>
+          </div>
+        ) : null}
+
+      {/* A board no longer in א-ב order says so, and offers that order
           back in one click. Shown only while the manager's own order
           actually differs from it: a row nudged and nudged back is not
           something to keep explaining. */}
@@ -298,16 +336,16 @@ export function BoardGrid({
             type="button"
             className="board-order-reset"
             onClick={order.reset}
-            title="להחזיר את השורות לסדר לפי שעת ההתחלה"
+            title="להחזיר את השורות לסדר א-ב"
           >
-            <Clock size={13} />
-            סידור לפי שעות
+            <ArrowDownAZ size={13} />
+            סידור לפי א-ב
           </button>
         </div>
       ) : null}
 
       <div
-        className="board-grid"
+        className={`board-grid${dates.length === 1 ? " is-day" : ""}`}
         dir="rtl"
         style={{ "--board-days": dates.length } as React.CSSProperties}
       >
@@ -322,9 +360,27 @@ export function BoardGrid({
             isToday={date === today}
             coverage={index.dayCoverage(date)}
             closure={closures.get(date)}
+            duties={duties.get(date)}
+            specialStaffing={specialStaffing.get(date)}
             columnRef={date === today ? todayColumn : undefined}
-            onGenerate={onGenerateDay ? () => onGenerateDay(date) : undefined}
+            onOpenAgent={onOpenDay ? () => onOpenDay(date) : undefined}
+            // Only on a day the period actually holds: a build aimed at a
+            // column the period never opened has no rows to fill.
+            onBuildFrom={
+              onBuildFrom &&
+              schedule &&
+              date >= schedule.starts_on &&
+              date <= schedule.ends_on
+                ? () => onBuildFrom(date)
+                : undefined
+            }
             onClear={onClearDay ? () => onClearDay(date) : undefined}
+            // Nothing to open when the day is already the only column.
+            onOpen={
+              onOpenDate && dates.length > 1
+                ? () => onOpenDate(date)
+                : undefined
+            }
           />
         ))}
 
@@ -362,530 +418,13 @@ export function BoardGrid({
             onPlace={placeOn}
             onDropCard={onDropCard}
             onDropEmployee={onDropEmployee}
+            onRemoveCard={removeCard}
             onOpenCard={onOpenCard}
             onAddShift={onAddShift}
           />
         ))}
+        </div>
       </div>
     </div>
   );
-}
-
-/** One day's column head.
- *
- *  Today is marked here rather than only on the cells beneath it, because
- *  the head is where the eye lands first when the question is "where am I".
- *  The per-day coverage line under the date is what makes the header worth
- *  its height: it answers "is this day staffed" without reading the column. */
-function DayHead({
-  date,
-  isToday,
-  coverage,
-  closure,
-  columnRef,
-  onGenerate,
-  onClear,
-}: {
-  date: string;
-  isToday: boolean;
-  /** Assigned and required for this day, counted once by the index. */
-  coverage: { assigned: number; required: number };
-  /** Whose closure this day is, when it is one. Undefined on an ordinary
-   *  day and on a workplace whose cycle was never anchored — the two are
-   *  the same thing here: the rotation has nothing to say. */
-  closure?: Closure;
-  /** Set on today's head only, so the scroller can bring it into view. */
-  columnRef?: React.Ref<HTMLDivElement>;
-  onGenerate?: () => void;
-  onClear?: () => void;
-}) {
-  const { assigned, required } = coverage;
-
-  return (
-    <div
-      ref={columnRef}
-      className={[
-        "board-dayhead",
-        isToday ? "is-today" : "",
-        isWeekend(date) ? "is-weekend" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      <span className="board-dayhead-weekday">{hebrewWeekday(date)}</span>
-      <span className="board-dayhead-date">{shortDate(date)}</span>
-      {required ? (
-        <span
-          className={`board-dayhead-coverage${
-            assigned < required ? " is-short" : ""
-          }`}
-          title={`${assigned} מתוך ${required} מקומות מאוישים`}
-        >
-          {assigned}/{required}
-        </span>
-      ) : (
-        <span className="board-dayhead-coverage is-empty">—</span>
-      )}
-      {isToday ? <span className="board-dayhead-pill">היום</span> : null}
-      {/* Whose weekend this is. The single most consequential fact about a
-          Thursday, and the one thing the grid underneath cannot show: a
-          manager filling a closure day without it is choosing between
-          colleagues who are not all in. `until_handover` marks the Sunday a
-          closure ends on, where only the morning still belongs to them. */}
-      {closure ? (
-        <span
-          className={`board-dayhead-closure${
-            closure.until_handover ? " is-handover" : ""
-          }`}
-          title={
-            (closure.until_handover
-              ? `${closure.label} סוגר/ת עד החילוף של הבוקר`
-              : `${closure.label} סוגר/ת ביום הזה`) +
-            (closure.employees.length
-              ? ` — ${closure.employees.join(", ")}`
-              : "")
-          }
-        >
-          <Repeat2 size={11} aria-hidden="true" />
-          {closure.until_handover ? `${closure.label} · חילוף` : closure.label}
-        </span>
-      ) : null}
-      <div className="board-dayhead-actions">
-        {onGenerate ? (
-          <button
-            type="button"
-            className="board-dayhead-generate"
-            onClick={onGenerate}
-            aria-label={`שיבוץ ${hebrewWeekday(date)} ${displayDate(date)}`}
-            title="לתת לסוכן הנחיות ולשבץ רק את היום הזה"
-          >
-            <Sparkles size={12} />
-            שבץ יום
-          </button>
-        ) : null}
-        {onClear ? (
-          <button
-            type="button"
-            className="board-dayhead-clear"
-            onClick={onClear}
-            aria-label={`מחיקת המשמרות של ${hebrewWeekday(date)} ${displayDate(date)}`}
-            title="מחיקת כל השיבוצים ביום הזה"
-          >
-            <Eraser size={12} />
-            נקה יום
-          </button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-/** One shift's row across the week. */
-function BoardRow({
-  shift,
-  position,
-  order,
-  draggingShift,
-  setDraggingShift,
-  overShift,
-  setOverShift,
-  dates,
-  today,
-  schedule,
-  index,
-  cardsFor,
-  constraints,
-  roles,
-  people,
-  hueOf,
-  dark,
-  filters,
-  readOnly,
-  touches,
-  dragging,
-  over,
-  setOver,
-  setDragging,
-  move,
-  onPlace,
-  onDropCard,
-  onDropEmployee,
-  onOpenCard,
-  onAddShift,
-}: {
-  shift: string;
-  /** Where this row sits and how many there are, or null when the board is
-   *  showing too few rows for an order to exist. */
-  position: { at: number; of: number } | null;
-  order: ShiftOrder;
-  draggingShift: string | null;
-  setDraggingShift: (shift: string | null) => void;
-  overShift: string | null;
-  setOverShift: (shift: string | null) => void;
-  dates: string[];
-  today: string;
-  schedule: Schedule;
-  index: ScheduleIndex;
-  cardsFor: (shift: string, date: string) => Assignment[];
-  constraints: Constraint[];
-  roles: Record<string, string>;
-  people: Record<string, CardPerson>;
-  hueOf: (name: string) => number;
-  dark: boolean;
-  filters: BoardFilters;
-  readOnly: boolean;
-  touches?: Map<string, AgentTouch[]>;
-  dragging: Assignment | null;
-  over: string | null;
-  setOver: (key: string | null) => void;
-  setDragging: (row: Assignment | null) => void;
-  move: MoveMode;
-  onPlace: (shift: string, date: string) => void;
-  onDropCard?: (move: {
-    assignment: Assignment;
-    shift_name: string;
-    slot_date: string;
-  }) => void;
-  onDropEmployee?: (input: {
-    employee: string;
-    shift_name: string;
-    slot_date: string;
-  }) => void;
-  onOpenCard?: (assignment: Assignment) => void;
-  onAddShift?: (input: { shift_name: string; slot_date: string }) => void;
-}) {
-  // The hours are read off whichever slot in the row carries them: a shift's
-  // times come from the vocabulary and are the same all week, but a slot
-  // that does not run on Sunday has none to read.
-  const withTimes = schedule.slots.find(
-    (slot) => slot.shift_name === shift && slot.start_time,
-  );
-  const onCall = schedule.slots.some(
-    (slot) => slot.shift_name === shift && slot.is_on_call,
-  );
-
-  const reorderable = position !== null;
-
-  return (
-    <>
-      {/* The row head is the handle. Dragging it reorders the board and
-          writes nothing — no assignment moves, so there is no reason to
-          collect and no dialog to open, which is why this gesture looks
-          like the card drag but ends nowhere near it (D12). It stays
-          available on a published board for the same reason: the week is
-          read-only, the order it is read in is not. */}
-      <div
-        className={[
-          "board-rowhead",
-          reorderable ? "is-reorderable" : "",
-          draggingShift === shift ? "is-dragging" : "",
-          overShift === shift && draggingShift !== shift ? "is-over" : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
-        draggable={reorderable}
-        onDragStart={(event) => {
-          if (!reorderable) return;
-          event.dataTransfer.setData(SHIFT_DRAG_TYPE, shift);
-          event.dataTransfer.effectAllowed = "move";
-          setDraggingShift(shift);
-        }}
-        onDragEnd={() => {
-          setDraggingShift(null);
-          setOverShift(null);
-        }}
-        onDragOver={(event) => {
-          // Only a row drag lands here. A card or a roster name dragged
-          // over the head is not a placement — there is no cell under it —
-          // so it is left un-droppable rather than silently reordering.
-          if (!event.dataTransfer.types.includes(SHIFT_DRAG_TYPE)) return;
-          event.preventDefault();
-          event.dataTransfer.dropEffect = "move";
-          setOverShift(shift);
-        }}
-        onDragLeave={() => {
-          if (overShift === shift) setOverShift(null);
-        }}
-        onDrop={(event) => {
-          if (!event.dataTransfer.types.includes(SHIFT_DRAG_TYPE)) return;
-          event.preventDefault();
-          const moved = event.dataTransfer.getData(SHIFT_DRAG_TYPE).trim();
-          setDraggingShift(null);
-          setOverShift(null);
-          if (moved && moved !== shift) order.moveTo(moved, shift);
-        }}
-      >
-        <span className="board-rowhead-name">
-          {reorderable ? (
-            <span className="board-rowhead-grip" aria-hidden="true">
-              <GripVertical size={12} />
-            </span>
-          ) : null}
-          {shift}
-          {onCall ? (
-            <span className="board-rowhead-oncall" title="כוננות">
-              <Moon size={12} />
-            </span>
-          ) : null}
-        </span>
-        {withTimes?.start_time ? (
-          <span className="board-rowhead-hours">
-            {withTimes.start_time}–{withTimes.end_time}
-          </span>
-        ) : null}
-
-        {/* The same reorder, without a mouse. HTML5 drag fires on neither
-            touch nor the keyboard, and the row order is exactly the kind of
-            thing a manager fixes once on a phone — so the arrows are the
-            reachable path, not a fallback. */}
-        {position ? (
-          <span className="board-rowhead-move">
-            <button
-              type="button"
-              onClick={() => order.nudge(shift, -1)}
-              disabled={position.at === 0}
-              aria-label={`הזזת ${shift} שורה למעלה`}
-              title="שורה למעלה"
-            >
-              <ChevronUp size={13} />
-            </button>
-            <button
-              type="button"
-              onClick={() => order.nudge(shift, 1)}
-              disabled={position.at === position.of - 1}
-              aria-label={`הזזת ${shift} שורה למטה`}
-              title="שורה למטה"
-            >
-              <ChevronDown size={13} />
-            </button>
-          </span>
-        ) : null}
-      </div>
-
-      {dates.map((date) => {
-        const slot = index.slot(shift, date);
-        const key = touchKey(shift, date);
-        const cards = cardsFor(shift, date);
-        const warnings = index.warnings(shift, date);
-        // Measured in filled seats, never in rendered cards. Two separate
-        // reasons the two differ, and each on its own produced a badge that
-        // lied: the cards are a *filtered view*, so a role filter made every
-        // full cell claim it was short of the people it had just hidden; and
-        // somebody shadowing the shift is a card who is not a seat, so a cell
-        // with its trainee on it read as covered while the audit underneath
-        // still called it short.
-        const filled = slot ? index.filledSeats(shift, date) : 0;
-        const missing = slot ? slot.headcount - filled : 0;
-        const short = missing > 0;
-        // What the agent has said about this cell, if anything. A cell may
-        // be touched by more than one source at once -- a simulation and
-        // the answer that led to it -- and the strongest wins the outline,
-        // which `collectTouches` has already ordered.
-        const touched = touches?.get(key) ?? [];
-        const touch = touched.length ? touched[touched.length - 1] : null;
-
-        // The shift does not run this day. Not a gap — nothing is missing.
-        if (!slot) {
-          return (
-            <div key={key} className="board-cell is-absent">
-              <span className="visually-hidden">אין משמרת</span>
-            </div>
-          );
-        }
-
-        // Focus filters hide whole cells rather than dimming them: "רק
-        // חוסרים" exists to make a short week scannable, and a board still
-        // showing every full cell at 40% opacity is not scannable. `short` is
-        // the same seat count the badge uses, so the filter keeps exactly the
-        // cells that are wearing one.
-        if (filters.unassignedOnly && !short) {
-          return <div key={key} className="board-cell is-filtered" />;
-        }
-        if (filters.conflictsOnly && !warnings.length) {
-          return <div key={key} className="board-cell is-filtered" />;
-        }
-
-        // A cell the picked-up card could land on. Its own cell is not one:
-        // putting a card back where it came from changes nothing, so it is
-        // not offered as a destination.
-        const isTarget =
-          !readOnly &&
-          Boolean(move.picked) &&
-          !(move.picked?.shift === shift && move.picked?.date === date);
-
-        return (
-          <div
-            key={key}
-            className={[
-              "board-cell",
-              short ? "is-short" : "",
-              over === key ? "is-over" : "",
-              warnings.length ? "has-warning" : "",
-              touch ? `is-touched is-touched-${touch.origin}` : "",
-              isWeekend(date) ? "is-weekend" : "",
-              date === today ? "is-today" : "",
-              isTarget ? "is-target" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            onDragOver={(event) => {
-              const rosterDrag = event.dataTransfer.types.includes(
-                EMPLOYEE_DRAG_TYPE,
-              );
-              if (readOnly || (!dragging && !rosterDrag)) return;
-              // Preventing default is what marks a valid drop target;
-              // without it the browser refuses the drop entirely.
-              event.preventDefault();
-              event.dataTransfer.dropEffect = rosterDrag ? "copy" : "move";
-              setOver(key);
-            }}
-            onDragLeave={() => setOver(over === key ? null : over)}
-            onDrop={(event) => {
-              event.preventDefault();
-              setOver(null);
-              if (readOnly) return;
-              const employee = event.dataTransfer
-                .getData(EMPLOYEE_DRAG_TYPE)
-                .trim();
-              if (employee) {
-                onDropEmployee?.({
-                  employee,
-                  shift_name: shift,
-                  slot_date: date,
-                });
-                return;
-              }
-              if (!dragging) return;
-              // Dropping where it came from is a no-op, not a change worth
-              // asking the manager to account for.
-              if (dragging.shift === shift && dragging.date === date) {
-                setDragging(null);
-                return;
-              }
-              onDropCard?.({
-                assignment: dragging,
-                shift_name: shift,
-                slot_date: date,
-              });
-              setDragging(null);
-            }}
-          >
-            {cards.map((row) => (
-              <ShiftCard
-                key={row.id}
-                assignment={row}
-                person={people[row.employee] ?? EMPTY_PERSON}
-                slot={slot}
-                hue={hueOf(row.employee)}
-                dark={dark}
-                status={schedule.status}
-                blocked={constraintBlocksSlot(
-                  constraints, row.employee, date, slot,
-                )}
-                warnings={warnings.filter(
-                  (warning) =>
-                    !warning.employee || warning.employee === row.employee,
-                )}
-                draggable={!readOnly}
-                touched={
-                  touched.find(
-                    (item) =>
-                      !item.employee || item.employee === row.employee,
-                  )?.origin ?? null
-                }
-                dimmed={Boolean(dragging) && dragging?.id === row.id}
-                picked={move.isPicked(row)}
-                onDragStart={() => setDragging(row)}
-                onDragEnd={() => {
-                  setDragging(null);
-                  setOver(null);
-                }}
-                onPick={readOnly ? undefined : () => move.pick(row)}
-                onOpen={readOnly ? undefined : () => onOpenCard?.(row)}
-              />
-            ))}
-
-            {/* Why this cell is lit, in words. The outline says the agent
-                touched it; this says what it said — a highlight the manager
-                cannot interpret is decoration. Nothing here is clickable:
-                acting on it is still done in the side column, through the
-                ordinary propose-then-confirm path (D8/D12). */}
-            {touch ? (
-              <span
-                className={`board-touch is-${touch.origin}`}
-                title={touched.map((row) => row.note).join("\n")}
-              >
-                <Sparkles size={10} />
-                {touchLabel(touch.origin)}
-              </span>
-            ) : null}
-
-            {short ? (
-              <span className="board-gap">
-                <AlertTriangle size={11} />
-                חסרים {missing}
-              </span>
-            ) : null}
-
-            {/* The destination half of the keyboard and touch move. It is
-                a real button covering the cell, so it is tabbable, has an
-                accessible name, and answers to a tap — none of which the
-                drop handler above does. It reports upward exactly as a drop
-                does, so the confirmation and the reason are unchanged
-                (D12). Rendered only while a card is actually picked up, so
-                it never sits over an idle cell intercepting clicks. */}
-            {isTarget ? (
-              <button
-                type="button"
-                className="board-drop-target"
-                onClick={() => onPlace(shift, date)}
-                aria-label={`העברת ${move.picked?.employee} ל${shift} ב-${shortDate(date)}`}
-                title="העברה לכאן"
-              >
-                <span className="board-drop-target-mark" aria-hidden="true">
-                  <Check size={14} />
-                </span>
-              </button>
-            ) : null}
-
-            {/* Creating a shift by clicking an empty cell. The picker and
-                the write live in the editor this opens — the cell only says
-                where. */}
-            {!readOnly && onAddShift ? (
-              <button
-                type="button"
-                className="board-add"
-                onClick={() =>
-                  onAddShift({ shift_name: shift, slot_date: date })
-                }
-                aria-label={`הוספת שיבוץ ל${shift} ב-${shortDate(date)}`}
-                title="הוספת שיבוץ"
-              >
-                <Plus size={13} />
-              </button>
-            ) : null}
-          </div>
-        );
-      })}
-    </>
-  );
-}
-
-/** Whether a recorded constraint contradicts this cell.
- *
- *  An empty `shift_name` covers the whole day — the convention the interview
- *  collects and `audit.py` reads. */
-/** What the badge on a touched cell says.
- *
- *  Three words, because the badge sits inside a cell that already carries
- *  cards and a gap count. The full sentence is on the hover; this only has
- *  to say which of the three kinds of agent attention this is. */
-function touchLabel(origin: AgentTouch["origin"]): string {
-  if (origin === "proposal") return "הצעה";
-  if (origin === "simulation") return "סימולציה";
-  return "נבדק";
-}
-
-function shortDate(iso: string): string {
-  return displayDate(iso).slice(0, 5);
 }

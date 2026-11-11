@@ -1,740 +1,457 @@
 "use client";
 
-import {
-  AlertTriangle,
-  CheckCircle2,
-  FileSpreadsheet,
-  FileWarning,
-  Lightbulb,
-  Trash2,
-  Upload,
-  X,
-} from "lucide-react";
+import { AlertTriangle, FileSpreadsheet, RefreshCw, Sparkles, Upload, Wand2, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
-import { DateInput } from "@/components/DateInput";
+import { DateInput, displayDate } from "@/components/DateInput";
 import { confirmImport, previewImport } from "@/services/api";
-import type {
-  CandidateRule,
-  ImportedConstraint,
-  ImportedPeriod,
-  ImportPreview,
-  ReadAssignment,
-} from "@/types";
+import type { ImportLayout, ImportOptions, ImportPreview, Schedule } from "@/types";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
-const ROWS_PER_PAGE = 50;
+const ROWS_SHOWN = 80;
+const AUTO = "__auto__";
+const SKIP = "__skip__";
+// A heading that means "not here that day" ("שבעתה", "יוצא בערב"): its rows
+// become the person's absences. The server's own word for it.
+const ABSENT = "!absent";
 
-/** Loading a schedule the workplace already kept.
+const SOURCE_LABEL: Record<ImportPreview["layout_source"], string> = {
+  detected: "זוהה אוטומטית",
+  model: "זוהה בעזרת הסוכן",
+  manager: "לפי ההגדרה שלך",
+};
+
+/** Loading a schedule the workplace already kept, in whatever shape it has.
  *
- *  Two screens, and the split is the decision
- *  ([D7](../../../docs/DECISIONS.md#d7--import-infers-layout-boss-confirms)):
- *  **reading a file writes nothing**, and the manager confirms an
- *  interpretation before anything is stored. The confirm button is the only
- *  thing on this component that persists, which is what makes the
- *  confirmation structural rather than a dialog in front of a write that
- *  already happened.
- *
- *  There is no template and no required format. The importer infers what the
- *  axes mean, so a sheet with shifts down the side, one with people down the
- *  side, and one with nothing but dates and names are all readable. Where it
- *  found no shift names at all it says so and asks here, rather than
- *  inventing a vocabulary the manager never declared
- *  ([D9](../../../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)).
- *
- *  Several files at once because that is the real case: the manager has a
- *  folder of past sheets, and a pattern worth learning is only visible
- *  across them. */
-export function ImportSchedule({
-  shiftNames,
-  onImported,
-  onClose,
-}: {
-  /** The workplace's declared shifts, offered when a sheet named none. */
+ *  **Reading a file writes nothing** (D7): every correction here -- the
+ *  layout, who a name means, which heading is which shift -- sends the same
+ *  file back to be re-read, and only the confirm button stores. There is no
+ *  template: the server finds the layout itself, asks the agent when it is
+ *  unsure, and the manager can fix it in a few fields or pick another
+ *  reading in one click (D42). */
+export function ImportSchedule({ employees, shiftNames, onImported, onClose }: {
+  /** The roster, offered for names the file writes differently. */
+  employees: string[];
+  /** The declared shifts, offered for headings the file names its own way. */
   shiftNames: string[];
-  onImported: () => void;
+  onImported: (schedule: Schedule) => void;
   onClose: () => void;
 }) {
-  const [files, setFiles] = useState<File[]>([]);
+  const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [options, setOptions] = useState<ImportOptions>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  // Which period the manager is looking at. A year of sheets is many
-  // periods, and showing them all expanded would bury the summary.
-  const [openPeriod, setOpenPeriod] = useState(0);
-  const [rowPage, setRowPage] = useState<Record<number, number>>({});
-  // A shift chosen here for rows that arrived without one. Keyed by period
-  // index; only the `date_only` layout ever needs it.
-  const [chosenShift, setChosenShift] = useState<Record<number, string>>({});
-  // Which learned rules the manager ticked. Nothing is ticked by default —
-  // a candidate becomes a rule by being chosen, never by being proposed.
-  const [accepted, setAccepted] = useState<Record<number, boolean>>({});
+  const [target, setTarget] = useState<string>("");
+  const [hint, setHint] = useState("");
   const picker = useRef<HTMLInputElement>(null);
 
-  const totals = useMemo(() => {
-    if (!preview) return { assignments: 0, people: 0, constraints: 0 };
-    return {
-      assignments: preview.periods.reduce(
-        (sum, period) => sum + period.assignments.length,
-        0,
-      ),
-      people: new Set(
-        preview.periods.flatMap((period) =>
-          period.assignments
-            .map((row) => row.employee.trim())
-            .filter(Boolean),
-        ),
-      ).size,
-      constraints: preview.periods.reduce(
-        (sum, period) => sum + period.unavailability.length,
-        0,
-      ),
-    };
-  }, [preview]);
-
-  /** Incomplete rows stay visible and block confirmation; nothing inferred
-   *  from a file is silently filtered out on the way to persistence. */
-  const invalid = useMemo(() => {
-    if (!preview) return { assignments: 0, constraints: 0 };
-    return preview.periods.reduce(
-      (count, period, index) => ({
-        assignments:
-          count.assignments +
-          period.assignments.filter(
-            (row) =>
-              !row.employee.trim() ||
-              !(row.shift || chosenShift[index] || "").trim() ||
-              !row.date,
-          ).length,
-        constraints:
-          count.constraints +
-          period.unavailability.filter(
-            (row) => !row.employee.trim() || !row.date,
-          ).length,
-      }),
-      { assignments: 0, constraints: 0 },
-    );
-  }, [preview, chosenShift]);
-
-  async function read(selected: File[]) {
-    if (!selected.length) return;
-    const legacy = selected.find((file) => /\.xls$/i.test(file.name));
-    if (legacy) {
-      setError(
-        `${legacy.name}: פורמט .xls הישן אינו נתמך. שמור אותו כ־.xlsx ונסה שוב.`,
-      );
-      return;
-    }
-    const unsupported = selected.find(
-      (file) => !/\.(xlsx|xlsm|docx)$/i.test(file.name),
-    );
-    if (unsupported) {
-      setError(`${unsupported.name}: אפשר להעלות קובצי Excel או Word בלבד.`);
-      return;
-    }
-    const tooLarge = selected.find((file) => file.size > MAX_FILE_SIZE);
-    if (tooLarge) {
-      setError(`${tooLarge.name}: הקובץ גדול מ־20MB.`);
-      return;
-    }
-    setFiles(selected);
+  async function read(chosen: File, next: ImportOptions, sameReading = false) {
     setBusy(true);
     setError("");
     try {
-      const found = await previewImport(selected, true);
-      setPreview(found);
-      setOpenPeriod(0);
-      setRowPage({});
+      const result = await previewImport(chosen, next);
+      // A name or a shift mapped is the same reading of the sheet: it keeps
+      // how that reading was found and the other readings on offer.
+      setPreview(sameReading && preview ? {
+        ...result, layout_source: preview.layout_source, explanation: preview.explanation,
+        confidence: preview.confidence, alternatives: preview.alternatives,
+      } : result);
+      setOptions(next);
+      const draft = result.overlaps.find((row) => row.status === "draft");
+      setTarget(result.overlaps.length && draft ? draft.id : "");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "הקריאה נכשלה");
-      setPreview(null);
+      setError(reason instanceof Error ? reason.message : "קריאת הקובץ נכשלה");
     } finally {
       setBusy(false);
     }
+  }
+
+  function choose(chosen: File | undefined) {
+    if (!chosen) return;
+    if (chosen.size > MAX_FILE_SIZE) {
+      setError("הקובץ גדול מדי (עד 20MB)");
+      return;
+    }
+    setFile(chosen);
+    setPreview(null);
+    void read(chosen, {});
+  }
+
+  /** Re-read the same file with one more correction. */
+  function reread(change: ImportOptions) {
+    if (file) void read(file, { ...options, hint: "", ...change });
+  }
+
+  /** Re-read with a name or shift mapped, on the layout already showing --
+   *  so mapping a name never sends the sheet back to detection or the agent. */
+  function remap(change: ImportOptions) {
+    if (file && preview) void read(file, { ...options, hint: "", layout: preview.layout, ...change }, true);
   }
 
   async function confirm() {
     if (!preview) return;
-    if (invalid.assignments || invalid.constraints) {
-      setError("יש להשלים או למחוק את השורות המסומנות לפני השמירה.");
-      return;
-    }
     setBusy(true);
     setError("");
     try {
-      // Every period is stored, with the manager's chosen shift filled in
-      // where the file named none. Sent from here rather than re-read on the
-      // server, so a correction made on this screen is what lands.
-      for (const [index, period] of preview.periods.entries()) {
-        const rows = period.assignments
-          .map((row: ReadAssignment) => ({
-            employee: row.employee.trim(),
-            shift: (row.shift || chosenShift[index] || "").trim(),
-            date: row.date,
-          }));
-        if (!rows.length) continue;
-        const dates = rows.map((row) => row.date).sort();
-        await confirmImport({
-          assignments: rows,
-          unavailability: period.unavailability.map((row) => ({
-            ...row,
-            employee: row.employee.trim(),
-            shift: row.shift.trim(),
-          })),
-          starts_on: dates[0],
-          ends_on: dates[dates.length - 1],
-        });
-      }
-      onImported();
+      const schedule = await confirmImport({
+        assignments: preview.assignments,
+        unavailability: preview.unavailability.filter((row) => row.employee),
+        schedule_id: target || null,
+        filename: preview.filename,
+      });
+      onImported(schedule);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "השמירה נכשלה");
-    } finally {
       setBusy(false);
     }
   }
 
-  function updatePeriod(
-    periodIndex: number,
-    update: (period: ImportedPeriod) => ImportedPeriod,
-  ) {
-    setPreview((current) =>
-      current
-        ? {
-            ...current,
-            periods: current.periods.map((period, index) =>
-              index === periodIndex ? update(period) : period,
-            ),
-          }
-        : current,
-    );
-  }
-
-  function updateAssignment(
-    periodIndex: number,
-    rowIndex: number,
-    patch: Partial<ReadAssignment>,
-  ) {
-    updatePeriod(periodIndex, (period) => ({
-      ...period,
-      assignments: period.assignments.map((row, index) =>
-        index === rowIndex ? { ...row, ...patch } : row,
-      ),
-    }));
-  }
-
-  function removeAssignment(periodIndex: number, rowIndex: number) {
-    updatePeriod(periodIndex, (period) => ({
-      ...period,
-      assignments: period.assignments.filter((_row, index) => index !== rowIndex),
-    }));
-  }
-
-  function updateConstraint(
-    periodIndex: number,
-    rowIndex: number,
-    patch: Partial<ImportedConstraint>,
-  ) {
-    updatePeriod(periodIndex, (period) => ({
-      ...period,
-      unavailability: period.unavailability.map((row, index) =>
-        index === rowIndex ? { ...row, ...patch } : row,
-      ),
-    }));
-  }
-
-  function removeConstraint(periodIndex: number, rowIndex: number) {
-    updatePeriod(periodIndex, (period) => ({
-      ...period,
-      unavailability: period.unavailability.filter(
-        (_row, index) => index !== rowIndex,
-      ),
-    }));
-  }
+  const published = preview?.overlaps.filter((row) => row.status !== "draft") ?? [];
+  const blocked = Boolean(preview && preview.overlaps.length && !target);
 
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
-      <div
-        className="modal import-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="import-title"
-        onClick={(event) => event.stopPropagation()}
-      >
+    <div className="modal-backdrop" role="presentation" onClick={busy ? undefined : onClose}>
+      <div className="modal import-dialog" role="dialog" aria-modal="true" aria-labelledby="import-title"
+        onClick={(event) => event.stopPropagation()}>
         <header className="modal-header">
-          <h2 id="import-title">
-            <FileSpreadsheet size={17} />
-            טעינת סידור קיים
-          </h2>
-          <button
-            type="button"
-            className="icon-button"
-            onClick={onClose}
-            aria-label="סגירה"
-          >
-            <X size={17} />
+          <h2 id="import-title"><FileSpreadsheet size={18} /> ייבוא סידור מקובץ</h2>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="סגירה" disabled={busy}>
+            <X size={18} />
           </button>
         </header>
 
+        <input ref={picker} type="file" hidden accept=".xlsx,.xlsm,.csv,.tsv,.docx"
+          onChange={(event) => { choose(event.target.files?.[0]); event.target.value = ""; }} />
+
         {!preview ? (
-          <>
-            {/* Said before the first click, because a manager who has been
-                asked for a template by other software will assume there is
-                one here too and go looking for it. */}
-            <p className="modal-summary">
-              העלה את קבצי הסידור שכבר יש לך — אקסל או וורד, כמה שתרצה בבת אחת.
-              <strong> אין פורמט קבוע</strong>: הקריאה מזהה לבד את מבנה הקובץ,
-              גם אם יש בו רק תאריכים ושמות.
-            </p>
-
-            <div
-              className="import-drop"
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => {
-                event.preventDefault();
-                read(Array.from(event.dataTransfer.files));
-              }}
-            >
-              <Upload size={22} />
-              <p>גרור לכאן קבצים, או</p>
-              <button
-                type="button"
-                className="primary-button"
-                onClick={() => picker.current?.click()}
-                disabled={busy}
-              >
-                {busy ? "קורא…" : "בחירת קבצים"}
-              </button>
-              <input
-                ref={picker}
-                type="file"
-                multiple
-                accept=".xlsx,.xlsm,.docx"
-                hidden
-                onChange={(event) => {
-                  read(Array.from(event.target.files ?? []));
-                  event.currentTarget.value = "";
-                }}
-              />
-            </div>
-
-            {files.length && busy ? (
-              <p className="modal-hint">קורא {files.length} קבצים…</p>
-            ) : null}
-          </>
+          <button type="button" className="import-drop" disabled={busy}
+            onClick={() => picker.current?.click()}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => { event.preventDefault(); choose(event.dataTransfer.files?.[0]); }}>
+            <Upload size={22} />
+            <strong>{busy ? "קורא את הקובץ…" : "בחר או גרור קובץ Excel, CSV או Word"}</strong>
+            <span>כל צורה מתאימה: משמרות בשורות או בעמודות, עובדים בשורות, ימים בלי תאריכים, כמה שבועות בגיליון אחד.</span>
+          </button>
         ) : (
-          <div className="import-result">
-            {/* The one sentence D7 asks for, before any detail. */}
-            <p className="import-headline">
-              זוהו <strong>{preview.periods.length}</strong> לוחות:{" "}
-              <strong>{totals.assignments}</strong> שיבוצים,{" "}
-              <strong>{totals.people}</strong> אנשים
-              {totals.constraints ? (
-                <>
-                  , <strong>{totals.constraints}</strong> סימוני אי-זמינות
-                </>
-              ) : null}
-              .
-            </p>
-
-            {/* Nothing has been written yet, and that is worth stating
-                outright — the screen otherwise looks like a result. */}
-            <p className="import-pending">
-              <AlertTriangle size={14} />
-              עדיין לא נשמר כלום. הכל נשמר רק בלחיצה על האישור למטה.
-            </p>
-
-            {preview.failures.length ? (
-              <div className="import-failures">
-                <FileWarning size={14} />
-                <div>
-                  {preview.failures.map((failure) => (
-                    <p key={failure.filename}>
-                      <strong>{failure.filename}</strong> — {failure.error}
-                    </p>
+          <div className="import-body">
+            <section className="import-reading">
+              <p className="modal-summary"><strong>{preview.summary}</strong></p>
+              <p className="import-explanation">
+                <span className={`import-source is-${preview.layout_source}`}>{SOURCE_LABEL[preview.layout_source]}</span>
+                {preview.explanation}
+                <span className="import-confidence">· התאמה {Math.round(preview.confidence * 100)}%</span>
+              </p>
+              <div className="import-toolbar">
+                <button type="button" className="ghost-button" onClick={() => picker.current?.click()} disabled={busy}>
+                  <Upload size={14} /> קובץ אחר
+                </button>
+                {preview.sheets.length > 1 ? (
+                  <label className="import-inline">גיליון
+                    <select value={preview.sheet_name} disabled={busy}
+                      onChange={(event) => reread({ sheet: event.target.value, layout: null })}>
+                      {preview.sheets.map((name) => <option key={name} value={name}>{name}</option>)}
+                    </select>
+                  </label>
+                ) : null}
+                {preview.assumed_week ? (
+                  <label className="import-inline">השבוע מתחיל ב־
+                    <DateInput value={options.week_start || preview.assumed_week}
+                      onChange={(value) => remap({ week_start: value })} />
+                  </label>
+                ) : null}
+                {/* A sheet holding more than one import can store opens on
+                    one month; these pick any other run of its dates. */}
+                {preview.file_starts_on && preview.file_starts_on !== preview.file_ends_on ? (
+                  <span className="import-inline">טווח לייבוא
+                    <DateInput value={preview.starts_on} min={preview.file_starts_on} max={preview.file_ends_on}
+                      aria-label="מתאריך" onChange={(value) => remap({ date_from: value, date_to: preview.ends_on })} />
+                    עד
+                    <DateInput value={preview.ends_on} min={preview.file_starts_on} max={preview.file_ends_on}
+                      aria-label="עד תאריך" onChange={(value) => remap({ date_from: preview.starts_on, date_to: value })} />
+                  </span>
+                ) : null}
+                {preview.yearless ? (
+                  <label className="import-inline">שנה
+                    <input type="number" min={2000} max={2100} className="import-year"
+                      defaultValue={options.year || Number(preview.starts_on.slice(0, 4)) || ""}
+                      onBlur={(event) => {
+                        const year = parseInt(event.target.value, 10);
+                        if (year >= 2000 && year !== Number(preview.starts_on.slice(0, 4))) remap({ year });
+                      }} />
+                  </label>
+                ) : null}
+              </div>
+              {preview.alternatives.length ? (
+                <div className="import-alternatives" aria-label="קריאות אחרות">
+                  <span>לא נכון? קריאות אחרות:</span>
+                  {preview.alternatives.map((option, index) => (
+                    <button key={index} type="button" className="ghost-button" disabled={busy}
+                      onClick={() => reread({ layout: option.layout })}>
+                      {option.explanation} ({option.rows})
+                    </button>
                   ))}
                 </div>
-              </div>
+              ) : null}
+            </section>
+
+            {preview.warnings.length ? (
+              <ul className="import-warnings">
+                {preview.warnings.map((warning) => <li key={warning}><AlertTriangle size={14} /> {warning}</li>)}
+              </ul>
             ) : null}
 
-            <div className="import-periods">
-              {preview.periods.map((period, index) => {
-                const open = openPeriod === index;
-                const needsShift =
-                  period.assignments.some((row) => !row.shift);
-                const pages = Math.max(
-                  1,
-                  Math.ceil(period.assignments.length / ROWS_PER_PAGE),
-                );
-                const page = Math.min(rowPage[index] ?? 0, pages - 1);
-                const rowStart = page * ROWS_PER_PAGE;
-                const visibleRows = period.assignments.slice(
-                  rowStart,
-                  rowStart + ROWS_PER_PAGE,
-                );
-                const shiftOptions = Array.from(
-                  new Set([...shiftNames, ...period.shifts]),
-                );
-                return (
-                  <div className="import-period" key={period.filename + index}>
-                    <button
-                      type="button"
-                      className="import-period-head"
-                      onClick={() => setOpenPeriod(open ? -1 : index)}
-                      aria-expanded={open}
-                    >
-                      <span className="import-period-name">
-                        {period.filename || `קובץ ${index + 1}`}
-                      </span>
-                      <span className="import-period-summary">
-                        {period.assignments.length} שיבוצים
-                        {period.unavailability.length
-                          ? ` · ${period.unavailability.length} סימוני אי־זמינות`
-                          : ""}
-                      </span>
-                    </button>
+            <SheetPreview sheet={preview.sheet} layout={preview.layout} />
 
-                    {open ? (
-                      <div className="import-period-body">
-                        {/* The inferred layout, named. A misread layout is
-                            the one error that makes everything else wrong,
-                            so it is shown rather than kept internal. */}
-                        <p className="import-layout">
-                          מבנה שזוהה:{" "}
-                          <strong>{layoutName(period.layout)}</strong>
-                          {period.shifts.length ? (
-                            <> · משמרות: {period.shifts.join("، ")}</>
-                          ) : null}
-                        </p>
+            <details className="import-section">
+              <summary><Wand2 size={14} /> תיקון המבנה</summary>
+              <LayoutEditor key={JSON.stringify(preview.layout)} layout={preview.layout} busy={busy}
+                onApply={(layout) => reread({ layout })} />
+              <div className="import-hint">
+                <label className="modal-field">או תאר את הקובץ במילים, והסוכן יקרא אותו שוב
+                  <textarea value={hint} maxLength={500} rows={2} placeholder="למשל: העובדים בעמודה הראשונה, יש שני שבועות אחד מתחת לשני, X פירושו חופש"
+                    onChange={(event) => setHint(event.target.value)} />
+                </label>
+                <button type="button" className="ghost-button" disabled={busy || !hint.trim()}
+                  onClick={() => reread({ hint: hint.trim(), layout: null, use_model: true })}>
+                  <Sparkles size={14} /> קרא שוב עם הסוכן
+                </button>
+              </div>
+            </details>
 
-                        {period.warnings.map((warning) => (
-                          <p className="import-warning" key={warning}>
-                            <AlertTriangle size={13} />
-                            {warning}
-                          </p>
-                        ))}
+            <PeopleTable preview={preview} employees={employees} busy={busy}
+              onMap={(name, value) => remap({ names: mapped(options.names, name, value) })} />
+            <ShiftTable preview={preview} shiftNames={shiftNames} mapping={options.shifts ?? {}} busy={busy}
+              onMap={(name, value) => remap({ shifts: mapped(options.shifts, name, value) })} />
+            <RowsPreview preview={preview} />
 
-                        {/* The file named no shift. Asked rather than
-                            guessed: inventing one here would be exactly the
-                            hardcoding D9 forbids. */}
-                        {needsShift ? (
-                          <label className="import-shift-pick">
-                            <span>לאיזו משמרת שייכים השיבוצים בקובץ הזה?</span>
-                            <select
-                              value={chosenShift[index] ?? ""}
-                              onChange={(event) =>
-                                setChosenShift((current) => ({
-                                  ...current,
-                                  [index]: event.target.value,
-                                }))
-                              }
-                            >
-                              <option value="">בחר משמרת…</option>
-                              {shiftNames.map((name) => (
-                                <option key={name} value={name}>
-                                  {name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        ) : null}
-
-                        <section className="import-edit-section">
-                          <div className="import-edit-title">
-                            <h3>שיבוצים שנקראו</h3>
-                            <span>אפשר לתקן כל שדה לפני השמירה</span>
-                          </div>
-                          <div className="import-edit-head" aria-hidden="true">
-                            <span>עובד</span>
-                            <span>משמרת</span>
-                            <span>תאריך</span>
-                            <span />
-                          </div>
-                          <div className="import-edit-rows">
-                            {visibleRows.map((row, pageIndex) => {
-                              const rowIndex = rowStart + pageIndex;
-                              const shift =
-                                row.shift || chosenShift[index] || "";
-                              return (
-                                <div className="import-edit-row" key={rowIndex}>
-                                  <label>
-                                    <span>עובד</span>
-                                    <input
-                                      value={row.employee}
-                                      list={`import-people-${index}`}
-                                      aria-invalid={!row.employee.trim()}
-                                      onChange={(event) =>
-                                        updateAssignment(index, rowIndex, {
-                                          employee: event.target.value,
-                                        })
-                                      }
-                                    />
-                                  </label>
-                                  <label>
-                                    <span>משמרת</span>
-                                    <input
-                                      value={shift}
-                                      list={`import-shifts-${index}`}
-                                      aria-invalid={!shift.trim()}
-                                      onChange={(event) =>
-                                        updateAssignment(index, rowIndex, {
-                                          shift: event.target.value,
-                                        })
-                                      }
-                                    />
-                                  </label>
-                                  <label>
-                                    <span>תאריך</span>
-                                    <DateInput
-                                      value={row.date}
-                                      aria-invalid={!row.date}
-                                      onChange={(date) =>
-                                        updateAssignment(index, rowIndex, {
-                                          date,
-                                        })
-                                      }
-                                    />
-                                  </label>
-                                  <button
-                                    type="button"
-                                    className="import-delete"
-                                    aria-label={`מחיקת השיבוץ של ${row.employee || "עובד ללא שם"}`}
-                                    onClick={() =>
-                                      removeAssignment(index, rowIndex)
-                                    }
-                                  >
-                                    <Trash2 size={15} />
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                          <datalist id={`import-people-${index}`}>
-                            {period.people.map((name) => (
-                              <option key={name} value={name} />
-                            ))}
-                          </datalist>
-                          <datalist id={`import-shifts-${index}`}>
-                            {shiftOptions.map((name) => (
-                              <option key={name} value={name} />
-                            ))}
-                          </datalist>
-                          {pages > 1 ? (
-                            <div className="import-pagination">
-                              <button
-                                type="button"
-                                className="ghost-button"
-                                disabled={page === 0}
-                                onClick={() =>
-                                  setRowPage((current) => ({
-                                    ...current,
-                                    [index]: page - 1,
-                                  }))
-                                }
-                              >
-                                הקודם
-                              </button>
-                              <span>
-                                עמוד {page + 1} מתוך {pages}
-                              </span>
-                              <button
-                                type="button"
-                                className="ghost-button"
-                                disabled={page === pages - 1}
-                                onClick={() =>
-                                  setRowPage((current) => ({
-                                    ...current,
-                                    [index]: page + 1,
-                                  }))
-                                }
-                              >
-                                הבא
-                              </button>
-                            </div>
-                          ) : null}
-                        </section>
-
-                        {period.unavailability.length ? (
-                          <section className="import-edit-section constraint">
-                            <div className="import-edit-title">
-                              <h3>אי־זמינות שנקראה</h3>
-                              <span>שורה ללא עובד חייבת שיוך או מחיקה</span>
-                            </div>
-                            <div className="import-edit-head" aria-hidden="true">
-                              <span>עובד</span>
-                              <span>משמרת</span>
-                              <span>תאריך</span>
-                              <span />
-                            </div>
-                            <div className="import-edit-rows">
-                              {period.unavailability.map((row, rowIndex) => (
-                                <div className="import-edit-row" key={rowIndex}>
-                                  <label>
-                                    <span>עובד</span>
-                                    <input
-                                      value={row.employee}
-                                      list={`import-people-${index}`}
-                                      placeholder="בחר או הקלד שם"
-                                      aria-invalid={!row.employee.trim()}
-                                      onChange={(event) =>
-                                        updateConstraint(index, rowIndex, {
-                                          employee: event.target.value,
-                                        })
-                                      }
-                                    />
-                                  </label>
-                                  <label>
-                                    <span>משמרת</span>
-                                    <input
-                                      value={row.shift}
-                                      list={`import-shifts-${index}`}
-                                      onChange={(event) =>
-                                        updateConstraint(index, rowIndex, {
-                                          shift: event.target.value,
-                                        })
-                                      }
-                                    />
-                                  </label>
-                                  <label>
-                                    <span>תאריך</span>
-                                    <DateInput
-                                      value={row.date}
-                                      aria-invalid={!row.date}
-                                      onChange={(date) =>
-                                        updateConstraint(index, rowIndex, {
-                                          date,
-                                        })
-                                      }
-                                    />
-                                  </label>
-                                  <button
-                                    type="button"
-                                    className="import-delete"
-                                    aria-label="מחיקת סימון אי־זמינות"
-                                    onClick={() =>
-                                      removeConstraint(index, rowIndex)
-                                    }
-                                  >
-                                    <Trash2 size={15} />
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          </section>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* What the history suggests. Separated from the schedule rows
-                because it is a different kind of claim: the rows are what
-                the file says, these are inferences from it. */}
-            {preview.candidate_rules.length ? (
-              <div className="import-rules">
-                <h3>
-                  <Lightbulb size={15} />
-                  מה שנלמד מהקבצים
-                </h3>
-                <p className="modal-hint">
-                  אלה הצעות, לא כללים. סמן את מה שנכון — מה שלא תסמן פשוט
-                  לא יישמר.
-                </p>
-                {preview.candidate_rules.map((rule: CandidateRule, index) => (
-                  <label className="import-rule" key={index}>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(accepted[index])}
-                      onChange={(event) =>
-                        setAccepted((current) => ({
-                          ...current,
-                          [index]: event.target.checked,
-                        }))
-                      }
-                    />
-                    <span className="import-rule-body">
-                      <span className="import-rule-text">
-                        {rule.text}
-                        <span
-                          className={`import-rule-kind kind-${rule.kind}`}
-                        >
-                          {rule.kind === "hard" ? "כלל קשיח" : "העדפה"}
-                        </span>
-                      </span>
-                      {/* The count behind the claim, so the manager approves
-                          something they can check rather than trust. */}
-                      <span className="import-rule-evidence">
-                        {rule.evidence}
-                      </span>
-                    </span>
+            {preview.overlaps.length ? (
+              <section className="import-section import-overlap">
+                <h3>כבר קיים סידור בתאריכים האלה</h3>
+                {preview.overlaps.filter((row) => row.status === "draft").map((row) => (
+                  <label key={row.id} className="import-choice">
+                    <input type="radio" name="import-target" checked={target === row.id}
+                      onChange={() => setTarget(row.id)} />
+                    למזג לתוך הטיוטה {displayDate(row.starts_on)}–{displayDate(row.ends_on)}: המשמרות שבקובץ יוחלפו בימים שבקובץ, כל השאר יישאר
                   </label>
                 ))}
-              </div>
-            ) : null}
-
-            {preview.notes.length ? (
-              <div className="import-notes">
-                {preview.notes.map((note) => (
-                  <p key={note}>{note}</p>
-                ))}
-              </div>
+                {published.length ? (
+                  <p className="modal-hint">
+                    {published.map((row) => `${displayDate(row.starts_on)}–${displayDate(row.ends_on)}`).join(", ")} מפורסם; כדי לייבא לתוכו יש להחזיר אותו לטיוטה, או למחוק אותו.
+                  </p>
+                ) : null}
+              </section>
             ) : null}
           </div>
         )}
 
-        {error ? (
-          <p className="import-error" role="alert">
-            {error}
-          </p>
-        ) : null}
+        {error ? <p className="import-error" role="alert">{error}</p> : null}
 
-        {preview ? (
-          <div className="modal-actions">
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => {
-                setPreview(null);
-                setFiles([]);
-              }}
-            >
-              קבצים אחרים
+        <footer className="modal-actions">
+          <button type="button" className="ghost-button" onClick={onClose} disabled={busy}>ביטול</button>
+          {preview ? (
+            <button type="button" className="primary-button" onClick={() => void confirm()}
+              disabled={busy || !preview.assignments.length || blocked}>
+              {busy ? <RefreshCw size={14} className="spin" /> : null}
+              {target ? "מיזוג לטיוטה" : "שמירה כסידור חדש"} ({preview.assignments.length} שיבוצים)
             </button>
-            <button
-              type="button"
-              className="primary-button"
-              onClick={confirm}
-              disabled={
-                busy ||
-                totals.assignments === 0 ||
-                Boolean(invalid.assignments || invalid.constraints)
-              }
-            >
-              <CheckCircle2 size={15} />
-              {busy
-                ? "שומר…"
-                : totals.assignments === 0
-                  ? "אין שיבוצים לשמירה"
-                : invalid.assignments || invalid.constraints
-                  ? `יש להשלים ${invalid.assignments + invalid.constraints} שורות`
-                  : `שמירת ${totals.assignments} שיבוצים`}
-            </button>
-          </div>
-        ) : null}
+          ) : null}
+        </footer>
       </div>
     </div>
   );
 }
 
-/** The inferred layout in the manager's language.
- *
- *  Named rather than shown as `shift_major`: the manager is being asked
- *  whether the reading is right, and they cannot answer that about a word
- *  from the codebase. */
-function layoutName(layout: string): string {
-  if (layout === "shift_major") return "משמרות בשורות, תאריכים בעמודות";
-  if (layout === "person_major") return "אנשים בשורות, תאריך ומשמרת בעמודות";
-  if (layout === "date_only") return "תאריכים ואנשים, ללא שמות משמרות";
-  return layout;
+/** The options map after one select changed: AUTO drops the entry, SKIP
+ *  leaves the name out (""), anything else is the chosen value. */
+function mapped(current: Record<string, string> | undefined, name: string, value: string) {
+  const next = { ...(current ?? {}) };
+  if (value === AUTO) delete next[name];
+  else next[name] = value === SKIP ? "" : value;
+  return next;
+}
+
+function SheetPreview({ sheet, layout }: { sheet: string[][]; layout: ImportLayout }) {
+  const across = layout.orientation === "dates_across";
+  const isHeader = (row: number, column: number) => (across ? row : column) === layout.header;
+  const isShift = (row: number, column: number) =>
+    layout.shift_line !== null && (across ? row : column) === layout.shift_line;
+  if (!sheet.length) return null;
+  return (
+    <details className="import-section" open>
+      <summary>הקובץ כפי שנקרא</summary>
+      <div className="import-sheet" dir="rtl">
+        <table>
+          <thead><tr><th />{sheet[0].map((_cell, column) => <th key={column}>{column + 1}</th>)}</tr></thead>
+          <tbody>
+            {sheet.map((row, index) => (
+              <tr key={index}>
+                <th>{index + 1}</th>
+                {row.map((cell, column) => (
+                  <td key={column} className={isHeader(index, column) ? "is-header" : isShift(index, column) ? "is-shift" : ""}>
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  );
+}
+
+/** The layout as a few fields. Numbers are shown one-based, as Excel does. */
+function LayoutEditor({ layout, busy, onApply }: {
+  layout: ImportLayout; busy: boolean; onApply: (layout: ImportLayout) => void;
+}) {
+  const [draft, setDraft] = useState(layout);
+  const across = draft.orientation === "dates_across";
+  const line = across ? "שורה" : "עמודה";
+  const cross = across ? "עמודה" : "שורה";
+  const set = (change: Partial<ImportLayout>) => setDraft((previous) => ({ ...previous, ...change }));
+  const words = (value: string) => value.split(",").map((word) => word.trim()).filter(Boolean);
+  return (
+    <div className="import-layout">
+      <label className="modal-field">התאריכים רצים
+        <select value={draft.orientation} onChange={(event) => set({ orientation: event.target.value as ImportLayout["orientation"] })}>
+          <option value="dates_across">לרוחב — בשורה</option>
+          <option value="dates_down">לאורך — בעמודה</option>
+        </select>
+      </label>
+      <NumberField label={`${line} התאריכים`} value={draft.header} onChange={(value) => set({ header: value ?? 0 })} />
+      <NumberField label={`${line} שמות המשמרות מתחת לתאריכים`} value={draft.shift_line} optional
+        onChange={(value) => set({ shift_line: value })} />
+      <label className="modal-field">כל {across ? "שורה" : "עמודה"} היא
+        <select value={draft.lanes} onChange={(event) => set({ lanes: event.target.value as ImportLayout["lanes"] })}>
+          <option value="shifts">משמרת — בתאים שמות עובדים</option>
+          <option value="people">עובד — בתאים המשמרת או סימון</option>
+          <option value="none">רק מקום — בתאים שמות עובדים</option>
+        </select>
+      </label>
+      <NumberField label={`${cross} השמות (ריק = אוטומטי)`} value={draft.label} optional onChange={(value) => set({ label: value })} />
+      <NumberField label={`${across ? "שורת" : "עמודת"} נתונים ראשונה`} value={draft.first_line} optional onChange={(value) => set({ first_line: value })} />
+      <NumberField label={`${across ? "שורת" : "עמודת"} נתונים אחרונה`} value={draft.last_line} optional onChange={(value) => set({ last_line: value })} />
+      <label className="modal-field">סימנים שפירושם &quot;לא זמין&quot; (מופרדים בפסיק)
+        <input value={draft.unavailable.join(", ")} onChange={(event) => set({ unavailable: words(event.target.value) })} />
+      </label>
+      <label className="modal-field">ערכים להתעלם מהם
+        <input value={draft.ignore.join(", ")} onChange={(event) => set({ ignore: words(event.target.value) })} />
+      </label>
+      <button type="button" className="primary-button" disabled={busy} onClick={() => onApply(draft)}>
+        <RefreshCw size={14} /> קרא מחדש לפי המבנה הזה
+      </button>
+    </div>
+  );
+}
+
+function NumberField({ label, value, optional = false, onChange }: {
+  label: string; value: number | null; optional?: boolean; onChange: (value: number | null) => void;
+}) {
+  return (
+    <label className="modal-field">{label}
+      <input type="number" min={1} value={value === null ? "" : value + 1} placeholder={optional ? "—" : undefined}
+        onChange={(event) => {
+          const number = parseInt(event.target.value, 10);
+          onChange(Number.isFinite(number) && number > 0 ? number - 1 : optional ? null : 0);
+        }} />
+    </label>
+  );
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  exact: "תואם", matched: "זוהה", ambiguous: "לא חד־משמעי", unknown: "לא ברשימה",
+  mapped: "מופה", skipped: "לא ייובא",
+};
+
+function PeopleTable({ preview, employees, busy, onMap }: {
+  preview: ImportPreview; employees: string[]; busy: boolean; onMap: (name: string, value: string) => void;
+}) {
+  if (!preview.people.length) return null;
+  const attention = preview.people.filter((row) => !["exact", "matched"].includes(row.status)).length;
+  return (
+    <details className="import-section" open={attention > 0}>
+      <summary>שמות בקובץ ({preview.people.length}{attention ? `, ${attention} דורשים בדיקה` : ""})</summary>
+      <table className="import-table">
+        <tbody>
+          {preview.people.map((row) => (
+            <tr key={row.name}>
+              <td>{row.name}</td>
+              <td><span className={`import-status is-${row.status}`}>{STATUS_LABEL[row.status]}</span></td>
+              <td>{row.count}</td>
+              <td>
+                <select disabled={busy} aria-label={`למי הכוונה ב־${row.name}`}
+                  value={row.status === "skipped" ? SKIP : row.status === "mapped" ? row.employee : AUTO}
+                  onChange={(event) => onMap(row.name, event.target.value)}>
+                  <option value={AUTO}>{row.employee && ["exact", "matched"].includes(row.status) ? `אוטומטי: ${row.employee}` : "להשאיר כמו בקובץ"}</option>
+                  {(row.candidates.length ? row.candidates : employees).concat(
+                    row.candidates.length ? employees.filter((name) => !row.candidates.includes(name)) : [],
+                  ).map((name) => <option key={name} value={name}>{name}</option>)}
+                  <option value={SKIP}>לא לייבא</option>
+                </select>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </details>
+  );
+}
+
+function ShiftTable({ preview, shiftNames, mapping, busy, onMap }: {
+  preview: ImportPreview; shiftNames: string[]; mapping: Record<string, string>; busy: boolean;
+  onMap: (name: string, value: string) => void;
+}) {
+  const rows = preview.shifts.filter((row) => row.count || row.name);
+  if (!rows.length) return null;
+  const attention = rows.filter((row) => !row.declared && row.count).length;
+  return (
+    <details className="import-section" open={attention > 0}>
+      <summary>משמרות בקובץ ({rows.length}{attention ? `, ${attention} לא מוגדרות` : ""})</summary>
+      <table className="import-table">
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.name || "none"}>
+              <td>{row.name || "ללא משמרת"}</td>
+              <td>{row.count}</td>
+              <td>
+                <select disabled={busy} aria-label={`איזו משמרת היא ${row.name || "ללא משמרת"}`}
+                  value={options(row)} onChange={(event) => onMap(row.name, event.target.value)}>
+                  <option value={AUTO}>{row.declared ? `אוטומטי: ${row.shift}` : "להשאיר כמו בקובץ"}</option>
+                  {shiftNames.map((name) => <option key={name} value={name}>{name}</option>)}
+                  <option value={ABSENT}>לא זמין (אילוץ)</option>
+                  <option value={SKIP}>לא לייבא</option>
+                </select>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </details>
+  );
+
+  function options(row: ImportPreview["shifts"][number]) {
+    if (!(row.name in mapping)) return AUTO;
+    return mapping[row.name] ? mapping[row.name] : SKIP;
+  }
+}
+
+function RowsPreview({ preview }: { preview: ImportPreview }) {
+  const rows = useMemo(
+    () => [...preview.assignments].sort((a, b) => a.date.localeCompare(b.date) || a.shift.localeCompare(b.shift)),
+    [preview.assignments],
+  );
+  return (
+    <details className="import-section">
+      <summary>השיבוצים שיישמרו ({rows.length})</summary>
+      <table className="import-table">
+        <tbody>
+          {rows.slice(0, ROWS_SHOWN).map((row, index) => (
+            <tr key={index}><td>{displayDate(row.date)}</td><td>{row.shift || "—"}</td><td>{row.employee}</td><td>{row.reason ?? ""}</td></tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.length > ROWS_SHOWN ? <p className="modal-hint">ועוד {rows.length - ROWS_SHOWN} שיבוצים</p> : null}
+    </details>
+  );
 }

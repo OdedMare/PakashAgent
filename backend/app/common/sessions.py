@@ -1,4 +1,4 @@
-"""Signed workspace session cookies.
+"""Signed workspace and admin session cookies.
 
 The cookie carries the team id and a role, signed with HMAC-SHA256 so the
 browser can hold it without being able to edit it. There is no server-side
@@ -16,8 +16,9 @@ import hashlib
 import hmac
 import json
 import secrets
+import threading
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 # Role names as they travel in the cookie.
 #
@@ -38,6 +39,29 @@ ROLE_MEMBER = "member"
 ROLE_EMPLOYEE = "employee"
 
 COOKIE_NAME = "pakash_session"
+# Which manager's browser this is (`guards.manager()`): their conversations,
+# and the actor the change log records for them.
+MANAGER_COOKIE_NAME = "pakash_manager"
+
+# The system operator -- the "צוות משמרות זהב" console (D28). A separate cookie
+# rather than a fourth role on `pakash_session`, for two reasons. An operator
+# belongs to no team, and every reader of the team cookie assumes a
+# `team_id`. And the two must coexist: the operator opening a team's
+# management area in the same browser would otherwise sign out of the
+# console. `read()` refuses this role outright, so an admin cookie copied
+# into the team slot authorizes nothing there, and `read_admin()` refuses
+# every team role, so the reverse fails too.
+ADMIN_COOKIE_NAME = "pakash_admin"
+ROLE_ADMIN = "admin"
+
+# The commander of a מכלול (D43). Like the operator, a cookie of its own: a
+# commander belongs to a group of teams, not to one. Entering a workplace
+# issues an ordinary boss cookie for that team carrying `commander` (the
+# מכלול's id), which is what lets every manager route serve the commander
+# unchanged while the guards re-check, on each request, that the team is
+# still linked to that מכלול.
+COMMANDER_COOKIE_NAME = "pakash_commander"
+ROLE_COMMANDER = "commander"
 
 
 def _b64(raw: bytes) -> str:
@@ -57,6 +81,8 @@ def issue(
     role: str,
     days: int,
     employee: Optional[str] = None,
+    manager_id: Optional[str] = None,
+    commander: Optional[str] = None,
 ) -> str:
     """`<payload>.<signature>`, both URL-safe base64.
 
@@ -73,6 +99,10 @@ def issue(
     }
     if employee:
         payload["employee"] = employee
+    if manager_id:
+        payload["manager_id"] = manager_id
+    if commander:
+        payload["commander"] = commander
     body = _b64(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
     return "%s.%s" % (body, _sign(secret, body))
 
@@ -112,9 +142,63 @@ def read(secret: str, cookie: Optional[str]) -> Optional[dict]:
     return payload
 
 
-def _sign(secret: str, body: str) -> str:
+def issue_admin(secret: str, hours: int) -> str:
+    """An operator session, signed like a team session but shorter-lived.
+
+    Hours rather than days: this cookie can delete every workspace on the
+    server, so an unattended browser should stop being able to after a
+    working day, not after a month.
+    """
+    payload = {"role": ROLE_ADMIN, "exp": int(time.time()) + hours * 3600}
+    body = _b64(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    return "%s.%s" % (body, _sign(secret, body))
+
+
+def read_admin(secret: str, cookie: Optional[str]) -> Optional[dict]:
+    """The operator payload if authentic and unexpired, else None."""
+    return _read_role(secret, cookie, ROLE_ADMIN)
+
+
+def issue_commander(secret: str, complex_id: str, days: int) -> str:
+    """A commander session: names the מכלול, never a team."""
+    payload = {
+        "role": ROLE_COMMANDER, "complex_id": complex_id,
+        "exp": int(time.time()) + days * 86400,
+    }
+    body = _b64(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    return "%s.%s" % (body, _sign(secret, body))
+
+
+def read_commander(secret: str, cookie: Optional[str]) -> Optional[dict]:
+    """The commander payload if authentic and unexpired, else None."""
+    payload = _read_role(secret, cookie, ROLE_COMMANDER)
+    if payload is None or not payload.get("complex_id"):
+        return None
+    return payload
+
+
+def _read_role(secret, cookie: Optional[str], role: str) -> Optional[dict]:
+    if not cookie or "." not in cookie:
+        return None
+    body, _, signature = cookie.rpartition(".")
+    if not hmac.compare_digest(_sign(secret, body), signature):
+        return None
+    try:
+        payload = json.loads(_unb64(body).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("role") != role:
+        return None
+    if int(payload.get("exp", 0)) < time.time():
+        return None
+    return payload
+
+
+def _sign(secret, body: str) -> str:
+    # A callable is a key looked up on first use (`SharedSecret`).
+    key = secret() if callable(secret) else secret
     return _b64(hmac.new(
-        secret.encode("utf-8"), body.encode("utf-8"), hashlib.sha256
+        key.encode("utf-8"), body.encode("utf-8"), hashlib.sha256
     ).digest())
 
 
@@ -122,7 +206,23 @@ def generate_secret() -> str:
     return secrets.token_urlsafe(32)
 
 
-__all__ = [
-    "COOKIE_NAME", "ROLE_BOSS", "ROLE_MEMBER", "ROLE_EMPLOYEE",
-    "issue", "read", "generate_secret",
-]
+class SharedSecret:
+    """A signing key every replica reads from one place (D39).
+
+    `load` is asked on first use rather than at import, so a process that
+    starts before its database does still starts; once it answers, the key
+    is kept for the life of the process. Passed wherever a secret string
+    goes -- `issue`, `read` and friends call it when they sign.
+    """
+
+    def __init__(self, load: Callable[[], str]):
+        self._load = load
+        self._value: Optional[str] = None
+        self._lock = threading.Lock()
+
+    def __call__(self) -> str:
+        if self._value is None:
+            with self._lock:
+                if self._value is None:
+                    self._value = self._load()
+        return self._value

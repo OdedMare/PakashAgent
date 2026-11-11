@@ -1,4 +1,4 @@
-import type { AgentAnswer, Proposal, Simulation } from "@/types";
+import type { AgentAnswer, Operation, Proposal, Simulation } from "@/types";
 
 /** One cell the agent has said something about, and why it is lit.
  *
@@ -13,6 +13,7 @@ export interface AgentTouch {
    *  it, so a proposal and a simulation can never look like each other —
    *  the same separation D20 draws on the panels themselves. */
   origin: "proposal" | "simulation" | "answer";
+  action?: Operation["action"];
   /** What the agent said about this cell, shown on hover. */
   note: string;
 }
@@ -74,6 +75,7 @@ function fromSimulation(simulation: Simulation | null): AgentTouch[] {
       date: operation.date,
       employee: operation.employee,
       origin: "simulation",
+      action: operation.action,
       note: operationNote(operation.action, operation.employee),
     });
     if (operation.with_employee) {
@@ -82,6 +84,7 @@ function fromSimulation(simulation: Simulation | null): AgentTouch[] {
         date: operation.with_date || operation.date,
         employee: operation.with_employee,
         origin: "simulation",
+        action: operation.action,
         note: operationNote(operation.action, operation.with_employee),
       });
     }
@@ -104,6 +107,7 @@ function fromProposal(proposal: Proposal | null): AgentTouch[] {
       date: operation.date,
       employee: operation.employee,
       origin: "proposal",
+      action: operation.action,
       note: operation.reason || operationNote(
         operation.action, operation.employee,
       ),

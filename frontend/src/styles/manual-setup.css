@@ -4,22 +4,35 @@
   background: var(--bg);
 }
 
+.unit-import { display: grid; gap: 1rem; min-width: 0; padding: clamp(1rem, 3vw, 2rem); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); }
+.unit-import > header, .unit-import > footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.unit-import h2, .unit-import h3, .unit-import p { margin: 0; }
+.unit-import p, .unit-import li { line-height: 1.65; }
+.unit-import small { color: var(--text-muted); }
+.unit-import-steps { display: flex; flex-wrap: wrap; gap: 0.6rem 1.8rem; padding-inline-start: 1.5rem; color: var(--text-muted); }
+.unit-import-steps [aria-current="step"] { color: var(--primary); font-weight: 700; }
+.unit-import-table { overflow: auto; max-height: 18rem; }
+.unit-import table { border-collapse: collapse; font-size: 0.85rem; }
+.unit-import td { padding: 0.5rem; border: 1px solid var(--border); white-space: pre-wrap; min-width: 5rem; }
+.unit-import summary { cursor: pointer; padding: 0.75rem 0; }
+.unit-import > footer { padding-top: 1rem; border-top: 1px solid var(--border); }
+.manual-header-actions { flex-wrap: wrap; }
+
 .manual-setup-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1.5rem;
   padding: 1.35rem clamp(1rem, 4vw, 3rem);
-  color: var(--text-on-dark);
+  color: var(--text);
   background: var(--sidebar);
-  border-bottom: 1px solid color-mix(in srgb, #fff 12%, transparent);
+  border-bottom: 1px solid var(--border);
 }
 
 .manual-setup-header h1 { margin: 0.18rem 0; font-size: clamp(1.35rem, 3vw, 2rem); }
-.manual-setup-header p { margin: 0; color: #aebbd0; font-size: 0.86rem; }
-.manual-kicker { color: #9db4ff; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; }
+.manual-setup-header p { margin: 0; color: var(--text-muted); font-size: 0.86rem; }
+.manual-kicker { color: var(--hue-violet); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; }
 .manual-header-actions { display: flex; gap: 0.55rem; flex: none; }
-.manual-setup-header .ghost-button { color: #d7dfeb; border-color: #475467; }
 
 .manual-sections {
   display: grid;
@@ -32,46 +45,68 @@
 .manual-section {
   display: grid;
   grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr);
-  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
 
-.manual-section > header { display: flex; gap: 0.8rem; padding: 1.15rem; background: var(--surface-2); border-inline-end: 1px solid var(--border); }
+.manual-section > header { display: flex; gap: 0.8rem; padding: 1.15rem; background: var(--surface-2); border-inline-end: 1px solid var(--border); border-start-start-radius: var(--radius); border-end-start-radius: var(--radius); }
 .manual-section > header > span { display: grid; width: 2.15rem; height: 2.15rem; flex: none; place-items: center; color: var(--primary); background: var(--primary-soft); border-radius: var(--radius-sm); }
+.manual-section > header > div { align-self: flex-start; }
 .manual-section > header svg { width: 1rem; }
 .manual-section h2 { margin: 0; font-size: 1rem; }
 .manual-section header p { margin: 0.3rem 0 0; color: var(--text-muted); font-size: 0.78rem; line-height: 1.55; }
-.manual-section-body { display: grid; gap: 0.9rem; min-width: 0; padding: 1.15rem; }
+.manual-section-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.9rem; min-width: 0; padding: 1.15rem; }
 .manual-grid { display: grid; gap: 0.75rem; }
 .manual-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .employee-grid { grid-template-columns: minmax(8rem, 1.3fr) minmax(8rem, 1fr) minmax(8rem, 1fr) 6rem 8rem; }
-.shift-grid { grid-template-columns: minmax(9rem, 1.2fr) 8rem repeat(3, 7rem) minmax(9rem, 1fr); }
+.limits-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.weekly-shifts { display: grid; gap: 0.6rem; min-width: 0; margin: 0; padding: 0; border: 0; }
+.weekly-shifts legend { margin-bottom: 0.6rem; padding: 0; color: var(--text-muted); font-size: 0.74rem; font-weight: 650; }
+.weekly-shifts small { color: var(--text-muted); font-size: 0.74rem; line-height: 1.55; }
+/* Wraps instead of holding six fixed columns: those needed ~51rem, more than
+   the section body has beside its header, and the row was cut off. */
+.shift-grid { grid-template-columns: repeat(auto-fill, minmax(min(9rem, 100%), 1fr)); }
 
 .manual-field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
-.manual-field > span, .manual-checkboxes legend { color: var(--text-muted); font-size: 0.74rem; font-weight: 650; }
-.manual-field input, .manual-field select, .manual-field textarea, .manual-rule input, .manual-rule select { width: 100%; min-height: 44px; padding: 0.55rem 0.65rem; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
-.manual-field textarea { min-height: 5rem; resize: vertical; line-height: 1.5; }
+/* A field's label: one look wherever a field is labelled. */
+.manual-field > span, .manual-checkboxes legend,
+.soldier-field > span, .constraint-form label:not(.profile-check) > span,
+.field-label { color: var(--text-muted); font-size: 0.74rem; font-weight: 650; }
+.manual-field input, .manual-field select, .manual-field textarea, .manual-rule input, .manual-rule select { width: 100%; }
+.manual-field textarea { resize: vertical; line-height: 1.5; }
 .manual-field input[readonly] { color: var(--text-muted); background: var(--surface-2); }
-
-.rotation-rail { display: flex; gap: 0; width: fit-content; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 999px; }
-.rotation-rail span { display: inline-flex; min-height: 38px; align-items: center; gap: 0.25rem; padding: 0.4rem 0.9rem; color: var(--text-muted); border-inline-start: 1px solid var(--border); }
-.rotation-rail span:last-child { border-inline-start: 0; }
-.rotation-rail span.is-first { color: var(--primary); background: var(--primary-soft); font-weight: 700; }
+.manual-rename-note { color: var(--text-muted); font-size: 0.72rem; line-height: 1.4; }
 
 .manual-checkboxes { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0; padding: 0; border: 0; }
 .manual-checkboxes legend { width: 100%; margin-bottom: 0.2rem; }
 .manual-checkboxes small { width: 100%; color: var(--text-muted); font-size: 0.72rem; }
-.manual-checkboxes label, .manual-shift-picks label { display: inline-flex; min-height: 38px; align-items: center; gap: 0.35rem; padding: 0.35rem 0.65rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; font-size: 0.78rem; }
+.manual-checkboxes label { display: inline-flex; min-height: 38px; align-items: center; gap: 0.35rem; padding: 0.35rem 0.65rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; font-size: 0.78rem; }
 .manual-checkboxes label:has(input:disabled) { opacity: 0.72; }
-.manual-checkboxes input, .manual-shift-picks input, .manual-check input { accent-color: var(--primary); }
+.manual-checkboxes input, .manual-check input { accent-color: var(--primary); }
 
-.manual-list { display: grid; gap: 0.65rem; }
-.manual-row { position: relative; display: grid; gap: 0.7rem; padding: 0.8rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
-.manual-row-foot { display: flex; align-items: center; gap: 0.75rem; }
+.manual-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.65rem; }
+.manual-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.7rem; padding: 0.8rem; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+/* Wraps on a narrow window (half a screen) rather than widening the card past
+   the screen's edge. */
+.manual-row-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+
+/* כשירות: only a person with a dated qualification is coloured. The edge and
+   badge carry the scheduling meanings of success, warning and danger, never
+   a person hue. */
+.manual-row.qualification-valid { border-inline-start: 4px solid var(--success); }
+.manual-row.qualification-expiring { border-inline-start: 4px solid var(--warning); background: var(--warning-soft); }
+.manual-row.qualification-expired { border-inline-start: 4px solid var(--danger); background: var(--danger-soft); }
+.qualification-badge { display: inline-flex; align-items: center; min-height: 32px; padding: 0.2rem 0.65rem; border: 1px solid currentColor; border-radius: 999px; font-size: 0.76rem; font-weight: 650; white-space: nowrap; }
+.qualification-badge.is-valid { color: var(--success); background: var(--success-soft); }
+.qualification-badge.is-expiring { color: var(--warning); background: var(--warning-soft); }
+.qualification-badge.is-expired { color: var(--danger); background: var(--danger-soft); }
+.qualification-basis { color: var(--text-muted); font-size: 0.74rem; }
+.manual-row-foot > .manual-rule:has(.qualification-badge) { grid-template-columns: minmax(0, 1fr) 11rem 44px auto; align-items: center; }
 .manual-check { display: inline-flex; min-height: 44px; align-items: center; gap: 0.4rem; white-space: nowrap; font-size: 0.8rem; }
-.manual-shift-picks { display: flex; flex: 1; flex-wrap: wrap; gap: 0.35rem; }
+/* Doubled class: pickers.css (loaded later) resets .multi-select's min-width to 0,
+   which let the row squeeze this field to nothing. */
+.multi-select.manual-shift-picks { flex: 1 1 12rem; min-width: min(12rem, 100%); }
 .manual-delete { position: absolute; inset-block-end: 0.65rem; inset-inline-end: 0.65rem; }
 .icon-button:disabled { opacity: 0.35; cursor: not-allowed; }
 
@@ -82,38 +117,131 @@
 .rotation-pair > svg { align-self: center; justify-self: center; width: 1.15rem; color: var(--primary); }
 .rotation-pair strong { font-size: 0.9rem; }
 .rotation-pair span, .rotation-rule-head span { color: var(--text-muted); font-size: 0.76rem; line-height: 1.5; }
-.rotation-anchors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; }
-.rotation-anchor-card { display: grid; gap: 0.75rem; padding: 0.85rem; background: var(--surface); border: 1px solid var(--border-strong); border-inline-start: 3px solid var(--primary); border-radius: var(--radius-sm); }
-.rotation-anchor-card.is-triplet { border-inline-start-color: var(--accent); }
-.rotation-anchor-card > header { display: flex; flex-direction: column; gap: 0.15rem; }
-.rotation-anchor-card > header strong { font-size: 0.86rem; }
-.rotation-anchor-card > header span { color: var(--text-muted); font-size: 0.73rem; line-height: 1.45; }
-.rotation-anchor-card .manual-grid.three { grid-template-columns: minmax(8rem, 0.8fr) minmax(11rem, 1.2fr); }
+.rotation-cycles { display: grid; gap: 0.65rem; }
+.rotation-cycle-card { display: grid; gap: 0.75rem; min-width: 0; padding: 0.85rem; background: var(--surface); border: 1px solid var(--border-strong); border-inline-start: 3px solid var(--primary); border-radius: var(--radius-sm); }
+.rotation-cycle-card > header, .rotation-block > header { display: flex; flex-direction: column; gap: 0.15rem; }
+.rotation-cycle-card.is-day-cycle { border-inline-start-color: var(--success); }
+/* Day cycles: the per-group and dated adjustments fold away. */
+.day-cycle-more { display: grid; gap: 0.65rem; padding-top: 0.6rem; border-top: 1px solid var(--border); }
+.day-cycle-more > summary { min-height: 44px; display: flex; align-items: center; color: var(--text-muted); font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+.day-cycle-more > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.day-cycle-more:not([open]) { padding-bottom: 0; }
+.day-cycle-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.rotation-cycle-card > header strong { font-size: 0.92rem; }
+.rotation-block > header strong { font-size: 0.84rem; }
+.rotation-block { display: grid; gap: 0.65rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
+.rotation-block > .ghost-button { justify-self: start; }
+.rotation-cycle-card > header span, .rotation-block > header span { color: var(--text-muted); font-size: 0.73rem; line-height: 1.45; }
+.rotation-hint { margin: 0; color: var(--text-muted); font-size: 0.76rem; line-height: 1.55; }
+.rotation-window-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.rotation-link { padding: 0; color: var(--primary); background: none; border: 0; font: inherit; text-decoration: underline; cursor: pointer; }
+.rotation-rule > .rotation-link { justify-self: start; min-height: 44px; font-size: 0.8rem; }
 .rotation-rule { gap: 0.9rem; }
 .rotation-rule-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .rotation-rule-head > div { display: grid; gap: 0.15rem; }
-.rotation-empty, .rotation-derived-note { margin: 0; padding: 0.75rem 0.85rem; color: var(--text-muted); background: var(--surface-2); border-inline-start: 3px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 0.78rem; line-height: 1.55; }
 .rotation-derived-note { border-inline-start-color: var(--primary); }
+.rotation-derived-note.is-warning { color: var(--warning); background: var(--warning-soft); border-inline-start-color: var(--warning); }
 .manual-error { width: min(76rem, calc(100% - 2rem)); margin: 1rem auto 0; padding: 0.75rem 1rem; color: var(--danger); background: var(--danger-soft); border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border)); border-radius: var(--radius-sm); }
 .manual-savebar { position: fixed; z-index: 8; inset: auto 0 0; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem clamp(1rem, 4vw, 3rem); background: color-mix(in srgb, var(--surface) 94%, transparent); border-top: 1px solid var(--border-strong); box-shadow: 0 -8px 30px rgba(16, 24, 40, 0.08); backdrop-filter: blur(10px); }
 .manual-savebar span { color: var(--text-muted); font-size: 0.8rem; }
 
+/* The cycle card asks three numbered questions, then shows the server's
+   answer for the coming weekends. */
+
 @media (max-width: 980px) {
   .manual-section { grid-template-columns: 1fr; }
-  .manual-section > header { border-inline-end: 0; border-bottom: 1px solid var(--border); }
-  .manual-grid.three, .employee-grid, .shift-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .rotation-anchors { grid-template-columns: 1fr; }
+  .manual-section > header { border-inline-end: 0; border-bottom: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0; }
+  .manual-grid.three, .employee-grid, .limits-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rotation-window-grid, .manual-grid.exit-closure { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .manual-grid.exit-closure > .manual-field:first-child { grid-column: 1 / -1; }
 }
 
 @media (max-width: 620px) {
   .manual-setup-header { align-items: flex-start; flex-direction: column; }
   .manual-header-actions { width: 100%; }
-  .manual-header-actions button { flex: 1; justify-content: center; }
-  .manual-grid.three, .employee-grid, .shift-grid, .manual-rule { grid-template-columns: 1fr; }
+  .manual-header-actions button { min-height: 44px; flex: 1; justify-content: center; }
+  .manual-header-actions .header-help { width: auto; }
+  .manual-header-actions .header-help > span { display: inline; }
+  .manual-grid.three, .employee-grid, .limits-grid, .manual-rule { grid-template-columns: 1fr; }
   .manual-row-foot { align-items: flex-start; flex-direction: column; }
   .rotation-pair { grid-template-columns: 1fr; }
   .rotation-pair > svg { transform: rotate(90deg); }
-  .rotation-anchor-card .manual-grid.three { grid-template-columns: 1fr; }
+  .rotation-window-grid, .manual-grid.exit-closure { grid-template-columns: 1fr; }
   .manual-savebar span { display: none; }
-  .manual-savebar button { width: 100%; justify-content: center; }
+  .manual-savebar button { width: 100%; min-height: 44px; justify-content: center; }
 }
+
+/* What the code scheduler understood (D32). */
+.manual-compiled-block { display: grid; gap: 0.3rem; min-width: 0; }
+.manual-rule > .manual-compiled-block { grid-column: 1 / -1; }
+.manual-day-picks { max-width: 30rem; }
+.manual-compiled { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.manual-compiled li { display: grid; grid-template-columns: minmax(0, 8rem) minmax(0, 1fr) auto; gap: 0.35rem 0.75rem; align-items: start; padding: 0.6rem 0.7rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.manual-compiled li.is-bare { display: flex; flex-wrap: wrap; gap: 0.35rem 0.75rem; padding: 0; background: none; border: 0; }
+.manual-compiled-kind { color: var(--text-muted); font-size: 0.78rem; }
+.manual-compiled-text { min-width: 0; overflow-wrap: anywhere; font-size: 0.85rem; }
+.manual-compiled-tag { padding: 0.15rem 0.5rem; font-size: 0.75rem; border-radius: 999px; white-space: nowrap; }
+.manual-compiled-tag.ok { color: var(--success); background: var(--success-soft); }
+.manual-compiled-tag.warn { color: var(--warning); background: var(--warning-soft); white-space: normal; }
+.manual-compiled-tag.muted { color: var(--text-muted); background: var(--surface-2); white-space: normal; }
+.manual-compiled-question { grid-column: 2 / -1; color: var(--warning); font-size: 0.78rem; }
+.manual-compiled-empty { margin: 0; color: var(--text-muted); font-size: 0.85rem; }
+@media (max-width: 640px) {
+  .manual-compiled li { grid-template-columns: minmax(0, 1fr); }
+  .manual-compiled-question { grid-column: auto; }
+}
+.manual-zero-note { margin: 0; color: var(--text-muted); font-size: 0.74rem; }
+
+/* "יציאות" — one closed list of kinds, then the closure hours and group count. */
+.exit-setup { display: grid; gap: 0.75rem; max-width: 52rem; }
+.exit-setup > .multi-select { max-width: 30rem; }
+.exit-closure { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.exit-closure > .manual-field:first-child { grid-column: 1 / -2; }
+.exit-pattern-fields { margin-block-start: 0.5rem; }
+
+/* Folding the setup: a section, a roster group, one soldier's card. Folding
+   only hides — every field stays in the form and is saved. */
+.manual-section > header { position: relative; }
+.manual-section > header > div { flex: 1; }
+.manual-section-toggle { flex: none; align-self: flex-start; }
+.manual-section-toggle svg, .roster-group-head svg, .manual-row-summary svg { transition: transform 120ms ease; }
+.manual-section.is-closed .manual-section-toggle svg { transform: rotate(90deg); }
+.manual-section.is-closed { grid-template-columns: 1fr; }
+.manual-section.is-closed > header { border-inline-end: 0; border-radius: var(--radius); }
+.manual-section-body[hidden] { display: none; }
+
+.roster-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.roster-grouping { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.78rem; color: var(--text-muted); font-weight: 650; }
+.roster-grouping select { min-height: 44px; padding: 0.45rem 0.65rem; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
+.roster-filter { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.roster-filter .chip-button { min-height: 44px; padding: 0.35rem 0.8rem; color: var(--text); background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 999px; font: inherit; font-size: 0.8rem; font-variant-numeric: tabular-nums; cursor: pointer; }
+.roster-filter .chip-button.is-selected { color: var(--primary); background: var(--primary-soft); border-color: var(--primary); }
+.roster-filter .chip-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.roster-fold-all { min-height: 44px; }
+.roster-filter-note { margin: 0; color: var(--text-muted); font-size: 0.78rem; }
+
+.roster-group { display: grid; gap: 0.55rem; }
+.roster-group-head { display: flex; min-height: 44px; align-items: center; gap: 0.5rem; padding: 0.4rem 0.7rem; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); font: inherit; text-align: start; cursor: pointer; }
+.roster-group-head span { margin-inline-start: auto; padding: 0.1rem 0.55rem; color: var(--text-muted); background: var(--surface); border-radius: 999px; font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.roster-group.is-closed .roster-group-head svg { transform: rotate(90deg); }
+.roster-group-head:focus-visible, .manual-row-summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.manual-row-summary { display: flex; min-height: 44px; align-items: center; gap: 0.5rem; padding: 0; color: var(--text); background: none; border: 0; font: inherit; text-align: start; cursor: pointer; }
+.manual-row-summary span { overflow: hidden; color: var(--text-muted); font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
+.manual-row-summary.is-open { min-height: 32px; }
+.manual-row.is-folded { padding-block: 0.15rem; }
+.manual-row.is-folded .manual-row-summary svg { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) {
+  .manual-section-toggle svg, .roster-group-head svg, .manual-row-summary svg { transition: none; }
+}
+
+.roster-search { display: flex; align-items: center; gap: 0.45rem; min-height: 44px; padding-inline: 0.7rem 0.25rem; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
+.roster-search:focus-within { outline: 2px solid var(--primary); outline-offset: 1px; }
+.roster-search > svg { flex: none; color: var(--text-muted); }
+.roster-search input { flex: 1; min-width: 0; min-height: 42px; padding: 0; color: var(--text); background: none; border: 0; outline: none; font: inherit; font-size: 0.85rem; }
+.roster-search input::-webkit-search-cancel-button { display: none; }
+
+/* The whole section header folds it; a folded one says in a line what is in it. */
+.manual-section > header { cursor: pointer; }
+.manual-section > header > div { min-width: 0; }
+.manual-section-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

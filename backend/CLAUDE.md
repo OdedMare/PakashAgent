@@ -7,120 +7,239 @@ Real Excel layouts: [`../docs/FILE_FORMATS.md`](../docs/FILE_FORMATS.md).
 
 ## Purpose
 
-Turn a conversation with the boss into a maintained shift schedule. The agent
-learns the workplace once (intro interview), then generates schedules, imports
-ones the boss already has, and rearranges them on request — explaining every
-decision and recording every reason.
+Turn a conversation with the boss into a maintained shift schedule. The
+manager describes the workplace once in a structured setup form; a
+constraint solver builds schedules from it (D34); the agent translates the
+manager's sentences, answers questions and proposes changes in a
+conversation — explaining every decision and recording every reason.
 
 ## Runtime and commands
 
-Python is **3.8.10**, mirroring AiSummryIO. Keep annotations compatible: use
-`Optional`, `List`, `Dict`; do **not** use `X | Y`, `list[str]`, or `match`.
-*(If the deployment target turns out to be newer, this is the one open question
-in DECISIONS.md — resolve it before writing much code.)*
+Python is **3.11** (it was 3.8.10 until [D30](../docs/DECISIONS.md#d30--model-calls-are-traced-to-opik-prompts-and-replies-included);
+the Opik tracing D30 added has since been removed — the deployment is
+air-gapped and nothing calls out but the model server).
+The code still writes `Optional`, `List`, `Dict`; match the file you are in.
 
 ```bash
 cd backend
 python -m pytest -q
 uvicorn app.main:app --reload
+python -m benchmarks.solver_bench --save before.json   # solver quality and time
 ```
 
 ## Architecture
 
 - `common/` — env defaults (`PAKASH_` prefix) plus the live runtime-settings
-  override store. Saved settings override env without restart; secrets masked.
-- `dal/database/postgres.py` — connection; verifies the schema exists.
-- `dal/llm/` — the OpenAI-compatible JSON client and its degradation ladder,
-  ported unchanged from AiSummryIO. Model/base URL/API key stay live per call.
+  override store. Saved settings override env without restart; secrets
+  masked. They are edited from the operator console (`/admin`, "מערכת"); the
+  team screen has no settings entry.
+- `dal/database.py` — connection; verifies the schema exists.
+- `dal/llm/` — the OpenAI-compatible JSON client and its degradation ladder
+  (strict structured outputs first). Model/base URL/API key stay live per
+  call; concurrency is held with PostgreSQL advisory locks.
+- `dal/notify.py` — LISTEN/NOTIFY between processes (D35).
+- `common/read_cache.py` + `dal/write_marks.py` — the optional Redis cache
+  of the board's heavy reads (D50), retired per team by every committed
+  write, noticed at the cursor. Keys under `redis_key_prefix`.
 - `dal/repository/` — the only SQL owner. `teams.py` also owns password
-  hashing (`scrypt`, stdlib) and the member share token.
+  hashing (`scrypt`, stdlib) and the member share token; `throttle.py` the
+  shared login-attempt counts (D35).
 - `bl/workspace_service.py` — workspace rules: who may enter a team, in which
   role, and what a new workspace inherits.
-- `api/dependencies.py` — the route guards (`visitor`, `boss`).
+- `bl/admin_service.py` — the צוות משמרות זהב operator console (D28): opening,
+  suspending and deleting teams. `dal/repository/admin.py` holds its
+  cross-team queries — the one deliberate exception to team scoping.
+- `bl/complex_service.py` — a מכלול (D43): משמרות (teams) joined under one
+  commander. The operator links existing teams and issues the commander's
+  password; the commander signs in on `pakash_commander`, reads the combined
+  board, and enters a team on an ordinary boss cookie marked `commander`.
+  `describe_action` names the commander's writes for the notice the team's
+  own commander reads (recorded by the middleware in `main.py`, which also
+  credits the commander's chat routes, `/api/complex/teams/{id}/chats`, to
+  that team). `bl/complex_routing.py` reads which משמרות a sentence in the
+  commander's chat is about — named, a named soldier's, else all (D46).
+  `dal/repository/complexes.py` holds its SQL.
+- `bl/complex_duties/` — the מכלול's duties (תורנויות): types the commander
+  defines, and one soldier on one duty for a whole day. A write is checked
+  (the soldier is on the team's roster and serving, the type is on and runs
+  that weekday, a seat is free), logged in the soldier's team as
+  `commander:<id>`, and told to that team's commander. The day is blocked
+  by `records.availability()`, which projects it as a `duty` with no hours.
+  A duty on a draft shift vacates it and opens a keep-existing refill
+  (`collisions.py`); "מלא בהוגנות" (`fill.py`, pure) proposes — keeping
+  each soldier six days from their other duties while anyone else is free
+  (D46) — and the commander approves; `balance.py` reports the spread (D44).
+  `dal/repository/complex_duties.py` holds its SQL.
+- `api/dependencies.py` — the route guards (`visitor`, `boss`, `own_manager`,
+  `employee`, `admin`, `commander`). `visitor` also refuses a suspended or
+  deleted team, and a commander's cookie for a team no longer in their מכלול.
 - `common/sessions.py` — signed session cookies (HMAC-SHA256, no library).
-- `bl/interview.py` — the intro interview, one `plan-chat` turn at a time
-  (ported from AiSummryIO). Collects the workplace profile, employees, rules
-  (tagged hard/soft), and the **shift vocabulary**. Every turn returns the
-  draft profile so far; `ready` is gated in code, never trusted to the prompt.
-  The manager may also **end it early** (`interview_service.end`), which
-  writes the partial draft with a `completeness` record of what it still owes
+- `common/events.py` — "an inbox moved" signals per team (across processes
+  over PostgreSQL LISTEN/NOTIFY, `dal/notify.py`, D35), feeding
+  the manager's SSE stream (`api/routers/employee/live.py`, D29). Signals
+  carry no data; the screen re-reads through the guarded routes.
+- `bl/profile_service/` — unit setup: the structured profile form (roster,
+  shift vocabulary, staffing, rotations, rules, policies), validated and
+  normalised in code with no model call. Saving queues the translation of
+  its sentences (`compile_sources`, D32). There is no intro interview any
+  more; a profile created here is `complete`, and an older partial one still
+  reports its gaps through `profile_gaps`
   ([D22](../docs/DECISIONS.md#d22--the-interview-can-be-ended-early-and-the-profile-says-what-it-owes-️-amends-d18)).
-- `bl/scheduler.py` — generates a schedule; every assignment carries a reason.
-  Builds the slot grid in code (which dates fall in a period is arithmetic) and
-  asks the model only to assign people into it.
-- `bl/changes.py` — conversational edits; asks for the boss's reason, proposes a
+  A saved name changes only through an explicit rename on the save
+  (`renamed_employees`/`renamed_shifts`, `profile_service/identity.py`),
+  carried through every stored row in one transaction
+  (`dal/repository/identity_changes.py`); `removed_employees` deletes a
+  soldier added by mistake, never one on a published week.
+- `bl/scheduler/` — builds a span: the slot grid (arithmetic), the
+  manager's sentences translated by `bl/directive_agent/`, then the solver.
+- `bl/solver/` — **the OR-Tools CP-SAT constraint solver that assigns every
+  schedule** ([D34](../docs/DECISIONS.md)). One boolean per legal (person,
+  slot) — a shift's `allowed_roles` and the rotation (an ungrouped
+  חמשושים/שושים soldier is home every weekend) decide legality; the audit's
+  blocking checks and every hard request are constraints; coverage is
+  solved first, then wishes and fairness (per-person load targets, priced
+  below a soft wish). נחפפים are placed beside a trainer and fill no seat.
+  Every row carries a reason. No model call. A roster of thirty or more is
+  solved in alphabetical chunks of two shift types, each seeing the last
+  (`chunks.py`, D54).
+- `bl/directive_agent/` + `bl/compiled_sources/` — the model's one job in a
+  build: translating rules, policies, notes, preferences and the build's
+  instruction into structured requests (`bl/schedule_requests.py`), kept
+  per sentence so a standing rule is translated once (D32). What does not
+  translate is named in the build's notes.
+- `bl/chat/` — **the agent.** One persistent
+  conversation per manager: questions answered with read-only tools,
+  replacement plans, generation previews, profile and constraint changes.
+  A turn prepares a plan and writes nothing; `chat/apply.py` applies it on
+  the manager's approval, atomically, after checking nothing moved. A seat
+  a planned removal vacates is filled by the solver (`chat/vacancies.py`).
+- `bl/changes/` — conversational edits; asks for the boss's reason, proposes a
   replacement with justification, applies on confirmation. Proposes only — it is
   handed no repository, so it cannot write.
-- `bl/briefing.py` — **the agent speaking first.** Reads the current state and
-  says what it noticed, unprompted. Returns exactly `headline`, `items`,
-  `quiet` — no operations, so there is no path from a briefing to a write.
-- `bl/copilot.py` + `app/worker.py` — the durable observation loop. PostgreSQL
-  owns jobs, inbox items, per-action permissions and append-only audit events;
-  the separate worker survives browser and API restarts.
-- `bl/schedule_service.py` — persistence and ordering around those three plus
-  the audit: propose, confirm, apply, publish, constraints, history.
-- `bl/audit.py` — **pure Python, no LLM.** Recomputes countable facts and returns
+- `app/worker.py` — the durable job loop. PostgreSQL owns the jobs (the
+  `copilot_jobs` table, claimed once with `FOR UPDATE SKIP LOCKED`); the
+  copilot inbox that named it is gone. The worker runs **inside the API
+  process by default** (`PAKASH_EMBEDDED_WORKER=0` turns it off) and can also
+  run on its own as `python -m app.worker`. Generation is queued as one job
+  per span; manager-chat turns and `compile_sources` are jobs too.
+  Six lanes by default (`PAKASH_WORKER_CONCURRENCY`), three of them only
+  for manager chat (`PAKASH_CHAT_WORKERS`), so a long build cannot occupy
+  every worker (D38).
+- `bl/schedule_service/` — persistence and ordering around the solver, the
+  change agent and the audit: open, build, propose, confirm, apply, publish,
+  clear, constraints, history, preferences, simulations, export.
+- `bl/audit/` — **pure Python, no LLM.** Recomputes countable facts and returns
   warnings. Never blocks. Also owns `personal_summary()` and `fairness()`, which
-  the employee area renders — they live here so one person's hours are literally
-  the same arithmetic as the manager's warnings, not a second implementation.
-- `bl/employee_service.py` — identity claims, the personal view, constraint
+  the employee area and the manager's stats read — they live here so one
+  person's hours are literally the same arithmetic as the manager's warnings,
+  not a second implementation. `shift_stats` counts load in shifts and
+  nights as well as hours, takes an `employee` to narrow to one person, and
+  is what `schedule_service/statistics.py` runs over any span of dates
+  (`window.py` decides which rows and which findings fall inside it).
+- `bl/employee_service/` — identity claims, the personal view, constraint
   requests, and the unread-change mark. Approval is the only thing that writes
   a constraint (D14).
-- `bl/schedule_service.create_blank/assign/unassign` — the manual path (D18).
-  The only schedule writes with no model call anywhere on them.
+- `bl/schedule_service/generation/` — opening a period and running its
+  checkpointed job. A job may cover less than its period: `start_generation`
+  takes `build_from`/`build_through` (the grid opens whole, the solver is
+  asked for the run), and `range.py` opens a job over a run of dates inside
+  a draft that already exists — manager-placed rows there are pins, the rest
+  of those dates is replaced, every other date is untouched.
+  Both also take `shifts` (`shift_filter.py`): only those shift types are
+  solved and rewritten, and rows on every other shift stand as fixed rows.
+  A range with `keep_existing` holds the rest where it fits instead of
+  replacing it (D37), and `absorb.py` opens such a job on every draft ahead
+  of today when a profile save adds a soldier or a shift; published weeks
+  are listed, never touched.
+- `bl/schedule_service/manual.py` (`create_blank`/`assign`/`unassign`) — the manual path (D18).
+  Writes with no model and no solver on them.
+- `bl/importer/` — a file in, in any shape (D42): one reader for any
+  `Layout`, detection scored against the roster, the model asked only to
+  describe the layout (never the rows). `schedule_service/importing.py`
+  previews (writes nothing) and commits what was approved — a new period, or
+  the imported shifts and dates merged into a chosen draft.
 - `bl/export.py` — a period out as `.xlsx`. Pure functions, no model, no
-  repository. Laid out shift-major like `FILE_FORMATS.md` Sample A so an
-  exported week can be edited and imported back.
-- `bl/importer.py` — Excel/Word ingest with layout inference. **No model
-  call**: which axis is time and whether shift is nested under date is grid
-  arithmetic, and code that counts cannot hallucinate a person into a shift.
-  Three layouts, scored against each other: `shift_major` (Sample A),
-  `person_major` (Sample B), and `date_only` — dates and people with no shift
-  axis at all, tried last and only when no row carries a lane label, so a real
-  shift axis is never flattened into it. Column headers written as hours
-  (`07:00-15:00`) fold into the declared shift running those hours rather than
-  becoming a second shift with the same meaning. Returns an `Interpretation`;
-  handed no repository, so it cannot write.
-- `bl/learn.py` — what a stack of past files says about the workplace.
-  `observe()` counts patterns across every uploaded file (no model);
-  `RuleLearner` turns those counts into candidate rules in the manager's own
-  words (D2) with the evidence attached. Proposes only — nothing is approved
+  repository. Laid out shift-major like `FILE_FORMATS.md` Sample A.
+- `bl/learn/` — what the manager's own corrections say about the workplace.
+  `observe_corrections()` counts repeated corrections in the change log (no
+  model); `RuleLearner` turns those counts into candidate rules in the
+  manager's own words (D2) with the evidence attached. Proposes only — nothing is approved
   by having been proposed.
-- `bl/tools.py` — **the named questions the agent may ask, answered in pure
-  Python.** Seven read-only operations (`read_period`, `employee_state`,
-  `coverage_gaps`, `validate_placement`, `find_replacements`,
-  `publish_readiness`, `profile_gaps`). No LLM call anywhere in the file, and
+- `bl/tools/` — **the named questions the agent may ask, answered in pure
+  Python.** Eight read-only operations (`read_period`, `team_overview`,
+  `employee_state`, `coverage_gaps`, `validate_placement`,
+  `find_replacements`, `publish_readiness`, `profile_gaps`); the chat adds
+  its own read tools in `chat/tools.py`. No LLM call anywhere in the file, and
   no write: it holds a repository and uses it for reads only (D19).
-- `bl/planner.py` — the loop that runs them. The model picks tools, the
-  tools answer with arithmetic, the results go back. Falls back to
-  `bl/intent.py` when no model is reachable, so the same questions are
-  answered with nothing configured.
-- `bl/intent.py` — **reading a Hebrew sentence with no model.** Keyword
-  matching against the workspace's own roster and shift vocabulary, six
-  question shapes, and `unknown` for anything else. It never guesses.
-- `bl/simulate.py` — what a change *would* do, computed in memory. Handed no
-  repository, so persisting nothing is a property of the wiring (D20).
+- `bl/planner/` — what the manager chat shares with the no-model reader:
+  the question and tool-call schema, and deterministic answers over
+  `bl/tools/` and `bl/intent/`. The model loop that answered `/ask` is gone;
+  the manager chat asks instead.
+- `bl/intent/` — **reading a Hebrew sentence with no model.** Keyword
+  matching against the workspace's own roster and shift vocabulary, seven
+  question shapes, and `unknown` for anything else. It never guesses. The
+  chat uses it for its zero-model fast path ("who can replace…").
+- `bl/absence/` — **an absence, from sentence to plan, with no model** (D36).
+  Reads one person and every date ("בשני ושלישי", "מ-1.11 עד 5.11"), asks once
+  when dates or scope are missing, ranks clean covers in stages — the same
+  role from the seat's own post, then the same role from another post, then
+  anyone else (`placement/tiers.py`) — and inside a stage so the load spreads
+  evenly (a bare "עד 31.12" runs from today; spans up to 120 days), and hands
+  `ChatPlanBuilder.prepare` a model-shaped turn — so the plan
+  meets every check a model plan does. Run inline by `start_turn` before the
+  model loop (`bl/chat/fast.py`); anything it cannot read goes to the model.
+  Also behind the read-only replacement tab, `GET /api/agent/replacements`.
+- `bl/change_plans/` — **the write gate for approved plans.** A plan is stored
+  independently of the chat that proposed it; approval rechecks its snapshot,
+  applies it once in one serializable transaction, and correlates every audit
+  row through `plan_id`. `bl/chat/apply.py` is only the conversation adapter.
+- `bl/simulate/` — what a change *would* do, computed in memory. Handed no
+  repository, so persisting nothing is a property of the wiring (D20). The
+  chat's `simulate_changes` tool reads it.
+- `bl/rotation/`, `bl/placement/` — whose closure a date is, and what a
+  placement would cost; pure arithmetic the solver, the board and the audit
+  share.
 - `bl/prompts/` — prompt text as markdown, loaded by `prompts.load(name)`.
   Shared fragments compose via `<!-- include: shared/name.md -->`.
 - `api/` — Pydantic HTTP contracts and routers.
-- `main.py` — FastAPI routes and composition root.
+- `main.py` — FastAPI routes, the composition root, and the embedded worker.
+  `session_key.py` decides which key signs cookies (D39).
+- `diagnose.py` — `python -m app.diagnose`: settings, the job queue, model
+  slots and a real completion, printed for a terminal on a closed network.
 
 Business logic under `bl/`, data access under `dal/`. A file owns one class or
 one concern; split rather than append.
 
+**Size rules.** No file over 300 lines and no function over 50 (docstring
+included). A concern that outgrows one file becomes a package: its
+`__init__.py` re-exports the public names, so callers keep importing from
+the same path, and a facade class (`ScheduleService`, `EmployeeService`,
+`ScheduleTools`) composes small collaborators that each own one job. Each
+package's `__init__` docstring carries a table of which module owns what.
+
 ## Locked rules
 
-- **The audit never blocks.** `bl/audit.py` returns warnings and nothing else. It
-  does not reject a schedule, rewrite an assignment, or veto the agent. Making it
-  authoritative reverses [D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)
-  — the whole product shape depends on the agent keeping the judgment.
+- **The audit never blocks.** `bl/audit/` returns warnings and nothing else. It
+  does not reject a schedule, rewrite an assignment, or veto the manager.
+  The solver is built from the same thresholds so its output is clean by the
+  audit's own measure, but the audit itself stays advisory
+  ([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34), D34)
+  — a hand-made or edited schedule that breaks a rule still saves.
 - **The audit contains no LLM call.** Its entire value is being arithmetic that
   cannot be hallucinated. Pure functions over a roster; trivially unit-testable.
-- **Hard rules are not gates.** They are strong instructions to the model plus a
-  loud warning when broken. This is a deliberate, accepted tradeoff — see D1/D3.
-- **How full a slot is has exactly one answer, and `bl/audit.py` owns it.**
+- **Generation honours hard rules; the audit still only warns.** The solver
+  will not place a row that breaks a hard rule it can represent (D34). A
+  rule it cannot represent is reported in the build's notes, never sent to
+  a model to assign around. On a hand-made schedule hard rules remain a
+  loud warning, not a gate (D1/D3).
+- **An operational duty is occupied time, not an advisory rule.** Dated duties
+  and recurring duties are hard intervals. The solver omits overlapping
+  placements, the picker marks them `blocking`, and manual/chat assignment and
+  move paths refuse them too. This is a write precondition outside `bl/audit/`;
+  the audit still only reports a schedule that already drifted.
+- **How full a slot is has exactly one answer, and `bl/audit/` owns it.**
   `required_headcount()` says how many people it asks for — reading the stored
-  grid first, since that is what the week was generated or imported into — and
+  grid first, since that is what the week was generated into — and
   `counts_toward_staffing()` says whether the person standing on it fills one
   of those seats. `audit`, `shift_stats`, `tools.coverage_gaps`,
   `simulate._coverage` and the board all go through the pair. A second count
@@ -129,32 +248,16 @@ one concern; split rather than append.
   believing either number. A shadow shift is where the two counts diverge:
   somebody learning the shift is at work, is on the board, accrues the hours,
   and leaves the slot needing everybody it asked for.
-- **Shift names are never hardcoded.** They come from the interview. Any literal
+- **Shift names are never hardcoded.** They come from unit setup. Any literal
   `"בוקר"` outside a test fixture or a Hebrew vocabulary table is a bug ([D9](../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)).
-  On import this means *matched against* the declared vocabulary, not
-  *restricted to* it: a header that matches none is taken from the sheet's own
-  wording, because the file records something the workplace really ran and
-  dropping it would silently lose history. Nothing is invented — a name is
-  either the workplace's or the manager's file's. A sheet naming no shift at
-  all (`date_only`) imports with the name **empty**, and the confirm screen
-  asks; filling it in with a guess is the bug D9 is about.
 - **No structured rule vocabulary.** Rules are the boss's own sentences ([D2](../docs/DECISIONS.md#d2--rules-stay-natural-language)).
+  What code made of one (`compiled_sources`, D32) is a kept derivative,
+  looked up by the sentence's words; it never replaces or rewrites it.
 - **Every assignment carries the agent's reason**; every change carries the boss's
   reason too. Neither is optional — they serve different purposes ([D8](../docs/DECISIONS.md#d8--two-reasons-both-required)).
   Enforced in three places on purpose: `assignments.reason` is `NOT NULL`, the
-  repository refuses a blank one, and `scheduler.py` drops an unreasoned row
-  rather than storing it.
-- **A briefing observes; it never acts.** `bl/briefing.py` returns three keys
-  and none of them is an operation, so nothing it says can be applied
-  ([D15](../docs/DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)).
-  A `suggestion` is a sentence the manager may send, after which the ordinary
-  propose-then-confirm path runs unchanged. Giving a briefing operations that
-  `apply` could read would reverse D3, D8 and D12 at once.
-- **A briefing never counts.** `warnings` and `fairness` are computed by
-  `audit.py` and handed to the model as facts. Speaking first does not move
-  the D3 line about which side does arithmetic.
-- **`schedule_service.brief()` never raises.** It returns quiet on any failure:
-  it decorates a screen that must render regardless of what the model is doing.
+  repository refuses a blank one, and the solver writes one on every row it
+  places (`bl/solver/solve.py`).
 - **A dragged shift is a proposal, not an edit.** `POST /api/schedule/move`
   requires the manager's reason exactly as a spoken change does ([D12](../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
 - **Clearing keeps the grid; deleting does not.** `POST /{id}/clear` empties
@@ -166,12 +269,13 @@ one concern; split rather than append.
   one gesture is still N people taken off N shifts, and the change log is
   the only history there is (D4).
 - **The rotation is enforced where a shift is assigned, and only ever
-  advisory afterwards.** `bl/rotation.py` is the single definition of whose
-  closure a date is; `scheduler.py` refuses to store a row contradicting it,
-  `placement.py` says so before the click, and `audit.py` warns about a
-  schedule that already drifted. Refusing a *generated* row is not the audit
-  gaining a veto (D3): it is the same class of bound as "a person nobody
-  declared", because the cycle was arithmetic this code already did.
+  advisory afterwards.** `bl/rotation/` is the single definition of whose
+  closure a date is; the solver never creates a variable for a placement
+  contradicting it, `bl/placement/` says so before the click, and `bl/audit/`
+  warns about a schedule that already drifted. Not placing a *generated* row
+  is not the audit gaining a veto (D3): it is the same class of bound as "a
+  person nobody declared", because the cycle was arithmetic this code
+  already did.
 - **The boss can build a schedule without the agent** ([D18](../docs/DECISIONS.md#d18--the-boss-can-place-a-shift-without-the-agent-️-completes-d6)).
   `/blank`, `/assign` and `/unassign` call no model at all — `build_slots()`
   was always pure arithmetic. `assign` writes immediately and that is *not* a
@@ -184,30 +288,15 @@ one concern; split rather than append.
   so rows predating the column keep their meaning, and `move_assignment`
   leaves it alone: dragging a hand-placed shift does not make it the agent's.
 - **The export layout is Sample A, not a design choice.** `bl/export.py`
-  writes the shape `bl/importer.py` is being built to read, so a week can
-  leave and come back ([D17](../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
-  Changing the layout to something prettier produces a file this product
-  cannot read.
+  writes the shape the workplace already keeps ([D17](../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
 - **A message for the team is written by the agent, not templated in code.**
   Posting the week to a group chat is writing, and the manager asks for it in
-  the conversation — the change agent answers with `reply` and no operations.
+  the conversation — the manager chat answers with a reply and no operations.
   Nothing is sent anywhere; the product has no channel to the team beyond the
   share link and holds no employee contact details.
-- **An import is never committed before confirmation.** Inference produces an
-  interpretation the boss approves; only then does anything persist ([D7](../docs/DECISIONS.md#d7--import-infers-layout-boss-confirms)).
-  Split across two endpoints so the confirmation is structural rather than a
-  dialog in front of a write that already happened: `/import/preview` reads
-  and returns, `/import/confirm` is the only one that writes. `confirm` takes
-  the rows back from the caller rather than re-reading the file, so a name the
-  manager corrected on the screen is what gets stored.
-- **An imported schedule keeps the shifts it actually ran.** `commit_import`
-  builds the slot grid from the file's own rows, not from `build_slots` —
-  regenerating it from today's vocabulary would quietly reshape history to
-  match a profile that may have changed since ([D9](../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)).
-- **A learned pattern is not a rule.** `bl/learn.py` returns *candidates*
-  carrying their evidence, and the leap from "has not happened" to "must not
-  happen" is the manager's to make: a file showing nobody on Saturday may mean
-  Saturday is closed, or that the sheet only covered weekdays. Anything but an
+- **A learned pattern is not a rule.** `bl/learn/` returns *candidates*
+  carrying their evidence, and the leap from a repeated correction to a rule
+  is the manager's to make. Anything but an
   explicit `hard` is stored soft — an invented hard rule nags the manager
   about a rule they never stated ([D1](../docs/DECISIONS.md#d1--rules-are-hard-or-soft)).
 - **No endpoint lets an employee mutate a schedule.** Enforced by
@@ -217,7 +306,7 @@ one concern; split rather than append.
   *request* via `guards.employee()` and nothing else. They cannot assign,
   move, publish, or approve — including their own request.
 - **A pending constraint request is inert.** It lives in `constraint_requests`,
-  not `availability`, so `bl/audit.py` cannot see it and submitting one cannot
+  not `availability`, so `bl/audit/` cannot see it and submitting one cannot
   move the arithmetic. The manager's approval is what promotes it into an
   `availability` row with `source='employee_reported'` (D13/D14). Keeping the
   two tables separate is what makes that a property of the schema rather than
@@ -235,20 +324,22 @@ one concern; split rather than append.
   would let any signed-in employee read a colleague's hours and stated reasons.
 - **Every workplace-owned read is scoped by `team_id`, taken from the signed
   session cookie** and never from the request ([D10](../docs/DECISIONS.md#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold-a-link)).
-- **`PAKASH_SESSION_SECRET` must be set in any real deployment.** Unset, each
-  worker signs with its own key and rejects the others' cookies.
-- **The interview has two doors, and only a person opens the second one.**
-  `_is_ready` governs what the *model* may declare finished and still refuses
-  a profile owing a required field; `interview_service.end` is the manager's
-  own act and calls no model at all (D22). An agent able to reach `end` would
-  be deciding it had asked enough — the judgement the confirmation turn keeps
-  with the manager.
+- **Only the operator opens a team** ([D28](../docs/DECISIONS.md)).
+  `POST /api/workspace` is 403 unless `PAKASH_OPEN_SIGNUP` is on; the console
+  (`/api/admin`, `guards.admin()`) is the door. Its cookie is separate from the
+  team cookie and neither reader accepts the other's role.
+- **The operator never decides headcount.** Opening a team takes a name and
+  a password; the roster, and how many people are on it, is the manager's.
+- **Every process signs cookies with one key** (D39). `PAKASH_SESSION_SECRET`
+  when set; unset, one key generated and kept in `deployment_state`, read
+  on first use by every replica (`app/session_key.py`). Only a process with
+  no database generates its own, and that is refused with several workers.
 - **A partial profile reports its gaps; it never blocks.** `completeness` is
-  read by `profile_gaps` and rendered on the board. The scheduler runs on a
-  thin profile and returns a thin schedule — refusing would be the audit
-  becoming a gate through a side door (D3/D22).
+  read by `profile_gaps`. The solver runs on a thin
+  profile and returns a thin schedule — only a profile with no shift
+  vocabulary at all is refused, because there is no grid to build (D9).
 - **The tool layer never writes** ([D19](../docs/DECISIONS.md#d19--the-agent-answers-with-tools-asking-and-changing-stay-separate)).
-  `bl/tools.py` is handed a repository and reads from it; the write path
+  `bl/tools/` is handed a repository and reads from it; the write path
   stays `schedule_service.apply()` behind the manager's confirmation. A tool
   that could write would be a second way to change a schedule, and the
   product deliberately has one.
@@ -256,7 +347,7 @@ one concern; split rather than append.
   carrying out a request would mean guessing which person, shift or date it
   means, the agent asks one focused question and proposes nothing. On the
   write path this is enforced **in code**, not by the prompt:
-  `changes._proposal` withdraws every operation naming an employee the
+  `changes/proposal.py` (through `questions.unresolved_people`) withdraws every operation naming an employee the
   roster cannot resolve — unknown, or shared by several people — exactly as
   it already withdraws one with no reason (D8). The two gates are separate
   and either can hold a proposal, but only one question is asked at a time:
@@ -265,10 +356,10 @@ one concern; split rather than append.
   `tools.resolve_employee` is the single resolver both paths use; it returns
   *several* matches rather than the first, since picking the first is the
   guess the whole gate exists to refuse.
-- **Reading may interpret; writing may not.** `bl/planner.py` answers a
+- **Reading may interpret; writing may not.** The chat answers a
   loosely-worded question against a reasonable reading — nothing moves, and a
-  re-ask is cheap. `bl/changes.py` may not, because a change applied to the
-  wrong record has to be found before it can be undone.
+  re-ask is cheap. A change may not, because a change applied to the wrong
+  record has to be found before it can be undone.
 - **A clarification continues the request; it does not replace it.**
   `pending_request` travels to the client with the question and back with the
   answer, and the two halves are read as one sentence — the manager answers
@@ -277,34 +368,35 @@ one concern; split rather than append.
   schedule and selects no row, so `team_id` from the signed cookie is still
   the only thing that scopes a write. It is cleared the moment the request is
   carried out, so an answered question cannot be reopened by a stale echo,
-  and both agents are shown what they already asked (`asked_last_turn`) so
+  and the agent is shown what it already asked (`asked_last_turn`) so
   the same question is never put twice.
 - **A tool failure is not an ambiguous request.** Nothing matching found, a
   technical error, and "which of these did you mean" are three different
   answers. The deterministic fallback answers the question rather than asking
   what the manager meant — an unreachable model is not the manager having
   been unclear, and asking would repeat on every retry.
-- **An answer carries no operations.** `POST /api/schedule/ask` returns
-  `answer`, `steps`, `needs_confirmation` — and nothing `apply` could read,
-  the same guard `bl/briefing.py` has (D15). Asking and changing are
-  separate acts, separate endpoints, and separate cards on the screen.
+- **An answer carries no operations.** A manager-chat answer is a reply;
+  only a pending plan, applied through its own endpoint, writes. Asking and
+  changing stay separate acts.
 - **The agent may not claim a placement is valid unless a tool said so.**
-  `find_replacements` re-validates every candidate through `bl/placement.py`
+  `find_replacements` re-validates every candidate through `bl/placement/`
   and keeps only the clean ones. This is *not* the audit becoming a gate:
   `validate_placement` still returns `blocking: False` and
   `publish_readiness.ready` is descriptive — nothing branches on it before a
   publish (D3).
-- **A simulation persists nothing, structurally.** `bl/simulate.py` is
+- **A simulation persists nothing, structurally.** `bl/simulate/` is
   handed no repository at all ([D20](../docs/DECISIONS.md#d20--a-simulation-is-not-a-proposal)),
-  like `changes.py` and `importer.py`. Approving one is an ordinary
+  like `bl/changes/`. Approving one is an ordinary
   `apply()` with the manager's reason — there is no dedicated endpoint for
   it, because a second write path is how a confirmation step gets routed
   around.
-- **The product answers without a model.** `bl/planner.py` falls back to
-  `bl/intent.py` over the same tools and reports `used_model: false`. The
-  fallback covers six question shapes and says plainly when it did not
-  understand — it never guesses, because an agent acting on a misread
-  sentence with no model to blame is worse than one that asks.
+- **The core works without a model.** Building a schedule from structured
+  input calls no model (D34); a build whose sentences could not be
+  translated still completes and says what it left out. In the chat, "who
+  can replace…" is answered by `bl/intent/` and the tools before any model
+  round (`replacement_lookup` in `chat/tools.py`). The reader never guesses — an
+  agent acting on a misread sentence with no model to blame is worse than
+  one that asks.
 - **A preference is not a rule and never authorises a write**
   ([D21](../docs/DECISIONS.md#d21--the-agent-remembers-preferences-and-every-one-of-them-is-visible)).
   It reaches the model as reported speech. An agent-proposed one lands
@@ -314,4 +406,5 @@ one concern; split rather than append.
   lives only in the log ([D4](../docs/DECISIONS.md#d4--living-schedule-not-versioned)).
 - Errors leaving the backend are `AgentError` in Hebrew.
 - Never log API keys or full prompts containing employee personal details.
+  Prompts never leave this process except to the model server.
 - Keep the design simple: add a module only when it owns a distinct boundary.

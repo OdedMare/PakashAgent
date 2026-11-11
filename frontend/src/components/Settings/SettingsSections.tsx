@@ -1,5 +1,6 @@
-import { Bot, CalendarRange, Database, RefreshCw } from "lucide-react";
+import { Bot, CalendarRange, Database, RefreshCw, Server } from "lucide-react";
 
+import { RedisSettings } from "./RedisSettings";
 import {
   SettingsField as Field,
   SettingsSelect as Select,
@@ -19,7 +20,7 @@ const SECTIONS = [
   {
     id: "schedule" as const,
     label: "בניית סידור",
-    description: "כמה ימים הסוכן בונה בכל פנייה",
+    description: "זמן ומעבדים לפותר האילוצים",
     icon: CalendarRange,
   },
   {
@@ -27,6 +28,12 @@ const SECTIONS = [
     label: "מסד הנתונים",
     description: "חיבור PostgreSQL וסכמה",
     icon: Database,
+  },
+  {
+    id: "redis" as const,
+    label: "Redis",
+    description: "מטמון לקריאות כבדות",
+    icon: Server,
   },
 ];
 
@@ -64,6 +71,7 @@ export function SettingsContent({ settings }: { settings: SettingsController }) 
     agent: <AgentSettings settings={settings} />,
     schedule: <ScheduleSettings settings={settings} />,
     database: <DatabaseSettings settings={settings} />,
+    redis: <RedisSettings settings={settings} />,
   };
   return <div className="settings-content">{sections[settings.activeSection]}</div>;
 }
@@ -89,6 +97,19 @@ function AgentSettings({ settings }: { settings: SettingsController }) {
         placeholder="http://localhost:11434/v1"
       />
       <ModelField settings={settings} />
+      <Select
+        settings={settings}
+        name="llm_reasoning_effort"
+        label="זמן חשיבה של המודל"
+        options={[
+          { value: "", label: "לא לשלוח (ברירת מחדל של השרת)" },
+          { value: "off", label: "כבוי — הכי מהיר" },
+          { value: "low", label: "נמוך" },
+          { value: "medium", label: "בינוני" },
+          { value: "high", label: "גבוה" },
+        ]}
+        hint="רוב זמן ההמתנה הוא החשיבה של המודל. ב-Qwen3 'כבוי' ו'נמוך' מכבים את החשיבה; ב-gpt-oss 'כבוי' שווה ל'נמוך'. השאירו ריק אם המודל לא תומך"
+      />
       <Toggle
         settings={settings}
         name="llm_diet_mode"
@@ -111,9 +132,9 @@ function AgentSettings({ settings }: { settings: SettingsController }) {
         name="llm_timeout_seconds"
         label="זמן מרבי לתשובת המודל"
         type="number"
-        min="1"
-        optional="שניות"
-        placeholder="120"
+        min="0"
+        optional="שניות; 0 = ברירת המחדל (5 דקות). בקשה תקועה נכשלת ומשחררת את התור"
+        placeholder="0"
       />
       <Field
         settings={settings}
@@ -128,39 +149,35 @@ function AgentSettings({ settings }: { settings: SettingsController }) {
   );
 }
 
-/** How wide one scheduling model call is.
- *
- *  The values are the backend's own (`GENERATION_MODES` in
- *  `backend/app/common/config/settings.py`); a third choice added there needs
- *  a line here, and nothing else — the backend rejects anything it does not
- *  recognise rather than quietly running at a width nobody chose. */
-const GENERATION_MODES = [
-  { value: "day", label: "יום אחד בכל פנייה — מדויק יותר" },
-  { value: "week", label: "עד שבוע בכל פנייה — מהיר יותר" },
-];
-
+/** The constraint solver that assigns every schedule. The model only
+ *  translates the manager's sentences; who goes where is solved in code. */
 function ScheduleSettings({ settings }: { settings: SettingsController }) {
-  const weekly = settings.text("schedule_generation_mode") === "week";
   return (
     <section className="settings-section">
-      <h3>רוחב הפנייה למודל</h3>
-      <Select
+      <h3>פותר האילוצים</h3>
+      <Field
         settings={settings}
-        name="schedule_generation_mode"
-        label="בניית הסידור"
-        options={GENERATION_MODES}
-        hint={
-          weekly
-            ? "הסוכן יבנה עד שבוע שלם בפנייה אחת. מהיר בהרבה — שבוע עולה פנייה אחת במקום שבע — אבל תיקון חוזר בונה מחדש את כל השבוע, ותקלה מפילה את כולו יחד."
-            : "הסוכן יבנה יום אחד בכל פנייה. איטי יותר, ומדויק יותר: כל יום נבדק ומתוקן בנפרד, ויום שנכשל חוזר בלי לפגוע בשכניו."
-        }
+        name="solver_time_limit_seconds"
+        label="זמן מרבי לפתרון"
+        type="number"
+        min="0.5"
+        max="600"
+        step="0.5"
+        optional="שניות לכל בלוק של עד 4 שבועות"
+        placeholder="10"
+      />
+      <Field
+        settings={settings}
+        name="solver_workers"
+        label="מעבדים במקביל"
+        type="number"
+        min="1"
+        optional="יותר מעבדים — פתרון טוב יותר באותו זמן"
+        placeholder="8"
       />
       <p className="settings-note">
-        {weekly
-          ? "בכל מקרה שבוע הוא תקרה ולא הבטחה: שבוע עמוס מדי לתשובה אחת מפוצל לכמה פניות."
-          : "אפשר לעבור למצב שבועי אם בניית סידור לוקחת יותר מדי זמן."}
-        {" "}
-        המצב נקבע כשלוחצים על בניית סידור — שינוי כאן לא משפיע על בנייה שכבר רצה.
+        הסידור נבנה בפותר אילוצים: כל משמרת, כלל, אילוץ ובקשה נשקלים יחד על פני כל התקופה.
+        המודל רק מתרגם הנחיות בשפה חופשית לבקשות מובנות, ומה שלא תורגם מוצג בהערות הבנייה.
       </p>
     </section>
   );
@@ -187,7 +204,7 @@ const MODEL_ROLES = [
     urlName: "llm_base_url_default",
     keyName: "llm_api_key_default",
     label: "מודל רגיל",
-    optional: "ראיון, שיחה, שינויים ולמידה; ריק = המודל הכללי",
+    optional: "שיחה, שינויים ולמידה; ריק = המודל הכללי",
   },
   {
     role: "advanced",

@@ -2,13 +2,15 @@
 
 import { useEffect } from "react";
 
-/** Keyboard shortcuts for moving around the week.
+/** Keyboard shortcuts for moving around the calendar.
  *
- *  Paging a week is the board's most repeated act and it cost a mouse trip to
- *  a specific arrow every time. These are navigation only — **nothing here
- *  writes, and nothing here opens a dialog that could write.** A shortcut
- *  that moved a shift would be a second write path around the confirmation
- *  (D12), so the bindings deliberately stop at "show me a different week".
+ *  Paging is the board's most repeated act and it cost a mouse trip to a
+ *  specific arrow every time. A press moves by whatever is on screen — a
+ *  day, a week, two weeks, a month — exactly as the arrows it stands in for
+ *  do. These are navigation only — **nothing here writes, and nothing here
+ *  opens a dialog that could write.** A shortcut that moved a shift would be
+ *  a second write path around the confirmation (D12), so the bindings
+ *  deliberately stop at "show me different dates".
  *
  *  **Mirrored for RTL, like the arrows themselves.** On a right-to-left board
  *  the previous week sits to the right, so `ArrowRight` goes back — the same

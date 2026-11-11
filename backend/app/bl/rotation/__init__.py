@@ -1,0 +1,47 @@
+"""Which closure group is in, on any given date. Pure arithmetic, no model.
+
+A closure (`סגירה`) is not another shift to balance: it is a stretch one group
+holds, and balancing it away breaks the cycle everyone planned their month
+around. So the cycle is computed here rather than asked of the model (D3).
+
+The cycle is anchored, not inferred. `round` and `triplet` may each name their
+own Saturday and first group; the legacy `first_closure_*` pair is a fallback.
+Without an anchor there is no cycle, and nothing is guessed.
+
+Six patterns: `round` (א, ב), `triplet` (תלתון: א, ב, ג), `quad` (רבעון:
+א, ב, ג, ד — one weekend in four), `quint` (חמישון, 1ל5: א–ה — one weekend
+in five), `hamshushim` (from Thursday) and `shushim` (from Friday). The
+lettered cycles set *who*
+closes; the other two set *how long*. **A closure weekend runs Thursday to
+Sunday morning** — the Sunday tail covers the day's first shift by the clock,
+found from declared start times rather than a Hebrew name (D9). This is the
+default: `rotation_closure_windows` can change a cycle's boundaries and
+`rotation_presence` overrides one group's presence on selected days or dates.
+
+**A cycle is stated once, for its first group.** One anchor places every
+group's turn, and group א's closure hours are every group's hours on its own
+weekend; a row naming another group is that group's exception. Presence is
+the one thing that stays per group.
+
+| Module | Owns |
+|---|---|
+| `cycle.py` | One pattern's anchored cycle; configuration errors |
+| `closures.py` | One person's closure days; the handover; `holds` |
+| `views.py` | Per-date and per-weekend views |
+| `presence.py` | Group presence and per-slot closure eligibility |
+| `personal.py` | One person's own pattern: none, daily, one weekend in N |
+| `day_cycles.py` | Day-based cycles (11/3, 12/2, שבוע־שבוע…): home stretches per group |
+| `vocabulary.py` | Groups, labels, patterns, date helpers |
+"""
+
+from app.bl.rotation.closures import closure_days, handover_shifts, holds
+from app.bl.rotation.cycle import closing_group, configuration_errors, cycle
+from app.bl.rotation.day_cycles import is_day_cycle
+from app.bl.rotation.views import by_date, schedule_for_model, weekend_preview
+from app.bl.rotation.vocabulary import cycle_of_group, exit_pattern, label
+
+__all__ = [
+    "by_date", "closing_group", "closure_days", "configuration_errors", "cycle_of_group",
+    "cycle", "exit_pattern", "is_day_cycle", "handover_shifts", "holds", "label",
+    "schedule_for_model", "weekend_preview",
+]

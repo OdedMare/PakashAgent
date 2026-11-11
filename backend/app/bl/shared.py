@@ -1,0 +1,194 @@
+"""Small values shared across business-logic features."""
+
+import datetime
+from typing import Any, Optional
+
+_MAX_TEXT_CHARS = 4000
+_MAX_PREFERENCES = 40
+
+HEBREW_WEEKDAYS = (
+    "יום שני", "יום שלישי", "יום רביעי", "יום חמישי",
+    "יום שישי", "שבת", "יום ראשון",
+)
+
+
+def text(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def bounded(value: Any, limit: int = _MAX_TEXT_CHARS) -> str:
+    return text(value)[:limit]
+
+
+def iso(value: Any) -> str:
+    return value.isoformat() if hasattr(value, "isoformat") else text(value)
+
+
+def parse_date(value: Any) -> Optional[datetime.date]:
+    try:
+        return datetime.date.fromisoformat(value)
+    except (ValueError, TypeError):
+        return None
+
+
+def number(value: Any, fallback: float) -> float:
+    if isinstance(value, bool):
+        return fallback
+    return float(value) if isinstance(value, (int, float)) else fallback
+
+
+def dict_items(rows: Any) -> list[dict]:
+    if not isinstance(rows, list):
+        return []
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def dict_rows(rows: Any, limit: int = 200) -> list[dict]:
+    return dict_items(rows)[-limit:]
+
+
+def employees(profile: dict) -> list[dict]:
+    return dict_items((profile or {}).get("employees"))
+
+
+def switched_off(person: Any) -> bool:
+    """A soldier the manager switched off: still on the roster, out of every build.
+
+    Reservists come and go, so `on_duty` is a switch rather than a departure:
+    missing or true means on; only an explicit false takes them out.
+    """
+    return isinstance(person, dict) and person.get("on_duty") is False
+
+
+def out_of_service(person: Any, date: str = "") -> bool:
+    """Whether this person may not be placed on `date`: switched off, or gone by then."""
+    if switched_off(person):
+        return True
+    ended = text(person.get("inactive_from")) if isinstance(person, dict) else ""
+    return bool(date and ended and date >= ended)
+
+
+def shifts(profile: dict) -> list[dict]:
+    return dict_items((profile or {}).get("shifts"))
+
+
+def person_roles(person: dict) -> set:
+    """Every role a person holds: the `roles` list, the single `role`, and
+    the role of each `qualifications` row (stale or not -- staleness is a
+    warning, `audit/unit_policy.py`, never a bar)."""
+    result = declared_roles(person)
+    rows = person.get("qualifications") if isinstance(person, dict) else None
+    if isinstance(rows, list):
+        result.update(text(row.get("role")) for row in rows
+                      if isinstance(row, dict) and text(row.get("role")))
+    return result
+
+
+def declared_roles(person: dict) -> set:
+    """The roles stated on `role`/`roles`, without qualifications."""
+    listed = person.get("roles") if isinstance(person, dict) else None
+    result = {text(role) for role in listed if text(role)} if isinstance(listed, list) else set()
+    if isinstance(person, dict) and text(person.get("role")):
+        result.add(text(person.get("role")))
+    return result
+
+
+def allowed_roles(shift: Optional[dict]) -> list[str]:
+    """The roles qualified to stand a shift. Empty means every role."""
+    rows = (shift or {}).get("allowed_roles") if isinstance(shift, dict) else None
+    return [text(role) for role in rows if text(role)] if isinstance(rows, list) else []
+
+
+def role_qualified(person: dict, shift: Optional[dict],
+                   declared: Optional[list] = None, shadow: bool = False) -> bool:
+    """Whether the person's role lets them work this shift at all.
+
+    A shift naming no `allowed_roles` restricts nobody, the same way an
+    empty `eligible_shifts` does on the person's side.
+
+    `allowed_roles` says who may fill a shift's seats, and a נחפף/ת fills
+    none. One whose role names a team keeps to that team's shifts; one with
+    no team yet -- whose roles qualify for none of the `declared` shifts,
+    "נחפף" being the usual case -- may stand any shift, beside a trainer
+    who is qualified for it (`solver.rules._shadows`). Without this they
+    could never be placed anywhere.
+    """
+    allowed = allowed_roles(shift)
+    if not allowed or person_roles(person) & set(allowed):
+        return True
+    return shadow and declared is not None and not any(
+        role_qualified(person, row) for row in declared)
+
+
+def warning_key(warning: dict) -> tuple:
+    return (
+        text(warning.get("code")),
+        text(warning.get("employee")),
+        iso(warning.get("date")),
+        text(warning.get("shift")),
+    )
+
+
+def preferences_for_model(preferences: Any) -> list[dict]:
+    """A bounded projection of confirmed standing preferences."""
+    return [
+        {
+            "kind": bounded(row.get("kind")),
+            "subject": bounded(row.get("subject")),
+            "text": bounded(row.get("text")),
+        }
+        for row in preferences or [] if isinstance(row, dict)
+    ][:_MAX_PREFERENCES]
+
+
+def resume(pending: str, reply: str) -> str:
+    """Join a held request with the manager's clarification."""
+    pending, reply = bounded(pending), bounded(reply)
+    if not pending:
+        return reply
+    if not reply or pending in reply:
+        return reply or pending
+    return "%s (%s)" % (pending, reply)
+
+
+def hebrew_weekday(day: Optional[datetime.date]) -> str:
+    return HEBREW_WEEKDAYS[day.weekday()] if day is not None else ""
+
+
+def weekday_key(value: Any) -> str:
+    value = text(value)
+    return value[4:].strip() if value.startswith("יום ") else value
+
+
+def runs_on(days: Any, weekday: str) -> bool:
+    """Whether a weekday list includes a day. Empty means every day."""
+    if not isinstance(days, list) or not days:
+        return True
+    return weekday_key(weekday) in {weekday_key(item) for item in days}
+
+
+def profile_for_model(profile: dict) -> dict:
+    """The shared workplace fields used by conversational model calls."""
+    profile = profile if isinstance(profile, dict) else {}
+    return {
+        "workplace": profile.get("workplace") or {},
+        "employees": profile.get("employees") or [],
+        "shifts": profile.get("shifts") or [],
+        "rules": profile.get("rules") or [],
+        "rest_policy": profile.get("rest_policy") or "",
+        "fairness_policy": profile.get("fairness_policy") or "",
+        "conflict_policy": profile.get("conflict_policy") or "",
+    }
+
+
+def usage_of(answer: Any) -> dict:
+    """The token usage the LLM client attached to an answer, or `{}`."""
+    usage = answer.get("_usage") if isinstance(answer, dict) else None
+    return usage if isinstance(usage, dict) else {}
+
+
+def add_usage(first: dict, second: dict) -> dict:
+    return {
+        key: first.get(key, 0) + second.get(key, 0)
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+    }

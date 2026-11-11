@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 
+import { CommanderArea, CommanderBar } from "@/components/Complex";
+import { CrewLoading } from "@/components/Crew";
 import { Employee } from "@/components/Employee";
-import { Interview } from "@/components/Interview";
 import { Management } from "@/components/Management";
 import { ManualSetup } from "@/components/ManualSetup";
 
@@ -24,8 +25,23 @@ export function Workspace({ memberToken }: { memberToken?: string }) {
 
   // The first `me` call has not answered yet. Rendering the login screen here
   // would flash it at a boss who is already signed in.
-  if (workspace === undefined) {
-    return <div className="workspace-gate" aria-busy="true" />;
+  if (workspace === undefined || state.commander === undefined) {
+    return <CrewLoading label="רגע, מכינים הכול…" />;
+  }
+
+  // The מכלול commander between משמרות (D43): the combined board. Once they
+  // enter one, the team session below takes over. A manager's own session
+  // in this browser still wins, as it did before the מכלול existed.
+  const ownTeam = Boolean(workspace && !workspace.commander);
+  if (state.commander && !ownTeam && !state.inside) {
+    return (
+      <CommanderArea
+        commander={state.commander}
+        busy={state.busy}
+        onEnter={state.enterTeam}
+        onLogout={state.commanderLogout}
+      />
+    );
   }
 
   if (workspace === null) {
@@ -34,7 +50,8 @@ export function Workspace({ memberToken }: { memberToken?: string }) {
         busy={state.busy}
         error={state.error}
         onLogin={state.login}
-        onCreate={state.create}
+        onEmployeeLogin={state.employeeLogin}
+        onCommanderLogin={state.commanderLogin}
         onDismissError={state.clearError}
       />
     );
@@ -54,16 +71,7 @@ export function Workspace({ memberToken }: { memberToken?: string }) {
   return <BossSurface state={state} workspace={workspace} />;
 }
 
-/** The manager's side: the interview until the workplace is taught, the
- *  management area after.
- *
- *  The profile is what switches them. It is the interview's durable result,
- *  so its presence means the workplace has been taught and there is
- *  something to schedule against — which is exactly the condition the
- *  management area needs. A manager can still reopen the interview to
- *  re-teach the workplace, and `reinterview` is that door; it is deliberately
- *  an explicit choice rather than something the app decides for them, since
- *  re-running the interview replaces the profile everything downstream reads. */
+/** The manager completes manual setup once, then works from the board. */
 function BossSurface({
   state,
   workspace,
@@ -71,60 +79,53 @@ function BossSurface({
   state: ReturnType<typeof useWorkspace>;
   workspace: NonNullable<ReturnType<typeof useWorkspace>["workspace"]>;
 }) {
-  const [setupMode, setSetupMode] = useState<"interview" | "manual" | null>(null);
-  const [buildAfterInterview, setBuildAfterInterview] = useState(false);
+  const [editingSetup, setEditingSetup] = useState(false);
   const taught = Boolean(workspace.profile);
+  // The commander inside a workplace (D43): the same screens, under a strip
+  // that says so and leads back. Signing out signs the commander out.
+  const commanding = Boolean(workspace.commander);
+  const bar = commanding ? (
+    <CommanderBar
+      complexName={workspace.complex?.name ?? ""}
+      teamName={workspace.name}
+      busy={state.busy}
+      onBack={() => void state.leaveTeam()}
+    />
+  ) : null;
 
-  if (setupMode === "manual") {
+  if (!taught || editingSetup) {
     return (
-      <ManualSetup
-        workspace={workspace}
-        onCancel={taught ? () => setSetupMode(null) : undefined}
-        onDone={async () => {
-          setSetupMode(null);
-          await state.refresh();
-        }}
-      />
+      <>
+        {bar}
+        <ManualSetup
+          workspace={workspace}
+          onCancel={taught ? () => setEditingSetup(false) : undefined}
+          onDone={async () => {
+            setEditingSetup(false);
+            await state.refresh();
+          }}
+        />
+      </>
     );
   }
 
-  if (taught && setupMode !== "interview") {
-    return (
+  return (
+    <>
+      {bar}
       <Management
         workspace={workspace}
         busy={state.busy}
-        onLogout={state.logout}
+        onLogout={commanding ? state.commanderLogout : state.logout}
         onRotateLink={state.rotateLink}
-        onOpenInterview={() => setSetupMode("interview")}
-        onOpenManualSetup={() => setSetupMode("manual")}
-        autoGenerate={buildAfterInterview}
-        onAutoGenerateStarted={() => setBuildAfterInterview(false)}
+        onOpenManualSetup={async () => {
+          // The profile and its revision were read at sign-in; the board,
+          // the chat and the roster have saved over it since. Setup reads its
+          // form from them once, on mount, and names the revision on save.
+          await state.refresh();
+          setEditingSetup(true);
+        }}
       />
-    );
-  }
-
-  // Always supplied now, taught or not. `refresh` re-reads the profile the
-  // interview just wrote, so a first interview ended early lands on a
-  // management area that already knows what it was given — without it,
-  // `taught` is still false from the last fetch and the router sends the
-  // manager straight back into the interview they just left.
-  return (
-    <Interview
-      workspace={workspace}
-      busy={state.busy}
-      onLogout={state.logout}
-      onRotateLink={state.rotateLink}
-      onDone={async () => {
-        setSetupMode(null);
-        await state.refresh();
-      }}
-      onBuild={async () => {
-        setBuildAfterInterview(true);
-        setSetupMode(null);
-        await state.refresh();
-      }}
-      onManualSetup={() => setSetupMode("manual")}
-    />
+    </>
   );
 }
 
@@ -156,5 +157,3 @@ function MemberSurface({
     />
   );
 }
-
-export { useWorkspace };

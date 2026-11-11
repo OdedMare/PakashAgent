@@ -1,405 +1,245 @@
 "use client";
 
-import {
-  Check,
-  FlaskConical,
-  HelpCircle,
-  Search,
-  Send,
-  Sparkles,
-  X,
-} from "lucide-react";
-import { useState } from "react";
+import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, Copy, History, LoaderCircle, MessageSquare, Paperclip, Pencil, Plus, RotateCcw, Search, Sparkles, Square, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Guard } from "@/components/Crew";
+import type { Who } from "@/components/Crew";
+import { Markdown } from "@/components/Markdown";
+import { copyText } from "@/lib/clipboard";
+import type { Proposal, Simulation } from "@/types";
+import { displayDate as formatDate } from "@/components/DateInput";
+import { hebrewWeekday } from "./Calendar";
+import type { useManagerChat } from "./useManagerChat";
+import { ChatPlanCard } from "./ChatPlanCard";
+import { ChatCandidates } from "./ChatCandidates";
+import { ScenarioResultCard } from "./ScenarioResultCard";
+import { ChangeSimulationCard } from "./ChangeSimulationCard";
+import { DismissFeedback, Suggestions, Thinking } from "./ChatLive";
 
-import type { AgentAnswer, Operation, Proposal, Simulation } from "@/types";
+const NO_SIMULATION = () => {};
 
-import { AgentAnswer as AgentAnswerBubble } from "./AgentAnswer";
-import { formatDate } from "./Calendar";
-
-/** Talking to the agent about the schedule — the way changes actually happen.
- *
- *  The loop is deliberately two steps
- *  ([D8](../../../docs/DECISIONS.md#d8--two-reasons-both-required)):
- *
- *  1. The manager says what they want. The agent answers with a *proposal* —
- *     nothing has been written.
- *  2. The manager reads the agent's reasoning and confirms, or does not.
- *
- *  That gap is the product, not friction. Under
- *  [D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)
- *  the agent's judgment is final, so seeing *why* it picked this person is
- *  the manager's one cheap chance to catch a bad call — which is why the
- *  reasoning is rendered in full rather than tucked behind a disclosure. */
-export function AgentChat({
-  proposal,
-  answer,
-  answerBusy = false,
-  busy,
-  hasSchedule = true,
-  writeLocked = false,
-  draft,
-  draftKey,
-  onPropose,
-  onAsk,
-  onSimulate,
-  onConfirm,
-  onDismiss,
-  onDismissAnswer,
-}: {
-  proposal: Proposal | null;
-  answer: AgentAnswer | null;
-  answerBusy?: boolean;
-  busy: boolean;
-  /** Without a period there is nothing to change, but the agent can still
-   *  answer questions about the workplace and help decide what to build. */
-  hasSchedule?: boolean;
-  /** Published periods are read-only until the manager returns them to draft. */
-  writeLocked?: boolean;
-  /** A sentence the briefing offered, seeded into the composer.
-   *
-   *  Seeded, never sent: the manager still presses send, which is what keeps
-   *  a suggestion a suggestion. An agent observation that dispatched itself
-   *  would be the agent acting on its own conclusion — exactly what D15 is
-   *  drawn to prevent. */
-  draft?: string;
-  /** Bumped each time a suggestion is clicked, so choosing the same one
-   *  again re-seeds the box after the manager has edited it. Without it the
-   *  effect below would not re-run on an identical `draft`. */
-  draftKey?: number;
-  onPropose: (request: string, reason?: string) => void;
-  /** Ask about the schedule without asking for a change.
-   *
-   *  A separate verb because it is a separate act. "מי יכול להחליף את יוסי
-   *  בשבת" is a question; answering it with a proposal would commit the
-   *  manager to something they did not ask for, and the two-step contract
-   *  exists precisely so a change is deliberate. */
-  onAsk?: (request: string) => void;
-  /** Turn the pending proposal into a simulation instead of applying it.
-   *
-   *  The manager reads the agent's reasoning and wants to see the
-   *  consequences before committing. Nothing is written either way. */
-  onSimulate?: (operations: Operation[]) => void;
-  onConfirm: (reason: string) => void;
-  onDismiss: () => void;
-  onDismissAnswer: () => void;
+/** The manager's one agent: every instruction to the scheduling agent goes
+ *  through this conversation. The board can open it focused on one day
+ *  (`focusDate`); messages then carry that day, and the agent treats requests
+ *  that name no date as being about it. */
+export function AgentChat({ who = "him", agent, visibleWeek, focusDate = "", focusKey, employees, starters, draft, draftKey, boardBusy, hidden = false, onClearFocus, onPreview, onSimulation = NO_SIMULATION, onOpenReceipt, onImport }: {
+  who?: Who; agent: ReturnType<typeof useManagerChat>; visibleWeek: string; focusDate?: string; focusKey?: number; employees: string[]; starters: string[];
+  draft?: string; draftKey?: number; boardBusy: boolean; hidden?: boolean; onClearFocus?: () => void;
+  onPreview: (proposal: Proposal | null) => void; onSimulation?: (simulation: Simulation | null) => void; onOpenReceipt: (date: string) => void;
+  /** Open the import screen; opening it writes nothing (D7). */
+  onImport?: () => void;
 }) {
-  const [request, setRequest] = useState("");
-  const [reason, setReason] = useState("");
-
-  // Adjusting state during render rather than in an effect: this is React's
-  // own pattern for a value that resets when a prop changes, and it avoids
-  // the cascading re-render an effect would cost.
-  //
-  // Keyed on `draftKey` rather than on the text, so clicking the same
-  // suggestion again puts it back after the manager has edited the box —
-  // while an ordinary re-render carrying the same draft never overwrites
-  // what they are in the middle of typing.
+  const [text, setText] = useState(() => readDraft(agent.chat?.id));
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [historySearch, setHistorySearch] = useState("");
+  // The manager message being edited. `inPlace` replaces it and what followed;
+  // after an applied plan that history stays, so the edit is sent as a new message.
+  const [editing, setEditing] = useState<{ id: string; inPlace: boolean } | null>(null);
+  // A message written while the agent is still answering, sent when it is done.
+  const [queued, setQueued] = useState("");
+  const [feedbackFor, setFeedbackFor] = useState("");
+  const input = useRef<HTMLTextAreaElement>(null);
+  const log = useRef<HTMLDivElement>(null);
+  const pinned = useRef(true);
+  const sending = useRef(false);
+  const [awayFromBottom, setAwayFromBottom] = useState(false);
+  const [copied, setCopied] = useState("");
+  const [copyError, setCopyError] = useState("");
+  const [conversationId, setConversationId] = useState(agent.chat?.id);
+  if (conversationId !== agent.chat?.id) {
+    setConversationId(agent.chat?.id); setText(readDraft(agent.chat?.id)); setEditing(null); setDeleteOpen(false); setQueued(""); setFeedbackFor("");
+  }
+  useEffect(() => {
+    if (!conversationId) return;
+    try {
+      if (text) localStorage.setItem(`manager-chat-draft:${conversationId}`, text);
+      else localStorage.removeItem(`manager-chat-draft:${conversationId}`);
+    } catch { /* The composer still works when browser storage is unavailable. */ }
+  }, [text, conversationId]);
   const [seeded, setSeeded] = useState(draftKey);
-  if (draftKey !== seeded) {
-    setSeeded(draftKey);
-    if (draft) setRequest(draft);
-  }
-
-  const needsReason = proposal?.needs_reason ?? false;
-  // The agent could not tell what the request referred to and asked. The
-  // question is already in `reply`; what this changes is the composer, which
-  // says "answer" rather than "request a change" — the manager is finishing
-  // a sentence, not starting one.
-  const needsInput = proposal?.needs_input ?? false;
-  // The manager's reason: whatever they already stated, otherwise what they
-  // are typing now in answer to the agent asking.
-  const confirmReason = (proposal?.stated_reason || reason).trim();
-  const hasScheduleOperations = Boolean(proposal?.operations.length);
-  const hasProfileOperations = Boolean(proposal?.profile_operations.length);
-  const scheduleReasonRequired = Boolean(
-    proposal?.operations.some((operation) => operation.action !== "generate_day"),
-  );
-
-  return (
-    <section className="agent-chat" aria-label="שיחה עם הסוכן">
-      <header className="agent-chat-header">
-        <span className="brand-mark" aria-hidden="true">
-          <Sparkles size={15} />
-        </span>
-        <div>
-          <h3>שיחה עם הסוכן</h3>
-          <p>
-            {hasSchedule
-              ? "אפשר להתייעץ על הצוות והסידור, או לבקש שינוי לאישור."
-              : "אפשר להתייעץ על הצוות, להוסיף עובדים ולהגדיר משמרות."}
-          </p>
-        </div>
-      </header>
-
-      {onAsk ? (
-        <div className="agent-quick-questions" aria-label="שאלות מהירות">
-          <span>אפשר לשאול</span>
-          {(hasSchedule ? SCHEDULE_QUESTIONS : PROFILE_QUESTIONS).map((question) => (
-            <button
-              type="button"
-              key={question}
-              disabled={busy}
-              onClick={() => onAsk(question)}
-            >
-              {question}
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      {proposal ? (
-        <div className={needsInput ? "proposal proposal-asking" : "proposal"}>
-          <p className="proposal-reply">
-            {needsInput ? (
-              <span className="proposal-question-mark" aria-hidden="true">
-                <HelpCircle size={14} />
-              </span>
-            ) : null}
-            {proposal.reply}
-          </p>
-
-          {/* The agent asked why. No operations came back, and none will
-              until it is answered — a missing reason is met with a question,
-              never a rejection. */}
-          {needsReason ? (
-            <form
-              className="proposal-reason"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (!reason.trim() || writeLocked) return;
-                onPropose(request || proposal.reply, reason.trim());
-              }}
-            >
-              <label>
-                <HelpCircle size={14} />
-                <span>מה הסיבה לשינוי?</span>
-                <input
-                  type="text"
-                  value={reason}
-                  maxLength={200}
-                  onChange={(event) => setReason(event.target.value)}
-                  placeholder="מחלה, חופשה, בקשת העובד…"
-                  autoFocus
-                />
-              </label>
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={busy || writeLocked || !reason.trim()}
-              >
-                שליחה
-              </button>
-            </form>
-          ) : null}
-
-          {/* The agent's reasoning, shown before the manager confirms. This
-              is the point of the confirmation step, not a detail. */}
-          {proposal.agent_reason ? (
-            <div className="proposal-reasoning">
-              <span className="proposal-label">הנימוק של הסוכן</span>
-              <p>{proposal.agent_reason}</p>
-            </div>
-          ) : null}
-
-          {proposal.operations.length ? (
-            <ul className="proposal-operations">
-              {proposal.operations.map((operation, index) => (
-                <li key={index}>
-                  <span className={`op-badge op-${operation.action}`}>
-                    {ACTION_LABELS[operation.action] ?? operation.action}
-                  </span>
-                  <span>
-                    {operation.employee || "כל המשמרות"}
-                    {operation.shift ? ` · ${operation.shift}` : ""}
-                    {operation.date ? ` · ${formatDate(operation.date)}` : ""}
-                    {operation.action === "generate_day" && operation.previewed
-                      ? ` · ${operation.assignments?.length ?? 0} שיבוצים שנבדקו`
-                      : ""}
-                    {operation.with_employee
-                      ? ` ⇄ ${operation.with_employee}`
-                      : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-
-          {proposal.profile_operations.length ? (
-            <ul className="proposal-operations">
-              {proposal.profile_operations.map((operation, index) => (
-                <li key={`profile-${index}`}>
-                  <span className="op-badge op-profile">
-                    {PROFILE_ACTION_LABELS[operation.action] ?? operation.action}
-                  </span>
-                  <span>{profileOperationSummary(operation)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-
-          {/* Warnings the change *would* produce, so a proposal that breaks
-              something is visible before it is accepted rather than after.
-              Still advisory: they do not disable the confirm button. */}
-          {proposal.warnings.length ? (
-            <ul className="proposal-warnings">
-              {proposal.warnings.map((warning, index) => (
-                <li key={index}>{warning.message}</li>
-              ))}
-            </ul>
-          ) : null}
-
-          <div className="proposal-actions">
-            <button type="button" className="ghost-button" onClick={onDismiss}>
-              <X size={14} />
-              ביטול
-            </button>
-            {/* See the consequences before committing to them. Writes
-                nothing, exactly as the proposal itself has written nothing —
-                this is a way to look harder, not a third path to a change. */}
-            {proposal.operations.some(
-              (operation) => operation.action !== "generate_day",
-            ) && onSimulate ? (
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => onSimulate(proposal.operations as Operation[])}
-                disabled={busy}
-                title="לראות מה השינוי היה עושה, בלי לבצע"
-              >
-                <FlaskConical size={14} />
-                סימולציה
-              </button>
-            ) : null}
-            {hasScheduleOperations || hasProfileOperations ? (
-              <button
-                type="button"
-                className="primary-button"
-                onClick={() => onConfirm(confirmReason)}
-                disabled={
-                  busy ||
-                  (hasScheduleOperations && (
-                    writeLocked || (scheduleReasonRequired && !confirmReason)
-                  ))
-                }
-              >
-                <Check size={14} />
-                {busy ? "מחיל…" : "אישור השינוי"}
-              </button>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {answerBusy || answer ? (
-        <div className="agent-answer-float">
-          <AgentAnswerBubble
-            answer={answer}
-            busy={answerBusy}
-            onDismiss={onDismissAnswer}
-            onContinue={() =>
-              document.getElementById("agent-composer-input")?.focus()
-            }
-          />
-        </div>
-      ) : null}
-
-      <form
-        className="agent-composer"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const text = request.trim();
-          if (!text || busy) return;
-          onPropose(text);
-          setRequest("");
-          setReason("");
-        }}
-      >
-        <input
-          id="agent-composer-input"
-          type="text"
-          value={request}
-          maxLength={500}
-          onChange={(event) => setRequest(event.target.value)}
-          placeholder={
-            needsInput
-              ? "התשובה לשאלה של הסוכן — אין צורך לחזור על הבקשה"
-              : hasSchedule
-                ? "למשל: תשבץ את שבת, או: דנה חולה ביום חמישי"
-                : "למשל: תוסיף את מאיה לצוות בתפקיד אחראית משמרת"
-          }
-          disabled={busy}
-          autoFocus={needsInput}
-        />
-        {/* Asking and requesting are two buttons because they are two
-            different acts. The magnifier reads the schedule and answers;
-            send asks the agent to propose a change. Collapsing them would
-            make every question produce a confirm button for something the
-            manager did not ask for. */}
-        {onAsk ? (
-          <button
-            type="button"
-            className="ghost-button"
-            onClick={() => {
-              const text = request.trim();
-              if (!text || busy) return;
-              onAsk(text);
-            }}
-            disabled={busy || !request.trim()}
-            aria-label="שאלה על הצוות או הסידור"
-            title="שאלה — קריאה בלבד, בלי לשנות כלום"
-          >
-            <Search size={15} />
-          </button>
-        ) : null}
-        <button
-          type="submit"
-          className="primary-button"
-          disabled={busy || !request.trim()}
-          aria-label="שליחה"
-          title="בקשת שינוי — הסוכן יציע ואתם תאשרו"
-        >
-          <Send size={15} />
-        </button>
-      </form>
-    </section>
-  );
+  if (seeded !== draftKey) { setSeeded(draftKey); if (draft) setText(draft); }
+  // Opening the chat on a day puts the cursor in the composer, ready for the
+  // day's instructions.
+  useEffect(() => { if (focusKey && !hidden) input.current?.focus(); }, [focusKey, hidden]);
+  const messages = agent.chat?.messages ?? [];
+  const last = messages[messages.length - 1];
+  const preview = last?.status === "pending" ? last.payload.plan : undefined;
+  useEffect(() => {
+    onPreview(preview?.kind === "changes" ? {
+      schedule_id: preview.schedule_id, reply: last?.content ?? "", needs_reason: false, needs_input: false,
+      pending_request: "", agent_reason: preview.agent_reason, stated_reason: preview.reason,
+      operations: preview.operations, constraints: preview.constraints, profile_operations: [],
+      warnings: preview.warnings as Proposal["warnings"],
+    } : null);
+  }, [preview, last?.content, onPreview]);
+  const messageCount = messages.length;
+  const lastStatus = last?.status;
+  useEffect(() => { pinned.current = true; }, [agent.chat?.id]);
+  useEffect(() => {
+    if (log.current && !hidden && pinned.current) log.current.scrollTop = log.current.scrollHeight;
+  }, [messageCount, lastStatus, last?.content, last?.payload.steps?.length, agent.chat?.id, hidden]);
+  useEffect(() => {
+    if (input.current) {
+      input.current.style.height = "auto";
+      input.current.style.height = `${Math.min(200, Math.max(44, input.current.scrollHeight))}px`;
+    }
+  }, [text]);
+  useEffect(() => { if (copied) { const timer = setTimeout(() => setCopied(""), 2000); return () => clearTimeout(timer); } }, [copied]);
+  const send = async (value: string, replaces?: string) => {
+    if (agent.loading || sending.current || !value.trim()) return;
+    if (agent.busy || agent.working) {
+      // Nothing is lost by typing ahead: it goes out once the answer lands.
+      setQueued(value.trim()); setText(""); setEditing(null);
+      return;
+    }
+    sending.current = true;
+    pinned.current = true;
+    const draftBefore = text;
+    setText(""); setEditing(null); setFeedbackFor("");
+    try {
+      if (!await agent.send(value, replaces)) setText((current) => current || draftBefore || value);
+    } finally { sending.current = false; input.current?.focus(); }
+  };
+  const disabled = agent.busy || agent.working || agent.loading;
+  useEffect(() => {
+    if (!queued || disabled) return;
+    // Out of the effect body: sending sets state, and the answer that just
+    // landed should paint before the next message goes.
+    const timer = setTimeout(() => { setQueued(""); void send(queued); }, 0);
+    return () => clearTimeout(timer);
+    // `send` is rebuilt every render; the queue only needs to react to the agent finishing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queued, disabled]);
+  const appliedAfter = (index: number) => messages.slice(index).some((row) => row.status === "applied" || row.payload.receipt);
+  const outgoing = agent.outgoing && !messages.some((row) => row.request_id === agent.outgoing!.requestId) ? agent.outgoing : null;
+  const scrollBehavior = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" as const : "smooth" as const;
+  return <section className="conversation" hidden={hidden} aria-label="שיחה עם סוכן הסידור">
+    <header className="conversation-toolbar">
+      <div className="conversation-title"><Guard who={who} face /><strong>{agent.chat?.title === "שיחה חדשה" ? "סוכן הסידור" : agent.chat?.title ?? "סוכן הסידור"}</strong></div>
+      <div className="conversation-tools">
+        <button type="button" className="icon-button" aria-label="היסטוריית שיחות" aria-expanded={historyOpen}
+          onClick={() => setHistoryOpen(!historyOpen)}><History size={17} /></button>
+        <button type="button" className="icon-button" aria-label="שיחה חדשה" disabled={agent.busy || agent.working || agent.loading}
+          onClick={() => { void agent.newChat(); setHistoryOpen(false); }}><Plus size={19} /></button>
+      </div>
+    </header>
+    <div className="conversation-context"><span className="conversation-context-dot" aria-hidden="true" />
+      {focusDate ? <span className="conversation-focus-day"><CalendarDays size={13} aria-hidden="true" />
+        {`יום ${hebrewWeekday(focusDate)} · ${formatDate(focusDate)}`}
+        {onClearFocus ? <button type="button" aria-label="הסרת המיקוד ביום" title="חזרה לכל השבוע" onClick={onClearFocus}><X size={12} /></button> : null}
+      </span> : visibleWeek ? `השבוע שמתחיל ב-${formatDate(visibleWeek)}` : "הצוות וכללי השיבוץ שלך"}
+    </div>
+    {historyOpen ? <div className="conversation-history">
+      <label className="conversation-history-search"><Search size={16} aria-hidden="true" />
+        <span className="sr-only">חיפוש שיחות</span><input value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="חיפוש שיחות…" />
+      </label>
+      <div className="conversation-history-list" aria-label="השיחות שלי">
+        {agent.chats.filter((row) => row.title.includes(historySearch.trim())).map((row) => <button type="button" key={row.id}
+          aria-current={row.id === agent.chat?.id ? "true" : undefined} disabled={agent.busy || agent.loading}
+          onClick={async () => { if (await agent.select(row.id)) { setHistoryOpen(false); input.current?.focus(); } }}>
+          <MessageSquare size={15} aria-hidden="true" /><span>{row.title}</span>
+          <time dateTime={row.updated_at}>{new Date(row.updated_at).toLocaleDateString("he-IL", { timeZone: "Asia/Jerusalem", day: "numeric", month: "short" })}</time>
+        </button>)}
+        {!agent.chats.some((row) => row.title.includes(historySearch.trim())) ? <p>לא נמצאו שיחות.</p> : null}
+      </div>
+      {deleteOpen ? <div className="conversation-delete-confirm">
+        <span>למחוק את השיחה? השינויים בסידור יישארו.</span>
+        <button type="button" disabled={agent.busy} onClick={() => { void agent.remove(); setDeleteOpen(false); }}>מחיקת השיחה</button>
+        <button type="button" onClick={() => setDeleteOpen(false)}>ביטול</button>
+      </div> : <button type="button" className="ghost-button" disabled={!agent.chat || agent.busy || agent.working}
+        onClick={() => setDeleteOpen(true)}><Trash2 size={14} /> מחיקת השיחה</button>}
+    </div> : null}
+    <div className="conversation-log" ref={log} role="log" aria-label="הודעות בשיחה" aria-relevant="additions text"
+      onScroll={() => { const element = log.current; if (element) { pinned.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; setAwayFromBottom(!pinned.current); } }}>
+      {agent.loading ? <p className="conversation-loading"><LoaderCircle size={17} /> טוען שיחות…</p> : null}
+      {!agent.loading && !messages.length ? <div className="conversation-empty">
+        <div className="conversation-empty-mark is-guard"><Guard who={who} /></div>
+        <h3>{focusDate ? `מה נעשה ביום ${hebrewWeekday(focusDate)}?` : "איך ננהל את הסידור היום?"}</h3>
+        <p>{focusDate ? "שיבוץ, החלפה או אילוץ — נדבר על היום שנבחר בלוח." : "שיבוצים, אנשים ואילוצים. מתחילים בבקשה שלך."}</p>
+        <div className="conversation-starters">{starters.map((value) =>
+          <button type="button" key={value} disabled={disabled} onClick={() => void send(value)}>{value}</button>)}</div>
+      </div> : null}
+      {messages.map((message, index) => <article id={`chat-message-${message.id}`} key={message.id} className={`conversation-message is-${message.role}${message.status === "error" ? " is-error" : ""}`}>
+        <div className="conversation-speaker">{message.role === "assistant" ? <><Guard who={who} face /> סוכן הסידור</> : "אני"}</div>
+        {message.status === "working" ? <Thinking who={who} steps={message.payload.steps ?? []} activity={message.payload.activity} draft={message.payload.draft} /> :
+          message.role === "assistant" ? <Markdown text={message.content} /> : <div className="conversation-text">{message.content}</div>}
+        {message.payload.plan ? <ChatPlanCard message={message} employees={employees} disabled={disabled || boardBusy}
+          onApply={(exceptions) => void agent.apply(message.id, exceptions)}
+          onDismiss={async () => { if (await agent.dismiss(message.id)) setFeedbackFor(message.id); }} onAdjust={(value) => void send(value)} /> : null}
+        {feedbackFor === message.id && message.id === last?.id && message.status === "dismissed" ?
+          <DismissFeedback disabled={disabled} onAnswer={(value) => void send(value)} onClose={() => setFeedbackFor("")} /> : null}
+        {message.role === "assistant" && (message.status === "complete" || message.status === "pending") && message.payload.results ?
+          <><ScenarioResultCard results={message.payload.results} disabled={disabled || message.id !== last?.id}
+            onSimulation={onSimulation} onSend={(value) => void send(value)} />
+          <ChangeSimulationCard results={message.payload.results} disabled={disabled || message.id !== last?.id}
+            onSimulation={onSimulation} onSend={(value) => void send(value)} />
+          <ChatCandidates results={message.payload.results} plan={message.payload.plan} disabled={disabled || message.id !== last?.id} onChoose={(value) => void send(value)} /></> : null}
+        {message.payload.question?.options.length ? <div className="conversation-options">{message.payload.question.options.map((option, index) =>
+          <button type="button" key={option.label} disabled={disabled || message.id !== last?.id || message.status === "applied"}
+            onClick={() => void send(option.answer)}>{index === 0 ? <Sparkles size={12} /> : null}{option.label}</button>)}</div> : null}
+        {message.id === last?.id && (message.status === "complete" || message.status === "pending") && !message.payload.question?.options.length ?
+          <Suggestions values={message.payload.suggestions ?? []} disabled={disabled} onChoose={(value) => void send(value)} /> : null}
+        {message.status !== "working" && message.payload.steps?.length ? <details className="conversation-checks"><summary><ChevronDown size={12} /> מה נבדק ({message.payload.steps.length})</summary>
+          <ul>{message.payload.steps.map((step, index) => <li key={index}>{TOOL_LABELS[step.tool] ?? "בדיקת הסידור"}{step.ok ? "" : " — הבדיקה לא הושלמה"}</li>)}</ul></details> : null}
+        {message.status === "error" && message.id === last?.id ? <button type="button" className="ghost-button" disabled={disabled} onClick={() => {
+          const previous = [...messages].reverse().find((row) => row.role === "user"); if (previous) void send(previous.content);
+        }}>ניסיון נוסף</button> : null}
+        {message.payload.receipt?.starts_on ? <button type="button" className="conversation-receipt-link" onClick={() => onOpenReceipt(message.payload.receipt!.starts_on!)}><CalendarDays size={14} />פתיחת הסידור שעודכן</button> : null}
+        {message.status !== "working" && message.content ? <div className="conversation-message-actions">
+          <button type="button" className="icon-button" aria-label={message.role === "assistant" ? "העתקת התשובה" : "העתקת ההודעה"} title="העתקה" onClick={async () => {
+            if (await copyText(message.content)) { setCopied(message.id); setCopyError(""); }
+            else setCopyError("ההעתקה לא זמינה בדפדפן הזה. אפשר לבחור ולהעתיק את הטקסט.");
+          }}>{copied === message.id ? <Check size={15} /> : <Copy size={15} />}</button>
+          {message.role === "user" ? <button type="button" className="icon-button" aria-label="עריכת הבקשה" title="עריכת הבקשה" disabled={disabled}
+            onClick={() => { setText(message.content); setEditing({ id: message.id, inPlace: !appliedAfter(index) }); input.current?.focus(); }}><Pencil size={15} /></button> : null}
+          {message.id === last?.id && message.role === "assistant" && message.status === "complete" && !message.payload.plan && !message.payload.receipt ?
+            <button type="button" className="icon-button" aria-label="תשובה נוספת" title="תשובה נוספת" disabled={disabled}
+              onClick={() => { pinned.current = true; void agent.regenerate(); }}><RotateCcw size={15} /></button> : null}
+        </div> : null}
+      </article>)}
+      {outgoing ? <>
+        <article className="conversation-message is-user is-sending"><div className="conversation-speaker">אני</div>
+          <div className="conversation-text">{outgoing.content}</div></article>
+        <article className="conversation-message is-assistant"><div className="conversation-speaker"><Guard who={who} face /> סוכן הסידור</div>
+          <Thinking who={who} steps={[]} /></article>
+      </> : null}
+    </div>
+    <div className="conversation-bottom">
+    {awayFromBottom ? <button type="button" className="conversation-jump" aria-label="מעבר להודעה האחרונה"
+      onClick={() => { pinned.current = true; setAwayFromBottom(false); log.current?.scrollTo({ top: log.current.scrollHeight, behavior: scrollBehavior() }); }}><ArrowDown size={17} /></button> : null}
+    {preview ? <div className="conversation-pending-bar"><span><Sparkles size={14} />תוכנית ממתינה לאישור</span>
+      <button type="button" onClick={() => document.getElementById(`chat-message-${last.id}`)?.scrollIntoView({ block: "nearest", behavior: scrollBehavior() })}>הצגת התוכנית</button></div> : null}
+    {copyError ? <p className="conversation-error" role="status">{copyError}</p> : null}
+    {agent.error ? <p className="conversation-error" role="alert">{agent.error}</p> : null}
+    {agent.refreshPending ? <button type="button" className="ghost-button" disabled={agent.busy}
+      onClick={() => void agent.retryRefresh()}><RotateCcw size={14} />רענון הלוח</button> : null}
+    <form className="conversation-composer" data-tour="agent-composer" onSubmit={(event) => { event.preventDefault(); void send(text, editing?.inPlace ? editing.id : undefined); }}>
+      {editing ? <div className="conversation-revising"><span>{editing.inPlace ? "עריכת הבקשה — התשובה תתעדכן בהתאם" : "אחרי הבקשה כבר אושר שינוי, אז הגרסה הערוכה תישלח כהודעה חדשה"}</span>
+        <button type="button" className="icon-button" aria-label="ביטול עריכת הבקשה" onClick={() => { setEditing(null); setText(""); }}><X size={15} /></button></div> : null}
+      {queued ? <div className="conversation-revising"><span>יישלח כשהסוכן יסיים: {queued}</span>
+        <button type="button" className="icon-button" aria-label="ביטול ההודעה הממתינה" onClick={() => { setText(queued); setQueued(""); }}><X size={15} /></button></div> : null}
+      <label className="sr-only" htmlFor="agent-composer-input">הודעה לסוכן הסידור</label>
+      <textarea id="agent-composer-input" ref={input} value={text} rows={1} maxLength={4000} dir="auto" aria-describedby="agent-composer-hint" placeholder={focusDate ? `שאלו על יום ${hebrewWeekday(focusDate)} ${formatDate(focusDate)}…` : "מה תרצו לעשות בסידור?"}
+        onChange={(event) => setText(event.target.value)} onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (text.trim()) void send(text, editing?.inPlace ? editing.id : undefined); }
+          if (event.key === "Escape" && editing) { event.preventDefault(); setEditing(null); setText(""); }
+        }} />
+      <div className="conversation-composer-footer">
+        {onImport ? <button type="button" className="icon-button" aria-label="ייבוא סידור מקובץ" title="ייבוא סידור מקובץ" onClick={onImport} disabled={boardBusy}><Paperclip size={18} /></button> : null}
+        <small id="agent-composer-hint">{agent.working ? "אפשר להמשיך לכתוב — ההודעה תישלח כשהסוכן יסיים" : "Enter לשליחה · Shift+Enter לשורה חדשה"}</small>
+        {agent.working ? <button type="button" className="conversation-send" aria-label="עצירת הבקשה" disabled={agent.busy} onClick={() => void agent.stop()}><Square size={16} /></button> :
+          <button type="submit" className="conversation-send" aria-label="שליחת הודעה" disabled={agent.loading || agent.busy || !text.trim()}>{agent.busy ? <LoaderCircle size={17} /> : <ArrowUp size={19} />}</button>}
+      </div>
+    </form>
+    <p className="conversation-disclaimer">הסוכן יכול לטעות. בדקו את התוכנית לפני האישור.</p>
+    </div>
+  </section>;
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  generate_day: "בניית יום",
-  assign: "שיבוץ",
-  remove: "הסרה",
-  swap: "החלפה",
-};
-
-const PROFILE_ACTION_LABELS: Record<string, string> = {
-  add_employee: "הוספת עובד/ת",
-  update_employee: "עריכת עובד/ת",
-  add_shift: "הוספת משמרת",
-  update_shift: "עריכת משמרת",
-};
-
-function profileOperationSummary(operation: Proposal["profile_operations"][number]): string {
-  const name = String(operation.item.name ?? operation.target);
-  if (operation.action.includes("employee")) {
-    const role = String(operation.item.role ?? "").trim();
-    return role ? `${name} · ${role}` : name;
-  }
-  const start = String(operation.item.start_time ?? "").trim();
-  const end = String(operation.item.end_time ?? "").trim();
-  const time = start || end ? ` · ${start || "—"}–${end || "—"}` : "";
-  const headcount = Number(operation.item.headcount ?? 1);
-  return `${name}${time} · תקן ${headcount}`;
+function readDraft(id?: string) {
+  try { return id ? localStorage.getItem(`manager-chat-draft:${id}`) ?? "" : ""; }
+  catch { return ""; }
 }
 
-const SCHEDULE_QUESTIONS = [
-  "מי סוגר בסופ״ש הקרוב?",
-  "מה חסר לפני פרסום?",
-  "איפה יש חוסרים בסידור?",
-] as const;
-
-const PROFILE_QUESTIONS = [
-  "מה עדיין חסר בפרופיל?",
-  "מה כדאי להגדיר לפני הסידור הראשון?",
-  "איזה טווח כדאי לבנות קודם?",
-] as const;
+const TOOL_LABELS: Record<string, string> = { team_overview: "פרטי הצוות והכללים", read_period: "הסידור והסגירות", employee_state: "משמרות, שעות ואילוצים", coverage_gaps: "משמרות חסרות", validate_placement: "תקינות השיבוץ", find_replacements: "חלופות מתאימות", publish_readiness: "מוכנות לפרסום", profile_gaps: "פרטים חסרים", list_periods: "סידורים קודמים ועתידיים", workload_report: "השוואת עומסים", change_history: "היסטוריית שינויים", simulate_changes: "בדיקת ההשפעה של השינויים בלי לשמור", staffing_scenario: "תרחיש כוח אדם ואיזון חוסרים", plan_review: "בחינת החריגות ותיקון ההצעה", plan_check: "תיקון התוכנית לפי בדיקת השרת" };

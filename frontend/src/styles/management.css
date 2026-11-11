@@ -1,6 +1,6 @@
 /* The management area: calendar, agent chat, roster, constraints, history.
    Uses the shared tokens in tokens.css so this reads as one system with the
-   interview — depth from borders and space, not elevation and glow.
+   conversation UI — depth from borders and space, not elevation and glow.
 
    RTL throughout. The calendar reads right-to-left like the source files it
    mirrors; `dir="rtl"` on the table plus logical properties keeps that true
@@ -12,6 +12,122 @@
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
+}
+
+/* The bar over the workspace. Actions sit at the inline end, which in RTL is
+   the top-left corner — opposite the sidebar, where a toolbar is looked for. */
+.management-topbar {
+  position: relative;
+  z-index: 11;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 3.25rem;
+  padding: 0.35rem 1.25rem;
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--border);
+}
+
+.management-topbar .header-actions {
+  gap: 4px;
+}
+
+.account-menu {
+  position: relative;
+  margin-inline-start: 6px;
+  padding-inline-start: 10px;
+  border-inline-start: 1px solid var(--border);
+}
+
+.account-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  max-width: 14rem;
+  padding: 0 10px;
+  color: var(--text-soft);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.account-menu-trigger:hover,
+.account-menu-trigger[aria-expanded="true"] {
+  color: var(--text);
+  background: var(--surface-3);
+}
+
+.account-menu-trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.account-menu-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.account-menu-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-end: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 13rem;
+  padding: 6px;
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.account-menu-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.account-menu-head span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.account-menu-panel button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  padding: 8px 10px;
+  color: var(--text-soft);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.account-menu-panel button:hover,
+.account-menu-panel button:focus-visible {
+  color: var(--text);
+  background: var(--surface-3);
+  outline: none;
 }
 
 .schedule-generation {
@@ -57,14 +173,6 @@
   flex-basis: 100%;
   color: var(--text);
   font-size: 0.8rem;
-}
-
-/* How wide this build's model calls are. Quieter than the counter above it —
-   it is context for the wait, not the progress itself. */
-.schedule-generation-mode {
-  flex-basis: 100%;
-  color: var(--text-muted);
-  font-size: 0.78rem;
 }
 
 .schedule-generation-note {
@@ -116,29 +224,6 @@
   }
 }
 
-.management-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 22rem;
-  gap: 1.25rem;
-  align-items: start;
-  padding: 1.25rem;
-  flex: 1;
-}
-
-@media (max-width: 1100px) {
-  .management-body {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.management-main,
-.management-side {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  min-width: 0;
-}
-
 /* -- toolbar ------------------------------------------------------------- */
 
 .management-toolbar {
@@ -164,26 +249,6 @@
   font-size: 1.02rem;
 }
 
-.period-status {
-  font-size: 0.76rem;
-  padding: 0.16rem 0.55rem;
-  border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  color: var(--text-muted);
-}
-
-.period-status.is-published {
-  color: var(--success);
-  background: var(--success-soft);
-  border-color: transparent;
-}
-
-.toolbar-actions {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
 .primary-button,
 .ghost-button {
   display: inline-flex;
@@ -191,30 +256,49 @@
   gap: 0.4rem;
   font: inherit;
   font-size: 0.88rem;
-  padding: 0.5rem 0.95rem;
+  font-weight: 500;
+  padding: 0.45rem 0.9rem;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .primary-button {
+  justify-content: center;
+  min-height: 38px;
   background: var(--primary);
   color: #fff;
   border: 1px solid transparent;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--primary) 35%, transparent);
 }
 
 .primary-button:hover:not(:disabled) {
   background: var(--primary-hover);
 }
 
+/* Frappe's secondary button: filled gray, no outline. The icon inside picks
+   up the primary hue so a toolbar of them is not a wall of gray. */
 .ghost-button {
-  background: transparent;
+  background: var(--surface-3);
   color: var(--text-soft);
-  border: 1px solid var(--border-strong);
+  border: 1px solid transparent;
+}
+
+.ghost-button > svg:first-child {
+  color: var(--primary);
 }
 
 .ghost-button:hover:not(:disabled) {
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--text) 9%, var(--surface));
+}
+
+.ghost-button.is-danger,
+.ghost-button.is-danger > svg:first-child {
+  color: var(--danger);
+}
+
+.ghost-button.is-danger:hover:not(:disabled) {
+  background: var(--danger-soft);
 }
 
 .ghost-button.full {
@@ -599,9 +683,8 @@
   color: var(--text-soft);
 }
 
-/* -- agent chat ---------------------------------------------------------- */
+/* -- panels -------------------------------------------------------------- */
 
-.agent-chat,
 .team-panel,
 .history {
   background: var(--surface);
@@ -610,118 +693,6 @@
   padding: 0.9rem 1rem;
 }
 
-.agent-chat {
-  position: relative;
-  isolation: isolate;
-}
-
-.agent-chat-header {
-  display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
-  margin-bottom: 0.75rem;
-}
-
-.agent-chat-header h3 {
-  margin: 0;
-  font-size: 0.95rem;
-}
-
-.agent-chat-header p {
-  margin: 0.15rem 0 0;
-  font-size: 0.78rem;
-  color: var(--text-muted);
-}
-
-.agent-quick-questions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin: -0.1rem 0 0.85rem;
-  padding-bottom: 0.8rem;
-  border-bottom: 1px solid var(--border);
-}
-
-.agent-quick-questions > span {
-  flex-basis: 100%;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-muted);
-}
-
-.agent-quick-questions button,
-.agent-answer-continue {
-  min-height: 44px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--text-soft);
-  padding: 0.45rem 0.75rem;
-  font: inherit;
-  font-size: 0.78rem;
-  cursor: pointer;
-  transition: border-color 180ms ease, background 180ms ease, color 180ms ease;
-}
-
-.agent-quick-questions button:hover,
-.agent-answer-continue:hover {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-  color: var(--primary);
-}
-
-.agent-quick-questions button:focus-visible,
-.agent-answer-continue:focus-visible {
-  outline: none;
-  box-shadow: var(--focus);
-}
-
-.agent-quick-questions button:disabled {
-  opacity: 0.48;
-  cursor: wait;
-}
-
-.proposal {
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  padding: 0.75rem;
-  margin-bottom: 0.75rem;
-  background: var(--surface-2);
-}
-
-.proposal-reply {
-  margin: 0 0 0.6rem;
-  font-size: 0.88rem;
-  line-height: 1.5;
-}
-
-/* A proposal that is asking rather than proposing. Marked so it does not read
-   as a change awaiting approval — there is nothing here to approve, and a
-   question styled like a proposal invites the manager to look for a confirm
-   button that deliberately is not there. */
-.proposal-asking {
-  border-style: dashed;
-  background: var(--surface);
-}
-
-.proposal-question-mark {
-  display: inline-flex;
-  vertical-align: -0.15em;
-  margin-inline-end: 0.35rem;
-  color: var(--primary);
-}
-
-/* The agent's reasoning, before the manager confirms. Given its own card so
-   it reads as the agent's judgment rather than as something already agreed —
-   it is the point of the confirmation step, not a footnote. */
-.proposal-reasoning {
-  background: var(--primary-soft);
-  border-radius: var(--radius-sm);
-  padding: 0.55rem 0.7rem;
-  margin-bottom: 0.6rem;
-}
-
-.proposal-label,
 .modal-note-label,
 .history-label {
   display: block;
@@ -730,54 +701,6 @@
   letter-spacing: 0.04em;
   color: var(--text-muted);
   margin-bottom: 0.15rem;
-}
-
-.proposal-reasoning p {
-  margin: 0;
-  font-size: 0.85rem;
-  line-height: 1.5;
-}
-
-.proposal-reason {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 0.6rem;
-}
-
-.proposal-reason label {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.82rem;
-  flex-wrap: wrap;
-}
-
-.proposal-reason input {
-  flex: 1;
-  min-width: 9rem;
-}
-
-.proposal-operations,
-.proposal-warnings {
-  list-style: none;
-  margin: 0 0 0.6rem;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.proposal-operations li {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-size: 0.83rem;
-}
-
-.proposal-warnings li {
-  font-size: 0.8rem;
-  color: var(--warning);
 }
 
 .op-badge {
@@ -811,7 +734,6 @@
   color: var(--primary);
 }
 
-.proposal-actions,
 .modal-actions,
 .constraint-form-actions {
   display: flex;
@@ -819,98 +741,11 @@
   justify-content: flex-end;
 }
 
-.agent-composer {
-  display: flex;
-  gap: 0.5rem;
-}
-
-/* Answers belong to the conversation that produced them. They float above
-   the composer instead of becoming another card at the top of the drawer. */
-.agent-answer-float {
-  position: absolute;
-  z-index: 5;
-  inset-inline: 0.8rem;
-  bottom: 4.2rem;
-  filter: drop-shadow(0 16px 26px color-mix(in srgb, #000 18%, transparent));
-}
-
-.agent-answer-float::after {
-  content: "";
-  position: absolute;
-  inset-inline-end: 2rem;
-  top: 100%;
-  width: 0.9rem;
-  height: 0.9rem;
-  background: var(--surface);
-  border-inline-end: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  transform: translateY(-0.48rem) rotate(45deg);
-}
-
-.agent-answer-float .agent-answer {
-  position: relative;
-  z-index: 1;
-  max-height: min(52vh, 24rem);
-  overflow-y: auto;
-  border-color: var(--border-strong);
-}
-
-.agent-answer-float .agent-answer-close {
-  display: inline-grid;
-  place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  margin: -0.7rem -0.65rem -0.7rem 0;
-  border-radius: 999px;
-}
-
-.agent-answer-float .agent-answer-close:hover {
-  color: var(--text);
-  background: var(--surface-2);
-}
-
-.agent-answer-float .agent-answer-close:focus-visible {
-  outline: none;
-  box-shadow: var(--focus);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .agent-answer-float {
-    animation: agent-answer-in 180ms ease-out;
-  }
-}
-
-@keyframes agent-answer-in {
-  from {
-    opacity: 0;
-    transform: translateY(0.45rem);
-  }
-}
-
-.agent-composer input,
-.proposal-reason input,
 .constraint-form input,
 .constraint-form select,
 .constraint-form textarea,
 .modal-field input {
   flex: 1;
-  font: inherit;
-  font-size: 0.86rem;
-  padding: 0.45rem 0.6rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
-}
-
-.agent-composer input:focus-visible,
-.constraint-form input:focus-visible,
-.constraint-form select:focus-visible,
-.constraint-form textarea:focus-visible,
-.modal-field input:focus-visible {
-  outline: none;
-  box-shadow: var(--focus);
-  border-color: var(--primary);
 }
 
 .profile-form input[readonly] {
@@ -953,7 +788,11 @@
 .roster li.roster-card {
   position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  /* One row: avatar, person, then however many controls the card carries
+     (load, grip, the on/off switch, edit, departure), each its own column. */
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: auto;
   gap: 0.55rem;
   padding: 0.55rem;
   border: 1px solid var(--border);
@@ -1059,6 +898,90 @@
   gap: 0.2rem;
 }
 
+/* A switched-off soldier: still listed, visibly out of the build. */
+.roster li.roster-card.is-off {
+  border-style: dashed;
+}
+
+.roster li.roster-card.is-off .roster-avatar,
+.roster li.roster-card.is-off .roster-name,
+.roster li.roster-card.is-off .roster-load {
+  opacity: 0.5;
+}
+
+.roster-off-note {
+  font-weight: 600;
+}
+
+.panel-count.is-off {
+  margin-inline-start: 0.35rem;
+}
+
+.duty-switch {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  padding: 0 0.35rem;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.duty-switch:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.duty-switch-track {
+  position: relative;
+  width: 2.1rem;
+  height: 1.25rem;
+  flex: none;
+  background: var(--border-strong);
+  border-radius: 999px;
+  transition: background-color 0.15s ease;
+}
+
+.duty-switch-thumb {
+  position: absolute;
+  top: 0.125rem;
+  inset-inline-start: 0.125rem;
+  width: 1rem;
+  height: 1rem;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  transition: inset-inline-start 0.15s ease;
+}
+
+/* On slides the thumb to the inline end — leftwards in Hebrew, as the
+   system's own mirrored switch does. */
+.duty-switch.is-on .duty-switch-track {
+  background: var(--success);
+}
+
+.duty-switch.is-on .duty-switch-thumb {
+  inset-inline-start: calc(100% - 1.125rem);
+}
+
+.duty-switch.is-on {
+  color: var(--success);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .duty-switch-track,
+  .duty-switch-thumb {
+    transition: none;
+  }
+}
+
 .roster-grip {
   align-self: center;
   color: var(--text-muted);
@@ -1122,9 +1045,7 @@
 .constraint-form label {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  font-size: 0.78rem;
-  color: var(--text-muted);
+  gap: 0.35rem;
 }
 
 .profile-form label > small {
@@ -1264,6 +1185,7 @@
   position: fixed;
   inset: 0;
   background: rgba(31, 30, 29, 0.45);
+  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1277,15 +1199,25 @@
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
   width: min(30rem, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
   padding: 1.1rem;
 }
 
 .modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  min-height: 74px;
   margin-bottom: 0.75rem;
+  padding: 14px 22px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(16px);
 }
 
 .modal-header h2 {
@@ -1294,6 +1226,7 @@
   gap: 0.4rem;
   margin: 0;
   font-size: 1rem;
+  letter-spacing: -0.01em;
 }
 
 .modal-summary {
@@ -1328,18 +1261,6 @@
 
 /* -- empty states and the member view ----------------------------------- */
 
-.management-empty {
-  background: var(--surface);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius);
-  padding: 2.5rem 1.5rem;
-}
-
-.management-empty-busy {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-}
-
 .member-main {
   padding: 1.25rem;
 }
@@ -1356,12 +1277,6 @@
   margin: 0;
 }
 
-.interview-done {
-  display: flex;
-  justify-content: center;
-  padding: 0 1.25rem 1.5rem;
-}
-
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -1372,129 +1287,6 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-/* -- the agent speaking first (D15) --------------------------------------
- *
- * Styled as the agent's own voice rather than as an alert: it sits above the
- * conversation, carries the same brand mark, and uses the soft primary tint
- * instead of the warning palette. That is deliberate — this surface reports
- * what the agent noticed, and dressing it as a failure would teach the
- * manager to dismiss it unread, which is the one way a thing that speaks
- * unprompted actually fails.
- */
-
-.briefing {
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  padding: 0.9rem 1rem;
-  box-shadow: var(--shadow-soft);
-}
-
-.briefing-header {
-  display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
-}
-
-.briefing-headline {
-  flex: 1;
-  min-width: 0;
-  font-size: 0.9rem;
-  line-height: 1.45;
-}
-
-.briefing-headline strong {
-  font-weight: 600;
-}
-
-/* The honest all-clear. Muted rather than hidden: "I looked and it is fine"
-   is worth reading once, and worth no more space than that. */
-.briefing-quiet {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.83rem;
-  color: var(--text-muted);
-}
-
-.briefing-items {
-  list-style: none;
-  margin: 0.7rem 0 0;
-  padding: 0;
-}
-
-.briefing-item {
-  display: flex;
-  gap: 0.5rem;
-  align-items: flex-start;
-  padding: 0.55rem 0;
-  border-top: 1px solid var(--border);
-}
-
-.briefing-icon {
-  display: flex;
-  padding-top: 0.15rem;
-  color: var(--text-muted);
-}
-
-.briefing-item.gap .briefing-icon,
-.briefing-item.risk .briefing-icon {
-  color: var(--warning);
-}
-
-.briefing-item.fairness .briefing-icon,
-.briefing-item.pattern .briefing-icon {
-  color: var(--accent);
-}
-
-.briefing-item.rotation .briefing-icon {
-  color: var(--primary);
-}
-
-.briefing-item.request .briefing-icon {
-  color: var(--success);
-}
-
-.briefing-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.briefing-body p {
-  margin: 0;
-  font-size: 0.85rem;
-  line-height: 1.5;
-}
-
-/* A suggestion is a sentence, so it looks like one — a quoted line the
-   manager can send, not a command button. Clicking it types the sentence
-   into the composer below; it applies nothing on its own (D15). */
-.briefing-ask {
-  margin-top: 0.4rem;
-  padding: 0.3rem 0.6rem;
-  font: inherit;
-  font-size: 0.78rem;
-  text-align: start;
-  color: var(--primary);
-  background: var(--primary-soft);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.briefing-ask:hover:not(:disabled) {
-  border-color: var(--primary);
-}
-
-.briefing-ask:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-.briefing[aria-busy="true"] {
-  opacity: 0.75;
 }
 
 /* -- stats: the period in numbers ----------------------------------------
@@ -1595,6 +1387,164 @@
   transform: rotate(180deg);
 }
 
+/* -- the filter ----------------------------------------------------------- */
+
+/* One row that wraps: the span, the dates it covers, the person. It sits
+   above the tiles because it narrows them too. */
+.stats-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.7rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.78rem;
+}
+
+.stats-spans {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--surface-3);
+  border-radius: 999px;
+}
+
+.stats-span {
+  padding: 0.28rem 0.7rem;
+  font: inherit;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.stats-span:hover {
+  color: var(--text);
+}
+
+.stats-span.is-on {
+  color: var(--primary);
+  font-weight: 600;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.stats-nav,
+.stats-dates {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.stats-nav-button,
+.stats-today,
+.stats-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font: inherit;
+  color: var(--text-soft);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.stats-nav-button {
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+}
+
+.stats-today,
+.stats-reset {
+  padding: 0.25rem 0.5rem;
+}
+
+.stats-reset {
+  border-color: transparent;
+  color: var(--text-muted);
+}
+
+:is(.stats-nav-button, .stats-today, .stats-reset):hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.stats-today:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+:is(.stats-span, .stats-nav-button, .stats-today, .stats-reset, .stats-select, .stats-date):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.stats-nav-label {
+  min-width: 7.5rem;
+  padding: 0 0.2rem;
+  text-align: center;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-muted);
+}
+
+/* Pushed to the far end where there is room, so the person reads as a
+   second, independent filter and not as part of the dates. */
+.stats-person {
+  margin-inline-start: auto;
+}
+
+.stats-select,
+.stats-date {
+  font: inherit;
+  padding: 0.3rem 0.55rem;
+  color: var(--text);
+  background: var(--surface-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+.stats-select {
+  max-width: 11rem;
+  cursor: pointer;
+}
+
+.stats-date {
+  width: 6.6rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The previous answer stays up, dimmed, while the next one is fetched. */
+.stats-body {
+  transition: opacity 160ms ease;
+}
+
+.stats-body.is-loading {
+  opacity: 0.5;
+}
+
+.stats-notice {
+  margin: 0;
+  padding: 0.9rem 0.2rem;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.stats-notice.is-error {
+  color: var(--danger);
+}
+
 /* -- the headline tiles --------------------------------------------------- */
 
 .stats-tiles {
@@ -1607,14 +1557,21 @@
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
-  padding: 0.6rem 0.7rem;
-  background: var(--surface-2);
+  padding: 0.85rem 0.95rem;
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
 }
 
 .stats-tile .stat-icon {
-  color: var(--primary);
+  display: inline-grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  color: var(--tint, var(--primary));
+  background: var(--tint-soft, var(--primary-soft));
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.35rem;
 }
 
 .stats-tile .stat-label {
@@ -1649,10 +1606,73 @@
 }
 
 .stats-chart figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   margin-bottom: 0.5rem;
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--text-soft);
+}
+
+.stats-chart-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.stats-chart-expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.65rem;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.stats-chart-expand:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.stats-chart-expand:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.stats-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.stats-legend-swatch {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 2px;
+  background: var(--primary);
+}
+
+.stats-legend-swatch.is-night {
+  background: var(--hue-violet);
+}
+
+.stats-legend-swatch.is-duty {
+  margin-inline-start: 0.5rem;
+  background: var(--hue-teal);
 }
 
 /* Days: vertical columns, one per date in the period. */
@@ -1711,6 +1731,18 @@
 .day-bar-label {
   font-size: 0.7rem;
   color: var(--text-muted);
+  min-height: 0.9rem;
+  white-space: nowrap;
+}
+
+/* A month of columns: no room for a gap or a figure each. The mark under a
+   week's first day is allowed to spill past its own narrow column. */
+.day-bars.is-dense {
+  gap: 2px;
+}
+
+.day-bars.is-dense .day-bar-value {
+  display: none;
 }
 
 /* People and shifts: horizontal rows, growing from the inline start. */
@@ -1785,6 +1817,77 @@
   color: var(--warning);
 }
 
+/* A person's row: the name over its rotation, and the nights stacked inside
+   the bar. Violet rather than amber — amber on this screen means "look at
+   this", and a night shift is a fact, not a finding. */
+.load-row.is-person {
+  grid-template-columns: minmax(4.5rem, 7.5rem) 1fr auto;
+}
+
+.load-row.is-person .load-name {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  line-height: 1.25;
+}
+
+.load-person,
+.load-rotation {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.load-rotation {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.load-row.is-person .load-fill {
+  display: flex;
+}
+
+.load-fill-night {
+  height: 100%;
+  background: var(--hue-violet);
+  border-radius: 999px;
+}
+
+.load-night {
+  color: var(--hue-violet);
+}
+
+/* מכלול duties: a second segment after the shifts, in the load they count
+   as. Teal, like the legend: a duty is load carried, not a finding. */
+.load-track.has-duty {
+  display: flex;
+  gap: 2px;
+}
+
+.load-fill-duty {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  background: var(--hue-teal);
+  border-radius: 999px;
+}
+
+.load-duty {
+  color: var(--hue-teal);
+}
+
+.load-conflict {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin-inline-start: 0.4rem;
+  padding: 0.02rem 0.3rem;
+  font-size: 0.7rem;
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-radius: 999px;
+}
+
 /* Warning counts: a tally per code, never summed into a score. */
 
 .warning-counts {
@@ -1833,7 +1936,12 @@
 }
 
 .stats-page .stats-tiles {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+}
+
+.stats-page .stats-filter {
+  margin-bottom: 1rem;
+  font-size: 0.84rem;
 }
 
 .stats-page .stats-tile {
@@ -1862,12 +1970,26 @@
   border-radius: var(--radius-sm);
 }
 
+.stats-chart.is-expanded {
+  grid-column: 1 / -1;
+  min-height: 19rem;
+}
+
 .stats-page .stats-chart figcaption {
   font-size: 0.9rem;
 }
 
 .stats-page .day-bars {
   height: 9.5rem;
+}
+
+.stats-chart.is-expanded .day-bars {
+  height: 14rem;
+}
+
+.stats-chart.is-expanded .load-rows,
+.stats-chart.is-expanded .warning-counts {
+  gap: 0.55rem;
 }
 
 .stats-empty {
@@ -1914,410 +2036,6 @@
   .stats-page .stats-chart {
     min-height: 0;
   }
-}
-
-/* -- import (D7) ---------------------------------------------------------
- *
- * Wider than the other modals: the manager is reading an interpretation of
- * several files and deciding whether it is right, which is a different task
- * from answering one question in a dialog.
- */
-
-.import-modal {
-  max-width: 780px;
-  width: min(780px, 94vw);
-  max-height: 88vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.import-drop {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 34px 20px;
-  border: 2px dashed var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.import-drop p {
-  margin: 0;
-  font-size: 0.9rem;
-}
-
-.import-result {
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding-inline-end: 4px;
-}
-
-.import-headline {
-  margin: 0;
-  font-size: 0.98rem;
-  color: var(--text);
-}
-
-/* Nothing has been written yet. Said in warning colour because the screen
-   otherwise reads as a completed result. */
-.import-pending {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 0;
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--warning-soft);
-  color: var(--warning);
-  font-size: 0.85rem;
-}
-
-.import-failures {
-  display: flex;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--danger-soft);
-  color: var(--danger);
-  font-size: 0.84rem;
-}
-
-.import-failures p {
-  margin: 0 0 3px;
-}
-
-.import-periods {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.import-period {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  background: var(--surface);
-}
-
-.import-period-head {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  padding: 10px 13px;
-  background: var(--surface-2);
-  border: 0;
-  cursor: pointer;
-  text-align: start;
-  font: inherit;
-  color: var(--text);
-}
-
-.import-period-head:hover {
-  background: var(--surface-3);
-}
-
-.import-period-name {
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-
-.import-period-summary {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-.import-period-body {
-  padding: 12px 13px;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  border-top: 1px solid var(--border);
-}
-
-.import-layout {
-  margin: 0;
-  font-size: 0.83rem;
-  color: var(--text-soft);
-}
-
-.import-warning {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--warning);
-}
-
-/* The file named no shift, so the manager is asked rather than a name being
-   invented for them (D9). */
-.import-shift-pick {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--primary-soft);
-  font-size: 0.85rem;
-}
-
-.import-shift-pick select {
-  padding: 7px 9px;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-}
-
-.import-edit-section {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-}
-
-.import-edit-section.constraint {
-  border-color: color-mix(in srgb, var(--warning) 28%, var(--border));
-}
-
-.import-edit-title {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.import-edit-title h3 {
-  margin: 0;
-  font-size: 0.87rem;
-}
-
-.import-edit-title span,
-.import-pagination {
-  color: var(--text-muted);
-  font-size: 0.74rem;
-}
-
-.import-edit-head,
-.import-edit-row {
-  display: grid;
-  grid-template-columns: minmax(130px, 1.3fr) minmax(120px, 1fr) 138px 44px;
-  gap: 7px;
-  align-items: center;
-}
-
-.import-edit-head {
-  padding-inline: 8px;
-  color: var(--text-muted);
-  font-size: 0.72rem;
-}
-
-.import-edit-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.import-edit-row {
-  padding: 7px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--surface);
-}
-
-.import-edit-row label {
-  min-width: 0;
-}
-
-.import-edit-row label > span {
-  display: none;
-}
-
-.import-edit-row input {
-  width: 100%;
-  min-height: 44px;
-  min-width: 0;
-  padding: 7px 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: 7px;
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.8rem;
-}
-
-.import-edit-row input:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 1px;
-}
-
-.import-edit-row input[aria-invalid="true"] {
-  border-color: var(--danger);
-  background: var(--danger-soft);
-}
-
-.import-delete {
-  width: 44px;
-  height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.import-delete:hover,
-.import-delete:focus-visible {
-  background: var(--danger-soft);
-  color: var(--danger);
-}
-
-.import-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-
-.import-pagination .ghost-button {
-  min-height: 44px;
-  padding: 5px 11px;
-  font-size: 0.77rem;
-}
-
-@media (max-width: 640px) {
-  .import-edit-head {
-    display: none;
-  }
-
-  .import-edit-row {
-    grid-template-columns: 1fr 1fr 44px;
-  }
-
-  .import-edit-row label {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-
-  .import-edit-row label > span {
-    display: inline;
-    color: var(--text-muted);
-    font-size: 0.7rem;
-  }
-
-  .import-edit-row label:nth-child(3) {
-    grid-column: 1 / 3;
-  }
-
-  .import-edit-row .import-delete {
-    grid-column: 3;
-    grid-row: 1 / 3;
-  }
-
-  .import-edit-title {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 2px;
-  }
-}
-
-.import-rules {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 13px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-}
-
-.import-rules h3 {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 0;
-  font-size: 0.92rem;
-}
-
-.import-rule {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  padding: 9px 11px;
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  cursor: pointer;
-}
-
-.import-rule-body {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.import-rule-text {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 0.88rem;
-  color: var(--text);
-}
-
-.import-rule-kind {
-  padding: 1px 7px;
-  border-radius: 999px;
-  font-size: 0.7rem;
-}
-
-.import-rule-kind.kind-hard {
-  background: var(--danger-soft);
-  color: var(--danger);
-}
-
-.import-rule-kind.kind-soft {
-  background: var(--surface-3);
-  color: var(--text-muted);
-}
-
-/* The count behind the claim: the manager approves something they can
-   check, not something they must trust. */
-.import-rule-evidence {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-}
-
-.import-notes {
-  font-size: 0.82rem;
-  color: var(--text-muted);
-}
-
-.import-notes p {
-  margin: 0 0 4px;
-}
-
-.import-error {
-  margin: 0;
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--danger-soft);
-  color: var(--danger);
-  font-size: 0.85rem;
 }
 
 /* -- rules the manager's own corrections suggest --------------------------- */
@@ -2415,346 +2133,6 @@
   color: var(--primary);
 }
 
-/* ── The agent's answer to a question ──────────────────────────────────────
-   A fifth card state on this screen, and it must not read as any of the
-   other four. An insight (`.briefing`) is something the agent volunteered, a
-   proposal (`.proposal`) is awaiting a decision, a confirmed change is on
-   the grid, and an error is red. This is an *answer*: the agent read the
-   schedule and is reporting. It carries no confirm button, because there is
-   nothing here to confirm — the response type has no operations in it. */
-.agent-answer {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-inline-start: 3px solid var(--success);
-  border-radius: var(--radius);
-  padding: 0.85rem 1rem;
-}
-
-/* Not understood is a different thing from not found, and reads differently:
-   amber rather than green, because the manager has to rephrase. */
-.agent-answer.is-unsure {
-  border-inline-start-color: var(--warning);
-}
-
-.agent-answer.is-busy {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.84rem;
-  color: var(--text-muted);
-  border-inline-start-color: var(--border-strong);
-}
-
-.agent-answer-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.agent-answer-header h3 {
-  margin: 0;
-  font-size: 0.92rem;
-  flex: 1;
-}
-
-.agent-answer-mark {
-  display: inline-flex;
-  color: var(--success);
-}
-
-.agent-answer.is-unsure .agent-answer-mark {
-  color: var(--warning);
-}
-
-.agent-answer-close {
-  border: none;
-  background: none;
-  color: var(--text-muted);
-  font-size: 1.1rem;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 0.2rem;
-}
-
-.agent-answer-body p {
-  margin: 0 0 0.35rem;
-  font-size: 0.86rem;
-  line-height: 1.55;
-  white-space: pre-wrap;
-}
-
-.agent-answer-continue {
-  margin-top: 0.45rem;
-}
-
-/* "Nothing has happened yet", said outright rather than implied by the
-   absence of a button (D8/D12). */
-.agent-answer-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.4rem;
-  margin: 0.6rem 0 0;
-  padding: 0.45rem 0.55rem;
-  border-radius: var(--radius-sm);
-  background: var(--primary-soft);
-  color: var(--text-soft);
-  font-size: 0.78rem;
-  line-height: 1.45;
-}
-
-.agent-answer-steps {
-  margin-top: 0.6rem;
-  font-size: 0.76rem;
-  color: var(--text-muted);
-}
-
-.agent-answer-steps summary {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  cursor: pointer;
-  list-style: none;
-}
-
-.agent-answer-steps ul {
-  margin: 0.4rem 0 0;
-  padding-inline-start: 1.1rem;
-}
-
-.agent-answer-steps li.is-failed {
-  color: var(--danger);
-}
-
-.agent-answer-mode {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  margin: 0.5rem 0 0;
-  font-size: 0.74rem;
-  color: var(--text-muted);
-}
-
-/* ── A simulation ─────────────────────────────────────────────────────────
-   Dashed on purpose, and in its own colour. Everything else on this screen
-   is either something that happened or something being decided; this is
-   something being *imagined*, and it must never be mistaken for a change
-   that landed. `bl/simulate.py` holds no repository, so nothing here has
-   touched the database. */
-.simulation {
-  background: var(--surface-2);
-  border: 1px dashed var(--accent);
-  border-radius: var(--radius);
-  padding: 0.85rem 1rem;
-}
-
-.simulation-header {
-  display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
-  margin-bottom: 0.7rem;
-}
-
-.simulation-header h3 {
-  margin: 0;
-  font-size: 0.92rem;
-}
-
-.simulation-header p {
-  margin: 0.15rem 0 0;
-  font-size: 0.77rem;
-  color: var(--text-muted);
-  line-height: 1.45;
-}
-
-.simulation-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--primary-soft);
-  color: var(--accent);
-  flex-shrink: 0;
-}
-
-.simulation-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
-  margin-bottom: 0.7rem;
-}
-
-.simulation-metric {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 0.5rem 0.55rem;
-}
-
-.simulation-metric.is-good {
-  border-color: var(--success);
-}
-
-.simulation-metric.is-bad {
-  border-color: var(--warning);
-}
-
-.simulation-metric-label {
-  display: block;
-  font-size: 0.72rem;
-  color: var(--text-muted);
-}
-
-.simulation-metric-value {
-  display: flex;
-  align-items: baseline;
-  gap: 0.3rem;
-  font-size: 1.05rem;
-  font-weight: 600;
-  margin: 0.1rem 0;
-}
-
-.simulation-metric-delta {
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-
-.simulation-metric-delta.is-up,
-.simulation-delta.is-up {
-  color: var(--success);
-}
-
-.simulation-metric-delta.is-down,
-.simulation-delta.is-down {
-  color: var(--danger);
-}
-
-.simulation-metric-hint {
-  display: block;
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  line-height: 1.35;
-}
-
-.simulation-people h4 {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  margin: 0 0 0.4rem;
-  font-size: 0.8rem;
-  color: var(--text-soft);
-}
-
-.simulation-people ul {
-  margin: 0 0 0.7rem;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.simulation-people li {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-  background: var(--surface);
-  border-radius: var(--radius-sm);
-  padding: 0.35rem 0.5rem;
-}
-
-.simulation-person {
-  font-weight: 600;
-  flex: 1;
-}
-
-.simulation-hours {
-  color: var(--text-muted);
-  font-size: 0.76rem;
-}
-
-.simulation-delta {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  font-size: 0.76rem;
-  font-weight: 600;
-  min-width: 3.2rem;
-  justify-content: flex-end;
-}
-
-.simulation-warnings,
-.simulation-resolved,
-.simulation-skipped {
-  margin: 0 0 0.6rem;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.simulation-warnings li,
-.simulation-resolved li,
-.simulation-skipped li {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.4rem;
-  font-size: 0.78rem;
-  line-height: 1.4;
-  padding: 0.4rem 0.5rem;
-  border-radius: var(--radius-sm);
-}
-
-.simulation-warnings li {
-  background: var(--warning-soft);
-  color: var(--text-soft);
-}
-
-.simulation-resolved li {
-  background: var(--success-soft);
-  color: var(--text-soft);
-}
-
-.simulation-skipped li {
-  background: var(--danger-soft);
-  color: var(--text-soft);
-}
-
-.simulation-empty {
-  margin: 0 0 0.6rem;
-  font-size: 0.82rem;
-  color: var(--text-muted);
-}
-
-.simulation-approve label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.78rem;
-  color: var(--text-soft);
-  margin-bottom: 0.55rem;
-}
-
-.simulation-approve input {
-  font: inherit;
-  font-size: 0.85rem;
-  padding: 0.45rem 0.6rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
-}
-
-.simulation-actions {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: flex-end;
-}
-
 /* ── Stored preferences ───────────────────────────────────────────────────
    Everything the agent remembers, visible and editable. A preference the
    manager cannot see is a rule they never agreed to, so there is no hidden
@@ -2800,23 +2178,6 @@
 .preferences-add input {
   flex: 1;
   min-width: 0;
-  font: inherit;
-  font-size: 0.83rem;
-  padding: 0.42rem 0.55rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
-}
-
-.preferences-add select {
-  font: inherit;
-  font-size: 0.78rem;
-  padding: 0.42rem 0.4rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
 }
 
 .preferences-group {
@@ -2894,13 +2255,6 @@
 .preferences-edit input {
   flex: 1;
   min-width: 0;
-  font: inherit;
-  font-size: 0.82rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
 }
 
 .preferences-empty {
@@ -2909,525 +2263,10 @@
   color: var(--text-muted);
 }
 
-/* -- durable copilot ----------------------------------------------------- */
-
-.copilot-console {
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-}
-
-.copilot-console-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem;
-  color: var(--text-on-dark);
-  background: var(--sidebar);
-  border: 1px solid color-mix(in srgb, #ffffff 8%, transparent);
-  border-radius: var(--radius);
-}
-
-.copilot-console-title {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.7rem;
-  min-width: 0;
-}
-
-.copilot-console-mark {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 2.35rem;
-  height: 2.35rem;
-  color: #ffffff;
-  background: var(--primary);
-  border-radius: var(--radius-sm);
-}
-
-.copilot-console-head h2,
-.copilot-console-head p,
-.copilot-section-intro h3,
-.copilot-section-intro p {
-  margin: 0;
-}
-
-.copilot-console-head h2 {
-  margin-top: 0.15rem;
-  font-size: 1.08rem;
-}
-
-.copilot-console-head p {
-  margin-top: 0.25rem;
-  color: #aebbd0;
-  font-size: 0.76rem;
-  line-height: 1.45;
-}
-
-.copilot-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: #aebbd0;
-  font-size: 0.68rem;
-  font-weight: 600;
-}
-
-.copilot-live i {
-  width: 0.45rem;
-  height: 0.45rem;
-  background: #98a6b9;
-  border-radius: 999px;
-}
-
-.copilot-live.is-working i {
-  background: var(--accent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
-  animation: copilot-pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes copilot-pulse {
-  50% { opacity: 0.45; }
-}
-
-.copilot-run {
-  flex: 0 0 auto;
-  min-height: 2.75rem;
-  white-space: nowrap;
-}
-
-.copilot-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-
-.copilot-metric {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  padding: 0.7rem 0.75rem;
-  border-inline-end: 1px solid var(--border);
-}
-
-.copilot-metric:last-child {
-  border-inline-end: 0;
-}
-
-.copilot-metric strong {
-  color: var(--text);
-  font-size: 1.2rem;
-  line-height: 1.15;
-  font-variant-numeric: tabular-nums;
-}
-
-.copilot-metric.is-primary strong { color: var(--primary); }
-.copilot-metric.is-danger strong { color: var(--danger); }
-.copilot-metric.is-compact strong { font-size: 0.84rem; }
-
-.copilot-metric span {
-  margin-top: 0.2rem;
-  color: var(--text-muted);
-  font-size: 0.72rem;
-}
-
-.copilot-feedback {
-  margin: 0;
-  padding: 0.65rem 0.75rem;
-  color: var(--primary);
-  background: var(--primary-soft);
-  border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--border));
-  border-radius: var(--radius-sm);
-  font-size: 0.78rem;
-}
-
-.copilot-feedback.is-error {
-  color: var(--danger);
-  background: var(--danger-soft);
-  border-color: color-mix(in srgb, var(--danger) 25%, var(--border));
-}
-
-.copilot-console-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 0.25rem;
-  background: var(--surface-3);
-  border-radius: var(--radius-sm);
-}
-
-.copilot-console-tabs button {
-  min-height: 2.75rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  padding: 0.45rem;
-  color: var(--text-muted);
-  background: transparent;
-  border: 0;
-  border-radius: calc(var(--radius-sm) - 3px);
-  font: inherit;
-  font-size: 0.76rem;
-}
-
-.copilot-console-tabs button.is-active {
-  color: var(--primary);
-  background: var(--surface);
-  box-shadow: var(--shadow-soft);
-}
-
-.copilot-console-tabs small {
-  display: grid;
-  place-items: center;
-  min-width: 1.15rem;
-  height: 1.15rem;
-  padding-inline: 0.25rem;
-  color: var(--text-on-dark);
-  background: var(--primary);
-  border-radius: 999px;
-  font-size: 0.7rem;
-}
-
-.copilot-queue,
-.copilot-permissions,
-.copilot-history {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-}
-
-.copilot-empty {
-  margin: 0;
-  padding: 1rem;
-  color: var(--text-muted);
-  text-align: center;
-  font-size: 0.78rem;
-}
-
-.copilot-zero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 1.25rem 1rem;
-  color: var(--success);
-  text-align: center;
-  background: var(--success-soft);
-  border: 1px solid color-mix(in srgb, var(--success) 22%, var(--border));
-  border-radius: var(--radius);
-}
-
-.copilot-zero strong {
-  margin-top: 0.35rem;
-  font-size: 0.85rem;
-}
-
-.copilot-zero span {
-  margin-top: 0.15rem;
-  color: var(--text-soft);
-  font-size: 0.73rem;
-}
-
-.copilot-item {
-  position: relative;
-  padding: 0.85rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-inline-start: 4px solid var(--primary);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-soft);
-}
-
-.copilot-item.is-failure {
-  border-inline-start-color: var(--danger);
-}
-
-.copilot-item.is-observation {
-  border-inline-start-color: var(--text-muted);
-}
-
-.copilot-item-topline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.6rem;
-}
-
-.copilot-item-topline time {
-  color: var(--text-muted);
-  font-size: 0.7rem;
-}
-
-.copilot-kind {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  color: var(--primary);
-  font-size: 0.7rem;
-  font-weight: 600;
-}
-
-.copilot-item.is-failure .copilot-kind { color: var(--danger); }
-.copilot-item.is-observation .copilot-kind { color: var(--text-muted); }
-
-.copilot-item h3 {
-  margin: 0.45rem 0 0;
-  font-size: 0.88rem;
-}
-
-.copilot-item p {
-  margin: 0.3rem 0 0;
-  color: var(--text-soft);
-  font-size: 0.8rem;
-  line-height: 1.5;
-}
-
-.copilot-context {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-top: 0.6rem;
-}
-
-.copilot-context span {
-  padding: 0.18rem 0.45rem;
-  color: var(--text-soft);
-  background: var(--surface-3);
-  border-radius: 999px;
-  font-size: 0.7rem;
-}
-
-.copilot-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-top: 0.65rem;
-}
-
-.copilot-actions button {
-  min-height: 2.75rem;
-}
-
-.copilot-handled {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: 0.8rem;
-}
-
-.copilot-handled summary {
-  padding: 0.7rem 0.8rem;
-  cursor: pointer;
-  color: var(--text-muted);
-}
-
-.copilot-handled-list {
-  padding-inline: 0.8rem;
-  border-top: 1px solid var(--border);
-}
-
-.copilot-handled-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.4rem;
-  padding: 0.55rem 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.copilot-handled-row:last-child { border-bottom: 0; }
-
-.copilot-handled-row > span {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.copilot-handled-row strong {
-  overflow: hidden;
-  font-size: 0.76rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.copilot-handled-row small {
-  color: var(--text-muted);
-  font-size: 0.7rem;
-}
-
-.copilot-handled-row .ghost-button {
-  min-height: 2.75rem;
-}
-
-.copilot-section-intro {
-  padding: 0.15rem 0.1rem;
-}
-
-.copilot-section-intro h3 {
-  font-size: 0.9rem;
-}
-
-.copilot-section-intro p {
-  margin-top: 0.2rem;
-  color: var(--text-muted);
-  font-size: 0.75rem;
-}
-
-.copilot-permission-row {
-  padding: 0.85rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
-.copilot-permission-row strong {
-  font-size: 0.82rem;
-}
-
-.copilot-permission-row p {
-  margin: 0.2rem 0 0;
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  line-height: 1.45;
-}
-
-.copilot-mode-picker {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.25rem;
-  margin-top: 0.65rem;
-  padding: 0.2rem;
-  background: var(--surface-3);
-  border-radius: var(--radius-sm);
-}
-
-.copilot-mode-picker button {
-  min-height: 2.75rem;
-  color: var(--text-muted);
-  background: transparent;
-  border: 0;
-  border-radius: calc(var(--radius-sm) - 3px);
-  font: inherit;
-  font-size: 0.72rem;
-}
-
-.copilot-mode-picker button.is-active {
-  color: var(--primary);
-  background: var(--surface);
-  box-shadow: var(--shadow-soft);
-  font-weight: 700;
-}
-
-.copilot-safety-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.45rem;
-  margin: 0;
-  padding: 0.7rem;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border));
-  border-radius: var(--radius-sm);
-  font-size: 0.72rem;
-  line-height: 1.45;
-}
-
-.copilot-safety-note svg {
-  flex: 0 0 auto;
-  margin-top: 0.15rem;
-}
-
-.copilot-audit {
-  position: relative;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
-.copilot-audit li {
-  position: relative;
-  display: grid;
-  grid-template-columns: 0.8rem minmax(0, 1fr);
-  gap: 0.55rem;
-  padding: 0.75rem 0.85rem;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.75rem;
-}
-
-.copilot-audit li:last-child { border-bottom: 0; }
-
-.copilot-audit-mark {
-  width: 0.6rem;
-  height: 0.6rem;
-  margin-top: 0.2rem;
-  background: var(--primary);
-  border: 2px solid var(--primary-soft);
-  border-radius: 999px;
-  box-shadow: 0 0 0 1px var(--primary);
-}
-
-.copilot-audit-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.copilot-audit-meta strong {
-  font-size: 0.76rem;
-}
-
-.copilot-audit-meta em {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  color: var(--success);
-  font-size: 0.7rem;
-  font-style: normal;
-}
-
-.copilot-audit p {
-  margin: 0.2rem 0 0;
-  color: var(--text-soft);
-  font-size: 0.72rem;
-}
-
-.copilot-audit small {
-  display: block;
-  margin-top: 0.2rem;
-  color: var(--text-muted);
-  font-size: 0.7rem;
-}
-
-@media (max-width: 480px) {
-  .copilot-console-head {
-    flex-direction: column;
-  }
-
-  .copilot-run {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .copilot-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .copilot-metric:nth-child(2) { border-inline-end: 0; }
-  .copilot-metric:nth-child(-n + 2) { border-bottom: 1px solid var(--border); }
-}
-
 /* --- a build refused for a reason the manager can close ----------------- */
 
 /* Deliberately the warning palette rather than the danger one used by
-   `.error`. Nothing failed here: the interview is unfinished, and painting a
+   `.error`. Nothing failed here: setup is incomplete, and painting a
    skipped step in the colour of a fault tells the manager they hit a bug when
    they hit a step. It also has to look like something with actions in it, so
    it is a panel rather than the single-line strip an error gets. */
@@ -3462,7 +2301,7 @@
   flex-shrink: 0;
 }
 
-/* The interview's own lines. `list-style-position: inside` keeps the markers
+/* The profile's own lines. `list-style-position: inside` keeps the markers
    inside the tinted panel in RTL, where an outside marker hangs into the
    border. */
 .gaps-list,
@@ -3492,3 +2331,263 @@
   gap: 8px;
   margin-top: 13px;
 }
+
+.management-topbar + .share-link {
+  margin-block: 12px;
+}
+
+/* -- importing a file (D7/D42) ------------------------------------------ */
+
+.modal.import-dialog {
+  width: min(56rem, 100%);
+  padding: 0 1.1rem 1.1rem;
+}
+
+.import-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 11rem;
+  padding: 1.5rem;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-soft);
+  font: inherit;
+  cursor: pointer;
+  text-align: center;
+}
+
+.import-drop:hover,
+.import-drop:focus-visible {
+  border-color: var(--primary);
+  color: var(--text);
+}
+
+.import-drop span {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  max-width: 32rem;
+  line-height: 1.6;
+}
+
+.import-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.import-explanation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-soft);
+}
+
+.import-source {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  background: var(--surface-3);
+}
+
+.import-source.is-model { background: var(--primary-soft); color: var(--primary); }
+.import-source.is-manager { background: var(--success-soft); color: var(--success); }
+
+.import-confidence { color: var(--text-muted); }
+
+.import-toolbar,
+.import-alternatives {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  font-size: 0.82rem;
+}
+
+.import-alternatives > span { color: var(--text-muted); }
+
+.import-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.import-warnings {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  list-style: none;
+  border-radius: var(--radius-sm);
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.import-warnings li { display: flex; gap: 0.35rem; align-items: baseline; }
+
+.import-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.75rem;
+}
+
+.import-section > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 32px;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.import-section h3 { margin: 0 0 0.4rem; font-size: 0.9rem; }
+
+.import-sheet {
+  max-height: 18rem;
+  overflow: auto;
+  margin-top: 0.5rem;
+}
+
+.import-sheet table,
+.import-table {
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.import-sheet th,
+.import-sheet td {
+  border: 1px solid var(--border);
+  padding: 0.2rem 0.4rem;
+  white-space: nowrap;
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.import-sheet th {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.import-sheet td.is-header { background: var(--primary-soft); }
+.import-sheet td.is-shift { background: var(--surface-3); }
+
+.import-table {
+  width: 100%;
+  margin-top: 0.4rem;
+}
+
+.import-table td {
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.import-table select { max-width: 14rem; }
+
+.import-status {
+  font-size: 0.72rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: var(--surface-3);
+}
+
+.import-status.is-exact,
+.import-status.is-matched,
+.import-status.is-mapped { background: var(--success-soft); color: var(--success); }
+.import-status.is-ambiguous,
+.import-status.is-unknown { background: var(--warning-soft); color: var(--warning); }
+
+.import-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.5rem 0.75rem;
+  margin-top: 0.6rem;
+  align-items: end;
+}
+
+.import-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+}
+
+.import-choice {
+  display: flex;
+  gap: 0.45rem;
+  align-items: baseline;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.import-year { width: 6rem; min-height: 36px; }
+
+.import-error {
+  margin: 0.75rem 0 0;
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 640px) {
+  .import-layout { grid-template-columns: 1fr; }
+}
+
+/* A soldier's competence and a reservist's questions (`SoldierFields`). */
+.soldier-reserve,
+.soldier-advanced {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.soldier-reserve legend { padding: 0 0.25rem; font-size: 0.78rem; font-weight: 650; }
+.soldier-advanced > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.soldier-advanced[open] > summary { color: var(--text); }
+.soldier-grid {
+  display: grid;
+  /* auto-fill, not auto-fit: a card with one or two fields (הצ״ח, אע״צ, a
+     shift's min/max) keeps them field-sized instead of stretching them
+     across the whole card. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
+  gap: 0.5rem;
+}
+.soldier-field { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+.soldier-reserve > small,
+.soldier-advanced > small { color: var(--text-muted); font-size: 0.72rem; line-height: 1.4; }
+
+/* Fixed blocked weekdays: seven checkboxes in one wrapping row. */
+.soldier-blocked-days { grid-template-columns: repeat(auto-fill, minmax(4.75rem, 1fr)); }
+.soldier-blocked-days label { display: flex; gap: 0.35rem; min-height: 32px; font-size: 0.82rem; cursor: pointer; }
+.soldier-reserve > small.soldier-blocked-warning { color: var(--danger); }
+
+/* A reservist's coming week: seven days, each cycling free → soft → hard. */
+.reserve-week { display: grid; gap: 0.5rem; margin-block: 0.5rem; padding: 0.75rem; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
+.reserve-week-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+.reserve-week-nav { display: flex; gap: 0.5rem; }
+.reserve-week-nav .is-active { font-weight: 600; text-decoration: underline; }
+.reserve-week-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.3rem; }
+.reserve-day { display: grid; justify-items: center; gap: 0.1rem; min-height: 44px; padding: 0.35rem 0.1rem; background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); cursor: pointer; font: inherit; }
+.reserve-day span, .reserve-day small { font-size: 0.72rem; color: var(--text-muted); }
+.reserve-day.is-soft { border-color: var(--warning); background: var(--warning-soft); }
+.reserve-day.is-hard { border-color: var(--danger); background: var(--danger-soft); }
+.reserve-day:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.reserve-week-hint { color: var(--text-muted); }

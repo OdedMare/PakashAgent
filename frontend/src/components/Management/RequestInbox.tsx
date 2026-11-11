@@ -1,14 +1,11 @@
 "use client";
 
 import { Check, Inbox, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
-import {
-  approveRequest,
-  pendingRequests,
-  rejectRequest,
-} from "@/services/api";
+import { approveRequest, rejectRequest } from "@/services/api";
 import type { ConstraintRequestRow } from "@/types";
+import { shortDate } from "@/components/DateInput";
 
 /** Constraint requests waiting on the manager.
  *
@@ -18,28 +15,27 @@ import type { ConstraintRequestRow } from "@/types";
  *  the request starts counting in `bl/audit.py`.
  *
  *  Approving is one click; rejecting requires a reason, and the button stays
- *  disabled until there is one. That mirrors `ConfirmMove`: the requirement is
+ *  disabled until there is one. That mirrors `ConfirmDrop`: the requirement is
  *  visible in the UI rather than arriving as a server error afterwards, and
  *  the reason is captured at the only moment it is cheap — while the manager
  *  still has it in mind ([D8](../../../../docs/DECISIONS.md)).
  *
- *  The decided row settles locally so the inbox does not flash. `onDecided`
- *  refreshes the wider overview independently because approval also changes
- *  constraints and audit warnings. */
-export function RequestInbox({ onDecided }: { onDecided: () => void }) {
-  const [rows, setRows] = useState<ConstraintRequestRow[]>([]);
+ *  The rows come from `useConstraintRequests`, owned by the management area,
+ *  so the drawer tab can count them and a new one can be announced while this
+ *  inbox is closed. A decided row settles through `onSettled` so the inbox
+ *  does not flash. `onDecided` refreshes the wider overview independently
+ *  because approval also changes constraints and audit warnings. */
+export function RequestInbox({
+  rows,
+  onSettled,
+  onDecided,
+}: {
+  rows: ConstraintRequestRow[];
+  onSettled: (id: string) => void;
+  onDecided: () => void;
+}) {
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState("");
-
-  const load = useCallback(async () => {
-    const next = await pendingRequests().catch(() => []);
-    setRows(next);
-  }, []);
-
-  useEffect(() => {
-    const first = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(first);
-  }, [load]);
 
   const decide = async (
     row: ConstraintRequestRow,
@@ -52,7 +48,7 @@ export function RequestInbox({ onDecided }: { onDecided: () => void }) {
       // The write succeeded, so this row is no longer pending. Settle it in
       // place instead of blanking and reloading the whole inbox — the
       // overview can refresh independently without making the card flash.
-      setRows((current) => current.filter((item) => item.id !== row.id));
+      onSettled(row.id);
       setReasons((current) => {
         const next = { ...current };
         delete next[row.id];
@@ -88,7 +84,7 @@ export function RequestInbox({ onDecided }: { onDecided: () => void }) {
             <div className="request-head">
               <strong>{row.employee}</strong>
               <span className="request-date">
-                {formatDate(row.constraint_date)}
+                {shortDate(row.constraint_date)}
                 {row.shift_name ? ` · ${row.shift_name}` : " · כל היום"}
               </span>
             </div>
@@ -135,10 +131,4 @@ export function RequestInbox({ onDecided }: { onDecided: () => void }) {
       </ul>
     </section>
   );
-}
-
-function formatDate(iso: string): string {
-  const date = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return iso;
-  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`;
 }

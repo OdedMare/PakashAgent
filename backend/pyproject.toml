@@ -2,7 +2,7 @@
 name = "pakash-backend"
 version = "0.1.0"
 description = "Conversational shift-scheduling agent"
-requires-python = "==3.8.10"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110,<1",
     "uvicorn>=0.23,<0.34",
@@ -14,15 +14,19 @@ dependencies = [
     "psycopg-pool>=3.1,<3.3",
     "openai>=1.40,<2",
     "typing-extensions>=4.8",
-    "backports.zoneinfo>=0.2.1; python_version < '3.9'",
     "numpy>=1.24,<1.25",
     "pandas>=2.0,<2.1",
     "openpyxl>=3.1,<3.2",
     # Multipart form parsing, required by FastAPI's `UploadFile`. The import
-    # route (D7) takes the manager's own spreadsheets as file uploads, and
+    # route (D7/D39) takes the manager's own spreadsheets as uploads, and
     # without this FastAPI raises at route-registration time rather than on
     # first request -- the whole app fails to start.
     "python-multipart>=0.0.9,<0.1",
+    # The constraint solver that assigns every schedule (bl/solver/, D34).
+    "ortools>=9.12,<10",
+    # The read cache, when a Redis URL is configured (common/redis_hub.py,
+    # D50). Inert without one.
+    "redis>=5,<6",
 ]
 
 [project.optional-dependencies]
@@ -33,6 +37,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
+where = ["."]
 include = ["app*"]
 
 # Prompts are markdown beside the code that sends them. `packages.find` ships
@@ -43,3 +48,4 @@ include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]

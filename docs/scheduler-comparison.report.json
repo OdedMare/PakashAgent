@@ -1,0 +1,116 @@
+{
+  "baseline": {
+    "quality": {
+      "coverage": {
+        "required": 7,
+        "assigned": 7,
+        "unfilled_slots": 0,
+        "percent": 100.0
+      },
+      "unfilled_seats": 0,
+      "warning_counts": [],
+      "by_employee": [
+        {
+          "employee": "דנה",
+          "hours": 32.0,
+          "shifts": 4,
+          "on_call": 0,
+          "days": 4
+        },
+        {
+          "employee": "יוסי",
+          "hours": 24.0,
+          "shifts": 3,
+          "on_call": 0,
+          "days": 3
+        },
+        {
+          "employee": "רון",
+          "hours": 0.0,
+          "shifts": 0,
+          "on_call": 0,
+          "days": 0
+        }
+      ],
+      "hours_stddev": 13.6,
+      "shifts_stddev": 1.7
+    },
+    "performance": {
+      "duration_ms": 3,
+      "model_calls": 2,
+      "failed_calls": 0,
+      "prompt_chars": 7183,
+      "schema_chars": 1244,
+      "reply_chars": 1313,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0,
+      "split_count": 0
+    }
+  },
+  "candidate": {
+    "quality": {
+      "coverage": {
+        "required": 7,
+        "assigned": 7,
+        "unfilled_slots": 0,
+        "percent": 100.0
+      },
+      "unfilled_seats": 0,
+      "warning_counts": [],
+      "by_employee": [
+        {
+          "employee": "דנה",
+          "hours": 32.0,
+          "shifts": 4,
+          "on_call": 0,
+          "days": 4
+        },
+        {
+          "employee": "יוסי",
+          "hours": 24.0,
+          "shifts": 3,
+          "on_call": 0,
+          "days": 3
+        },
+        {
+          "employee": "רון",
+          "hours": 0.0,
+          "shifts": 0,
+          "on_call": 0,
+          "days": 0
+        }
+      ],
+      "hours_stddev": 13.6,
+      "shifts_stddev": 1.7
+    },
+    "performance": {
+      "duration_ms": 1,
+      "model_calls": 2,
+      "failed_calls": 0,
+      "prompt_chars": 5605,
+      "schema_chars": 1183,
+      "reply_chars": 759,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0,
+      "split_count": 0
+    }
+  },
+  "delta": {
+    "duration_ms": -2,
+    "model_calls": 0,
+    "failed_calls": 0,
+    "prompt_chars": -1578,
+    "schema_chars": -61,
+    "reply_chars": -554,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0,
+    "split_count": 0,
+    "unfilled_seats": 0,
+    "hours_stddev": 0.0,
+    "shifts_stddev": 0.0
+  },
+  "checks_not_worse": true
+}

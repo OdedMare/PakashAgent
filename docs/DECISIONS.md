@@ -23,7 +23,7 @@ UI. The boss's own sentences are kept and passed to the model as context.
 if code isn't enforcing rules, code doesn't need to represent them. Follows from
 D3; don't reintroduce structured rules without revisiting that.
 
-## D3 — The agent decides; code only audits ⚠️
+## D3 — The agent decides; code only audits ⚠️ *(amended by D31; assignment superseded by D34)*
 
 **The most important decision here.**
 
@@ -80,6 +80,11 @@ agent must be able to reason about a schedule it did not author.
 
 ## D7 — Import infers layout, boss confirms
 
+> **Revived by [D42](#d42--import-is-back-a-sheets-shape-is-data-found-by-code-the-model-or-the-manager-revives-d7).**
+> Importing was removed for a while and is back, with the layout as data
+> rather than a reader per shape. What is below still holds: no template,
+> and nothing is stored before the manager confirms.
+
 No fixed template. The agent reads whatever it's given, infers the structure, and
 shows its interpretation for confirmation before committing anything.
 
@@ -126,6 +131,9 @@ The two sides authenticate differently, on purpose:
 
 - **The boss** picks a password when the workspace is created. It is what
   authorizes authoring — the interview, the settings, and later the schedule.
+  *(Amended by [D28](#d28--teams-are-opened-by-צוות-משמרות-זהב-not-by-whoever-reaches-the-login-page-️-amends-d10):
+  the operator, צוות משמרות זהב, now opens the workspace and sets the first
+  password; the boss can change it from then on.)*
 - **Members** get an unguessable share link (`/team/<token>`) and no account at
   all. Following it grants a read-only session.
 
@@ -171,7 +179,7 @@ The management calendar lets the manager drag an assignment to another slot.
 The drop **does not write**. It opens a confirmation that collects the
 manager's reason, and only that dialog applies the move.
 
-*Why:* [D3](#d3--the-agent-decides-code-only-audits-) says changes happen by
+*Why:* [D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34) says changes happen by
 talking, and [D8](#d8--two-reasons-both-required) requires two reasons on
 every change. A drag that wrote directly would satisfy neither — the
 `change_log` would gain a row nobody could account for, which is the one
@@ -249,7 +257,7 @@ unauthenticated form bolted onto the share link.
   unclaimed visitor is what it was.
 - **The audit stays advisory.** A pending request is not a constraint and is
   invisible to `audit.py` until approved. Approving one is what makes it
-  countable — which keeps [D3](#d3--the-agent-decides-code-only-audits-)
+  countable — which keeps [D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)
   intact rather than letting a submission silently change the arithmetic.
 - **The manager remains the sole decider.** Approval is a manager action, and
   a rejection carries the manager's reason.
@@ -279,6 +287,11 @@ uses when someone leaves.
 
 ## D15 — The agent speaks first, but still never writes
 
+> **Removed.** The automatic briefings (`bl/briefing.py`,
+> `Management/Briefing.tsx`) and the `/brief` route are gone; the agent
+> speaks only in the manager chat, when spoken to. Kept as the record of
+> what was decided at the time.
+
 The agent no longer waits to be addressed. It reads the current state on its
 own and **opens the conversation**: when the manager enters the management
 area, after anything changes, before a period is published, and periodically
@@ -295,7 +308,7 @@ that `apply` can read, and `bl/briefing.py` returns exactly three keys —
 
 *Why this shape and not autonomy:* "be proactive" reads like a request for an
 agent that acts. Acting would reverse three decisions at once —
-[D3](#d3--the-agent-decides-code-only-audits-) (the manager decides what
+[D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34) (the manager decides what
 lands), [D8](#d8--two-reasons-both-required) (every change carries the
 manager's reason, which only they can supply), and
 [D12](#d12--dragging-a-shift-is-a-proposal-not-an-edit) (even a *drag* is only
@@ -455,7 +468,7 @@ never made.
 
 **The audit does not move.** `bl/audit.py` runs on a hand-built week exactly
 as it runs on a generated one, and it still only warns
-([D3](#d3--the-agent-decides-code-only-audits-)). This is the *cheap* half of
+([D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)). This is the *cheap* half of
 the product — pure arithmetic, no model — so a manually built schedule is
 fully checked even though nothing about it was generated.
 
@@ -500,7 +513,7 @@ through the unchanged propose-then-confirm path.
 whole period and asks for operations, which works for a single absence and
 stops working the moment a question needs four countable things resolved in
 order. Each of those is what
-[D3](#d3--the-agent-decides-code-only-audits-) already assigns to code —
+[D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34) already assigns to code —
 arithmetic over a roster is what a model gets subtly wrong in a way that
 reads exactly like getting it right. Naming the questions moves each one to
 the side of the line D3 already drew, rather than drawing a new one.
@@ -622,7 +635,7 @@ screen rather than one warning.
 **D3 is untouched, and this is the reason the rest holds.** Nothing here
 blocks: the board opens, the scheduler runs on a thin profile and returns a
 thin schedule, and the audit warns exactly as it always did
-([D3](#d3--the-agent-decides-code-only-audits-)). The gaps are *reported*.
+([D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)). The gaps are *reported*.
 A partial profile that refused to schedule would be the audit becoming a
 gate, arriving through a side door.
 
@@ -644,6 +657,12 @@ question to the agent first. **It still writes nothing and fills no gap**
 (D19): the interview remains the only thing that writes a profile.
 
 ## D23 — The copilot is durable, permissioned, and reversible
+
+> **Partly withdrawn.** The copilot itself — its scans, inbox, permissions
+> and audit — was removed: its approve and rollback changed only a status,
+> and everything it noticed the board and the chat already say. What stays
+> is the durable queue below, which carries builds, chat turns and
+> translations.
 
 The proactive agent now runs in a separate backend process. PostgreSQL owns
 its queue: jobs are deduplicated, claimed with row locking, retried, and
@@ -725,7 +744,7 @@ write ([D10](#d10--one-workspace-per-team-the-boss-holds-a-password-members-hold
 **⚠️ This is not the audit becoming a gate.** Nothing here refuses a change
 the manager wants; it refuses one the *agent* would have aimed by guessing.
 Once the target is named, the placement proceeds over every warning exactly
-as before ([D3](#d3--the-agent-decides-code-only-audits-)).
+as before ([D3](#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)).
 
 **A tool failure is not an ambiguous request.** Nothing matching found, a
 technical error, and "which of these did you mean" are three different
@@ -733,78 +752,1196 @@ answers. The deterministic fallback still answers the question rather than
 asking what the manager meant — an unreachable model is not the manager
 having been unclear, and asking would repeat on every retry.
 
-## D25 — Full-time service suspends the civilian ceilings, and a borrowed soldier is an offer
+---
 
-A unit that closes is not a job measured in weekly hours, and the schedule
-must stop pretending otherwise. Two things follow, and they are one decision
-because they are the same fact seen from two sides: **the rotation, not the
-week, is what this workplace spends.**
+## D25 — The front door has a worker entrance, but it only signs in *(amends D14)*
 
-**The three civilian ceilings do not describe a unit that closes.**
-`max_weekly_hours`, `max_consecutive_days` and `min_rest_hours` are facts
-about a job someone goes home from. A soldier on a סגירה is *in* — Thursday
-through the Sunday handover, with no eight-hour gap between shifts that a
-civilian rest rule would recognise. So `audit.py` stops producing
-`over_hours` and `consecutive` for such a workplace entirely, and drops the
-rest minimum to zero. Reporting them would report the rotation as a violation
-of itself, every week, on every soldier — a page of warnings saying only
-"this unit closes", which is the state the manager already knows and the
-noise that teaches them to stop reading warnings at all.
+The front page asks for the team first, then offers two doors: **מנהל**
+(the team password, unchanged from D10) and **עובד/ת** (a claimed name and its
+personal passcode, D14). Before this, a worker could only arrive through the
+share link, even to sign in to a name they had claimed months ago.
 
-**What survives is the impossible, not the merely hard.** The rest check is
-lowered rather than switched off, because a negative gap is not a short rest:
-nobody can stand two overlapping shifts, and being full-time does not make
-them able to. That case is reported as the overlap it is.
+**The worker door signs in; it does not claim.** `POST /api/employee/signin`
+takes `team_id` in the body, because there is no session to take it from, and
+reaches only a name that is already claimed. Claiming stays behind the
+share-link session exactly as D14 set it.
 
-**The unit is derived, never asked.** A workplace runs a closure rotation if
-it declares a `rotation_mode`, enables an exit pattern, or carries one person
-with an `exit_pattern` or a `rotation_group` — all facts the intro interview
-already collects (`rotation.full_time_unit`). Asking the manager "and is this
-the army?" would ask them to restate what they said, and would let the two
-answers disagree. The interview stops asking for the three numbers in such a
-unit and asks for the cycle's anchors instead: whose weekend Saturday is, is
-the first scheduling fact here, and it is the one the scheduler cannot run
-without.
+*Why sign-in can drop the link and claiming cannot:* for an existing claim the
+passcode is the credential, so the link proves nothing extra. For an
+unclaimed name the link is the *only* proof of having been invited. The team
+picker on the front page is public, so letting it reach `claim` would let
+anyone who can see a team's name take any name its roster has not claimed yet.
 
-*The narrow half:* an ordinary civilian roster is untouched. No rotation, no
-suspension — every ceiling means exactly what it meant before, which is what
-keeps this from being "the audit got weaker".
+*Why the name is typed, not picked:* a picker on a public page would publish
+every team's roster to anyone who opens the site. The share-link
+`IdentityGate` still lists names, because a visitor there has proven they
+were invited.
 
-**A soldier from another rotation may be offered, never placed.** The other
-side of the same fact. A closure belongs to one group, and until now every
-candidate list stopped at that boundary: someone from the group that is out
-warns twice over and is filtered away, so a shift the closing group cannot
-fill came back as "nobody". That is arithmetically true and practically
-false — there *is* somebody, they are simply on their exit.
+**Consequences worth knowing:**
 
-So `placement.borrow_offers` asks the narrower question: **who is blocked by
-the rotation and by nothing else.** A candidate survives only when every
-warning their placement would cause came from the cycle — `cross_rotation`,
-or an availability row the server derived from the closure. Somebody with a
-constraint of their own is not offered: a borrow trades the rotation, and the
-rotation is the only thing it is allowed to trade.
+- **`/signin` and `/login` share one throttle key**
+  (`employee:<team>:<name>`), so two doors to one passcode do not double
+  the guesses an attacker gets.
+- **A wrong passcode and an unclaimed name answer identically**, as `/login`
+  already did. Here that matters more, because this door needs no link.
+- **Taking `team_id` from the body is a login's exception to the
+  team-from-cookie rule**, the same one `/api/workspace/login` already
+  makes: the route issues the cookie, so there is no cookie yet to read the
+  team from. Every route *after* sign-in still scopes by the signed session.
 
-**Every one of them is a sentence, not a change.** The scheduler is still
-forbidden to assign across a cycle; it leaves the slot short and names the
-offer in `notes`. The change agent returns no operations for one. The board
-draws them in the warning colour, under their own heading, apart from the
-colleagues who are simply free. `requires_approval` is on every row.
-Bringing somebody in on a weekend that is not theirs costs them a plan made a
-month ago — that is a cost only the person carrying the unit can agree to
-pay, and offering it is exactly as far as the agent may go
-([D8](#d8--two-reasons-both-required),
-[D12](#d12--dragging-a-shift-is-a-proposal-not-an-edit),
-[D15](#d15--the-agent-speaks-first-but-still-never-writes)).
+## D26 — One manager conversation follows clear instructions *(amends D8 for manager chat)*
 
-*Why the offer is withheld while the closing group can answer:* a
-cross-rotation name listed beside three free colleagues teaches the manager
-that the cycle is a formality to be worked around for convenience. It appears
-only when the group that is in has nobody left, which is the case it exists
-for.
+The manager chat is the single conversational entry point for scheduling,
+employees, availability, recurring constraints, workplace rules and advice.
+A clear instruction needs no separate justification. When the manager does not
+provide a reason, the chat records their actual request as the audit reason;
+the agent still explains its choices separately and must not invent a motive.
+Legacy change routes and manual board actions keep their existing contracts.
+
+Advice and “what if” questions produce answers, without a pending mutation.
+The chat can run the existing pure-Python simulator over a complete combination
+of changes and compare coverage, workload and warnings before recommending it.
+
+Unknown targets, duplicate assignments and malformed operations are repaired
+or clarified. Newly introduced rule conflicts are returned to the agent for
+one advisory review; it can repair its own choices or describe a deliberate
+exception. Existing unrelated gaps do not hold an otherwise valid change.
+Recurring rules validate their weekday/shift lists and availability flag before
+saving, so unknown fields cannot silently widen a Tuesday constraint to every
+day. New employee rows explicitly carry role, eligibility, service and rotation;
+omitted fields on existing roster/shift rows preserve their saved values.
+Final previews retain explicit Apply approval, exception approval, private
+manager history, stale-state checks and atomic writes. A message alone never
+writes to the schedule.
+
+## D27 — Employees ask about swaps; the charts are the manager's *(amends D14)*
+
+> **Update:** the employee chat ("שאלו על החלפות", `POST /api/employee/assistant`)
+> has since been removed. Employees offer swaps only through the swap form
+> under "בקשות והחלפות". The rest of this decision — charts are the
+> manager's, `fairness` stays off `/api/employee/me` — still holds.
+
+The personal area's "הנתונים שלי" tab — hours, shift mix and a comparison
+against every colleague — is gone. Hours per person is the manager's view
+(the stats panel on the board), and `/api/employee/me` no longer carries
+`fairness`, so colleagues' hours do not reach an employee's browser at all.
+In its place is **"שאלו על החלפות"**: a small chat where an employee asks who
+they could swap with, or how their week could work better.
+
+**It suggests; it never writes.** `POST /api/employee/assistant` returns
+`answer` and `suggestions` and nothing an `apply` could read — the D15/D19
+shape. A suggestion carries a button that sends the **ordinary swap offer**
+(`POST /api/employee/swaps`), which still needs the colleague's agreement and
+then the manager's decision (D14). There is no new write path.
+
+**Which swaps exist is decided in code.** `bl/employee_service/swap_options.py`
+tries the employee's upcoming published shifts against colleagues' and keeps
+only trades that introduce **no** audit warning anywhere in the period; ones
+that clear a warning about the employee rank first. The model picks from that
+list by id and phrases the answer; an unknown id is dropped. This is D19's
+"never claim a placement is valid unless a tool said so", applied to the
+employee side.
+
+**What the model sees is what the employee's own screen shows** — their shifts,
+who is on them with them, their hours, the team *average*, their own warnings —
+plus the clean swaps. Colleagues' constraints are read in code to rule swaps
+out and never leave it: an option is either offered or absent, with no reason.
+Drafts, pending requests and the change log are not read at all.
+
+*Why not reuse the manager chat:* that conversation reads drafts, other
+people's stated reasons and pending requests, and prepares plans for approval.
+None of that belongs in front of an employee, and a soldier asking "with whom
+can I swap Tuesday" needs one answer and a button, not a planning surface.
+The conversation lives in the browser only; nothing is stored server-side.
+
+**It answers without a model**, listing the clean swaps (narrowed to a weekday
+named in the question), and reports `used_model: false`.
+
+## D28 — Teams are opened by צוות משמרות זהב, not by whoever reaches the login page ⚠️ *(amends D10)*
+
+Before this, anyone who could load the front page could press "פתיחת צוות
+חדש", pick a name and a password, and become the boss of a new workspace.
+D10 said exactly that — *"the boss picks a password when the workspace is
+created"* — and the settings router already admitted the cost in its own
+docstring: *"anyone can open a workspace and become its boss."* The boss asked
+for that door to close, and for one place to control the whole system.
+
+**What is now true:**
+
+- **The operator is צוות משמרות זהב**, with its own console at `/admin` and
+  its own HttpOnly cookie (`pakash_admin`, 12 hours). Not a fourth role on the
+  team cookie: an operator belongs to no team, and the two sessions must
+  coexist in one browser. Each cookie's reader refuses the other's role.
+- **Its password defaults to the settings password** (`010802` unless
+  `PAKASH_SETTINGS_PASSWORD` says otherwise). The operator is the one person
+  who already held that; `PAKASH_ADMIN_PASSWORD` gives the console a separate
+  credential. Both empty keeps the console locked.
+- **`POST /api/workspace` answers 403** unless `PAKASH_OPEN_SIGNUP=true`. The
+  login page no longer offers to open a team; it says who does.
+- **The operator opens a team with a name and a password, nothing more.**
+  The first manager password is shown once on a hand-over card, then only its
+  hash exists. Afterwards the operator can rename the team, keep a private
+  note on it, reset the manager password, rotate the share link, release a
+  claimed name, **suspend** and **delete** — and sees every team's numbers:
+  employees, claimed identities, periods, pending requests, last activity.
+- **How many employees a team has is the manager's decision.** The console
+  reports the count (a departed employee is listed, not counted) and never
+  limits it. A per-team seat cap was built and removed the same day at the
+  boss's direction: the operator opens the door, the manager runs the room.
+- **A suspended team is refused at every door and under every open session.**
+  `Guards.visitor()` asks the database whether the team is active (cached ten
+  seconds per process, cleared at once by the console), because a signed
+  cookie outlives a suspension by up to thirty days otherwise. The same check
+  makes a *deleted* team's cookies stop working instead of failing deeper.
+  The team's data is untouched; resuming restores access exactly.
+- **Deleting is `DELETE FROM teams`** and every team table cascades — the
+  schedules, the change log, identities, requests, chats, the interview.
+  It asks for the team's name typed back, and suspension is offered first as
+  the reversible version.
+- **The operator reaches `/api/settings` on its own session**, without the
+  `X-Settings-Password` header. The console's "מערכת" tab is where the
+  process-wide settings now live; a boss can still open them the old way.
+
+**What is deliberately unchanged:**
+
+- **The boss still holds the team password and can change it**
+  (`/api/workspace/password`). The operator sets the first one and can reset a
+  forgotten one, but does not keep knowing it.
+- **Every team route still scopes by the team on the signed cookie.** The
+  console's queries are the one deliberate exception — cross-team by design —
+  and they live in one mixin, `dal/repository/admin.py`, so the exception is
+  a single file to review. None returns a password or passcode hash.
+
+*Why deleting may remove `change_log` rows when D4 says never to:* D4 is about
+a living schedule's history while the team exists. Deleting the team is the
+operator removing the tenant, not editing its history; there is nobody left
+for that history to serve.
+
+**⚠️ The default operator password is committed** (it is the settings
+password's default). That was already true of the settings panel, which can
+repoint the database; the console can now also delete teams. Set
+`PAKASH_SETTINGS_PASSWORD` or `PAKASH_ADMIN_PASSWORD` in any real deployment.
+
+## D29 — The manager hears a submission as it happens
+
+> **Update:** the per-process limitation below is resolved by D35 — signals
+> cross processes over PostgreSQL `LISTEN/NOTIFY` (`dal/notify.py`). The same
+> SSE line now also carries a bare `chat` signal, so a streaming manager-chat
+> reply is re-read at once.
+
+When an employee submits or withdraws a constraint request, or answers or
+withdraws a swap, the manager's open screen re-reads that inbox within a
+second, and the existing pop-up announces it. Before this, the screen polled
+every 15 seconds, so a request could sit unannounced for that long while
+the manager was looking straight at the board.
+
+**It is a Server-Sent Events stream, boss-only**
+(`GET /api/schedule/requests/events`). An employee route publishes to it only
+after its write succeeded. A refused submission wakes nobody.
+
+**A signal carries no data.** It names an inbox (`requests` or `swaps`) and
+nothing else. The browser re-reads through the routes it already used, behind
+the same `guards.boss()`. So the stream adds *when* without adding a second
+*what*, and there is no new read path that would need its own scoping or
+could leak a colleague's stated reason.
+
+**It does not cross [D16](#d16--an-employee-is-told-what-changed-and-acknowledging-is-what-marks-it-read)
+or [D17](#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes).**
+Those refuse a *delivery channel*: something that reaches a person who has
+not opened the app, through an address the product does not hold. This
+reaches only a manager's own open tab, which is the same "the app telling
+someone while they are looking at it" that D16 already allows.
+
+**The stream ends itself every five minutes** and `EventSource` reconnects.
+The reconnect passes through the guard again, so a team suspended under
+[D28](#d28--teams-are-opened-by-צוות-משמרות-זהב-not-by-whoever-reaches-the-login-page-️-amends-d10)
+stops listening within minutes rather than holding an authorised stream
+forever.
+
+**⚠️ Per process, like `LoginThrottle`.** `common/events.py` is in-memory. A
+submission handled by another worker does not reach this worker's streams.
+The 15-second poll stays underneath as the backstop, so a dropped stream or
+a second worker degrades to the old behaviour rather than to silence. If the
+backend ever runs several workers, Postgres `LISTEN/NOTIFY` is the upgrade.
+
+---
+
+## D30 — Model calls are traced to Opik, prompts and replies included
+
+> **Removed.** Opik tracing (`dal/llm/tracing.py`, the `opik` dependency, its
+> settings and compose variables) was taken out: the deployment runs on an
+> air-gapped network, and nothing but the model server may be called. The
+> `pakash.llm` log line (counts and timings only) remains. The move to
+> Python 3.11 stays.
+
+With `OPIK_API_KEY` set, every `complete_json` is one trace in Opik, named by
+its flow, with each HTTP completion under it as an LLM span: messages, reply,
+model, tokens, duration, and the error when it failed
+(`dal/llm/tracing.py`). Without the key nothing is sent and nothing changes.
+
+**This is a deliberate exception to "never log full prompts".** Prompts carry
+employee names, stated reasons for absence and the manager's own sentences
+about their staff, and with the key set they leave the machine for the
+configured Opik workspace (Comet's hosted Opik unless `OPIK_URL_OVERRIDE`
+points at a self-hosted one). The boss chose this knowingly: a token count
+can say a call was expensive but never *why the model answered that*, and
+that is the question every prompt fix starts from.
+
+The exception is narrow:
+
+- **Opik only, and only behind the key.** The `pakash.llm` log line stays
+  counts and timings (`telemetry.py`). No other log, error or response gains
+  prompt text because tracing exists.
+- **Env-only and read at start-up.** Not in the settings panel: a team
+  manager must not be able to start shipping every team's prompts to an
+  account of their choosing. Turning it on is the operator's act.
+- **It never fails a call.** A tracing error is logged and the call runs
+  untraced.
+
+*Why Python moved to 3.11 in the same change:* Opik's SDK dropped 3.8 long
+ago, and the 3.8.10 pin was already the costliest line in the build (EOL
+Debian, compiling `backports.zoneinfo`). See BUILD_ORDER.md.
+
+## D31 — Structured schedules may be assigned by code ⚠️ *(amends D3; superseded by D34)*
+
+The manager can choose `AI`, deterministic `code`, or `auto` for schedule
+generation. Code uses the existing availability, qualification, staffing,
+rest, load and rotation arithmetic and spends zero model tokens.
+
+**The boundary is representability, not roster size.** Code runs only when
+all placement inputs are structured. Explicit code mode refuses semantic
+input and never silently drops context. In auto mode, a small model call may
+compile an exact instruction into one of two validated operations: a named
+employee is unavailable, or a named employee is required, for one existing
+shift on one existing date. Code then builds the roster. Every semantic
+source must be accounted for, and the server rejects invented people, shifts,
+dates and unsupported operations. Ambiguous rules, preferences, policy,
+training judgment, incomplete translation and a deterministic result with
+warnings fall back to the full scheduling model.
+
+This is the narrow exception to D3. The translator is a compiler into existing
+structured inputs, not a second rule engine and not an assignment agent. It
+does not make warnings blocking for an AI answer. Hybrid results report their
+translation token usage and carry a reason per assignment; every result remains
+an ordinary draft the manager may inspect and edit. The selected engine is
+stamped when the build opens; changing the setting affects the next build.
+
+## D32 — A standing sentence is translated once, and the translation is kept *(amends D31, D21)*
+
+D31's translator ran on every build: the same rule, policy and note were
+sent to the model for every week and every span, and a policy code cannot
+represent (`rest_policy`) was sent, failed and fell back to the full
+scheduler every time. Now a **standing** source — a rule, a policy, an
+employee's note, an active preference; everything but the build's own
+instruction — is translated once and kept in `compiled_sources`.
+
+**The sentence stays the source.** A kept translation is a derivative,
+looked up by the words (`source_key`), the roster and shift names
+(`vocab_key`) and the compiler (version + prompt). Editing the sentence,
+changing the roster or the prompt simply stops matching. D2 holds: rules
+stay the manager's sentences, and D21 holds: a preference still authorises
+nothing. What changed is that D31 gave both a structured vocabulary to be
+*read into* for code, and reading one is now done once.
+
+**Setup is translated when it is saved.** The save stays zero-token and
+synchronous; it queues one `compile_sources` job, and the worker translates
+what is missing. No model, or a failed job, costs nothing: the next build
+translates as it did before.
+
+**A negative is kept too.** A binding source the model marked `unresolved`
+sends later builds straight to the full scheduler without a translation
+call. What *code* refused, or the model skipped, is not kept — it is tried
+again.
+
+**Time is anchored to when the sentence was written.** "עודד חולה 3 או 4
+ימים" is read against `source_anchors.anchored_on`, the day the sentence
+was first seen, which does not move when it is compiled again. The model
+gives the certain range (hard), the uncertain day (soft, weight 3) and a
+question for the manager; code checks a relative range lies within 90 days
+of the anchor and an absolute one within the dates the sentence writes, and
+refuses to keep a recurring sentence spread over one period's dates.
+
+**Policies became translatable (step 2).** Four request kinds were added so
+the policies that used to be kept as unresolved can be read into code:
+`min_rest`, `max_consecutive`, `balance` and `requires_with`, the first
+three allowed to name nobody (the whole team). A policy is translated clause
+by clause and left unresolved whole if any clause has no kind — training,
+rotation restated, "use judgement". `COMPILER_VERSION` moved to 2 so every
+kept negative is read again. `balance` is a ranking, not a guarantee: it is
+weighed like any soft wish, and is not reported as broken. Trainees are
+still not placed by code, so a training policy still goes to the full
+scheduler.
+
+**Shown, not edited.** Setup lists what code made of each sentence:
+translated, needs AI (with the reason), a wish code will not weigh,
+translating, or expired. Correcting a reading means rewording the sentence.
+
+---
+
+## D33 — Redis shares process-local state, and is never required *(superseded by D35)*
+
+Two things lived in each process's memory: the login throttle and the
+manager's live "an inbox moved" signals (D29). With more than one process --
+several API workers, or the API beside `app.worker` -- each kept its own
+copy: N workers allowed N times the guesses, and a signal raised on one
+worker never reached a manager streaming from another.
+
+**With a Redis URL saved, both are shared** (`common/redis_hub.py`): the
+throttle counts and locks in Redis keys, and signals go out on a per-team
+pub/sub channel that one listener thread per process relays to its streams.
+
+**The model queue moves to Redis too** (`dal/llm/redis_slots.py`), taking
+over from `PostgresModelSlots` whenever Redis is reachable. It keeps that
+contract -- one deployment-wide limit read live from `llm_max_concurrency`,
+one call in flight per team -- and adds the one thing advisory locks polled
+in a loop could not give: order. Tickets are served by priority, then
+arrival, so a manager's chat goes ahead of a queued build day. Holders renew
+a 30-second lease and waiters refresh their ticket, so a killed process
+frees its place within a lease. The PostgreSQL slots stay as the fallback.
+
+**Redis is an accelerator, not a dependency.** URL empty is the default.
+Without Redis, or when it stops answering, the throttle and the signals
+return to memory and the queue to PostgreSQL. A login must never fail
+because a cache is down.
+
+The URL, password and key prefix are runtime settings, editable in the panel
+with a connection test that shows the server and what this app keeps in it:
+active model calls, the queue, locked accounts. A save reaches the other
+processes because the hub re-reads the settings file every few seconds.
+
+## D34 — A constraint solver assigns every schedule; the model only translates ⚠️ *(supersedes D31, replaces D3 for assignment)*
+
+The manager asked to rebuild the engine around what the field has settled
+on for rostering: a language model for language, a solver for the
+arithmetic. Who works which shift is a combinatorial optimisation, and a
+model filling it day by day was the slowest and least reliable part of the
+product — a prompt per day or week, repair calls, capacity splitting, and a
+greedy fallback that could spend a person on Monday whom Tuesday needed.
+
+**OR-Tools CP-SAT assigns a whole span in one solve** (`bl/solver/`): one
+boolean per legal (person, slot) pair. A placement that breaks a hard
+availability, the rotation or closure cycle, eligibility or a hard `avoid`
+is never a variable. The audit's blocking checks — rest, runs of days,
+weekly hours — and every hard structured request are constraints. The
+objective is solved in two phases: coverage first (unfilled seats, missing
+roles, the shift manager), then, without giving any of that back, soft
+wishes and soft availability, closers on their own closure, an even share of
+hours and nights, and a day off between shifts. Spans are up to four weeks;
+a longer period is solved in such blocks, each seeing the ones before it.
+
+**The model's only job in a build is translation.** The `DirectiveAgent`
+(D32) turns instructions, rules, policies, notes and preferences into
+validated absences, pins and structured requests. A sentence that does not
+translate — binding or not — is never sent to a full AI scheduler; there is
+none. The schedule is built without it and its `notes` name it, so the
+manager can restate it or record it as a constraint. Structured input needs
+no model call at all.
+
+**What stays from D3.** The audit is still arithmetic, still advisory, and
+still the one definition of every countable fact; the solver is built from
+the same thresholds so a solved schedule is clean by the same measure that
+grades it. The manager still decides: every result is an ordinary draft
+with a reason per row (D8), every hand placement is a pin, and a seat
+nobody can legally fill is reported rather than refused. The chat, the
+change agent and the reason gates are unchanged.
+
+**Operational-duty exception.** A separately recorded duty is occupied time,
+not a preference the manager may knowingly override. The same interval
+arithmetic is shown by the placement check, but assignment and move endpoints
+also reject an overlap directly. This does not give the audit a veto: the
+write precondition is enforced outside `bl/audit/`, while the audit continues
+to report any older schedule that already contains the conflict.
+
+**What changes.** "Hard" now means hard for generation: the solver will not
+place a row that breaks a hard rule it can represent. Engines and call
+widths (`ai`/`code`/`auto`, `day`/`week`) are gone; the panel holds the
+solver's time limit and worker count instead. Among equally good schedules
+the pick may differ between builds.
+
+## D35 — PostgreSQL holds every piece of shared state *(supersedes D33)*
+
+Redis held three things (D33). Each fits in the database every process
+already shares, so the deployment has one stateful service, not two:
+
+- **The login throttle** is a `login_attempts` table: a fixed window per
+  account, a lock after the limit, swept as accounts recover.
+- **Live inbox signals** are `LISTEN`/`NOTIFY` on a channel named after the
+  schema, one listener connection per process (`dal/notify.py`).
+- **The model queue** is the advisory-lock `PostgresModelSlots` that was
+  already Redis's fallback: one deployment-wide limit, one call per team.
+
+A database that stops answering drops the throttle and the signals back to
+memory, as Redis being down did. A settings save made by another process is
+picked up by the store itself within seconds, which the Redis hub used to
+trigger. `llm_max_concurrency` now defaults to 4: the endpoints this runs
+against are hosted or batching servers; a local Ollama should lower it to 1.
+
+---
+
+## D36 — An absence is read and planned in code, and the fairest cover is proposed *(amends the chat's "the manager chooses" rule)*
+
+"עודד חולה בשני ושלישי", "עודד טס לחו״ל", "ירין לא יכולה לעבוד בשישי" are the
+commonest things a manager types, and each cost three or four full model
+rounds -- the whole prompt, profile, period and transcript re-sent each time
+-- to reach what is a lookup and arithmetic: who, which dates, their shifts,
+who is free (D3).
+
+**`bl/absence/` answers these with no model.** It reads one roster name, an
+absence phrase and every date the sentence names (lists, ranges, weekdays in
+the week on screen, "השבוע"). What it cannot place with certainty -- two
+names, a named shift, a hypothetical, a pairing wish -- goes to the model
+unchanged. A missing date is one question ("באילו תאריכים?"); a bare weekday
+on a "can't work" sentence is one question with two buttons (this Friday, or
+every Friday as a standing constraint).
+
+**The plan carries the fairest cover rather than waiting for a pick.** Each
+affected shift's candidates come from `find_replacements` (clean only), are
+ranked by hours, then shifts, then nights in the period, and the load is
+recounted after every pick so one person does not absorb the whole absence;
+each pick is re-audited beside the earlier ones. This reverses the chat
+prompt's "wait for the manager to choose" for this path only, and is safe
+for the same reason any plan is: nothing is written until the manager
+approves, the alternatives are shown under the plan, and choosing one
+rebuilds it in code. A manager's own pick wins over the fair one.
+
+**Not a second write path.** The plan is built by handing
+`ChatPlanBuilder.prepare` the turn the model would have returned, so it
+passes every check and audit a model plan does. The replacement tab reads
+only (`GET /api/agent/replacements`); its picks become a plan by being sent
+to the conversation, where approval is the one write (D12/D19).
+
+**Answered in the request.** `start_turn` runs the code paths inline, so a
+code-answered turn comes back finished in the send response with no worker
+pickup and no poll. The queued job still runs and finds the turn finished.
+
+## D37 — A new soldier or a new shift is absorbed into the drafts already built *(amends "a saved change applies to the next build")*
+
+A client asked that adding a person or a shift fit them into the board
+already built while keeping almost everything where it was. Until now a
+profile save applied only to the next build, and rebuilding a range
+replaced every generated row on it: one new soldier reshuffled 21 of 28
+rows in a test week.
+
+**The solver keeps what stands** (`solver/stability.py`). A rebuild handed
+`keep` rewards each existing row for staying where it is, priced at half
+of what moving that shift from somebody above the even share to somebody
+below it gains in evenness. So a shift moves from an overloaded person to
+an underloaded one (the newcomer), and never from somebody already at
+their share. In the same test week the newcomer took exactly four shifts,
+one from each of the four people carrying five, and nothing else moved; a
+new night shift on a roster able to staff it moved nothing at all.
+Coverage is still settled first (D34), so a kept row never holds a seat
+empty, and a kept row keeps the reason it was placed with (D8).
+
+**Saving the profile starts it.** A save that adds an active person or a
+shift opens a `keep_existing` range job on every draft from today (or its
+first day) to its end; the shift's slots are added to the stored grid
+first. A published week is never touched, only listed as skipped, since
+changing what the team was shown needs the manager to unpublish it; a
+draft with nothing on it is left alone. The same happens after a profile
+plan is approved in the chat. A refit that cannot start never fails the
+save. The build dialog offers the same refit by hand ("שמירה על השיבוץ
+הקיים").
+
+## D38 — A stuck model call fails, and a team may run several at once *(amends D35's one-call-per-team quota)*
+
+Every chat message and build of a team sat on "ממתין למודל…" behind one
+call the model server never answered. Three things combined: `llm_timeout_
+seconds` defaulted to 0, meaning no read limit for chat; each team could hold
+one model call at a time; and only one worker lane took chat turns.
+
+- **0 is the built-in ceiling, not "forever".** 300s for chat and every
+  other flow, 900s for a build's translation. A read timeout is not retried,
+  and the SDK's own retries are off, so a stuck call fails once with a
+  Hebrew error and releases its slot.
+- **A team may use every global slot** (`llm_team_concurrency`, 0 by
+  default). Set it on a deployment shared by several busy teams.
+- **Three chat lanes of six worker threads**, so one slow turn does not hold
+  every other manager's; the pool grows to 16 to carry them.
+
+What this gives up: a model genuinely slower than five minutes per chat
+answer now fails, and `llm_timeout_seconds` must be raised for it. A
+server that serves one request at a time queues concurrent calls itself,
+and a call waiting in its queue counts against the same ceiling.
+
+## D39 — Replicas agree through PostgreSQL, not a shared disk or a variable *(completes D35)*
+
+Running four API pods and three frontend pods showed what D35 left per
+process. Two things broke without an error:
+
+- **The session key.** Unset, each process generated its own, so a cookie
+  issued by one pod was refused by the next and bosses were logged out at
+  random. The start-up guard only counted workers inside one process
+  (`WEB_CONCURRENCY`), so four pods of one worker each passed it.
+- **Panel settings.** They were a JSON file on a volume. Pods rarely share a
+  disk, so a save applied on the pod that took it and nowhere else.
+
+Both now live in a `deployment_state` table. The session key, when
+`PAKASH_SESSION_SECRET` is unset, is generated once and claimed with an
+insert the first process wins; every other reads it back on first use, not
+at import, so a pod may start before its database. A panel save is written
+there with a version, and every process polls it on the file's existing
+three-second cadence. The `database_*` fields stay in the file and the
+environment: they are what the poll connects with. A file saved before
+this seeds an empty table once.
+
+`initialize()` also runs under an advisory lock now: replicas starting
+together raced through the same `CREATE ... IF NOT EXISTS`, and Postgres
+answers the loser with a unique violation.
+
+What this gives up: the session key sits in the database in the clear, next
+to everything it protects; an operator who wants it elsewhere sets the
+variable. A process with no database still generates its own key, and is
+refused with more than one worker.
+
+## D40 — A seat a chat change vacates is filled by the solver *(amends the chat's "the manager chooses" rule, extends D34)*
+
+A `changes` plan that takes somebody off a shift used to leave the seat
+empty unless the model named a replacement, and the model was told to wait
+for the manager's pick — so a constraint chat could loop asking "who will
+replace her?" while the absence itself was never planned.
+
+**The model names who leaves; the solver picks who comes in.** When a plan's
+removals leave a slot with fewer people than it had, `bl/chat_vacancies.py`
+hands the touched dates to the solver: every other row there is a pin, the
+person who left (and anyone the plan marks unavailable) is a hard `avoid`,
+and only the solver's picks on vacated slots join the plan as `assign`
+operations, listed under the reply. A model-picked cover for a seat the
+same plan vacates is dropped in favour of the solver's; a pick that replaces
+nobody is still asked about. `leave_vacant` keeps a seat empty on request.
+Chat builds use the saved solver settings, like the board's.
+
+**Still one write path.** It is a plan like any other: shown, audited, and
+applied only on the manager's approval (D8/D19). A seat nobody can legally
+fill is reported in the reply, never filled against a rule.
+
+## D41 — The system settings live only in the operator console *(amends D28)*
+
+The settings gear and the account-menu entry are gone from the team screen;
+the model, solver and database settings are edited only from the צוות
+משמרות זהב console's "מערכת" tab, on the operator session. They are shared
+by every team, and a team manager editing them moved the ground under
+everyone else. `/api/settings` still admits a boss session that sends the
+settings password, for scripts; no team UI uses it.
+
+---
+
+## D42 — Import is back: a sheet's shape is data, found by code, the model or the manager *(revives D7)*
+
+Importing was removed (D7) because a reader per shape could not keep up:
+every file that predated the app came in a shape of its own — dates down or
+across, people or shifts as lanes, weekday names with no dates, weeks
+stacked on one sheet — and each needed another class.
+
+**The shape is now a `Layout`, not a class.** Which way time runs, the line
+holding the dates, an optional shift line nested under them, what a lane is
+(`shifts`, `people` or `none`), where data starts and ends, and the sheet's
+own markers for "away" and "nothing". One reader (`bl/importer/reader.py`)
+reads any sheet given one. Turning the sheet on its side is a transpose, so
+"length or width" costs nothing.
+
+**Three sources answer "what is the layout", and one scorer judges them.**
+
+1. *The manager*, on the confirm screen: a few fields, or one click on an
+   alternative reading. Read as given.
+2. *Detection* (`detect.py`): every plausible layout, both orientations,
+   read and scored by how much of the sheet resolves to **people on the
+   roster and shifts the profile declares**. No model call.
+3. *The model* (`mapper.py`, flow `import`), asked only when detection is
+   below 75% sure, finds nothing, or the manager described the file in
+   words. It sees the sheet's corner and returns a layout — **never rows**.
+   Its layout is read and scored by the same code and used only if it
+   explains the sheet at least as well.
+
+So the model can make reading flexible without being able to place anybody:
+who works when is still read by code, cell by cell, and checked against the
+roster (D34's division, applied to files).
+
+**Names are matched, never guessed** (`roster.py`): "שובל ק." is שובל קרמר,
+"יוסי ב." is a roster that only says יוסי, "קרמר" alone with two Kramers is
+a question. The screen maps any name or shift heading to someone, or leaves
+it out, and the file is re-read with that mapping.
+
+**Preview writes nothing; confirm stores what was shown** (D7 unchanged).
+A confirm opens a new period, or — when the manager chose an overlapping
+draft — rewrites only the imported shifts on the imported dates of that
+draft. A published period is never written into. Rows carry
+`source='imported'` and a reason naming the file; absences the sheet stated
+become the manager's constraints.
+
+**What a real unit's file added** (Sample C in `FILE_FORMATS.md`): a
+header line decides for itself whether its dates are day or month first,
+since one copy of the same sheet writes `13/10/2024` and another
+`10/13/2024`; `בית` is an absence like `חופש`; a handover word
+(`חפיפה`) is a note on the row, not part of a name; a sheet up to 1,500
+columns wide is read, and one holding more than an import may store opens
+on the month covering today, with any other run of dates a field away; a
+workbook with a tab per month opens on the tab covering today. Unit 619's
+own tab (Sample D) added dates as `01-מרץ` with the year chosen on screen,
+a personal-number column that labels nobody, legend and banner rows, and
+cells naming a place with the shift in brackets — read as headings the
+manager maps to a declared shift, to an absence, or to nothing.
+
+What this gives up: a layout is one shape per sheet. A sheet mixing two
+unrelated tables needs its data range narrowed (`first_line`/`last_line`)
+or splitting. Colours carry no meaning to the importer.
+
+## D43 — A מכלול joins several משמרות under one מפקד מכלול *(amends D10, D28)*
+
+Some units are not one shift but several independent ones that together make
+one large shift — a **מכלול**. Each part is a **משמרת** with its own
+commander, the **מפקד משמרת**; above them a **מפקד מכלול** sees and edits all
+of them.
+
+*Words.* In code a משמרת is a team (`teams`) and its commander is the boss
+role; on screen they are **משמרת** and **מפקד/ת משמרת**, and the login door
+says so. "סוג משמרת" stays the name of a shift type (בוקר, לילה) inside one.
+(The roster badge "מפקד/ת" — someone qualified to command a shift on the
+board — is older and unrelated.)
+
+**The parts stay teams.** A משמרת in a מכלול is an ordinary team in every
+respect: its own roster, shift types, rotations, rules, constraints,
+requests, solver builds, agent chat, statistics and share link. Nothing in a
+team changes by joining. A מכלול is a row above teams (`complexes`, with
+`teams.complex_id`); it holds no schedule of its own. A team belongs to at
+most one מכלול, and linking one already in another is refused, not moved.
+
+**Who does what:**
+
+- **The operator** (צוות משמרות זהב, `/admin`, tab "מכלולים") opens a מכלול
+  from **existing** teams, changes its membership, renames, suspends and
+  deletes it (deleting removes the grouping only), and issues and resets the
+  **מפקד מכלול password** — shown once on a hand-over card, kept only as a
+  scrypt hash, like a team's.
+- **A מפקד משמרת** signs in with the team password exactly as before, sees
+  and edits only their own משמרת, and publishes their own schedule. The
+  password stays theirs: a commander's session is refused at
+  `/api/workspace/password` (`guards.own_manager()`).
+- **A מפקד מכלול** signs in at the login page's third door ("מפקד מכלול",
+  shown only when a מכלול exists) on a cookie of their own,
+  `pakash_commander`. They land on the **combined board** — every משמרת's
+  shifts side by side with every soldier, narrowed to one משמרת and then to
+  one shift type, over a day, a week, two weeks or a month — and a
+  "המשמרות" page with each משמרת's coverage, open seats and warnings.
+  "כניסה לניהול" opens a משמרת with **every power its commander has**: the
+  board, building, the agent, statistics, the roster, setup, constraints,
+  requests and publishing. The **agent, statistics and changes** are also
+  pages of the מכלול screen itself: a row on top picks the משמרת, and the
+  page renders that משמרת's own `AgentChat`, `Stats` and `ChangesPanel` —
+  not copies — after opening it on the commander's session exactly as
+  "כניסה לניהול" does. Which of the two the commander is in ("entered" or
+  "on the מכלול screen") is remembered per browser tab, since the cookie is
+  the same in both.
+- **A soldier** sees their own משמרת, as today. The מכלול is invisible to
+  them.
+
+**Entering is an ordinary boss cookie, marked.** `POST /api/complex/teams/
+{id}/enter` issues `pakash_session` for that team with `commander` set to
+the מכלול's id. Every manager route therefore serves the commander
+unchanged; `Guards.visitor_session` re-checks on each request (cached ten
+seconds, cleared by the console at once) that the team is still linked to
+that מכלול and both are active, so unlinking or suspending ends access on
+the next request. The commander's chats are their own (`manager_id`
+`commander-<id>`), the same from any browser.
+
+**Constraints and rules stay in the משמרת.** There are no מכלול-wide rules:
+no site-wide minimum, no rest counted across משמרות. Each solver runs on its
+own data. The combined board only reads — counting seats as each stored grid
+states them — and is not a second audit.
+
+**A soldier belongs to one משמרת.** Moving a soldier means moving them
+inside their משמרת's schedule. Seating someone from one משמרת in another's
+shift is deliberately left out: it would need a person known to two
+rosters, a rule for whose constraints apply, and a guard against one person
+being placed in both at once.
+
+**A מפקד מכלול's edit reaches the מפקד משמרת.** Every write they make inside
+a משמרת is recorded in its change log under `commander:<id>`, and — by the
+middleware in `main.py`, after the write succeeded — as a row in
+`commander_notices` named in the commander's words ("פרסם סידור", "שינה
+שיבוץ בלוח", "שינה את הגדרות המשמרת"…; checks and previews are not told).
+Repeats within ten minutes fold into one row with a count. A `commander`
+signal wakes the משמרת commander's open screen, where a banner lists them
+until "ראיתי". There is no locking: the last edit stands, and both sides see
+who made it.
+
+**Publishing stays per משמרת.** Each מפקד משמרת publishes their own; the מפקד
+מכלול may publish any one from inside it. There is no "publish the whole
+מכלול".
+
+What this gives up: no cross-משמרת staffing, no shared soldiers, and no
+single agent conversation about the whole מכלול — the agent always speaks
+about one משמרת, because its tools, the solver and the constraints are
+scoped to one. Each is an extension of
+this model, not a change to it.
+
+## D44 — A מכלול's duties block a whole day and count as load *(extends D43, D34)*
+
+A מכלול commander asked to assign duties (תורנויות: מטבח, שמירה, ש״ג…) to
+soldiers of every משמרת, so that a soldier on duty is out of that day's
+shifts, the duties are shared fairly, and they show in the statistics.
+
+**What is now true:**
+
+- **The מכלול owns its duties.** `complex_duty_types` (name, seats a day,
+  weekdays, `weight`, `active`) and `complex_duties` (one soldier -- a team
+  and a roster name -- on one duty for one whole day, at most one a day).
+  The commander sets them by hand on the "תורנויות" page; there are no
+  מכלול-wide rules beyond that (D43 stands).
+- **A duty blocks the whole day, midnight to midnight.** `records.
+  availability()` projects it as a `duty` with no hours, and
+  `audit/constraints.py` reads that as the day: every shift touching it is
+  blocked, the night before that ends on its morning included, a shift
+  ending exactly at midnight not. The solver, the manual and chat write
+  guards and the audit read it through the same `constraint_conflicts`.
+  Duty reads reach one day either side of a span for that reason.
+- **The team's commander sees it and cannot remove it.** It lists among the
+  constraints as "תורנות מכלול", the constraint delete refuses it, every
+  set, cancel and record lands in the team's change log as
+  `commander:<id>` and reaches its commander as a notice (D43).
+- **A duty on a shift already placed is saved, and the shift follows the
+  week it is in** (`complex_duties/collisions.py`). On a draft, from today
+  on, the soldier is taken off (logged with the duty as the reason, as the
+  commander) and one keep-existing range rebuild per week (D37) refills the
+  seat around the board. A published week is never changed: its commander
+  is told who to cover. The past is left. The commander sees each outcome.
+- **"מלא בהוגנות" proposes; the commander approves** (D20). A pure greedy
+  fill (`fill.py`), a day and a kind at a time: first, nobody within six
+  days of another duty of theirs, before or after (D46); then the fewest
+  weighted duty days over 8 weeks, then weekend duties, then the widest
+  gap to their nearest duty, then whoever has no shift the duty would take
+  (that day's, or a night from the evening before), then the whole load,
+  then the names. Whoever has left, holds a hard whole-day constraint or a team
+  duty, already stands a duty, or is home on the cycle (the solver's own
+  `bl/rotation` gates) is not proposed. Approval seats each kept row
+  through the ordinary assign, reports the ones it could not, and resolves
+  the collisions once for the whole fill.
+- **The balance** (`balance.py`) reports per soldier, per משמרת and per kind
+  -- seats asked for counted from the day a kind was created -- and the
+  spread. A report, never a quota.
+- **The soldier sees their own duties** in the personal area, a week back
+  to eight ahead, whether or not a week is published; the team's board
+  marks each day's duties on its column head and paints those cells
+  blocked (`lib/constraints.ts` mirrors the whole day).
+- **A team leaving the מכלול** loses its duties from today on, in the same
+  transaction; past ones stay as history.
+- **A recorded duty counts without blocking.** `blocks = FALSE` is a duty
+  stood before this system or outside it: not projected into availability,
+  but counted like any other.
+- **A duty day is a shift already carried.** The solver is handed the
+  team's duties (`generate_span(duties=)`, read by `AssignmentHistory.
+  duties` over the fairness lookback through the period's end) and adds
+  `weight` shifts per day to that person's carried load before water-filling
+  the targets. Nights are not charged. With no duties -- most soldiers, and
+  every team outside a מכלול -- the spread is exactly what it was. The build
+  notes say who was counted.
+- **The statistics count it too.** `shift_stats(duties=)` adds per person
+  duties, weekend duties, weighted load and `load` = shifts + duty load
+  (which orders the list), and totals per kind; nothing is drawn for a team
+  without duties.
+
+**Deliberately not done:** a team's own timed duty (`duties`) still blocks
+hours and is not counted as load; a published week a duty collides with is
+not changed; a soldier cannot be on two duties a day; deleting a מכלול
+removes its duties with it, history included (the grouping is what owned
+them).
+
+## D45 — Many teams at once: fewer round trips, more API processes, no PgBouncer *(extends D35, D39)*
+
+With many teams signed in, pages stalled waiting on PostgreSQL. The cause
+was not the data -- a hundred teams is a small database -- but the queue in
+front of it: one API process, sixteen pooled connections, and every
+repository call paying up to four round trips (the pool's health check,
+`BEGIN`, the query, `COMMIT`) while holding a connection. `get_schedule`, read on
+every page and after every write, was three such calls.
+
+- **A single statement runs in autocommit** (`database.single_statement`,
+  used by `RepositoryBase._all`/`_execute`). It was its own transaction
+  already; Postgres now wraps it implicitly. Inside `atomic()` or a job's
+  bound connection it joins that transaction as before.
+- **The checkout check is skipped for a connection returned in the last two
+  seconds** (`dal/pool_hooks.py`); one idle longer is still checked, so a
+  database restart is noticed. The return hook puts `autocommit` back off.
+- **`get_schedule` sends its three queries in one pipeline.**
+- **`team_profile()` sends the document only when it changed**, keyed on
+  `(revision, updated_at)` per process (`profile_cache.py`). The row is
+  read every time, so another process's save is seen on the next read;
+  nothing read inside `atomic()` is kept.
+- **The API runs several processes** (`WEB_CONCURRENCY`, four in compose)
+  beside the separate worker, and PostgreSQL gets sized settings, 200
+  connections and `pg_stat_statements` (`docs/SCALING.md`).
+
+Measured against the repository on one host with 0.5 ms added per network
+hop: `get_schedule` 35 -> 6 ms, a single-row read 10 -> 3 ms, and a
+three-read page under 64 threads on one pool of 16 from 98 to 219 per
+second.
+
+**PgBouncer in transaction mode was considered and refused.** The job
+claim and the model slots hold *session* advisory locks, `LISTEN` needs a
+session of its own, and `search_path` is set per connection -- each of
+them breaks when consecutive transactions land on different server
+connections. Sizing `max_connections` to the processes is enough at this
+scale.
+
+What this gives up: a request still borrows a connection per statement
+rather than one per request -- a request may call the model between two
+reads, and holding a connection across that would bring back the pool
+exhaustion this decision is about.
+
+---
+
+## D46 — The מכלול commander's agent speaks to every משמרת, and duties are spread wide *(extends D43, D44)*
+
+**Context.** The commander's screen looked like a separate product: a page
+title over a small board, the agent on a page of its own that spoke to one
+משמרת at a time (entering it swapped the browser's team cookie), and the
+duties drawn as a table of their own. And "מלא בהוגנות" ranked by count
+first and spacing fifth, backwards only, so equal counts put a soldier on
+duty day after day.
+
+**Decision.**
+
+- **The commander's screen is the משמרת's control room, a level up**: the
+  same sidebar, board head, tiles, filter bar (משמרת, shift type, soldier,
+  "רק חוסרים"), cards, and the agent in the resizable drawer opened from
+  the guard. The duties page is drawn on the same grid and cards.
+- **One pane, one conversation per משמרת.** `/api/complex/teams/{id}/chats`
+  serves the manager-chat routes to the commander on their own cookie,
+  the team named by the path and checked against the מכלול
+  (`guards.commander_in_team`) -- the one place a team id comes from a
+  path outside the operator console, because the commander acts on every
+  משמרת by design. The session is the one "כניסה לניהול" gives
+  (`commander-<id>` chats), the middleware bills the team's model quota,
+  logs the actor as `commander:<id>` and tells the team's commander, as
+  for any commander write.
+- **"כל המכלול" routes a sentence in code** (`bl/complex_routing.py`,
+  `POST /api/complex/route`): a משמרת it names, else the משמרת of a
+  soldier it names (full name, or a first name unique in the מכלול), else
+  every משמרת -- or the משמרות the commander picked. Each agent answers in
+  its own conversation; each plan is approved on its own and applies in
+  its משמרת only. There is no cross-משמרת plan: each has its own rules
+  and solver, and one approval spanning several would be a write no
+  single audit answers to.
+- **Duties are spread wide.** The fill keeps every soldier at least
+  `MIN_GAP_DAYS` (6) from their other duties, stored future ones included,
+  while anybody else is free; a closer pick says so in its reason. Among
+  equals the widest gap wins.
+
+**What this gives up.** A sentence about two soldiers in two משמרות goes to
+both agents with the whole sentence, and each acts on its own soldier; a
+sentence that names nobody reaches every משמרת and costs one turn each.
+
+---
+
 
 ## Open
 
-- **Python version.** `AiSummryIO` pins **3.8.10** (EOL), likely a deployment
-  constraint there. Mirroring it unless PakashAgent targets a newer environment —
-  the boss hasn't answered. If 3.8.10 holds: no `X | Y`, no `list[str]`, no
-  `match`; use `Optional`, `List`, `Dict`.
+- *(none)* — the Python version is settled at **3.11** (D30).
+
+## D47 — A reserve unit's staffing standard is structured, and its roster comes in from its own app *(extends D34)*
+
+A reserve unit moving over from its own roster app (groups א–ח, each staffing
+its own 12-hour day and night shifts) brought four rules this product could
+not state, and a roster it should not have to retype.
+
+**The standard lives in one profile block, `unit_policy`, and on each
+person** (`bl/audit/unit_policy.py`, read by the solver and the audit alike):
+
+- **Role counts.** A role listed N times in a shift's `required_roles`
+  needs N holders, and one person fills one role seat (a maximum matching,
+  `cover`). Before, a role was satisfied by any one holder, so "three
+  radio operators" could not be said.
+- **Fallback roles.** `role_fallbacks[role]` names roles whose holders may
+  fill a seat first-hand holders cannot, priced above a soft wish
+  (`solver/staffing.FALLBACK`) and reported as a notice.
+- **The weak per shift.** `max_weak_per_shift` caps people of `competence`
+  "weak" on one shift as a hard constraint, beside the competence balance
+  that already pulls each shift toward the team's average. Competence never
+  changes how many shifts someone gets.
+- **Dated qualifications.** `qualifications: [{role, last_active}]` count as
+  roles held. One older than `qualification_validity_days` (90) is a notice,
+  never a bar: the unit renews it by training, not by being left off.
+  Working a shift renews it too: the window runs from the later of
+  `last_active` and the person's last shift worked (the setup screen reads
+  every period, `bl/qualification.py`; the audit, the shifts earlier in the
+  period it is auditing), so nobody retypes the date after every shift.
+  The setup screen colours a person by it — only one with a dated row.
+- **Shifts per week.** `weekly_shifts` (reservists, `service_type` reserve),
+  `weekly_shifts_officers` and `weekly_shifts_ncos` (selected by each person's
+  optional `rank_group`) are team-wide defaults beside the legacy
+  `weekly_shifts_regular` fallback and each reservist's own
+  `reserve_days_per_week`/`reserve_min_days`: the
+  maximum is hard, the minimum priced and applied only to whole weeks of a
+  span, Sunday to Saturday. `weekly_shifts_overflow` (team-wide, 0 unless
+  set) lets the solver go that many shifts past a maximum, each one priced
+  above everything but coverage so it is taken only for a seat nobody else
+  could fill, and noted in the build; past it the seat stays empty. The
+  audit's `weekly_shifts` warns on each shift over the maximum, dated on
+  that shift so its card says so, and says when it is past the overflow too
+  (a hand placement can be).
+  Any soldier may carry their own `min_weekly_shifts` / `max_weekly_shifts`,
+  which win over their service type's, each on its own (blank is the
+  team's). Setup edits the סדיר (`weekly_shifts_regular`) and מילואים
+  (`weekly_shifts`) numbers in "גבולות עומס ומנוחה", and each soldier's in
+  their card; the rest of `unit_policy` still saves through untouched.
+
+None of this is a structured *rule vocabulary* (D2): these are numbers on a
+setup form, like `audit_policy`, not the manager's sentences.
+
+**The roster import from the unit's own app was removed.** It read that
+app's CSV export or paste format (`POST /api/profile/import-roster`) and
+saved it as a profile. It is gone from the setup screen and the API; a
+roster is typed in setup, or read from any sheet by the generic unit reader
+(`importer/unit.py`). A unit with no weekend anchor leaves its people
+ungrouped, which means no rotation, and first setup does not demand a
+group it would have no cycle for.
+
+---
+
+## D48 — A replacement is searched in stages: role and post first *(refines D36)*
+
+The manager's rule for replacing a soldier: first a holder of the same role
+from the shift itself, who is free; then the same role from another place;
+only then anyone else who fits. Ranking every clean cover by load alone
+offered a lighter stranger ahead of the soldier's own crew-mate.
+
+So `placement/tiers.py` puts every candidate in a stage before the load is
+asked: **0** — shares a role with the leaving soldier and belongs to this
+post; **1** — shares the role, from another post; **2** — everyone else the
+placement checks pass. A *post* is the shift's `purpose` when it states one
+(two shifts with one purpose are one place at different hours), else the
+shift itself. Someone *belongs* to it when the period has them on it, or
+their `eligible_shifts` names it — an empty list means "every shift" and
+says nothing about where they belong. A leaving soldier with no role leaves
+no role to match, and the stages are the post alone.
+
+The stage sorts before the candidate cap, so a holder of the role is never
+cut in favour of a lighter stranger; inside a stage the order is the fair
+one it always was. The changes tab and the chat's candidate cards head each
+stage, and the fair pick is the lightest of the earliest stage with a clean
+cover. Stage 2 stays listed so the manager is never left with nothing.
+
+---
+
+## D49 — A soldier can be switched off without leaving *(beside the departure)*
+
+Reservists come and go week by week, and a departure (`inactive_from`) was
+the wrong tool for that: it reads as "left", archives the person, and
+taking them back meant undoing it. Every roster card now carries an on/off
+switch, stored as `on_duty` on the person. Only an explicit `false` is off;
+a row that never had the field is on.
+
+**Off means not taken into account at all.** The build marks the person
+hard-unavailable on every date (`scheduler/availability.py`, reason
+"כבוי/ה — לא משתתף/ת בשיבוץ"), so the solver never makes a variable for
+them and fairness gives them no target. The placement check, a hand
+placement, a chat plan and a role expanded to its holders refuse them
+(`shared.out_of_service`).
+
+**Switching is a profile save, absorbed like D37.** Switching off vacates
+the person's rows in each draft from today on — hand-placed ones too, each
+logged with the reason "החייל/ת כובה/תה ברשימת כוח האדם" — and refits the
+draft around the gap with `keep_existing`. Switching on reads as a new
+soldier and fits them in. A published week, or one with a build already
+running, is left as it is and named, as for any absorbed save.
+
+**Existing teams were migrated once.** Whoever was out of the roster on
+the day of the upgrade (an `inactive_from` on or before today, or a Magen
+Merkava soldier marked "לא זמין/ה:" from a call-up still ahead) came back
+switched off, and the Magen Merkava builder now switches such soldiers off
+instead of ending them; the migration records itself in `deployment_state`, so a
+soldier departed afterwards is never brought back by a restart. The
+departure itself stays, for someone who really left.
+
+---
+
+## D50 — Redis keeps the heavy board reads until the team writes *(amends D35)*
+
+The operator asked to put Redis in front of the board's heavy reads and take
+load off PostgreSQL. Those reads are several queries and a full audit each
+— the management overview, the stats panel, a day, a week, a span of weeks,
+a period by id — and they are read far more often than they change: every
+tab switch, every poll after a write, every member opening the share link.
+
+**PostgreSQL stays the only source of truth** (D35). Redis holds copies
+only, and every key in it may be thrown away at any moment. The throttle,
+the live signals and the model queue stay where D35 put them.
+
+**What is cached** is wrapped at the routes (`api/routers/schedules/`):
+`/overview`, `/current`, `/at`, `/between`, `/stats` and `GET /{id}`, keyed
+by team, the arguments, the role (a member reads published periods only)
+and today's date. The value is stored as the JSON the route returns, so a
+hit and a miss answer the same shape. The commander's combined board
+(`/api/complex/board`) reads each team's span through the same entry
+(`CachedPeriods`), so it and the team's own month view share one copy per
+team and are retired together.
+
+**Invalidation is by version, and every write is noticed at the cursor.**
+Finding every write by hand — a route, a job checkpoint, a commander's duty
+written into another team — is how a cache comes to show a board that is no
+longer true, so it is not done by hand:
+
+- Every pooled connection uses `write_marks.TrackingCursor`, which marks a
+  statement that writes (by its first word) with the team of the work in
+  progress (`current_team()`, set per request by the middleware and per
+  job by the worker). With no team in context — the operator console, a
+  commander's route, start-up — the mark is `""`, which means every team.
+  Tables no cached read looks at (the job queue, login attempts, the
+  deployment's shared values, chat turns) are not marked.
+- The marks are told **after the commit and before the response**: when the
+  `connect()`/`single_statement()` block ends, or when a job's borrowed
+  connection commits. Not from the pool's return, which psycopg_pool runs on
+  its own thread a moment later — a screen re-reading right after its own
+  write would otherwise get the old version.
+- Telling touches Redis only. The hub reads the settings it holds
+  (`store.peek()`), never `store.get()`, which polls the shared settings
+  from the database: a read taken inside a write's invalidation is a second
+  connection while the first is being told about, and it deadlocked the
+  pool in testing. A listener's own statements are never told back to it.
+- Each team has a generation counter, and the deployment one more. A cached
+  read's key carries both, so a write retires everything its team cached
+  with one `INCR`. A read that started before a write and finishes after it
+  lands under the old generation, where nobody asks again. A counter Redis
+  evicted starts again from the clock, so it cannot revive an old read.
+
+**Never required, never wrong for long, never waited for.** With no Redis,
+a TTL of 0, or a command that fails, the read goes to PostgreSQL exactly as
+before. No request waits for a connection: the hub connects on a thread of
+its own and answers "not connected" meanwhile, so a Redis that is down never
+costs a read or a write its connect timeout. A write
+that could not reach Redis leaves a debt that bumps the deployment's
+counter before anything cached is trusted again; a fresh process starts
+owing it, and the debt is paid the moment a connection is made — a worker
+that only writes leaves nothing stale behind. `redis_cache_ttl_seconds` (default 300, at most a day) bounds what
+that cannot cover, such as a process that cannot reach Redis while others
+can.
+
+**The connection is the one D33 had**, back in the runtime settings and the
+operator console's "מערכת" tab: URL, host, port, username, password (masked),
+and the key prefix. **Every key starts with the prefix** —
+`<prefix>:cache:read:…` for reads, `<prefix>:cache:generation` and
+`<prefix>:cache:team:<id>:generation` for the counters — so one Redis can
+serve several deployments or other applications, and the panel counts this
+deployment's keys by SCAN under it. A save reaches every replica through
+the shared settings (D39).
+
+**An empty saved connection means the env's.** Every save writes every
+field, so a deployment that saved anything before `PAKASH_REDIS_URL` was set
+held an empty URL in its file and its shared row, and the env value was
+never read again. With no URL and no host saved, the connection fields come
+from env (`redis_fields.env_when_unset`); one saved in the panel still wins.
+To keep the env's Redis but stop caching, set the TTL to 0.
+
+## D51 — Fairness remembers eight weeks *(extends D34; amends "the last two weeks")*
+
+The manager asked that fairness look further back than the fortnight the
+solver used to see. A soldier who carried the nights in weeks three to six
+was asked for an even share again as soon as two weeks had passed, and the
+history read stopped after 300 rows — about a month for a team of thirty —
+so a wider window would not even have been read.
+
+**The fixed rows stay as they were.** The last fourteen days still count
+in every rule (rest, runs of days, the week) and in the load. **The
+ledger** (`solver/ledger.py`) carries what is older, into the evenness only:
+eight weeks by default (`audit_policy.fairness_lookback_weeks`, 0 turns it
+off, at most 12), the four weeks before the span whole and the older ones at
+half. It reaches the solver through `carried`, the same entry מכלול duties
+use, so it is never a fixed row and never counted in demand twice.
+
+**Weeks a soldier was not there are filled at the team's own rate.** A
+newcomer, or someone back from a long absence, did not refuse the weeks
+before their first row: for each of those weeks they are credited what the
+team carried per person. Without it, a soldier who joined this week was
+owed every night the others had carried over two months and was handed all
+of them in one build (a test pins exactly that: 6 of 6 nights before, 2 of
+6 after). A soldier with no row anywhere in the window is read the same way.
+
+**The history is read by date.** `AssignmentHistory` reads every earlier
+period back to the ledger's widest window (12 weeks); the row limit is now
+only a guard against a runaway history. מכלול duties are read over the
+same window, and the days older than the fixed rows join the ledger.
+
+## D52 — A shift weighs what the manager says it weighs; a night 1.5 *(amends D34's "an even number of shifts")*
+
+The manager said a night is worth more than a day shift. Load stays counted
+in shifts, not hours (a soldier on base is not on the clock), but each shift
+now counts by its `load_weight` (`audit.roster.load_weight`): 1.5 for a
+night by default (`is_night`, but not an on-call night — a night someone is
+only available is not a night worked), 1 for anything else, or one of
+0.5–1.75 chosen on the shift in setup ("משקל עומס"). Nights are still evened
+on their own as well, so whoever carried the nights both does fewer nights
+next and fewer shifts in all.
+
+**The list stops at 1.75 on purpose.** Moving one shift of the heaviest
+weight from the most loaded soldier to the least loaded saves 975 in the
+objective, nights included; a soft wish costs 1,000. At 2 a wish would be
+broken to even out one night. A test holds the inequality.
+
+The same weight is read wherever load is: the evenness and its capacity
+estimate, the price of keeping a row in place (D37), the ledger (D51), and
+the stats panel, whose `load` is now the weighted shifts plus מכלול duty
+days (`weighted` per person beside the plain count).
+
+## D53 — A new week keeps the shape of the last two, and a rebuild keeps what stands *(extends D37)*
+
+The manager asked that a new schedule resemble the weeks before it rather
+than change everything. Two cases, two answers:
+
+- **Rebuilding days already built** now keeps the existing rows by default:
+  "שמירה על השיבוץ הקיים" in the build dialog starts ticked (D37's held
+  phase does the rest). Unticked, the days are built over as before.
+- **A new week** rewards each placement that repeats the soldier's own
+  pattern — the same shift on the same weekday in each of the last two
+  weeks (`solver/continuity.py`). The reward is the smallest price in the
+  model (30 a week, 60 on `audit_policy.continuity: "high"`, 0 on `"off"`):
+  below one shift of evenness at the lightest weight and below any gap
+  between shifts, so it only chooses among schedules that are otherwise as
+  good. It does not keep whoever carried the nights on them; the evenness
+  and the ledger move them far more strongly. A build reports
+  `continuity_kept` of `continuity_rows` in its metrics.
+
+
+## D54 — A team of thirty or more is solved in chunks of shifts *(extends D34)*
+
+The manager asked that a large משמרות — thirty people and up — be solved
+in chunks rather than all at once: the shift types in alphabetical order,
+in pairs or more, each chunk scheduled on its own.
+
+One model over every shift of forty people and four weeks does not get far
+inside the time limit; two smaller ones do. `solver/chunks.py` splits the
+span's shift types alphabetically, two to a chunk (a shift left alone joins
+the chunk before it, so no chunk is a single shift), and solves them in
+order. A chunk sees every pin and everything the earlier chunks placed as
+fixed rows — the mechanism a shift-narrowed build already used — so rest,
+runs of days, weekly limits, request limits and the load each person
+carries all cross chunks, and the last chunk evens what the first handed
+out. The time limit is divided by placements to decide, so a chunked build
+takes what a whole one did. The build is answered as one: one audit, one
+set of coverage notes, `metrics.chunks` for each chunk's own numbers.
+
+Measured on the benchmark's `large` team (40 people, 4 shifts, 4 weeks, 4
+threads), whole → chunked:
+
+| limit | shift spread | night spread | short rests | soft absences broken | prefers met |
+|---|---|---|---|---|---|
+| 10s | 20–25 → 11–14 | 19–20 → 5–9 | 36–39 → 15–23 | 14–16 → 5 | 71–77% → 41–71% |
+| 30s | 9 → 4 | 13 → 4 | 8 → 3 | 0 → 1 | 77% → 71% |
+| 60s | 3 → 6 | 6 → 4 | 2 → 0 | 0 → 1 | 77% → 71% |
+
+So at the limits a build actually runs with, chunks are markedly more even
+and better rested; given a minute the whole model catches up, and it stays
+somewhat better at `prefer` wishes that reach across chunks. What a chunk
+cannot see is what a later chunk will need: a soft request counted across
+shifts of two chunks (`balance`, a soft `max_count`) is weighed by each
+with the earlier rows as given, not jointly.
+
+**The manager watches it happen.** A running build names the chunk it is
+on in the banner ("משבצים את המשמרות בוקר, לילה (חלק 1 מתוך 2)…"), and
+each solved chunk is written to the board before the next one starts, so
+the grid fills shift pair by shift pair instead of all at once. The span's
+checkpoint still writes the whole span at the end; a chunk already on the
+board when a span fails or is stopped stays as ordinary draft rows and is
+rebuilt when the span is run again.
+
+The threshold and chunk size are constants (`chunks.MIN_PEOPLE`,
+`chunks.SHIFTS`) and arguments of `generate_span`; zero solves whole.

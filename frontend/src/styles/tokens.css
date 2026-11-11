@@ -1,71 +1,132 @@
-/* Pakash is an operations product, so its visual language comes from a
-   dispatch desk: cool paper, dark ink, precise rules and one blue action
-   colour. Warning and success colours are reserved for schedule meaning.
-   There are no decorative gradients or glows. */
+/* Shared native-inspired neutrals. Blue identifies actions; schedule status
+   and per-person colours retain their meaning. Glass belongs to navigation. */
 :root {
-  --bg: #eef2f6;
+  --font-system: -apple-system, BlinkMacSystemFont, "Inter", "Noto Sans Hebrew", "Arial Hebrew", "Segoe UI", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --bg: #f5f5f7;
   --surface: #ffffff;
-  --surface-2: #f7f9fb;
-  --surface-3: #e6ebf1;
-  --sidebar: #101828;
-  --sidebar-2: #1d2939;
-  --text: #101828;
-  --text-soft: #344054;
-  --text-muted: #667085;
-  --text-on-dark: #f8fafc;
-  --border: #d8e0e9;
-  --border-strong: #b9c5d3;
-  --primary: #2e5bd7;
-  --primary-hover: #2448b8;
-  --primary-soft: #eaf0ff;
-  --accent: #0f766e;
+  --surface-2: #f9f9fb;
+  --surface-3: #eeeef0;
+  --sidebar: #f0f0f2;
+  --sidebar-2: #e9e9ee;
+  --text: #1d1d1f;
+  --text-soft: #424245;
+  --text-muted: #6e6e73;
+  --text-on-dark: #ffffff;
+  --border: #e5e5ea;
+  --border-strong: #d2d2d7;
+  --primary: #0071e3;
+  --primary-hover: #0062c4;
+  --primary-soft: #e8f1fd;
+  /* The blue a filled control is painted with. Equal to --primary in light;
+     in dark it stays deeper so white text on it still clears 4.5:1. */
+  --primary-fill: #0071e3;
+  --accent: #0071e3;
   --success: #18794e;
-  --success-soft: #e8f5ee;
+  --success-soft: #e7f6ed;
   --warning: #9a5708;
-  --warning-soft: #fff3df;
+  --warning-soft: #fff4e0;
   --danger: #b42318;
-  --danger-soft: #feebe9;
-  --shadow: 0 18px 48px rgba(16, 24, 40, 0.12);
-  --shadow-soft: 0 1px 3px rgba(16, 24, 40, 0.08);
-  --radius: 12px;
-  --radius-sm: 8px;
-  --focus: 0 0 0 3px rgba(46, 91, 215, 0.28);
-  /* Kept as compatibility tokens for existing components. Both intentionally
-     resolve to a flat operation colour rather than a decorative effect. */
-  --brand-gradient: #2e5bd7;
+  --danger-soft: #feecea;
+  /* Chart and section hues; navigation and summary icons stay neutral. */
+  --hue-blue: #2e5bd7;
+  --hue-blue-soft: #ecf1ff;
+  --hue-violet: #7a3fe0;
+  --hue-violet-soft: #f3edff;
+  --hue-teal: #0b7a70;
+  --hue-teal-soft: #e5f6f3;
+  --hue-pink: #c2266f;
+  --hue-pink-soft: #fdecf4;
+  --shadow: 0 20px 64px -16px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --focus: 0 0 0 3px rgba(0, 113, 227, 0.28);
+  /* The one form field: `:where(input, select, textarea)` below. */
+  --control-height: 44px;
+  --control-pad-y: 0.55rem;
+  --control-pad-x: 0.65rem;
+  --control-font-size: 15px;
+  --brand-gradient: linear-gradient(var(--primary-fill), var(--primary-fill));
+  --on-primary: #ffffff;
   --brand-glow: none;
+  /* Gold is reserved for the brand mark and favicon, away from status.
+     `--gold` clears 4.5:1 on white for text; `--on-gold` is the glyph on the
+     gold mark. */
+  --gold: #8f6300;
+  --gold-soft: #fbf3df;
+  --gold-gradient: linear-gradient(135deg, #f8dc8a 0%, #e4b53f 48%, #b9860c 100%);
+  --gold-text: linear-gradient(120deg, #a06f00 0%, #7a5300 100%);
+  --on-gold: #3b2a05;
+  --gold-glow: none;
+  /* Frosted navigation; working surfaces stay opaque. */
+  --glass: rgba(245, 245, 247, 0.88);
+  --glass-strong: rgba(255, 255, 255, 0.96);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-blur: saturate(140%) blur(20px);
+  --aurora: linear-gradient(var(--bg), var(--bg));
 }
 
 :root[data-theme="dark"] {
-  --bg: #0f1724;
-  --surface: #172131;
-  --surface-2: #1d2939;
-  --surface-3: #29374a;
-  --text: #f8fafc;
-  --text-soft: #d6deea;
-  --text-muted: #98a6b9;
-  --sidebar: #0a101c;
-  --sidebar-2: #172131;
-  --border: #2d3b4f;
-  --border-strong: #47566b;
-  --primary: #7b9cff;
-  --primary-hover: #9ab2ff;
-  --primary-soft: #1e3268;
-  --accent: #5ed0c4;
+  --bg: #1c1c1e;
+  --surface: #242426;
+  --surface-2: #29292c;
+  --surface-3: #333336;
+  --text: #f5f5f7;
+  --text-soft: #d1d1d6;
+  --text-muted: #a1a1a6;
+  --sidebar: #202022;
+  --sidebar-2: #303033;
+  --border: #3a3a3c;
+  --border-strong: #505054;
+  --primary: #0a84ff;
+  --primary-hover: #409cff;
+  --primary-soft: #0c2645;
+  --primary-fill: #0071e3;
+  --accent: #0a84ff;
   --success: #6bc995;
-  --success-soft: #17392c;
+  --success-soft: #16332a;
   --warning: #f0b45b;
-  --warning-soft: #3b2a12;
+  --warning-soft: #362713;
   --danger: #ff8a80;
-  --danger-soft: #44211f;
-  --shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
-  --shadow-soft: 0 1px 3px rgba(0, 0, 0, 0.24);
-  --brand-gradient: #5f82ef;
+  --danger-soft: #3f2120;
+  --hue-blue: #8aa6ff;
+  --hue-blue-soft: #1d2a52;
+  --hue-violet: #b79bff;
+  --hue-violet-soft: #2c2150;
+  --hue-teal: #5ed0c4;
+  --hue-teal-soft: #143430;
+  --hue-pink: #f28ab8;
+  --hue-pink-soft: #3d1a2c;
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 24px 60px -16px rgba(0, 0, 0, 0.75);
+  --shadow-soft: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 6px 18px -8px rgba(0, 0, 0, 0.6);
+  --focus: 0 0 0 3px rgba(10, 132, 255, 0.5);
+  --brand-gradient: linear-gradient(var(--primary-fill), var(--primary-fill));
+  --on-primary: #ffffff;
   --brand-glow: none;
+  --gold: #f2c95c;
+  --gold-soft: #33280f;
+  --gold-gradient: linear-gradient(135deg, #ffe7a3 0%, #f0c14f 48%, #c9921a 100%);
+  --gold-text: linear-gradient(120deg, #ffe39a 0%, #e9b543 100%);
+  --on-gold: #2e2003;
+  --gold-glow: none;
+  --glass: rgba(32, 32, 34, 0.9);
+  --glass-strong: rgba(36, 36, 38, 0.96);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --aurora: linear-gradient(var(--bg), var(--bg));
 }
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  color-scheme: light;
+  font-family: var(--font-system);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 html,
@@ -80,9 +141,18 @@ body,
 button,
 input,
 textarea,
-select {
-  font-family: "Noto Sans Hebrew", "Arial Hebrew", Arial, sans-serif;
-  font-size: 16px;
+select,
+option,
+optgroup,
+dialog {
+  /* The system face first: on Apple devices that is SF Pro and SF Hebrew,
+     which is most of what makes the app feel native there. Elsewhere Inter
+     carries Latin and digits and Noto Sans Hebrew the Hebrew — both loaded
+     in the root layout, degrading to system faces if the host is unreachable. */
+  font-family: var(--font-system);
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  font-feature-settings: "cv11", "ss01";
 }
 
 body {
@@ -98,6 +168,58 @@ select {
   color: inherit;
 }
 
+input::file-selector-button {
+  font: inherit;
+}
+
+/* One field, everywhere. Every text input, select and textarea in the app
+   has this box: 44px tall, the strong border, the small radius, the surface
+   behind it and the blue focus ring. Written in `:where()` so it carries no
+   specificity: a screen never restates it, and only a field that is
+   deliberately not a field — a search inside a bar, the chat composer, a
+   toolbar filter chip — overrides it with a class of its own. A label above
+   a field is `.field-label` (or `.manual-field > span`), styled once below. */
+:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="button"], [type="submit"]), select, textarea) {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-height: var(--control-height);
+  padding: var(--control-pad-y) var(--control-pad-x);
+  font: inherit;
+  font-size: var(--control-font-size);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]), select, textarea):focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: var(--focus);
+}
+
+:where(input[readonly], textarea[readonly]) {
+  color: var(--text-muted);
+  background: var(--surface-2);
+}
+
+:where(input, select, textarea):disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+:where(textarea) {
+  min-height: 5rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+/* iOS zooms into a field under 16px; on a phone every field is 16px. */
+@media (max-width: 640px) {
+  :root { --control-font-size: 16px; }
+}
+
 button {
   cursor: pointer;
   touch-action: manipulation;
@@ -110,8 +232,8 @@ button {
 }
 
 :focus-visible {
-  outline: none;
-  box-shadow: var(--focus);
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
 }
 
 .skip-link {

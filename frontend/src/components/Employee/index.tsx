@@ -2,7 +2,6 @@
 
 import {
   ArrowLeftRight,
-  BarChart3,
   BellRing,
   CalendarDays,
   CalendarClock,
@@ -16,22 +15,24 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-import { useTheme } from "@/components/Interview/useTheme";
-import { Calendar } from "@/components/Management/Calendar";
+import { CrewLoading } from "@/components/Crew";
+import { HelpButton, useGuideSurface } from "@/components/Guide";
+import { useTheme } from "@/hooks/useTheme";
+import { Calendar, hebrewWeekday } from "@/components/Management/Calendar";
 import type { EmployeeView } from "@/types";
 
 import { ConstraintForm } from "./ConstraintForm";
-import { HoursPanel } from "./HoursPanel";
 import { IdentityGate } from "./IdentityGate";
 import { SwapPanel } from "./SwapPanel";
 import { useEmployee } from "./useEmployee";
+import { shortDate } from "@/components/DateInput";
 
 /** The employee's personal area.
  *
  *  What [D14](../../../../docs/DECISIONS.md) added, and the boundary of what
- *  it added: this screen shows one person their own hours, their own shifts
- *  and their own warnings, and lets them **ask** not to be scheduled. It has
- *  no control that edits a schedule — the calendar below is the same
+ *  it added: this screen shows one person their own shifts and changes, and
+ *  lets them **ask** not to be scheduled or to swap. Charts of hours against
+ *  the team are the manager's (D27). It has no control that edits a schedule — the calendar below is the same
  *  `readOnly` grid the team view renders, taking no `onDrop`, because the
  *  manager remains the sole decider.
  *
@@ -43,11 +44,13 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
   const state = useEmployee();
   const { view } = state;
   const [section, setSection] = useState<EmployeeSection>("mine");
+  // Only once signed in: the claim gate has none of what the tour points at.
+  useGuideSurface(view ? "employee" : null);
 
   // Not asked yet. Rendering the gate here would flash a claim screen at
   // someone who is already signed in.
   if (view === undefined) {
-    return <div className="workspace-gate" aria-busy="true" />;
+    return <CrewLoading label="פותחים את האזור האישי…" />;
   }
 
   if (view === null) {
@@ -66,18 +69,22 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
   const shiftNames = readShiftNames(view.shifts);
 
   return (
-    <div className="interview">
-      <header className="interview-header">
+    <div className="workspace-surface">
+      <header className="workspace-sidebar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
             <UserCircle size={17} />
           </span>
-          <span>
-            {view.employee}
-            <span className="brand-sub"> · האזור שלי</span>
+          <span className="brand-text">
+            <span className="brand-name">משמרות זהב</span>
+            <span>
+              {view.employee}
+              <span className="brand-sub"> · האזור שלי</span>
+            </span>
           </span>
         </div>
         <div className="header-actions">
+          <HelpButton />
           <button
             type="button"
             className="icon-button"
@@ -101,7 +108,12 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
         </div>
       </header>
 
-      <main id="main-content" className="employee-main">
+      {/* The full board gets the whole window: a week of shifts squeezed into
+          the reading column hides most of it behind a sideways scroll. */}
+      <main
+        id="main-content"
+        className={section === "schedule" ? "employee-main is-wide" : "employee-main"}
+      >
         {/* What moved since this person last looked (D16). Above everything
             because it is the reason to open the app at all — an employee
             whose shift changed should not have to spot it by comparing the
@@ -116,7 +128,7 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
             on the other end of it. */}
         <SwapAlert waiting={view.swaps_awaiting_me ?? 0} />
 
-        <nav className="employee-tabs" role="tablist" aria-label="האזור שלי">
+        <nav className="employee-tabs" role="tablist" aria-label="האזור שלי" data-tour="employee-tabs">
           <EmployeeTab
             active={section === "mine"}
             icon={<CalendarDays size={16} />}
@@ -124,16 +136,11 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
             onClick={() => setSection("mine")}
           />
           <EmployeeTab
-            active={section === "analytics"}
-            icon={<BarChart3 size={16} />}
-            label="הנתונים שלי"
-            onClick={() => setSection("analytics")}
-          />
-          <EmployeeTab
             active={section === "requests"}
             icon={<ClipboardList size={16} />}
             label="בקשות והחלפות"
             badge={pendingCount(view)}
+            tour="employee-requests-tab"
             onClick={() => setSection("requests")}
           />
           <EmployeeTab
@@ -145,20 +152,13 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
         </nav>
 
         <div className="employee-tab-panel" role="tabpanel">
+          {section === "mine" ? <MyDuties view={view} /> : null}
           {section === "mine" ? (
             view.schedule ? (
               <>
                 <MyShifts view={view} />
                 <MyChanges view={view} />
               </>
-            ) : (
-              <NoPublishedSchedule />
-            )
-          ) : null}
-
-          {section === "analytics" ? (
-            view.schedule ? (
-              <HoursPanel summary={view.summary} fairness={view.fairness} />
             ) : (
               <NoPublishedSchedule />
             )
@@ -187,7 +187,7 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
 
           {section === "schedule" ? (
             view.schedule ? (
-              <section className="employee-panel">
+              <section className="employee-panel employee-board">
                 <h2>הסידור המלא</h2>
                 {/* `readOnly`, no `onDrop`: there is no gesture here that could
                     change anything. The same component the manager uses, so the
@@ -213,24 +213,27 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
   );
 }
 
-type EmployeeSection = "mine" | "analytics" | "requests" | "schedule";
+type EmployeeSection = "mine" | "requests" | "schedule";
 
 function EmployeeTab({
   active,
   icon,
   label,
   badge = 0,
+  tour,
   onClick,
 }: {
   active: boolean;
   icon: React.ReactNode;
   label: string;
   badge?: number;
+  tour?: string;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
+      data-tour={tour}
       role="tab"
       aria-selected={active}
       className={active ? "is-active" : undefined}
@@ -296,7 +299,7 @@ function MyShifts({ view }: { view: EmployeeView }) {
             <li key={`${shift.date}-${shift.shift}`}>
               <div className="shift-when">
                 <strong>{shift.weekday}</strong>
-                <span>{formatDate(shift.date)}</span>
+                <span>{shortDate(shift.date)}</span>
               </div>
               <div className="shift-what">
                 <span className="shift-name">{shift.shift}</span>
@@ -310,6 +313,35 @@ function MyShifts({ view }: { view: EmployeeView }) {
             </li>
           );
         })}
+      </ul>
+    </section>
+  );
+}
+
+/** Their own מכלול duties (D44): a whole day each, set by the מכלול
+ *  commander, which no shift of theirs can fall on. Nothing renders for a
+ *  soldier with none -- most of them, and every team outside a מכלול. */
+function MyDuties({ view }: { view: EmployeeView }) {
+  const duties = view.duties ?? [];
+  if (!duties.length) return null;
+  return (
+    <section className="employee-panel">
+      <h2>התורנויות שלי</h2>
+      <ul className="shift-list">
+        {duties.map((duty) => (
+          <li key={duty.duty_date}>
+            <div className="shift-when">
+              <strong>{hebrewWeekday(duty.duty_date)}</strong>
+              <span>{shortDate(duty.duty_date)}</span>
+            </div>
+            <div className="shift-what">
+              <span className="shift-name">{duty.duty_type}</span>
+              <span className="shift-with">
+                {duty.blocks ? "כל היום · תורנות מכלול" : "נרשמה כתורנות שנעשתה"}
+              </span>
+            </div>
+          </li>
+        ))}
       </ul>
     </section>
   );
@@ -339,11 +371,13 @@ function MyChanges({ view }: { view: EmployeeView }) {
               {entry.is_new ? (
                 <span className="change-dot" aria-label="חדש" />
               ) : null}
-              {entry.slot_date ? formatDate(entry.slot_date) : ""}
+              {entry.slot_date ? shortDate(entry.slot_date) : ""}
               {entry.shift_name ? ` · ${entry.shift_name}` : ""}
             </span>
-            {entry.reason ? (
-              <span className="change-reason">{entry.reason}</span>
+            {entry.reason || entry.action.startsWith("complex_duty") ? (
+              <span className="change-reason">
+                {entry.action.startsWith("complex_duty") ? entry.agent_reason : entry.reason}
+              </span>
             ) : null}
           </li>
         ))}
@@ -370,7 +404,7 @@ function ChangeAlert({
   if (unseen <= 0) return null;
 
   return (
-    <section className="change-alert" role="status">
+    <section className="change-alert" role="status" data-tour="change-alert">
       <span className="brand-mark" aria-hidden="true">
         <BellRing size={16} />
       </span>
@@ -418,7 +452,7 @@ function SwapAlert({ waiting }: { waiting: number }) {
 /** Shift names as the profile recorded them.
  *
  *  Read defensively: the profile is model-produced JSON whose shape the
- *  interview owns, so anything unexpected degrades to an empty list rather
+ *  profile owns, so anything unexpected degrades to an empty list rather
  *  than throwing. Never hardcode shift names — they are per-workplace data
  *  (D9). */
 function readShiftNames(shifts: EmployeeView["shifts"]): string[] {
@@ -431,11 +465,3 @@ function readShiftNames(shifts: EmployeeView["shifts"]): string[] {
     )
     .filter((name): name is string => typeof name === "string" && name !== "");
 }
-
-function formatDate(iso: string): string {
-  const date = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return iso;
-  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
-
-export { useEmployee };

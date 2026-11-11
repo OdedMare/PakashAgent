@@ -2,6 +2,34 @@ services:
   db:
     image: postgres:16
     restart: unless-stopped
+    # The image's defaults are sized for a laptop: 128MB of shared buffers
+    # and 100 connections, which several API processes plus the worker use
+    # up between them. Size the memory settings to the host (shared_buffers
+    # about a quarter of its RAM, effective_cache_size about three quarters).
+    # pg_stat_statements is what says which query is slow -- see
+    # docs/SCALING.md for enabling and reading it.
+    command:
+      - postgres
+      - -c
+      - max_connections=${PAKASH_PG_MAX_CONNECTIONS:-200}
+      - -c
+      - shared_buffers=${PAKASH_PG_SHARED_BUFFERS:-512MB}
+      - -c
+      - effective_cache_size=${PAKASH_PG_EFFECTIVE_CACHE_SIZE:-1536MB}
+      - -c
+      - work_mem=${PAKASH_PG_WORK_MEM:-16MB}
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=top
+      - -c
+      - track_io_timing=on
+      - -c
+      - log_min_duration_statement=${PAKASH_PG_LOG_SLOW_MS:-500}
     environment:
       POSTGRES_DB: pakash
       POSTGRES_USER: pakash
@@ -18,35 +46,66 @@ services:
     build: ./backend
     restart: unless-stopped
     environment:
+      # API processes in this container. Every route is a sync handler on a
+      # thread pool, so one process serves one CPU's worth of Python; with
+      # many teams signed in that one process is the queue. Each process
+      # holds up to PAKASH_DATABASE_POOL_SIZE connections plus one LISTEN:
+      # this x (pool + 1), plus the worker's pool, plus model calls in
+      # flight, must stay under the database's max_connections above.
+      WEB_CONCURRENCY: ${PAKASH_API_WORKERS:-4}
       PAKASH_DATABASE_URL: ${PAKASH_DATABASE_URL:-postgresql://pakash:pakash@db:5432/pakash}
       PAKASH_DATABASE_SCHEMA: ${PAKASH_DATABASE_SCHEMA:-pakash}
       PAKASH_DATABASE_HOST: db
       PAKASH_RUNTIME_SETTINGS_FILE: /data/runtime-settings.json
-      # Signs the workspace session cookie. Unset, the backend generates one
-      # per process — fine for a single-container dev run, but sessions then
-      # die on every restart. Set it in .env for anything long-lived.
+      # The API runs the job worker in-process by default; here the
+      # `worker` service below is the worker, so the API leaves it to it.
+      PAKASH_EMBEDDED_WORKER: ${PAKASH_EMBEDDED_WORKER:-false}
+      # Signs the workspace session cookie. Unset, one is generated and kept
+      # in the database, shared by every replica and restart (D39).
       PAKASH_SESSION_SECRET: ${PAKASH_SESSION_SECRET:-}
+      # Unlocks the settings panel, on top of the boss login. Falls back to
+      # the committed default (same as settings.py) -- an empty value here
+      # would override it and lock the panel. Override it in .env.
+      PAKASH_SETTINGS_PASSWORD: ${PAKASH_SETTINGS_PASSWORD:-010802}
+      # The צוות משמרות זהב console at /admin (D28). Empty = same as the
+      # settings password above.
+      PAKASH_ADMIN_PASSWORD: ${PAKASH_ADMIN_PASSWORD:-}
+      # Self-service team creation from the login page. Off: the console
+      # opens teams.
+      PAKASH_OPEN_SIGNUP: ${PAKASH_OPEN_SIGNUP:-false}
       # The model runs on the host, not in the compose network.
       PAKASH_LLM_BASE_URL: ${PAKASH_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
       PAKASH_LLM_MODEL: ${PAKASH_LLM_MODEL:-gemma3:27b}
-      # Wall time for ONE HTTP completion. 0 = no limit: generation is a
-      # background job the browser polls, so giving up is the UI's decision,
-      # not a number guessed here. Set a positive value only to bound a
-      # server that HANGS.
+      # Wall time for ONE HTTP completion. 0 = the built-in ceiling (300s for
+      # chat, 900s for a build's translation); a call past it fails and frees
+      # its slot instead of blocking everything behind it.
       PAKASH_LLM_TIMEOUT_SECONDS: ${PAKASH_LLM_TIMEOUT_SECONDS:-0}
-      # Interactive calls fall back before a proxy turns queueing into a 500.
-      # Schedule generation is background work and is not bounded by this.
-      PAKASH_LLM_QUEUE_SECONDS: ${PAKASH_LLM_QUEUE_SECONDS:-180}
-      # Env-only by design: the semaphore is built once at import, so this
-      # cannot be changed from the settings panel. 1 suits Ollama; raise it
-      # for a batching server (vLLM, TGI).
-      PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-1}
-      # How wide one scheduling model call is: `day` or `week`. `day` is the
-      # accurate default -- each date is verified and repaired on its own.
-      # `week` builds up to seven days per call, which is several times
-      # faster on a slow local model, at the cost of re-answering the whole
-      # span when one row is wrong. Also editable live in the settings panel.
-      PAKASH_SCHEDULE_GENERATION_MODE: ${PAKASH_SCHEDULE_GENERATION_MODE:-day}
+      # 0 = no queue deadline. Set a positive value only when interactive
+      # calls should deliberately give up while the model slot is occupied.
+      PAKASH_LLM_QUEUE_SECONDS: ${PAKASH_LLM_QUEUE_SECONDS:-0}
+      # Shared across API and worker processes through PostgreSQL advisory
+      # locks. 4 suits a hosted API; lower it to 1 for a local Ollama.
+      PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-4}
+      # How many of those one team may hold; 0 = all of them.
+      PAKASH_LLM_TEAM_CONCURRENCY: ${PAKASH_LLM_TEAM_CONCURRENCY:-0}
+      PAKASH_LLM_REASONING_EFFORT: ${PAKASH_LLM_REASONING_EFFORT:-}
+      # The constraint solver that assigns every schedule (bl/solver/):
+      # seconds per solve and parallel workers. Also editable in the panel.
+      PAKASH_SOLVER_TIME_LIMIT_SECONDS: ${PAKASH_SOLVER_TIME_LIMIT_SECONDS:-10}
+      PAKASH_SOLVER_WORKERS: ${PAKASH_SOLVER_WORKERS:-8}
+      # Redis for the read cache (D50), shared by the API and the worker so a
+      # job's write retires what the API cached. All empty = off. Host/port/
+      # username override the same parts of the URL; a host alone is enough.
+      # Every key starts with the prefix. Also editable in the settings panel.
+      # `docker compose --profile redis up` starts the one below:
+      # PAKASH_REDIS_URL=redis://redis:6379/0
+      PAKASH_REDIS_URL: ${PAKASH_REDIS_URL:-}
+      PAKASH_REDIS_HOST: ${PAKASH_REDIS_HOST:-}
+      PAKASH_REDIS_PORT: ${PAKASH_REDIS_PORT:-}
+      PAKASH_REDIS_USERNAME: ${PAKASH_REDIS_USERNAME:-}
+      PAKASH_REDIS_PASSWORD: ${PAKASH_REDIS_PASSWORD:-}
+      PAKASH_REDIS_KEY_PREFIX: ${PAKASH_REDIS_KEY_PREFIX:-pakash}
+      PAKASH_REDIS_CACHE_TTL_SECONDS: ${PAKASH_REDIS_CACHE_TTL_SECONDS:-300}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -58,7 +117,7 @@ services:
       db:
         condition: service_healthy
 
-  copilot:
+  worker:
     build: ./backend
     command: ["python", "-m", "app.worker"]
     restart: unless-stopped
@@ -74,11 +133,28 @@ services:
       # would make the same work succeed or fail depending on which process
       # picked it up.
       PAKASH_LLM_TIMEOUT_SECONDS: ${PAKASH_LLM_TIMEOUT_SECONDS:-0}
-      PAKASH_LLM_QUEUE_SECONDS: ${PAKASH_LLM_QUEUE_SECONDS:-180}
-      PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-1}
-      PAKASH_SCHEDULE_GENERATION_MODE: ${PAKASH_SCHEDULE_GENERATION_MODE:-day}
+      PAKASH_LLM_QUEUE_SECONDS: ${PAKASH_LLM_QUEUE_SECONDS:-0}
+      PAKASH_LLM_MAX_CONCURRENCY: ${PAKASH_LLM_MAX_CONCURRENCY:-4}
+      PAKASH_LLM_TEAM_CONCURRENCY: ${PAKASH_LLM_TEAM_CONCURRENCY:-0}
+      PAKASH_LLM_REASONING_EFFORT: ${PAKASH_LLM_REASONING_EFFORT:-}
+      PAKASH_SOLVER_TIME_LIMIT_SECONDS: ${PAKASH_SOLVER_TIME_LIMIT_SECONDS:-10}
+      PAKASH_SOLVER_WORKERS: ${PAKASH_SOLVER_WORKERS:-8}
+      PAKASH_REDIS_URL: ${PAKASH_REDIS_URL:-}
+      PAKASH_REDIS_HOST: ${PAKASH_REDIS_HOST:-}
+      PAKASH_REDIS_PORT: ${PAKASH_REDIS_PORT:-}
+      PAKASH_REDIS_USERNAME: ${PAKASH_REDIS_USERNAME:-}
+      PAKASH_REDIS_PASSWORD: ${PAKASH_REDIS_PASSWORD:-}
+      PAKASH_REDIS_KEY_PREFIX: ${PAKASH_REDIS_KEY_PREFIX:-pakash}
+      PAKASH_REDIS_CACHE_TTL_SECONDS: ${PAKASH_REDIS_CACHE_TTL_SECONDS:-300}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      PAKASH_COPILOT_SCAN_SECONDS: ${PAKASH_COPILOT_SCAN_SECONDS:-1800}
+      # Three lanes only take manager chat, so one slow turn does not hold
+      # the others; the rest checkpoint one generation span at a time.
+      PAKASH_WORKER_CONCURRENCY: ${PAKASH_WORKER_CONCURRENCY:-6}
+      # Solver threads this process runs at once (empty: every CPU). On a
+      # host shared with PostgreSQL and the API, leave them room: a build
+      # that takes every core is what makes pages stall while it solves.
+      PAKASH_SOLVER_CPU_BUDGET: ${PAKASH_SOLVER_CPU_BUDGET:-}
+      PAKASH_CHAT_WORKERS: ${PAKASH_CHAT_WORKERS:-3}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -101,6 +177,14 @@ services:
       - "3000:3000"
     depends_on:
       - backend
+
+  # Optional: the read cache's Redis (D50). Started only with
+  # `--profile redis`; the app works the same without it.
+  redis:
+    image: redis:7
+    profiles: ["redis"]
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru"]
 
 volumes:
   pakash-db:

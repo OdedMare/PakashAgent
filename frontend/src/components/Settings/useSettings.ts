@@ -1,10 +1,11 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 
-import { getSettings, probeModels, updateSettings } from "@/services/api";
+import { getSettings, probeModels, probeRedis, updateSettings } from "@/services/api";
+import type { RedisReport } from "@/types";
 
-export type SettingsSection = "agent" | "schedule" | "database";
+export type SettingsSection = "agent" | "schedule" | "database" | "redis";
 
 /** What the backend returns in place of a stored secret, and what it accepts
  *  back to mean "unchanged". Must match `MASKED_SECRET` in
@@ -24,7 +25,10 @@ export function useSettings() {
   const [activeSection, setActiveSection] = useState<SettingsSection>("agent");
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [loaded, setLoaded] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  // The settings password, once the server has accepted it. Held here and
+  // nowhere else: closing the panel unmounts the hook and locks it again.
+  const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -38,24 +42,38 @@ export function useSettings() {
   // is" — and the general refresh button would never show its spinner.
   const [loadingRole, setLoadingRole] = useState<string | null>(null);
   const [errorsByRole, setErrorsByRole] = useState<Record<string, string>>({});
+  const [redisReport, setRedisReport] = useState<RedisReport | null>(null);
+  const [redisTesting, setRedisTesting] = useState(false);
+  const [redisError, setRedisError] = useState("");
 
-  useEffect(() => {
-    getSettings()
-      .then((next) => {
-        setValues(next as unknown as Record<string, unknown>);
-        setLoaded(true);
-        // Fill the model datalist from the saved connection right away. A
-        // failure here is not worth showing before the boss asks for it —
-        // the model server simply may not be running yet.
-        void probeModels({ llm_base_url: String(next.llm_base_url ?? "") })
-          .then((result) => setModelsByRole((current) => ({
-            ...current, "": result.models,
-          })))
-          .catch(() => undefined);
-      })
-      .catch((reason) => setError(errorMessage(reason, "טעינת ההגדרות נכשלה")))
-      .finally(() => setLoading(false));
-  }, []);
+  /** Load the settings with `candidate` as the password. The load itself is
+   *  the check: a wrong password answers 403 and nothing is shown. */
+  const unlock = async (candidate: string) => {
+    setLoading(true);
+    setError("");
+    try {
+      const next = await getSettings(candidate);
+      setValues(next as unknown as Record<string, unknown>);
+      setPassword(candidate);
+      setLoaded(true);
+      // Fill the model datalist from the saved connection right away. A
+      // failure here is not worth showing before the boss asks for it —
+      // the model server simply may not be running yet.
+      void probeModels(
+        { llm_base_url: String(next.llm_base_url ?? "") }, candidate,
+      )
+        .then((result) => setModelsByRole((current) => ({
+          ...current, "": result.models,
+        })))
+        .catch(() => undefined);
+      // The Redis card shows the saved connection as soon as it is opened.
+      void probeRedis({}, candidate).then(setRedisReport).catch(() => undefined);
+    } catch (reason) {
+      setError(errorMessage(reason, "טעינת ההגדרות נכשלה"));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -63,7 +81,7 @@ export function useSettings() {
     setError("");
     setMessage("");
     try {
-      const saved = await updateSettings(values);
+      const saved = await updateSettings(values, password);
       setValues(saved as unknown as Record<string, unknown>);
       setMessage("ההגדרות נשמרו ויחולו על הפנייה הבאה.");
     } catch (reason) {
@@ -94,7 +112,7 @@ export function useSettings() {
         llm_base_url: String(values[urlKey] ?? ""),
         openai_api_key: String(values[secretKey] ?? ""),
         role,
-      });
+      }, password);
       setModelsByRole((current) => ({ ...current, [role]: result.models }));
     } catch (reason) {
       setErrorsByRole((current) => ({
@@ -103,6 +121,28 @@ export function useSettings() {
       }));
     } finally {
       setLoadingRole(null);
+    }
+  };
+
+  /** Test the Redis connection typed in the form, before it is saved. An
+   *  untouched password is still masked, which the backend reads as "use the
+   *  stored one". */
+  const testRedis = async () => {
+    setRedisTesting(true);
+    setRedisError("");
+    try {
+      setRedisReport(await probeRedis({
+        redis_url: String(values.redis_url ?? ""),
+        redis_host: String(values.redis_host ?? ""),
+        redis_port: String(values.redis_port ?? ""),
+        redis_username: String(values.redis_username ?? ""),
+        redis_password: String(values.redis_password ?? ""),
+        redis_key_prefix: String(values.redis_key_prefix ?? ""),
+      }, password));
+    } catch (reason) {
+      setRedisError(errorMessage(reason, "בדיקת החיבור נכשלה"));
+    } finally {
+      setRedisTesting(false);
     }
   };
 
@@ -123,8 +163,10 @@ export function useSettings() {
 
   return {
     activeSection, setActiveSection, loaded, loading, saving, message, error,
+    unlock,
     modelsFor, modelsErrorFor, loadingRole,
     save, loadModels, set, text, checked, secretSaved,
+    redisReport, redisTesting, redisError, testRedis,
   };
 }
 

@@ -1,11 +1,18 @@
 "use client";
 
+import { CalendarDays } from "lucide-react";
 import { useRef, useState } from "react";
+
+import { displayDate } from "./dateFormat";
+import { openNativePicker } from "./pickers";
+
+export { displayDate, shortDate } from "./dateFormat";
 
 /** A controlled ISO date with a fixed Israeli display format (DD/MM/YYYY).
  * Native date inputs follow the browser locale and may show MM/DD even in an
  * RTL screen, so this keeps the visible order explicit while APIs still get
- * YYYY-MM-DD. */
+ * YYYY-MM-DD. The calendar button beside it opens the browser's own date
+ * picker on a hidden native input, so a date can be typed or chosen. */
 export function DateInput({
   value,
   onChange,
@@ -20,6 +27,7 @@ export function DateInput({
   max?: string;
 }) {
   const input = useRef<HTMLInputElement>(null);
+  const native = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState(() => displayDate(value));
   const [editing, setEditing] = useState(false);
 
@@ -33,44 +41,68 @@ export function DateInput({
   };
 
   return (
-    <input
-      {...props}
-      ref={input}
-      type="text"
-      dir="ltr"
-      inputMode="numeric"
-      autoComplete="off"
-      placeholder="DD/MM/YYYY"
-      value={editing ? draft : displayDate(value)}
-      required={required}
-      maxLength={10}
-      onChange={(event) => {
-        const next = dateDraft(event.target.value);
-        setDraft(next);
-        input.current?.setCustomValidity("");
-        const iso = parseDisplayDate(next);
-        if (iso && (!min || iso >= min) && (!max || iso <= max)) onChange(iso);
-        if (!next) onChange("");
-      }}
-      onBlur={(event) => {
-        const message = validate(draft);
-        event.currentTarget.setCustomValidity(message);
-        setEditing(false);
-        props.onBlur?.(event);
-      }}
-      onFocus={(event) => {
-        setDraft(displayDate(value));
-        setEditing(true);
-        props.onFocus?.(event);
-      }}
-      aria-label={props["aria-label"] ?? "תאריך בפורמט יום/חודש/שנה"}
-    />
+    <span className="picker-field">
+      <input
+        {...props}
+        className={`picker-field-text${props.className ? ` ${props.className}` : ""}`}
+        ref={input}
+        type="text"
+        dir="ltr"
+        inputMode="numeric"
+        autoComplete="off"
+        placeholder="DD/MM/YYYY"
+        value={editing ? draft : displayDate(value)}
+        required={required}
+        maxLength={10}
+        onChange={(event) => {
+          const next = dateDraft(event.target.value);
+          setDraft(next);
+          input.current?.setCustomValidity("");
+          const iso = parseDisplayDate(next);
+          if (iso && (!min || iso >= min) && (!max || iso <= max)) onChange(iso);
+          if (!next) onChange("");
+        }}
+        onBlur={(event) => {
+          const message = validate(draft);
+          event.currentTarget.setCustomValidity(message);
+          setEditing(false);
+          props.onBlur?.(event);
+        }}
+        onFocus={(event) => {
+          setDraft(displayDate(value));
+          setEditing(true);
+          props.onFocus?.(event);
+        }}
+        aria-label={props["aria-label"] ?? "תאריך בפורמט יום/חודש/שנה"}
+      />
+      <button
+        type="button"
+        className="picker-field-button"
+        disabled={props.disabled || props.readOnly}
+        aria-label="בחירת תאריך מלוח שנה"
+        title="בחירה מלוח שנה"
+        onClick={() => openNativePicker(native.current)}
+      >
+        <CalendarDays size={16} aria-hidden="true" />
+      </button>
+      <input
+        ref={native}
+        type="date"
+        className="picker-field-native"
+        tabIndex={-1}
+        aria-hidden="true"
+        value={value}
+        min={min}
+        max={max}
+        onChange={(event) => {
+          if (!event.target.value) return;
+          input.current?.setCustomValidity("");
+          setEditing(false);
+          onChange(event.target.value);
+        }}
+      />
+    </span>
   );
-}
-
-export function displayDate(iso: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : iso;
 }
 
 function parseDisplayDate(value: string): string {

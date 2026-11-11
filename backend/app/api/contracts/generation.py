@@ -1,0 +1,72 @@
+"""Building a period: generated, day by day, or blank (D18)."""
+
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
+
+
+class RequiredAssignment(BaseModel):
+    """One manager-pinned placement that generation must preserve."""
+
+    employee: str = Field(min_length=1, max_length=200)
+    shift: str = Field(min_length=1, max_length=200)
+    date: str = Field(min_length=1, max_length=20)
+
+
+class StaffingOverride(BaseModel):
+    """One date whose required seats differ from the shift's normal staffing."""
+
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    shift: str = Field(min_length=1, max_length=200)
+    headcount: int = Field(ge=0, le=100)
+
+
+class GenerateRequest(BaseModel):
+    """Build a period. Omitted dates mean the current week."""
+
+    starts_on: Optional[str] = None
+    ends_on: Optional[str] = None
+    # The dates the agent is asked for, when that is less than the period.
+    # The period keeps its whole-week bounds so the board can find it by its
+    # Sunday; the days outside this run open empty, for the manager (D18).
+    build_from: Optional[str] = Field(default=None, max_length=10)
+    build_through: Optional[str] = Field(default=None, max_length=10)
+    instructions: str = Field(default="", max_length=2000)
+    required_assignments: List[RequiredAssignment] = Field(
+        default=[], max_length=100
+    )
+    # Only these shift types are built ("only the nights"); empty means all.
+    shifts: List[str] = Field(default=[], max_length=50)
+    staffing_overrides: List[StaffingOverride] = Field(default=[], max_length=100)
+
+
+class GenerateDayRequest(BaseModel):
+    """Rebuild one date inside an existing draft."""
+
+    date: str = Field(min_length=10, max_length=10)
+    instructions: str = Field(default="", max_length=2000)
+
+
+class GenerateRangeRequest(BaseModel):
+    """Build a run of dates inside an existing draft."""
+
+    starts_on: str = Field(min_length=10, max_length=10)
+    ends_on: str = Field(min_length=10, max_length=10)
+    instructions: str = Field(default="", max_length=2000)
+    # Absorb into the rows already there instead of rebuilding them: a new
+    # soldier or a new shift moves as few people as it needs.
+    keep_existing: bool = False
+    # Only these shift types are rebuilt; rows on the others stand.
+    shifts: List[str] = Field(default=[], max_length=50)
+    staffing_overrides: List[StaffingOverride] = Field(default=[], max_length=100)
+
+
+class BlankRequest(BaseModel):
+    """Open an empty period for the manager to fill in by hand (D18).
+
+    Same date arguments as `GenerateRequest` and deliberately no
+    `instructions`: there is no model on this path to instruct.
+    """
+
+    starts_on: Optional[str] = None
+    ends_on: Optional[str] = None

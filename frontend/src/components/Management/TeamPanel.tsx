@@ -1,14 +1,43 @@
 "use client";
 
-import { CalendarOff, Clock3, GripVertical, Pencil, Plus, Repeat2, Trash2, UserRound } from "lucide-react";
+import {
+  CalendarDays,
+  CalendarOff,
+  Clock3,
+  GripVertical,
+  Pencil,
+  Plus,
+  Repeat2,
+  Trash2,
+  Undo2,
+  UserMinus,
+  UserRound,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { EMPLOYEE_DRAG_TYPE } from "@/components/Board/dragData";
-import { DateInput } from "@/components/DateInput";
-import type { Constraint, ShiftStats } from "@/types";
+import { displayDate } from "@/components/DateInput";
+import type { Departure } from "@/services/api";
+import type { Constraint, DayCycle, ShiftStats } from "@/types";
 
-import { formatDate } from "./Calendar";
+import { ConfirmDeparture } from "./ConfirmDeparture";
 import { buildPalette, colorStyle } from "./palette";
+import { SHIFT_LEVEL_LABELS, STATUS_LABELS, soldierSummary, statusOf } from "./SoldierFields";
+import {
+  SOURCE_LABELS,
+  SHIFT_TYPE_LABELS,
+  formatWindow,
+  text,
+  exitPatternLabel,
+  strings,
+  record,
+  formatHours,
+  shiftHeadcount,
+  weekendHeadcount,
+} from "./teamLabels";
+import { EmployeeForm, ShiftForm } from "./TeamForms";
+import { ConstraintForm } from "./TeamConstraintForm";
+import { ReserveWeek } from "./ReserveWeek";
 
 /** The roster and the constraints recorded against it.
  *
@@ -30,9 +59,14 @@ export function TeamPanel({
   draggable = false,
   readOnly = false,
   rotationMode = "round",
+  dayCycles = [],
+  today = "",
   onAdd,
   onRemove,
   onSaveProfile,
+  onDeleteShift,
+  onPreviewDeparture,
+  onDepart,
 }: {
   employees: Record<string, unknown>[];
   shifts: Record<string, unknown>[];
@@ -43,6 +77,8 @@ export function TeamPanel({
   draggable?: boolean;
   readOnly?: boolean;
   rotationMode?: "round" | "triplet";
+  dayCycles?: DayCycle[];
+  today?: string;
   onAdd?: (input: {
     employee: string;
     constraint_date: string;
@@ -53,19 +89,30 @@ export function TeamPanel({
     is_hard?: boolean;
     reason?: string;
     source?: string;
+    constraint_type?: "availability" | "duty";
   }) => void;
   onRemove?: (rowId: string) => void;
   onSaveProfile?: (input: {
     employees?: Record<string, unknown>[];
     shifts?: Record<string, unknown>[];
   }) => void;
+  /** Deleting a shift type archives it: stored schedules keep their rows. */
+  onDeleteShift?: (name: string) => Promise<void>;
+  /** Deleting an employee is a departure: an end date, later shifts vacated. */
+  onPreviewDeparture?: (input: { employee: string; effective_date?: string }) => Promise<Departure>;
+  onDepart?: (input: { employee: string; effective_date?: string; reason?: string }) => Promise<boolean>;
 }) {
   const [adding, setAdding] = useState(false);
+  const [departing, setDeparting] = useState<string | null>(null);
+  const [weekOf, setWeekOf] = useState<string | null>(null);
+  const [departBusy, setDepartBusy] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<string | null>(null);
   const [addingEmployee, setAddingEmployee] = useState(false);
   const [editingShift, setEditingShift] = useState<string | null>(null);
   const [addingShift, setAddingShift] = useState(false);
+  const [deletingShift, setDeletingShift] = useState<string | null>(null);
   const names = employees
+    .filter((row) => !row.inactive_from || !today || text(row.inactive_from) > today)
     .map((row) => text(row.name))
     .filter((name) => name !== "");
   const shiftNames = shifts
@@ -80,6 +127,24 @@ export function TeamPanel({
     () => new Map((stats?.by_employee ?? []).map((row) => [row.employee, row])),
     [stats?.by_employee],
   );
+  const archived = employees.filter((row) => row.inactive_from && today && text(row.inactive_from) <= today);
+  const offCount = names.filter((name) => isOff(employees.find((row) => text(row.name) === name))).length;
+  /** The on/off switch. Off keeps the soldier on the roster and out of every
+   *  build; the server frees their draft shifts from today and refits around
+   *  the gap. On again, they are fit in like a new soldier. */
+  const toggleDuty = (name: string) => onSaveProfile?.({
+    employees: employees.map((row) => text(row.name) === name
+      ? { ...row, on_duty: isOff(row) }
+      : row),
+  });
+  /** Undo a departure. Only the end date goes; vacated shifts stay vacated. */
+  const restore = (name: string) => onSaveProfile?.({
+    employees: employees.map((row) => {
+      if (text(row.name) !== name) return row;
+      const { inactive_from: _ended, ...rest } = row;
+      return rest;
+    }),
+  });
 
   return (
     <aside className="team-panel" aria-label="כוח האדם, התקינה והאילוצים">
@@ -88,7 +153,13 @@ export function TeamPanel({
           <UserRound size={15} />
           כוח אדם
           <span className="panel-count">{names.length}</span>
+          {offCount ? <span className="panel-count is-off" title="כבויים — לא נלקחים בחשבון בשיבוץ">{offCount} כבויים</span> : null}
         </h3>
+        {onSaveProfile && names.length ? (
+          <p className="roster-help">
+            המתג ליד כל חייל/ת קובע אם הוא/היא בשיבוץ. כבוי/ה — לא נלקח/ת בחשבון כלל, והמשמרות שלו/ה בטיוטות מהיום מתפנות ומשובצות מחדש.
+          </p>
+        ) : null}
         {draggable && names.length ? (
           <p className="roster-help">
             גררו עובד או עובדת אל משמרת פנויה בלוח.
@@ -104,18 +175,20 @@ export function TeamPanel({
                 (!row.available || Boolean(row.start_time || row.end_time)),
             ).length;
             const load = loadByName.get(name);
+            const off = isOff(person);
+            const canDrag = draggable && !off;
             return (
               <li
                 key={name}
-                className={`roster-card${draggable ? " is-draggable" : ""}`}
-                draggable={draggable}
+                className={`roster-card${canDrag ? " is-draggable" : ""}${off ? " is-off" : ""}`}
+                draggable={canDrag}
                 onDragStart={(event) => {
-                  if (!draggable) return;
+                  if (!canDrag) return;
                   event.dataTransfer.setData(EMPLOYEE_DRAG_TYPE, name);
                   event.dataTransfer.setData("text/plain", name);
                   event.dataTransfer.effectAllowed = "copy";
                 }}
-                title={draggable ? `גרירת ${name} למשמרת` : undefined}
+                title={canDrag ? `גרירת ${name} למשמרת` : undefined}
               >
                 <span
                   className="roster-avatar"
@@ -128,12 +201,15 @@ export function TeamPanel({
                   <span className="roster-name">{name}</span>
                   <span className="roster-role">
                     {text(person?.role) || "ללא תפקיד מוגדר"}
-                    {person ? ` · ${exitPatternLabel(person)}` : ""}
+                    {person ? ` · ${exitPatternLabel(person, dayCycles)}` : ""}
                     {text(person?.rotation_group) ? ` ${text(person?.rotation_group)}` : ""}
-                    {text(person?.service_type) ? ` · ${SERVICE_TYPE_LABELS[text(person?.service_type)] ?? text(person?.service_type)}` : ""}
+                    {text(person?.service_type) ? ` · ${STATUS_LABELS[statusOf(person?.service_type, person?.rank_group)] ?? text(person?.service_type)}` : ""}
                   </span>
+                  {off ? <span className="roster-note roster-off-note">כבוי/ה — לא נלקח/ת בחשבון בשיבוץ</span> : null}
+                  {text(person?.inactive_from) ? <span className="roster-note">מסיים/ת · {displayDate(text(person?.inactive_from))}</span> : null}
                   {person?.is_shift_manager ? <span className="roster-capability">מפקד/ת משמרת</span> : null}
                   {person?.can_train ? <span className="roster-capability">מוסמך/ת לחפוף</span> : null}
+                  {soldierSummary(person) ? <span className="roster-capability">{soldierSummary(person)}</span> : null}
                   {text(person?.notes) ? <span className="roster-note">{text(person?.notes)}</span> : null}
                 </span>
                 <span className="roster-load" aria-label="עומס בסידור הנוכחי">
@@ -147,8 +223,22 @@ export function TeamPanel({
                     </span>
                   ) : null}
                 </span>
-                {draggable ? (
+                {canDrag ? (
                   <GripVertical className="roster-grip" size={17} aria-hidden="true" />
+                ) : null}
+                {!readOnly && onAdd && onRemove && text(person?.service_type) === "reserve" ? (
+                  <button
+                    type="button"
+                    className={`icon-button subtle${weekOf === name ? " is-active" : ""}`}
+                    onClick={() => setWeekOf(weekOf === name ? null : name)}
+                    aria-label={`הימים של ${name} בשבוע`}
+                    title="אילו ימים מתאימים השבוע"
+                  >
+                    <CalendarDays size={13} />
+                  </button>
+                ) : null}
+                {onSaveProfile ? (
+                  <DutySwitch name={name} on={!off} onToggle={() => toggleDuty(name)} />
                 ) : null}
                 {onSaveProfile ? (
                   <button
@@ -163,6 +253,27 @@ export function TeamPanel({
                     <Pencil size={13} />
                   </button>
                 ) : null}
+                {onSaveProfile && text(person?.inactive_from) ? (
+                  <button
+                    type="button"
+                    className="icon-button subtle"
+                    onClick={() => restore(name)}
+                    aria-label={`ביטול סיום העבודה של ${name}`}
+                    title="ביטול סיום העבודה"
+                  >
+                    <Undo2 size={13} />
+                  </button>
+                ) : onDepart && onPreviewDeparture ? (
+                  <button
+                    type="button"
+                    className="icon-button subtle"
+                    onClick={() => setDeparting(name)}
+                    aria-label={`הוצאת ${name} מהסגל`}
+                    title="הוצאה מהסגל"
+                  >
+                    <UserMinus size={13} />
+                  </button>
+                ) : null}
               </li>
             );
           })}
@@ -170,6 +281,34 @@ export function TeamPanel({
             <li className="panel-empty">אין עובדים בפרופיל עדיין.</li>
           ) : null}
         </ul>
+        {weekOf && onAdd && onRemove ? (
+          <ReserveWeek name={weekOf} today={today} constraints={constraints} onAdd={onAdd} onRemove={onRemove} />
+        ) : null}
+        {archived.length ? <details className="roster-archive"><summary>עובדים שסיימו את העבודה ({archived.length})</summary>
+          <ul>{archived.map((person) => <li key={text(person.name)}><strong>{text(person.name)}</strong>
+            <span>סיום עבודה · {displayDate(text(person.inactive_from))}</span>
+            {onSaveProfile ? <button type="button" className="ghost-button" onClick={() => restore(text(person.name))}>
+              <Undo2 size={13} /> החזרה לסגל
+            </button> : null}</li>)}</ul>
+        </details> : null}
+        {departing && onDepart && onPreviewDeparture ? (
+          <ConfirmDeparture
+            employee={departing}
+            today={today}
+            busy={departBusy}
+            onPreview={onPreviewDeparture}
+            onCancel={() => setDeparting(null)}
+            onConfirm={async ({ effective_date, reason }) => {
+              setDepartBusy(true);
+              const done = await onDepart({ employee: departing, effective_date, reason });
+              setDepartBusy(false);
+              if (done) {
+                setDeparting(null);
+                if (editingEmployee === departing) setEditingEmployee(null);
+              }
+            }}
+          />
+        ) : null}
         {onSaveProfile ? (
           addingEmployee || editingEmployee ? (
             <EmployeeForm
@@ -178,6 +317,7 @@ export function TeamPanel({
                 : undefined}
               shiftNames={shiftNames}
               defaultExitPattern={rotationMode}
+              dayCycles={dayCycles}
               onCancel={() => {
                 setAddingEmployee(false);
                 setEditingEmployee(null);
@@ -224,9 +364,10 @@ export function TeamPanel({
                     {text(shift.start_time) || "—"}–{text(shift.end_time) || "—"}
                     {` · ${SHIFT_TYPE_LABELS[text(shift.shift_type)] ?? (Boolean(shift.is_on_call) ? "כוננות" : "רגילה")}`}
                     {shift.requires_shift_manager ? " · נדרש מפקד/ת" : ""}
+                    {text(shift.min_competence) ? ` · משמרת חזקה (${SHIFT_LEVEL_LABELS[text(shift.min_competence)] ?? ""})` : ""}
                   </span>
                 </span>
-                <span className="roster-load">תקן {shiftHeadcount(shift)}</span>
+                <span className="roster-load">תקן {shiftHeadcount(shift)}{weekendHeadcount(shift) ? ` · סופ״ש ${weekendHeadcount(shift)}` : ""}</span>
                 {onSaveProfile ? (
                   <button
                     type="button"
@@ -240,10 +381,48 @@ export function TeamPanel({
                     <Pencil size={13} />
                   </button>
                 ) : null}
+                {onDeleteShift && shiftNames.length > 1 ? (
+                  <button
+                    type="button"
+                    className="icon-button subtle"
+                    onClick={() => {
+                      setAddingShift(false);
+                      setEditingShift(null);
+                      setDeletingShift(name);
+                    }}
+                    aria-label={`מחיקת סוג המשמרת ${name}`}
+                    title="מחיקת סוג משמרת"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                ) : null}
               </li>
             );
           })}
         </ul>
+        {deletingShift && onDeleteShift ? (
+          <div className="constraint-form profile-form" role="alertdialog" aria-label={`מחיקת סוג המשמרת ${deletingShift}`}>
+            <strong>למחוק את סוג המשמרת {deletingShift}?</strong>
+            <small>
+              סידורים שכבר נבנו נשארים כפי שהם. הבנייה הבאה לא תכלול את המשמרת,
+              והיא תוסר מהמשמרות המתאימות ומהאילוצים הקבועים של העובדים.
+            </small>
+            <div className="constraint-form-actions">
+              <button type="button" className="ghost-button" onClick={() => setDeletingShift(null)}>ביטול</button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={async () => {
+                  const name = deletingShift;
+                  setDeletingShift(null);
+                  await onDeleteShift(name);
+                }}
+              >
+                <Trash2 size={13} /> מחיקה
+              </button>
+            </div>
+          </div>
+        ) : null}
         {onSaveProfile ? (
           addingShift || editingShift ? (
             <ShiftForm
@@ -277,14 +456,14 @@ export function TeamPanel({
           )
         ) : null}
         <p className="roster-help">
-          שינוי סוג משמרת משפיע על סידורים חדשים; לוחות קיימים נשמרים כפי שנבנו.
+          משמרת חדשה נכנסת גם לטיוטות מהיום והלאה, בלי לשנות את השיבוץ הקיים. שינוי במשמרת קיימת חל על בנייה הבאה.
         </p>
       </section>
 
       <section className="panel-section">
         <h3>
           <CalendarOff size={15} />
-          אילוצים
+          אילוצים ותורנויות
           <span className="panel-count">{constraints.length + recurringConstraints.length}</span>
         </h3>
 
@@ -295,8 +474,9 @@ export function TeamPanel({
               <div className="constraint-main">
                 <span className="constraint-who">{employee}</span>
                 <span className="constraint-when">
-                  קבוע · {strings(rule.days).length ? strings(rule.days).join(", ") : "כל יום"}
+                  {text(rule.constraint_type) === "duty" ? "תורנות קבועה" : "קבוע"} · {strings(rule.days).length ? strings(rule.days).join(", ") : "כל יום"}
                   {strings(rule.shifts).length ? ` · ${strings(rule.shifts).join(", ")}` : " · כל המשמרות"}
+                  {text(rule.constraint_type) === "duty" && (text(rule.start_time) || text(rule.end_time)) ? ` · ${text(rule.start_time)}–${text(rule.end_time)}` : ""}
                 </span>
               </div>
               {text(rule.reason) ? <span className="constraint-reason">{text(rule.reason)}</span> : null}
@@ -318,8 +498,12 @@ export function TeamPanel({
               <div className="constraint-main">
                 <span className="constraint-who">{row.employee}</span>
                 <span className="constraint-when">
-                  {formatDate(row.constraint_date)}
-                  {row.shift_name ? ` · ${row.shift_name}` : " · כל היום"}
+                  {displayDate(row.constraint_date)}
+                  {row.source === "complex"
+                    ? " · תורנות מכלול · כל היום"
+                    : row.constraint_type === "duty"
+                    ? " · תורנות חוסמת"
+                    : row.shift_name ? ` · ${row.shift_name}` : " · כל היום"}
                   {formatWindow(row) ? ` · ${formatWindow(row)}` : ""}
                 </span>
               </div>
@@ -332,7 +516,7 @@ export function TeamPanel({
               <span className="constraint-source">
                 {row.is_hard ? "קשיח" : "העדפה"}
               </span>
-              {!readOnly && onRemove ? (
+              {!readOnly && onRemove && row.source !== "complex" ? (
                 <button
                   type="button"
                   className="icon-button subtle"
@@ -373,6 +557,7 @@ export function TeamPanel({
                         is_hard: input.is_hard,
                         reason: input.reason,
                         source: "manager",
+                        constraint_type: input.constraint_type,
                       }],
                     };
                   });
@@ -399,424 +584,25 @@ export function TeamPanel({
     </aside>
   );
 }
+/** Off is only ever an explicit `on_duty: false`; a row that never had the
+ *  field is on, like every soldier saved before the switch existed. */
+export function isOff(person: Record<string, unknown> | undefined): boolean {
+  return person?.on_duty === false;
+}
 
-function EmployeeForm({
-  initial,
-  shiftNames,
-  defaultExitPattern,
-  onCancel,
-  onSubmit,
-}: {
-  initial?: Record<string, unknown>;
-  shiftNames: string[];
-  defaultExitPattern: "round" | "triplet";
-  onCancel: () => void;
-  onSubmit: (employee: Record<string, unknown>) => void;
-}) {
-  const [name, setName] = useState(text(initial?.name));
-  const [role, setRole] = useState(text(initial?.role));
-  const [exitPattern, setExitPattern] = useState(
-    text(initial?.exit_pattern) || defaultExitPattern,
-  );
-  const groups = exitPattern === "triplet" ? ["א", "ב", "ג"] : exitPattern === "round" ? ["א", "ב"] : [];
-  const [rotationGroup, setRotationGroup] = useState(text(initial?.rotation_group) || groups[0] || "");
-  const [serviceType, setServiceType] = useState(text(initial?.service_type) || "standard");
-  const [countsTowardStaffing, setCountsTowardStaffing] = useState(initial?.counts_toward_staffing !== false);
-  const [isShiftManager, setIsShiftManager] = useState(Boolean(initial?.is_shift_manager));
-  const [canTrain, setCanTrain] = useState(Boolean(initial?.can_train));
-  const [notes, setNotes] = useState(rawText(initial?.notes));
-  const initialEligible = Array.isArray(initial?.eligible_shifts)
-    ? initial.eligible_shifts.filter((value): value is string => typeof value === "string")
-    : shiftNames;
-  const [eligible, setEligible] = useState<string[]>(initialEligible);
-
+function DutySwitch({ name, on, onToggle }: { name: string; on: boolean; onToggle: () => void }) {
   return (
-    <form className="constraint-form profile-form" onSubmit={(event) => {
-      event.preventDefault();
-      if (!name.trim()) return;
-      onSubmit({ name: name.trim(), role: role.trim(), eligible_shifts: eligible, exit_pattern: exitPattern, rotation_group: rotationGroup, service_type: serviceType, counts_toward_staffing: countsTowardStaffing, is_shift_manager: isShiftManager, can_train: canTrain, notes: notes.trim() });
-    }}>
-      <label>
-        <span>שם *</span>
-        <input value={name} maxLength={120} onChange={(event) => setName(event.target.value)} required readOnly={Boolean(initial)} title={initial ? "שם קיים הוא מזהה קבוע" : undefined} />
-        {initial ? <small>השם מקושר לזהות ולשיבוצים ולכן נשאר קבוע.</small> : null}
-      </label>
-      <label>
-        <span>תפקיד</span>
-        <input value={role} maxLength={120} onChange={(event) => setRole(event.target.value)} />
-      </label>
-      <div className="constraint-time-grid">
-        <label><span>מבנה יציאות</span><select value={exitPattern} onChange={(event) => {
-          const pattern = event.target.value;
-          setExitPattern(pattern);
-          setRotationGroup(pattern === "triplet" || pattern === "round" ? "א" : "");
-        }}>{Object.entries(EXIT_PATTERN_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        {groups.length ? <label><span>קבוצה</span><select value={rotationGroup} onChange={(event) => setRotationGroup(event.target.value)}>{groups.map((group) => <option key={group}>{group}</option>)}</select></label> : null}
-        <label><span>מעמד</span><select value={serviceType} onChange={(event) => {
-          setServiceType(event.target.value);
-          if (event.target.value === "overlap") setCountsTowardStaffing(false);
-        }}><option value="standard">תקן</option><option value="overlap">נחפף/ת</option><option value="reserve">מילואים</option></select></label>
-      </div>
-      <label className="profile-check"><input type="checkbox" checked={countsTowardStaffing} onChange={(event) => setCountsTowardStaffing(event.target.checked)} /><span>נספר/ת בתקן</span></label>
-      <label className="profile-check"><input type="checkbox" checked={isShiftManager} onChange={(event) => setIsShiftManager(event.target.checked)} /><span>מוסמך/ת כמפקד/ת משמרת</span></label>
-      <label className="profile-check"><input type="checkbox" checked={canTrain} onChange={(event) => setCanTrain(event.target.checked)} /><span>מוסמך/ת לחפוף</span></label>
-      <label><span>הערות לחייל/ת</span><textarea value={notes} maxLength={200} rows={3} onChange={(event) => setNotes(event.target.value)} placeholder="מידע קבוע שכדאי לקחת בחשבון בשיבוץ" /></label>
-      {shiftNames.length ? (
-        <fieldset className="profile-checkboxes">
-          <legend>משמרות שהעובד/ת יכול/ה לבצע</legend>
-          {shiftNames.map((shift) => (
-            <label key={shift}>
-              <input
-                type="checkbox"
-                checked={eligible.includes(shift)}
-                onChange={(event) => setEligible(event.target.checked
-                  ? [...eligible, shift]
-                  : eligible.filter((name_) => name_ !== shift))}
-              />
-              <span>{shift}</span>
-            </label>
-          ))}
-        </fieldset>
-      ) : null}
-      <FormActions onCancel={onCancel} ready={Boolean(name.trim())} />
-    </form>
-  );
-}
-
-function ShiftForm({
-  initial,
-  onCancel,
-  onSubmit,
-}: {
-  initial?: Record<string, unknown>;
-  onCancel: () => void;
-  onSubmit: (shift: Record<string, unknown>) => void;
-}) {
-  const [name, setName] = useState(text(initial?.name));
-  const [start, setStart] = useState(text(initial?.start_time));
-  const [end, setEnd] = useState(text(initial?.end_time));
-  const [headcount, setHeadcount] = useState(shiftHeadcount(initial));
-  const [onCall, setOnCall] = useState(Boolean(initial?.is_on_call));
-  const [shiftType, setShiftType] = useState(text(initial?.shift_type) || (onCall ? "on_call" : "regular"));
-  const [purpose, setPurpose] = useState(text(initial?.purpose));
-  const [requiresManager, setRequiresManager] = useState(Boolean(initial?.requires_shift_manager));
-
-  return (
-    <form className="constraint-form profile-form" onSubmit={(event) => {
-      event.preventDefault();
-      if (!name.trim()) return;
-      onSubmit({
-        name: name.trim(), start_time: start, end_time: end,
-        headcount, shift_type: shiftType, is_on_call: shiftType === "on_call", purpose,
-        requires_shift_manager: requiresManager,
-      });
-    }}>
-      <label>
-        <span>שם המשמרת *</span>
-        <input value={name} maxLength={120} onChange={(event) => setName(event.target.value)} required readOnly={Boolean(initial)} title={initial ? "שם קיים הוא מזהה קבוע" : undefined} />
-        {initial ? <small>השם מקושר ללוחות קיימים ולכן נשאר קבוע.</small> : null}
-      </label>
-      <fieldset className="profile-time-card">
-        <legend>שעות המשמרת</legend>
-        <div className="constraint-time-grid">
-          <label><span>שעת התחלה</span><input type="time" step={300} value={start} onChange={(event) => setStart(event.target.value)} /></label>
-          <label><span>שעת סיום</span><input type="time" step={300} value={end} onChange={(event) => setEnd(event.target.value)} /></label>
-        </div>
-        <small>אפשר להקליד שעה ישירות. סיום מוקדם מההתחלה מסמן משמרת שחוצה חצות.</small>
-      </fieldset>
-      <label><span>סוג משמרת</span><select value={shiftType} onChange={(event) => { setShiftType(event.target.value); setOnCall(event.target.value === "on_call"); }}><option value="regular">רגילה</option><option value="overlap">חפיפה</option><option value="on_call">כוננות</option></select></label>
-      <label><span>ייעוד</span><input value={purpose} maxLength={120} onChange={(event) => setPurpose(event.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></label>
-      <label><span>תקן בסיסי</span><input type="number" min={1} max={100} value={headcount} onChange={(event) => setHeadcount(Number(event.target.value) || 1)} /></label>
-      <label className="profile-check"><input type="checkbox" checked={requiresManager} onChange={(event) => setRequiresManager(event.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
-      <FormActions onCancel={onCancel} ready={Boolean(name.trim())} />
-    </form>
-  );
-}
-
-function FormActions({ onCancel, ready }: { onCancel: () => void; ready: boolean }) {
-  return (
-    <div className="constraint-form-actions">
-      <button type="button" className="ghost-button" onClick={onCancel}>ביטול</button>
-      <button type="submit" className="primary-button" disabled={!ready}>שמירה</button>
-    </div>
-  );
-}
-
-function shiftHeadcount(shift?: Record<string, unknown>): number {
-  const staffing = Array.isArray(shift?.staffing) ? shift.staffing : [];
-  const fallback = staffing.find((group) => {
-    if (!group || typeof group !== "object") return false;
-    const days = (group as { days?: unknown }).days;
-    return !Array.isArray(days) || days.length === 0;
-  }) as { headcount?: unknown } | undefined;
-  return typeof fallback?.headcount === "number" ? fallback.headcount : 1;
-}
-
-function formatHours(hours: number): string {
-  return Number.isInteger(hours) ? `${hours} ש׳` : `${hours.toFixed(1)} ש׳`;
-}
-
-/** Recording one constraint.
- *
- *  `source` is a real question rather than a hidden default: whether the
- *  manager decided this or an employee reported it is exactly the
- *  distinction the schema keeps, and asking costs one select. */
-function ConstraintForm({
-  names,
-  shiftNames,
-  onCancel,
-  onSubmit,
-}: {
-  names: string[];
-  shiftNames: string[];
-  onCancel: () => void;
-  onSubmit: (input: {
-    employee: string;
-    constraint_date: string;
-    shift_name?: string;
-    available?: boolean;
-    start_time?: string;
-    end_time?: string;
-    is_hard?: boolean;
-    reason?: string;
-    source?: string;
-    duration: "temporary" | "permanent";
-    weekdays: string[];
-  }) => void;
-}) {
-  const [employee, setEmployee] = useState(names[0] ?? "");
-  const [date, setDate] = useState("");
-  const [shift, setShift] = useState("");
-  const [kind, setKind] = useState<"unavailable" | "window">("unavailable");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
-  const [isHard, setIsHard] = useState(true);
-  const [reason, setReason] = useState("");
-  const [source, setSource] = useState("manager");
-  const [duration, setDuration] = useState<"temporary" | "permanent">("temporary");
-  const [weekdays, setWeekdays] = useState<string[]>([]);
-
-  const ready =
-    employee.trim() !== "" &&
-    (duration === "permanent" ? weekdays.length > 0 : date !== "") &&
-    (kind === "unavailable" || startTime !== "" || endTime !== "");
-
-  return (
-    <form
-      className="constraint-form"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!ready) return;
-        onSubmit({
-          employee: employee.trim(),
-          constraint_date: date,
-          shift_name: shift,
-          available: kind === "window",
-          start_time: kind === "window" ? startTime : "",
-          end_time: kind === "window" ? endTime : "",
-          is_hard: isHard,
-          reason: reason.trim(),
-          source,
-          duration,
-          weekdays,
-        });
-      }}
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      className={`duty-switch${on ? " is-on" : ""}`}
+      onClick={onToggle}
+      aria-label={`${name} בשיבוץ`}
+      title={on ? `כיבוי ${name}: לא ייכלל/תיכלל בשיבוץ` : `הדלקת ${name}: ייכלל/תיכלל בשיבוץ`}
     >
-      <label>
-        <span>עובד</span>
-        {names.length ? (
-          <select
-            value={employee}
-            onChange={(event) => setEmployee(event.target.value)}
-          >
-            {names.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input
-            type="text"
-            value={employee}
-            onChange={(event) => setEmployee(event.target.value)}
-          />
-        )}
-      </label>
-
-      <label>
-        <span>משך האילוץ</span>
-        <select value={duration} onChange={(event) => setDuration(event.target.value as "temporary" | "permanent")}>
-          <option value="temporary">זמני — לתאריך מסוים</option>
-          <option value="permanent">קבוע — חוזר בכל שבוע</option>
-        </select>
-      </label>
-
-      {duration === "temporary" ? <label>
-        <span>תאריך</span>
-        <DateInput
-          value={date}
-          onChange={setDate}
-          required
-        />
-      </label> : <fieldset className="profile-checkboxes"><legend>ימים קבועים</legend>{WEEKDAYS.map((day) => <label key={day}><input type="checkbox" checked={weekdays.includes(day)} onChange={(event) => setWeekdays(event.target.checked ? [...weekdays, day] : weekdays.filter((value) => value !== day))} /><span>{day}</span></label>)}</fieldset>}
-
-      <label>
-        <span>משמרת</span>
-        <select
-          value={shift}
-          onChange={(event) => setShift(event.target.value)}
-        >
-          {/* The empty option is the whole-day constraint, which is the
-              interview's own convention and how the audit reads it. */}
-          <option value="">כל היום</option>
-          {shiftNames.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label>
-        <span>סוג זמינות</span>
-        <select
-          value={kind}
-          onChange={(event) =>
-            setKind(event.target.value as "unavailable" | "window")
-          }
-        >
-          <option value="unavailable">לא זמין/ה</option>
-          <option value="window">זמין/ה רק בחלון שעות</option>
-        </select>
-      </label>
-
-      {kind === "window" ? (
-        <div className="constraint-time-grid">
-          <label>
-            <span>יכול/ה להתחיל מ־</span>
-            <input
-              type="time"
-              value={startTime}
-              onChange={(event) => setStartTime(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>חייב/ת לסיים עד</span>
-            <input
-              type="time"
-              value={endTime}
-              onChange={(event) => setEndTime(event.target.value)}
-            />
-          </label>
-          <small>אפשר למלא רק אחד מהגבולות. למשל 16:00 בלבד.</small>
-        </div>
-      ) : null}
-
-      <label>
-        <span>עוצמת האילוץ</span>
-        <select
-          value={isHard ? "hard" : "soft"}
-          onChange={(event) => setIsHard(event.target.value === "hard")}
-        >
-          <option value="hard">קשיח — אין לשבץ בניגוד אליו</option>
-          <option value="soft">העדפה — אפשר לחרוג כשצריך</option>
-        </select>
-      </label>
-
-      <label>
-        <span>סיבה</span>
-        <input
-          type="text"
-          value={reason}
-          maxLength={200}
-          onChange={(event) => setReason(event.target.value)}
-          placeholder="מחלה, לימודים, מילואים…"
-        />
-      </label>
-
-      <label>
-        <span>מקור</span>
-        <select
-          value={source}
-          onChange={(event) => setSource(event.target.value)}
-        >
-          <option value="manager">המנהל קבע</option>
-          <option value="employee_reported">העובד מסר</option>
-        </select>
-      </label>
-
-      <div className="constraint-form-actions">
-        <button type="button" className="ghost-button" onClick={onCancel}>
-          ביטול
-        </button>
-        <button type="submit" className="primary-button" disabled={!ready}>
-          שמירה
-        </button>
-      </div>
-    </form>
+      <span className="duty-switch-track" aria-hidden="true"><span className="duty-switch-thumb" /></span>
+      <span className="duty-switch-label">{on ? "דולק" : "כבוי"}</span>
+    </button>
   );
-}
-
-/** How each provenance reads to the manager. Deliberately says who supplied
- *  the information, since no employee ever entered it through the app. */
-const SOURCE_LABELS: Record<string, string> = {
-  manager: "המנהל",
-  agent: "הסוכן",
-  employee_reported: "העובד מסר",
-  interview: "מהראיון",
-};
-
-const SERVICE_TYPE_LABELS: Record<string, string> = {
-  standard: "תקן",
-  overlap: "נחפף/ת",
-  reserve: "מילואים",
-};
-
-const EXIT_PATTERN_LABELS: Record<string, string> = {
-  round: "סבב א / ב",
-  triplet: "תלתון א / ב / ג",
-  hamshushim: "חמשושים",
-  shushim: "שושים",
-};
-
-const SHIFT_TYPE_LABELS: Record<string, string> = {
-  regular: "רגילה",
-  overlap: "חפיפה",
-  on_call: "כוננות",
-};
-
-const WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
-
-function formatWindow(row: Constraint): string {
-  if (row.start_time && row.end_time) return `${row.start_time}–${row.end_time}`;
-  if (row.start_time) return `החל מ־${row.start_time}`;
-  if (row.end_time) return `עד ${row.end_time}`;
-  return "";
-}
-
-function text(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function rawText(value: unknown): string {
-  return typeof value === "string" ? value : "";
-}
-
-function exitPatternLabel(person: Record<string, unknown>): string {
-  const pattern = text(person.exit_pattern);
-  if (EXIT_PATTERN_LABELS[pattern]) return EXIT_PATTERN_LABELS[pattern];
-  return text(person.rotation_group) === "ג" ? EXIT_PATTERN_LABELS.triplet : EXIT_PATTERN_LABELS.round;
-}
-
-function strings(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
-    : [];
-}
-
-function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
 }

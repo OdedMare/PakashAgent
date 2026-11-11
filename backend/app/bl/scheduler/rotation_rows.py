@@ -1,0 +1,177 @@
+"""The rotation and closure cycles, expressed as hard unavailability rows.
+
+Derived from `bl/rotation.py` rather than asked of the model, for the reason
+`audit.py` is code: which group closes on 12/09 is arithmetic
+([D3](../../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+"""
+
+import datetime
+from typing import List
+
+from app.bl import rotation as rotation_cycle
+from app.bl.rotation.presence import closure_status, presence_status
+from app.bl.audit import constraint_conflicts
+from app.bl.shared import weekday_key
+from app.bl.scheduler.slots import build_slots
+from app.bl.scheduler.values import bounded
+
+# Availability rows derived from the rotation itself rather than read from the
+# manager's constraints. An assignment contradicting one puts somebody in on a
+# weekend that is not theirs, so both sources are refused on every generation
+# path -- a gate in only one route is a gate the other walks around.
+ROTATION_SOURCES = frozenset({"rotation", "closure"})
+
+_ROUND_GROUPS = ("א", "ב")
+
+
+def overridden(keys: set, employee: str, date: str, shift: str) -> bool:
+    """Whether an explicit dated row already speaks for this occurrence."""
+    return (employee, date, shift) in keys or (employee, date, "") in keys
+
+
+def _blocked_row(employee: str, slot: dict, reason: str, **extra) -> dict:
+    row = {
+        "employee": employee,
+        "date": slot["slot_date"],
+        "shift": slot["shift_name"],
+        "available": False,
+        "start_time": "",
+        "end_time": "",
+        "is_hard": True,
+        "reason": reason,
+    }
+    row.update(extra)
+    return row
+
+
+# -- round rotation (A/B complement) -----------------------------------------
+
+
+def rotation_availability(
+    profile: dict, start: datetime.date, end: datetime.date, keys: set,
+) -> List[dict]:
+    """Expand Rotation A once; Rotation B is its exact slot complement."""
+    workplace = (profile or {}).get("workplace") or {}
+    rules = [
+        rule for rule in workplace.get("rotation_a_unavailability") or []
+        if isinstance(rule, dict)
+    ]
+    if not rules:
+        return []
+    people = _round_people(profile, workplace)
+    result = []
+    for slot in build_slots(profile, start.isoformat(), end.isoformat()):
+        unavailable_a = _rotation_a_blocks(slot, rules)
+        for employee, group in people:
+            if presence_status(profile, {"exit_pattern": "round", "rotation_group": group}, slot) is not None:
+                continue
+            unavailable = unavailable_a if group == "א" else not unavailable_a
+            if not unavailable:
+                continue
+            result.append(_blocked_row(
+                employee, slot, "סבב %s אינו זמין במועד זה" % group,
+                source="rotation",
+                rotation_group=group,
+                derived_from="rotation_a_unavailability",
+            ))
+    return result
+
+
+def _round_people(profile: dict, workplace: dict) -> List[tuple]:
+    people = []
+    for person in (profile or {}).get("employees") or []:
+        if not isinstance(person, dict):
+            continue
+        pattern = bounded(person.get("exit_pattern")) or bounded(
+            workplace.get("rotation_mode")
+        ) or "round"
+        group = bounded(person.get("rotation_group"))
+        name = bounded(person.get("name"))
+        if pattern == "round" and group in _ROUND_GROUPS and name:
+            people.append((name, group))
+    return people
+
+
+def _rotation_a_blocks(slot: dict, rules: List[dict]) -> bool:
+    weekday = weekday_key(slot.get("weekday"))
+    for rule in rules:
+        days = {weekday_key(item) for item in rule.get("days") or [] if weekday_key(item)}
+        if days and weekday not in days:
+            continue
+        shifts = {bounded(item) for item in rule.get("shifts") or [] if bounded(item)}
+        if shifts and slot.get("shift_name") not in shifts:
+            continue
+        occurrence = {
+            "employee": "rotation-a", "date": slot.get("slot_date"),
+            "shift": slot.get("shift_name"),
+        }
+        assignment = dict(
+            occurrence,
+            start_time=slot.get("start_time"), end_time=slot.get("end_time"),
+        )
+        constraint = dict(
+            occurrence, available=False,
+            start_time=rule.get("start_time"), end_time=rule.get("end_time"),
+        )
+        if constraint_conflicts(assignment, constraint):
+            return True
+    return False
+
+
+# -- closures ----------------------------------------------------------------
+
+
+def closure_availability(
+    profile: dict, start: datetime.date, end: datetime.date, keys: set,
+) -> List[dict]:
+    """Hard rows keeping each closure day inside the group that owns it.
+
+    A scheduler that balances every day on its own merits hands Saturday to
+    whoever is under quota and breaks the cycle the unit planned around. So on
+    a day some group is closing, everyone on a rotation who is *not* holding
+    that day is marked unavailable. Someone with no pattern and no group is
+    untouched, and an unanchored cycle produces nothing rather than a guess.
+    """
+    people = [
+        person for person in (profile or {}).get("employees") or []
+        if isinstance(person, dict) and bounded(person.get("name"))
+    ]
+    result = []
+    for slot in build_slots(profile, start.isoformat(), end.isoformat()):
+        for person in people:
+            status = presence_status(profile, person, slot)
+            source = "rotation" if status is not None else "closure"
+            if status is None:
+                status = closure_status(profile, person, slot)
+            if status is False:
+                result.append(_blocked_row(
+                    bounded(person.get("name")), slot,
+                    _blocked_reason(profile, person, slot, source),
+                    source=source,
+                    rotation_group=bounded(person.get("rotation_group")),
+                    derived_from="rotation_presence" if source == "rotation" else "closure_cycle",
+                ))
+    return result
+
+
+def _blocked_reason(profile: dict, person: dict, slot: dict, source: str) -> str:
+    pattern = rotation_cycle.exit_pattern(profile, person)
+    group = bounded(person.get("rotation_group"))
+    if rotation_cycle.is_day_cycle(pattern):
+        return "%s בבית במועד זה לפי מחזור היציאות" % rotation_cycle.label(pattern, group, profile)
+    if source == "rotation":
+        return "%s אינו נוכח במועד זה לפי הגדרות הסבבים והסגירה" % rotation_cycle.label(pattern, group, profile)
+    if not group:
+        return "%s יוצא/ת הביתה בכל סופ״ש" % bounded(person.get("name"))
+    day = datetime.date.fromisoformat(slot["slot_date"])
+    # The Sunday handover belongs to the weekend that just ended.
+    saturday = day - datetime.timedelta(days=1 if day.weekday() == 6 else 0)
+    return "הסגירה במועד זה שייכת ל%s" % rotation_cycle.label(
+        pattern, rotation_cycle.closing_group(profile, saturday, pattern))
+
+
+def closures_for_model(profile: dict, start, end) -> List[dict]:
+    """The period's closure cycle, per weekend, for the prompt."""
+    if start is None or end is None:
+        return []
+    return rotation_cycle.schedule_for_model(profile, start, end)

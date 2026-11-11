@@ -120,3 +120,28 @@ def test_an_unknown_route_still_answers_404(client):
     """Starlette's own 404, not the catch-all: registering a handler for
     `Exception` must not turn routing failures into server errors."""
     assert client.get("/api/_no_such_route_at_all").status_code == 404
+
+
+def test_a_401_on_a_read_stays_out_of_the_warning_log(client, caplog):
+    """The `/me` probe on every visit, and pollers whose cookie died, were
+    flooding the log at WARNING."""
+    with caplog.at_level(logging.DEBUG, logger="pakash.api"):
+        assert client.get("/api/workspace/me").status_code == 401
+    refused = [r for r in caplog.records if "/api/workspace/me" in r.getMessage()]
+    assert refused and all(r.levelno == logging.DEBUG for r in refused)
+
+
+def test_the_access_log_drops_401_reads_and_keeps_refused_writes():
+    from app.common.logging_setup import _Quiet401
+
+    def line(method, status):
+        return logging.LogRecord(
+            "uvicorn.access", logging.INFO, __file__, 0,
+            '%s - "%s %s HTTP/%s" %d',
+            ("1.2.3.4:5", method, "/api/x", "1.1", status), None,
+        )
+
+    quiet = _Quiet401()
+    assert not quiet.filter(line("GET", 401))
+    assert quiet.filter(line("POST", 401))
+    assert quiet.filter(line("GET", 500))

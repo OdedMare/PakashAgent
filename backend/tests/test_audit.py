@@ -175,13 +175,18 @@ def test_a_soft_time_window_is_a_notice_not_a_hard_warning():
     assert "העדפה" in conflict["message"]
 
 
+# The defaults are a base's (no weekly hours cap, eleven days in a row);
+# these checks are exercised against an office week's thresholds.
+OFFICE = {"audit_policy": {"max_weekly_hours": 45, "max_consecutive_days": 6}}
+
+
 def test_weekly_hours_over_the_ceiling_are_reported():
-    """Six morning shifts is 48 hours, past the 45-hour default."""
+    """Six morning shifts is 48 hours, past a 45-hour week."""
     assignments = [
         _assign("דנה", MORNING, "2026-08-%02d" % day)
         for day in range(17, 23)
     ]
-    warnings = audit(assignments, SHIFTS, EMPLOYEES)
+    warnings = audit(assignments, SHIFTS, EMPLOYEES, profile=OFFICE)
     over = _by_code(warnings, OVER_HOURS)
     assert len(over) == 1
     assert over[0]["details"]["hours"] == pytest.approx(48.0)
@@ -222,7 +227,7 @@ def test_seven_consecutive_days_is_reported():
         _assign("יוסי", EVENING, "2026-08-%02d" % day)
         for day in range(17, 24)
     ]
-    warnings = audit(assignments, SHIFTS, EMPLOYEES)
+    warnings = audit(assignments, SHIFTS, EMPLOYEES, profile=OFFICE)
     runs = _by_code(warnings, CONSECUTIVE)
     assert len(runs) == 1
     assert runs[0]["details"]["days"] == 7
@@ -268,125 +273,6 @@ def test_a_shift_crossing_midnight_is_measured_into_the_next_day():
     rest = _by_code(warnings, SHORT_REST)
     assert len(rest) == 1
     assert rest[0]["details"]["rest_hours"] == pytest.approx(0.0)
-
-
-# -- full-time service --------------------------------------------------------
-#
-# A unit that closes is not a job measured in weekly hours: the three civilian
-# ceilings above stop describing it, and reporting them would report the
-# rotation itself as a violation every single week (D25). The unit is read off
-# the rotation the interview already collected, never asked for separately.
-
-FULL_TIME_PROFILE = {
-    "workplace": {
-        "name": "פלוגה", "rotation_mode": "round",
-        "first_closure_date": "2026-08-29", "first_closure_group": "א",
-    },
-    "employees": [
-        {"name": "דנה", "exit_pattern": "round", "rotation_group": "א"},
-        {"name": "יוסי", "exit_pattern": "round", "rotation_group": "ב"},
-        {"name": "רון", "exit_pattern": "round", "rotation_group": "ב"},
-    ],
-}
-
-
-def test_a_full_time_unit_has_no_weekly_hour_ceiling():
-    """The same 48 hours that warn in a civilian roster say nothing here."""
-    assignments = [
-        _assign("דנה", MORNING, "2026-08-%02d" % day)
-        for day in range(17, 23)
-    ]
-    warnings = audit(
-        assignments, SHIFTS, FULL_TIME_PROFILE["employees"],
-        profile=FULL_TIME_PROFILE,
-    )
-    assert _by_code(warnings, OVER_HOURS) == []
-
-
-def test_a_full_time_unit_does_not_count_consecutive_days():
-    """A closure is consecutive days by design, not by accident."""
-    assignments = [
-        _assign("יוסי", EVENING, "2026-08-%02d" % day)
-        for day in range(17, 24)
-    ]
-    warnings = audit(
-        assignments, SHIFTS, FULL_TIME_PROFILE["employees"],
-        profile=FULL_TIME_PROFILE,
-    )
-    assert _by_code(warnings, CONSECUTIVE) == []
-
-
-def test_a_full_time_unit_drops_the_rest_minimum():
-    """Eight hours between two shifts is a closure, not a finding."""
-    warnings = audit(
-        [
-            _assign("רון", EVENING, "2026-08-17"),
-            _assign("רון", MORNING, "2026-08-18"),
-        ],
-        SHIFTS, FULL_TIME_PROFILE["employees"],
-        profile=dict(FULL_TIME_PROFILE, audit_policy={"min_rest_hours": 10}),
-    )
-    assert _by_code(warnings, SHORT_REST) == []
-
-
-def test_overlapping_shifts_are_still_impossible_in_a_full_time_unit():
-    """The rest minimum falls to zero; it is not switched off.
-
-    Nobody can stand two shifts at once, and a unit being full-time does not
-    make them able to. A negative gap is reported as the overlap it is
-    rather than as a short rest, because no amount of rest would fix it.
-    """
-    # A patrol that starts while the morning is still running. Declared
-    # here rather than in SHIFTS because an overlap is exactly what a real
-    # vocabulary avoids -- it has to be built to be tested.
-    patrol = {
-        "name": "סיור", "start_time": "12:00", "end_time": "20:00",
-        "is_on_call": False, "hour_weight": 1.0,
-        "staffing": [{"days": [], "headcount": 1, "required_roles": []}],
-    }
-    warnings = audit(
-        [
-            _assign("רון", MORNING, "2026-08-17"),
-            _assign("רון", "סיור", "2026-08-17"),
-        ],
-        SHIFTS + [patrol], FULL_TIME_PROFILE["employees"],
-        profile=FULL_TIME_PROFILE,
-    )
-    rest = _by_code(warnings, SHORT_REST)
-    assert len(rest) == 1
-    assert rest[0]["details"]["overlapping"] is True
-    assert "חופפות" in rest[0]["message"]
-
-
-def test_a_civilian_roster_keeps_every_ceiling():
-    """The suspension is the rotation's, not everybody's.
-
-    Without a cycle anywhere in the profile this is an ordinary workplace and
-    the three checks mean exactly what they meant before.
-    """
-    assignments = [
-        _assign("דנה", MORNING, "2026-08-%02d" % day)
-        for day in range(17, 24)
-    ]
-    warnings = audit(
-        assignments, SHIFTS, EMPLOYEES,
-        profile={"workplace": {"name": "מוקד"}, "employees": EMPLOYEES},
-    )
-    assert len(_by_code(warnings, OVER_HOURS)) == 1
-    assert len(_by_code(warnings, CONSECUTIVE)) == 1
-
-
-def test_a_cleared_hour_ceiling_means_no_ceiling_not_a_ceiling_of_zero():
-    """A manager who empties the field is saying hours are not the measure."""
-    assignments = [
-        _assign("דנה", MORNING, "2026-08-%02d" % day)
-        for day in range(17, 23)
-    ]
-    warnings = audit(
-        assignments, SHIFTS, EMPLOYEES,
-        profile={"audit_policy": {"max_weekly_hours": 0}},
-    )
-    assert _by_code(warnings, OVER_HOURS) == []
 
 
 def test_an_understaffed_slot_is_reported():
@@ -492,7 +378,7 @@ def test_an_unknown_shift_name_contributes_no_invented_hours():
          "date": "2026-08-%02d" % day}
         for day in range(17, 24)
     ]
-    warnings = audit(assignments, SHIFTS, EMPLOYEES)
+    warnings = audit(assignments, SHIFTS, EMPLOYEES, profile=OFFICE)
     assert _by_code(warnings, OVER_HOURS) == []
     # It is still seven consecutive days of work.
     assert len(_by_code(warnings, CONSECUTIVE)) == 1
@@ -554,7 +440,8 @@ def test_the_audit_never_blocks_and_never_mutates():
         "available": False,
     }]
 
-    warnings = audit(assignments, SHIFTS, EMPLOYEES, availability=availability)
+    warnings = audit(assignments, SHIFTS, EMPLOYEES, availability=availability,
+                     profile=OFFICE)
 
     # Every category fired...
     assert {OVER_HOURS, CONSECUTIVE, DOUBLE_BOOKED, UNAVAILABLE} <= set(
@@ -656,12 +543,32 @@ def test_on_call_counts_as_a_night():
 
 
 def test_a_shift_the_vocabulary_does_not_mark_is_not_guessed_into_a_night():
-    """Never inferred from the name or the start time — the vocabulary is
-    per-workplace, and guessing is the hardcoding D9 forbids."""
+    """A regular daytime shift carries no night burden."""
     by_name = _load([
         {"employee": "רון", "shift": "בוקר", "date": "2026-08-03"},
     ])
     assert by_name["רון"]["nights"] == 0
+
+
+@pytest.mark.parametrize("start,end,expected", [
+    ("23:00", "07:00", 1), ("00:00", "08:00", 1),
+    ("22:00", "23:59", 1), ("05:00", "13:00", 1),
+    ("07:00", "15:00", 0), ("15:00", "23:00", 0), ("", "", 0),
+])
+def test_nights_are_counted_from_times_without_a_special_name_or_flag(start, end, expected):
+    rows = load_history([_assign("דנה", "משמרת", "2026-10-05")],
+                        [{"name": "משמרת", "start_time": start, "end_time": end}],
+                        [{"name": "דנה"}])
+    assert rows[0]["nights"] == expected
+
+
+def test_night_count_uses_the_saved_slot_times():
+    rows = load_history([_assign("דנה", "בוקר", "2026-10-05")],
+                        _LOAD_SHIFTS, [{"name": "דנה"}], slots=[{
+                            "shift_name": "בוקר", "slot_date": "2026-10-05",
+                            "start_time": "23:00", "end_time": "07:00",
+                        }])
+    assert rows[0]["nights"] == 1
 
 
 def test_load_history_counts_weekends():
@@ -709,3 +616,12 @@ def test_load_history_survives_junk_rows():
     )
     assert {row["employee"] for row in rows} == {"רון", "דנה", "יוסי"}
     assert all(row["shifts"] == 0 for row in rows)
+
+
+def test_the_default_thresholds_are_a_bases():
+    """Unstated, the week is a base's: eight hours' rest between shifts,
+    eleven days in a row, and no weekly hours cap that binds."""
+    from app.bl.audit.roster import policy
+
+    assert policy({}) == {"max_weekly_hours": 168.0, "max_consecutive_days": 11,
+                          "min_rest_hours": 8.0}

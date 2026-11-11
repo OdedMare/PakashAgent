@@ -1,0 +1,183 @@
+"""How long a model call may wait, read, and run in total, per flow.
+
+Every number here is read from the settings on each call, so a value saved in
+the panel applies to the next call. See `llm/CLAUDE.md` for why the
+scheduler has its own, much longer read ceiling.
+"""
+
+import threading
+
+import httpx
+
+from app.dal.llm.model_slots import (
+    INTERACTIVE, ModelSlots, PostgresModelSlots, priority_for_flow,
+)
+
+# How long to wait for the TCP/TLS handshake to a model server, in every
+# configuration including "no timeout". Reaching a server that is up is a
+# matter of milliseconds on a LAN and a second or two across the internet; a
+# handshake still unfinished after this is a wrong host, a wrong port or a
+# server that is not listening, and none of those get better by waiting.
+_CONNECT_TIMEOUT_SECONDS = 30
+
+
+_DEFAULT_MAX_CONCURRENCY = 1
+# The model server is a shared finite resource, and a single generation can
+# occupy it for a minute. Bound concurrent HTTP completions process-wide so a
+# burst of requests across API and worker processes queues here instead of
+# thrashing the server.
+#
+# PostgreSQL advisory locks hold the line across every process; the
+# in-memory fallback below exists for lightweight adapters and tests with no
+# database configuration.
+#
+# The right value depends entirely on the server. One that batches
+# continuously (vLLM, TGI) does its own scheduling and is *starved* by a low
+# limit, because a request held back here is a request it cannot put in a
+# batch. One that serves a single request at a time (Ollama's default) is only
+# thrashed by a high one.
+_LLM_SLOTS = None
+_LLM_SLOTS_LOCK = threading.Lock()
+
+
+def slots_for(store):
+    global _LLM_SLOTS
+    settings = store.get()
+    if getattr(settings, "database_url", ""):
+        return PostgresModelSlots(store)
+    if _LLM_SLOTS is None:
+        with _LLM_SLOTS_LOCK:
+            if _LLM_SLOTS is None:
+                limit = getattr(
+                    settings, "llm_max_concurrency", _DEFAULT_MAX_CONCURRENCY
+                )
+                _LLM_SLOTS = ModelSlots(limit)
+    return _LLM_SLOTS
+
+
+_DEFAULT_QUEUE_SECONDS = 180
+
+
+def queue_seconds(settings, flow: str):
+    """How long interactive work may wait for a slot; builds wait forever."""
+    if priority_for_flow(flow) != INTERACTIVE:
+        return None
+    try:
+        seconds = int(getattr(
+            settings, "llm_queue_seconds", _DEFAULT_QUEUE_SECONDS
+        ))
+    except (TypeError, ValueError):
+        seconds = _DEFAULT_QUEUE_SECONDS
+    return seconds if seconds > 0 else None
+
+# Ceiling on one logical `complete_json` call. `llm_timeout_seconds` bounds a
+# single HTTP round-trip, but the ladder can run four of them and each retries
+# up to three times — multiplied out, one request could hold a worker for the
+# better part of an hour. This is the number that actually stops that.
+#
+# **It is derived from the timeout, not fixed.** Both numbers used to be
+# constants, and a deployment whose model needed more than the default said
+# so by raising `llm_timeout_seconds` — which did nothing, because the budget
+# below it stayed where it was and cut every call off first. Worse, once the
+# timeout was raised past the budget the two inverted: the deadline expired
+# before a single HTTP call could finish, so the retries and the ladder could
+# never run at all and the setting appeared to make things worse.
+#
+# So the invariant is stated in code rather than left to whoever edits the
+# settings: the budget is always a multiple of one round-trip, which is what
+# makes room for the retry above it. Below this ratio the resilience
+# machinery is decorative.
+_BUDGET_MULTIPLIER = 2.5
+_MIN_TOTAL_BUDGET_SECONDS = 300
+# Daily scheduling calls are deliberately small. Letting one hold the whole
+# range defeats checkpointing and makes the UI look frozen; a failed day can
+# be retried without discarding its neighbours. So the scheduler gets a
+# *tighter* multiple — but still a multiple, never a flat constant that a
+# slow model would breach on its first attempt.
+_SCHEDULER_BUDGET_MULTIPLIER = 1.5
+# The scheduler's read ceiling. Not a guess at the answer time -- one day
+# answers in minutes -- but the point past which the server is not slow, it
+# is gone. Without it, one call the server never answers held its model slot
+# forever: with the default limit of
+# one, every chat timed out and every build queued behind it, and the worker
+# threads waiting in that queue left none free for the code-built ones.
+_SCHEDULER_READ_CEILING_SECONDS = 900
+# Every other flow's read ceiling when `llm_timeout_seconds` is 0. "No limit"
+# used to mean exactly that, and a chat call the server never answered then
+# held its worker and its model slot until the process restarted: every
+# later message sat on "ממתין למודל…" behind it. A chat answer that takes
+# longer than this is not slow, it is stuck, and the manager is better told.
+_DEFAULT_READ_CEILING_SECONDS = 300
+
+
+def read_timeout_for(settings, flow: str) -> int:
+    """The per-call read ceiling. The scheduler's is its own, far above it.
+
+    **Building a schedule does not honour `llm_timeout_seconds`**, and that
+    is deliberate rather than an oversight.
+
+    `llm_timeout_seconds` is one number for every call this product makes,
+    and the calls are not comparable. A briefing is a short prompt to the
+    fast model and answers in seconds; one day of scheduling is a large
+    prompt to the heavy model and can take minutes on the hardware these
+    deployments run on. A value chosen so the settings panel feels
+    responsive is therefore, for the scheduler, a ceiling *below* the real
+    answer time — and such a ceiling is not a safety net, it is a guarantee
+    of failure. The observed shape of that failure is exactly this: the
+    briefing works, and every build dies on `ReadTimeout` while the model
+    server is still generating the answer nobody is listening for any more.
+
+    The reason a read ceiling existed at all was to stop one request holding
+    a browser connection open. Generation no longer holds one: it is a
+    background job that checkpoints every day, the browser polls short reads,
+    and the manager has a stop button. So the protection is obsolete for this
+    flow and only its cost remains.
+
+    It is still bounded, by `_SCHEDULER_READ_CEILING_SECONDS` (or the
+    setting, if larger): a call that never ends holds the model slot that
+    every other call in the deployment waits for.
+
+    Every other flow reads `llm_timeout_seconds`, and 0 there means
+    `_DEFAULT_READ_CEILING_SECONDS`, not "forever": a call that never ends
+    must fail and give its slot back.
+
+    Connecting stays bounded for every flow — see `httpx_timeout`. An
+    unreachable server is not a slow one.
+    """
+    configured = getattr(settings, "llm_timeout_seconds", 0) or 0
+    if flow == "scheduler":
+        return max(_SCHEDULER_READ_CEILING_SECONDS, configured)
+    return configured if configured > 0 else _DEFAULT_READ_CEILING_SECONDS
+
+
+def budget_seconds(settings, flow: str) -> float:
+    """The ceiling on one logical call, in seconds.
+
+    Always strictly greater than the flow's read timeout, so one HTTP attempt
+    can always complete inside it. Every flow's read is bounded
+    (`read_timeout_for`), so every flow has a budget.
+    """
+    timeout = read_timeout_for(settings, flow)
+    if flow == "scheduler":
+        return max(timeout * _SCHEDULER_BUDGET_MULTIPLIER, timeout + 60)
+    return max(timeout * _BUDGET_MULTIPLIER, _MIN_TOTAL_BUDGET_SECONDS)
+
+
+def httpx_timeout(timeout) -> httpx.Timeout:
+    """One HTTP completion's budget, phase by phase.
+
+    `timeout` bounds the whole round-trip when it is positive. When it is 0
+    or less the read is unbounded — see `_client_for` — but connecting,
+    writing and waiting for a pooled connection stay bounded, because none of
+    those three is the model thinking.
+    """
+    if not timeout or timeout <= 0:
+        return httpx.Timeout(
+            None,
+            connect=_CONNECT_TIMEOUT_SECONDS,
+            write=_CONNECT_TIMEOUT_SECONDS,
+            pool=_CONNECT_TIMEOUT_SECONDS,
+        )
+    return httpx.Timeout(
+        timeout, connect=min(_CONNECT_TIMEOUT_SECONDS, timeout)
+    )

@@ -6,14 +6,15 @@ Three things here are the point of the feature and are asserted directly:
   so a member's cookie is refused whichever URL it is aimed at (D5).
 - **One workspace cannot reach another's schedule**, even holding its id
   (D10). A cross-team miss reads as "not found", never as "not yours".
-- **Warnings never block.** A schedule that breaks every rule still returns
-  200 and still renders (D3).
+- **Ordinary warnings remain advisory.** Hard unavailability is the one
+  placement invariant; other rule breaks still return 200 and render (D3).
 """
 
 from types import SimpleNamespace
+import copy
+import datetime
 import json
 import threading
-import time
 
 import pytest
 from fastapi import FastAPI
@@ -23,7 +24,11 @@ from fastapi.testclient import TestClient
 from app.api.dependencies import Guards
 from app.api.routers import schedules
 from app.bl.schedule_service import ScheduleService
-from app.common.errors import AgentError, AppError, NotFoundError, error_payload
+from app.common.errors import (
+    ASSIGNMENT_MOVED, AgentError, AppError, ConflictError, NotFoundError,
+    error_payload,
+)
+from app.common.time_context import israel_today
 from app.common.sessions import COOKIE_NAME, ROLE_BOSS, ROLE_MEMBER, issue
 
 TEAM = "team-a"
@@ -69,7 +74,10 @@ class _FakeScheduleRepo:
     def team_profile(self, team_id):
         return self.profiles.get(team_id)
 
-    def update_team_profile(self, team_id, profile):
+    def team_profile_revision(self, team_id):
+        return 0 if team_id in self.profiles else None
+
+    def update_team_profile(self, team_id, profile, expected_revision=None):
         self.profiles[team_id] = profile
         return profile
 
@@ -141,6 +149,26 @@ class _FakeScheduleRepo:
         ]
         return self.slots[schedule_id]
 
+    def add_slots(self, schedule_id, team_id, slots):
+        self.get_schedule(schedule_id, team_id)
+        stored = {(slot["shift_name"], slot["slot_date"]) for slot in self.slots[schedule_id]}
+        self.slots[schedule_id] += [
+            dict(slot, id=self._id("slot"), team_id=team_id) for slot in slots
+            if (slot["shift_name"], slot["slot_date"]) not in stored
+        ]
+        return self.slots[schedule_id]
+
+    def update_slot_headcounts(self, schedule_id, team_id, slots):
+        self.get_schedule(schedule_id, team_id)
+        changes = {
+            (slot["shift_name"], slot["slot_date"]): slot["headcount"]
+            for slot in slots
+        }
+        for slot in self.slots[schedule_id]:
+            key = slot["shift_name"], slot["slot_date"]
+            if key in changes:
+                slot["headcount"] = changes[key]
+
     def find_slot(self, schedule_id, team_id, shift_name, slot_date):
         self.get_schedule(schedule_id, team_id)
         for slot in self.slots.get(schedule_id, []):
@@ -178,7 +206,7 @@ class _FakeScheduleRepo:
         return self.assignments(schedule_id, team_id)
 
     def replace_span_assignments(self, schedule_id, team_id, dates,
-                                 assignments):
+                                 assignments, shifts=None):
         # Rows on other dates keep their identity, exactly as the real
         # DELETE ... WHERE slot_date = ANY(...) leaves them alone. Tests that
         # hold an assignment id across a checkpoint depend on that.
@@ -190,6 +218,8 @@ class _FakeScheduleRepo:
         kept = [
             row for row in self.assignment_rows.get(schedule_id, [])
             if slots.get(row["slot_id"], {}).get("slot_date") not in wanted
+            or (shifts and slots.get(row["slot_id"], {}).get("shift_name")
+                not in shifts)
         ]
         self.assignment_rows[schedule_id] = kept + [
             {"id": self._id("asg"), "slot_id": item["slot_id"],
@@ -228,13 +258,15 @@ class _FakeScheduleRepo:
             ]
 
     def move_assignment(self, assignment_id, team_id, slot_id, reason,
-                        employee=None):
+                        employee=None, expected_slot_id=None):
         assert reason.strip(), "reason is required (D8)"
         for schedule_id, rows in self.assignment_rows.items():
             if self.schedules[schedule_id]["team_id"] != team_id:
                 continue
             for row in rows:
                 if row["id"] == assignment_id:
+                    if expected_slot_id and row["slot_id"] != expected_slot_id:
+                        raise ConflictError(ASSIGNMENT_MOVED)
                     row["slot_id"] = slot_id
                     row["reason"] = reason
                     if employee:
@@ -252,6 +284,7 @@ class _FakeScheduleRepo:
             "available": available, "start_time": start_time,
             "end_time": end_time, "is_hard": is_hard,
             "reason": reason, "source": source,
+            "constraint_type": "availability",
         }
         self.availability_rows = [
             existing for existing in self.availability_rows
@@ -263,6 +296,18 @@ class _FakeScheduleRepo:
         self.availability_rows.append(row)
         return row
 
+    def set_duty(self, team_id, employee, duty_date, start_time, end_time,
+                 reason="", source="manager"):
+        row = {
+            "id": self._id("duty"), "team_id": team_id, "employee": employee,
+            "constraint_date": duty_date, "shift_name": "",
+            "available": False, "start_time": start_time,
+            "end_time": end_time, "is_hard": True,
+            "reason": reason, "source": source, "constraint_type": "duty",
+        }
+        self.availability_rows.append(row)
+        return row
+
     def availability(self, team_id, starts_on=None, ends_on=None,
                      employee=None):
         rows = [
@@ -270,9 +315,15 @@ class _FakeScheduleRepo:
             if row["team_id"] == team_id
         ]
         if starts_on:
-            rows = [r for r in rows if r["constraint_date"] >= starts_on]
+            previous = (datetime.date.fromisoformat(starts_on) - datetime.timedelta(days=1)).isoformat()
+            rows = [r for r in rows if r["constraint_date"] >= (
+                previous if r.get("constraint_type") == "duty" else starts_on
+            )]
         if ends_on:
-            rows = [r for r in rows if r["constraint_date"] <= ends_on]
+            following = (datetime.date.fromisoformat(ends_on) + datetime.timedelta(days=1)).isoformat()
+            rows = [r for r in rows if r["constraint_date"] <= (
+                following if r.get("constraint_type") == "duty" else ends_on
+            )]
         if employee:
             rows = [r for r in rows if r["employee"] == employee]
         return rows
@@ -320,8 +371,9 @@ class _ScriptedLlm:
         self._answers = list(answers or [])
         self.calls = []
 
-    def complete_json(self, system, user, schema=None, flow=""):
-        self.calls.append({"system": system, "user": user, "schema": schema})
+    def complete_json(self, system, user, schema=None, flow="", time_context="", on_text=None):
+        self.calls.append({"system": system, "user": user, "schema": schema,
+                           "time_context": time_context})
         if not self._answers:
             raise AssertionError("model called more times than scripted")
         answer = self._answers.pop(0)
@@ -335,24 +387,22 @@ def _generation(assignments, notes=None):
             "summary": "סידור השבוע"}
 
 
-def _build_app(answers=None, launch=None, settings=None):
+def _build_app(answers=None, launch=None, settings=None, failures=0):
     repository = _FakeScheduleRepo()
     llm = _ScriptedLlm(answers)
     repository.model_calls = llm.calls
     guards = Guards(SECRET)
     app = FastAPI()
-    app.include_router(
-        schedules.build_router(
-            ScheduleService(
-                repository, llm, launch=launch, settings=settings,
-                # The retry backoff is real seconds in production and nothing
-                # here: these tests describe *that* a span is re-asked, which
-                # is not the same claim as how long the pause is.
-                sleep=lambda _seconds: None,
-            ),
-            guards,
-        )
+    service = ScheduleService(
+        repository, llm, launch=launch, settings=settings,
+        # The retry backoff is real seconds in production and nothing
+        # here: these tests describe *that* a span is re-asked, which
+        # is not the same claim as how long the pause is.
+        sleep=lambda _seconds: None,
     )
+    if failures:
+        _flaky(service, failures)
+    app.include_router(schedules.build_router(service, guards))
 
     # The real handler's body builder, not a copy of it. A second shaping of
     # the same response is how a field the API actually returns goes missing
@@ -367,133 +417,26 @@ def _build_app(answers=None, launch=None, settings=None):
     return app, repository
 
 
+def _flaky(service, failures):
+    """The span solver fails `failures` times, then works: a stand-in for
+    any transient error between a job and its checkpoint."""
+    scheduler = service._stepper._scheduler
+    solve = scheduler.generate_span
+    left = [failures]
+
+    def generate_span(*args, **kwargs):
+        if left[0]:
+            left[0] -= 1
+            raise AgentError("תקלה זמנית")
+        return solve(*args, **kwargs)
+
+    scheduler.generate_span = generate_span
+
+
 def _client(app, role=ROLE_BOSS, team=TEAM):
     client = TestClient(app)
     client.cookies.set(COOKIE_NAME, issue(SECRET, team, role, 30))
     return client
-
-
-def test_day_build_falls_back_when_the_decision_agent_is_unavailable():
-    app, repo = _build_app([])
-    client = _client(app)
-    opened = client.post("/api/schedule/blank", json={
-        "starts_on": "2026-08-23", "ends_on": "2026-08-29",
-    }).json()
-
-    proposal = client.post("/api/schedule/propose", json={
-        "request": "תשבץ את שבת", "schedule_id": opened["id"],
-    })
-    assert proposal.status_code == 200
-    body = proposal.json()
-    assert body["operations"][0]["action"] == "generate_day"
-    assert body["operations"][0]["previewed"] is True
-    assert body["operations"][0]["assignments"]
-    assert len(repo.model_calls) == 1
-
-    applied = client.post("/api/schedule/apply", json={
-        "schedule_id": opened["id"],
-        "operations": body["operations"],
-        "reason": "",
-        "agent_reason": body["agent_reason"],
-    })
-    assert applied.status_code == 200
-    assert applied.json()["assignments"]
-    assert len(repo.model_calls) == 1
-
-
-def test_agent_sees_candidates_and_its_choice_is_the_confirmed_schedule():
-    app, repo = _build_app([{
-        "candidate": 1,
-        "reply": "הרצתי את השיבוץ ובחרתי בחלופה המאוזנת לאישור.",
-        "agent_reason": "בחרתי ביוסי מתוך שתי החלופות החוקיות.",
-    }])
-    client = _client(app)
-    opened = client.post("/api/schedule/blank", json={
-        "starts_on": "2026-08-23", "ends_on": "2026-08-29",
-    }).json()
-
-    proposal = client.post("/api/schedule/propose", json={
-        "request": "תשבץ את שבת", "schedule_id": opened["id"],
-    })
-    assert proposal.status_code == 200
-    body = proposal.json()
-    operation = body["operations"][0]
-    assert operation["previewed"] is True
-    assert [row["employee"] for row in operation["assignments"]] == ["יוסי"]
-    assert body["agent_reason"] == "בחרתי ביוסי מתוך שתי החלופות החוקיות."
-    assert len(repo.model_calls) == 1
-
-    applied = client.post("/api/schedule/apply", json={
-        "schedule_id": opened["id"],
-        "operations": body["operations"],
-        "reason": "",
-        "agent_reason": body["agent_reason"],
-    })
-    assert applied.status_code == 200
-    assert [row["employee"] for row in applied.json()["assignments"]] == [
-        "יוסי"
-    ]
-    assert len(repo.model_calls) == 1
-
-
-def test_a_generated_preview_cannot_be_rewritten_before_confirmation():
-    app, _repo = _build_app([{
-        "candidate": 0,
-        "reply": "החלופה מוכנה לאישור.",
-        "agent_reason": "החלופה חוקית ומאוזנת.",
-    }])
-    client = _client(app)
-    opened = client.post("/api/schedule/blank", json={
-        "starts_on": "2026-08-23", "ends_on": "2026-08-29",
-    }).json()
-    body = client.post("/api/schedule/propose", json={
-        "request": "תשבץ את שבת", "schedule_id": opened["id"],
-    }).json()
-    body["operations"][0]["assignments"][0]["employee"] = "עובד שהומצא"
-
-    applied = client.post("/api/schedule/apply", json={
-        "schedule_id": opened["id"],
-        "operations": body["operations"],
-        "reason": "",
-        "agent_reason": body["agent_reason"],
-    })
-
-    assert applied.status_code == 502
-    assert "יש לבקש הצעה חדשה" in applied.json()["detail"]
-
-
-def test_manual_assignment_cannot_cross_a_mandatory_round():
-    app, repo = _build_app([])
-    repo.profiles[TEAM] = {
-        "workplace": {
-            "name": "יחידה",
-            "round_first_closure_date": "2026-08-29",
-            "round_first_closure_group": "א",
-        },
-        "employees": [
-            {"name": "סבב א", "exit_pattern": "round", "rotation_group": "א"},
-            {"name": "סבב ב", "exit_pattern": "round", "rotation_group": "ב"},
-        ],
-        "shifts": PROFILE["shifts"],
-        "rules": [],
-    }
-    client = _client(app)
-    opened = client.post("/api/schedule/blank", json={
-        "starts_on": "2026-08-29", "ends_on": "2026-08-29",
-    }).json()
-
-    blocked = client.post("/api/schedule/assign", json={
-        "schedule_id": opened["id"], "employee": "סבב ב",
-        "shift_name": MORNING, "slot_date": "2026-08-29",
-    })
-    assert blocked.status_code == 502
-    assert "סבב או תלתון" in blocked.json()["detail"]
-
-    allowed = client.post("/api/schedule/assign", json={
-        "schedule_id": opened["id"], "employee": "סבב א",
-        "shift_name": MORNING, "slot_date": "2026-08-29",
-    })
-    assert allowed.status_code == 200
 
 
 class _DeferredLauncher:
@@ -511,19 +454,22 @@ class _DeferredLauncher:
 # -- generating ------------------------------------------------------------
 
 def test_generating_stores_a_draft_with_reasons():
-    app, repo = _build_app([])
+    app, repo = _build_app()
     response = _client(app).post("/api/schedule/generate", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-18",
     })
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "draft"
-    assert "זמינות" in body["assignments"][0]["reason"]
+    assert len(body["assignments"]) == 2
+    assert all(row["reason"] for row in body["assignments"])
+    # Nothing here needed translating, so the model was never asked.
     assert repo.model_calls == []
 
 
-def test_generation_does_not_wait_for_a_model_to_read_soft_preferences():
-    app, repo = _build_app([])
+def test_generation_reads_only_active_standing_preferences():
+    app, repo = _build_app([{"calls": [], "directives": [], "requests": [],
+                             "unresolved": [{"source_id": "source-1", "reason": "כבר מכוסה"}]}])
     repo.preference_rows = [
         {
             "team_id": TEAM, "status": "active", "kind": "employee",
@@ -540,8 +486,8 @@ def test_generation_does_not_wait_for_a_model_to_read_soft_preferences():
     })
 
     assert response.status_code == 200
-    assert response.json()["assignments"]
-    assert repo.model_calls == []
+    payload = json.loads(repo.model_calls[0]["user"])
+    assert [row["text"] for row in payload["sources"]] == ["דנה מעדיפה בקרים"]
 
 
 def test_generating_enforces_the_managers_required_assignment():
@@ -560,10 +506,7 @@ def test_generating_enforces_the_managers_required_assignment():
 
 
 def test_progressive_generation_supports_one_specific_date():
-    app, _ = _build_app([_generation([{
-        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-        "reason": "דנה מוסמכת לבוקר",
-    }])])
+    app, _ = _build_app()
     client = _client(app)
 
     started = client.post("/api/schedule/generate/start", json={
@@ -577,15 +520,30 @@ def test_progressive_generation_supports_one_specific_date():
     ).json()
     assert finished["generation"]["status"] == "complete"
     assert finished["generation"]["completed_days"] == 1
-    assert finished["assignments"][0]["employee"] == "דנה"
+    assert len(finished["assignments"]) == 1
 
 
-def test_generation_run_returns_before_the_model_and_is_polled_with_get():
+def test_progressive_generation_uses_and_returns_special_day_staffing():
+    app, _ = _build_app()
+    client = _client(app)
+    override = {"date": "2026-08-17", "shift": MORNING, "headcount": 2}
+
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+        "staffing_overrides": [override],
+    }).json()
+    finished = client.post(
+        "/api/schedule/generate/%s/next" % started["id"]
+    ).json()
+
+    assert started["generation"]["staffing_overrides"] == [override]
+    assert started["slots"][0]["headcount"] == 2
+    assert len(finished["assignments"]) == 2
+
+
+def test_generation_run_returns_before_the_solve_and_is_polled_with_get():
     launcher = _DeferredLauncher()
-    app, repo = _build_app([_generation([{
-        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-        "reason": "דנה מוסמכת לבוקר",
-    }])], launch=launcher)
+    app, repo = _build_app(launch=launcher)
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-17",
@@ -596,28 +554,22 @@ def test_generation_run_returns_before_the_model_and_is_polled_with_get():
     ).json()
 
     assert queued["generation"]["status"] == "running"
-    assert repo.model_calls == []
+    assert queued["assignments"] == []
     launcher.run_next()
     completed = client.get("/api/schedule/%s" % started["id"]).json()
     assert completed["generation"]["status"] == "complete"
-    assert completed["assignments"][0]["employee"] == "דנה"
+    assert len(completed["assignments"]) == 1
 
 
-def test_generation_does_not_need_model_retries():
-    """One bad answer costs a retry, not the rest of the period.
+def test_a_transient_failure_is_retried_without_stopping_the_job():
+    """One failure costs a retry, not the rest of the period.
 
     The worker owns this, not the browser: nobody is watching a background
     build, so a job that parks itself on the first blip is a job that waits
     for a person who may not come back for an hour.
     """
     launcher = _DeferredLauncher()
-    app, repo = _build_app([
-        AgentError("תקלה זמנית"),
-        _generation([{
-            "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-            "reason": "הניסיון החוזר הצליח",
-        }]),
-    ], launch=launcher)
+    app, _ = _build_app(launch=launcher, failures=1)
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-17",
@@ -630,24 +582,15 @@ def test_generation_does_not_need_model_retries():
         "/api/schedule/%s" % started["id"]
     ).json()["generation"]
     assert generation["status"] == "complete"
-    assert generation["days"][0]["attempts"] == 1
-    assert repo.model_calls == []
+    assert generation["days"][0]["attempts"] == 2
 
 
 def test_failed_background_generation_requeues_as_running_for_polling():
     """Once the retries are spent the job parks, and `/run` resumes it."""
     launcher = _DeferredLauncher()
-    app, repo = _build_app(
-        # One more failure than the worker will absorb, so the job reaches
-        # `failed` rather than recovering on its own.
-        [AgentError("תקלה זמנית")] * 3 + [
-            _generation([{
-                "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-                "reason": "הניסיון החוזר הצליח",
-            }]),
-        ],
-        launch=launcher,
-    )
+    # One more failure than the worker will absorb, so the job reaches
+    # `failed` rather than recovering on its own.
+    app, _ = _build_app(launch=launcher, failures=3)
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-17",
@@ -658,16 +601,22 @@ def test_failed_background_generation_requeues_as_running_for_polling():
     launcher.run_next()
     assert client.get("/api/schedule/%s" % started["id"]).json()[
         "generation"
+    ]["status"] == "failed"
+
+    resumed = client.post(path).json()
+    assert resumed["generation"]["status"] == "running"
+    launcher.run_next()
+    assert client.get("/api/schedule/%s" % started["id"]).json()[
+        "generation"
     ]["status"] == "complete"
-    assert repo.model_calls == []
 
 
 def test_one_existing_day_can_be_rebuilt_with_board_instructions():
+    avoid = {"kind": "avoid", "employees": ["דנה"], "is_hard": True,
+             "reason": "יום הסגירה של קבוצה א", "source_id": "source-1"}
     launcher = _DeferredLauncher()
-    app, repo = _build_app([_generation([{
-        "employee": "יוסי", "shift": MORNING, "date": "2026-08-17",
-        "reason": "יוסי בקבוצת הסגירה של שבת",
-    }])], launch=launcher)
+    app, repo = _build_app([{"calls": [], "directives": [], "requests": [avoid],
+                             "unresolved": []}], launch=launcher)
     client = _client(app)
     opened = client.post("/api/schedule/blank", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-17",
@@ -677,7 +626,7 @@ def test_one_existing_day_can_be_rebuilt_with_board_instructions():
         "/api/schedule/generate/%s/day/start" % opened["id"],
         json={
             "date": "2026-08-17",
-            "instructions": "זה יום הסגירה של קבוצה א; לשמור על הסבב",
+            "instructions": "זה יום הסגירה של קבוצה א; דנה לא נכנסת",
         },
     ).json()
     client.post("/api/schedule/generate/%s/run" % opened["id"])
@@ -685,66 +634,259 @@ def test_one_existing_day_can_be_rebuilt_with_board_instructions():
     assert prepared["generation"]["total_days"] == 1
     assert repo.model_calls == []
     launcher.run_next()
+    payload = json.loads(repo.model_calls[0]["user"])
+    assert "יום הסגירה" in payload["sources"][0]["text"]
     completed = client.get("/api/schedule/%s" % opened["id"]).json()
-    assert completed["assignments"]
-    assert repo.schedules[opened["id"]]["generation"]["instructions"].startswith(
-        "זה יום"
+    assert [row["employee"] for row in completed["assignments"]] == ["יוסי"]
+
+
+def test_a_run_of_days_is_built_inside_an_existing_draft():
+    """"From this day until Saturday" on a week that already has a period.
+
+    The job is planned for the run and nothing else: no solve is spent on
+    the days before it, what the manager placed inside it survives as a
+    pin (D18), and what sits outside it is not rewritten.
+    """
+    app, repo = _build_app()
+    client = _client(app)
+    opened = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+    }).json()
+    for day in ("2026-08-17", "2026-08-21"):
+        client.post("/api/schedule/assign", json={
+            "shift_name": MORNING, "slot_date": day,
+            "employee": "יוסי", "schedule_id": opened["id"],
+        })
+    path = "/api/schedule/generate/%s" % opened["id"]
+
+    prepared = client.post(path + "/range/start", json={
+        "starts_on": "2026-08-20", "ends_on": "2026-08-22",
+    }).json()
+
+    assert prepared["generation"]["total_days"] == 3
+    assert [day["dates"] for day in prepared["generation"]["days"]] == [
+        ["2026-08-20", "2026-08-21", "2026-08-22"],
+    ]
+    built = client.post(path + "/next").json()
+    assert built["generation"]["status"] == "complete"
+    placed = {(row["date"], row["source"]) for row in built["assignments"]}
+    assert placed == {
+        ("2026-08-17", "manager"), ("2026-08-20", "agent"),
+        ("2026-08-21", "manager"), ("2026-08-22", "agent"),
+    }
+    assert {row["employee"] for row in built["assignments"]
+            if row["date"] == "2026-08-21"} == {"יוסי"}
+
+
+def test_rebuilding_an_existing_day_updates_its_special_staffing():
+    app, _ = _build_app()
+    client = _client(app)
+    opened = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+    override = {"date": "2026-08-17", "shift": MORNING, "headcount": 2}
+
+    prepared = client.post(
+        "/api/schedule/generate/%s/range/start" % opened["id"],
+        json={
+            "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+            "staffing_overrides": [override],
+        },
+    ).json()
+    built = client.post(
+        "/api/schedule/generate/%s/next" % opened["id"]
+    ).json()
+
+    assert prepared["slots"][0]["headcount"] == 2
+    assert prepared["generation"]["staffing_overrides"] == [override]
+    assert len(built["assignments"]) == 2
+
+    reset = client.post(
+        "/api/schedule/generate/%s/range/start" % opened["id"],
+        json={"starts_on": "2026-08-17", "ends_on": "2026-08-17"},
+    ).json()
+    assert reset["slots"][0]["headcount"] == 1
+    assert reset["generation"]["staffing_overrides"] == []
+
+
+def test_a_run_of_days_is_refused_on_a_published_period_and_off_its_dates():
+    app, _ = _build_app()
+    client = _client(app)
+    opened = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+    }).json()
+    path = "/api/schedule/generate/%s/range/start" % opened["id"]
+
+    outside = client.post(path, json={
+        "starts_on": "2026-08-23", "ends_on": "2026-08-29",
+    })
+    backwards = client.post(path, json={
+        "starts_on": "2026-08-22", "ends_on": "2026-08-20",
+    })
+    client.post("/api/schedule/%s/publish" % opened["id"])
+    published = client.post(path, json={
+        "starts_on": "2026-08-20", "ends_on": "2026-08-22",
+    })
+
+    assert outside.status_code == 502
+    assert backwards.status_code == 502
+    assert published.status_code == 502
+
+
+def _two_shift_profile():
+    profile = copy.deepcopy(PROFILE)
+    profile["shifts"].append({
+        "name": EVENING, "start_time": "15:00", "end_time": "23:00",
+        "days": [], "is_on_call": False, "hour_weight": 1.0,
+        "staffing": [{"days": [], "headcount": 1, "required_roles": []}],
+    })
+    return profile
+
+
+def test_a_run_of_days_can_be_built_for_one_shift_only():
+    """"Only the evenings, this week": the other shift is left as it stands.
+
+    The agent's mornings on those dates are not replaced, and the evenings
+    are the only rows the build writes.
+    """
+    app, repo = _build_app()
+    profile = _two_shift_profile()
+    profile["employees"][1]["eligible_shifts"] = [EVENING]
+    repo.profiles[TEAM] = profile
+    client = _client(app)
+    opened = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+    }).json()
+    path = "/api/schedule/generate/%s" % opened["id"]
+    client.post(path + "/range/start", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-17",
+        "shifts": [MORNING],
+    })
+    mornings = client.post(path + "/next").json()
+    kept = {row["id"] for row in mornings["assignments"]}
+    assert {row["shift"] for row in mornings["assignments"]} == {MORNING}
+
+    prepared = client.post(path + "/range/start", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-17",
+        "shifts": [EVENING],
+    }).json()
+    built = client.post(path + "/next").json()
+
+    assert prepared["generation"]["shifts"] == [EVENING]
+    assert built["generation"]["status"] == "complete"
+    assert kept <= {row["id"] for row in built["assignments"]}
+    evenings = [row for row in built["assignments"] if row["shift"] == EVENING]
+    assert sorted(row["date"] for row in evenings) == ["2026-08-16", "2026-08-17"]
+    assert {row["employee"] for row in evenings} == {"יוסי"}
+
+
+def test_a_new_period_can_be_built_for_one_shift_only():
+    app, repo = _build_app()
+    repo.profiles[TEAM] = _two_shift_profile()
+    client = _client(app)
+
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+        "shifts": [MORNING],
+    }).json()
+    built = client.post("/api/schedule/generate/%s/next" % started["id"]).json()
+
+    assert {slot["shift_name"] for slot in built["slots"]} == {MORNING, EVENING}
+    assert {row["shift"] for row in built["assignments"]} == {MORNING}
+    assert len(built["assignments"]) == 7
+
+
+def test_a_build_for_a_shift_the_period_lacks_is_refused():
+    app, _ = _build_app()
+    client = _client(app)
+    opened = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+    }).json()
+
+    refused = client.post(
+        "/api/schedule/generate/%s/range/start" % opened["id"],
+        json={"starts_on": "2026-08-16", "ends_on": "2026-08-22",
+              "shifts": ["אין כזאת"]},
     )
-    assert repo.model_calls == []
+
+    assert refused.status_code == 502
 
 
-def test_progressive_long_range_is_one_persisted_request_per_day():
-    app, _ = _build_app([
-        _generation([{
-            "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-            "reason": "כיסוי יום ראשון",
-        }]),
-        _generation([{
-            "employee": "יוסי", "shift": MORNING, "date": "2026-08-18",
-            "reason": "כיסוי יום שני",
-        }]),
-    ])
+def test_a_new_period_can_be_built_from_a_day_inside_its_week():
+    """The period keeps its week; the job covers only what was asked for.
+
+    A period beginning on the Thursday would not contain the Sunday the
+    board reads that week by, and would be invisible on it.
+    """
+    app, repo = _build_app()
+    client = _client(app)
+
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+        "build_from": "2026-08-20", "build_through": "2026-08-22",
+    }).json()
+
+    assert (started["starts_on"], started["ends_on"]) == (
+        "2026-08-16", "2026-08-22",
+    )
+    assert len({slot["slot_date"] for slot in started["slots"]}) == 7
+    assert started["generation"]["total_days"] == 3
+    first = client.post(
+        "/api/schedule/generate/%s/next" % started["id"]
+    ).json()
+    assert first["generation"]["completed_days"] == 3
+    assert sorted(row["date"] for row in first["assignments"]) == [
+        "2026-08-20", "2026-08-21", "2026-08-22",
+    ]
+
+
+def test_a_build_range_outside_its_period_is_refused():
+    app, _ = _build_app()
+    client = _client(app)
+
+    refused = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+        "build_from": "2026-08-20", "build_through": "2026-08-25",
+    })
+
+    assert refused.status_code == 502
+
+
+def test_a_long_range_is_solved_in_four_week_spans():
+    app, _ = _build_app()
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
-        "instructions": "לשמור על חלוקה הוגנת",
+        "starts_on": "2026-08-01", "ends_on": "2026-09-30",
     }).json()
+    assert [len(day["dates"]) for day in started["generation"]["days"]] == [28, 28, 5]
 
     first = client.post(
         "/api/schedule/generate/%s/next" % started["id"]
     ).json()
-    assert first["generation"]["completed_days"] == 1
+    assert first["generation"]["completed_days"] == 28
     assert first["generation"]["status"] == "running"
-
-    second = client.post(
-        "/api/schedule/generate/%s/next" % started["id"]
-    ).json()
-    assert second["generation"]["status"] == "complete"
-    assert second["generation"]["completed_days"] == 2
-    assert {row["date"] for row in second["assignments"]} == {
-        "2026-08-17", "2026-08-18",
-    }
+    for _ in range(2):
+        last = client.post("/api/schedule/generate/%s/next" % started["id"]).json()
+    assert last["generation"]["status"] == "complete"
+    assert len(last["assignments"]) == 61
 
 
-def test_a_day_completes_even_when_the_model_would_fail():
-    app, repo = _build_app([
-        AgentError("תקלה זמנית"),
-        _generation([{
-            "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-            "reason": "ניסיון חוזר הצליח",
-        }]),
-    ])
+def test_a_failed_day_is_checkpointed_and_the_same_day_can_resume():
+    app, repo = _build_app(failures=1)
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-17",
     }).json()
     path = "/api/schedule/generate/%s/next" % started["id"]
 
-    completed = client.post(path)
-    assert completed.status_code == 200
-    assert completed.json()["generation"]["status"] == "complete"
-    assert completed.json()["generation"]["days"][0]["attempts"] == 1
-    assert repo.model_calls == []
+    assert client.post(path).status_code == 502
+    assert repo.schedules[started["id"]]["generation"]["days"][0][
+        "status"
+    ] == "failed"
+
+    resumed = client.post(path).json()
+    assert resumed["generation"]["status"] == "complete"
+    assert resumed["generation"]["days"][0]["attempts"] == 2
 
 
 def test_progress_answers_the_poll_without_rebuilding_the_grid():
@@ -804,21 +946,12 @@ def test_a_running_job_says_when_a_worker_last_touched_it():
 def test_a_manager_can_stop_a_build_and_keep_the_finished_days():
     """Giving up is the manager's decision, and it costs them nothing.
 
-    The days already paid for stay, the period is an ordinary draft
-    immediately, and resuming picks up the first day that is not complete."""
-    app, repo = _build_app([
-        _generation([{
-            "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-            "reason": "כיסוי יום ראשון",
-        }]),
-        _generation([{
-            "employee": "יוסי", "shift": MORNING, "date": "2026-08-18",
-            "reason": "כיסוי יום שני",
-        }]),
-    ])
+    The spans already solved stay, the period is an ordinary draft
+    immediately, and resuming picks up the first span that is not complete."""
+    app, repo = _build_app()
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+        "starts_on": "2026-08-01", "ends_on": "2026-09-05",
     }).json()
     client.post("/api/schedule/generate/%s/next" % started["id"])
 
@@ -827,8 +960,8 @@ def test_a_manager_can_stop_a_build_and_keep_the_finished_days():
     ).json()
 
     assert stopped["generation"]["status"] == "cancelled"
-    assert stopped["generation"]["completed_days"] == 1
-    assert [row["date"] for row in stopped["assignments"]] == ["2026-08-17"]
+    assert stopped["generation"]["completed_days"] == 28
+    assert max(row["date"] for row in stopped["assignments"]) == "2026-08-28"
     assert stopped["status"] == "draft"
 
 
@@ -881,6 +1014,34 @@ def test_a_stopped_job_resumes_from_the_first_unfinished_day():
     ]["status"] == "complete"
 
 
+def test_a_stopped_build_banner_can_be_dismissed_and_resume_brings_it_back():
+    launcher = _DeferredLauncher()
+    app, _ = _build_app([_generation([{
+        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
+        "reason": "כיסוי יום ראשון",
+    }])], launch=launcher)
+    client = _client(app)
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+    }).json()
+    dismiss = "/api/schedule/generate/%s/dismiss" % started["id"]
+
+    # A running build is stopped from its banner, not hidden.
+    client.post("/api/schedule/generate/%s/run" % started["id"])
+    assert client.post(dismiss).status_code >= 400
+
+    client.post("/api/schedule/generate/%s/cancel" % started["id"])
+    launcher.run_next()
+    dismissed = client.post(dismiss).json()
+    assert dismissed["generation"]["status"] == "cancelled"
+    assert dismissed["generation"]["dismissed"] is True
+
+    resumed = client.post(
+        "/api/schedule/generate/%s/run" % started["id"]
+    ).json()
+    assert resumed["generation"]["dismissed"] is False
+
+
 def test_polling_the_same_job_twice_does_not_start_a_second_worker():
     """Two tabs, one job. A second worker would generate every day twice."""
     launcher = _DeferredLauncher()
@@ -902,15 +1063,11 @@ def test_polling_the_same_job_twice_does_not_start_a_second_worker():
 
 def test_a_hand_placed_shift_survives_the_day_being_generated():
     """The board stays writable while a period is built (D18), so a cell
-    filled in mid-build must not be undone by the day that follows it.
+    filled in mid-build must not be undone by the span that follows it.
 
-    It goes to the model as a pin, and it is kept whether or not the model
-    repeats it -- with the manager's own source, so the history still says a
-    person put it there."""
-    app, repo = _build_app([_generation([{
-        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-        "reason": "בחירת הסוכן",
-    }])])
+    It goes to the solver as a pin, with the manager's own source, so the
+    history still says a person put it there."""
+    app, repo = _build_app()
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-17",
@@ -925,8 +1082,7 @@ def test_a_hand_placed_shift_survives_the_day_being_generated():
     ).json()
 
     placed = {row["employee"]: row["source"] for row in built["assignments"]}
-    assert placed["יוסי"] == "manager"
-    assert repo.model_calls == []
+    assert placed == {"יוסי": "manager"}
 
 
 class _BlockingLlm:
@@ -951,12 +1107,17 @@ class _BlockingLlm:
         return self._answer
 
 
-def test_a_model_that_never_answers_cannot_hold_generation_open():
+def test_a_build_held_open_by_the_model_leaves_the_board_usable():
+    """The failure this whole path exists to prevent.
+
+    A model that never answers (here, while translating an instruction)
+    must not leave the manager with a period stuck at "building" and no way
+    forward. Three things have to hold — the poll must stay cheap and
+    answerable, a shift must still be placeable by hand, and stopping must
+    actually stop.
+    """
     repository = _FakeScheduleRepo()
-    llm = _BlockingLlm(_generation([{
-        "employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-        "reason": "דנה מוסמכת לבוקר",
-    }]))
+    llm = _BlockingLlm({"calls": [], "directives": [], "requests": [], "unresolved": []})
     repository.model_calls = llm.calls
     guards = Guards(SECRET)
     app = FastAPI()
@@ -973,17 +1134,34 @@ def test_a_model_that_never_answers_cannot_hold_generation_open():
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+        "instructions": "לשמור על חלוקה הוגנת",
     }).json()
     client.post("/api/schedule/generate/%s/run" % started["id"])
-    deadline = time.time() + 2
-    while time.time() < deadline:
-        state = client.get("/api/schedule/%s/progress" % started["id"]).json()
-        if state["generation"]["status"] == "complete":
-            break
-        time.sleep(0.01)
-    assert state["generation"]["status"] == "complete"
-    assert not llm.entered.is_set()
-    assert repository.model_calls == []
+    assert llm.entered.wait(10), "the worker never reached the model"
+
+    try:
+        # The poll answers while the model is still thinking, and answers
+        # with the counter rather than the period.
+        progress = client.get(
+            "/api/schedule/%s/progress" % started["id"]
+        ).json()
+        assert progress["generation"]["status"] == "running"
+        assert progress["generation"]["heartbeat"]
+
+        # The board is not locked: a manager can place a shift by hand on a
+        # date the solver has not reached yet.
+        placed = client.post("/api/schedule/assign", json={
+            "shift_name": MORNING, "slot_date": "2026-08-18",
+            "employee": "יוסי", "schedule_id": started["id"],
+        })
+        assert placed.status_code == 200
+
+        stopped = client.post(
+            "/api/schedule/generate/%s/cancel" % started["id"]
+        ).json()
+        assert stopped["generation"]["status"] == "cancelled"
+    finally:
+        llm.release.set()
 
 
 def _two_periods(client):
@@ -1084,14 +1262,14 @@ def test_a_write_naming_no_period_still_means_the_current_one():
     assert placed.json()["id"] == newer["id"]
 
 
-def test_generating_without_a_finished_interview_is_refused():
+def test_generating_without_unit_setup_is_refused():
     """No profile means no shift vocabulary, and guessing one is exactly
     the hardcoding D9 forbids."""
     app, repo = _build_app([])
     repo.profiles[TEAM] = None
     response = _client(app).post("/api/schedule/generate", json={})
     assert response.status_code == 502
-    assert "ראיון" in response.json()["detail"]
+    assert "הגדרת היחידה" in response.json()["detail"]
 
 
 def _days(first, last):
@@ -1103,25 +1281,20 @@ def _days(first, last):
 
 
 def test_a_generated_schedule_carries_its_warnings_and_still_returns_200():
-    """D3: warnings are advisory. A schedule that breaks a rule still renders.
-
-    Eight days is past `_CHUNK_DAYS`, so this also covers the case the warning
-    needs most: a run of consecutive shifts that crosses a chunk boundary and
-    is only visible once the chunks are merged. The audit sees the period, not
-    the calls it took to build it.
-    """
-    app, _ = _build_app([
-        _generation(_days(17, 23)), _generation(_days(24, 24)),
-    ])
+    """D3 still holds for the audit: warnings are advisory. A seat nobody can
+    legally take is reported, and the schedule still renders."""
+    app, repo = _build_app()
+    repo.profiles[TEAM] = dict(PROFILE, shifts=[dict(PROFILE["shifts"][0], staffing=[
+        {"days": [], "headcount": 3, "required_roles": []}])])
     response = _client(app).post("/api/schedule/generate", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-24",
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
     })
     assert response.status_code == 200
     codes = {warning["code"] for warning in response.json()["warnings"]}
-    # The deterministic engine avoids a provable consecutive-days breach
-    # instead of accepting it from a model and merely reporting it later.
-    assert "consecutive" not in codes
-    assert len(response.json()["assignments"]) == 8
+    assert "unfilled" in codes
+    assert any("נשארה בחוסר" in note for note in response.json()["notes"])
+    # The schedule is still there in full, not withheld.
+    assert len(response.json()["assignments"]) == 4
 
 
 # -- the management overview ----------------------------------------------
@@ -1139,6 +1312,8 @@ def test_the_overview_returns_roster_vocabulary_and_period():
     assert [row["name"] for row in body["employees"]] == ["דנה", "יוסי"]
     assert [row["name"] for row in body["shifts"]] == [MORNING]
     assert body["schedule"]["assignments"]
+    # The replacement tab's dates default to it; dropping it left them blank.
+    assert body["today"] == israel_today().isoformat()
 
 
 def test_the_overview_carries_the_periods_numbers():
@@ -1148,23 +1323,21 @@ def test_the_overview_carries_the_periods_numbers():
     what the browser actually receives -- a field added to `shift_stats` but
     missing from `ShiftStats` would be silently dropped here.
     """
-    app, _ = _build_app([_generation([
-        {"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-         "reason": "מוסמכת"},
-    ])])
+    app, _ = _build_app()
     client = _client(app)
     client.post("/api/schedule/generate", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+        "required_assignments": [{"employee": "דנה", "shift": MORNING, "date": "2026-08-17"}],
     })
 
     stats = client.get("/api/schedule/overview").json()["stats"]
 
-    assert stats["total_shifts"] == 2
-    assert stats["people_working"] == 2
+    assert stats["total_shifts"] == 1
+    assert stats["people_working"] == 1
     # Everyone on the roster is present, including the person with no
     # shifts -- that zero is the whole point of the per-person chart.
     assert {row["employee"] for row in stats["by_employee"]} == {"דנה", "יוסי"}
-    assert stats["coverage"]["assigned"] == 2
+    assert stats["coverage"]["assigned"] == 1
 
 
 def test_the_overview_carries_zeroed_stats_before_anything_is_built():
@@ -1214,14 +1387,14 @@ def test_opening_a_blank_period_calls_no_model():
     assert body["assignments"] == []
 
 
-def test_a_blank_period_without_a_finished_interview_is_refused():
-    """Skipping the agent does not mean skipping the interview: without the
+def test_a_blank_period_without_unit_setup_is_refused():
+    """Skipping the agent does not mean skipping setup: without the
     shift vocabulary there is no grid to build (D9)."""
     app, repo = _build_app([])
     repo.profiles[TEAM] = None
     response = _client(app).post("/api/schedule/blank", json={})
     assert response.status_code == 502
-    assert "ראיון" in response.json()["detail"]
+    assert "הגדרת היחידה" in response.json()["detail"]
 
 
 def test_a_manual_assignment_is_marked_as_the_managers_and_calls_no_model():
@@ -1277,6 +1450,59 @@ def test_a_manual_assignment_is_recorded_in_the_change_log():
     assert placed["reason"] == "כיסוי בוקר"
 
 
+@pytest.mark.parametrize("service_type", ["standard", "reserve"])
+def test_hard_unavailability_vacates_and_blocks_standard_and_reserve_soldiers(service_type):
+    app, repo = _build_app([])
+    repo.profiles[TEAM] = copy.deepcopy(PROFILE)
+    repo.profiles[TEAM]["employees"][0]["service_type"] = service_type
+    client = _client(app)
+    schedule = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    placed = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "schedule_id": schedule["id"],
+    })
+    assert placed.status_code == 200
+
+    constraint = client.post("/api/schedule/constraints", json={
+        "employee": "דנה", "constraint_date": "2026-08-17",
+        "reason": "לא זמינה", "is_hard": True,
+    })
+    assert constraint.status_code == 200
+    assert repo.assignments(schedule["id"], TEAM) == []
+
+    check = client.post("/api/schedule/check", json={
+        "employee": "דנה", "shift_name": MORNING,
+        "slot_date": "2026-08-17", "schedule_id": schedule["id"],
+    })
+    assert check.json()["blocking"] is True
+    refused = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "schedule_id": schedule["id"],
+    })
+    assert refused.status_code == 409
+    assert "אינו/ה זמין/ה" in refused.json()["detail"]
+
+
+def test_soft_unavailability_still_allows_a_manual_override():
+    app, _ = _build_app([])
+    client = _client(app)
+    schedule = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    client.post("/api/schedule/constraints", json={
+        "employee": "דנה", "constraint_date": "2026-08-17",
+        "reason": "עדיף שלא", "is_hard": False,
+    })
+
+    response = client.post("/api/schedule/assign", json={
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "schedule_id": schedule["id"],
+    })
+    assert response.status_code == 200
+
+
 def test_assigning_the_same_person_twice_changes_nothing():
     """The table is UNIQUE (slot_id, employee) and the insert does nothing on
     conflict, so a double click is a success that added no duplicate."""
@@ -1311,9 +1537,10 @@ def test_a_manual_schedule_still_carries_its_warnings():
     app, _ = _build_app([])
     client = _client(app)
     client.post("/api/schedule/blank", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-24",
+        "starts_on": "2026-08-17", "ends_on": "2026-08-28",
     })
-    for day in range(17, 25):
+    # Twelve days in a row: one past the default eleven.
+    for day in range(17, 29):
         client.post("/api/schedule/assign", json={
             "shift_name": MORNING, "slot_date": "2026-08-%02d" % day,
             "employee": "דנה",
@@ -1324,7 +1551,7 @@ def test_a_manual_schedule_still_carries_its_warnings():
     codes = {warning["code"] for warning in schedule["warnings"]}
     assert "consecutive" in codes
     # Reported, never withheld.
-    assert len(schedule["assignments"]) == 8
+    assert len(schedule["assignments"]) == 12
 
 
 def test_unassigning_removes_the_row_and_logs_it():
@@ -1346,6 +1573,74 @@ def test_unassigning_removes_the_row_and_logs_it():
     removed = [row for row in repo.changes if row["action"] == "removed"][0]
     assert removed["employee"] == "דנה"
     assert removed["reason"] == "דנה התחלפה"
+
+
+def _week_with_dana(client, days=("2026-08-17", "2026-08-18")):
+    created = client.post("/api/schedule/blank", json={
+        "starts_on": days[0], "ends_on": days[-1],
+    }).json()
+    for day in days:
+        client.post("/api/schedule/assign", json={
+            "shift_name": MORNING, "slot_date": day, "employee": "דנה",
+            "schedule_id": created["id"],
+        })
+    return created
+
+
+def test_a_departure_preview_counts_the_shifts_and_writes_nothing():
+    app, repo = _build_app([])
+    client = _client(app)
+    created = _week_with_dana(client)
+    repo.schedules[created["id"]]["status"] = "published"
+    changes = len(repo.changes)
+
+    response = client.post("/api/schedule/departure/preview", json={
+        "employee": "דנה", "effective_date": "2026-08-18",
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["shifts"] == 1 and body["effective_date"] == "2026-08-18"
+    assert [row["id"] for row in body["published"]] == [created["id"]]
+    assert len(repo.changes) == changes
+    assert repo.schedules[created["id"]]["status"] == "published"
+    assert not repo.profiles[TEAM]["employees"][0].get("inactive_from")
+
+
+def test_a_departure_vacates_later_shifts_and_keeps_the_name_and_history():
+    """Deleting an employee is a departure: the name is an identity key (D4)."""
+    app, repo = _build_app([])
+    client = _client(app)
+    created = _week_with_dana(client)
+    repo.schedules[created["id"]]["status"] = "published"
+
+    response = client.post("/api/schedule/departure", json={
+        "employee": "דנה", "effective_date": "2026-08-18", "reason": "סיימה שירות",
+    })
+
+    assert response.status_code == 200
+    assert response.json()["shifts"] == 1
+    left = repo.assignments(created["id"], TEAM)
+    assert [str(row["date"])[:10] for row in left] == ["2026-08-17"]
+    assert repo.schedules[created["id"]]["status"] == "draft"
+    people = {row["name"]: row for row in repo.profiles[TEAM]["employees"]}
+    assert people["דנה"]["inactive_from"] == "2026-08-18"
+    assert not people["יוסי"].get("inactive_from")
+    removed = [row for row in repo.changes if row["action"] == "removed"]
+    assert len(removed) == 1 and removed[0]["reason"] == "סיימה שירות"
+
+    again = client.post("/api/schedule/departure", json={"employee": "דנה"})
+    assert again.status_code == 409
+
+
+def test_a_departure_is_refused_for_a_name_not_on_the_roster_and_for_a_member():
+    app, _ = _build_app([])
+    assert _client(app).post("/api/schedule/departure", json={
+        "employee": "אין כזו",
+    }).status_code == 404
+    assert _client(app, role=ROLE_MEMBER).post("/api/schedule/departure", json={
+        "employee": "דנה",
+    }).status_code in (401, 403)
 
 
 def test_clearing_a_day_empties_it_and_leaves_the_rest_of_the_week():
@@ -1542,10 +1837,10 @@ def test_constraints_are_scoped_to_the_workspace():
 # -- the change loop -------------------------------------------------------
 
 def test_a_change_without_a_reason_is_answered_by_asking():
-    app, _ = _build_app([{
-        "reply": "למה דנה לא מגיעה?", "needs_reason": True,
-        "agent_reason": "", "operations": [], "constraints": [],
-    }])
+    app, _ = _build_app([
+        {"reply": "למה דנה לא מגיעה?", "needs_reason": True,
+         "agent_reason": "", "operations": [], "constraints": []},
+    ])
     client = _client(app)
     client.post("/api/schedule/generate", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-18",
@@ -1560,6 +1855,8 @@ def test_a_change_without_a_reason_is_answered_by_asking():
 def test_proposing_persists_nothing():
     """The two-step contract: a proposal is a proposal until confirmed."""
     app, repo = _build_app([
+        _generation([{"employee": "דנה", "shift": MORNING,
+                      "date": "2026-08-17", "reason": "מוסמכת"}]),
         {"reply": "אציע להוריד את דנה", "needs_reason": False,
          "agent_reason": "דנה חולה, יוסי פנוי",
          "operations": [{"action": "remove", "employee": "דנה",
@@ -1581,13 +1878,11 @@ def test_proposing_persists_nothing():
 
 def test_applying_a_confirmed_change_records_both_reasons():
     """D8: the manager's reason and the agent's both land in the log."""
-    app, repo = _build_app([
-        _generation([{"employee": "דנה", "shift": MORNING,
-                      "date": "2026-08-17", "reason": "מוסמכת"}]),
-    ])
+    app, repo = _build_app()
     client = _client(app)
     created = client.post("/api/schedule/generate", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+        "required_assignments": [{"employee": "דנה", "shift": MORNING, "date": "2026-08-17"}],
     }).json()
 
     response = client.post("/api/schedule/apply", json={
@@ -1685,6 +1980,35 @@ def test_a_confirmed_drag_moves_the_assignment_and_logs_the_reason():
     assert entry["reason"] == "דנה ביקשה להחליף יום"
 
 
+def test_a_drag_somebody_else_already_moved_is_refused():
+    """Two managers drag the same shift. The second confirmation names the
+    slot its manager saw it on, which it has since left, so it is refused
+    rather than moving the shift again from wherever it went."""
+    app, repo = _build_app([
+        _generation([{"employee": "דנה", "shift": MORNING,
+                      "date": "2026-08-17", "reason": "מוסמכת"}]),
+    ])
+    client = _client(app)
+    created = client.post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    assignment = created["assignments"][0]
+    drag = {
+        "assignment_id": assignment["id"], "shift_name": MORNING,
+        "slot_date": "2026-08-18", "reason": "החלפת יום",
+        "from_slot_id": assignment["slot_id"],
+    }
+    assert client.post("/api/schedule/move", json=drag).status_code == 200
+
+    stale = client.post("/api/schedule/move", json=dict(
+        drag, slot_date="2026-08-17", reason="החזרה",
+    ))
+    assert stale.status_code == 409
+    assert stale.json()["detail"] == ASSIGNMENT_MOVED
+    moves = [row for row in repo.changes if row["action"] == "moved"]
+    assert len(moves) == 1
+
+
 def test_a_drag_without_a_reason_is_rejected():
     """The confirmation dialog is what collects it; an empty one never
     reaches the server."""
@@ -1724,6 +2048,72 @@ def test_a_timed_soft_constraint_is_recorded():
     assert response.json()["is_hard"] is False
 
 
+def test_a_duty_is_recorded_and_blocks_manual_placement_even_across_midnight():
+    app, _ = _build_app([])
+    client = _client(app)
+    schedule = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+
+    duty = client.post("/api/schedule/constraints", json={
+        "employee": "דנה", "constraint_date": "2026-08-17",
+        "constraint_type": "duty", "start_time": "22:00", "end_time": "08:00",
+        "reason": "תורנות חמ״ל",
+    })
+    assert duty.status_code == 200
+    assert duty.json()["constraint_type"] == "duty"
+
+    check = client.post("/api/schedule/check", json={
+        "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-18",
+        "schedule_id": schedule["id"],
+    })
+    assert check.status_code == 200
+    assert check.json()["blocking"] is True
+
+    assigned = client.post("/api/schedule/assign", json={
+        "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-18",
+        "schedule_id": schedule["id"],
+    })
+    assert assigned.status_code == 409
+    assert "תורנות חוסמת" in assigned.json()["detail"]
+
+
+def test_a_complex_duty_blocks_manual_placement_for_the_whole_day():
+    app, repo = _build_app([])
+    client = _client(app)
+    schedule = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    # As `records.availability()` projects a מכלול duty: no hours.
+    repo.availability_rows.append({
+        "id": "complex-duty-1", "team_id": TEAM, "employee": "דנה",
+        "constraint_date": "2026-08-18", "shift_name": "", "available": False,
+        "start_time": "", "end_time": "", "is_hard": True, "reason": "מטבח",
+        "source": "complex", "constraint_type": "duty",
+    })
+
+    assigned = client.post("/api/schedule/assign", json={
+        "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-18",
+        "schedule_id": schedule["id"],
+    })
+    assert assigned.status_code == 409
+    assert "בתורנות מטבח של המכלול" in assigned.json()["detail"]
+
+    assert client.post("/api/schedule/assign", json={
+        "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-17",
+        "schedule_id": schedule["id"],
+    }).status_code == 200
+
+
+def test_a_duty_requires_both_clock_bounds():
+    app, _ = _build_app([])
+    response = _client(app).post("/api/schedule/constraints", json={
+        "employee": "דנה", "constraint_date": "2026-08-17",
+        "constraint_type": "duty", "start_time": "22:00",
+    })
+    assert response.status_code == 422
+
+
 def test_an_invalid_constraint_time_is_rejected():
     app, _ = _build_app([])
     response = _client(app).post("/api/schedule/constraints", json={
@@ -1733,24 +2123,20 @@ def test_an_invalid_constraint_time_is_rejected():
     assert response.status_code == 422
 
 
-def test_a_recorded_constraint_shows_up_as_a_warning_when_contradicted():
-    """The audit reads a constraint with no shift as covering the whole day."""
-    app, _ = _build_app([_generation([
-        {"employee": "דנה", "shift": MORNING, "date": "2026-08-17",
-         "reason": "כיסוי"},
-    ])])
+def test_a_recorded_hard_constraint_vacates_an_existing_assignment():
+    app, _ = _build_app()
     client = _client(app)
+    body = client.post("/api/schedule/generate", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-17",
+        "required_assignments": [{"employee": "דנה", "shift": MORNING, "date": "2026-08-17"}],
+    }).json()
     client.post("/api/schedule/constraints", json={
         "employee": "דנה", "constraint_date": "2026-08-17",
         "reason": "מילואים",
     })
-    body = client.post("/api/schedule/generate", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
-    }).json()
-    assert not any(
-        row["employee"] == "דנה" and row["date"] == "2026-08-17"
-        for row in body["assignments"]
-    )
+    body = client.get("/api/schedule/%s" % body["id"]).json()
+    assert body["assignments"] == []
+    assert any(warning["code"] == "unfilled" for warning in body["warnings"])
 
 
 def test_restating_a_constraint_replaces_rather_than_duplicates():
@@ -1787,69 +2173,6 @@ def test_the_change_log_is_readable_as_history():
     })
     history = client.get("/api/schedule/history/list").json()
     assert any(row["action"] == "generated" for row in history)
-
-
-# -- the agent speaking first ----------------------------------------------
-
-def test_the_agent_briefs_the_manager_unprompted():
-    """The one route the manager did not initiate (D15)."""
-    app, _ = _build_app([
-        {"headline": "יש חור בשלישי", "quiet": False, "items": [
-            {"text": "משמרת בוקר של שלישי ריקה", "kind": "gap",
-             "suggestion": "מי יכול לכסות את בוקר שלישי?"},
-        ]},
-    ])
-    client = _client(app)
-    client.post("/api/schedule/generate", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
-    })
-
-    body = client.post("/api/schedule/brief", json={
-        "trigger": "opened", "last_said": [],
-    }).json()
-
-    assert body["quiet"] is False
-    assert body["items"][0]["suggestion"]
-
-
-def test_a_briefing_never_breaks_the_screen():
-    """No model answer is scripted, so the call fails inside the service.
-
-    It must come back quiet and `200`. This sits beside a calendar that has
-    to render whatever the model is doing — an error here would take the
-    management area down with it.
-    """
-    app, _ = _build_app([])
-
-    response = _client(app).post("/api/schedule/brief", json={
-        "trigger": "opened",
-    })
-
-    assert response.status_code == 200
-    assert response.json() == {"headline": "", "items": [], "quiet": True}
-
-
-def test_a_member_cannot_ask_for_a_briefing():
-    """A briefing reads drafts and other people's stated reasons."""
-    app, _ = _build_app([])
-    member = _client(app, role=ROLE_MEMBER)
-
-    assert member.post(
-        "/api/schedule/brief", json={"trigger": "opened"}
-    ).status_code == 401
-
-
-def test_briefing_before_the_interview_is_quiet_without_calling_the_model():
-    """Nothing to observe: the agent knows neither the shifts nor the people,
-    and a briefing built on that would be invented rather than noticed."""
-    app, repo = _build_app([])
-    repo.profiles = {}
-
-    body = _client(app).post(
-        "/api/schedule/brief", json={"trigger": "opened"}
-    ).json()
-
-    assert body["quiet"] is True
 
 
 # -- leaving the app as a file (D17) ---------------------------------------
@@ -1900,297 +2223,6 @@ def test_one_workspace_cannot_download_anothers_period():
     ).status_code == 404
 
 
-# -- import (D7) -----------------------------------------------------------
-
-def _upload(book, name="schedule.xlsx"):
-    import io
-
-    stream = io.BytesIO()
-    book.save(stream)
-    return (
-        "files",
-        (name, stream.getvalue(),
-         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
-    )
-
-
-def _sheet(grid):
-    """An ad-hoc `.xlsx` from a list of rows, for one-off layouts."""
-    from openpyxl import Workbook
-
-    book = Workbook()
-    for row in grid:
-        book.active.append(row)
-    return book
-
-
-def _preview_grid(client, grid):
-    return client.post(
-        "/api/schedule/import/preview?learn_rules=false",
-        files=[_upload(_sheet(grid), "sheet.xlsx")],
-    ).json()
-
-
-def _preview(client, books, learn_rules=False):
-    return client.post(
-        "/api/schedule/import/preview?learn_rules=%s"
-        % ("true" if learn_rules else "false"),
-        files=[_upload(book, "file-%d.xlsx" % index)
-               for index, book in enumerate(books)],
-    )
-
-
-def test_previewing_an_import_reads_the_file():
-    from tests.fixtures.build import sample_a
-
-    app, repo = _build_app([])
-    response = _preview(_client(app), [sample_a()])
-    assert response.status_code == 200
-    body = response.json()
-    assert body["periods"][0]["layout"] == "shift_major"
-    # Both rows are read. `PROFILE` declares only `בוקר`, and the `צהריים`
-    # row is still taken from the sheet's own wording rather than dropped --
-    # the file records something the workplace really ran.
-    assert len(body["periods"][0]["assignments"]) == 10
-
-
-def test_a_shift_the_workplace_never_declared_is_still_read():
-    """A file may name a shift the interview never heard of (D7).
-
-    Sample A has a `צהריים` row this workplace never declared. Refusing it
-    would silently lose real history and would make the product reject the
-    very files it exists to absorb. Nothing is invented — the name is the
-    manager's own.
-    """
-    from tests.fixtures.build import sample_a
-
-    app, repo = _build_app([])
-    body = _preview(_client(app), [sample_a()]).json()
-    assert body["periods"][0]["shifts"] == [MORNING, EVENING]
-
-
-def test_a_declared_shift_is_still_matched_to_its_declared_name():
-    """D9 where it applies: the vocabulary's spelling wins."""
-    app, repo = _build_app([])
-    body = _preview_grid(_client(app), [
-        ["משמרות", "1/6/25"],
-        ["משמרת בוקר", "דנה"],
-    ])
-    assert body["periods"][0]["shifts"] == [MORNING]
-
-
-def test_a_sheet_of_only_dates_and_people_is_read():
-    """No shift column at all — the plainest file a manager keeps."""
-    app, repo = _build_app([])
-    body = _preview_grid(_client(app), [
-        ["", "1/6/25", "2/6/25"],
-        ["", "דנה", "יוסי"],
-    ])
-    period = body["periods"][0]
-    assert period["layout"] == "date_only"
-    assert period["shifts"] == []
-    assert any("אין שמות משמרות" in note for note in period["warnings"])
-
-
-def test_previewing_an_import_stores_nothing():
-    """D7's whole point: inference is not a write.
-
-    The confirmation is only real if the preview has not already committed.
-    """
-    from tests.fixtures.build import sample_a
-
-    app, repo = _build_app([])
-    _preview(_client(app), [sample_a()])
-    assert repo.schedules == {}
-    assert repo.availability_rows == []
-    assert repo.changes == []
-
-
-def test_confirming_an_import_stores_the_approved_rows():
-    app, repo = _build_app([])
-    response = _client(app).post("/api/schedule/import/confirm", json={
-        "assignments": [
-            {"employee": "דנה", "shift": MORNING, "date": "2026-08-17"},
-            {"employee": "יוסי", "shift": MORNING, "date": "2026-08-18"},
-        ],
-    })
-    assert response.status_code == 200
-    assert len(response.json()["assignments"]) == 2
-    assert len(repo.schedules) == 1
-
-
-def test_an_imported_row_says_it_was_imported():
-    """`assignments.source` distinguishes a recorded past from a decision."""
-    app, repo = _build_app([])
-    _client(app).post("/api/schedule/import/confirm", json={
-        "assignments": [
-            {"employee": "דנה", "shift": MORNING, "date": "2026-08-17"},
-        ],
-    })
-    rows = list(repo.assignment_rows.values())[0]
-    assert rows[0]["source"] == "imported"
-
-
-def test_an_imported_row_carries_a_reason_without_inventing_one():
-    """D8 is answered by a different voice, not relaxed."""
-    app, repo = _build_app([])
-    _client(app).post("/api/schedule/import/confirm", json={
-        "assignments": [
-            {"employee": "דנה", "shift": MORNING, "date": "2026-08-17"},
-        ],
-    })
-    rows = list(repo.assignment_rows.values())[0]
-    assert rows[0]["reason"]
-
-
-def test_a_stated_constraint_is_stored_as_the_managers_own():
-    """Nobody submitted it, so `employee_reported` would be a lie (D13)."""
-    app, repo = _build_app([])
-    _client(app).post("/api/schedule/import/confirm", json={
-        "assignments": [
-            {"employee": "דנה", "shift": MORNING, "date": "2026-08-17"},
-        ],
-        "unavailability": [
-            {"employee": "יוסי", "date": "2026-08-18", "shift": EVENING,
-             "reason": "לא זמין"},
-        ],
-    })
-    assert repo.availability_rows[0]["source"] == "manager"
-    assert repo.availability_rows[0]["available"] is False
-
-
-def test_the_grid_comes_from_the_file_not_from_todays_vocabulary():
-    """A past schedule ran the shifts it ran.
-
-    `EVENING` is not in `PROFILE`'s shift list, so rebuilding the grid with
-    `build_slots` would silently drop it and reshape history.
-    """
-    app, repo = _build_app([])
-    _client(app).post("/api/schedule/import/confirm", json={
-        "assignments": [
-            {"employee": "יוסי", "shift": EVENING, "date": "2026-08-17"},
-        ],
-    })
-    slots = list(repo.slots.values())[0]
-    assert [slot["shift_name"] for slot in slots] == [EVENING]
-
-
-def test_an_unreadable_file_does_not_sink_the_batch():
-    """A folder of a year's sheets will contain one stray document."""
-    from tests.fixtures.build import sample_a
-
-    app, repo = _build_app([])
-    response = _client(app).post(
-        "/api/schedule/import/preview?learn_rules=false",
-        files=[
-            _upload(sample_a(), "good.xlsx"),
-            ("files", ("junk.xlsx", b"not a spreadsheet",
-                       "application/octet-stream")),
-        ],
-    )
-    assert response.status_code == 200
-    body = response.json()
-    assert len(body["periods"]) == 1
-    assert body["failures"][0]["filename"] == "junk.xlsx"
-
-
-def test_a_workbook_reads_schedule_tabs_even_when_summary_is_active():
-    from openpyxl import Workbook
-
-    book = Workbook()
-    book.active.title = "סיכום"
-    book.active.append(["מדד", "ערך"])
-    schedule = book.create_sheet("שבוע 1")
-    schedule.append(["משמרות", "1/6/25"])
-    schedule.append([MORNING, "דנה"])
-
-    app, repo = _build_app([])
-    body = _preview(_client(app), [book]).json()
-
-    assert len(body["periods"]) == 1
-    assert body["periods"][0]["filename"].endswith("שבוע 1")
-    assert body["periods"][0]["assignments"][0]["employee"] == "דנה"
-    assert body["failures"][0]["filename"].endswith("סיכום")
-
-
-def test_no_readable_file_at_all_is_an_error():
-    app, repo = _build_app([])
-    response = _client(app).post(
-        "/api/schedule/import/preview?learn_rules=false",
-        files=[("files", ("junk.xlsx", b"nope", "application/octet-stream"))],
-    )
-    assert response.status_code >= 400
-
-
-def test_learned_rules_are_never_returned_pre_approved():
-    """A candidate becomes a rule only when the manager says so (D7)."""
-    from tests.fixtures.build import sample_a
-
-    app, repo = _build_app([{
-        "rules": [{"text": "אלמוג עובד בעיקר בוקר", "kind": "soft",
-                   "evidence": "2 מתוך 3", "confidence": "medium"}],
-        "notes": [],
-    }])
-    response = _preview(_client(app), [sample_a()], learn_rules=True)
-    assert response.status_code == 200
-    rules = response.json()["candidate_rules"]
-    assert rules and rules[0]["approved"] is False
-
-
-def test_patterns_are_counted_across_all_the_uploaded_files():
-    """A pattern is by definition what one period cannot show."""
-    from tests.fixtures.build import sample_a, sample_b
-
-    app, repo = _build_app([])
-    repo.profiles[TEAM] = dict(PROFILE, shifts=[
-        {"name": MORNING}, {"name": EVENING},
-    ])
-    single = _preview(_client(app), [sample_a()]).json()
-    both = _preview(_client(app), [sample_a(), sample_b()]).json()
-    # The tally spans the batch: Sample B's rows are counted alongside
-    # Sample A's, which is the only way a cross-period pattern is visible.
-    assert (both["observations"]["totals"]["assignments"]
-            > single["observations"]["totals"]["assignments"])
-    assert len(both["periods"]) == 2
-
-
-def test_a_shiftless_row_cannot_be_confirmed():
-    """The read shape allows an empty shift; the stored shape does not.
-
-    A sheet of dates and people carries no shift, and that stays visible
-    through the preview. By the time rows are being stored the manager has
-    been asked, and a shiftless assignment has no slot on the grid to sit in.
-    """
-    app, repo = _build_app([])
-    response = _client(app).post("/api/schedule/import/confirm", json={
-        "assignments": [
-            {"employee": "דנה", "shift": "", "date": "2026-08-17"},
-        ],
-    })
-    assert response.status_code == 422
-    assert repo.schedules == {}
-
-
-def test_a_member_cannot_preview_an_import():
-    from tests.fixtures.build import sample_a
-
-    app, repo = _build_app([])
-    response = _preview(_client(app, role=ROLE_MEMBER), [sample_a()])
-    assert response.status_code in (401, 403)
-
-
-def test_a_member_cannot_confirm_an_import():
-    app, repo = _build_app([])
-    response = _client(app, role=ROLE_MEMBER).post(
-        "/api/schedule/import/confirm", json={
-            "assignments": [
-                {"employee": "דנה", "shift": MORNING, "date": "2026-08-17"},
-            ],
-        })
-    assert response.status_code in (401, 403)
-    assert repo.schedules == {}
-
-
 # -- the board: checking a placement before making it ----------------------
 
 def test_checking_a_placement_calls_no_model():
@@ -2210,16 +2242,18 @@ def test_checking_a_placement_calls_no_model():
         "employee": "דנה", "shift_name": MORNING, "slot_date": "2026-08-17",
     })
     assert response.status_code == 200
-    assert response.json()["ok"] is True
+    body = response.json()
+    assert body["ok"] is True
+    # The contract keeps every field the picker filters and colours on; a
+    # field `bl/placement` computes but the response model omits never
+    # reaches the browser.
+    assert {
+        "exit_pattern", "is_overlap", "eligible_shifts", "rotation_group",
+        "borrowable", "borrow_from", "shared_roles",
+    } <= set(body["candidates"][0])
 
 
-def test_a_check_that_warns_still_returns_200_and_never_blocks():
-    """Warnings inform; they do not become a 4xx (D3).
-
-    The same rule the audit follows everywhere else in this router, asserted
-    on the one route whose entire job is reporting problems — the most
-    tempting place to turn a warning into a rejection.
-    """
+def test_a_check_returns_200_and_marks_hard_unavailability_as_blocking():
     app, repo = _build_app([])
     client = _client(app)
     client.post("/api/schedule/blank", json={
@@ -2234,7 +2268,7 @@ def test_a_check_that_warns_still_returns_200_and_never_blocks():
     assert response.status_code == 200
     body = response.json()
     assert body["ok"] is False
-    assert body["blocking"] is False
+    assert body["blocking"] is True
     assert body["reasons"], "a refusal-shaped answer with no reason given"
 
 
@@ -2323,16 +2357,73 @@ def test_one_workspace_cannot_read_another_by_date():
     ).json() is None
 
 
+# -- the board: every period across a span ---------------------------------
+
+def test_a_span_serves_every_period_it_touches_oldest_first():
+    """What the two-week and month views read: one request, several periods,
+    each one whole even where the span only clips it."""
+    app, repo = _build_app([])
+    client = _client(app)
+    for starts_on, ends_on in (
+        ("2026-08-23", "2026-08-29"),
+        ("2026-08-16", "2026-08-22"),
+        ("2026-09-20", "2026-09-26"),
+    ):
+        client.post("/api/schedule/blank", json={
+            "starts_on": starts_on, "ends_on": ends_on,
+        })
+    body = client.get("/api/schedule/between", params={
+        "start": "2026-08-20", "end": "2026-08-25",
+    }).json()
+    assert [row["starts_on"] for row in body] == ["2026-08-16", "2026-08-23"]
+    assert "warnings" in body[0] and "slots" in body[0]
+
+
+def test_a_span_nobody_scheduled_answers_an_empty_list():
+    """Empty rather than an error: a month with nothing built is a state the
+    board draws, not a failure."""
+    app, repo = _build_app([])
+    client = _client(app)
+    response = client.get("/api/schedule/between", params={
+        "start": "2026-10-01", "end": "2026-10-31",
+    })
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_a_member_reaches_only_published_periods_across_a_span():
+    """The same line `/at` draws (D5): a draft is the manager's until they
+    publish it, however wide the read."""
+    app, repo = _build_app([])
+    boss = _client(app)
+    boss.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-16", "ends_on": "2026-08-22",
+    })
+    member = _client(app, role=ROLE_MEMBER)
+    assert member.get("/api/schedule/between", params={
+        "start": "2026-08-16", "end": "2026-08-29",
+    }).json() == []
+
+
+def test_a_span_that_is_backwards_or_too_wide_is_refused():
+    """A read that audits every period it returns is not open-ended."""
+    app, repo = _build_app([])
+    client = _client(app)
+    for start, end in (
+        ("2026-08-22", "2026-08-16"),
+        ("2026-01-01", "2026-12-31"),
+        ("not-a-date", "2026-08-22"),
+    ):
+        response = client.get("/api/schedule/between", params={
+            "start": start, "end": end,
+        })
+        assert response.status_code >= 400
+
+
 # -- a partial profile is a fork in the flow, not a dead end ---------------
 
-def _ended_early(repo, **overrides):
-    """A profile shaped like one `interview_service.end` wrote.
-
-    The escape hatch is allowed to complete an interview with whatever was
-    collected, recording the rest on `completeness`. That profile is real and
-    `team_profile()` serves it, so every "is the interview done" check passes
-    and only the shift vocabulary is actually absent.
-    """
+def _partial_profile(repo, **overrides):
+    """A saved profile that still lacks shift vocabulary."""
     profile = {
         "workplace": {"name": "מוקד"},
         "employees": [{"name": "דנה"}],
@@ -2352,14 +2443,14 @@ def _ended_early(repo, **overrides):
 def test_a_blank_period_over_a_profile_with_no_shifts_says_what_is_missing():
     """The bug this guard exists for.
 
-    An interview ended early leaves a profile that exists but carries no
+    Partial setup leaves a profile that exists but carries no
     shift vocabulary. It used to pass the `if not profile` check, reach
     `build_slots`, come back empty, and fail as an unexplained 502 -- the
     manual path looking broken rather than unfinished. The refusal now names
-    the gap and says the interview can be resumed.
+    the gap and points back to setup.
     """
     app, repo = _build_app([])
-    _ended_early(repo)
+    _partial_profile(repo)
     response = _client(app).post("/api/schedule/blank", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-18",
     })
@@ -2367,7 +2458,7 @@ def test_a_blank_period_over_a_profile_with_no_shifts_says_what_is_missing():
     body = response.json()
     assert "משמרות" in body["detail"]
     # The part a client can act on: which topics, and that there is a door.
-    assert body["can_resume_interview"] is True
+    assert body["can_edit_profile"] is True
     assert "לא הוגדר אף סוג משמרת." in body["gaps"]
     assert body["blocks"], "a gap that blocks says what it costs"
 
@@ -2380,11 +2471,11 @@ def test_generating_over_a_profile_with_no_shifts_fails_the_same_way():
     button must not find the other reporting something else.
     """
     app, repo = _build_app([])
-    _ended_early(repo)
+    _partial_profile(repo)
     response = _client(app).post("/api/schedule/generate", json={})
     assert response.status_code == 502
     body = response.json()
-    assert body["can_resume_interview"] is True
+    assert body["can_edit_profile"] is True
     assert "לא הוגדר אף סוג משמרת." in body["gaps"]
 
 
@@ -2397,17 +2488,17 @@ def test_a_shift_the_grid_builder_would_skip_counts_as_no_vocabulary():
     exists to stop.
     """
     app, repo = _build_app([])
-    _ended_early(repo, shifts=[{"start_time": "07:00", "end_time": "15:00"}])
+    _partial_profile(repo, shifts=[{"start_time": "07:00", "end_time": "15:00"}])
     response = _client(app).post("/api/schedule/blank", json={})
     assert response.status_code == 502
-    assert response.json()["can_resume_interview"] is True
+    assert response.json()["can_edit_profile"] is True
 
 
-def test_shifts_that_never_run_in_the_window_blame_the_dates_not_the_interview():
+def test_shifts_that_never_run_in_the_window_blame_the_dates_not_setup():
     """A different failure deserves a different sentence.
 
     The vocabulary is complete here -- the shift simply does not run on the
-    days asked for. Re-opening the interview would teach nothing, so this
+    days asked for. Re-opening setup would teach nothing, so this
     stays an ordinary refusal with no resume offered.
     """
     app, repo = _build_app([])
@@ -2423,52 +2514,38 @@ def test_shifts_that_never_run_in_the_window_blame_the_dates_not_the_interview()
     assert response.status_code == 502
     body = response.json()
     assert "תאריכים" in body["detail"]
-    assert "can_resume_interview" not in body
+    assert "can_edit_profile" not in body
 
 
 # -- how wide a build's model calls are ------------------------------------
 
 
 class _FakeSettings:
-    """The runtime-settings store, reduced to the one field this reads."""
+    """The runtime-settings store, reduced to the generation fields."""
 
-    def __init__(self, mode):
+    def __init__(self, mode, engine="ai"):
         self._mode = mode
+        self._engine = engine
 
     def get(self):
-        return SimpleNamespace(schedule_generation_mode=self._mode)
+        return SimpleNamespace(
+            schedule_generation_mode=self._mode,
+            schedule_generation_engine=self._engine,
+        )
 
 
-def test_week_mode_builds_a_week_in_one_model_call():
+def test_a_week_is_one_span_counted_in_seven_days():
     launcher = _DeferredLauncher()
-    # A complete, legal week in one answer: every slot staffed, and the two
-    # of them alternating so neither runs past the consecutive-days ceiling.
-    # Nothing left for a repair call to chase, which is what makes "one model
-    # call" the claim this test is actually making.
-    week = [
-        {
-            "employee": "דנה" if day % 2 else "יוסי",
-            "shift": MORNING,
-            "date": "2026-08-%d" % day,
-            "reason": "מאזן את הבקרים בין דנה ליוסי",
-        }
-        for day in range(17, 24)
-    ]
-    app, _ = _build_app(
-        [_generation(week)],
-        launch=launcher,
-        settings=_FakeSettings("week"),
-    )
+    app, repo = _build_app(launch=launcher)
     client = _client(app)
     started = client.post("/api/schedule/generate/start", json={
         "starts_on": "2026-08-17", "ends_on": "2026-08-23",
     }).json()
 
     # One span covering the week, but still seven days of progress: the bar
-    # measures the period, not the number of calls.
+    # measures the period, not the number of solves.
     assert len(started["generation"]["days"]) == 1
     assert started["generation"]["total_days"] == 7
-    assert started["generation"]["mode"] == "week"
 
     client.post("/api/schedule/generate/%s/run" % started["id"])
     launcher.run_next()
@@ -2477,33 +2554,9 @@ def test_week_mode_builds_a_week_in_one_model_call():
     assert body["generation"]["status"] == "complete"
     assert body["generation"]["completed_days"] == 7
     assert len({row["date"] for row in body["assignments"]}) == 7
-
-
-def test_day_mode_is_the_default_and_asks_once_per_date():
-    launcher = _DeferredLauncher()
-    app, _ = _build_app(
-        [
-            _generation([{
-                "employee": "דנה", "shift": MORNING,
-                "date": "2026-08-%d" % day, "reason": "דנה זמינה",
-            }])
-            for day in (17, 18)
-        ],
-        launch=launcher,
-    )
-    client = _client(app)
-    started = client.post("/api/schedule/generate/start", json={
-        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
-    }).json()
-
-    assert started["generation"]["mode"] == "day"
-    assert len(started["generation"]["days"]) == 2
-
-    client.post("/api/schedule/generate/%s/run" % started["id"])
-    launcher.run_next()
-    assert client.get("/api/schedule/%s" % started["id"]).json()[
-        "generation"
-    ]["status"] == "complete"
+    metrics = body["generation"]["days"][0]["metrics"]
+    assert metrics["engine"] == "solver" and metrics["total_tokens"] == 0
+    assert repo.model_calls == []
 
 
 def test_a_checkpoint_leaves_earlier_days_rows_alone():

@@ -22,11 +22,16 @@ and the degradation ladder can run four of them, each with its own retries.
 Multiplied out, a pathological request could hold a worker for many minutes.
 `deadline` is the ceiling on the whole logical call: a retry that could not
 finish before it is not attempted at all.
+
+**A read timeout is final.** The server accepted the request and stayed
+silent for the whole read ceiling; it is stuck or still busy with it, and a
+retry would only hold the model slot for another ceiling (`_read_timed_out`).
 """
 
 import random
 import time
 
+import httpx
 from openai import (
     APIConnectionError,
     APITimeoutError,
@@ -69,7 +74,7 @@ def create_with_retry(client, model: str, kwargs: dict, deadline=None):
             )
         except _ERRORS as exc:
             last_error = exc
-            if attempt + 1 >= _ATTEMPTS:
+            if attempt + 1 >= _ATTEMPTS or _read_timed_out(exc):
                 break
             delay = _delay(attempt, exc)
             # Sleeping past the deadline only to fail on the next check wastes
@@ -85,6 +90,18 @@ def create_with_retry(client, model: str, kwargs: dict, deadline=None):
         # exactly what it exists to do.
         raise APITimeoutError(request=None)
     raise last_error
+
+
+def _read_timed_out(error) -> bool:
+    """Whether the server took the request and never answered it.
+
+    Not retried: the read ceiling is minutes long, the server is most likely
+    still working on (or stuck in) the request it was sent, and asking again
+    only holds the model slot for another full ceiling. A connect timeout
+    is still retried -- nothing reached the server.
+    """
+    return isinstance(error, APITimeoutError) and isinstance(
+        error.__cause__, httpx.ReadTimeout)
 
 
 def _delay(attempt: int, error) -> float:

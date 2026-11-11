@@ -51,11 +51,10 @@ class _OldSettings:
 
 @pytest.mark.parametrize("flow, expected", [
     ("scheduler", ADVANCED),
-    ("schedule_decision", FAST),
-    ("interview", DEFAULT),
     ("changes", DEFAULT),
     ("planner", DEFAULT),
     ("learn", DEFAULT),
+    ("import", DEFAULT),
     ("briefing", FAST),
 ])
 def test_each_flow_maps_to_its_role(flow, expected):
@@ -67,8 +66,7 @@ def test_generation_is_the_only_advanced_flow():
     # flow onto the expensive model.
     advanced = [
         flow for flow in
-        ("scheduler", "schedule_decision", "interview", "changes", "planner",
-         "learn", "briefing")
+        ("scheduler", "changes", "planner", "learn", "briefing")
         if role_for_flow(flow) == ADVANCED
     ]
     assert advanced == ["scheduler"]
@@ -178,7 +176,7 @@ def test_every_flow_the_backend_actually_passes_is_mapped():
 
     bl = pathlib.Path(__file__).resolve().parent.parent / "app" / "bl"
     used = set()
-    for path in bl.glob("*.py"):
+    for path in bl.rglob("*.py"):
         used.update(re.findall(r'flow="([^"]+)"', path.read_text("utf-8")))
 
     assert used, "no flow= arguments found — did the call sites move?"
@@ -187,6 +185,5 @@ def test_every_flow_the_backend_actually_passes_is_mapped():
 
 
 _MAPPED = {
-    "scheduler", "schedule_decision", "interview", "changes", "planner",
-    "learn", "briefing",
+    "scheduler", "changes", "planner", "learn", "import", "briefing",
 }

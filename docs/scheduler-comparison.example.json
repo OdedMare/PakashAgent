@@ -1,0 +1,414 @@
+{
+  "measurement_kind": "scripted_model",
+  "baseline_revision": "92f9cfb",
+  "profile": {
+    "workplace": {
+      "name": "מוקד"
+    },
+    "employees": [
+      {
+        "name": "דנה"
+      },
+      {
+        "name": "יוסי"
+      },
+      {
+        "name": "רון"
+      }
+    ],
+    "shifts": [
+      {
+        "name": "בוקר",
+        "start_time": "07:00",
+        "end_time": "15:00",
+        "days": [],
+        "is_on_call": false,
+        "staffing": [
+          {
+            "days": [],
+            "headcount": 1
+          }
+        ]
+      }
+    ],
+    "rules": []
+  },
+  "starts_on": "2026-10-05",
+  "ends_on": "2026-10-11",
+  "availability": [],
+  "baseline": {
+    "slots": [
+      {
+        "shift_name": "בוקר",
+        "slot_date": "2026-10-05",
+        "weekday": "יום שני",
+        "start_time": "07:00",
+        "end_time": "15:00",
+        "headcount": 1,
+        "required_roles": [],
+        "requires_shift_manager": false,
+        "is_on_call": false
+      },
+      {
+        "shift_name": "בוקר",
+        "slot_date": "2026-10-06",
+        "weekday": "יום שלישי",
+        "start_time": "07:00",
+        "end_time": "15:00",
+        "headcount": 1,
+        "required_roles": [],
+        "requires_shift_manager": false,
+        "is_on_call": false
+      },
+      {
+        "shift_name": "בוקר",
+        "slot_date": "2026-10-07",
+        "weekday": "יום רביעי",
+        "start_time": "07:00",
+        "end_time": "15:00",
+        "headcount": 1,
+        "required_roles": [],
+        "requires_shift_manager": false,
+        "is_on_call": false
+      },
+      {
+        "shift_name": "בוקר",
+        "slot_date": "2026-10-08",
+        "weekday": "יום חמישי",
+        "start_time": "07:00",
+        "end_time": "15:00",
+        "headcount": 1,
+        "required_roles": [],
+        "requires_shift_manager": false,
+        "is_on_call": false
+      },
+      {
+        "shift_name": "בוקר",
+        "slot_date": "2026-10-09",
+        "weekday": "יום שישי",
+        "start_time": "07:00",
+        "end_time": "15:00",
+        "headcount": 1,
+        "required_roles": [],
+        "requires_shift_manager": false,
+        "is_on_call": false
+      },
+      {
+        "shift_name": "בוקר",
+        "slot_date": "2026-10-10",
+        "weekday": "שבת",
+        "start_time": "07:00",
+        "end_time": "15:00",
+        "headcount": 1,
+        "required_roles": [],
+        "requires_shift_manager": false,
+        "is_on_call": false
+      },
+      {
+        "shift_name": "בוקר",
+        "slot_date": "2026-10-11",
+        "weekday": "יום ראשון",
+        "start_time": "07:00",
+        "end_time": "15:00",
+        "headcount": 1,
+        "required_roles": [],
+        "requires_shift_manager": false,
+        "is_on_call": false
+      }
+    ],
+    "assignments": [
+      {
+        "employee": "דנה",
+        "shift": "בוקר",
+        "date": "2026-10-05",
+        "reason": "זמין ומוסמך למשמרת"
+      },
+      {
+        "employee": "יוסי",
+        "shift": "בוקר",
+        "date": "2026-10-06",
+        "reason": "זמין ומוסמך למשמרת"
+      },
+      {
+        "employee": "דנה",
+        "shift": "בוקר",
+        "date": "2026-10-07",
+        "reason": "זמין ומוסמך למשמרת"
+      },
+      {
+        "employee": "יוסי",
+        "shift": "בוקר",
+        "date": "2026-10-08",
+        "reason": "זמין ומוסמך למשמרת"
+      },
+      {
+        "employee": "דנה",
+        "shift": "בוקר",
+        "date": "2026-10-09",
+        "reason": "זמין ומוסמך למשמרת"
+      },
+      {
+        "employee": "יוסי",
+        "shift": "בוקר",
+        "date": "2026-10-10",
+        "reason": "זמין ומוסמך למשמרת"
+      },
+      {
+        "employee": "דנה",
+        "shift": "בוקר",
+        "date": "2026-10-11",
+        "reason": "זמין ומוסמך למשמרת"
+      }
+    ],
+    "notes": [],
+    "summary": "סידור לשבוע",
+    "warnings": [],
+    "metrics": {
+      "date": "2026-10-05",
+      "through": "2026-10-11",
+      "status": "complete",
+      "duration_ms": 3,
+      "returned": 7,
+      "accepted": 7,
+      "rejected": 0,
+      "warnings": 0,
+      "repaired": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0,
+      "model_calls": 2,
+      "failed_calls": 0,
+      "prompt_chars": 7183,
+      "schema_chars": 1244,
+      "reply_chars": 1313
+    }
+  },
+  "candidate": {
+    "slots": [
+      {
+        "shift_name": "בוקר",
+        "slot_date": "2026-10-05",
+        "weekday": "יום שני",
+        "start_time": "07:00",
+        "end_time": "15:00",
+        "headcount": 1,
+        "required_roles": [],
+        "requires_shift_manager": false,
+        "is_on_call": false
+      },
+      {
+        "shift_name": "בוקר",
+        "slot_date": "2026-10-06",
+        "weekday": "יום שלישי",
+        "start_time": "07:00",
+        "end_time": "15:00",
+        "headcount": 1,
+        "required_roles": [],
+        "requires_shift_manager": false,
+        "is_on_call": false
+      },
+      {
+        "shift_name": "בוקר",
+        "slot_date": "2026-10-07",
+        "weekday": "יום רביעי",
+        "start_time": "07:00",
+        "end_time": "15:00",
+        "headcount": 1,
+        "required_roles": [],
+        "requires_shift_manager": false,
+        "is_on_call": false
+      },
+      {
+        "shift_name": "בוקר",
+        "slot_date": "2026-10-08",
+        "weekday": "יום חמישי",
+        "start_time": "07:00",
+        "end_time": "15:00",
+        "headcount": 1,
+        "required_roles": [],
+        "requires_shift_manager": false,
+        "is_on_call": false
+      },
+      {
+        "shift_name": "בוקר",
+        "slot_date": "2026-10-09",
+        "weekday": "יום שישי",
+        "start_time": "07:00",
+        "end_time": "15:00",
+        "headcount": 1,
+        "required_roles": [],
+        "requires_shift_manager": false,
+        "is_on_call": false
+      },
+      {
+        "shift_name": "בוקר",
+        "slot_date": "2026-10-10",
+        "weekday": "שבת",
+        "start_time": "07:00",
+        "end_time": "15:00",
+        "headcount": 1,
+        "required_roles": [],
+        "requires_shift_manager": false,
+        "is_on_call": false
+      },
+      {
+        "shift_name": "בוקר",
+        "slot_date": "2026-10-11",
+        "weekday": "יום ראשון",
+        "start_time": "07:00",
+        "end_time": "15:00",
+        "headcount": 1,
+        "required_roles": [],
+        "requires_shift_manager": false,
+        "is_on_call": false
+      }
+    ],
+    "assignments": [
+      {
+        "employee": "דנה",
+        "shift": "בוקר",
+        "date": "2026-10-05",
+        "reason": "זמין ומוסמך למשמרת"
+      },
+      {
+        "employee": "דנה",
+        "shift": "בוקר",
+        "date": "2026-10-07",
+        "reason": "זמין ומוסמך למשמרת"
+      },
+      {
+        "employee": "יוסי",
+        "shift": "בוקר",
+        "date": "2026-10-08",
+        "reason": "זמין ומוסמך למשמרת"
+      },
+      {
+        "employee": "דנה",
+        "shift": "בוקר",
+        "date": "2026-10-09",
+        "reason": "זמין ומוסמך למשמרת"
+      },
+      {
+        "employee": "יוסי",
+        "shift": "בוקר",
+        "date": "2026-10-10",
+        "reason": "זמין ומוסמך למשמרת"
+      },
+      {
+        "employee": "דנה",
+        "shift": "בוקר",
+        "date": "2026-10-11",
+        "reason": "זמין ומוסמך למשמרת"
+      },
+      {
+        "employee": "יוסי",
+        "shift": "בוקר",
+        "date": "2026-10-06",
+        "reason": "זמין ומוסמך למשמרת"
+      }
+    ],
+    "notes": [],
+    "summary": "סידור לשבוע",
+    "warnings": [],
+    "metrics": {
+      "date": "2026-10-05",
+      "through": "2026-10-11",
+      "status": "complete",
+      "duration_ms": 1,
+      "returned": 1,
+      "accepted": 7,
+      "rejected": 0,
+      "warnings": 0,
+      "repaired": true,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0,
+      "model_calls": 2,
+      "failed_calls": 0,
+      "prompt_chars": 5605,
+      "schema_chars": 1183,
+      "reply_chars": 759,
+      "repair_dates": [
+        "2026-10-06"
+      ],
+      "repair_error": "",
+      "repair_improved": true,
+      "quality_before": {
+        "coverage": {
+          "required": 7,
+          "assigned": 6,
+          "unfilled_slots": 1,
+          "percent": 85.7
+        },
+        "unfilled_seats": 1,
+        "warning_counts": [
+          {
+            "code": "unfilled",
+            "severity": "warning",
+            "count": 1
+          }
+        ],
+        "by_employee": [
+          {
+            "employee": "דנה",
+            "hours": 32.0,
+            "shifts": 4,
+            "on_call": 0,
+            "days": 4
+          },
+          {
+            "employee": "יוסי",
+            "hours": 16.0,
+            "shifts": 2,
+            "on_call": 0,
+            "days": 2
+          },
+          {
+            "employee": "רון",
+            "hours": 0.0,
+            "shifts": 0,
+            "on_call": 0,
+            "days": 0
+          }
+        ],
+        "hours_stddev": 13.06,
+        "shifts_stddev": 1.63
+      },
+      "quality": {
+        "coverage": {
+          "required": 7,
+          "assigned": 7,
+          "unfilled_slots": 0,
+          "percent": 100.0
+        },
+        "unfilled_seats": 0,
+        "warning_counts": [],
+        "by_employee": [
+          {
+            "employee": "דנה",
+            "hours": 32.0,
+            "shifts": 4,
+            "on_call": 0,
+            "days": 4
+          },
+          {
+            "employee": "יוסי",
+            "hours": 24.0,
+            "shifts": 3,
+            "on_call": 0,
+            "days": 3
+          },
+          {
+            "employee": "רון",
+            "hours": 0.0,
+            "shifts": 0,
+            "on_call": 0,
+            "days": 0
+          }
+        ],
+        "hours_stddev": 13.6,
+        "shifts_stddev": 1.7
+      }
+    }
+  }
+}

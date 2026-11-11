@@ -1,4 +1,4 @@
-"""Error types leaving the backend.
+"""Error types returned by the backend.
 
 Messages are Hebrew: they reach a Hebrew-speaking boss directly, so the text
 carried here is user-facing copy, not a developer string.
@@ -20,20 +20,27 @@ class AgentError(AppError):
     status_code = 502
 
 
+class ModelOutputError(AgentError):
+    """A reply or context that may fit after narrowing the scheduling span."""
+
+    def __init__(self, message: str, usage=None):
+        super().__init__(message)
+        self.usage = usage or {}
+
+
 class ProfileIncompleteError(AgentError):
-    """The interview finished, but not with enough to build a grid.
+    """The saved profile does not contain enough to build a grid.
 
     Its own type rather than a bare `AgentError` because the caller can *do*
     something about this one: the profile names exactly which required topics
     are still owed, so the failure carries them and the UI opens the
-    interview on them instead of showing a dead end. Everything else in
+    profile editor on them instead of showing a dead end. Everything else in
     `bl/` failing is genuinely terminal for the request; this is a fork in
     the flow, and collapsing the two into one type is what made the manual
     path look broken rather than unfinished.
 
-    `gaps` are the lines `bl/interview.py` produced -- the same definition
-    the readiness gate uses, never a second copy. `blocks` says what each
-    gap costs in the manager's terms.
+    `gaps` describe missing profile data and `blocks` says what each gap costs
+    in the manager's terms.
     """
 
     def __init__(
@@ -55,18 +62,30 @@ class ConflictError(AppError):
     status_code = 409
 
 
+# A save edited from a profile somebody else has saved over since.
+PROFILE_CHANGED = "ההגדרות נשמרו בינתיים ממקום אחר. רעננו את הדף ונסו שוב"
+# A drag confirmed after somebody else moved or removed the same shift.
+ASSIGNMENT_MOVED = "המשמרת הוזזה בינתיים ממקום אחר. רעננו את הלוח ונסו שוב"
+
+
 class AuthError(AppError):
     status_code = 401
 
 
-class UnavailableError(AppError):
-    """The process is alive but cannot accept work.
+class ForbiddenError(AppError):
+    """Signed in, but this action needs a credential the session lacks.
 
-    503 rather than 500: nothing raised, and the service still answers — it
-    has simply run out of the capacity to take on more.
+    403 rather than 401: the session is fine, and a client that treats 401
+    as "go back to the login screen" must not log the boss out over it.
     """
 
-    status_code = 503
+    status_code = 403
+
+
+class TooManyAttemptsError(AppError):
+    """Too many wrong passwords against one account in a short window."""
+
+    status_code = 429
 
 
 def error_payload(exc: AppError) -> dict:
@@ -86,5 +105,5 @@ def error_payload(exc: AppError) -> dict:
         # The one failure a caller can act on rather than only report.
         payload["gaps"] = exc.gaps
         payload["blocks"] = exc.blocks
-        payload["can_resume_interview"] = True
+        payload["can_edit_profile"] = True
     return payload

@@ -38,8 +38,25 @@ class RuntimeSettings:
     llm_api_key_default: str = ""
     llm_api_key_advanced: str = ""
     llm_queue_seconds: int = 180
-    # How wide one scheduling model call is: "day" or "week". Read by
-    # `bl/schedule_service.py` when a period is opened, so a saved change
-    # applies to the next build without a restart. See
-    # `Settings.schedule_generation_mode` for the tradeoff.
-    schedule_generation_mode: str = "day"
+    # Model calls one team may have in flight at once; 0 = `llm_max_concurrency`.
+    llm_team_concurrency: int = 0
+    # "off" / "low" / "medium" / "high" for a reasoning model; empty sends
+    # nothing. `ladder._add_reasoning` puts it in the model family's form.
+    llm_reasoning_effort: str = ""
+    # False accepts any TLS certificate from the model server. See
+    # `Settings.llm_verify_ssl` for why this is a last resort.
+    llm_verify_ssl: bool = False
+    # The constraint solver (`bl/solver/`): wall time per solve and its
+    # parallel workers. Read per build, so a saved change applies next time.
+    solver_time_limit_seconds: float = 10.0
+    solver_workers: int = 8
+    # The read cache (`common/read_cache.py`, D50). Empty URL and host = off,
+    # and every read goes to PostgreSQL as before. Explicit parts are written
+    # over the URL's own (`redis_connection_url`).
+    redis_url: str = ""
+    redis_host: str = ""
+    redis_port: Optional[int] = None
+    redis_username: str = ""
+    redis_password: str = ""
+    redis_key_prefix: str = "pakash"
+    redis_cache_ttl_seconds: int = 300

@@ -2,48 +2,56 @@
 
 import {
   AlertCircle,
+  ArrowLeftRight,
   BarChart3,
   CalendarDays,
   Inbox,
-  LogOut,
   LayoutGrid,
   Moon,
   MessagesSquare,
-  Settings2,
   SlidersHorizontal,
   Share2,
-  Upload,
   Sparkles,
   Sun,
   Users,
   X,
+  Plus,
+  Search,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 
 import { Board } from "@/components/Board";
-import { useTheme } from "@/components/Interview/useTheme";
-import { SettingsPanel } from "@/components/Settings";
+import { AgentGuard, CrewStage, randomGuard } from "@/components/Crew";
+import type { Who } from "@/components/Crew";
+import { HelpButton, useGuideSurface } from "@/components/Guide";
+import type { ChecklistItem } from "@/components/Guide";
+import { useTheme } from "@/hooks/useTheme";
+import { CommanderNotices } from "@/components/Complex/CommanderNotices";
 import { ShareLink } from "@/components/Workspace/ShareLink";
-import type { ManagementOverview, TeamView } from "@/types";
+import type { ChatPlan, ManagementOverview, Proposal, Simulation, TeamView } from "@/types";
 
+import { AccountMenu } from "./AccountMenu";
 import { AgentChat } from "./AgentChat";
+import { useManagerChat } from "./useManagerChat";
+import { chatStarters } from "./chatStarters";
+import { useChatSplit } from "./useChatSplit";
 import { ProfileGapsNotice } from "./ProfileGapsNotice";
-import { Briefing } from "./Briefing";
-import { formatDate } from "./Calendar";
-import { CopilotInbox } from "./CopilotInbox";
-import { History } from "./History";
 import { LearnedFromChanges } from "./LearnedFromChanges";
 import { ImportSchedule } from "./ImportSchedule";
 import { Preferences } from "./Preferences";
 import { RequestInbox } from "./RequestInbox";
-import { SimulationPanel } from "./SimulationPanel";
+import { ChangesPanel } from "./ChangesPanel";
+import { RequestToast } from "./RequestToast";
 import { SwapInbox } from "./SwapInbox";
 import { Stats } from "./Stats";
 import { TeamPanel } from "./TeamPanel";
-import { Warnings } from "./Warnings";
+import { useConstraintRequests } from "./useConstraintRequests";
+import { useLiveInbox } from "./useLiveInbox";
 import { useManagement } from "./useManagement";
+import { displayDate } from "@/components/DateInput";
 
-/** The manager's board-first workspace, opened once the interview is done.
+/** The manager's board-first workspace, opened once setup is complete.
  *
  *  The week remains visible while the agent and management tools open in a
  *  contextual drawer. Both render from the same `useManagement` state, so a
@@ -62,7 +70,6 @@ export function Management({
   busy: workspaceBusy = false,
   onLogout,
   onRotateLink,
-  onOpenInterview,
   onOpenManualSetup,
   autoGenerate = false,
   onAutoGenerateStarted,
@@ -71,11 +78,11 @@ export function Management({
   busy?: boolean;
   onLogout?: () => void;
   onRotateLink?: () => void;
-  onOpenInterview?: () => void;
   onOpenManualSetup?: () => void;
   autoGenerate?: boolean;
   onAutoGenerateStarted?: () => void;
 }) {
+  // The manager chat is the only agent surface; there are no automatic briefings.
   const state = useManagement();
   const generate = state.generate;
   const { theme, toggle } = useTheme();
@@ -83,12 +90,79 @@ export function Management({
   // never has to remember which cell they were discussing with the agent.
   const [view, setView] = useState<ManagerView>("board");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const { workspace: workspaceRef, share: chatShare, resizing, handle: resizeHandle } = useChatSplit();
+  const [chatSearch, setChatSearch] = useState("");
+  const [chatPreview, setChatPreview] = useState<Proposal | null>(null);
+  const [chatSimulation, setChatSimulation] = useState<Simulation | null>(null);
+  const [chatWeek, setChatWeek] = useState<{ date: string; n: number }>();
+  // The day the board opened the agent on, if any. Counted like `suggested`
+  // so opening the same day twice still focuses the composer.
+  const [focusDay, setFocusDay] = useState<{ date: string; n: number }>({ date: "", n: 0 });
+  const refresh = state.refresh;
+  const boardRefresh = useRef<((date?: string) => Promise<void>) | null>(null);
+  const registerBoardRefresh = useCallback((reload: ((date?: string) => Promise<void>) | null) => {
+    boardRefresh.current = reload;
+  }, []);
+  const onChatApplied = useCallback(async (plan?: ChatPlan) => {
+    const date = plan?.operations[0]?.date || plan?.starts_on || plan?.constraints[0]?.date;
+    await boardRefresh.current?.(date);
+    await refresh(true);
+  }, [refresh]);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      // Below 1100px the drawer is a sheet over the board, so it waits to be opened.
+      if (window.matchMedia("(min-width: 1100px)").matches) setDrawerOpen(true);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
   const [section, setSection] = useState<ManagerSection>("agent");
-  const [copilotPending, setCopilotPending] = useState(0);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const openAgent = useCallback((date?: string) => {
+    if (date !== undefined) setFocusDay((previous) => ({ date, n: previous.n + 1 }));
+    setView("board");
+    setSection("agent");
+    setDrawerOpen(true);
+  }, []);
+  // A focus day belongs to the week it was opened from. Paging to another
+  // week drops it, so the agent is never told about a day off screen.
+  const focusDate = focusDay.date && inWeek(focusDay.date, state.focusedWeek) ? focusDay.date : "";
+  const agent = useManagerChat(workspace.id, state.focusedScheduleId, state.focusedWeek, focusDate, onChatApplied);
+  // The agent is one of the two guards, rolled again for every conversation
+  // and every time it steps back into the corner — never while it is open,
+  // so the chat shows the guard that was pressed.
+  const agentOpen = drawerOpen && section === "agent";
+  const [agentWho, setAgentWho] = useState<Who>("him");
+  const rollAgent = useCallback(() => setAgentWho(randomGuard()), []);
+  const chatId = agent.chat?.id;
+  useEffect(() => {
+    if (agentOpen) return;
+    const frame = requestAnimationFrame(rollAgent);
+    return () => cancelAnimationFrame(frame);
+  }, [agentOpen, rollAgent]);
+  useEffect(() => {
+    if (chatId === undefined) return;
+    const frame = requestAnimationFrame(rollAgent);
+    return () => cancelAnimationFrame(frame);
+  }, [chatId, rollAgent]);
+  // Pending constraint requests, polled here rather than inside the inbox so
+  // the tab can count them and a new one pops up wherever the manager is.
+  const requests = useConstraintRequests(section === "requests" && drawerOpen);
+  const { dismissArrivals } = requests;
+  // Bumped when an employee answers or withdraws a swap, so the swap inbox
+  // re-reads without waiting for the manager to reopen it.
+  const [swapsVersion, setSwapsVersion] = useState(0);
+  useLiveInbox({
+    requests: requests.reload,
+    swaps: () => setSwapsVersion((version) => version + 1),
+  });
+  const openRequests = useCallback(() => {
+    setView("board");
+    setSection("requests");
+    setDrawerOpen(true);
+    dismissArrivals();
+  }, [dismissArrivals]);
   const [shareOpen, setShareOpen] = useState(false);
-  // The import flow. Opening it writes nothing; the screen's own confirm
-  // button is what persists (D7).
+  // The import flow. Opening it writes nothing; its own confirm is what
+  // persists (D7).
   const [importOpen, setImportOpen] = useState(false);
   const [autoGenerating, setAutoGenerating] = useState(false);
   const autoGenerationStarted = useRef(false);
@@ -106,7 +180,9 @@ export function Management({
   // a period left half-built by a closed tab is still a job, and the manager
   // needs to be told so on the next visit.
   const buildState =
-    state.generation && state.generation.status !== "complete"
+    state.generation &&
+    state.generation.status !== "complete" &&
+    !state.generation.dismissed
       ? state.generation.status
       : "";
   const buildId = overview?.schedule?.id ?? "";
@@ -117,17 +193,115 @@ export function Management({
   // manager with nothing to do but press retry and watch it fail again.
   const buildError =
     state.generation?.days?.find((day) => day.status === "failed")?.error ?? "";
-  // How many topics the interview left unsettled. Counted from the profile's
-  // own record rather than re-derived, so the badge, the board's notice and
-  // what the agent says when asked are all reading one answer. Zero — and no
-  // badge — is the ordinary case: a confirmed interview carries no record at
-  // all, because the gate refused to let it finish owing anything.
+  // Legacy profiles may carry unresolved setup topics. Keep the checklist
+  // useful until the manager saves them through the profile editor.
   const completeness = overview?.profile?.completeness;
   const openTopics =
     completeness && !completeness.complete
       ? completeness.missing_topics.length + completeness.open_points.length
       : 0;
   const schedule = overview?.schedule ?? null;
+
+  // Whether this manager has opened the team link from this browser. Nothing
+  // on the server records a link being *handed out*, so the first-steps list
+  // can only know it was looked at — which is the step it is nudging toward.
+  const sharedKey = `pakash-link-opened:${workspace.id}`;
+  const [linkOpened, setLinkOpened] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      try {
+        if (localStorage.getItem(sharedKey)) setLinkOpened(true);
+      } catch {
+        /* Storage blocked: the step simply stays open. */
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [sharedKey]);
+  const openShare = useCallback(() => {
+    setShareOpen(true);
+    setLinkOpened(true);
+    try {
+      localStorage.setItem(sharedKey, "1");
+    } catch {
+      /* A convenience only. */
+    }
+  }, [sharedKey]);
+
+  const showBoard = useCallback(() => {
+    setView("board");
+    // Below 1100px the drawer covers the board rather than sitting beside it.
+    if (!window.matchMedia("(min-width: 1100px)").matches) setDrawerOpen(false);
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  // The first steps, read off the overview. Each one is ticked by the
+  // workplace actually being in that state — never by the list itself — and
+  // each action only navigates to where the step is done.
+  const periods = overview?.periods ?? [];
+  const coverage = overview?.stats?.coverage;
+  const checklist: ChecklistItem[] = overview
+    ? [
+        {
+          id: "teach",
+          label: "ללמד את משמרות זהב על היחידה",
+          done: openTopics === 0,
+          detail: openTopics ? `${openTopics} נושאים עוד חסרים בפרופיל` : "הגדרת היחידה הושלמה",
+          actionLabel: "להשלמה",
+          onAction: onOpenManualSetup,
+        },
+        {
+          id: "week",
+          label: "לפתוח סידור לשבוע",
+          done: periods.length > 0 || Boolean(schedule),
+          detail: "עם הסוכן או ידנית",
+          actionLabel: "ללוח",
+          onAction: showBoard,
+        },
+        {
+          id: "fill",
+          label: "לאייש את כל המשמרות",
+          done: Boolean(schedule && coverage && coverage.required > 0 && coverage.unfilled_slots === 0),
+          detail: schedule && coverage
+            ? coverage.unfilled_slots
+              ? `${coverage.unfilled_slots} משמרות עוד פתוחות השבוע`
+              : "כל המשמרות מאוישות"
+            : "אחרי שנפתח שבוע",
+          actionLabel: "ללוח",
+          onAction: showBoard,
+        },
+        {
+          id: "ask",
+          label: "לשאול את הסוכן שאלה ראשונה",
+          done: agent.chats.length > 0,
+          detail: "למשל: ‘מה חסר לפני פרסום?’ — שאלה לא משנה דבר",
+          actionLabel: "לנסות",
+          onAction: () => {
+            setSuggested((previous) => ({ text: "מה חסר לפני פרסום השבוע?", n: previous.n + 1 }));
+            openAgent();
+          },
+        },
+        {
+          id: "share",
+          label: "לשתף את קישור הצוות",
+          done: linkOpened,
+          detail: "הצוות רואה רק מה שפורסם",
+          actionLabel: "לקישור",
+          onAction: workspace.member_token ? openShare : undefined,
+        },
+        {
+          id: "publish",
+          label: "לפרסם את השבוע לצוות",
+          done: periods.some((period) => period.status === "published") || schedule?.status === "published",
+          detail: "אזהרות לא חוסמות פרסום",
+          actionLabel: "ללוח",
+          onAction: showBoard,
+        },
+      ]
+    : [];
+  useGuideSurface("manager", {
+    checklist,
+    actions: { board: showBoard, agent: () => openAgent() },
+  });
 
   useEffect(() => {
     if (!autoGenerate || autoGenerationStarted.current) return;
@@ -139,18 +313,32 @@ export function Management({
 
   return (
     <div className="management">
-      <header className="interview-header">
+      <header className="workspace-sidebar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
             <CalendarDays size={17} />
           </span>
-          <span>
-            {workspace.name}
-            <span className="brand-sub"> · איזור ניהול</span>
+          <span className="brand-text">
+            <span className="brand-name">משמרות זהב</span>
+            <span>
+              {workspace.name}
+              <span className="brand-sub">
+                {workspace.commander ? " · מפקד מכלול" : " · איזור ניהול"}
+              </span>
+            </span>
           </span>
         </div>
         {/* The board is the workspace; management opens beside it. */}
-        <nav className="management-nav" aria-label="ניווט ראשי">
+        <nav className="management-nav" aria-label="ניווט ראשי" data-tour="nav">
+          <button
+            type="button"
+            className={`management-nav-item${drawerOpen ? " is-active" : ""}`}
+            onClick={() => openAgent()}
+            aria-expanded={drawerOpen}
+          >
+            <MessagesSquare size={15} />
+            סוכן הסידור
+          </button>
           <button
             type="button"
             className={`management-nav-item${view === "board" && !drawerOpen ? " is-active" : ""}`}
@@ -179,74 +367,59 @@ export function Management({
           </button>
           <button
             type="button"
-            className={`management-nav-item${view === "analytics" ? " is-active" : ""}`}
+            className={`management-nav-item${view === "overview" ? " is-active" : ""}`}
             onClick={() => {
-              setView("analytics");
+              setView("overview");
               setDrawerOpen(false);
               window.scrollTo({ top: 0 });
             }}
-            aria-current={view === "analytics" ? "page" : undefined}
+            aria-current={view === "overview" ? "page" : undefined}
           >
             <BarChart3 size={15} />
-            נתונים
+            <span>סקירה</span>
           </button>
-          <button
-            type="button"
-            className={`management-nav-item${drawerOpen ? " is-active" : ""}`}
-            onClick={() => {
-              setView("board");
-              setDrawerOpen(true);
-            }}
-            aria-expanded={drawerOpen}
-          >
-            <MessagesSquare size={15} />
-            ניהול
-          </button>
+
         </nav>
 
-        <div className="header-actions">
+        <section className="workspace-conversations" aria-label="השיחות שלך">
+          <button type="button" className="sidebar-new-chat" disabled={agent.busy || agent.working || agent.loading}
+            onClick={() => { void agent.newChat(); openAgent(); }}><Plus size={18} />שיחה חדשה</button>
+          <label className="sidebar-search"><Search size={15} aria-hidden="true" />
+            <input type="search" aria-label="חיפוש שיחות" placeholder="חיפוש שיחות" value={chatSearch}
+              onChange={(event) => setChatSearch(event.target.value)} /></label>
+          <span className="sidebar-section-label">השיחות שלך</span>
+          <div className="sidebar-chat-list">
+            {agent.chats.filter((chat) => chat.title.includes(chatSearch)).map((chat) =>
+              <button type="button" key={chat.id} title={chat.title} disabled={agent.busy || agent.working}
+                className={agent.chat?.id === chat.id ? "is-active" : ""}
+                aria-current={agent.chat?.id === chat.id ? "true" : undefined}
+                onClick={() => { void agent.select(chat.id); openAgent(); }}><MessagesSquare size={15} /><span>{chat.title}</span></button>)}
+            {chatSearch && !agent.chats.some((chat) => chat.title.includes(chatSearch)) ? <p>לא נמצאו שיחות</p> : null}
+          </div>
+        </section>
+      </header>
+
+      {/* The bar over the workspace: setup, sharing, theme, and
+          the account menu that signs out. Kept out of the sidebar so it sits
+          where the manager looks first rather than under the chat list. */}
+      <div className="management-topbar">
+        <div className="header-actions" data-tour="header-actions">
           {onOpenManualSetup ? (
             <button
               type="button"
               className="icon-button"
               onClick={onOpenManualSetup}
-              aria-label="הגדרה ידנית של היחידה"
-              title="הגדרה ידנית של היחידה"
+              aria-label="הגדרת היחידה, הסבבים והתלתונים"
+              title="הגדרת היחידה, הסבבים והתלתונים"
             >
               <SlidersHorizontal size={17} />
-            </button>
-          ) : null}
-          {onOpenInterview ? (
-            <button
-              type="button"
-              className={
-                openTopics ? "icon-button has-badge" : "icon-button"
-              }
-              onClick={onOpenInterview}
-              aria-label={
-                openTopics
-                  ? `ראיון היכרות — ${openTopics} נושאים פתוחים`
-                  : "ראיון היכרות"
-              }
-              title={
-                openTopics
-                  ? `הראיון לא הושלם — ${openTopics} נושאים עוד לא סוכמו`
-                  : "ראיון היכרות"
-              }
-            >
-              <Sparkles size={17} />
-              {openTopics ? (
-                <span className="icon-badge" aria-hidden="true">
-                  {openTopics > 9 ? "9+" : openTopics}
-                </span>
-              ) : null}
             </button>
           ) : null}
           {workspace.member_token ? (
             <button
               type="button"
               className="icon-button"
-              onClick={() => setShareOpen((open) => !open)}
+              onClick={() => (shareOpen ? setShareOpen(false) : openShare())}
               aria-label="קישור לצוות"
               title="קישור לצוות"
               aria-expanded={shareOpen}
@@ -257,33 +430,21 @@ export function Management({
           <button
             type="button"
             className="icon-button"
-            onClick={() => setSettingsOpen(true)}
-            aria-label="הגדרות מערכת"
-            title="הגדרות מערכת"
-          >
-            <Settings2 size={17} />
-          </button>
-          <button
-            type="button"
-            className="icon-button"
             onClick={toggle}
             aria-label={theme === "dark" ? "מצב בהיר" : "מצב כהה"}
           >
             {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
           </button>
-          {onLogout ? (
-            <button
-              type="button"
-              className="icon-button"
-              onClick={onLogout}
-              aria-label="יציאה"
-              title="יציאה"
-            >
-              <LogOut size={17} />
-            </button>
-          ) : null}
+          <HelpButton />
+          <AccountMenu
+            name={workspace.name}
+            role={workspace.commander
+              ? "מפקד/ת מכלול"
+              : workspace.complex ? "מפקד/ת משמרת" : undefined}
+            onLogout={onLogout}
+          />
         </div>
-      </header>
+      </div>
 
       {shareOpen && workspace.member_token ? (
         <ShareLink
@@ -296,29 +457,21 @@ export function Management({
       {/* What a build is doing, and the way out of one.
           The banner is the *only* thing a build occupies: the board below it
           stays writable throughout (D18), so a manager can keep placing
-          shifts by hand while the agent works — and can stop it. Stopping
+          shifts by hand while the solver works — and can stop it. Stopping
           keeps every day already built; the period is an ordinary draft the
           moment it returns, and "המשך" picks the rest up from the first day
           that is not finished. */}
       {autoGenerating || buildState ? (
         <div className="schedule-generation" role="status" aria-live="polite">
+          {buildState !== "failed" && buildState !== "cancelled" ? <CrewStage size="sm" /> : null}
           <div className="schedule-generation-copy">
             <strong>
               {buildState === "failed"
                 ? `היצירה נעצרה בתאריך ${state.generation?.current_date ?? ""}`
                 : buildState === "cancelled"
                 ? `היצירה הופסקה — ${state.generation?.completed_days ?? 0} מתוך ${state.generation?.total_days ?? 7} ימים נשמרו`
-                : `בונים את הסידור — ${state.generation?.completed_days ?? 0} מתוך ${state.generation?.total_days ?? 7} ימים`}
+                : `${state.generation?.activity || "בונים את הסידור"} — ${state.generation?.completed_days ?? 0} מתוך ${state.generation?.total_days ?? 7} ימים נשמרו`}
             </strong>
-            {/* Which width this build is running at. Worth saying on the
-                banner and not only in the settings panel: it is the single
-                biggest factor in how long the manager is about to wait, and
-                the setting that governs it lives two screens away. */}
-            {state.generation?.mode === "week" ? (
-              <span className="schedule-generation-mode">
-                בנייה שבועית — עד שבוע בכל פנייה למודל
-              </span>
-            ) : null}
             {buildState === "failed" && buildError ? (
               <span className="schedule-generation-why">{buildError}</span>
             ) : null}
@@ -333,6 +486,16 @@ export function Management({
                   {buildState === "failed"
                     ? "ניסיון חוזר מהיום שנכשל"
                     : "המשך יצירה מהיום הבא"}
+                </button>
+              ) : null}
+              {buildId && (buildState === "failed" || buildState === "cancelled") ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  disabled={state.generating}
+                  onClick={() => void state.dismissGeneration(buildId)}
+                >
+                  הסתרה
                 </button>
               ) : null}
               {buildId && buildState === "running" && state.generating ? (
@@ -353,12 +516,11 @@ export function Management({
                   className="ghost-button"
                   onClick={() => void state.resumeGeneration(buildId)}
                 >
-                  המשך יצירה מהיום הבא
+                  הצגת התקדמות היצירה
                 </button>
               ) : null}
               <span className="schedule-generation-note">
-                הסוכן בונה כל יום בנפרד ומתחשב במה שכבר שובץ — אפשר לשבץ ידנית
-                בזמן שהוא עובד.
+                ההתקדמות נשמרת אוטומטית. אפשר לשבץ ידנית או לחזור מאוחר יותר.
               </span>
             </span>
           </div>
@@ -392,19 +554,25 @@ export function Management({
         </div>
       ) : null}
 
+      {/* What the מכלול commander changed here, for this workplace's own
+          manager (D43). The commander, inside, is not shown their own. */}
+      {workspace.complex && !workspace.commander ? (
+        <CommanderNotices onSeen={() => void state.refresh()} />
+      ) : null}
+
       {/* A build refused for a reason the manager can close. Above the board
           because it is about the board they are looking at not existing, and
           beside the error rather than inside it: nothing here is a fault. */}
       {state.gaps ? (
         <ProfileGapsNotice
           gaps={state.gaps}
-          onOpenInterview={onOpenInterview}
+          onOpenSetup={onOpenManualSetup}
           onDiscuss={() => {
             // Seed the composer and move to the room. The question is
             // written for the manager rather than sent for them — the agent
             // answers questions and writes nothing (D15), so the point of
-            // arriving here is to work out what the interview is owed
-            // before going and answering it.
+            // arriving here is to work out what setup is missing before
+            // opening the profile editor.
             setSuggested((previous) => ({
               text: "אני רוצה לבנות סידור לשבוע הקרוב. מה חסר לך כדי לבנות אותו, ואיך נשלים את זה?",
               n: previous.n + 1,
@@ -418,11 +586,15 @@ export function Management({
 
       <main
         id="main-content"
-        className={`management-workspace${drawerOpen ? " has-drawer" : ""}${view !== "board" ? " is-page" : ""}`}
+        ref={workspaceRef}
+        className={`management-workspace${drawerOpen ? " has-drawer" : ""}${view !== "board" ? " is-page" : ""}${resizing ? " is-resizing" : ""}`}
+        style={{ "--chat-share": `${(chatShare * 100).toFixed(2)}%` } as CSSProperties}
       >
-        {view === "analytics" ? (
-          <ManagerAnalytics overview={overview} />
-        ) : view === "team" ? (
+        <ManagerOverview
+          hidden={view !== "overview"}
+          overview={overview}
+        />
+        {view === "overview" ? null : view === "team" ? (
           <section className="manager-analytics" aria-labelledby="manager-team-title">
             <header className="manager-analytics-head">
               <div>
@@ -430,36 +602,47 @@ export function Management({
                 <h1 id="manager-team-title">כוח אדם ותקינה</h1>
                 <p>אנשי צוות, מעמד, סבב או תלתון, סוגי משמרות ואילוצים במקום אחד.</p>
               </div>
-              <span className="manager-analytics-status">
-                {overview?.employees.length ?? 0} אנשי צוות
-              </span>
+              {overview ? (
+                <span className="manager-analytics-status">
+                  {overview.employees.length} אנשי צוות
+                </span>
+              ) : null}
             </header>
             {overview ? (
+              <>
               <TeamPanel
+                today={overview.today}
                 employees={overview.employees}
                 shifts={overview.shifts}
                 constraints={overview.availability}
                 stats={overview.stats}
                 dark={theme === "dark"}
                 rotationMode={overview.profile?.workplace?.rotation_mode}
+                dayCycles={overview.profile?.workplace?.day_cycles}
                 onAdd={state.addConstraint}
                 onRemove={state.removeConstraint}
                 onSaveProfile={state.saveProfile}
+                onDeleteShift={state.deleteShift}
+                onPreviewDeparture={state.previewDeparture}
+                onDepart={state.depart}
               />
+              <Preferences busy={state.busy} />
+              </>
             ) : (
               <div className="manager-analytics-loading" aria-busy="true">
-                טוען את פרטי הצוות…
+                <CrewStage label="טוען את פרטי הצוות…" />
               </div>
             )}
           </section>
         ) : (
           <Board
+            key={workspace.id}
             overview={overview}
             busy={state.busy}
             generating={state.generating}
             dark={theme === "dark"}
             onGenerate={state.generate}
-            onGenerateDay={state.generateDay}
+            onOpenDay={(date) => openAgent(date)}
             onOpenBlank={state.openBlank}
             onAssign={state.assign}
             onUnassign={state.unassign}
@@ -469,21 +652,24 @@ export function Management({
             onPublish={state.publish}
             onExport={state.exportSchedule}
             onPeriodChange={state.focusPeriod}
-            onOpenAgent={() => {
-              setSection("agent");
-              setDrawerOpen(true);
-            }}
+            navigateToWeek={chatWeek}
+            onRefreshReady={registerBoardRefresh}
+            onOpenAgent={() => openAgent()}
+            onImport={() => setImportOpen(true)}
             // What the agent is currently saying, so the board can show
             // *where* on the week it applies. The same state the cards in the
             // control room render — one source, so the two screens can never
             // point at different cells. Read-only: the board produces no
             // operations and there is no path from a highlight to a write.
             agent={{
-              simulation: state.simulation,
-              proposal: state.proposal,
-              answer: state.answer,
+              simulation: chatSimulation,
+              proposal: chatPreview,
+              answer: null,
             }}
           />
+        )}
+        {agentOpen ? null : (
+          <AgentGuard who={agentWho} onOpen={() => openAgent()} onSwap={rollAgent} />
         )}
         <button
           type="button"
@@ -497,6 +683,18 @@ export function Management({
           aria-label="אזור ניהול"
           hidden={!drawerOpen}
         >
+          <div
+            className="manager-chat-resizer"
+            role="separator"
+            tabIndex={0}
+            aria-label="גודל הסוכן מול הלוח — גרירה או חיצים, לחיצה כפולה לאיפוס"
+            title="גרירה לשינוי הגודל · לחיצה כפולה לאיפוס"
+            aria-orientation="vertical"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(chatShare * 100)}
+            {...resizeHandle}
+          />
           <div className="manager-drawer-head">
             <div>
               <strong>ניהול הסידור</strong>
@@ -506,35 +704,42 @@ export function Management({
               <X size={17} />
             </button>
           </div>
-          <div className="manager-tabs" role="group" aria-label="כלי ניהול">
+          <div className="manager-tabs" data-tour="drawer-tabs">
+            <div className="manager-tabs-track" role="group" aria-label="כלי ניהול">
             <ManagerTab
               active={section === "agent"}
               icon={<Sparkles size={15} />}
               label="סוכן"
-              count={copilotPending}
               onClick={() => setSection("agent")}
+            />
+            <ManagerTab
+              active={section === "replace"}
+              icon={<ArrowLeftRight size={15} />}
+              label="שינויים"
+              onClick={() => setSection("replace")}
             />
             <ManagerTab
               active={section === "requests"}
               icon={<Inbox size={15} />}
               label="בקשות"
-              onClick={() => setSection("requests")}
+              count={requests.rows.length}
+              onClick={openRequests}
             />
-            <ManagerTab
-              active={section === "team"}
-              icon={<Users size={15} />}
-              label="צוות"
-              onClick={() => setSection("team")}
-            />
-            <ManagerTab
-              active={section === "overview"}
-              icon={<BarChart3 size={15} />}
-              label="סקירה"
-              onClick={() => setSection("overview")}
-            />
+            </div>
+            {/* Desktop hides the drawer head, so the way out lives here.
+                Closing hands the whole width back to the board. */}
+            <button
+              type="button"
+              className="icon-button manager-tabs-close"
+              onClick={() => setDrawerOpen(false)}
+              aria-label="סגירת הסוכן"
+              title="סגירת הסוכן — הלוח יתרחב"
+            >
+              <X size={16} />
+            </button>
           </div>
 
-          <div className="manager-drawer-content">
+          <div className={`manager-drawer-content${section === "agent" ? " is-conversation" : ""}`}>
           {section === "agent" ? <>
           {schedule?.status === "published" ? (
             <PublishedNotice
@@ -542,52 +747,53 @@ export function Management({
               busy={state.busy}
             />
           ) : null}
-          <Briefing
-            briefing={state.briefing}
-            busy={state.briefing_busy}
-            onAsk={(text) =>
-              setSuggested((previous) => ({ text, n: previous.n + 1 }))
-            }
-            onDismiss={state.dismissBriefing}
-          />
-          {/* A change being considered rather than requested. Rendered in
-              its own colour above the proposal so the two can never be
-              confused — nothing here has been written, and approving runs
-              the ordinary apply path with the manager's reason (D8). */}
-          <SimulationPanel
-            simulation={state.simulation}
-            busy={state.busy}
-            writeLocked={schedule?.status === "published"}
-            onApprove={state.approveSimulation}
-            onDiscard={state.dismissSimulation}
-          />
+          </> : null}
           <AgentChat
-            proposal={state.proposal}
-            answer={state.answer}
-            answerBusy={state.answer_busy}
-            busy={state.busy}
-            hasSchedule={Boolean(schedule)}
-            writeLocked={schedule?.status === "published"}
+            who={agentWho}
+            hidden={section !== "agent"}
+            agent={agent}
+            visibleWeek={state.focusedWeek}
+            focusDate={focusDate}
+            focusKey={focusDay.n}
+            onClearFocus={() => setFocusDay((previous) => ({ date: "", n: previous.n }))}
+            employees={overview?.employees.map((person) => String(person.name ?? "")).filter(Boolean) ?? []}
+            starters={chatStarters({ warnings: schedule?.warnings ?? [], requests: requests.rows, focusDate })}
+            boardBusy={state.busy}
             draft={suggested.text}
             draftKey={suggested.n}
-            onPropose={state.propose}
-            onAsk={state.ask}
-            onSimulate={state.simulate}
-            onConfirm={state.confirm}
-            onDismiss={state.dismissProposal}
-            onDismissAnswer={state.dismissAnswer}
+            onPreview={setChatPreview}
+            onSimulation={setChatSimulation}
+            onOpenReceipt={(date) => setChatWeek((previous) => ({ date, n: (previous?.n ?? 0) + 1 }))}
+            onImport={() => setImportOpen(true)}
           />
-          </> : null}
 
-          <div hidden={section !== "agent"}>
-          <CopilotInbox
-            onOpenInterview={onOpenInterview}
-            onPendingChange={setCopilotPending}
-            onAct={(text) => {
-              setSuggested((previous) => ({ text, n: previous.n + 1 }));
+          {section === "replace" ? <>
+          {schedule?.status === "published" ? (
+            <PublishedNotice
+              onUnlock={() => state.publish(schedule.id, false)}
+              busy={state.busy}
+            />
+          ) : null}
+          <ChangesPanel
+            employees={overview?.employees ?? []}
+            activeEmployees={activeEmployees(overview?.employees ?? [], overview?.today ?? "")}
+            shifts={overview?.shifts ?? []}
+            today={overview?.today ?? ""}
+            rotationMode={overview?.profile?.workplace?.rotation_mode}
+            dayCycles={overview?.profile?.workplace?.day_cycles}
+            disabled={agent.busy || agent.working}
+            onSaveProfile={state.saveProfile}
+            onPreviewDeparture={state.previewDeparture}
+            onDepart={state.depart}
+            onPrepare={(message) => {
+              // The picks become a plan in the conversation, where approving
+              // it is the one write path (D12); the server reads this wording
+              // back in code, so the plan arrives without a model round.
+              setSection("agent");
+              void agent.send(message);
             }}
           />
-          </div>
+          </> : null}
 
           {section === "requests" ? <>
           {schedule?.status === "published" ? (
@@ -596,85 +802,88 @@ export function Management({
               busy={state.busy}
             />
           ) : null}
-          <RequestInbox onDecided={state.refresh} />
+          <RequestInbox
+            rows={requests.rows}
+            onSettled={requests.settle}
+            onDecided={state.refresh}
+          />
           <SwapInbox
+            version={swapsVersion}
             onDecided={state.refresh}
             writeLocked={schedule?.status === "published"}
           />
           </> : null}
 
-          {section === "team" ? <>
-          <Preferences busy={state.busy} />
-          <TeamPanel
-            employees={overview?.employees ?? []}
-            shifts={overview?.shifts ?? []}
-            constraints={overview?.availability ?? []}
-            stats={overview?.stats}
-            dark={theme === "dark"}
-            rotationMode={overview?.profile?.workplace?.rotation_mode}
-            draggable={schedule?.status === "draft" && !state.busy}
-            onAdd={state.addConstraint}
-            onRemove={state.removeConstraint}
-            onSaveProfile={state.saveProfile}
-          />
-          </> : null}
 
-          {section === "overview" ? <>
-            <button type="button" className="ghost-button full" onClick={() => setImportOpen(true)} disabled={state.busy}>
-              <Upload size={14} />
-              טעינת סידור קיים
-            </button>
-            {schedule?.notes?.length ? <ul className="schedule-notes">{schedule.notes.map((note, index) => <li key={index}>{note}</li>)}</ul> : null}
-            {schedule ? <Warnings warnings={schedule.warnings} /> : null}
-            {overview?.stats ? <Stats stats={overview.stats} /> : null}
-            <History entries={overview?.changes ?? []} />
-            <LearnedFromChanges />
-          </> : null}
           </div>
         </aside>
+        <RequestToast
+          arrivals={requests.arrivals}
+          onOpen={openRequests}
+          onDismiss={dismissArrivals}
+        />
       </main>
 
-      {/* Reading the files writes nothing; this screen's own confirm button
-          is the only thing that persists (D7). */}
       {importOpen ? (
         <ImportSchedule
+          employees={(overview?.employees ?? []).map((person) => String(person.name ?? "")).filter(Boolean)}
           shiftNames={(overview?.shifts ?? [])
             .map((shift) => String((shift as { name?: unknown }).name ?? ""))
             .filter(Boolean)}
           onClose={() => setImportOpen(false)}
-          onImported={() => {
+          onImported={(imported) => {
             setImportOpen(false);
+            // Land on the imported week, the same way a chat receipt does.
+            setChatWeek((previous) => ({ date: imported.starts_on, n: (previous?.n ?? 0) + 1 }));
             void state.refresh();
           }}
         />
-      ) : null}
-
-      {settingsOpen ? (
-        <SettingsPanel onClose={() => setSettingsOpen(false)} />
       ) : null}
     </div>
   );
 }
 
-type ManagerView = "board" | "team" | "analytics";
-type ManagerSection = "agent" | "requests" | "team" | "overview";
+type ManagerView = "board" | "team" | "overview";
 
-function ManagerAnalytics({
+/** Whether `date` falls in the seven days starting `weekStart`. An unknown
+ *  week keeps the day: nothing on screen contradicts it yet. */
+function inWeek(date: string, weekStart: string): boolean {
+  if (!weekStart) return true;
+  const offset = (new Date(`${date}T00:00:00`).getTime() - new Date(`${weekStart}T00:00:00`).getTime()) / 86_400_000;
+  return offset >= 0 && offset < 7;
+}
+type ManagerSection = "agent" | "replace" | "requests";
+
+/** Roster names still on the active roster on `today`. */
+export function activeEmployees(employees: Record<string, unknown>[], today: string): string[] {
+  return employees
+    .filter((person) => !person.inactive_from || !today || String(person.inactive_from) > today)
+    .map((person) => String(person.name ?? ""))
+    .filter(Boolean);
+}
+
+function ManagerOverview({
+  hidden,
   overview,
 }: {
+  hidden: boolean;
   overview: ManagementOverview | undefined;
 }) {
   const schedule = overview?.schedule;
 
   return (
-    <section className="manager-analytics" aria-labelledby="manager-analytics-title">
+    <section
+      className="manager-analytics manager-overview"
+      aria-labelledby="manager-overview-title"
+      hidden={hidden}
+    >
       <header className="manager-analytics-head">
         <div>
-          <span className="manager-analytics-eyebrow">חדר הנתונים</span>
-          <h1 id="manager-analytics-title">תמונת מצב של הצוות</h1>
+          <span className="manager-analytics-eyebrow">סקירה</span>
+          <h1 id="manager-overview-title">כל מה שדורש מבט, במקום אחד</h1>
           <p>
             {schedule
-              ? `${formatDate(schedule.starts_on)}–${formatDate(schedule.ends_on)} · ${schedule.status === "published" ? "סידור מפורסם" : "טיוטה בעבודה"}`
+              ? `${displayDate(schedule.starts_on)}–${displayDate(schedule.ends_on)} · נתוני הסידור`
               : "כשתיפתח תקופת שיבוץ, הנתונים שלה יופיעו כאן."}
           </p>
         </div>
@@ -685,24 +894,15 @@ function ManagerAnalytics({
         ) : null}
       </header>
 
-      {overview ? <Stats stats={overview.stats} expanded /> : (
-        <div className="manager-analytics-loading" aria-busy="true">
-          טוען את נתוני התקופה…
-        </div>
-      )}
-
-      {schedule?.warnings.length ? (
-        <section className="manager-analytics-warnings">
-          <div className="manager-analytics-section-head">
-            <div>
-              <span>מה דורש מבט</span>
-              <h2>התראות התקופה</h2>
-            </div>
-            <strong>{schedule.warnings.length}</strong>
+      <div className="manager-overview-flow">
+        {overview ? <Stats overview={overview} expanded /> : (
+          <div className="manager-analytics-loading" aria-busy="true">
+            <CrewStage label="טוען את נתוני התקופה…" />
           </div>
-          <Warnings warnings={schedule.warnings} />
-        </section>
-      ) : null}
+        )}
+
+        <LearnedFromChanges />
+      </div>
     </section>
   );
 }
@@ -728,7 +928,7 @@ function ManagerTab({
       onClick={onClick}
     >
       {icon}
-      {label}
+      <span>{label}</span>
       {count ? <span className="manager-tab-badge">{count > 9 ? "9+" : count}</span> : null}
     </button>
   );

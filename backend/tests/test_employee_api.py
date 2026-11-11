@@ -31,6 +31,7 @@ from app.common.errors import (
 from app.common.sessions import (
     COOKIE_NAME, ROLE_BOSS, ROLE_EMPLOYEE, ROLE_MEMBER, issue,
 )
+from app.common.throttle import LoginThrottle
 from app.dal.repository.teams import hash_password, verify_password
 
 SECRET = "test-secret"
@@ -247,6 +248,9 @@ class _FakeIdentities:
     def team_profile(self, team_id):
         return PROFILE if team_id in (TEAM, OTHER_TEAM) else None
 
+    def team_profile_revision(self, team_id):
+        return 0 if team_id in (TEAM, OTHER_TEAM) else None
+
     def availability(self, team_id, starts_on=None, ends_on=None,
                      employee=None):
         """Same signature as `ScheduleRepository.availability`."""
@@ -353,7 +357,7 @@ def _as(client, role, team=TEAM, name=None):
     )
 
 
-def _claim(client, name=DANA, passcode="1234", team=TEAM):
+def _claim(client, name=DANA, passcode="123456", team=TEAM):
     _as(client, ROLE_MEMBER, team)
     response = client.post(
         "/api/employee/claim", json={"employee": name, "passcode": passcode}
@@ -385,7 +389,7 @@ def test_a_name_not_on_the_roster_cannot_be_claimed(client):
     _as(client, ROLE_MEMBER)
 
     response = client.post(
-        "/api/employee/claim", json={"employee": "מנהל", "passcode": "1234"}
+        "/api/employee/claim", json={"employee": "מנהל", "passcode": "123456"}
     )
 
     # 502, the codebase's `AgentError`. Same status the schedule service
@@ -401,7 +405,7 @@ def test_a_claimed_name_cannot_be_claimed_again(client):
     _as(client, ROLE_MEMBER)
 
     response = client.post(
-        "/api/employee/claim", json={"employee": DANA, "passcode": "9999"}
+        "/api/employee/claim", json={"employee": DANA, "passcode": "999999"}
     )
 
     assert response.status_code == 409
@@ -409,7 +413,7 @@ def test_a_claimed_name_cannot_be_claimed_again(client):
 
 def test_an_anonymous_visitor_cannot_claim_anything(client):
     assert client.post(
-        "/api/employee/claim", json={"employee": DANA, "passcode": "1234"}
+        "/api/employee/claim", json={"employee": DANA, "passcode": "123456"}
     ).status_code == 401
 
 
@@ -442,11 +446,11 @@ def test_the_roster_marks_which_names_are_taken(client):
 # --- logging in -------------------------------------------------------------
 
 def test_the_right_passcode_signs_an_employee_in(client):
-    _claim(client, passcode="1234")
+    _claim(client, passcode="123456")
     _as(client, ROLE_MEMBER)
 
     response = client.post(
-        "/api/employee/login", json={"employee": DANA, "passcode": "1234"}
+        "/api/employee/login", json={"employee": DANA, "passcode": "123456"}
     )
 
     assert response.status_code == 200
@@ -454,29 +458,122 @@ def test_the_right_passcode_signs_an_employee_in(client):
 
 
 def test_a_wrong_passcode_is_refused(client):
-    _claim(client, passcode="1234")
+    _claim(client, passcode="123456")
     _as(client, ROLE_MEMBER)
 
     assert client.post(
-        "/api/employee/login", json={"employee": DANA, "passcode": "9999"}
+        "/api/employee/login", json={"employee": DANA, "passcode": "999999"}
     ).status_code == 401
+
+
+def test_repeated_wrong_passcodes_lock_the_name_out(client):
+    """Locked even for the right passcode afterwards -- otherwise the
+    lockout only delays the guess that would have succeeded anyway."""
+    _claim(client, passcode="123456")
+    _as(client, ROLE_MEMBER)
+    for _ in range(5):
+        client.post(
+            "/api/employee/login", json={"employee": DANA, "passcode": "999999"}
+        )
+
+    assert client.post(
+        "/api/employee/login", json={"employee": DANA, "passcode": "123456"}
+    ).status_code == 429
+
+
+def test_a_passcode_shorter_than_six_cannot_be_claimed(client):
+    _as(client, ROLE_MEMBER)
+
+    assert client.post(
+        "/api/employee/claim", json={"employee": DANA, "passcode": "1234"}
+    ).status_code == 422
 
 
 def test_an_unclaimed_name_and_a_wrong_passcode_are_indistinguishable(client):
     """Otherwise the endpoint reports which names are claimed to anyone
     holding the link."""
-    _claim(client, name=DANA, passcode="1234")
+    _claim(client, name=DANA, passcode="123456")
     _as(client, ROLE_MEMBER)
 
     wrong_code = client.post(
-        "/api/employee/login", json={"employee": DANA, "passcode": "9999"}
+        "/api/employee/login", json={"employee": DANA, "passcode": "999999"}
     )
     unclaimed = client.post(
-        "/api/employee/login", json={"employee": YOSSI, "passcode": "9999"}
+        "/api/employee/login", json={"employee": YOSSI, "passcode": "999999"}
     )
 
     assert wrong_code.status_code == unclaimed.status_code == 401
     assert wrong_code.json() == unclaimed.json()
+
+
+# --- the front door: signing in without the share link (D25) ----------------
+
+def _signin(client, name=DANA, passcode="123456", team=TEAM):
+    client.cookies.clear()
+    return client.post("/api/employee/signin", json={
+        "team_id": team, "employee": name, "passcode": passcode,
+    })
+
+
+def test_a_claimed_employee_can_sign_in_without_the_share_link(client):
+    _claim(client)
+
+    response = _signin(client)
+
+    assert response.status_code == 200, response.text
+    assert client.get("/api/employee/me").json()["employee"] == DANA
+
+
+def test_the_front_door_cannot_reach_an_unclaimed_name(client):
+    """Claiming still needs the link. Without that, anyone who can see the
+    team picker could take a name nobody has claimed yet."""
+    response = _signin(client, name=YOSSI)
+
+    assert response.status_code == 401
+    assert client.get("/api/employee/me").status_code == 401
+
+
+def test_the_front_door_does_not_say_which_names_are_claimed(client):
+    """The front door is open to anyone, so it must not reveal the roster."""
+    _claim(client, name=DANA, passcode="123456")
+
+    wrong_code = _signin(client, name=DANA, passcode="999999")
+    unclaimed = _signin(client, name=YOSSI, passcode="999999")
+
+    assert wrong_code.status_code == unclaimed.status_code == 401
+    assert wrong_code.json() == unclaimed.json()
+
+
+def test_the_front_door_signs_into_the_team_it_named_only(client):
+    _claim(client, name=DANA, passcode="123456", team=TEAM)
+
+    assert _signin(client, team=OTHER_TEAM).status_code == 401
+
+
+def test_the_front_door_and_the_link_share_one_throttle():
+    """Two doors to one passcode must not mean twice the guesses."""
+    repository = _FakeIdentities()
+    service = EmployeeService(repository, _FakeSchedules(repository))
+    app = FastAPI()
+    app.include_router(employee_router.build_router(
+        service, Guards(SECRET), SECRET, 30, LoginThrottle(limit=2),
+    ))
+
+    @app.exception_handler(AppError)
+    async def handler(request, exc):
+        return JSONResponse(
+            status_code=exc.status_code, content={"detail": str(exc)}
+        )
+
+    client = TestClient(app)
+    _claim(client)
+    _as(client, ROLE_MEMBER)
+    client.post(
+        "/api/employee/login", json={"employee": DANA, "passcode": "wrong"}
+    )
+    _signin(client, passcode="wrong")
+
+    assert _signin(client).status_code == 429
 
 
 # --- the identity comes off the cookie, never the body ----------------------
@@ -591,11 +688,11 @@ def test_a_boss_cannot_reach_the_employee_area_without_claiming(client):
 
 def test_a_claim_in_one_team_does_not_authenticate_in_another(context):
     client, repository, _ = context
-    _claim(client, name=DANA, passcode="1234", team=TEAM)
+    _claim(client, name=DANA, passcode="123456", team=TEAM)
     _as(client, ROLE_MEMBER, team=OTHER_TEAM)
 
     assert client.post(
-        "/api/employee/login", json={"employee": DANA, "passcode": "1234"}
+        "/api/employee/login", json={"employee": DANA, "passcode": "123456"}
     ).status_code == 401
 
 
@@ -819,8 +916,8 @@ def test_acknowledging_settles_only_the_caller(client, context):
     """The employee comes off the signed cookie, so one person reading their
     own changes can never clear a colleague's badge."""
     _, repository, _ = context
-    _claim(client, name=DANA, passcode="1234")
-    _claim(client, name=YOSSI, passcode="5678")
+    _claim(client, name=DANA, passcode="123456")
+    _claim(client, name=YOSSI, passcode="567856")
     _change(repository, employee=DANA)
     _change(repository, employee=YOSSI)
 
@@ -838,3 +935,10 @@ def test_a_member_without_an_identity_cannot_acknowledge(client):
     _as(client, ROLE_MEMBER)
 
     assert client.post("/api/employee/acknowledge").status_code == 401
+
+
+def test_the_personal_view_no_longer_carries_the_teams_hours(client):
+    """Hours per colleague are the manager's stats, not a teammate's."""
+    _claim(client)
+
+    assert "fairness" not in client.get("/api/employee/me").json()

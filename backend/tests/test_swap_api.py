@@ -82,7 +82,7 @@ def client(context):
     return context[0]
 
 
-def _as_employee(client, name, team=TEAM, passcode="1234"):
+def _as_employee(client, name, team=TEAM, passcode="123456"):
     """Sign in as an employee, claiming the name the first time.
 
     Going through claim and login rather than setting a cookie by hand: both
@@ -119,7 +119,7 @@ def _agreed_swap(client):
     """Walk an offer to the state the manager rules on: both agreed."""
     _as_employee(client, DANA)
     swap_id = _offer(client).json()["id"]
-    _as_employee(client, YOSSI, passcode="5678")
+    _as_employee(client, YOSSI, passcode="567856")
     client.post(
         "/api/employee/swaps/%s/answer" % swap_id, json={"agreed": True}
     )
@@ -159,7 +159,7 @@ def test_a_declined_offer_ends_and_is_not_the_managers_problem(context):
     _as_employee(client, DANA)
     swap_id = _offer(client).json()["id"]
 
-    _as_employee(client, YOSSI, passcode="5678")
+    _as_employee(client, YOSSI, passcode="567856")
     response = client.post(
         "/api/employee/swaps/%s/answer" % swap_id, json={"agreed": False}
     )
@@ -176,7 +176,7 @@ def test_a_declined_offer_ends_and_is_not_the_managers_problem(context):
 
 def test_an_employee_can_only_offer_their_own_shift(context):
     client, _, _ = context
-    _as_employee(client, YOSSI, passcode="5678")
+    _as_employee(client, YOSSI, passcode="567856")
 
     # Yossi offering Dana's morning away, naming her as the counterparty.
     response = client.post("/api/employee/swaps", json={
@@ -338,7 +338,7 @@ def test_both_sides_see_the_swap_labelled_with_their_own_role(context):
     _offer(client)
 
     dana = client.get("/api/employee/swaps").json()[0]
-    _as_employee(client, YOSSI, passcode="5678")
+    _as_employee(client, YOSSI, passcode="567856")
     yossi = client.get("/api/employee/swaps").json()[0]
 
     # One row, two readers, two different questions -- decided here rather
@@ -353,7 +353,7 @@ def test_only_the_colleague_sees_it_as_waiting_on_them(context):
     _offer(client)
 
     assert client.get("/api/employee/swaps/incoming").json() == []
-    _as_employee(client, YOSSI, passcode="5678")
+    _as_employee(client, YOSSI, passcode="567856")
     incoming = client.get("/api/employee/swaps/incoming").json()
 
     # The badge means "somebody is waiting on you", which is never true of
@@ -369,7 +369,7 @@ def test_the_requester_may_take_an_offer_back(context):
     response = client.post("/api/employee/swaps/%s/withdraw" % swap_id)
 
     assert response.json()["status"] == "withdrawn"
-    _as_employee(client, YOSSI, passcode="5678")
+    _as_employee(client, YOSSI, passcode="567856")
     # Withdrawn offers leave the colleague's queue.
     assert client.get("/api/employee/swaps/incoming").json() == []
 

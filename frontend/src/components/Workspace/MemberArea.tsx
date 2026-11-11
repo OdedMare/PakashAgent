@@ -9,8 +9,10 @@ import {
   Users,
 } from "lucide-react";
 
-import { useTheme } from "@/components/Interview/useTheme";
-import { Calendar, formatDate } from "@/components/Management/Calendar";
+import { HelpButton, useGuideSurface } from "@/components/Guide";
+import { useTheme } from "@/hooks/useTheme";
+import { Calendar } from "@/components/Management/Calendar";
+import { displayDate } from "@/components/DateInput";
 import { useManagement } from "@/components/Management/useManagement";
 import type { TeamView } from "@/types";
 
@@ -47,6 +49,7 @@ export function MemberArea({
 }) {
   const { theme, toggle } = useTheme();
   const { overview } = useManagement();
+  useGuideSurface("member");
   const shifts = readShiftNames(workspace.profile);
   const schedule = overview?.schedule ?? null;
   // The roster in profile order, so a member reads the same colours the
@@ -57,23 +60,28 @@ export function MemberArea({
     .filter((name) => name !== "");
 
   return (
-    <div className="interview">
-      <header className="interview-header">
+    <div className="workspace-surface">
+      <header className="workspace-sidebar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
             <Users size={17} />
           </span>
-          <span>
-            {workspace.name}
-            <span className="brand-sub"> · תצוגת צוות</span>
+          <span className="brand-text">
+            <span className="brand-name">משמרות זהב</span>
+            <span>
+              {workspace.name}
+              <span className="brand-sub"> · תצוגת צוות</span>
+            </span>
           </span>
         </div>
         <div className="header-actions">
+          <HelpButton />
           {onOpenPersonal ? (
             <button
               type="button"
               className="icon-button"
               onClick={onOpenPersonal}
+              data-tour="member-personal"
               aria-label="האזור האישי שלי"
               title="האזור האישי שלי"
             >
@@ -102,12 +110,12 @@ export function MemberArea({
 
       <main id="main-content" className="member-main">
         {schedule ? (
-          <div className="member-schedule">
+          <div className="member-schedule" data-tour="member-schedule">
             <div className="management-toolbar">
               <div className="period">
                 <span className="period-range">
-                  {formatDate(schedule.starts_on)} –{" "}
-                  {formatDate(schedule.ends_on)}
+                  {displayDate(schedule.starts_on)} –{" "}
+                  {displayDate(schedule.ends_on)}
                 </span>
               </div>
             </div>
@@ -148,10 +156,10 @@ export function MemberArea({
   );
 }
 
-/** Shift names as the interview recorded them.
+/** Shift names as unit setup recorded them.
  *
  *  Read defensively: the profile is model-produced JSON whose exact shape the
- *  interview owns, so a missing or differently-keyed field must degrade to
+ *  profile owns, so a missing or differently-keyed field must degrade to
  *  showing nothing rather than throwing. Never hardcode shift names — they
  *  are per-workplace data (D9). */
 function readShiftNames(profile: TeamView["profile"]): string[] {

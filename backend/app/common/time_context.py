@@ -1,12 +1,9 @@
-"""Israel-local time for agent context and scheduling calendar decisions."""
+"""Israel-local time for agent context and scheduling decisions."""
 
 import datetime
 from typing import Optional
 
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # Python 3.8 deployment target
-    from backports.zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo
 
 
 ISRAEL_TIMEZONE = "Asia/Jerusalem"
@@ -32,8 +29,14 @@ def israel_today(
 def agent_time_context(
     now: Optional[datetime.datetime] = None,
 ) -> str:
-    """Machine-readable clock plus the rules every model invocation follows."""
-    local = israel_datetime(now).replace(microsecond=0)
+    """Machine-readable clock plus the rules every model invocation follows.
+
+    Minute precision on purpose: a clock that ticks every second makes
+    consecutive calls differ, so an inference server cannot reuse the prompt
+    it just computed. It closes the prompt (`complete_json`) for the same
+    reason. No scheduling decision turns on seconds.
+    """
+    local = israel_datetime(now).replace(second=0, microsecond=0)
     return """Current date and time:
 - Timezone: {timezone}
 - Local datetime: {datetime}
@@ -54,8 +57,3 @@ Time interpretation rules:
         weekday=local.strftime("%A"),
         time=local.strftime("%H:%M"),
     )
-
-
-__all__ = [
-    "ISRAEL_TIMEZONE", "agent_time_context", "israel_datetime", "israel_today",
-]

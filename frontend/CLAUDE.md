@@ -1,9 +1,56 @@
 # Frontend (`frontend/`)
 
 Next.js App Router, TypeScript, plain CSS. Deps and conventions ported from
-AiSummryIO; the design tokens in `src/styles/tokens.css` are its `shell.css`
-palette — warm cream ground, terracotta accent — so the two products read as
-one system.
+AiSummryIO.
+
+**The look is native-inspired and restrained, following Apple's productivity apps.**
+Tokens live in `src/styles/tokens.css`; the shared finish lives in
+`src/styles/aurora.css`, imported last. Use Apple grays, the system face
+(SF Pro / SF Hebrew on Apple devices, Inter and Noto Sans Hebrew elsewhere),
+opaque working surfaces and thin separators. Translucent `--glass` is reserved
+for navigation and toolbars, with an opaque fallback for reduced transparency.
+System blue `--primary` identifies actions and selection; filled controls use
+`--primary-fill` so white labels stay readable in both themes. Avoid decorative
+colour cycling, canvas washes, gradient text and glowing shadows. Gold is
+reserved for the product mark and favicon. Person colours identify employees;
+warning, danger and success retain their scheduling meaning. The legacy
+`--brand-gradient` and `--aurora` tokens are neutral compatibility surfaces,
+not invitations to add decoration. Keep keyboard focus visible, touch controls
+at least 44px, and motion short with reduced-motion support.
+
+**The two guards are the product's characters** (`components/Crew/`, pure
+SVG + CSS in `styles/crew.css`; the drawing itself is the stateless
+`Crew/Guard.tsx` so the server-rendered guide page can use it). They wave on
+the entrance card, patrol whatever the app waits on (`CrewStage`: a build,
+the agent's working line, a screen still loading), narrate the help panel,
+the first-visit tour and the `/tutorial` guide, and one of them *is* the
+agent: it stands in the board's corner and opens the chat when pressed.
+Which one is rolled per conversation (`randomGuard`), again whenever it
+returns to the corner and every 25 seconds there, never while the chat is
+open, and the chat uses that guard as its avatar, greeting and working
+indicator. All motion stops under `prefers-reduced-motion`.
+
+**One field, everywhere.** Every text input, select and textarea gets one
+box from `styles/tokens.css` — 44px, the strong border, `--radius-sm`, the
+surface behind it, the blue focus ring — through a `:where()` rule with no
+specificity, sized by the `--control-*` tokens (16px text on a phone, so iOS
+does not zoom). Do not restate it on a screen: a form's class sets layout
+only (width, flex, grid). Override it only for something that is not a
+field — a search inside a bar, the chat composer, a toolbar filter chip. A
+label above a field is a `<span>` inside `.manual-field`, `.soldier-field`
+or a `.constraint-form` label, or `.field-label`: one muted 0.74rem/650.
+
+**Every date and time field can be picked as well as typed.** `DateInput`
+adds a calendar button over the browser's own picker; `TimeInput` is typed
+24-hour `HH:MM` plus a clock button with an hour/minute list (`pickers.ts`,
+`styles/pickers.css`), because native time inputs have no picker in some
+browsers and show AM/PM in others. Use them rather than a bare `<input
+type="date|time">`.
+
+**Shift types are picked from a scrolling multi-select** (`MultiSelect.tsx`,
+styles in `styles/pickers.css`): a field that reads back the choice and a
+list that keeps its own height, rather than a checkbox per shift — a unit
+with many shifts made that wall longer than the form around it.
 
 `next.config.ts` proxies `/api/*` to FastAPI, so the browser sees one origin
 and there is no CORS setup.
@@ -20,7 +67,7 @@ and the third of them is not an edit at all:
   that collects the manager's reason, and that dialog is what applies the move
   ([D12](../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
   Dragging is a faster way to say what you want, not a way around saying why
-  ([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-),
+  ([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34),
   [D8](../docs/DECISIONS.md#d8--two-reasons-both-required)).
 - **Filling an empty cell writes immediately** — the `+` on a cell opens an
   employee picker and the choice is saved
@@ -30,24 +77,154 @@ and the third of them is not an edit at all:
   boss build a week without the agent at all.
 - **Dragging a shift *row* writes nothing at all** — it is not a third
   gesture on the schedule but a change to the order the board is read in
-  (`Board/shiftOrder.ts`). The rows default to **the clock**, earliest start
-  first, because that is the sequence the day actually happens in; the order
-  the slots were written in carried no meaning a manager could see, and
-  alphabetising would scramble the same sequence differently
-  ([D9](../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace)). A shift
-  with no hours cannot be placed on a clock, so those keep their declared
-  order and sit last. The manager can drag or nudge the rows into any other
+  (`Board/shiftOrder.ts`). The rows default to **א-ב** (Hebrew collation), so the shifts of
+  one post sit together — אלחוט יום directly above אלחוט לילה — instead of
+  being split between the top (day) and bottom (night) of the board. The
+  shift filter and the מכלול view use the same order. The manager can drag or nudge the rows into any other
   order, remembered per browser, and put them back with one click. Because
   nothing is written, this works on a published board too, where every write
   is refused.
 
+**The board has four widths, and they are two kinds of screen.** The switch
+beside the arrows (`Board/ViewSwitch.tsx`, arithmetic in `Board/views.ts`)
+chooses יום, שבוע, שבועיים or חודש, and the arrows step by whichever is
+showing.
+
+- **Day and week are the working board.** Both sit inside one stored period,
+  so every gesture above is there, aimed at it. A day is `BoardGrid` handed
+  one date instead of seven — the week with six columns put away, not a
+  second screen — and the rail above it keeps the other six in sight and
+  moves between them.
+- **Two weeks and a month are for reading** (`Board/RangeGrid.tsx`). They
+  cross periods, and every write the board makes names the one period it
+  lands on, so nothing there writes: a day is a button that opens that day,
+  a week's label opens that week, and the period's own actions — publish,
+  clear, delete, export — are withheld because there is no one period for
+  them to mean. Do not add a drag here. It would be a move between two
+  periods with no dialog able to say which audit it answers to
+  ([D12](../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)).
+- **A span is one read.** `GET /api/schedule/between` returns every period
+  touching the dates; `Board/span.ts` clips and joins them into an ordinary
+  `Schedule`, which is what lets the index, the tiles and the filters count a
+  day or a month exactly as they count a week. That joined span has no id on
+  purpose — it is not something a write could be aimed at.
+- **The anchor is a day, remembered per session; the view is a habit,
+  remembered per browser.** Switching views never moves the anchor, so a
+  month narrows to the week the manager was already in. Under the two wide
+  views the anchor's week is still the period reported upward
+  (`onPeriodChange`), so the agent's conversation stays about a real week.
+- **A day with no period says "לא תוכנן".** That and an empty day inside a
+  built week are different facts, and only the first is an invitation to
+  build something.
+
 **A day column says whose closure it is.** `schedule.closures` arrives with
-the period, computed by `bl/rotation.py`, and the board renders it on the
+the period, computed by `bl/rotation/`, and the board renders it on the
 column head and in the placement dialog. It is not derived here on purpose:
 which group closes on 12/09 is arithmetic, and a browser-side cycle would be
 a second answer to a question that must have exactly one. The Sunday a
 closure hands over on reads dimmer and says `חילוף` — the group is in for
 that morning and out for the rest of the day.
+
+**The rotation section is a handful of closed lists** (`ManualSetup/ExitKinds.tsx`): a
+closed multi-select of every kind of exit the unit has — none, daily, weekend
+groups (סבבים), every day cycle by name (11/3, 12/2, 10/4, שבוע־שבוע,
+14/7, 21/7, 5/2, 4/3), a manual days on base / at home, and a unit's own
+סגירה 1 ל־X (2–8 groups, `kind: "weekends"`) — ticking one creates that
+cycle, unticking removes it unless somebody is on it — חמשושים,
+שושים, a personal 1 ל־N, reservists — and, when weekend groups are chosen, the round type (a closed
+list of every type the screen offered before: 11/3, 12/2, 10/4, שבוע־שבוע or
+other days and times, from `closureShapes.ts`), which fills in when the
+closure starts and ends (day + time, both editable; an edit that matches no
+type reads as "other"), and how many groups take turns (2 סבב, 3 תלתון,
+4 רבעון, 5 חמישון). There is no calendar, no exception weekends and no
+"which date does which group close": an anchor already stored is kept, and a
+cycle without one is saved with group א closing the coming Saturday. The
+closure is group א's one undated window row, which the server applies to every
+group in turn. What is ticked is saved as `enabled_exit_patterns`; a pattern
+somebody is on stays on. Stored exception rows and presence rules are kept and
+saved unchanged but are no longer shown. A soldier's own questions (daily days
+and hours, a personal 1 ל־N and its first weekend) render under their pattern
+(`Management/ExitPatternFields.tsx`). A
+reservist's coming week is set from the team list (`Management/ReserveWeek.tsx`):
+each day cycles רגיל → עדיף שלא → לא יכול/ה, stored as whole-day
+availability rows, and the solver picks the days. A reservist is not asked
+how many days a week they come: any day they are not blocked, and both forms
+save `reserve_days_per_week` empty for one (`daysCapOf`; an officer or NCO
+still has the number). Weekdays they can never
+come ("דוד לא יכול להגיע ברביעי") are seven checkboxes in the same card
+(`SoldierFields`, in setup and in the roster's form): each is a
+hard whole-day rule in the person's `recurring_constraints`
+(`lib/blockedDays.ts`), not a field of its own, so one recorded through the
+constraint form or the chat shows ticked there too.
+
+**A cycle is typed once, in the team setup screen** (`ManualSetup/`, the
+sliders icon). The server-wide model, solver and database settings are not
+on the team screen at all: they live in the operator console's "מערכת" tab.
+`ManualSetup/RotationSetup.tsx` holds only the lettered cycles and how an
+anchor stored for another group is read as א's next turn; the other groups'
+turns and hours are derived by the server. The older fixed א/ב unavailability
+block shows only to a unit that still has rows in it. The day cycles ticked in that list each get
+a card in `ManualSetup/DayCycleSetup.tsx` that edits and deletes it (the bin
+is off while somebody is on it): its name, the days on base and at home (or
+the X of a 1 ל־X), the anchor, how many groups, and departure and return.
+Buttons under the cards add more manual ones than the list's one each. When
+each other group starts, a group's own hours and dated changes are folded
+under "התאמות לפי קבוצה ותאריך". There is no preview strip: who is home on a
+date is answered by the server. The whole screen
+saves in one `updateProfile`. A saved soldier's or shift's name can be
+corrected there: each row remembers the name it was loaded under (`_saved`,
+never sent), and an edited one goes out as `renamed_employees` /
+`renamed_shifts` (`{old: new}`), which the server carries through every
+stored row — the board, constraints, requests, swaps, identities — in the
+same transaction, logging a `renamed` entry. A renamed shift's references on
+the form (soldiers' shift picks, rotation rules) follow as it is typed, but
+only to a name no other shift has. The bin on a saved soldier is for one
+added by mistake: `removed_employees` deletes them with their draft rows
+(each logged as `removed`), and is refused for anyone on a published week,
+where "הוצאה מהסגל" is the tool. A save that
+adds a soldier or a shift refits every draft ahead of today, keeping its
+rows (D37); anything else applies to the next build. Setup no longer
+sets a shift's `allowed_roles` or its role composition (`required_roles`):
+both fields are gone from the card and a save clears any stored. A shift's
+days, like every day choice on the screen (a daily soldier's days, the old
+א/ב block), are a closed multi-select. A shift's "משקל עומס" (`load_weight`, a closed list 0.5–1.75; empty is
+1.5 for a night and 1 otherwise) is how much one of it counts when the load
+is evened (D52). A shift can also ask for a different
+headcount on the weekend, and "weekend" means the round's closure — the days
+one group is home, until the Sunday handover — not a fixed Friday and
+Saturday. The closure start chosen in the rotation section sets its first day; no
+row means the server's Thursday. It is saved as a staffing group
+marked `closure: true` whose days are worked out per shift at save time
+(the first day only for a shift still running when the closure opens, the
+Sunday only for one starting before the handover).
+
+**The setup screen folds, and the roster can be read in groups.** Every
+section folds from its header, and "כיווץ הכל" / "פתיחת הכל" in the screen's
+header folds or opens them all at once; a folded section shows a one-line
+summary (the unit's name, the exit kinds, the shift names…) in place of its
+hint, and which sections are folded is remembered per browser
+(`ManualSetup/useCollapsed.ts`). The roster
+(`ManualSetup/RosterView.tsx`, arithmetic in `rosterGroups.ts`) groups by
+מעמד, נספר בתקן, משמרת (someone allowed on two shifts is under both) or
+מבנה יציאות, each group folds, and the status chips narrow it to, say, only
+מילואים. A search box above them finds a soldier by name, role,
+competence, status, rotation, shift, qualification or note — every word
+typed, in any order, ignoring niqqud and geresh — and is not remembered.
+A soldier's card folds to one line, and so does a shift's card (hours,
+headcount, purpose), each list with its own fold-all button. All of this only hides: hidden
+rows stay in the form and save with the rest, and a soldier added while one
+status is shown takes that status. The grouping and filter are a habit,
+remembered per browser; nothing is written to the server.
+
+**A soldier card is coloured by their dated qualifications (כשירות).** Only
+a person with a dated row ("פעילות אחרונה") is coloured — green while every
+qualification holds, orange in its last seven days, red once one has lapsed —
+and each row carries a badge saying until when. The date is never retyped
+after a shift: `POST /api/profile/qualification-preview`
+(`ManualSetup/useQualification.ts`, debounced like the rotation strip) counts
+the unit's `qualification_validity_days` from the later of the typed date and
+the person's last shift already worked on the board (`bl/qualification.py`).
+It colours; it does not restrict who the solver may place.
 
 **Taking a week back is two different acts.** *ניקוי* empties the
 assignments and keeps the shift rows, so the week can be filled in again
@@ -72,7 +249,13 @@ colours, which mean something specific on this grid.
 **A board card says who is standing there, not why** (`Board/ShiftCard.tsx`).
 Name, role, rotation — `exit_pattern` and `rotation_group` rendered as one
 phrase by `Board/person.ts`, since a group is what makes somebody rotate at
-all — plus badges for **מפקד/ת** and **נחפף/ת**. The command badge reads off
+all — plus badges for **מפקד/ת** and **נחפף/ת**. A soldier with a roster note carries a ringed
+**!** whose hover is the note; setup's "הערות לחייל/ת לתצוגה בלבד"
+(`workplace.notes_visual_only`) keeps notes on the board only — the build is
+then not told about them (`scheduler/directives.semantic_sources` skips them). An overlap (נחפף/ת) card drops
+the per-name hue for one shared violet with a thick inline-start bar,
+diagonal stripes and a solid badge, so a trainee never reads as a filled
+seat; alarm styling still wins. The command badge reads off
 the *person*, not `slot.requires_shift_manager`: whether anyone in a cell can
 run the shift is the question, and gating it on the slot hid the answer on
 exactly the shifts nobody had declared it needed. `assignment.reason` used to
@@ -80,62 +263,64 @@ hold the card's last line; it is still written on every path and still
 [D8](../docs/DECISIONS.md#d8--two-reasons-both-required)'s record, and it is
 one hover away — but a justification is read once, when the placement is made,
 and the grid is read every day.
+A flagged card says *why* on its face: a red last line names the rule and
+the number that broke it ("אילוץ 12:00–20:00 · מילואים", "רק 6 ש׳ מנוחה
+(נדרש 8)", "רמה חלשה · המשמרת דורשת גבוהה ומעלה" on a strong shift),
+worded from the warning's `details` by `lib/warningSummary.ts`,
+with `+N` for further findings and every audit sentence on the hover. A
+constraint the board finds itself (`blockingConstraint`) stands in until the
+audit reports the same one.
 
-Built so far: the workspace gate, the interview, the management area, and the
-import screen. All surfaces exist.
+**The placement dialog ranks people, not just lists them**
+(`Board/ShiftEditor.tsx`, fed by `POST /api/schedule/check`). Each
+candidate shows availability, rotation and an overlap badge, and the list
+filters (`Board/CandidateFilters.tsx`) by name, exit pattern, rotation group,
+the shift types a person may work (`eligible_shifts`, from the roster), role,
+and free / same-role-from-another-post / closing / commander / trainer /
+no-overlap. The filters narrow what the check returned; they never re-check
+anything. **A short shift can borrow.** Somebody the roster keeps to another
+post, who holds a role this shift's own people hold and has no reason
+against them except "not this post", arrives `borrowable` with the posts
+they come from (`borrow_from`) and the role in common (`shared_roles`). They
+sort right after the free, read in teal with a "מ־א · נהג" badge — neither
+the green of this post's free people nor the amber of a real conflict — and
+are placed like anyone else (the eligibility warning still shows). Moving without a mouse (touch, keyboard) is
+`useMoveMode` / `useBoardKeys` — the same drop, the same confirmation.
+`FilterBar` hides rows and never changes them; `CoverageBar` keeps reporting
+the whole week from the overview's own audit figures, never a browser count.
+
+Built: the workspace gate, unit setup, the management area, the operator
+console and the employee areas. There is no intro interview any more; the
+profile comes from the setup form.
 
 | Surface | Purpose |
 |---|---|
-| Workspace gate | Boss login / team creation — `src/components/Workspace/` |
+| Workspace gate | Pick the team, then the manager or worker door — `src/components/Workspace/`. No team creation here (D28) |
+| Operator console | `/admin` — צוות משמרות זהב: every team with its counts, open (name + password)/rename/suspend/delete, the מכלולים tab (link existing teams, issue the מפקד מכלול password, D43), and the system settings ("מערכת", the only place they are edited) — `src/components/Admin/` |
+| Commander area | The מפקד מכלול's control room (D43, D46), built as the משמרת's own: the same sidebar, `WeekNav`/`ViewSwitch` head, tiles, `board-filters` bar (`CommanderFilters`: משמרת, shift type, soldier, "רק חוסרים" — hides, never recounts) and `board-card`s, every משמרת as a band with its own "סוכן" and "כניסה לניהול". The agent is the resizable drawer beside the board, opened from the guard (`CommanderChat`): a tab per משמרת, each a full `AgentChat` over `commanderChatRoutes(id)` (`useManagerChat` takes the routes), and "כל המכלול", whose sentence is routed by `POST /api/complex/route` (or to the משמרות picked under "שליחה אל") and sent to each one's agent at once; their answers and plans show as cards, each approved on its own. "סטטיסטיקות"/"שינויים" are the משמרת's own `Stats`/`ChangesPanel` (`UnitTools`, after `enterComplexTeam`); a changes pick goes to that משמרת's chat tab. "תורנויות" (`DutiesView`, `DutyForm`, `DutyTypes`, `useDuties`) is drawn on the board's grid: tiles, a filter bar (kind, משמרת, soldier, "רק פנויים"), a row per kind, each soldier a card in their מכלול colour; "רישום תורנות שכבר נעשתה" records one that counts without blocking; "מלא בהוגנות" draws the server's proposal (dashed blue, each removable) until "אישור" (`DutySuggestionBar`); "מאזן" is `DutyBalancePanel` (D44). `CommanderNotices` tells the משמרת's own commander what changed. Inside a משמרת the board's day heads name who is on duty, and `lib/constraints.ts` paints a duty with no hours as the whole day — `src/components/Complex/` |
 | Member area | The employee's read-only surface — `MemberArea.tsx` |
-| Interview | The intro conversation, one question per turn — `src/components/Interview/` |
+| Unit setup | The structured profile form — roster, shift vocabulary, staffing, rotations, rules — and what code made of each sentence (`CompiledSources.tsx`, D32) — shown where it is written: a soldier's notes and constraints on their card, a rule's status beside the rule, and only the unit-wide policies in their own section — `src/components/ManualSetup/` |
+| Guide | The first-run tour, the help panel and the `/tutorial` page, narrated by the two guards — `src/components/Guide/`, `src/app/tutorial/` |
+| Guards | The animated pair: entrance, waits, guide, and the agent's own face — `src/components/Crew/` |
 | Management | The manager's control room — `src/components/Management/` |
 | Schedule | The living grid for a period, RTL — `Management/Calendar.tsx` |
-| Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `ConfirmMove.tsx` |
-| Briefing | What the agent noticed unprompted — `Management/Briefing.tsx` |
-| Copilot inbox | Durable observations, proposals, failures, permissions and audit — `Management/CopilotInbox.tsx` |
-| Agent answer | What the agent found when *asked* — `Management/AgentAnswer.tsx` |
-| Simulation | A change being considered, never one that landed — `Management/SimulationPanel.tsx` |
+| Manager chat | **The** agent: every instruction, question and plan, optionally focused on one day; opened from the guard in the board's corner — `Management/AgentChat.tsx` |
+| Change confirm | The agent's reasoning plus resulting warnings — `Management/AgentChat.tsx`, `Board/ConfirmDrop.tsx` |
+| Changes tab | "שינויים" — `Management/ChangesPanel.tsx`, three actions. **החלפת משמרת**: who is out and when → covers offered in stages, each under its own heading: the same role from that shift, then the same role from another place (a shift's `purpose` when set, else the shift), then anyone else who fits; inside a stage the load spreads evenly (`placement/tiers.py`). If nobody fits cleanly, warned alternatives remain visible with the exact rest/constraint warning; the picks go to the chat as a plan (D36). The search runs only on "חיפוש מחליפים", never on its own, so two optional filters are set before it runs — "מחליף/ה מאיזו משמרת" (a shift type) and "בעל/ת תפקיד" (a role) — are sent with it (`from_shifts`, `roles`), and the server checks only those people (`placement/tiers.pool`), so a narrowed search is shorter and faster — `ReplacementPanel.tsx`, reads only; its wording is shared with the chat cards in `lib/replacement.ts` and read back by the server. **הוספת חייל** / **הוספת משמרת**: the roster's own `EmployeeForm`/`ShiftForm`, saved through `saveProfile`, after which the server fits the newcomer into every draft from today on, keeping the board (D37) |
+| Import | A file in, in any shape (D42) — `Management/ImportSchedule.tsx`, opened from the board toolbar, an empty week, or the paperclip in the chat composer. Every correction (layout fields, an alternative reading, a name or shift mapping, a description for the agent) re-sends the file to be re-read; only its confirm stores |
 | Preferences | What the agent remembers, all of it visible — `Management/Preferences.tsx` |
-| Import confirm | Inferred interpretation, confirmed before anything is stored — `Management/ImportSchedule.tsx` |
 | Employee view | **Read-only** schedule — `MemberArea` renders the same `Calendar` with `readOnly` |
-| Personal area | One employee's own hours, shifts and constraint requests — `src/components/Employee/` |
-| Request inbox | The manager ruling on submissions — `Management/RequestInbox.tsx` |
-
-## Importing a schedule the workplace already had
-
-`Management/ImportSchedule.tsx`, opened from the toolbar. Two screens, and the
-split is the decision
-([D7](../docs/DECISIONS.md#d7--import-infers-layout-boss-confirms)): reading
-files calls `previewImport`, which **writes nothing**, and the confirm button
-is the only thing that persists. The screen says so outright, because a filled
-interpretation otherwise looks like a completed result.
-
-**There is no template, and the screen says that before the first click.** A
-manager who has been asked for one by other software will go looking for it
-here. The importer infers axis semantics, so shifts-in-rows, people-in-rows,
-and a bare list of dates and names are all readable.
-
-**Where the file named no shift, the screen asks.** A `date_only` sheet
-imports with an empty shift name and the confirm button stays disabled until
-one is chosen — filling it in with a guess is exactly the hardcoding
-[D9](../docs/DECISIONS.md#d9--shift-vocabulary-is-per-workplace) forbids, and
-a disabled button is how the question stays visible.
-
-**Learned rules arrive unticked.** Each candidate shows the count behind it,
-so the manager approves a claim they can check rather than one they must
-trust. Nothing is ticked by default: a candidate becomes a rule by being
-chosen, never by having been proposed.
+| Personal area | One employee's own shifts, constraint requests and swaps — `src/components/Employee/` |
+| Request inbox | The manager ruling on submissions — `Management/RequestInbox.tsx`; a new one pops up live (`RequestToast.tsx`, pushed via `useLiveInbox.ts`, D29) |
 
 ## The management area
 
-`Management/index.tsx` is where the manager lands once the interview has produced
-a profile — `workspace.profile` is the switch, since it is the interview's
-durable result and exactly the thing the area needs to run on. That profile
-may be **partial** (D22), and the area says so rather than hiding it: a badge
-on the interview button counts the open topics, and the empty-week card
-explains that the agent is working from what it managed to learn. The manager
-can ask the agent directly — `profile_gaps` is a tool like any other, so
+`Management/index.tsx` is where the manager lands once unit setup has saved
+a profile — `workspace.profile` is the switch, since it is exactly the thing
+the area needs to run on. A profile may still owe something (an older
+partial one, D22), and the area says so rather than hiding it:
+`ProfileGapsNotice` lists the gaps and points back to setup. The manager can
+ask the agent directly — `profile_gaps` is a tool like any other, so
 *"מה עוד חסר לך"* is answered from the record rather than the model's
 impression.
 
@@ -145,71 +330,78 @@ impression.
   rendering an empty grid with a disabled button.
 
 - **Drag proposes; the dialog writes.** `Calendar` reports a drop upward and
-  changes nothing itself. `ConfirmMove` collects the manager's reason and its
+  changes nothing itself. `ConfirmDrop` collects the manager's reason and its
   confirm button stays disabled until there is one, so the requirement is
   visible rather than enforced by a server error afterwards.
-- **The manual writes are deliberately quiet.** `assign` and `unassign` pass
-  `{ quiet: true }` to `run()`, which skips the briefing a write normally
-  triggers. A manager placing twenty people into an empty week would otherwise
-  fire twenty model calls, on a deployment whose model is small and
-  rate-limited — and the agent would be remarking on a grid it is watching
-  being typed. The audit still runs on every one of those writes, because it
-  is pure arithmetic and costs nothing, so the warnings under the calendar
-  stay live throughout. Opening a blank period is *not* quiet: it happens once
-  and is worth a remark.
-- **The agent chat is two-step.** A proposal renders the agent's reasoning in
-  full, plus the warnings the change *would* cause, and nothing is applied until
-  the manager confirms. A proposal that comes back `needs_reason` carries no
-  operations — the agent is asking why, and the answer goes back through the
-  same call.
-- **A proposal that is asking does not look like one that is proposing.**
-  `needs_input` means the agent could not tell which person, shift or date the
-  request meant and asked instead of picking one. The card renders dashed with
-  no confirm button, because there is nothing to confirm — a question styled
-  like a proposal invites the manager to look for a button that deliberately
-  is not there.
-- **The manager answers the question, not the whole request again.**
-  `pending_request` comes back with the question and `useManagement` sends it
-  with their next sentence, so "ערב" resumes "תשבץ את דניאל". Held in a ref
-  rather than state — it is sent, never rendered — and in *two* refs, one per
-  conversation: a clarification about a question must never resume a held
-  change, which is the one way this could target the wrong record. Dismissing
-  either card clears its pending request, since the manager declining to
-  answer means their next sentence is a new request.
-- **The agent speaks first, and still writes nothing.** `Briefing` renders
-  what the agent noticed on its own — on open, after every write, before
-  publishing, and every half hour in an idle room
-  ([D15](../docs/DECISIONS.md#d15--the-agent-speaks-first-but-still-never-writes)).
-  Clicking a suggestion **types the sentence into the composer**; the manager
-  still sends it and still confirms with a reason. A briefing carries no
-  operations at all, so there is nothing here that could apply itself. A quiet
-  briefing renders as one calm line rather than vanishing — "I looked and it is
-  fine" is worth reading, and hiding it would leave the manager unsure the
-  agent looked.
-- **A briefing never breaks the screen.** It has its own `busy` flag and never
-  sets `error`: a failure means the agent has nothing to say, not that the
-  manager's action failed. `brief()` never throws.
+- **The manual writes call no model.** `assign` and `unassign` write one
+  cell each and re-read the overview; `{ quiet: true }` still marks them, a
+  leftover from the automatic briefings that are gone (the agent speaks only
+  in the manager chat). The audit runs on every one of those writes, because
+  it is pure arithmetic and costs nothing, so the warnings under the calendar
+  stay live throughout.
+- **One saved conversation, followed by a separate approval.** `AgentChat`
+  and `useManagerChat` use `/api/agent/chats` for questions, changes, profile edits
+  and actual generated previews. Follow-up questions and chosen replacements
+  use saved transcript context. A question has no Apply button; a pending plan
+  shows concrete changes, reasoning and all warnings. Displayed exceptions
+  require an explicit checkbox before approval. Superseded plans cannot apply.
+- **History is private to the signed manager browser identity.** The existing
+  team-password login remains. New chat, history, deletion, polling and Stop are
+  built into the conversation. Histories do not sync across devices without
+  individual manager accounts. See [Manager chat](../docs/MANAGER_CHAT.md).
+- **The conversation has its own available height.** Its transcript scrolls
+  independently and its composer stays visible.
+- **The manager owns the split between the agent and the board.** On desktop
+  a visible grip on the divider drags it (arrows nudge, Home/End go to the
+  limits, double-click or Enter resets). `Management/useChatSplit.ts` keeps it
+  as a *share* of the workspace rather than pixels, so a split chosen on a
+  wide monitor still means the same thing on a laptop, and keeps each side
+  above a pixel floor (agent 340, board 320). Remembered per browser, like
+  the shift-row order; nothing is written to the server. The X at the end
+  of the drawer's tab row closes the agent outright, and the board takes the
+  full width back — full-size cards, roles and the week rail return.
 - **Export downloads; it does not navigate.** `downloadSchedule` fetches the
   binary with the session cookie and triggers the browser's own download from
   an object URL, so a failure surfaces as a Hebrew error rather than a blank
   tab ([D17](../docs/DECISIONS.md#d17--a-schedule-leaves-as-a-file-a-message-is-something-the-agent-writes)).
   It is the one management action that does *not* go through `run()` — a
-  download changes nothing for a refetch or a briefing to react to.
+  download changes nothing for a refetch to react to.
+- **A build can start on any day and end on any day.** "בנייה מכאן" on a
+  day's column head, and "בנייה מיום … עד שבת" on the card of an unbuilt
+  week, open the one build dialog (`Board/GenerateDialog.tsx`) on that day
+  through Saturday; both ends stay editable and "עד שבת" is a shortcut, not
+  a limit. Inside a draft that exists it is `generateScheduleRange`: only
+  those days are solved, what was generated on them is replaced, and
+  what the manager placed is kept and filled around (D18) — the dialog counts
+  both before the click, and takes no list of required shifts because the
+  board behind it already is one. "שמירה על השיבוץ הקיים" sends
+  `keep_existing`: the built rows stay where they fit and only what a new
+  soldier or shift needs moves (D37). It starts ticked (D53): a rebuild
+  keeps the week's shape unless the manager unticks it. The run is bounded by the period: a build
+  is one job on one period. On a week with nothing stored, the period is
+  still opened as **whole weeks** (`inWholeWeeks`) with the run sent beside
+  it as `build_from`/`build_through`. The board finds a week by its Sunday,
+  so a period beginning on a Wednesday would be stored and never drawn; the
+  days outside the run open empty instead.
+  The dialog also narrows a build by shift type: "כל המשמרות" or one or
+  more "רק <משמרת>" buttons, named from setup. Only the chosen shifts are
+  built (`shifts` on both calls); the others on those days stay as they are.
 - **Building a period does not lock the area.** `generate` and its two
   siblings report through `state.generating`, never through `state.busy`:
-  a build runs for minutes, and routing it through the helper the board's own
-  controls wait on left the manager unable to place a single shift — or to
-  reach the button that stops it — until it finished, which for a hung model
-  meant forever. While a build runs the board is fully writable (D18), and a
-  cell filled in by hand becomes a pin the agent fills around.
+  a build is a background job — seconds per four-week span for the solver
+  (D34), longer when its sentences are translated by a slow model — and
+  routing it through the helper the board's own controls wait on left the
+  manager unable to place a shift, or reach the stop button, until it
+  finished. While a build runs the board is fully writable (D18), and a cell
+  filled in by hand becomes a pin the solver fills around.
 - **The poll ends, and says why.** `resumeScheduleGeneration` reads
-  `/{id}/progress` rather than the whole period, backs off while one day is
-  in flight, and re-fetches the grid only when a day lands. It watches the
+  `/{id}/progress` rather than the whole period, backs off while a span is
+  in flight, and re-fetches the grid only when one lands. It watches the
   job's `heartbeat`: one that stops means the job lost its worker, and the
   poller re-POSTs `/run` to adopt it. Everything else is the manager's call —
-  "עצירת היצירה" stops the wait *and* the job, keeping every finished day,
-  because with no model timeout configured the browser is the only
-  participant that knows whether anyone is still waiting.
+  "עצירת היצירה" stops the wait *and* the job, keeping every finished span:
+  the browser is the only participant that knows whether anyone is still
+  waiting.
 - **Every hand-write names the period it happened on.** `assign`, `unassign`
   and `move` all send `schedule_id`, taken from the week the board is
   actually rendering. Without it the server resolves "the period covering
@@ -218,65 +410,88 @@ impression.
   the id, had just told them the cell was fine. `focusPeriod` reports the
   same period upward so the agent's proposals, answers and simulations are
   about the week on screen rather than about today's.
-- **The banner says how wide the build is.** `generation.mode` is stamped by
-  the server when the period is opened, and a `week` build says so under the
-  counter. It is the single biggest factor in how long the manager is about
-  to wait, and the setting that governs it (הגדרות ← בניית סידור) lives two
-  screens away — so the board states it rather than leaving them to infer it
-  from the pace.
-- **A failed build says why.** The per-day `error` is rendered in the banner.
-  It is usually the one thing the manager can act on — a model timeout is
-  fixed by a setting, not by pressing retry again.
+- **The banner counts days and says what the build is doing.** The counter
+  is in dates however many spans the job has, and `generation.activity` is
+  the worker's current step. What a build could not honour — a seat nobody
+  could legally fill, a sentence that did not translate — arrives in its
+  notes, not as an error (D34).
+- **A failed build says why.** The span's `error` is rendered in the banner.
+  It is usually the one thing the manager can act on — a pin that breaks a
+  hard constraint, or the database being unreachable — not something retry
+  fixes.
 - **Everything re-reads after a write.** `useManagement` refetches the overview
   rather than patching locally: the schedule, its warnings, the constraints and
   the log all move together, and a locally patched grid beside a stale audit is
   worse than a brief spinner.
-- **Five card states, and they never look alike.** The side column
-  distinguishes an *insight* (`Briefing`, the agent volunteered it), an
-  *answer* (`AgentAnswer`, the agent read the schedule and reported), a
-  *simulation* (`SimulationPanel`, dashed and in its own colour — nothing
-  has been written), a *proposal awaiting approval* (`AgentChat`, with a
-  confirm button and a required reason), and an *error*. A simulation that
-  looked like a proposal would be one.
-- **Asking and requesting a change are two buttons.** The magnifier calls
-  `/ask` — read-only, and the card it produces has no confirm button because
-  the response carries no operations (D19). Send asks the agent to propose.
-  Collapsing them would make every question produce a confirm button for
-  something the manager did not ask for.
-- **An answer says which checks it rests on.** `AgentAnswer` lists the tools
-  that ran, and states when it was produced without a model. Both are
-  product requirements rather than debugging output: an answer whose checks
-  are invisible has to be taken on faith, and a manager who cannot tell they
-  are on the deterministic path would read "לא הבנתי" as the product being
-  broken rather than the model being unconfigured.
-- **Approving a simulation is the ordinary apply call.** `SimulationPanel`
-  keeps its button disabled until there is a reason, mirroring `ConfirmMove`
-  — and it sends the same `applyChange` a typed sentence does. There is no
-  shortcut, because a second write path is how the confirmation step gets
-  routed around (D8/D12).
+- **One agent surface.** The manager chat is the only place the agent takes
+  instructions. The board's per-day "סוכן ליום" button opens the chat focused
+  on that date (sent as `focus_date`) rather than a separate dialog; a plan
+  for that day rebuilds only that day. There are no automatic briefings,
+  answer cards or simulation panels beside it.
+- **Questions and actions share one composer.** Message requests prepare answers
+  or plans and never perform domain writes. Only the separate Apply endpoint
+  commits the stored plan, with snapshot checks and an atomic transaction.
+  The legacy `POST /api/schedule/propose` and `/apply` remain for other
+  callers; `/ask`, `/simulate`, `/tool` and `/brief` are gone.
+- **Deleting an employee is a departure, not an erasure.** The roster card's
+  "הוצאה מהסגל" opens `ConfirmDeparture`, which counts first
+  (`/api/schedule/departure/preview`, writes nothing): how many shifts from
+  the chosen date on will be vacated, and which published weeks return to
+  draft. Confirming sets `inactive_from` and vacates those shifts, each one
+  logged — the chat's `retire` plan without the model. The name stays in the
+  profile because it is the key history, identity and colour hang on
+  (`keep_existing_names` refuses a removal outright). The person moves to
+  "עובדים שסיימו", where "החזרה לסגל" clears the date; vacated shifts stay
+  vacated.
+- **Switching a soldier off is not a departure** (D49). The switch on each
+  roster card (and "דולק/ת בשיבוץ" in setup) saves `on_duty` through
+  `saveProfile`. Off keeps the person listed — dimmed, not draggable, out of
+  the replacement tab — and out of every build; the server vacates their
+  draft shifts from today and refits. On again fits them in like a new
+  soldier.
 - **Every stored preference is on screen.** `Preferences` lists suggested,
   active and archived rows and lets the manager reword, approve, archive or
   delete any of them — a preference they cannot see is a rule they never
   agreed to (D21).
+- **The stats panel counts shifts, and its filter asks the server.**
+  `Stats` reports load per person in shifts — how many, how many of them
+  nights, and the person's rotation in the words a board card uses — plus
+  the number of conflicts (audit findings at `warning` severity, the board
+  tile's own cut). Hours are weighted, so they stay in the hover and are no
+  longer what the chart is drawn in. `StatsFilter` narrows all of it to a
+  day, a week, a calendar month, a chosen range, or one person; unfiltered
+  it renders the overview's own `stats`, and any other choice is
+  `GET /api/schedule/stats` (`useStats`). Never a `.filter()` over the rows
+  on screen: those are one period, a month is several, and a second count
+  in the browser is how a tile comes to disagree with the warning under it.
+  Coverage is hidden for one person — a seat belongs to the slot.
 - **Constraints show their source.** `source` says whether the manager decided
   it, the agent recorded it, or it came from the employee — an approved
   submission is stored as `employee_reported`, keeping "Dana said she cannot
   do Thursdays" distinct from "the manager decided Dana is off Thursdays"
   (D13/D14).
 - **Approving is one click; rejecting requires a reason.** `RequestInbox`
-  keeps the reject button disabled until there is one, mirroring `ConfirmMove`
+  keeps the reject button disabled until there is one, mirroring `ConfirmDrop`
   — the requirement is visible rather than arriving as a server error.
 
 ## Workspaces
 
 `src/components/Workspace/index.tsx` picks the surface from the role the
 server reported: no session → the login gate, `member` → `MemberArea` (with a
-door into the personal area), `employee` → the personal area, `boss` → the
-interview until the workplace has been taught, then the management area.
-`workspace.profile` is what switches those last two, and reopening the interview
-over an existing profile is a deliberate choice the manager makes — re-running it
-replaces the profile everything downstream reads.
+door into the personal area), `employee` → the personal area, `boss` → unit
+setup (`ManualSetup`) until the workplace has a profile, then the management
+area. `workspace.profile` is what switches those last two; the sliders icon
+reopens setup over an existing profile, and a save there applies to the next
+build — except a new soldier or shift, which is absorbed into the drafts
+ahead of today with as few moves as possible (D37). The management area
+picks the refit up as a running build on mount; `saveProfile` watches the
+one on screen and names any published week it left alone.
 
+- **A lost session returns to the gate, once.** A GET refused with 401
+  calls `onSessionLost` (`services/api.ts`); `useWorkspace` re-asks `/me`
+  and only on its own 401 drops to the login gate, which unmounts every
+  poller — otherwise they kept asking every few seconds after the cookie
+  died (a restart without a fixed session secret, a suspended team).
 - **The session is an HttpOnly cookie**, so this code cannot read it. "Am I
   logged in?" is answered by `GET /api/workspace/me`, never by local state
   that could disagree with the cookie the browser actually holds.
@@ -286,9 +501,30 @@ replaces the profile everything downstream reads.
 - **Every request sends `credentials: "same-origin"`.** Without it the browser
   withholds the cookie and every guarded route answers 401 while the user is
   plainly logged in.
+- **The front door asks for the team, then manager or worker**
+  (`Login.tsx`, [D25](../docs/DECISIONS.md)). The worker door takes a
+  *typed* name and a passcode and only signs in to a name already claimed;
+  claiming still goes through the share link's `IdentityGate`. Do not put a
+  roster picker here: this page is public, and a picker would publish every
+  team's names.
+- **Teams are opened at `/admin`, not here** ([D28](../docs/DECISIONS.md)).
+  The gate says so and links to the console. The console has its own
+  HttpOnly cookie, so an operator can also be signed in to a team in the same
+  browser; `useAdmin` asks `/api/admin/me` for the same reason `useWorkspace`
+  asks `/me`. Its "מערכת" tab renders `SystemSettings`, which unlocks on the
+  operator session with no settings password. Opening a team asks for a name
+  and a password only — headcount is the manager's — and that password is
+  shown once on the hand-over card and never again.
 - **The member share link is `/team/<token>`.** `MemberEntry` exchanges the
   token for a cookie and then `replaceState`s it out of the URL, so the
   credential stops travelling in the address bar and the back stack.
+- **A מכלול commander has a cookie of their own** (`pakash_commander`, D43).
+  `useWorkspace` asks `/api/complex/me` beside `/api/workspace/me`: with no
+  team session and a commander session the gate renders `CommanderArea`;
+  entering a משמרת hands back an ordinary boss session marked `commander`,
+  so `BossSurface` renders as for its own commander, under `CommanderBar`.
+  On screen a team inside a מכלול is a **משמרת** and its manager a **מפקד/ת
+  משמרת**; the login door says so.
 - **This routing is not the access control.** The backend guards every route
   independently; a visitor who forced past the component still gets a 401.
 
@@ -299,41 +535,15 @@ files. Hebrew is also *data* — shift names, weekdays, and availability markers
 arrive in Hebrew from the backend ([FILE_FORMATS.md](../docs/FILE_FORMATS.md)).
 Never assume a Latin-script fallback.
 
-## The interview surface
-
-One question per turn, rendered as a Claude-style conversation column: the
-agent's question, its recommendation in a marked-off card, and 2–5 selectable
-answers beneath it.
-
-- **The interview can always be left.** The door icon ends it early, behind a
-  confirmation that states what is being left unfinished and never disables
-  its own button ([D22](../docs/DECISIONS.md#d22--the-interview-can-be-ended-early-and-the-profile-says-what-it-owes-️-amends-d18)).
-  This is supplied on a *first* interview too — it used to be withheld so
-  nobody reached the board with nothing to schedule against, which made the
-  first interview a room with no door. Ending awaits the write and then
-  refreshes the workspace, because the profile it writes is what the router
-  switches on; navigating first would race it.
-
-- **Answers send the option's label, not a number.** A bare number is
-  ambiguous — choice or headcount — and the prompt makes the model ask rather
-  than guess. Numbering the buttons would teach the boss to answer "2".
-- **Free text is a separate field, never an "אחר" option.** An option called
-  "other" makes writing your own answer look like a last resort; the prompt
-  forbids it for that reason.
-- **A recommendation is the agent's opinion, not a workplace fact.** It is
-  styled as its own card so it never reads as something the boss already said.
-- **Only the newest question is answerable.** Past turns keep rendering their
-  options, disabled, so the thread stays readable without letting a question
-  be answered twice.
-- **The session id is the only client state**, held in `localStorage`. A
-  refresh resumes server-side and costs no model call.
-
 ## Audit warnings
 
 Warnings render as **non-blocking inline banners** on the schedule. They never
 gate a save, never block confirmation, and never present as errors. A schedule
 with warnings is a valid schedule the boss may knowingly accept
-([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)).
+([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)).
+An overlapping operational duty is not an advisory warning: the placement
+check marks it `blocking`, the confirmation action is disabled, and the server
+also refuses the write.
 
 ## Rules
 
@@ -354,8 +564,12 @@ with warnings is a valid schedule the boss may knowingly accept
   with no `onDrop`. Submitting a constraint creates a **pending request** and
   the copy says so — an employee who believes a submitted constraint is
   already in force is the failure mode this feature would otherwise create.
-- Import and change are two-step: interpretation/proposal, then confirmation.
-  Never auto-confirm either.
+- **The employee sees no team charts** (D27). Hours per colleague are the
+  manager's stats. The employee assistant chat is gone; a swap is offered
+  only through the swap form ("בקשות והחלפות", `proposeSwap`), and its card
+  says the colleague and the manager still have to agree. The full-board
+  tab there widens to the whole window.
+- A change is two-step: proposal, then confirmation. Never auto-confirm it.
 - The agent's reasoning is shown before the boss confirms — it is the point, not a
   detail to hide behind a disclosure triangle ([D8](../docs/DECISIONS.md#d8--two-reasons-both-required)).
 - Shift names come from the API. No hardcoded Hebrew shift labels.

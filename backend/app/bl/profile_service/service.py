@@ -1,0 +1,275 @@
+"""`ProfileService`: manual and agent-confirmed edits to the workplace profile."""
+
+import copy
+from typing import Any, Callable, Dict, List, Optional
+
+from app.bl import compiled_sources, qualification
+from app.bl.profile_service import roster
+from app.bl.profile_service import shifts as shift_rules
+from app.bl.profile_service import unit as unit_rules
+from app.bl.profile_service import workplace as workplace_rules
+from app.bl.profile_service.identity import IdentityChanges
+from app.bl.profile_service.retire import retire_shift
+from app.bl.profile_service.validation import keep_existing_names, text, text_list
+from app.common.errors import (
+    PROFILE_CHANGED, AgentError, ConflictError, NotFoundError,
+)
+
+_TEXT_SECTIONS = (
+    "availability_process", "constraint_deadline", "casual_worker_policy",
+    "rest_policy", "weekend_policy", "fairness_policy", "conflict_policy",
+    "existing_schedule_source", "summary",
+)
+_OBJECT_SECTIONS = ("training_policy", "audit_policy", "unit_policy")
+
+
+class ProfileService:
+    """Keep profile edits on the team's profile, with small validation."""
+
+    def __init__(self, repository):
+        self._repository = repository
+
+    def update(
+        self,
+        team_id: str,
+        employees: Optional[List[dict]] = None,
+        shifts: Optional[List[dict]] = None,
+        workplace: Optional[dict] = None,
+        rules: Optional[List[dict]] = None,
+        dependencies: Optional[List[str]] = None,
+        expected_revision: Optional[int] = None,
+        renamed_employees: Optional[Dict[str, str]] = None,
+        renamed_shifts: Optional[Dict[str, str]] = None,
+        removed_employees: Optional[List[str]] = None,
+        **sections: Any
+    ) -> dict:
+        """Merge a patch into the saved profile.
+
+        `expected_revision` is the revision the manager's form was loaded
+        at; a save from a form somebody else has saved over since is refused
+        rather than quietly undoing their edit.
+
+        `renamed_employees`/`renamed_shifts` (`{old: new}`) and
+        `removed_employees` are the one way a saved name changes or goes
+        (`identity.py`): applied to the saved profile before the patch is
+        merged, and to every stored row in the same transaction.
+        """
+        revision = self._repository.team_profile_revision(team_id)
+        if expected_revision is not None and revision is not None \
+                and expected_revision != revision:
+            raise ConflictError(PROFILE_CHANGED)
+        current = self._repository.team_profile(team_id)
+        creating = current is None
+        current = current or {}
+        changes = IdentityChanges.read(current, renamed_employees, renamed_shifts,
+                                       removed_employees)
+        current = changes.apply(current)
+        # Applied to the merge too: a patch written before the rename still
+        # names the old soldier or shift in its references (trainers, a
+        # soldier's shifts), and no row may be left pointing at a name gone.
+        updated = changes.apply(_prepare_profile(
+            current, employees, shifts, workplace, rules, dependencies, sections,
+        ))
+        saved = self._save(team_id, updated, revision, creating, changes)
+        # Still no model call here: the rules, policies and notes just saved
+        # are translated for the code scheduler by the worker (D32).
+        compiled_sources.queue(self._repository, team_id)
+        return saved
+
+    def _save(self, team_id, updated, revision, creating, changes) -> dict:
+        if creating:
+            roster.validate_first_profile(updated)
+            updated["completeness"] = {
+                "complete": True, "missing_topics": [], "open_points": [],
+            }
+            return self._repository.create_team_profile(team_id, updated)
+        # The revision read above, not the client's: the merge was made
+        # from the profile read after it, and nothing may land between.
+        if changes:
+            return self._repository.update_team_profile_with_identity_changes(
+                team_id, updated, revision,
+                changes.employees, changes.shifts, changes.removed,
+            )
+        return self._repository.update_team_profile(
+            team_id, updated, expected_revision=revision,
+        )
+
+    def revision(self, team_id: str) -> Optional[int]:
+        """What a save names to refuse a stale edit. A read."""
+        return self._repository.team_profile_revision(team_id)
+
+    def current(self, team_id: str) -> Optional[dict]:
+        """The saved profile, or None before the first save. A read."""
+        return self._repository.team_profile(team_id)
+
+    def qualifications(self, team_id: str, employees: List[dict], today, days=None) -> dict:
+        """Each dated person's כשירות on `today`, from the setup screen's
+        unsaved rows and the shifts they have actually worked. A read."""
+        worked = self._repository.last_shift_dates(team_id, today.isoformat())
+        return qualification.standings(self.current(team_id), employees, worked, today, days)
+
+    def delete_shift(self, team_id: str, name: str) -> dict:
+        """Archive a shift type; existing schedules keep their rows."""
+        revision = self._repository.team_profile_revision(team_id)
+        current = self._repository.team_profile(team_id)
+        if current is None:
+            raise NotFoundError("פרופיל הצוות לא נמצא")
+        updated = retire_shift(current, name)
+        saved = self._repository.update_team_profile(
+            team_id, updated, expected_revision=revision,
+        )
+        compiled_sources.queue(self._repository, team_id)
+        return saved
+
+    def compiled(self, team_id: str) -> List[dict]:
+        """What code made of each rule, policy and note (D32). A read."""
+        return compiled_sources.report(self._repository, team_id)
+
+    def preview(self, team_id: str, **patch) -> dict:
+        """Validate a conversational edit with the same rules, without writing."""
+        current = self._repository.team_profile(team_id)
+        if current is None:
+            raise NotFoundError("פרופיל הצוות לא נמצא")
+        return _prepare_profile(
+            current, patch.get("employees"), patch.get("shifts"),
+            patch.get("workplace"), patch.get("rules"), patch.get("dependencies"),
+            patch,
+        )
+
+    def preview_structure(self, team_id, shift_rows, employees=None):
+        """Explicit shift migration; ordinary profile edits retain identity guards."""
+        current = self._repository.team_profile(team_id)
+        if current is None:
+            raise NotFoundError("פרופיל הצוות לא נמצא")
+        existing = {row["name"]: row for row in current.get("employees") or []}
+        if employees is not None:
+            if not isinstance(employees, list) or any(not isinstance(row, dict) for row in employees):
+                raise AgentError("פרטי העובדים חייבים להיות רשימת רשומות")
+            employees = [dict(existing.get(row.get("name"), {}), **row) for row in employees]
+        updated = _prepare_profile(current, employees, None, None, None, None, {})
+        updated["shifts"] = shift_rules.shifts(shift_rows)
+        names = {row["name"] for row in updated["shifts"]}
+        for person in updated["employees"]:
+            before = existing.get(person["name"], {})
+            person["archived_eligible_shifts"] = sorted(set(before.get("archived_eligible_shifts") or []) |
+                                                       (set(before.get("eligible_shifts") or []) - names))
+        updated["archived_shifts"] = current.get("archived_shifts", []) + [
+            dict(row) for row in current.get("shifts") or []
+            if row not in (current.get("archived_shifts") or [])]
+        return updated
+
+    def apply_operations(self, team_id: str, operations: List[dict]) -> dict:
+        """Apply confirmed agent operations through the same validation path."""
+        revision = self._repository.team_profile_revision(team_id)
+        profile = self._repository.team_profile(team_id)
+        if profile is None:
+            raise NotFoundError("פרופיל הצוות לא נמצא")
+        edit = _ProfileEdit(profile)
+        for operation in operations or []:
+            edit.apply(operation or {})
+        return self.update(
+            team_id,
+            employees=edit.employees if edit.employees_changed else None,
+            shifts=edit.shifts if edit.shifts_changed else None,
+            expected_revision=revision,
+        )
+
+
+
+def _prepare_profile(current, employees, shifts, workplace, rules, dependencies, sections):
+    updated = copy.deepcopy(current)
+    _apply_workplace(updated, current, workplace)
+    _apply_roster(updated, current, employees, shifts)
+    if rules is not None:
+        updated["rules"] = workplace_rules.rules(rules)
+    if dependencies is not None:
+        updated["dependencies"] = text_list(dependencies)
+    _apply_sections(updated, sections)
+    roster.validate_rotation_groups(updated)
+    return updated
+
+
+def _apply_workplace(updated: dict, current: dict, offered: Optional[dict]) -> None:
+    if offered is not None:
+        merged = dict(current.get("workplace") or {})
+        merged.update(offered)
+        updated["workplace"] = workplace_rules.workplace(merged)
+
+
+def _apply_roster(updated: dict, current: dict, employees, shift_rows) -> None:
+    if employees is not None:
+        default = text((updated.get("workplace") or {}).get("rotation_mode")) or "round"
+        edited = roster.employees(employees, default_exit_pattern=default)
+        keep_existing_names(current.get("employees"), edited, "עובד")
+        updated["employees"] = edited
+    if shift_rows is not None:
+        edited = shift_rules.shifts(shift_rows)
+        keep_existing_names(current.get("shifts"), edited, "משמרת")
+        updated["shifts"] = edited
+
+
+def _apply_sections(updated: dict, sections: Dict[str, Any]) -> None:
+    for key in _OBJECT_SECTIONS:
+        if sections.get(key) is None:
+            continue
+        if not isinstance(sections[key], dict):
+            raise AgentError("פרטי המדיניות אינם תקינים")
+        updated[key] = (
+            workplace_rules.audit_policy(sections[key]) if key == "audit_policy"
+            else unit_rules.unit_policy(sections[key]) if key == "unit_policy"
+            else dict(sections[key])
+        )
+    for key in _TEXT_SECTIONS:
+        if sections.get(key) is not None:
+            updated[key] = text(sections[key])
+
+
+class _ProfileEdit:
+    """The roster and vocabulary being edited by a list of agent operations."""
+
+    def __init__(self, profile: dict):
+        self.employees = [dict(row) for row in profile.get("employees") or []]
+        self.shifts = [dict(row) for row in profile.get("shifts") or []]
+        self.employees_changed = self.shifts_changed = False
+        self._actions: Dict[str, Callable[[str, dict], None]] = {
+            "add_employee": self._add_employee,
+            "update_employee": self._update_employee,
+            "add_shift": self._add_shift,
+            "update_shift": self._update_shift,
+        }
+
+    def apply(self, operation: dict) -> None:
+        action = self._actions.get(text(operation.get("action")))
+        if action is None:
+            raise AgentError("פעולת פרופיל אינה נתמכת")
+        item = operation.get("item")
+        action(text(operation.get("target")), dict(item) if isinstance(item, dict) else {})
+
+    def _add_employee(self, target: str, item: dict) -> None:
+        self.employees.append(roster.employee_item(item))
+        self.employees_changed = True
+
+    def _update_employee(self, target: str, item: dict) -> None:
+        item["name"] = target
+        self.employees = _replace(self.employees, target, roster.employee_item(item), "עובד")
+        self.employees_changed = True
+
+    def _add_shift(self, target: str, item: dict) -> None:
+        self.shifts.append(shift_rules.shift_item(item))
+        self.shifts_changed = True
+
+    def _update_shift(self, target: str, item: dict) -> None:
+        item["name"] = target
+        self.shifts = _replace(self.shifts, target, shift_rules.shift_item(item), "משמרת")
+        self.shifts_changed = True
+
+
+def _replace(rows: List[dict], target: str, item: dict, label: str) -> List[dict]:
+    if not target:
+        raise AgentError("חסר שם ה%s לעריכה" % label)
+    if not any(text(row.get("name")) == target for row in rows):
+        raise AgentError("ה%s לא נמצא בפרופיל" % label)
+    return [
+        dict(row, **item) if text(row.get("name")) == target else row
+        for row in rows
+    ]

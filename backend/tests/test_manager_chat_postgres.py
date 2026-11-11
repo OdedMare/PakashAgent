@@ -1,0 +1,179 @@
+"""Optional real-database checks; CHAT_TEST_DSN must point to a scratch DB."""
+
+import copy
+import os
+import uuid
+from types import SimpleNamespace
+
+import psycopg
+import pytest
+from psycopg import sql
+
+from app.bl.chat.service import ManagerChatService
+from app.bl.schedule_service import ScheduleService
+from app.bl.schedule_service.generation.job import GenerationJob
+from app.common.config import Settings
+from app.dal import database as postgres
+from app.dal.repository import Repository
+from tests.test_schedule_api import _ScriptedLlm, PROFILE, MORNING
+from tests.test_manager_chat import sickness, turn
+
+pytestmark = pytest.mark.skipif(not os.getenv("CHAT_TEST_DSN"), reason="requires a scratch PostgreSQL database")
+
+
+@pytest.fixture
+def real_repo():
+    dsn = os.environ["CHAT_TEST_DSN"]
+    schema = "chat_test_" + uuid.uuid4().hex[:12]
+    with psycopg.connect(dsn, autocommit=True) as connection:
+        connection.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
+    settings = Settings(_env_file=None, database_url=dsn, database_schema=schema,
+                        database_host="", database_user="", database_password="",
+                        database_name="", database_port=None)
+    repo = Repository(SimpleNamespace(get=lambda: settings))
+    try:
+        repo.initialize()
+        yield repo
+    finally:
+        postgres.close_pool()
+        with psycopg.connect(dsn, autocommit=True) as connection:
+            connection.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
+
+
+def seed(repo, published=False):
+    team = repo.create_team("בדיקת שיחה", "test-password-only")
+    repo.create_team_profile(team["id"], copy.deepcopy(PROFILE))
+    period = repo.create_schedule(team["id"], "2026-10-04", "2026-10-10")
+    slots = repo.replace_slots(period["id"], team["id"], [{
+        "shift_name": MORNING, "slot_date": "2026-10-05", "headcount": 1,
+        "start_time": "07:00", "end_time": "15:00",
+    }])
+    repo.add_assignment(period["id"], team["id"], slots[0]["id"], "דנה", "שיבוץ קיים")
+    if published:
+        repo.set_schedule_status(period["id"], team["id"], "published")
+    chat = repo.create_chat(team["id"], "manager-a")
+    llm = _ScriptedLlm([sickness()])
+    service = ManagerChatService(repo, llm, ScheduleService(repo, llm))
+    service.llm = llm
+    message_id = service.start_turn(team["id"], "manager-a", chat["id"], {
+        "content": "דנה חולה היום, תציע את יוסי להחלפה", "request_id": "request-1", "schedule_id": period["id"],
+    })
+    service.reply(team["id"], "manager-a", chat["id"], message_id)
+    saved = repo.get_chat(team["id"], "manager-a", chat["id"])
+    assert saved["messages"][-1]["status"] == "pending"
+    return team["id"], period["id"], chat["id"], message_id, service
+
+
+def test_real_generation_queue_has_one_claimable_job_per_span(real_repo):
+    team = real_repo.create_team("בדיקת תור", "test-password-only")
+    period = real_repo.create_schedule(
+        team["id"], "2026-10-20", "2026-10-21"
+    )
+    job = GenerationJob.open([
+        {"date": day, "through": day, "dates": [day]}
+        for day in ("2026-10-20", "2026-10-21")
+    ], 2, "day", "", [])
+    real_repo.set_generation(period["id"], team["id"], job.to_dict())
+
+    real_repo.queue_generation_job(team["id"], period["id"])
+    queued = real_repo._all(
+        "SELECT payload FROM copilot_jobs WHERE team_id=%s ORDER BY created_at",
+        (team["id"],),
+    )
+    assert [row["payload"]["date"] for row in queued] == [
+        "2026-10-20", "2026-10-21",
+    ]
+
+    with real_repo.claim_copilot_job("interactive") as claimed:
+        assert claimed is None
+    with real_repo.claim_copilot_job("background") as claimed:
+        assert claimed["payload"]["date"] == "2026-10-20"
+        real_repo.finish_copilot_job(claimed["id"])
+    with real_repo.claim_copilot_job("background") as claimed:
+        assert claimed["payload"]["date"] == "2026-10-21"
+        real_repo.finish_copilot_job(claimed["id"])
+
+
+@pytest.mark.parametrize("published", [False, True])
+def test_real_batch_commits_assignments_absence_receipt_and_idempotency(real_repo, published):
+    team, period, chat, message, service = seed(real_repo, published)
+    pending = real_repo.get_chat(team, "manager-a", chat)["messages"][-1]
+    plan_id = pending["payload"]["plan_id"]
+    assert real_repo.get_change_plan(plan_id, team)["status"] == "pending"
+    service.apply(team, "manager-a", chat, message, True)
+    assert [row["employee"] for row in real_repo.assignments(period, team)] == ["יוסי"]
+    assert real_repo.availability(team)[0]["employee"] == "דנה"
+    assert real_repo.get_chat(team, "manager-a", chat)["messages"][-1]["status"] == "applied"
+    assert real_repo.get_schedule(period, team)["status"] == "draft"
+    assert real_repo.get_change_plan(plan_id, team)["status"] == "applied"
+    assert {row["plan_id"] for row in real_repo.change_log(team)} == {plan_id}
+    count = len(real_repo.change_log(team))
+    service.apply(team, "manager-a", chat, message, True)
+    assert len(real_repo.change_log(team)) == count
+
+
+@pytest.mark.parametrize("published", [False, True])
+def test_real_later_failure_rolls_back_earlier_repository_commits(real_repo, monkeypatch, published):
+    team, period, chat, message, service = seed(real_repo, published)
+    def fail(*args, **kwargs):
+        raise RuntimeError("simulated late constraint write failure")
+    monkeypatch.setattr(real_repo, "set_availability", fail)
+    with pytest.raises(RuntimeError):
+        service.apply(team, "manager-a", chat, message, True)
+    assert [row["employee"] for row in real_repo.assignments(period, team)] == ["דנה"]
+    assert not real_repo.change_log(team) and not real_repo.availability(team)
+    assert real_repo.get_chat(team, "manager-a", chat)["messages"][-1]["status"] == "pending"
+    assert real_repo.get_schedule(period, team)["status"] == ("published" if published else "draft")
+
+
+def test_real_conversation_confirmation_saves_instruction_and_receipt_once(real_repo):
+    team, period, chat, message, service = seed(real_repo)
+    request = dict(content="כן, תעשה", request_id="text-approval", approval_message_id=message)
+    service.start_turn(team, "manager-a", chat, request)
+    saved = real_repo.get_chat(team, "manager-a", chat)["messages"]
+    assert saved[-1]["payload"]["receipt"] and saved[-2]["content"] == "כן, תעשה"
+    assert real_repo.assignments(period, team)[0]["employee"] == "יוסי"
+    service.start_turn(team, "manager-a", chat, request)
+    assert len(real_repo.get_chat(team, "manager-a", chat)["messages"]) == len(saved)
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_real_shift_migration_is_atomic_and_preserves_unaffected_ids(real_repo, monkeypatch, fail):
+    team, period, chat, _, service = seed(real_repo)
+    before = copy.deepcopy(real_repo.team_profile(team))
+    original = real_repo.assignments(period, team)[0]
+    shifts = [dict(name=name, start_time=start, end_time=end,
+                   staffing=[dict(days=[], headcount=1, required_roles=[])])
+              for name, start, end in [("יום", "12:00", "00:00"), ("לילה", "00:00", "12:00")]]
+    employees = [dict(row, eligible_shifts=["יום", "לילה"]) for row in before["employees"]]
+    proposal = turn("restructure")
+    import json
+    proposal.update(profile_patch_json=json.dumps(dict(shifts=shifts, employees=employees)),
+                    starts_on="2026-10-06", ends_on="2026-10-06")
+    # The vocabulary rebuild is solved; the model only proposes it.
+    service.llm._answers += [proposal]
+    message = service.start_turn(team, "manager-a", chat, dict(content="שנה את המשמרות ביום שלישי",
+                                 request_id="migrate", schedule_id=period))
+    service.reply(team, "manager-a", chat, message)
+    assert real_repo.get_chat(team, "manager-a", chat)["messages"][-1]["status"] == "pending"
+    if fail:
+        def fail_assignment(*args, **kwargs):
+            raise RuntimeError("migration write failed")
+        monkeypatch.setattr(real_repo, "add_assignment", fail_assignment)
+        with pytest.raises(RuntimeError):
+            service.apply(team, "manager-a", chat, message)
+        assert real_repo.team_profile(team) == before
+        assert real_repo.assignments(period, team) == [original]
+    else:
+        service.apply(team, "manager-a", chat, message)
+        saved = real_repo.assignments(period, team)
+        assert next(row for row in saved if str(row["date"]) == "2026-10-05")["id"] == original["id"]
+        assert {row["shift"] for row in saved if str(row["date"]) == "2026-10-06"} == {"יום", "לילה"}
+
+
+def test_a_tail_read_starts_at_the_named_message(real_repo):
+    team, _, chat, message_id, _ = seed(real_repo)
+    tail = real_repo.get_chat(team, "manager-a", chat, from_message=message_id)["messages"]
+    assert [row["id"] for row in tail] == [message_id]
+    whole = real_repo.get_chat(team, "manager-a", chat, from_message="missing")["messages"]
+    assert len(whole) == 2

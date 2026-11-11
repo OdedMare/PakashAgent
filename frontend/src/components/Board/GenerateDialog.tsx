@@ -1,46 +1,95 @@
 "use client";
 
-import { CalendarPlus, CalendarRange, Plus, Trash2, X } from "lucide-react";
+import { CalendarCog, CalendarPlus, CalendarRange, Layers, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { DateInput } from "@/components/DateInput";
-import { formatDate, hebrewWeekday } from "@/components/Management/Calendar";
-import type { RequiredAssignment } from "@/types";
+import { DateInput, displayDate } from "@/components/DateInput";
+import { hebrewWeekday } from "@/components/Management/Calendar";
+import type { RequiredAssignment, Schedule, StaffingOverride } from "@/types";
+
+import { addDays, sundayOf } from "./dates";
 
 type Row = RequiredAssignment & { id: number };
+type OverrideRow = StaffingOverride & { id: number };
 
+/** Ask the agent for a run of days.
+ *
+ *  One dialog for both places a build starts. On a week with nothing stored
+ *  it opens a period; handed a `period`, it builds inside that draft instead
+ *  — "from this day until Saturday, or until the day I choose". The second
+ *  takes no list of required shifts, because the board behind it already is
+ *  one: whatever the manager placed by hand is kept and filled around (D18).
+ *
+ *  Either way the build can be narrowed to some shift types — "only the
+ *  nights for the month". Rows on every other shift stay as they are; the
+ *  names come from setup, never from this file (D9).
+ */
 export function GenerateDialog({
   employees,
   shifts,
-  weekStart,
-  weekEnd,
+  from,
+  through,
+  period = null,
   busy,
   onConfirm,
   onCancel,
 }: {
   employees: string[];
   shifts: Record<string, unknown>[];
-  weekStart: string;
-  weekEnd: string;
+  /** The run the dialog opens on. Both ends stay editable. */
+  from: string;
+  through: string;
+  /** The draft being built into, when there is one. Its dates bound the
+   *  run: a build is one job on one period, and a run that spilled past it
+   *  would have nowhere to write the days beyond. */
+  period?: Schedule | null;
   busy: boolean;
   onConfirm: (input: {
     starts_on: string;
     ends_on: string;
     instructions: string;
     required_assignments: RequiredAssignment[];
+    /** Only these shift types; empty means every shift. */
+    shifts: string[];
+    /** Hold the rows already built and move only what a new soldier or
+     *  shift needs, instead of rebuilding the days. */
+    keep_existing: boolean;
+    staffing_overrides: StaffingOverride[];
   }) => void;
   onCancel: () => void;
 }) {
-  const [startsOn, setStartsOn] = useState(weekStart);
-  const [endsOn, setEndsOn] = useState(weekEnd);
+  const [startsOn, setStartsOn] = useState(from);
+  const [endsOn, setEndsOn] = useState(through);
   const [instructions, setInstructions] = useState("");
+  // On by default: rebuilding days that are already built keeps what
+  // stands and moves only what the change needs, so the team does not find
+  // a whole new week. The manager unticks it to start the days over.
+  const [keepExisting, setKeepExisting] = useState(true);
   const dates = useMemo(
     () => dateRange(startsOn, endsOn),
     [startsOn, endsOn],
   );
   const options = useMemo(() => shiftOptions(shifts), [shifts]);
+  // Empty is "every shift", the default; a choice narrows the build to it.
+  const [chosen, setChosen] = useState<string[]>([]);
+  const toggleShift = (name: string) =>
+    setChosen((current) =>
+      current.includes(name)
+        ? current.filter((item) => item !== name)
+        : [...current, name],
+    );
+  const built = chosen.length
+    ? options.filter((option) => chosen.includes(option.name))
+    : options;
+  const runsInRange = dates.some((date) => shiftsForDate(built, date).length > 0);
   const nextId = useRef(1);
   const [rows, setRows] = useState<Row[]>([]);
+  const [overrides, setOverrides] = useState<OverrideRow[]>(() =>
+    (period?.generation.staffing_overrides ?? [])
+      .filter((row) => row.date >= from && row.date <= through)
+      .map((row, index) => ({ ...row, id: index + 1 })),
+  );
+  const overrideId = useRef(overrides.length + 1);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -64,13 +113,31 @@ export function GenerateDialog({
     }));
   };
   const validRange = dates.length > 0 && startsOn <= endsOn;
-  const valid = validRange && rows.every(
+  const overrideKeys = overrides.map((row) => `${row.shift}|${row.date}`);
+  const validOverrides = overrides.every(
+    (row) => dates.includes(row.date)
+      && shiftsForDate(options, row.date).some((shift) => shift.name === row.shift)
+      && Number.isInteger(row.headcount) && row.headcount >= 0 && row.headcount <= 100,
+  ) && new Set(overrideKeys).size === overrideKeys.length;
+  const valid = validRange && runsInRange && rows.every(
     (row) => row.employee && dates.includes(row.date) && row.shift,
-  );
+  ) && validOverrides;
 
-  const chooseLength = (days: number) => {
-    setEndsOn(addDays(startsOn, days - 1));
-  };
+  const presets = useMemo(
+    () => rangePresets(startsOn, period?.ends_on),
+    [startsOn, period?.ends_on],
+  );
+  // What the run would do to days that already hold something. Counted from
+  // the period on screen rather than asked for: it is the same rule the
+  // server applies — the manager's rows stay, everything else is replaced.
+  const standing = useMemo(() => {
+    const rows = (period?.assignments ?? []).filter(
+      (row) => row.date >= startsOn && row.date <= endsOn
+        && (!chosen.length || chosen.includes(row.shift)),
+    );
+    const kept = rows.filter((row) => row.source === "manager").length;
+    return { kept, replaced: rows.length - kept };
+  }, [period, startsOn, endsOn, chosen]);
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onCancel}>
@@ -83,7 +150,8 @@ export function GenerateDialog({
       >
         <header className="modal-header">
           <h2 id="generate-dialog-title">
-            <CalendarPlus size={17} /> בניית סידור לתאריך או לטווח
+            <CalendarPlus size={17} />{" "}
+            {period ? "בניית ימים בסידור הקיים" : "בניית סידור לתאריך או לטווח"}
           </h2>
           <button type="button" className="icon-button" onClick={onCancel} aria-label="סגירה">
             <X size={17} />
@@ -91,8 +159,9 @@ export function GenerateDialog({
         </header>
 
         <p className="modal-summary">
-          בחרו טווח, הוסיפו כללים לבקשה, ואם צריך גם שיבוצים שחייבים להופיע.
-          הסוכן יבנה כל יום בנפרד ויתחשב בכל מה שכבר נקבע.
+          {period
+            ? "בחרו מאיזה יום ועד איזה יום לבנות. הסוכן יבנה רק את הימים האלה ויתחשב בכל מה שכבר נקבע בשאר הסידור."
+            : "בחרו טווח, הוסיפו כללים לבקשה, ואם צריך גם שיבוצים שחייבים להופיע. פותר האילוצים יבנה את כל הטווח ויתחשב בכל מה שכבר נקבע."}
         </p>
 
         <form onSubmit={(event) => {
@@ -103,6 +172,11 @@ export function GenerateDialog({
               ends_on: endsOn,
               instructions: instructions.trim(),
               required_assignments: rows.map(({ employee, shift, date }) => ({ employee, shift, date })),
+              shifts: chosen,
+              keep_existing: Boolean(period) && standing.replaced > 0 && keepExisting,
+              staffing_overrides: overrides.map(({ date, shift, headcount }) => ({
+                date, shift, headcount,
+              })),
             });
           }
         }}>
@@ -118,13 +192,13 @@ export function GenerateDialog({
             </div>
 
             <div className="generate-range-presets" aria-label="אורך התקופה">
-              {[{ days: 1, label: "יום אחד" }, { days: 7, label: "שבוע" }, { days: 14, label: "שבועיים" }].map((preset) => (
+              {presets.map((preset) => (
                 <button
-                  key={preset.days}
+                  key={preset.label}
                   type="button"
-                  className={dates.length === preset.days ? "is-active" : ""}
-                  aria-pressed={dates.length === preset.days}
-                  onClick={() => chooseLength(preset.days)}
+                  className={endsOn === preset.end ? "is-active" : ""}
+                  aria-pressed={endsOn === preset.end}
+                  onClick={() => setEndsOn(preset.end)}
                 >
                   {preset.label}
                 </button>
@@ -135,6 +209,8 @@ export function GenerateDialog({
               <label>
                 <span>מתאריך</span>
                 <DateInput
+                  min={period?.starts_on}
+                  max={period?.ends_on}
                   value={startsOn}
                   onChange={(next) => {
                     setStartsOn(next);
@@ -148,6 +224,7 @@ export function GenerateDialog({
                 <span>עד תאריך</span>
                 <DateInput
                   min={startsOn}
+                  max={period?.ends_on}
                   value={endsOn}
                   onChange={setEndsOn}
                   required
@@ -158,10 +235,143 @@ export function GenerateDialog({
             <div className="generate-range-summary" aria-live="polite">
               <strong>{dates.length === 1 ? "יום אחד" : `${dates.length} ימים`}</strong>
               <span>
-                {hebrewWeekday(startsOn)} {formatDate(startsOn)}
-                {dates.length > 1 ? ` — ${hebrewWeekday(endsOn)} ${formatDate(endsOn)}` : ""}
+                {hebrewWeekday(startsOn)} {displayDate(startsOn)}
+                {dates.length > 1 ? ` — ${hebrewWeekday(endsOn)} ${displayDate(endsOn)}` : ""}
               </span>
             </div>
+          </section>
+
+          {options.length > 1 ? (
+            <section className="generate-shifts" aria-labelledby="generate-shifts-title">
+              <div className="generate-period-head">
+                <span className="generate-period-mark" aria-hidden="true">
+                  <Layers size={18} />
+                </span>
+                <div>
+                  <h3 id="generate-shifts-title">אילו משמרות לשבץ?</h3>
+                  <p>אפשר לשבץ רק סוג משמרת אחד או כמה. שאר המשמרות נשארות כמו שהן.</p>
+                </div>
+              </div>
+              <div className="generate-shift-choices" role="group" aria-label="סוגי משמרות">
+                <button
+                  type="button"
+                  className={chosen.length ? "" : "is-active"}
+                  aria-pressed={!chosen.length}
+                  onClick={() => setChosen([])}
+                >
+                  כל המשמרות
+                </button>
+                {options.map((option) => (
+                  <button
+                    key={option.name}
+                    type="button"
+                    className={chosen.includes(option.name) ? "is-active" : ""}
+                    aria-pressed={chosen.includes(option.name)}
+                    onClick={() => toggleShift(option.name)}
+                  >
+                    רק {option.name}
+                    {option.hours ? <small>{option.hours}</small> : null}
+                  </button>
+                ))}
+              </div>
+              {chosen.length && validRange && !runsInRange ? (
+                <p className="generate-shifts-empty" role="alert">
+                  המשמרות שנבחרו לא מתקיימות בימים האלה.
+                </p>
+              ) : null}
+            </section>
+          ) : null}
+
+          <section className="generate-special" aria-labelledby="generate-special-title">
+            <div className="generate-period-head">
+              <span className="generate-period-mark" aria-hidden="true">
+                <CalendarCog size={18} />
+              </span>
+              <div>
+                <h3 id="generate-special-title">ימים עם תקינה מיוחדת</h3>
+                <p>חג, אירוע או יום חריג: התקן כאן מחליף רק את התקן של אותה משמרת באותו תאריך.</p>
+              </div>
+            </div>
+            {overrides.length ? (
+              <div className="generate-special-list">
+                {overrides.map((row, index) => {
+                  const available = shiftsForDate(options, row.date);
+                  return (
+                    <fieldset className="generate-special-row" key={row.id}>
+                      <legend>יום מיוחד {index + 1}</legend>
+                      <label>
+                        <span>תאריך</span>
+                        <select
+                          value={row.date}
+                          onChange={(event) => setOverrides((current) => current.map((item) => {
+                            if (item.id !== row.id) return item;
+                            const date = event.target.value;
+                            const choices = shiftsForDate(options, date);
+                            const shift = choices.some((item) => item.name === row.shift)
+                              ? row.shift : (choices[0]?.name ?? "");
+                            return { ...item, date, shift, headcount: normalHeadcount(choices.find((item) => item.name === shift), date) };
+                          }))}
+                        >
+                          {dates.map((date) => (
+                            <option key={date} value={date}>{hebrewWeekday(date)} · {displayDate(date)}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        <span>משמרת</span>
+                        <select
+                          value={row.shift}
+                          onChange={(event) => setOverrides((current) => current.map((item) => item.id === row.id
+                            ? { ...item, shift: event.target.value, headcount: normalHeadcount(available.find((shift) => shift.name === event.target.value), row.date) }
+                            : item))}
+                        >
+                          {available.map((shift) => <option key={shift.name}>{shift.name}</option>)}
+                        </select>
+                      </label>
+                      <label>
+                        <span>תקן מיוחד</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={row.headcount}
+                          onChange={(event) => setOverrides((current) => current.map((item) => item.id === row.id
+                            ? { ...item, headcount: Number(event.target.value) }
+                            : item))}
+                          required
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="icon-button generate-remove"
+                        onClick={() => setOverrides((current) => current.filter((item) => item.id !== row.id))}
+                        aria-label={`מחיקת יום מיוחד ${index + 1}`}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </fieldset>
+                  );
+                })}
+                {new Set(overrideKeys).size !== overrideKeys.length ? (
+                  <p className="generate-shifts-empty" role="alert">אותה משמרת ותאריך הוגדרו יותר מפעם אחת.</p>
+                ) : null}
+              </div>
+            ) : null}
+            <button
+              type="button"
+              className="ghost-button generate-add"
+              disabled={!dates.length || !options.length}
+              onClick={() => {
+                const date = dates.find((day) => shiftsForDate(options, day).length) ?? startsOn;
+                const shift = shiftsForDate(options, date)[0];
+                setOverrides((current) => [...current, {
+                  id: overrideId.current++, date, shift: shift?.name ?? "",
+                  headcount: normalHeadcount(shift, date),
+                }]);
+              }}
+            >
+              <Plus size={15} /> הוספת יום מיוחד
+            </button>
           </section>
 
           <label className="generate-instructions">
@@ -173,6 +383,36 @@ export function GenerateDialog({
               onChange={(event) => setInstructions(event.target.value)}
             />
           </label>
+          {period && standing.replaced ? (
+            <label className="generate-keep">
+              <input
+                type="checkbox"
+                checked={keepExisting}
+                onChange={(event) => setKeepExisting(event.target.checked)}
+              />
+              <span>
+                שמירה על השיבוץ הקיים
+                <small>מזיזים רק את מה שצריך: חייל או משמרת חדשים, הנחיות חדשות או איזון. בטלו את הסימון כדי לבנות את הימים מחדש.</small>
+              </span>
+            </label>
+          ) : null}
+          {period ? (
+            <p className="modal-note">
+              {chosen.length
+                ? `רק ${chosen.join(", ")} ייבנו מחדש. שאר המשמרות בימים האלה נשארות כמו שהן. `
+                : ""}
+              {standing.replaced
+                ? keepExisting
+                  ? `${standing.replaced} שיבוצים שנבנו בימים האלה נשארים במקומם ככל האפשר; יוזזו רק אלה שנדרשים לאיזון. `
+                  : `${standing.replaced} שיבוצים שנבנו בימים האלה יוחלפו. `
+                : ""}
+              {standing.kept
+                ? `${standing.kept} שיבוצים ששיבצתם ידנית נשארים במקומם, והסוכן ימלא סביבם.`
+                : "מה שתשבצו ידנית על הלוח נשאר במקומו, והסוכן ממלא סביבו."}
+            </p>
+          ) : null}
+          {period ? null : (
+            <>
           <div className="generate-required-list">
             {rows.map((row, index) => {
               const availableShifts = shiftsForDate(options, row.date);
@@ -198,7 +438,7 @@ export function GenerateDialog({
                     >
                       {dates.map((date) => (
                         <option key={date} value={date}>
-                          {hebrewWeekday(date)} · {formatDate(date)}
+                          {hebrewWeekday(date)} · {displayDate(date)}
                         </option>
                       ))}
                     </select>
@@ -242,14 +482,23 @@ export function GenerateDialog({
           >
             <Plus size={15} /> הוספת שיבוץ חובה
           </button>
+            </>
+          )}
 
           <p className="modal-hint">
-            טווח הבנייה: {hebrewWeekday(startsOn)} {formatDate(startsOn)} עד {hebrewWeekday(endsOn)} {formatDate(endsOn)}. כללי מקום העבודה והאילוצים הקיימים חלים על כל יום.
+            טווח הבנייה: {hebrewWeekday(startsOn)} {displayDate(startsOn)} עד {hebrewWeekday(endsOn)} {displayDate(endsOn)}. כללי מקום העבודה והאילוצים הקיימים חלים על כל יום.
+            {!period && validRange && !fillsItsWeeks(startsOn, endsOn)
+              ? " שאר ימי השבוע ייפתחו ריקים — לשיבוץ ידני או לבנייה בהמשך."
+              : ""}
           </p>
           <div className="modal-actions">
             <button type="button" className="ghost-button" onClick={onCancel}>ביטול</button>
             <button type="submit" className="primary-button" disabled={!valid || busy}>
-              {busy ? "בונה…" : dates.length === 1 ? "בניית הסידור ליום" : `בניית הסידור ל-${dates.length} ימים`}
+              {busy
+                ? "בונה…"
+                : `${chosen.length ? `שיבוץ רק ${chosen.join(", ")}` : "בניית הסידור"} ${
+                    dates.length === 1 ? "ליום" : `ל-${dates.length} ימים`
+                  }`}
             </button>
           </div>
         </form>
@@ -258,7 +507,15 @@ export function GenerateDialog({
   );
 }
 
-type ShiftOption = { name: string; hours: string; days: string[] };
+type ShiftOption = {
+  name: string;
+  hours: string;
+  days: string[];
+  staffing: Record<string, unknown>[];
+  headcount: number;
+  startsOn: string;
+  endsOn: string;
+};
 
 function shiftOptions(rows: Record<string, unknown>[]): ShiftOption[] {
   return rows.flatMap((row) => {
@@ -269,41 +526,82 @@ function shiftOptions(rows: Record<string, unknown>[]): ShiftOption[] {
     const days = Array.isArray(row.days)
       ? row.days.filter((day): day is string => typeof day === "string")
       : [];
-    return [{ name, hours: start && end ? `${start}–${end}` : "", days }];
+    const staffing = Array.isArray(row.staffing)
+      ? row.staffing.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+      : [];
+    return [{
+      name, hours: start && end ? `${start}–${end}` : "", days, staffing,
+      headcount: typeof row.headcount === "number" ? row.headcount : 1,
+      startsOn: typeof row.starts_on === "string" ? row.starts_on : "",
+      endsOn: typeof row.ends_on === "string" ? row.ends_on : "",
+    }];
   });
+}
+
+function normalHeadcount(shift: ShiftOption | undefined, date: string): number {
+  if (!shift) return 1;
+  const weekday = hebrewWeekday(date).replace(/^יום /, "");
+  let fallback = shift.headcount;
+  for (const group of shift.staffing) {
+    if (typeof group.headcount !== "number") continue;
+    const days = Array.isArray(group.days)
+      ? group.days.filter((day): day is string => typeof day === "string")
+      : [];
+    if (!days.length) fallback = group.headcount;
+    else if (days.some((day) => day.replace(/^יום /, "") === weekday)) return group.headcount;
+  }
+  return fallback;
 }
 
 function shiftsForDate(shifts: ShiftOption[], date: string): ShiftOption[] {
   const weekday = hebrewWeekday(date).replace(/^יום /, "");
   return shifts.filter((shift) =>
-    !shift.days.length || shift.days.some((day) => day.replace(/^יום /, "") === weekday),
+    (!shift.startsOn || shift.startsOn <= date)
+      && (!shift.endsOn || date <= shift.endsOn)
+      && (!shift.days.length || shift.days.some((day) => day.replace(/^יום /, "") === weekday)),
   );
+}
+
+/** The shortcuts for where a run ends, given where it starts.
+ *
+ *  "עד שבת" is the one a manager reaches for mid-week: the rest of this
+ *  week, whatever day it is. Inside a period the weeks-long ones give way to
+ *  the period's own end, and any two that land on the same date are offered
+ *  once — from a Sunday, "until Saturday" *is* the week. */
+function rangePresets(
+  start: string,
+  limit?: string,
+): { label: string; end: string }[] {
+  const saturday = addDays(sundayOf(start), 6);
+  const offered = [
+    { label: "יום אחד", end: start },
+    { label: "עד שבת", end: saturday },
+    ...(limit
+      ? [{ label: "עד סוף הסידור", end: limit }]
+      : [
+          { label: "שבוע", end: addDays(start, 6) },
+          { label: "שבועיים", end: addDays(start, 13) },
+        ]),
+  ];
+  const seen = new Set<string>();
+  return offered.filter((preset) => {
+    if ((limit && preset.end > limit) || seen.has(preset.end)) return false;
+    seen.add(preset.end);
+    return true;
+  });
+}
+
+/** Whether a run is whole weeks, Sunday through Saturday. */
+function fillsItsWeeks(first: string, last: string): boolean {
+  return sundayOf(first) === first && addDays(sundayOf(last), 6) === last;
 }
 
 function dateRange(first: string, last: string): string[] {
   const dates: string[] = [];
-  const cursor = new Date(`${first}T00:00:00`);
-  const end = new Date(`${last}T00:00:00`);
-  while (cursor <= end) {
-    dates.push([
-      cursor.getFullYear(),
-      String(cursor.getMonth() + 1).padStart(2, "0"),
-      String(cursor.getDate()).padStart(2, "0"),
-    ].join("-"));
-    cursor.setDate(cursor.getDate() + 1);
-  }
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  if (!iso.test(first) || !iso.test(last)) return dates;
+  for (let cursor = first; cursor <= last; cursor = addDays(cursor, 1)) dates.push(cursor);
   return dates;
-}
-
-function addDays(iso: string, days: number): string {
-  const date = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return iso;
-  date.setDate(date.getDate() + days);
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ].join("-");
 }
 
 function newRow(

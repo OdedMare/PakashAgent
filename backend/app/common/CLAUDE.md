@@ -1,18 +1,59 @@
 # Common (`app/common/`)
 
-Cross-cutting infrastructure. **Ported from AiSummryIO.**
+Cross-cutting infrastructure. Config, settings and logging were ported from
+AiSummryIO.
 
-- `config/settings.py` — env-derived defaults, prefix **`PAKASH_`**, read from
+- `config.py` — env-derived defaults, prefix **`PAKASH_`**, read from
   `.env`. These are *defaults*; the runtime store overrides them.
-- `runtime_settings/` — the live override store. Settings saved in the UI beat env
+- `runtime_settings/` — the live override store. Settings saved in the system
+  settings (the operator console's "מערכת" tab; the team screen has no
+  settings entry, D41) beat env
   values **without a restart**, because `dal/llm/` reads the store on every call.
   Secrets are masked on the way out; a masked value coming back means "unchanged",
   so the stored secret is kept.
 - `sessions.py` — signed workspace session cookies: `issue()` and `read()`,
-  HMAC-SHA256 over a compact payload. Not a JWT and not trying to be — no
+  HMAC-SHA256 over a compact payload. The secret may be a `SharedSecret`,
+  looked up from the database on first use (D39). Not a JWT and not trying to be — no
   algorithm field, no library, a format this file fully controls.
-- `logging_setup.py` — `structlog` configuration.
+- `logging_setup.py` — standard-library logging configuration, level from
+  `PAKASH_LOG_LEVEL`. A refused (401) read — a poller whose session died —
+  logs at DEBUG and is dropped from uvicorn's access log unless the level is
+  DEBUG; a refused POST (a wrong password) still warns.
 - `errors.py` — `AgentError`, the Hebrew-facing error type everything raises.
+- `actor.py` — who is acting, for the change log's `actor`: set per request
+  from the signed cookies, and per job from the request that queued it.
+- `throttle.py` — `LoginThrottle`: every password check (boss login,
+  employee login, change password, settings password) runs through
+  `attempt()`, which locks an account for 15 minutes after 5 wrong guesses.
+  Keyed by account, not IP — behind the Next proxy every request has the same
+  IP. Shared through the `login_attempts` table when handed the repository
+  (D35); otherwise in memory, per process.
+- `events.py` — `TeamEvents`: an employee route `publish()`es "the
+  requests (or swaps) inbox moved" from its worker thread, and the manager's
+  SSE stream, waiting on the event loop, wakes up (D29). No payload. Across
+  processes over PostgreSQL LISTEN/NOTIFY (`dal/notify.py`), otherwise in
+  memory; the client's 15-second poll is the backstop either way.
+- `runtime_settings/` re-reads its file from `get()` at most every few
+  seconds, so a save made by another process arrives without a restart.
+  It holds the model connections, timeouts, the solver's limits
+  (`solver_time_limit_seconds`, `solver_workers`) and the database
+  credentials. Every save is also written to `deployment_state`
+  (`shared.py`, D39) and polled on the same cadence, so replicas with no
+  shared disk agree too — everything but the `database_*` fields, which
+  are what the poll connects with and so stay in the file and env.
+- `redis_hub.py` — the one Redis connection a process shares, built from the
+  live settings (URL, host, port, username, password, `redis_key_prefix`);
+  `key()` puts every key under the prefix, `probe()` feeds the panel's
+  connection test. `None` when unset or unreachable, never a failure.
+- `read_cache.py` — `ReadCache` (D50): the board's heavy reads kept in Redis
+  under per-team generation counters, retired by every committed write
+  (`dal/write_marks.py`). No Redis or a TTL of 0 = every read goes to
+  PostgreSQL.
+- `time_context.py` — Israel-local time, and the minute-precision clock line
+  that closes every prompt's user turn (after the context, so it does not cut
+  the server's prefix cache).
+- `activity.py` — the progress line a running job reports, without model
+  code knowing about storage.
 
 ## Settings that matter here
 
@@ -24,12 +65,30 @@ Cross-cutting infrastructure. **Ported from AiSummryIO.**
 | `PAKASH_LLM_BASE_URL_<ROLE>` | Optional endpoint for that role; falls back to the general URL |
 | `PAKASH_LLM_API_KEY_<ROLE>` | Optional API key for that role's endpoint; falls back to `OPENAI_API_KEY`. A role on another provider is authenticated by another credential |
 | `PAKASH_LLM_DIET_MODE` | Compact prompts and bounded completions |
-| `PAKASH_LLM_TIMEOUT_SECONDS` | Wall time for one logical call, retries included |
+| `PAKASH_LLM_REASONING_EFFORT` | `off`/`low`/`medium`/`high`: how long a reasoning model thinks (gpt-oss, Qwen3); empty sends nothing. Live-editable |
+| `PAKASH_LLM_TIMEOUT_SECONDS` | Wall time for one HTTP completion; 0 = the built-in ceiling (300s, builds 900s). A stuck call fails and frees its slot (D38) |
+| `PAKASH_LLM_QUEUE_SECONDS` | How long interactive work may wait for a model slot; 0 = no limit |
+| `PAKASH_LLM_VERIFY_SSL` | Ignored: the model server's certificate is never verified |
 | `OPENAI_API_KEY` | Read unprefixed, as the SDK expects |
+| `PAKASH_LOG_LEVEL` | `INFO` by default; `DEBUG` also logs refused reads |
+| `PAKASH_ADMIN_SESSION_HOURS` | How long an operator stays signed in (default 12) |
 | `PAKASH_DATABASE_*` | URL plus optional explicit overrides |
-| `PAKASH_SESSION_SECRET` | Signs the workspace session cookie. **Set this in production** — unset, it is generated per process, so sessions die on restart and break across workers. Changing it logs every boss out. |
+| `PAKASH_DATABASE_POOL_SIZE` | Pooled connections per process (default 16). With several replicas, replicas × (this + 1 + model calls in flight) must stay under Postgres's `max_connections` |
+| `PAKASH_SESSION_SECRET` | Signs the workspace session cookie. Unset, one key is generated and kept in the database for every replica (D39); only with no database is it per process. Changing it logs every boss out. |
+| `PAKASH_SETTINGS_PASSWORD` | Lets a boss session reach `/api/settings` when sent as the `X-Settings-Password` header (the operator console needs only its own session). Defaults to `010802` (committed); **override it in any real deployment**. Set to empty, that path stays locked. The settings are shared by every workspace |
 | `PAKASH_SESSION_DAYS` | How long a boss stays logged in (default 30) |
-| `PAKASH_SCHEDULE_GENERATION_MODE` | How wide one scheduling model call is: `day` (default, one date per call — verified and repaired on its own) or `week` (up to seven dates per call — several times faster, coarser repair). Live-editable in the panel; read when a period is opened, so a running build keeps the mode it started with |
+| `PAKASH_ADMIN_PASSWORD` | The operator console's password; empty = the settings password (D28) |
+| `PAKASH_OPEN_SIGNUP` | Self-service team creation from the login page (default off) |
+| `PAKASH_EMBEDDED_WORKER` | Run the job worker inside the API process (default on; compose turns it off because it runs `app.worker` separately) |
+| `PAKASH_WORKER_CONCURRENCY` / `PAKASH_CHAT_WORKERS` | Worker threads (default 6) and how many of them only take manager-chat turns (default 3) |
+| `PAKASH_SOLVER_CPU_BUDGET` | Solver threads one process runs at once (default: the CPU count); a solve waits for its `solver_workers` share. Set per process when the API and a worker share a machine |
+| `PAKASH_JOB_RETENTION_DAYS` | Finished jobs are deleted after this many days (default 30), checked hourly by every worker process |
+| `PAKASH_SOLVER_TIME_LIMIT_SECONDS` / `PAKASH_SOLVER_WORKERS` | The constraint solver's wall time per solve (default 10s) and parallel workers (default 8). Live-editable; chat builds read them too |
+| `PAKASH_LLM_MAX_CONCURRENCY` | Model calls in flight across every process (default 4; 1 for a local Ollama) |
+| `PAKASH_LLM_TEAM_CONCURRENCY` | How many of those one team may hold; 0 (default) = all of them |
+| `PAKASH_REDIS_URL` / `_HOST` / `_PORT` / `_USERNAME` / `_PASSWORD` | The read cache's Redis (D50); all empty = off. Host, port and username override the URL's. Live-editable; used whenever no URL or host is saved in the panel |
+| `PAKASH_REDIS_KEY_PREFIX` | Every key this app writes starts with it (default `pakash`) |
+| `PAKASH_REDIS_CACHE_TTL_SECONDS` | How long a cached read may live (default 300, max a day); 0 turns the cache off. Writes retire reads at once either way |
 
 ## Rules
 

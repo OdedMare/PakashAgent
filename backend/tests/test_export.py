@@ -2,8 +2,8 @@
 
 Pure functions over a stored schedule, so the whole contract is testable with
 no database and no model. What is pinned here is the part that is not
-cosmetic: the **layout**, which is Sample A from `FILE_FORMATS.md` because the
-importer is being built to read that shape, and the distinction between a
+cosmetic: the **layout**, which is Sample A from `FILE_FORMATS.md` because that is
+the shape the workplace already keeps, and the distinction between a
 shift that does not run and a shift nobody is on.
 """
 
@@ -60,8 +60,8 @@ def _grid(sheet):
 # -- the layout ------------------------------------------------------------
 
 def test_the_sheet_is_shift_major_with_dates_across_the_top():
-    """Sample A's shape. Not a preference: the importer is being built to
-    read it, so a week can leave, be edited, and come back."""
+    """Sample A's shape. Not a preference: it is the layout the workplace
+    already keeps."""
     sheet = _sheet(_schedule())
 
     assert sheet.cell(row=4, column=1).value == "משמרות"

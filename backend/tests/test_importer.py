@@ -1,397 +1,430 @@
-"""Layout inference over the two real files, which disagree structurally.
+"""The importer reads a schedule in whatever shape the workplace kept it.
 
-`BUILD_ORDER.md` calls this the riskiest part of the build, and the reason is
-in `FILE_FORMATS.md`: the two samples are not two dialects of one layout,
-their axes mean different things. So the test that matters is not "does it
-parse Sample A" but **does one inference pass both** — which is why they run
-through the same function with the same vocabulary here.
-
-No database and no model: inference is pure grid arithmetic, so this is a
-unit test of the whole contract.
+Each test is a shape a real manager writes: the two samples in
+`docs/FILE_FORMATS.md`, each turned on its side, people down the side with
+shift names in the cells, weekday templates, stacked weeks, titles and
+totals around the grid. None of them has code of its own -- they are all a
+`Layout`, found by detection, by the model, or by the manager.
 """
 
 import io
+import json
 
 import pytest
+from openpyxl import Workbook
 
-from app.bl.export import as_workbook
-from app.bl.importer import infer, read_grid, read_grids
+from app.bl.importer import LayoutMapper, infer, read_grids
+from app.bl.importer.roster import AMBIGUOUS, EXACT, MATCHED, UNKNOWN, match_people
 from app.common.errors import AgentError
-from tests.fixtures.build import EVENING, MORNING, ON_CALL, sample_a, sample_b
 
-PROFILE = {"shifts": [{"name": MORNING}, {"name": EVENING}, {"name": ON_CALL}]}
+MORNING, NOON, NIGHT = "בוקר", "צהריים", "כונן לילה"
 
-
-def _grid(book):
-    stream = io.BytesIO()
-    book.save(stream)
-    return read_grid(stream.getvalue(), "schedule.xlsx")
-
-
-def _interpret(book, profile=PROFILE):
-    return infer(_grid(book), profile)
-
-
-# -- Sample A: shift-major, dense ------------------------------------------
-
-def test_sample_a_is_read_as_shift_major():
-    found = _interpret(sample_a())
-    assert found.layout == "shift_major"
-
-
-def test_sample_a_finds_both_declared_shifts():
-    found = _interpret(sample_a())
-    assert found.shifts == [MORNING, EVENING]
-
-
-def test_sample_a_spans_the_whole_week():
-    found = _interpret(sample_a())
-    assert found.starts_on == "2025-06-15"
-    assert found.ends_on == "2025-06-19"
-
-
-def test_sample_a_is_dense_every_cell_an_assignment():
-    """5 dates x 2 shifts, every cell filled."""
-    found = _interpret(sample_a())
-    assert len(found.assignments) == 10
-
-
-def test_sample_a_reads_a_named_cell_as_that_persons_assignment():
-    found = _interpret(sample_a())
-    assert {
-        "employee": "שובל ק.", "shift": MORNING, "date": "2025-06-15",
-    } in found.assignments
-
-
-def test_sample_a_weekday_row_is_header_not_data():
-    """`ראשון` under the dates is a label; it must not become a shift."""
-    found = _interpret(sample_a())
-    assert all("ראשון" not in name for name in found.shifts)
-
-
-def test_sample_a_counts_each_person_once():
-    found = _interpret(sample_a())
-    assert found.people.count("אלמוג ע.") == 1
-    assert len(found.people) == 6
-
-
-# -- Sample B: person-major, sparse, nested header -------------------------
-
-def test_sample_b_is_read_as_person_major():
-    found = _interpret(sample_b())
-    assert found.layout == "person_major"
-
-
-def test_sample_b_reads_the_nested_header_into_three_shifts():
-    """The date row is merged across its shift sub-columns."""
-    found = _interpret(sample_b())
-    assert sorted(found.shifts) == sorted([MORNING, EVENING, ON_CALL])
-
-
-def test_sample_b_pairs_a_cell_with_the_date_its_column_sits_under():
-    found = _interpret(sample_b())
-    assert {
-        "employee": "מאור נ", "shift": EVENING, "date": "2026-02-03",
-    } in found.assignments
-
-
-def test_sample_b_is_sparse():
-    """Three names in a 5x6 grid; the empty cells are not assignments."""
-    found = _interpret(sample_b())
-    assert len(found.assignments) == 3
-
-
-def test_sample_b_classifies_an_availability_marker_not_as_a_person():
-    """`לא זמינה` shares the grid with names and is not one."""
-    found = _interpret(sample_b())
-    assert "לא זמינה" not in found.people
-    assert not any(
-        row["employee"] == "לא זמינה" for row in found.assignments
-    )
-
-
-def test_sample_b_records_the_marker_as_unavailability():
-    found = _interpret(sample_b())
-    assert len(found.unavailability) == 1
-    assert found.unavailability[0]["date"] == "2026-02-03"
-    assert found.unavailability[0]["shift"] == EVENING
-
-
-def test_an_unattributed_marker_is_flagged_rather_than_guessed():
-    """Sample B's last lane holds a marker and no name at all.
-
-    The file does not say whose it is, so neither does the importer -- it
-    warns instead, and the confirm screen (D7) is where the name is supplied.
-    """
-    found = _interpret(sample_b())
-    assert found.unavailability[0]["employee"] == ""
-    assert any("אינם משויכים" in note for note in found.warnings)
-
-
-def test_a_lane_is_named_by_its_placements_not_its_first_cell():
-    """A lane whose name is written where the person is placed.
-
-    Taking the first non-empty cell would make `לא זמינה` a person.
-    """
-    grid = [
-        ["", "2.2", "2.2"],
-        ["", MORNING, EVENING],
-        ["", "נועה ר", "לא זמינה"],
-    ]
-    found = infer(grid, PROFILE)
-    assert found.unavailability[0]["employee"] == "נועה ר"
-    assert "לא זמינה" not in found.people
-
-
-# -- the point of the whole exercise ---------------------------------------
-
-def test_one_inference_reads_both_structurally_different_files():
-    """The regression `FILE_FORMATS.md` exists for.
-
-    Same function, same vocabulary, opposite axis semantics.
-    """
-    first = _interpret(sample_a())
-    second = _interpret(sample_b())
-    assert first.layout != second.layout
-    assert first.assignments and second.assignments
-
-
-def test_an_exported_week_can_be_imported_back():
-    """`export.py` writes Sample A's shape precisely so this round-trips."""
-    schedule = {
-        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
-        "slots": [
-            {"shift_name": MORNING, "slot_date": "2026-08-17"},
-            {"shift_name": MORNING, "slot_date": "2026-08-18"},
-        ],
-        "assignments": [
-            {"employee": "דנה", "shift": MORNING, "date": "2026-08-17"},
-            {"employee": "יוסי", "shift": MORNING, "date": "2026-08-18"},
-        ],
-    }
-    found = infer(read_grid(as_workbook(schedule), "x.xlsx"), PROFILE)
-    assert sorted(found.people) == ["דנה", "יוסי"]
-    assert len(found.assignments) == 2
-
-
-# -- D7: an interpretation is something a person approves ------------------
-
-def test_the_interpretation_summarises_itself_for_confirmation():
-    """D7's confirm screen needs one readable sentence."""
-    summary = _interpret(sample_a()).summary()
-    assert "6 אנשים" in summary
-    assert "10 שיבוצים" in summary
-
-
-def test_unreadable_input_is_refused_in_hebrew():
-    with pytest.raises(AgentError):
-        infer([], PROFILE)
-
-
-def test_a_sheet_with_no_dates_is_refused():
-    with pytest.raises(AgentError):
-        infer([["שם", "משהו"], ["דנה", "אחר"]], PROFILE)
-
-
-# -- D9: shift names come from the interview, never from a guess -----------
-
-def test_a_shift_the_interview_never_heard_of_is_still_read():
-    """A file may name a shift the vocabulary does not have.
-
-    The sheet records something the workplace really ran -- an old name, a
-    one-off, a column headed only by hours. Dropping it would silently lose
-    history and would make the product refuse exactly the old files it
-    exists to absorb (D7). Nothing is invented: the name comes from the
-    manager's own file.
-    """
-    found = infer(_grid(sample_a()), {"shifts": [{"name": MORNING}]})
-    assert found.shifts == [MORNING, EVENING]
-
-
-def test_a_declared_shift_still_wins_over_the_sheets_wording():
-    """D9 is unchanged where it applies: declared names are matched first."""
-    grid = [
-        ["משמרות", "1/6/25"],
-        ["משמרת בוקר", "דנה"],
-    ]
-    found = infer(grid, {"shifts": [{"name": MORNING}]})
-    assert found.shifts == [MORNING]
-
-
-# -- a file with no shift vocabulary at all --------------------------------
-
-def test_a_sheet_of_only_dates_and_people_is_read():
-    """The case with no shift column at all: dates, and who worked them.
-
-    A single unnamed lane is still a schedule. Refusing it would mean the
-    product only reads files that already look like its own export.
-    """
-    grid = [
-        ["", "1/6/25", "2/6/25", "3/6/25"],
-        ["", "דנה", "יוסי", "דנה"],
-    ]
-    found = infer(grid, {})
-    assert found.layout == "date_only"
-    assert len(found.assignments) == 3
-    assert sorted(found.people) == ["דנה", "יוסי"]
-
-
-def test_a_sheet_with_no_shifts_says_so_rather_than_inventing_one():
-    """An empty shift name is the question made visible (D9).
-
-    Naming it `בוקר` would be hardcoding a vocabulary the file never gave.
-    """
-    found = infer(
-        [["", "1/6/25", "2/6/25"], ["", "דנה", "יוסי"]], {},
-    )
-    assert found.shifts == []
-    assert all(row["shift"] == "" for row in found.assignments)
-    assert any("אין שמות משמרות" in note for note in found.warnings)
-
-
-def test_a_labelled_sheet_is_not_flattened_into_the_date_only_layout():
-    """A real shift axis must win over the fallback that ignores it."""
-    grid = [
-        ["משמרות", "1/6/25", "2/6/25"],
-        ["בוקר", "דנה", "יוסי"],
-        ["צהריים", "יוסי", "דנה"],
-    ]
-    found = infer(grid, {"shifts": [{"name": MORNING}, {"name": EVENING}]})
-    assert found.layout == "shift_major"
-    assert found.shifts == [MORNING, EVENING]
-
-
-def test_a_single_day_sheet_is_read():
-    """One column is a short schedule, not an unreadable one."""
-    found = infer(
-        [["משמרות", "1/6/25"], ["בוקר", "דנה"]],
-        {"shifts": [{"name": MORNING}]},
-    )
-    assert len(found.assignments) == 1
-    assert found.starts_on == found.ends_on == "2025-06-01"
-
-
-def test_hours_in_the_header_are_matched_to_the_declared_shift():
-    """`07:00-15:00` is the morning shift, not a second shift called that."""
-    grid = [
-        ["", "1/6/25", "2/6/25"],
-        ["07:00-15:00", "דנה", "יוסי"],
-    ]
-    found = infer(grid, {"shifts": [
+PROFILE = {
+    "employees": [{"name": name} for name in (
+        "שובל קרמר", "אלמוג עזרא", "אורי אבן", "תאיר גל", "ניצן שמש", "סאלי אור")],
+    "shifts": [
         {"name": MORNING, "start_time": "07:00", "end_time": "15:00"},
-    ]})
-    assert found.shifts == [MORNING]
+        {"name": NOON, "start_time": "15:00", "end_time": "23:00"},
+        {"name": NIGHT, "start_time": "23:00", "end_time": "07:00"},
+    ],
+}
+
+SAMPLE_A = [
+    ["סידור עבודה", "", "", ""],
+    ["", "", "", ""],
+    ["", "15/6/25", "16/6/25", "17/6/25"],
+    ["משמרות", "ראשון", "שני", "שלישי"],
+    [MORNING, "שובל ק.", "אלמוג ע.", "אורי א."],
+    [NOON, "ניצן ש.", "ניצן ש.", "אלמוג ע."],
+]
+
+SAMPLE_B = [
+    ["", "2.2 ראשון", "2.2 ראשון", "2.2 ראשון", "3.2 שני", "3.2 שני", "3.2 שני"],
+    ["", MORNING, NOON, NIGHT, MORNING, NOON, NIGHT],
+    ["", "", "ניצן ש", "", "", "ניצן ש", ""],
+    ["", "תאיר ג", "", "", "", "", "לא זמינה"],
+]
 
 
-def test_hours_matching_no_declared_shift_stand_for_themselves():
+def _turned(grid):
+    width = max(len(row) for row in grid)
+    return [[row[column] if column < len(row) else "" for row in grid]
+            for column in range(width)]
+
+
+def _rows(result):
+    return sorted((row["employee"], row["shift"], row["date"]) for row in result["assignments"])
+
+
+SAMPLE_A_ROWS = sorted([
+    ("שובל קרמר", MORNING, "2025-06-15"), ("אלמוג עזרא", MORNING, "2025-06-16"),
+    ("אורי אבן", MORNING, "2025-06-17"), ("ניצן שמש", NOON, "2025-06-15"),
+    ("ניצן שמש", NOON, "2025-06-16"), ("אלמוג עזרא", NOON, "2025-06-17"),
+])
+
+
+# -- shapes ------------------------------------------------------------------
+
+def test_sample_a_is_read_with_abbreviated_names_resolved_to_the_roster():
+    result = infer(SAMPLE_A, PROFILE)
+    assert _rows(result) == SAMPLE_A_ROWS
+    assert result["layout"]["lanes"] == "shifts"
+    assert result["layout_source"] == "detected"
+    assert result["confidence"] >= 0.9
+
+
+def test_sample_a_on_its_side_reads_the_same_rows():
+    result = infer(_turned(SAMPLE_A), PROFILE)
+    assert _rows(result) == SAMPLE_A_ROWS
+    assert result["layout"]["orientation"] == "dates_down"
+
+
+def test_sample_b_reads_the_nested_header_and_the_marker_with_its_owner():
+    result = infer(SAMPLE_B, PROFILE)
+    assert result["layout"]["shift_line"] == 1
+    assert ("תאיר גל", MORNING) in [(row[0], row[1]) for row in _rows(result)]
+    assert [(row["employee"], row["shift"]) for row in result["unavailability"]] == [
+        ("תאיר גל", NIGHT)]
+    assert any("ללא שנה" in warning for warning in result["warnings"])
+
+
+def test_sample_b_on_its_side_reads_the_same_rows():
+    assert _rows(infer(_turned(SAMPLE_B), PROFILE)) == _rows(infer(SAMPLE_B, PROFILE))
+
+
+def test_people_down_the_side_with_the_shift_written_in_each_cell():
     grid = [
-        ["", "1/6/25", "2/6/25"],
-        ["22:00-06:00", "דנה", "יוסי"],
+        ["שם", "1/11/26", "2/11/26", "3/11/26"],
+        ["שובל קרמר", MORNING, "", NOON],
+        ["אלמוג עזרא", "07:00-15:00", "חופש", MORNING],
     ]
-    found = infer(grid, {"shifts": [
-        {"name": MORNING, "start_time": "07:00", "end_time": "15:00"},
-    ]})
-    assert found.shifts == ["22:00-06:00"]
+    result = infer(grid, PROFILE)
+    assert result["layout"]["lanes"] == "people"
+    assert _rows(result) == sorted([
+        ("שובל קרמר", MORNING, "2026-11-01"), ("שובל קרמר", NOON, "2026-11-03"),
+        ("אלמוג עזרא", MORNING, "2026-11-01"), ("אלמוג עזרא", MORNING, "2026-11-03"),
+    ])
+    assert result["unavailability"][0]["employee"] == "אלמוג עזרא"
 
 
-def test_the_same_hours_written_differently_still_match():
-    """One person writes the same range three ways in the same year."""
-    for header in ("7:00-15:00", "07.00-15.00", "07:00 - 15:00"):
-        found = infer(
-            [["", "1/6/25"], [header, "דנה"]],
-            {"shifts": [{
-                "name": MORNING, "start_time": "07:00", "end_time": "15:00",
-            }]},
-        )
-        assert found.shifts == [MORNING], header
-
-
-def test_the_declared_spelling_wins_over_the_sheets():
-    """A sheet writing `משמרת בוקר` lands on the declared `בוקר`."""
+def test_dates_down_the_side_and_people_across_the_top():
     grid = [
-        ["משמרות", "1/6/25", "2/6/25"],
-        ["משמרת בוקר", "דנה", "יוסי"],
+        ["תאריך", "שובל קרמר", "תאיר גל"],
+        ["1.11.2026", MORNING, NOON],
+        ["2.11.2026", NOON, ""],
     ]
-    found = infer(grid, {"shifts": [{"name": MORNING}]})
-    assert found.shifts == [MORNING]
+    result = infer(grid, PROFILE)
+    assert result["layout"]["orientation"] == "dates_down"
+    assert ("תאיר גל", NOON, "2026-11-01") in _rows(result)
+    assert len(result["assignments"]) == 3
 
 
-# -- real-world workbook resilience ---------------------------------------
+def test_a_weekday_template_is_laid_on_the_week_the_manager_names():
+    grid = [["", "ראשון", "שני", "ג׳"], [MORNING, "שובל", "תאיר", "סאלי"]]
+    result = infer(grid, PROFILE, week_start="2026-11-08")
+    assert [row["date"] for row in result["assignments"]] == [
+        "2026-11-08", "2026-11-09", "2026-11-10"]
+    assert result["assumed_week"] == "2026-11-08"
 
-def test_every_visible_worksheet_is_returned_for_inference():
-    from openpyxl import Workbook
 
+def test_weeks_stacked_on_one_sheet_restart_the_dates():
+    grid = [
+        ["", "1/11/26", "2/11/26"],
+        [MORNING, "שובל קרמר", "תאיר גל"],
+        ["", "", ""],
+        ["", "8/11/26", "9/11/26"],
+        [MORNING, "סאלי אור", "אורי אבן"],
+    ]
+    result = infer(grid, PROFILE)
+    assert result["dates"] == ["2026-11-01", "2026-11-02", "2026-11-08", "2026-11-09"]
+    assert "8/11/26" not in [row["employee"] for row in result["assignments"]]
+
+
+def test_several_people_in_one_cell_are_each_placed():
+    grid = [["", "1/11/26"], [MORNING, "שובל קרמר, תאיר גל"]]
+    assert len(infer(grid, PROFILE)["assignments"]) == 2
+
+
+# -- the manager's corrections -----------------------------------------------
+
+def test_a_layout_the_manager_sends_is_read_as_given():
+    layout = {"orientation": "dates_across", "header": 2, "lanes": "shifts"}
+    result = infer(SAMPLE_A, PROFILE, layout=layout)
+    assert result["layout_source"] == "manager"
+    assert _rows(result) == SAMPLE_A_ROWS
+
+
+def test_a_name_can_be_mapped_to_someone_or_left_out():
+    grid = [["", "1/11/26", "2/11/26"], [MORNING, "דני", "מישהו"]]
+    result = infer(grid, PROFILE, names={"דני": "אורי אבן", "מישהו": ""})
+    assert _rows(result) == [("אורי אבן", MORNING, "2026-11-01")]
+    statuses = {row["name"]: row["status"] for row in result["people"]}
+    assert statuses == {"דני": "mapped", "מישהו": "skipped"}
+
+
+def test_a_shift_heading_can_be_mapped_to_a_declared_shift():
+    grid = [["", "1/11/26"], ["משמרת א", "שובל קרמר"]]
+    result = infer(grid, PROFILE, shifts={"משמרת א": MORNING})
+    assert _rows(result) == [("שובל קרמר", MORNING, "2026-11-01")]
+
+
+def test_an_unknown_name_is_kept_and_named_in_the_warnings():
+    result = infer([["", "1/11/26"], [MORNING, "זר גמור"]], PROFILE)
+    assert result["people"][0]["status"] == UNKNOWN
+    assert any("זר גמור" in warning for warning in result["warnings"])
+
+
+def test_alternative_readings_travel_with_the_answer():
+    assert infer(SAMPLE_A, PROFILE)["alternatives"]
+
+
+# -- the model ------------------------------------------------------------------
+
+class _Mapper:
+    def __init__(self, answer):
+        self.answer = answer
+        self.calls = []
+
+    def propose(self, grid, profile, hint="", previous=None):
+        self.calls.append({"hint": hint, "previous": previous})
+        return self.answer
+
+
+def test_the_model_is_not_asked_when_detection_is_sure():
+    mapper = _Mapper(None)
+    infer(SAMPLE_A, PROFILE, mapper=mapper)
+    assert mapper.calls == []
+
+
+def test_a_hint_asks_the_model_and_its_layout_wins_when_it_reads_better():
+    # Dates in a column the detector never looks at as a header (row 13).
+    grid = [[""] * 3 for _ in range(13)] + [["", "1/11/26", "2/11/26"],
+                                            [MORNING, "שובל קרמר", "תאיר גל"]]
+    mapper = _Mapper({"orientation": "dates_across", "header": 13, "lanes": "shifts",
+                      "explanation": "תאריכים בשורה 14"})
+    result = infer(grid, PROFILE, mapper=mapper)
+    assert result["layout_source"] == "model"
+    assert result["explanation"] == "תאריכים בשורה 14"
+    assert len(result["assignments"]) == 2
+
+
+def test_a_model_layout_that_reads_worse_than_detection_is_not_used():
+    mapper = _Mapper({"orientation": "dates_down", "header": 0, "lanes": "none",
+                      "explanation": "x"})
+    result = infer(SAMPLE_A, PROFILE, mapper=mapper, hint="קובץ רגיל")
+    assert mapper.calls and result["layout_source"] == "detected"
+
+
+def test_nothing_readable_is_a_hebrew_error():
+    with pytest.raises(AgentError):
+        infer([["שלום", "עולם"]], PROFILE)
+
+
+# -- names and files -----------------------------------------------------------
+
+def test_names_match_by_words_and_initials_and_never_guess():
+    profile = {"employees": [{"name": "שובל קרמר"}, {"name": "דנה קרמר"}]}
+    found = match_people(["שובל קרמר", "שובל ק.", "קרמר", "יוסי"], profile)
+    assert found["שובל קרמר"]["status"] == EXACT
+    assert found["שובל ק."] == {"employee": "שובל קרמר", "status": MATCHED,
+                                "candidates": ["שובל קרמר"]}
+    assert found["קרמר"]["status"] == AMBIGUOUS
+    assert found["יוסי"]["status"] == UNKNOWN
+
+
+def test_every_visible_sheet_of_a_workbook_is_returned_with_merges_filled():
     book = Workbook()
-    book.active.title = "סיכום"
-    book.active.append(["הערות למנהל"])
-    schedule = book.create_sheet("שבוע 1")
-    schedule.append(["משמרות", "1/6/25"])
-    schedule.append([MORNING, "דנה"])
-
-    sheets = read_grids(_workbook_bytes(book), "year.xlsx")
-
-    assert [name for name, _grid in sheets] == ["סיכום", "שבוע 1"]
-    assert infer(sheets[1][1], PROFILE).assignments[0]["employee"] == "דנה"
-
-
-def test_reported_excel_dimensions_are_bounded_before_iteration():
-    from openpyxl import Workbook
-
-    book = Workbook()
-    book.active.append(["משמרות", "1/6/25"])
-    book.active.append([MORNING, "דנה"])
-    # A stray formatted/value cell far down the sheet is common after users
-    # delete old rows. It must not make openpyxl materialise half a million.
-    book.active.cell(row=500000, column=1, value="old")
-
-    grid = read_grid(_workbook_bytes(book), "large-dimension.xlsx")
-
-    assert len(grid) == 400
-    assert infer(grid, PROFILE).assignments[0]["employee"] == "דנה"
+    book.active.title = "הוראות"
+    book.active["A1"] = "קרא אותי"
+    sheet = book.create_sheet("שבוע")
+    sheet.append(["", "1/11/26", ""])
+    sheet.merge_cells("B1:C1")
+    sheet.append(["", MORNING, NOON])
+    buffer = io.BytesIO()
+    book.save(buffer)
+    grids = read_grids(buffer.getvalue(), "file.xlsx")
+    assert [title for title, _grid in grids] == ["הוראות", "שבוע"]
+    assert grids[1][1][0] == ["", "1/11/26", "1/11/26"]
 
 
-def test_yearless_dates_are_never_assumed_silently():
-    found = infer(
-        [["משמרות", "2.2"], [MORNING, "דנה"]], PROFILE
-    )
-    assert any("ללא שנה" in note for note in found.warnings)
+def test_a_csv_in_the_hebrew_windows_encoding_is_read():
+    data = ",1/11/26\n%s,שובל קרמר\n" % MORNING
+    grids = read_grids(data.encode("cp1255"), "week.csv")
+    assert _rows(infer(grids[0][1], PROFILE)) == [("שובל קרמר", MORNING, "2026-11-01")]
 
 
-def test_shift_major_unavailability_is_preserved_for_confirmation():
-    found = infer(
-        [
-            ["משמרות", "1/6/25", "2/6/25"],
-            [MORNING, "לא זמינה", "דנה"],
-        ], PROFILE
-    )
-    assert found.unavailability == [{
-        "employee": "", "shift": MORNING, "date": "2025-06-01",
-        "reason": "לא זמינה",
-    }]
-    assert any("אינם משויכים" in note for note in found.warnings)
+def test_a_short_roster_name_matches_whole_words_only():
+    profile = {"employees": [{"name": "יוסי"}, {"name": "דן"}]}
+    found = match_people(["יוסי ב.", "דנה כהן"], profile)
+    assert found["יוסי ב."]["employee"] == "יוסי"
+    assert found["דנה כהן"]["status"] == UNKNOWN
 
 
-def test_duplicate_placements_are_removed_and_reported():
-    found = infer([
-        ["משמרות", "1/6/25"],
-        [MORNING, "דנה, דנה"],
-    ], PROFILE)
-    assert len(found.assignments) == 1
-    assert any("כפולות" in note for note in found.warnings)
+class _Llm:
+    def __init__(self, answer):
+        self.answer = answer
+        self.calls = []
+
+    def complete_json(self, system, user, schema=None, flow=""):
+        self.calls.append({"user": json.loads(user), "flow": flow, "schema": schema})
+        if isinstance(self.answer, Exception):
+            raise self.answer
+        return self.answer
 
 
-@pytest.mark.parametrize("header", ["2025-06-01", "1-6-2025", "45809"])
-def test_common_excel_date_representations_are_read(header):
-    found = infer([["משמרות", header], [MORNING, "דנה"]], PROFILE)
-    assert found.starts_on == "2025-06-01"
+def test_the_mapper_sends_the_sheets_corner_and_asks_for_a_layout_only():
+    llm = _Llm({"orientation": "dates_down", "header": 0, "lanes": "people",
+                "explanation": "עובדים בעמודות", "_usage": {"total_tokens": 9}})
+    answer = LayoutMapper(llm).propose(SAMPLE_A, PROFILE, hint="קובץ ישן")
+    sent = llm.calls[0]
+    assert sent["flow"] == "import"
+    assert sent["user"]["sheet"][0] == {"row": 0, "cells": ["סידור עבודה"]}
+    assert sent["user"]["hint"] == "קובץ ישן"
+    assert "assignments" not in sent["schema"]["properties"]
+    assert "_usage" not in answer and answer["lanes"] == "people"
 
 
-def test_old_xls_gets_an_actionable_error():
-    with pytest.raises(AgentError, match="xlsx"):
-        read_grids(b"legacy", "schedule.xls")
+def test_an_unreachable_model_leaves_the_mapper_silent():
+    assert LayoutMapper(_Llm(AgentError("down"))).propose(SAMPLE_A, PROFILE) is None
+    assert LayoutMapper(_Llm({"orientation": "sideways"})).propose(SAMPLE_A, PROFILE) is None
 
 
-def _workbook_bytes(book):
-    stream = io.BytesIO()
-    book.save(stream)
-    return stream.getvalue()
+def test_a_cross_in_a_persons_lane_is_a_day_off_not_a_shift():
+    grid = [["שם", "1/11/26", "2/11/26"], ["שובל קרמר", MORNING, "X"]]
+    result = infer(grid, PROFILE)
+    assert _rows(result) == [("שובל קרמר", MORNING, "2026-11-01")]
+    assert result["unavailability"][0]["date"] == "2026-11-02"
+
+
+# -- the unit's own file: names down column A, each date merged over its
+# three shifts, a weekday row and a shift row under it, "בית" across a home
+# stretch, a first name where the person works, "-חפיפה" on a handover.
+
+UNIT_NAMES = ("שובל קרמר", "אלמוג עזרא", "אורי אבן", "תאיר גל")
+UNIT_SHIFTS = (MORNING, NOON, NIGHT)
+DAY_NAMES = ("ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת")
+
+
+def _unit_file(dates, title_rows=0):
+    """`dates` are the header texts, one per day, as the file writes them."""
+    header = [""] + [text for text in dates for _shift in UNIT_SHIFTS]
+    weekday = [""] + [DAY_NAMES[i % 7] for i in range(len(dates)) for _shift in UNIT_SHIFTS]
+    shifts = ["שם"] + list(UNIT_SHIFTS) * len(dates)
+    lanes = [[name] + [""] * (3 * len(dates)) for name in UNIT_NAMES]
+    lanes[0][1] = "שובל"                      # works the first morning
+    lanes[1][2] = "אלמוג-חפיפה"               # a handover, first noon
+    lanes[2][1:4] = ["בית", "בית", "בית"]      # home the whole first day
+    lanes[3][6] = "תאיר"                      # second day, night
+    return [[""] * len(header)] * title_rows + [header, weekday, shifts] + lanes
+
+
+UNIT_ROWS = [("אלמוג עזרא", NOON), ("שובל קרמר", MORNING), ("תאיר גל", NIGHT)]
+
+
+def test_the_units_file_with_israeli_dates():
+    result = infer(_unit_file(["06/10/2024", "07/10/2024"]), PROFILE)
+    assert result["layout"]["lanes"] == "people" and result["layout"]["shift_line"] == 2
+    assert [(row[0], row[1]) for row in _rows(result)] == UNIT_ROWS
+    assert _rows(result)[2][2] == "2024-10-07"
+    assert result["confidence"] >= 0.9
+
+
+def test_american_dates_are_read_month_first_from_the_line_itself():
+    # 10/12 alone could be either; 10/13 settles the whole line.
+    result = infer(_unit_file(["10/12/2024", "10/13/2024"]), PROFILE)
+    assert result["dates"] == ["2024-10-12", "2024-10-13"]
+
+
+def test_an_ambiguous_line_is_read_whichever_way_its_dates_run_on():
+    result = infer(_unit_file(["10/01/2024", "10/02/2024"]), PROFILE)
+    assert result["dates"] == ["2024-10-01", "2024-10-02"]
+
+
+def test_dates_in_the_second_row_under_a_title_row():
+    result = infer(_unit_file(["22.12.2024", "23.12.2024"], title_rows=1), PROFILE)
+    assert result["layout"]["header"] == 1
+    assert [(row[0], row[1]) for row in _rows(result)] == UNIT_ROWS
+
+
+def test_home_is_an_absence_and_a_handover_is_a_note_not_a_name():
+    result = infer(_unit_file(["06/10/2024", "07/10/2024"]), PROFILE)
+    home = [row for row in result["unavailability"] if row["employee"] == "אורי אבן"]
+    assert len(home) == 3 and {row["reason"] for row in home} == {"בית"}
+    handover = [row for row in result["assignments"] if row["employee"] == "אלמוג עזרא"]
+    assert handover[0]["reason"] == "חפיפה"
+
+
+def test_a_year_on_one_sheet_opens_on_one_month_and_a_window_picks_another():
+    import datetime as dt
+
+    days = [dt.date(2024, 1, 1) + dt.timedelta(days=n) for n in range(366)]
+    grid = _unit_file([day.strftime("%d/%m/%Y") for day in days])
+    grid[-1][-1] = "תאיר"                     # the last night of the year
+    shown = infer(grid, PROFILE)
+    assert len(shown["dates"]) <= 31 and shown["file_ends_on"] == "2024-12-31"
+    assert any("מוצגים רק" in warning for warning in shown["warnings"])
+    chosen = infer(grid, PROFILE, date_from="2024-01-01", date_to="2024-01-02")
+    assert [(row[0], row[1]) for row in _rows(chosen)] == UNIT_ROWS
+
+
+# -- unit 619's own tab: a personal number then the name, weekday letters
+# over "25-פבר" dates, a banner row and a legend row on top, and cells that
+# say where the person is and, in brackets, which shift they work there.
+
+U619 = {
+    "employees": [{"name": name} for name in ("אמילי", "אליה", "אילון", "דני")],
+    "shifts": [{"name": "פריצה יום", "start_time": "08:00", "end_time": "20:00"},
+               {"name": "פריצה לילה", "start_time": "20:00", "end_time": "08:00"}],
+}
+
+
+def _unit_619_tab():
+    dates = ["25-פבר", "26-פבר", "27-פבר", "28-פבר", "01-מרץ", "02-מרץ"]
+    banner = "בהצלחה, אין עליכם!"
+    return [
+        ["", "", "", "ד", "ה", "ו", "ש", "א", "ב"],
+        ["", "מ.א", "שבעתה", *dates],
+        ["", "", "מעוף", *([banner] * 6)],
+        ["", "", "בית", *(["צמא"] * 6)],
+        ["", "2157712", "אמילי ווישנבצקי", "שבעתה", "צמא", "צמא", "צמא (משמרת לילה)",
+         "צמא (משמרת לילה)", "צמא (יוצא בערב)"],
+        ["", "2142901", "אליה וובק", "שבעתה", "שבעתה", "xer", "צמא", "צמא (משמרת בוקר)", "בית"],
+        ["", "3226110", "אילון בראשי", "צמא", "צמא", "בית", "בית", "צמא (משמרת בוקר)",
+         "צמא (משמרת בוקר)"],
+    ]
+
+
+def test_unit_619s_tab_reads_names_not_personal_numbers_and_skips_legend_rows():
+    result = infer(_unit_619_tab(), U619, year=2026)
+    assert result["layout"]["lanes"] == "people" and result["layout"]["header"] == 1
+    names = {row["name"]: row["employee"] for row in result["people"]}
+    assert names["אמילי ווישנבצקי"] == "אמילי" and names["אילון בראשי"] == "אילון"
+    assert "בית" not in names and not any(name.isdigit() for name in names)
+    assert result["dates"][0] == "2026-02-25" and result["yearless"]
+    home = {(row["employee"], row["date"]) for row in result["unavailability"]}
+    assert ("אליה", "2026-03-02") in home and ("אילון", "2026-02-27") in home
+
+
+def test_the_managers_mapping_turns_places_into_shifts_absences_or_nothing():
+    shifts = {"צמא (משמרת לילה)": "פריצה לילה", "צמא (משמרת בוקר)": "פריצה יום",
+              "צמא": "", "צמא (יוצא בערב)": "", "xer": "", "שבעתה": "!absent",
+              "בהצלחה, אין עליכם!": ""}
+    result = infer(_unit_619_tab(), U619, year=2026, shifts=shifts, names={"מעוף": ""})
+    assert sorted((row["employee"], row["shift"], row["date"]) for row in result["assignments"]) == [
+        ("אילון", "פריצה יום", "2026-03-01"), ("אילון", "פריצה יום", "2026-03-02"),
+        ("אליה", "פריצה יום", "2026-03-01"),
+        ("אמילי", "פריצה לילה", "2026-02-28"), ("אמילי", "פריצה לילה", "2026-03-01"),
+    ]
+    away = [row for row in result["unavailability"] if row["reason"] == "שבעתה"]
+    assert {(row["employee"], row["date"]) for row in away} == {
+        ("אמילי", "2026-02-25"), ("אליה", "2026-02-25"), ("אליה", "2026-02-26")}
+    assert next(row for row in result["shifts"] if row["name"] == "שבעתה")["shift"] == "!absent"
+    assert not any("משמרות שאינן מוגדרות" in warning for warning in result["warnings"])
+
+
+def test_hebrew_month_dates_with_and_without_a_year():
+    from app.bl.importer.cells import parse_date
+
+    assert parse_date("1 במרץ 2026") == "2026-03-01"
+    assert parse_date("28-פבר-26") == "2026-02-28"
+    assert parse_date("15 בדצמבר") .endswith("-12-15")

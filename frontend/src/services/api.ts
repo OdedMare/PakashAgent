@@ -1,38 +1,188 @@
 import type {
-  AgentAnswer,
-  Briefing,
-  BriefingTrigger,
-  ChangeEntry,
+  AdminComplex,
+  AdminOverview,
+  CommanderNotice,
+  CommanderView,
+  ComplexBoard,
+  ComplexSummary,
+  ComplexDuty,
+  DutyApproval,
+  DutyBalance,
+  DutyBoard,
+  DutyConflict,
+  DutyRosterTeam,
+  DutySuggestion,
+  DutyType,
+  AdminTeam,
+  AdminTeamDetail,
   ChangeLearning,
   Constraint,
   ConstraintRequestRow,
-  CopilotAuditEvent,
-  CopilotInboxData,
-  CopilotItem,
-  CopilotMode,
-  EmployeeIdentity,
   EmployeeView,
-  ImportedConstraint,
+  ImportedRow,
+  ImportOptions,
   ImportPreview,
-  InterviewTurn,
-  InterviewSeed,
   ManagementOverview,
-  Operation,
   PlacementCheck,
   Preference,
   PreferenceKind,
   PreferenceStatus,
-  Proposal,
   RosterName,
+  RedisReport,
   RuntimeSettings,
   Schedule,
   ScheduleProgress,
-  Simulation,
+  ShiftStats,
   SwapRow,
   TeamSummary,
   TeamView,
   Workspace,
+  ManagerChatSummary,
+  ManagerConversation,
+  ReplacementOptions,
 } from "@/types";
+
+/** One set of conversation routes. The manager's own live under
+ *  `/api/agent/chats` on the team cookie; a מכלול commander reaches each
+ *  משמרת's under `/api/complex/teams/<id>/chats` on their own cookie (D43),
+ *  so one pane can speak to every משמרת without entering any of them. */
+export function chatRoutes(base = "/api/agent/chats") {
+  const at = (id: string, rest = "") => `${base}/${encodeURIComponent(id)}${rest}`;
+  return {
+    list: () => request<ManagerChatSummary[]>(base),
+    create: () => request<ManagerConversation>(base, { method: "POST" }),
+    // `fromMessage` asks for that message and everything after it, not the whole thread.
+    read: (id: string, fromMessage?: string) => request<ManagerConversation>(
+      at(id, fromMessage ? `?from_message=${encodeURIComponent(fromMessage)}` : "")),
+    remove: (id: string) => request(at(id), { method: "DELETE" }),
+    send: (id: string, input: { content: string; request_id: string; schedule_id?: string; visible_week?: string; focus_date?: string; approval_message_id?: string; displayed_plan_id?: string; replaces_message_id?: string }) =>
+      request<ManagerConversation>(at(id, "/messages"), { method: "POST", body: JSON.stringify(input) }),
+    // Answer the last request again, replacing the last answer in the thread.
+    regenerate: (id: string, input: { request_id: string; schedule_id?: string; visible_week?: string; focus_date?: string }) =>
+      request<ManagerConversation>(at(id, "/regenerate"), { method: "POST", body: JSON.stringify(input) }),
+    apply: (id: string, messageId: string, acceptExceptions: boolean) =>
+      request<ManagerConversation>(at(id, `/messages/${encodeURIComponent(messageId)}/apply`), {
+        method: "POST", body: JSON.stringify({ accept_exceptions: acceptExceptions }),
+      }),
+    dismiss: (id: string, messageId: string) =>
+      request<ManagerConversation>(at(id, `/messages/${encodeURIComponent(messageId)}/dismiss`), { method: "POST" }),
+    stop: (id: string) => request<ManagerConversation>(at(id, "/stop"), { method: "POST" }),
+    /** The live "something moved" stream; only the team cookie has one. */
+    events: base === "/api/agent/chats" ? () => managerEvents() : null,
+  };
+}
+export type ChatRoutes = ReturnType<typeof chatRoutes>;
+export const managerChatRoutes = chatRoutes();
+export const commanderChatRoutes = (teamId: string) =>
+  chatRoutes(`/api/complex/teams/${encodeURIComponent(teamId)}/chats`);
+/** Which of the commander's משמרות a sentence is about — read in code. */
+export const routeCommanderMessage = (content: string) =>
+  request<{ team_ids: string[]; by: "team" | "soldier" | "all" }>("/api/complex/route", {
+    method: "POST", body: JSON.stringify({ content }),
+  });
+// Who could cover one person's absence, fairest first. Reads only: the picks
+// become a plan by being sent to the conversation.
+type ReplacementSearch = {
+  id: string;
+  status: "queued" | "running" | "complete" | "failed";
+  result?: ReplacementOptions;
+  error?: string;
+};
+
+export async function getReplacementOptions(
+  employee: string,
+  startsOn: string,
+  endsOn: string,
+  options?: { signal?: AbortSignal; fromShifts?: string[]; roles?: string[] },
+): Promise<ReplacementOptions> {
+  const signal = options?.signal;
+  let search = await request<ReplacementSearch>("/api/agent/replacements/searches", {
+    method: "POST",
+    // The filter narrows who the server checks at all, so a narrowed search
+    // is also the faster one.
+    body: JSON.stringify({
+      employee, starts_on: startsOn, ends_on: endsOn,
+      from_shifts: options?.fromShifts ?? [], roles: options?.roles ?? [],
+    }),
+    signal,
+  });
+  // Most searches finish in a second or two: look again soon, then ease off.
+  let delay = 200;
+  try {
+    while (search.status === "queued" || search.status === "running") {
+      await waitForReplacementPoll(delay, signal);
+      delay = Math.min(1_000, Math.round(delay * 1.6));
+      search = await request<ReplacementSearch>(
+        `/api/agent/replacements/searches/${encodeURIComponent(search.id)}`,
+        { signal },
+      );
+    }
+  } catch (reason) {
+    // The form moved on: release the job if no worker has started it, so it
+    // does not hold a lane while the search now on screen waits behind it.
+    if (signal?.aborted) {
+      request<void>(`/api/agent/replacements/searches/${encodeURIComponent(search.id)}`, {
+        method: "DELETE",
+      }).catch(() => undefined);
+    }
+    throw reason;
+  }
+  if (search.status === "complete" && search.result) return search.result;
+  throw new Error(search.error || "חיפוש המחליפים נכשל. נסו שוב");
+}
+
+function waitForReplacementPoll(delay: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(abortError());
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", stop);
+      resolve();
+    }, delay);
+    function stop() {
+      clearTimeout(timer);
+      reject(abortError());
+    }
+    signal?.addEventListener("abort", stop, { once: true });
+  });
+}
+
+function abortError(): Error {
+  return Object.assign(new Error("Aborted"), { name: "AbortError" });
+}
+
+/** Routes whose 401 is an answer rather than a symptom: the probes that
+ *  ask "who am I". */
+const EXPECTED_401 = ["/api/workspace/me", "/api/employee/me", "/api/complex/me"];
+
+const sessionLostListeners = new Set<() => void>();
+
+/** Hear about a read refused for want of a session.
+ *
+ *  The pollers behind the management area (requests inbox, chat) run
+ *  until they are unmounted, and nothing unmounted them when the cookie
+ *  died under them — a backend restart with no fixed session secret, a
+ *  suspended team, an expired session. Each kept asking every few seconds
+ *  and filled the server log with 401s while the screen still looked
+ *  signed in. `useWorkspace` listens here and re-asks `/me`, which is
+ *  what returns the browser to the login gate and stops them all. */
+export function onSessionLost(listener: () => void): () => void {
+  sessionLostListeners.add(listener);
+  return () => {
+    sessionLostListeners.delete(listener);
+  };
+}
+
+/** A GET is a read the session should have covered. A refused POST is
+ *  usually a wrong password or passcode, which is the form's to answer, and
+ *  the operator console's cookie is a separate session whose loss says
+ *  nothing about the team's. */
+function signalsSessionLost(method: string, path: string): boolean {
+  if (method !== "GET") return false;
+  if (path.startsWith("/api/admin/")) return false;
+  // The commander's own cookie, like the operator's, is a separate session.
+  if (path.startsWith("/api/complex/")) return false;
+  return !EXPECTED_401.some((probe) => path === probe || path.startsWith(`${probe}?`));
+}
 
 /**
  * Every backend call is traced to the browser console.
@@ -45,12 +195,13 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const method = options?.method ?? "GET";
   const label = `${method} ${path}`;
   const started = performance.now();
-  console.debug(`[api] → ${label}`, options?.body);
+  console.debug(`[api] → ${label}`);
 
   let response: Response;
   try {
     response = await fetch(path, {
       ...options,
+      cache: "no-store",
       // The workspace session is an HttpOnly cookie. Without this the browser
       // withholds it on anything it treats as cross-origin, and every guarded
       // route answers 401 while the user is plainly logged in.
@@ -58,6 +209,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       headers: { "Content-Type": "application/json", ...options?.headers },
     });
   } catch (reason) {
+    if (options?.signal?.aborted) throw reason;
     // A network-level failure never reaches the code below, so it would
     // otherwise surface as a bare "Failed to fetch" with no route attached.
     console.error(`[api] ✗ ${label} network error`, reason);
@@ -67,16 +219,19 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const elapsed = performance.now() - started;
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    console.error(`[api] ✗ ${label} → ${response.status}`, data);
+    if (response.status === 401 && signalsSessionLost(method, path)) {
+      sessionLostListeners.forEach((listener) => listener());
+    }
+    if (!(response.status === 401 && EXPECTED_401.includes(path))) console.error(`[api] ✗ ${label} → ${response.status}`);
     throw apiError(data, response.status);
   }
-  console.debug(`[api] ✓ ${label} (${elapsed.toFixed(0)}ms)`, data);
+  console.debug(`[api] ✓ ${label} (${elapsed.toFixed(0)}ms)`);
   return data as T;
 }
 
 /** A refusal the manager can act on rather than only read.
  *
- *  The backend raises this when the interview finished without a shift
+ *  The backend raises this when the profile has no shift
  *  vocabulary: there is no grid to build, but the fix is a conversation
  *  rather than a bug report. It carries the missing topics so the UI can
  *  name them and offer the way back in, which is the whole difference
@@ -101,18 +256,24 @@ export class ProfileIncompleteError extends Error {
 function apiError(data: unknown, status: number): Error {
   const message = errorDetail(data, status);
   const body = data as {
-    can_resume_interview?: unknown;
+    can_edit_profile?: unknown;
     gaps?: unknown;
     blocks?: unknown;
   };
-  if (body?.can_resume_interview === true) {
+  if (body?.can_edit_profile === true) {
     return new ProfileIncompleteError(
       message,
       lines(body.gaps),
       lines(body.blocks),
     );
   }
-  return new Error(message);
+  return Object.assign(new Error(message), { status });
+}
+
+/** The HTTP status a failed `request` answered with, when there was one. */
+export function errorStatus(reason: unknown): number | undefined {
+  const status = (reason as { status?: unknown } | null)?.status;
+  return typeof status === "number" ? status : undefined;
 }
 
 function lines(value: unknown): string[] {
@@ -134,58 +295,31 @@ function errorDetail(data: unknown, status: number): string {
   return `שגיאת שרת (${status})`;
 }
 
-export function startInterview(seed?: InterviewSeed): Promise<InterviewTurn> {
-  return request<InterviewTurn>("/api/interview", {
-    method: "POST",
-    body: seed ? JSON.stringify(seed) : undefined,
+/** The settings password travels as a header on every settings call. It is
+ *  held in the panel's memory only -- never stored -- so closing the panel
+ *  locks it again. */
+function settingsHeaders(password: string): Record<string, string> {
+  return { "X-Settings-Password": password };
+}
+
+/** Current settings, with every secret already masked by the backend. A
+ *  wrong password answers 403, which is how the panel checks it. */
+export function getSettings(password: string): Promise<RuntimeSettings> {
+  return request<RuntimeSettings>("/api/settings", {
+    headers: settingsHeaders(password),
   });
-}
-
-export function resumeInterview(sessionId: string): Promise<InterviewTurn> {
-  return request<InterviewTurn>(`/api/interview/${sessionId}`);
-}
-
-export function answerInterview(
-  sessionId: string,
-  content: string,
-  mode: "answer" | "correction" = "answer",
-): Promise<InterviewTurn> {
-  return request<InterviewTurn>(`/api/interview/${sessionId}/answer`, {
-    method: "POST",
-    body: JSON.stringify({ content, mode }),
-  });
-}
-
-export function retryInterview(sessionId: string): Promise<InterviewTurn> {
-  return request<InterviewTurn>(`/api/interview/${sessionId}/retry`, {
-    method: "POST",
-  });
-}
-
-/** Close the interview now, keeping whatever has been collected.
- *
- *  Costs no model call on the server — this is the way out of an interview
- *  the manager does not have time to finish, and a way out that needs the
- *  model is not one. What the profile still owes is recorded on it. */
-export function endInterview(sessionId: string): Promise<InterviewTurn> {
-  return request<InterviewTurn>(`/api/interview/${sessionId}/end`, {
-    method: "POST",
-  });
-}
-
-/** Current settings, with every secret already masked by the backend. */
-export function getSettings(): Promise<RuntimeSettings> {
-  return request<RuntimeSettings>("/api/settings");
 }
 
 /** Save a partial patch. A masked secret sent back means "unchanged", so a
  *  field the boss did not retype keeps its stored value. */
 export function updateSettings(
   patch: Record<string, unknown>,
+  password: string,
 ): Promise<RuntimeSettings> {
   return request<RuntimeSettings>("/api/settings", {
     method: "PUT",
     body: JSON.stringify(patch),
+    headers: settingsHeaders(password),
   });
 }
 
@@ -201,29 +335,104 @@ export function probeModels(
     llm_base_url?: string;
     openai_api_key?: string;
     role?: string;
-  } = {},
+    llm_verify_ssl?: boolean;
+  },
+  password: string,
 ): Promise<{ models: string[] }> {
   return request<{ models: string[] }>("/api/models", {
     method: "POST",
     body: JSON.stringify(overrides),
+    headers: settingsHeaders(password),
   });
 }
 
+
+/** Test a Redis connection and report what is in it under the key prefix.
+ *  A field left out is the saved value; an empty URL means "no Redis", and
+ *  an empty or masked password means the stored one. A failed connection
+ *  still answers 200, with `connected: false` and the reason. */
+export function probeRedis(
+  overrides: {
+    redis_url?: string;
+    redis_host?: string;
+    redis_port?: string;
+    redis_username?: string;
+    redis_password?: string;
+    redis_key_prefix?: string;
+  },
+  password: string,
+): Promise<RedisReport> {
+  return request<RedisReport>("/api/settings/redis", {
+    method: "POST",
+    body: JSON.stringify(overrides),
+    headers: settingsHeaders(password),
+  });
+}
+
+
+// --- the צוות משמרות זהב console (D28) --------------------------------------
+// Its own HttpOnly cookie (`pakash_admin`), so it never disturbs a team
+// session in the same browser. Opening a team happens only here.
+
+export const adminLogin = (password: string) =>
+  request<{ role: string }>("/api/admin/login", { method: "POST", body: JSON.stringify({ password }) });
+export const adminLogout = () => request<{ status: string }>("/api/admin/logout", { method: "POST" });
+export const adminMe = () => request<{ role: string; expires: number }>("/api/admin/me");
+export const adminOverview = () => request<AdminOverview>("/api/admin/overview");
+export const adminTeams = () => request<AdminTeam[]>("/api/admin/teams");
+export const adminTeam = (id: string) => request<AdminTeamDetail>(`/api/admin/teams/${encodeURIComponent(id)}`);
+/** A name and the first manager password — the roster is the manager's. */
+export const adminCreateTeam = (input: { name: string; password: string }) =>
+  request<AdminTeamDetail>("/api/admin/teams", { method: "POST", body: JSON.stringify(input) });
+/** Only the keys present are applied. */
+export const adminUpdateTeam = (id: string, patch: Partial<{ name: string; active: boolean; notes: string }>) =>
+  request<AdminTeamDetail>(`/api/admin/teams/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+export const adminResetPassword = (id: string, password: string) =>
+  request<{ status: string }>(`/api/admin/teams/${encodeURIComponent(id)}/password`, { method: "POST", body: JSON.stringify({ password }) });
+export const adminRotateLink = (id: string) =>
+  request<AdminTeamDetail>(`/api/admin/teams/${encodeURIComponent(id)}/member-link/rotate`, { method: "POST" });
+export const adminReleaseIdentity = (id: string, employee: string) =>
+  request<AdminTeamDetail>(`/api/admin/teams/${encodeURIComponent(id)}/identities/release`, { method: "POST", body: JSON.stringify({ employee }) });
+/** Irreversible. The team's name must be typed back. */
+export const adminDeleteTeam = (id: string, confirmName: string) =>
+  request<{ status: string }>(`/api/admin/teams/${encodeURIComponent(id)}/delete`, { method: "POST", body: JSON.stringify({ confirm_name: confirmName }) });
+
+// --- a מכלול (D43) ---------------------------------------------------------
+// The operator links existing teams and issues the commander's password; the
+// commander signs in on a cookie of their own and enters a workplace, which
+// hands them an ordinary manager session for it.
+
+export const adminComplexes = () => request<AdminComplex[]>("/api/admin/complexes");
+export const adminCreateComplex = (input: { name: string; password: string; team_ids: string[] }) =>
+  request<AdminComplex>("/api/admin/complexes", { method: "POST", body: JSON.stringify(input) });
+/** Only the keys present are applied; `team_ids` is the whole membership. */
+export const adminUpdateComplex = (id: string, patch: Partial<{ name: string; active: boolean; notes: string; team_ids: string[] }>) =>
+  request<AdminComplex>(`/api/admin/complexes/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+export const adminResetComplexPassword = (id: string, password: string) =>
+  request<{ status: string }>(`/api/admin/complexes/${encodeURIComponent(id)}/password`, { method: "POST", body: JSON.stringify({ password }) });
+/** Removes the grouping only; the teams stay. The name is typed back. */
+export const adminDeleteComplex = (id: string, confirmName: string) =>
+  request<{ status: string }>(`/api/admin/complexes/${encodeURIComponent(id)}/delete`, { method: "POST", body: JSON.stringify({ confirm_name: confirmName }) });
+
+export const listComplexes = () => request<ComplexSummary[]>("/api/complex/list");
+export const commanderLogin = (complexId: string, password: string) =>
+  request<ComplexSummary>("/api/complex/login", { method: "POST", body: JSON.stringify({ complex_id: complexId, password }) });
+export const commanderLogout = () => request<{ status: string }>("/api/complex/logout", { method: "POST" });
+export const commanderMe = () => request<CommanderView>("/api/complex/me");
+export const complexBoard = (start: string, end: string) =>
+  request<ComplexBoard>(`/api/complex/board?${new URLSearchParams({ start, end })}`);
+export const enterComplexTeam = (teamId: string) =>
+  request<ComplexSummary>(`/api/complex/teams/${encodeURIComponent(teamId)}/enter`, { method: "POST" });
+export const leaveComplexTeam = () => request<{ status: string }>("/api/complex/leave", { method: "POST" });
+/** For the workplace's own manager: what the commander changed, unseen. */
+export const commanderNotices = () =>
+  request<{ complex: ComplexSummary | null; notices: CommanderNotice[] }>("/api/complex/notices");
+export const markCommanderNoticesSeen = () =>
+  request<{ status: string }>("/api/complex/notices/seen", { method: "POST" });
 
 /** Teams for the login picker. Served unauthenticated. */
 export function listTeams(): Promise<TeamSummary[]> {
   return request<TeamSummary[]>("/api/workspace/teams");
-}
-
-/** Open a workspace and log in as its boss. */
-export function createTeam(
-  name: string,
-  password: string,
-): Promise<Workspace> {
-  return request<Workspace>("/api/workspace", {
-    method: "POST",
-    body: JSON.stringify({ name, password }),
-  });
 }
 
 export function loginTeam(
@@ -264,20 +473,25 @@ export function rotateMemberLink(): Promise<Workspace> {
   });
 }
 
-export function changePassword(
-  current: string,
-  replacement: string,
-): Promise<{ status: string }> {
-  return request<{ status: string }>("/api/workspace/password", {
-    method: "POST",
-    body: JSON.stringify({ current, replacement }),
-  });
-}
-
 /** Everything the management area opens with. Served to members too — the
  *  backend shapes it by role, giving them published periods only. */
 export function scheduleOverview(): Promise<ManagementOverview> {
   return request<ManagementOverview>("/api/schedule/overview");
+}
+
+/** The stats panel's numbers for a span of dates, optionally one person's.
+ *
+ *  The same shape the overview carries for the current period, counted by
+ *  the same code — the span may be a day inside a period or a month across
+ *  several. Manager only. */
+export function scheduleStats(
+  start: string,
+  end: string,
+  employee = "",
+): Promise<ShiftStats> {
+  const query = new URLSearchParams({ start, end });
+  if (employee) query.set("employee", employee);
+  return request<ShiftStats>(`/api/schedule/stats?${query}`);
 }
 
 /** Create or patch the workplace profile manually, without a model call.
@@ -290,6 +504,7 @@ export function updateProfile(body: {
   dependencies?: string[];
   training_policy?: Record<string, unknown>;
   audit_policy?: Record<string, unknown>;
+  unit_policy?: UnitPolicy;
   availability_process?: string;
   constraint_deadline?: string;
   casual_worker_policy?: string;
@@ -299,20 +514,109 @@ export function updateProfile(body: {
   conflict_policy?: string;
   existing_schedule_source?: string;
   summary?: string;
-}): Promise<import("@/types").WorkplaceProfile> {
+  /** The `profile_revision` the form was loaded at: a save over somebody
+   *  else's newer one is refused (409) instead of silently undoing it. */
+  expected_revision?: number | null;
+  /** Saved names corrected (`{old: new}`) and soldiers deleted from setup;
+   *  the server carries both through every stored row in the same save. */
+  renamed_employees?: Record<string, string>;
+  renamed_shifts?: Record<string, string>;
+  removed_employees?: string[];
+}): Promise<import("@/types").WorkplaceProfile & { absorbed?: ProfileAbsorption | null }> {
   return request("/api/profile", {
     method: "PUT",
     body: JSON.stringify(body),
   });
 }
 
-/** Build a date range one checkpointed day per HTTP/model request. */
+/** Who is still qualified (כשיר/ה) today, from the unsaved roster: the
+ *  server reads each person's last worked shift and counts the unit's
+ *  validity from the later of that and each typed date. Only people with a
+ *  dated qualification come back. Writes nothing. */
+export const qualificationPreview = (
+  body: { employees: { name: string; qualifications: unknown }[] },
+  signal?: AbortSignal,
+) => request<{ today: string; people: Record<string, import("@/types").QualificationStanding> }>(
+  "/api/profile/qualification-preview",
+  { method: "POST", body: JSON.stringify(body), signal },
+);
+
+/** The unit's staffing standard (`audit/unit_policy.py`): ratings, stale
+ *  qualifications, fallback roles and shifts per Sunday-to-Saturday week. */
+export interface UnitPolicy {
+  max_weak_per_shift?: number | null;
+  qualification_validity_days?: number;
+  role_fallbacks?: Record<string, string[]>;
+  weekly_shifts?: { min?: number; max?: number };
+  weekly_shifts_regular?: { min?: number; max?: number };
+  weekly_shifts_officers?: { min?: number; max?: number };
+  weekly_shifts_ncos?: { min?: number; max?: number };
+  /** Shifts a week past `max`, each one only to fill a seat and each warned on. */
+  weekly_shifts_overflow?: number;
+}
+
+/** Role -> people per shift, for a group's day and night shifts. */
+export type GroupStaffing = { day: Record<string, number>; night: Record<string, number> };
+
+/** What a profile save fit into the drafts already built: the new soldiers
+ *  (or soldiers switched back on) and shifts, each draft ahead of today now being refit while keeping its
+ *  rows, and the weeks left alone (published, or busy) with the reason. */
+export interface ProfileAbsorption {
+  employees: string[];
+  shifts: string[];
+  /** Soldiers this save switched off, and how many of their draft shifts
+   *  from today on were vacated for the refit to fill. */
+  switched_off?: string[];
+  vacated?: number;
+  schedules: { schedule_id: string; starts_on: string; ends_on: string }[];
+  skipped: { schedule_id: string; starts_on: string; ends_on: string; reason: string }[];
+}
+
+/** One rule, policy or note as the code scheduler understood it (D32).
+ *  `pending` means not translated yet: the worker does it after a save. */
+export interface CompiledSource {
+  kind: string;
+  context: string;
+  text: string;
+  binding: boolean;
+  status: "compiled" | "unresolved" | "pending";
+  reason: string;
+  question: string;
+  expires_on: string | null;
+  expired: boolean;
+  items: number;
+}
+
+/** The coming weekends of each cycle, computed by the server from the setup
+ *  screen's unsaved rotation. Writes nothing; `error` names a row that would
+ *  not save. */
+export const rotationPreview = (
+  body: { workplace: Record<string, unknown>; shifts: Record<string, unknown>[]; weeks?: number },
+  signal?: AbortSignal,
+) => request<{ error: string; cycles: Partial<Record<"round" | "triplet" | "quad" | "quint", import("@/types").RotationWeekend[]>> }>(
+  "/api/profile/rotation-preview",
+  { method: "POST", body: JSON.stringify(body), signal },
+);
+
+export const compiledSources = () =>
+  request<{ sources: CompiledSource[] }>("/api/profile/compiled").then((body) => body.sources);
+
+/** Build a date range one checkpointed day per HTTP/model request.
+ *
+ *  `build_from`/`build_through` ask the agent for part of the period only.
+ *  The period itself stays whole weeks, because the board reads a week by
+ *  its Sunday and a period beginning mid-week would not be found by it. */
 export async function generateSchedule(
   body: {
     starts_on?: string;
     ends_on?: string;
+    build_from?: string;
+    build_through?: string;
     instructions?: string;
     required_assignments?: import("@/types").RequiredAssignment[];
+    staffing_overrides?: import("@/types").StaffingOverride[];
+    /** Only these shift types are built; empty or absent means all. */
+    shifts?: string[];
   } = {},
   onProgress?: (schedule: Schedule) => void,
   options?: { signal?: AbortSignal },
@@ -347,7 +651,9 @@ export class GenerationStoppedError extends Error {
  *
  * - It reads `/progress`, not the whole period. The counter is the entire
  *   question being asked once a second; the grid is fetched only when the
- *   counter moves, so a twelve-day build stops re-auditing twelve days of
+ *   counter moves — or the progress line does: a large team is solved in
+ *   chunks of shifts, each named there as it starts, and the chunk before
+ *   it is on the board by then — so a twelve-day build stops re-auditing twelve days of
  *   assignments to learn that the agent is still on Tuesday.
  * - It backs off while nothing is happening, up to a few seconds, and drops
  *   straight back to a tight interval the moment a day lands.
@@ -374,6 +680,7 @@ export async function resumeScheduleGeneration(
   onProgress?.(schedule);
 
   let completed = schedule.generation.completed_days;
+  let activity = schedule.generation.activity ?? "";
   let beat = schedule.generation.heartbeat ?? "";
   let beatSeenAt = Date.now();
   let relaunches = 0;
@@ -396,10 +703,13 @@ export async function resumeScheduleGeneration(
 
     const moved =
       progress.generation.completed_days !== completed ||
+      (progress.generation.activity ?? "") !== activity ||
       progress.generation.status !== "running";
     completed = progress.generation.completed_days;
+    activity = progress.generation.activity ?? "";
     if (moved) {
-      // A day landed, or the job ended. Now the grid is worth re-reading.
+      // A day or a chunk of shifts landed, or the job ended. Now the grid
+      // is worth re-reading.
       schedule = await getSchedule(scheduleId);
       delay = POLL_MIN_MS;
     } else {
@@ -440,7 +750,7 @@ export async function resumeScheduleGeneration(
 }
 
 /** How far a build has got. The cheap read the poll above is built on. */
-export function scheduleProgress(
+function scheduleProgress(
   scheduleId: string,
 ): Promise<ScheduleProgress> {
   return request<ScheduleProgress>(`/api/schedule/${scheduleId}/progress`);
@@ -459,23 +769,44 @@ export function cancelScheduleGeneration(
   });
 }
 
-/** Rebuild one date in an existing draft, preserving manager-pinned rows. */
-export async function generateScheduleDay(
+/** Hide the banner of a stopped or failed build. Keeps every day built,
+ *  and the build can still be resumed. */
+export function dismissScheduleGeneration(
+  scheduleId: string,
+): Promise<Schedule> {
+  return request<Schedule>(`/api/schedule/generate/${scheduleId}/dismiss`, {
+    method: "POST",
+  });
+}
+
+/** Build a run of dates in an existing draft — "from this day until
+ *  Saturday". What the agent built there is replaced; what the manager
+ *  placed there is kept, and every other date is left alone. `shifts`
+ *  narrows it to those shift types ("only the nights"); the rest stand. */
+export async function generateScheduleRange(
   body: {
     schedule_id: string;
-    date: string;
+    starts_on: string;
+    ends_on: string;
     instructions?: string;
+    shifts?: string[];
+    keep_existing?: boolean;
+    staffing_overrides?: import("@/types").StaffingOverride[];
   },
   onProgress?: (schedule: Schedule) => void,
   options?: { signal?: AbortSignal },
 ): Promise<Schedule> {
   const schedule = await request<Schedule>(
-    `/api/schedule/generate/${body.schedule_id}/day/start`,
+    `/api/schedule/generate/${body.schedule_id}/range/start`,
     {
       method: "POST",
       body: JSON.stringify({
-        date: body.date,
+        starts_on: body.starts_on,
+        ends_on: body.ends_on,
         instructions: body.instructions ?? "",
+        shifts: body.shifts ?? [],
+        keep_existing: body.keep_existing ?? false,
+        staffing_overrides: body.staffing_overrides ?? [],
       }),
     },
   );
@@ -560,8 +891,9 @@ export function assignEmployee(body: {
  *  drag is validated, explained in Hebrew, and offered deterministic
  *  alternatives without a token being generated.
  *
- *  It advises and never gates. The caller is free to write anyway, and the
- *  board does exactly that when the manager confirms (D3). */
+ *  Ordinary findings advise and never gate (D3). Hard unavailability and
+ *  duty overlaps return `blocking: true`, and the write endpoint independently
+ *  enforces them. */
 export function checkPlacement(body: {
   employee: string;
   shift_name: string;
@@ -582,9 +914,27 @@ export function checkPlacement(body: {
  *
  *  What the board opens on. Null is a normal answer — "no schedule that
  *  week" is a state the board renders as an empty week, not an error. */
-export function scheduleAt(day: string): Promise<Schedule | null> {
+export function scheduleAt(day: string, signal?: AbortSignal): Promise<Schedule | null> {
   return request<Schedule | null>(
     `/api/schedule/at?day=${encodeURIComponent(day)}`,
+    { signal },
+  );
+}
+
+/** Every stored period touching a span of dates, oldest first.
+ *
+ *  What the board's two-week and month views read: one request for a span
+ *  no single period covers. An empty list is a normal answer — a month with
+ *  nothing built yet — and each period comes back whole, even where the span
+ *  only clips it. */
+export function schedulesBetween(
+  start: string,
+  end: string,
+  signal?: AbortSignal,
+): Promise<Schedule[]> {
+  return request<Schedule[]>(
+    `/api/schedule/between?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+    { signal },
   );
 }
 
@@ -595,6 +945,47 @@ export function unassignEmployee(body: {
   schedule_id?: string;
 }): Promise<Schedule> {
   return request<Schedule>("/api/schedule/unassign", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** What taking somebody off the roster vacates. */
+export interface Departure {
+  employee: string;
+  effective_date: string;
+  shifts: number;
+  published: { id: string; starts_on: string; ends_on: string }[];
+}
+
+/** Somebody chosen to take over one shift a departure vacates. */
+export interface DepartureCover {
+  schedule_id: string;
+  shift_name: string;
+  slot_date: string;
+  employee: string;
+}
+
+/** Count what a departure would vacate. **Writes nothing.** */
+export function previewDeparture(body: {
+  employee: string;
+  effective_date?: string;
+}): Promise<Departure> {
+  return request<Departure>("/api/schedule/departure/preview", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Take somebody off the active roster. The name stays in the profile with
+ *  an end date — it is what their history hangs on — and every shift from
+ *  that date on is vacated and logged. */
+export function departEmployee(body: {
+  employee: string;
+  effective_date?: string;
+  reason?: string;
+}): Promise<Departure> {
+  return request<Departure>("/api/schedule/departure", {
     method: "POST",
     body: JSON.stringify(body),
   });
@@ -644,32 +1035,13 @@ export function unpublishSchedule(scheduleId: string): Promise<Schedule> {
   });
 }
 
-export function getSchedule(scheduleId: string): Promise<Schedule> {
+function getSchedule(scheduleId: string): Promise<Schedule> {
   return request<Schedule>(`/api/schedule/${scheduleId}`);
 }
 
 /** Ask the agent what it would do. **Persists nothing** — the manager
  *  confirms before anything lands, and that gap is where the agent's
  *  reasoning gets read (D8). */
-/** What the agent has to say without being asked (D15).
- *
- *  Called when the management area opens, after the state changes, and
- *  before publishing. It writes nothing and it never fails loudly: a
- *  briefing that could not be produced comes back `quiet`, because this sits
- *  beside a calendar that has to render regardless.
- *
- *  `lastSaid` is the headlines already shown this sitting, sent back so the
- *  agent does not repeat an opening the manager has read. */
-export function briefManager(
-  trigger: BriefingTrigger,
-  lastSaid: string[] = [],
-): Promise<Briefing> {
-  return request<Briefing>("/api/schedule/brief", {
-    method: "POST",
-    body: JSON.stringify({ trigger, last_said: lastSaid.slice(-8) }),
-  });
-}
-
 /** Download one period as `.xlsx` (D17).
  *
  *  Deliberately not routed through `request()`: that helper parses every
@@ -701,37 +1073,6 @@ export async function downloadSchedule(scheduleId: string): Promise<void> {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-export function proposeChange(
-  body: {
-    request: string;
-    schedule_id?: string;
-    reason?: string;
-    /** The request a previous turn held rather than guess at, sent back with
-     *  the manager's clarification so it resumes instead of being retyped. */
-    pending_request?: string;
-  },
-): Promise<Proposal> {
-  return request<Proposal>("/api/schedule/propose", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
-
-/** Apply a proposal the manager confirmed. The manager's reason is required
- *  by now — they have already been asked for it. */
-export function applyChange(body: {
-  schedule_id: string;
-  operations: Operation[];
-  profile_operations?: import("@/types").ProfileOperation[];
-  reason: string;
-  agent_reason?: string;
-}): Promise<unknown> {
-  return request("/api/schedule/apply", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
-
 /** A drag the manager confirmed. The gesture itself changed nothing — this
  *  is what the confirmation dialog sends once they have given a reason, so a
  *  dragged shift carries the same two reasons a spoken change does (D8). */
@@ -744,27 +1085,14 @@ export function moveAssignment(body: {
   /** The period the drag happened on. Omitted means the one covering today,
    *  which is only ever right by coincidence. */
   schedule_id?: string;
+  /** The slot the shift was dragged from: a shift somebody else moved in
+   *  the meantime is refused (409) instead of being moved again. */
+  from_slot_id?: string;
 }): Promise<Schedule> {
   return request<Schedule>("/api/schedule/move", {
     method: "POST",
     body: JSON.stringify(body),
   });
-}
-
-export function listConstraints(params: {
-  starts_on?: string;
-  ends_on?: string;
-  employee?: string;
-} = {}): Promise<Constraint[]> {
-  const query = new URLSearchParams(
-    Object.entries(params).filter(([, value]) => Boolean(value)) as [
-      string,
-      string,
-    ][],
-  ).toString();
-  return request<Constraint[]>(
-    `/api/schedule/constraints/list${query ? `?${query}` : ""}`,
-  );
 }
 
 /** Record a constraint. Boss-only: employees never write (D5). `source`
@@ -780,6 +1108,7 @@ export function setConstraint(body: {
   is_hard?: boolean;
   reason?: string;
   source?: string;
+  constraint_type?: "availability" | "duty";
 }): Promise<Constraint> {
   return request<Constraint>("/api/schedule/constraints", {
     method: "POST",
@@ -787,17 +1116,18 @@ export function setConstraint(body: {
   });
 }
 
-export function deleteConstraint(rowId: string): Promise<{ status: string }> {
-  return request<{ status: string }>(`/api/schedule/constraints/${rowId}`, {
+/** Archive a shift type. Stored schedules keep their rows; the next build
+ * stops producing it, and the roster's references to it are cleaned up. */
+export function deleteShiftType(name: string): Promise<import("@/types").WorkplaceProfile> {
+  return request(`/api/profile/shifts/${encodeURIComponent(name)}`, {
     method: "DELETE",
   });
 }
 
-/** The append-only change log — the only history there is (D4). */
-export function listChanges(scheduleId?: string): Promise<ChangeEntry[]> {
-  return request<ChangeEntry[]>(
-    `/api/schedule/history/list${scheduleId ? `?schedule_id=${scheduleId}` : ""}`,
-  );
+export function deleteConstraint(rowId: string): Promise<{ status: string }> {
+  return request<{ status: string }>(`/api/schedule/constraints/${rowId}`, {
+    method: "DELETE",
+  });
 }
 
 /* -- the employee's own area (D14) ----------------------------------------
@@ -831,6 +1161,24 @@ export function employeeLogin(body: {
   return request<{ employee: string }>("/api/employee/login", {
     method: "POST",
     body: JSON.stringify(body),
+  });
+}
+
+/** Sign in to a claimed name from the front door, without the share link
+ *  (D25). The team is named here because there is no session to carry it.
+ *  Only an existing claim is reachable — claiming still needs the link. */
+export function employeeSignIn(body: {
+  teamId: string;
+  employee: string;
+  passcode: string;
+}): Promise<{ employee: string }> {
+  return request<{ employee: string }>("/api/employee/signin", {
+    method: "POST",
+    body: JSON.stringify({
+      team_id: body.teamId,
+      employee: body.employee,
+      passcode: body.passcode,
+    }),
   });
 }
 
@@ -914,16 +1262,6 @@ export function proposeSwap(body: {
   });
 }
 
-/** Swaps naming the caller, on either side. */
-export function mySwaps(): Promise<SwapRow[]> {
-  return request<SwapRow[]>("/api/employee/swaps");
-}
-
-/** Offers waiting on the caller's answer — their badge. */
-export function incomingSwaps(): Promise<SwapRow[]> {
-  return request<SwapRow[]>("/api/employee/swaps/incoming");
-}
-
 /** Accept or decline an offer.
  *
  *  Accepting still moves nothing: it puts the swap in the manager's inbox,
@@ -955,10 +1293,6 @@ export function pendingSwaps(): Promise<SwapRow[]> {
   return request<SwapRow[]>("/api/schedule/swaps/pending");
 }
 
-export function allSwaps(): Promise<SwapRow[]> {
-  return request<SwapRow[]>("/api/schedule/swaps");
-}
-
 /** Approve, and perform the swap.
  *
  *  The reason is **required**, unlike a constraint approval: this one moves
@@ -987,13 +1321,18 @@ export function rejectSwap(
 
 /* -- the manager's side of the same feature -------------------------------- */
 
+/** The manager's live line (Server-Sent Events). Boss-only.
+ *
+ *  Each event is named for an inbox — `requests` or `swaps` — and carries no
+ *  data: the screen re-reads that inbox through its usual route. Same-origin,
+ *  so the session cookie rides along as it does on `fetch`. */
+export function managerEvents(): EventSource {
+  return new EventSource("/api/schedule/requests/events", { withCredentials: true });
+}
+
 /** Requests awaiting a decision. Boss-only. */
 export function pendingRequests(): Promise<ConstraintRequestRow[]> {
   return request<ConstraintRequestRow[]>("/api/schedule/requests/pending");
-}
-
-export function allRequests(): Promise<ConstraintRequestRow[]> {
-  return request<ConstraintRequestRow[]>("/api/schedule/requests");
 }
 
 /** Approve, which writes the constraint it becomes — with
@@ -1016,133 +1355,6 @@ export function rejectRequest(
   return request(`/api/schedule/requests/${requestId}/reject`, {
     method: "POST",
     body: JSON.stringify({ reason }),
-  });
-}
-
-export function listIdentities(): Promise<EmployeeIdentity[]> {
-  return request<EmployeeIdentity[]>("/api/schedule/requests/identities");
-}
-
-/** Free a claimed name. The manager's tool for a departure or a lost
- *  passcode — rotating the share link does not do this. */
-export function releaseIdentity(
-  employee: string,
-): Promise<{ status: string }> {
-  return request<{ status: string }>(
-    "/api/schedule/requests/identities/release",
-    { method: "POST", body: JSON.stringify({ employee }) },
-  );
-}
-
-/** Read uploaded schedule files and return what they appear to say.
- *
- *  **Writes nothing.** Under D7 the manager reads the interpretation and
- *  confirms it; `confirmImport` is the only call that persists. Sent as
- *  multipart rather than through `request`, which forces a JSON
- *  content-type — setting it by hand here would break the boundary the
- *  browser generates.
- *
- *  Many files at once because that is the real case: a manager has a folder
- *  of past sheets, and a pattern worth learning is only visible across them.
- */
-export async function previewImport(
-  files: File[],
-  learnRules = true,
-): Promise<ImportPreview> {
-  const path = `/api/schedule/import/preview?learn_rules=${learnRules}`;
-  const body = new FormData();
-  files.forEach((file) => body.append("files", file));
-  console.debug(`[api] → POST ${path}`, files.map((f) => f.name));
-
-  let response: Response;
-  try {
-    response = await fetch(path, {
-      method: "POST",
-      credentials: "same-origin",
-      body,
-    });
-  } catch (reason) {
-    console.error(`[api] ✗ POST ${path} network error`, reason);
-    throw new Error("לא ניתן להתחבר לשרת");
-  }
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    console.error(`[api] ✗ POST ${path} → ${response.status}`, data);
-    throw new Error(errorDetail(data, response.status));
-  }
-  console.debug(`[api] ✓ POST ${path}`, data);
-  return data as ImportPreview;
-}
-
-/** Store an interpretation the manager approved (D7).
- *
- *  The rows travel back from the screen rather than being re-read from the
- *  file, so a shift the manager chose or a name they corrected is what gets
- *  stored — re-inferring here would silently discard the correction.
- */
-export function confirmImport(body: {
-  assignments: { employee: string; shift: string; date: string }[];
-  unavailability?: ImportedConstraint[];
-  starts_on?: string;
-  ends_on?: string;
-}): Promise<Schedule> {
-  return request<Schedule>("/api/schedule/import/confirm", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
-
-/** Ask the agent a question about the team or schedule. **Writes nothing.**
- *
- *  The multi-step half of the agent: the planner picks read-only tools, the
- *  backend answers each with arithmetic, and the reply is assembled from
- *  what they returned. There is no operation in the response, so nothing an
- *  answer says can be applied — a question that wants a change comes back
- *  with `needs_confirmation` and still goes through propose-then-confirm.
- *
- *  It answers with no model configured, via the deterministic reader, and
- *  says so in `used_model`. */
-export function askAgent(body: {
-  request: string;
-  schedule_id?: string;
-  /** The question the agent left open, so a one-word reply continues it. */
-  pending_request?: string;
-}): Promise<AgentAnswer> {
-  return request<AgentAnswer>("/api/schedule/ask", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
-
-/** Run one named read-only tool directly. **Writes nothing.**
- *
- *  The same tools the agent uses, reachable without a conversation — which
- *  is what stops a board button and the agent from ever giving different
- *  answers to the same question. */
-export function runAgentTool(body: {
-  tool: string;
-  arguments?: Record<string, unknown>;
-}): Promise<Record<string, unknown>> {
-  return request<Record<string, unknown>>("/api/schedule/tool", {
-    method: "POST",
-    body: JSON.stringify({ arguments: {}, ...body }),
-  });
-}
-
-/** What a set of operations would do. **Persists nothing.**
- *
- *  Deliberately not `proposeChange`: a proposal is an answer with a confirm
- *  button attached, and a manager asking "what happens if" has not asked for
- *  one. Approving a simulation is an ordinary `applyChange` with their
- *  reason (D8). */
-export function simulateChange(body: {
-  operations: Operation[];
-  schedule_id?: string;
-}): Promise<Simulation> {
-  return request<Simulation>("/api/schedule/simulate", {
-    method: "POST",
-    body: JSON.stringify(body),
   });
 }
 
@@ -1189,44 +1401,85 @@ export function deletePreference(rowId: string): Promise<{ status: string }> {
   });
 }
 
-export function getCopilotInbox(): Promise<CopilotInboxData> {
-  return request<CopilotInboxData>("/api/copilot/inbox");
+/** Read one uploaded schedule file and say what it holds.
+ *
+ *  **Writes nothing** (D7): `confirmImport` is the only call that persists.
+ *  `options` carries the manager's corrections -- the layout, which name
+ *  means whom, which heading is which shift -- and the same file is sent
+ *  again with them, so the server re-reads rather than the browser patching
+ *  rows it cannot read itself. Multipart rather than through `request`,
+ *  which forces a JSON content-type and would break the boundary.
+ */
+export async function previewImport(file: File, options: ImportOptions = {}): Promise<ImportPreview> {
+  return uploadPreview<ImportPreview>("/api/schedule/import/preview", file, options);
 }
 
-export function getCopilotAudit(): Promise<{ events: CopilotAuditEvent[] }> {
-  return request<{ events: CopilotAuditEvent[] }>("/api/copilot/audit");
+export interface UnitImportPreview {
+  filename: string;
+  sheets: { name: string; rows: number; preview: string[][]; recognized: boolean }[];
+  people: { name: string; sources: string[]; existing: string; candidates: string[] }[];
+  shifts: { name: string; start_time: string; end_time: string; headcount: number;
+    sources: string[]; hours_source: string; counts: number[]; existing: Record<string, unknown> | null }[];
+  warnings: string[];
 }
 
-export function runCopilotNow(): Promise<{ status: string; job_id: string }> {
-  return request<{ status: string; job_id: string }>("/api/copilot/run", {
+export function previewUnitImport(file: File): Promise<UnitImportPreview> {
+  return uploadPreview<UnitImportPreview>("/api/profile/import/preview", file, {});
+}
+
+async function uploadPreview<T>(path: string, file: File, options: ImportOptions): Promise<T> {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("options", JSON.stringify(options));
+  console.debug(`[api] → POST ${path}`, file.name);
+  let response: Response;
+  try {
+    response = await fetch(path, { method: "POST", credentials: "same-origin", body });
+  } catch (reason) {
+    console.error(`[api] ✗ POST ${path} network error`, reason);
+    throw new Error("לא ניתן להתחבר לשרת");
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    console.error(`[api] ✗ POST ${path} → ${response.status}`);
+    throw apiError(data, response.status);
+  }
+  return data as T;
+}
+
+/** Store the rows the manager approved. With `schedule_id` they are merged
+ *  into that draft; without it a new period is opened. */
+export function confirmImport(body: {
+  assignments: ImportedRow[];
+  unavailability?: ImportedRow[];
+  schedule_id?: string | null;
+  filename?: string;
+}): Promise<Schedule> {
+  return request<Schedule>("/api/schedule/import/confirm", {
     method: "POST",
+    body: JSON.stringify(body),
   });
 }
 
-export function setCopilotPermission(
-  actionType: string,
-  mode: CopilotMode,
-): Promise<{ action_type: string; mode: CopilotMode }> {
-  return request<{ action_type: string; mode: CopilotMode }>(
-    `/api/copilot/permissions/${encodeURIComponent(actionType)}`,
-    { method: "PATCH", body: JSON.stringify({ mode }) },
-  );
-}
-
-export function approveCopilotItem(itemId: string): Promise<CopilotItem> {
-  return request<CopilotItem>(`/api/copilot/items/${itemId}/approve`, {
-    method: "POST",
-  });
-}
-
-export function dismissCopilotItem(itemId: string): Promise<CopilotItem> {
-  return request<CopilotItem>(`/api/copilot/items/${itemId}/dismiss`, {
-    method: "POST",
-  });
-}
-
-export function rollbackCopilotItem(itemId: string): Promise<CopilotItem> {
-  return request<CopilotItem>(`/api/copilot/items/${itemId}/rollback`, {
-    method: "POST",
-  });
-}
+// The מכלול's duties (תורנויות), on the commander's cookie.
+export const dutyBoard = (start: string, end: string) =>
+  request<DutyBoard>(`/api/complex/duties?${new URLSearchParams({ start, end })}`);
+export const dutyRoster = () => request<DutyRosterTeam[]>("/api/complex/duty-roster");
+export const createDutyType = (input: { name: string; seats: number; weight: number; days: string[] }) =>
+  request<DutyType>("/api/complex/duty-types", { method: "POST", body: JSON.stringify(input) });
+export const updateDutyType = (id: string, patch: Partial<Omit<DutyType, "id">>) =>
+  request<DutyType>(`/api/complex/duty-types/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
+export const deleteDutyType = (id: string) =>
+  request<{ status: string }>(`/api/complex/duty-types/${encodeURIComponent(id)}`, { method: "DELETE" });
+// `blocks: false` records a duty already stood: it counts and blocks nothing.
+export const assignDuty = (input: { duty_type_id: string; team_id: string; employee: string; duty_date: string; note: string; blocks: boolean }) =>
+  request<{ duty: ComplexDuty; conflicts: DutyConflict[] }>("/api/complex/duties", { method: "POST", body: JSON.stringify(input) });
+export const cancelDuty = (id: string) =>
+  request<ComplexDuty>(`/api/complex/duties/${encodeURIComponent(id)}`, { method: "DELETE" });
+// "מלא בהוגנות": a proposal for every open seat. Writes nothing.
+export const suggestDuties = (start: string, end: string) =>
+  request<DutySuggestion>(`/api/complex/duties/suggest?${new URLSearchParams({ start, end })}`, { method: "POST" });
+export const approveDuties = (rows: { duty_type_id: string; team_id: string; employee: string; duty_date: string }[]) =>
+  request<DutyApproval>("/api/complex/duties/approve", { method: "POST", body: JSON.stringify({ rows }) });
+export const dutyBalance = (start: string, end: string) =>
+  request<DutyBalance>(`/api/complex/duties/balance?${new URLSearchParams({ start, end })}`);

@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-from app.common.config.settings import Settings
+from app.common.config import Settings
 from app.common.runtime_settings.normalizers import MASKED_SECRET
 from app.common.runtime_settings.runtime_settings_store import (
     RuntimeSettingsStore,
@@ -31,8 +31,9 @@ def store(tmp_path, monkeypatch):
 def test_env_defaults_are_the_starting_point(store):
     settings = store.get()
     assert settings.llm_base_url == "http://localhost:11434/v1"
-    # 0 means "no timeout": the UI decides when to stop waiting.
+    # 0 means the built-in ceiling (`dal/llm/budgets.py`), not "forever".
     assert settings.llm_timeout_seconds == 0
+    assert settings.llm_queue_seconds == 0
     # 0 means "do not send repetition_penalty at all".
     assert settings.llm_repetition_penalty == 0.0
 
@@ -274,26 +275,26 @@ def test_saving_a_role_model_leaves_the_stored_api_key_alone(store):
     assert store.get().llm_model_advanced == "big-model"
 
 
-# -- how wide a schedule build's model calls are ---------------------------
+# -- the constraint solver's limits ---------------------------------------
 
 
-def test_generation_mode_defaults_to_one_day_per_call(store):
-    assert store.get().schedule_generation_mode == "day"
+def test_the_solver_defaults_to_ten_seconds_and_eight_workers(store):
+    assert store.get().solver_time_limit_seconds == 10.0
+    assert store.get().solver_workers == 8
 
 
-def test_generation_mode_can_be_switched_to_weekly(store):
-    store.update({"schedule_generation_mode": "week"})
-    assert store.get().schedule_generation_mode == "week"
+def test_a_solver_limit_is_clamped_to_something_that_can_run(store):
+    store.update({"solver_time_limit_seconds": 0, "solver_workers": 0})
+    assert store.get().solver_time_limit_seconds == 0.5
+    assert store.get().solver_workers == 1
+    store.update({"solver_time_limit_seconds": 9999})
+    assert store.get().solver_time_limit_seconds == 600.0
 
 
-def test_an_unknown_generation_mode_is_refused_rather_than_defaulted(store):
-    """A width nobody chose is the one outcome this setting exists to stop.
-
-    Quietly folding an unrecognised value to the default would leave a
-    deployment that asked for something else running builds at a width its
-    settings file does not describe.
-    """
-    store.update({"schedule_generation_mode": "week"})
-    with pytest.raises(ValueError):
-        store.update({"schedule_generation_mode": "month"})
-    assert store.get().schedule_generation_mode == "week"
+def test_reasoning_effort_keeps_only_values_servers_accept(store):
+    """A typo sent as-is would 400 every call; it reads as "send nothing"."""
+    assert store.get().llm_reasoning_effort == ""
+    store.update({"llm_reasoning_effort": " Off "})
+    assert store.get().llm_reasoning_effort == "off"
+    store.update({"llm_reasoning_effort": "fast"})
+    assert store.get().llm_reasoning_effort == ""

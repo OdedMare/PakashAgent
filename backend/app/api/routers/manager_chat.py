@@ -1,0 +1,107 @@
+"""Private chat routes; messages prepare plans, clicks approve stored plans."""
+
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
+
+
+class ChatTurn(BaseModel):
+    content: str = Field(min_length=1, max_length=4000)
+    request_id: str = Field(min_length=1, max_length=80)
+    schedule_id: Optional[str] = None
+    visible_week: str = Field(default="", max_length=10)
+    focus_date: str = Field(default="", max_length=10)
+    approval_message_id: Optional[str] = Field(default=None, max_length=80)
+    displayed_plan_id: Optional[str] = Field(default=None, max_length=80)
+    # A manager message to take back and replace with this one (an edit).
+    replaces_message_id: Optional[str] = Field(default=None, max_length=80)
+
+
+class ChatRegenerate(BaseModel):
+    request_id: str = Field(min_length=1, max_length=80)
+    schedule_id: Optional[str] = None
+    visible_week: str = Field(default="", max_length=10)
+    focus_date: str = Field(default="", max_length=10)
+
+
+class ChatApproval(BaseModel):
+    accept_exceptions: bool = False
+
+
+def build_router(service, repository, guards):
+    """The manager's own conversations, on the team cookie."""
+    router = APIRouter(prefix="/api/agent/chats", tags=["manager chat"])
+    _register(router, service, repository, guards.manager())
+    return router
+
+
+def build_commander_router(service, repository, guards):
+    """The same conversations for a מכלול commander, one per משמרת, named by
+    the path and checked against the מכלול (D43). The commander's chat pane
+    speaks to every משמרת through these without entering any of them; each
+    session is the one `manager()` gives the commander inside that team."""
+    router = APIRouter(
+        prefix="/api/complex/teams/{team_id}/chats", tags=["commander chat"],
+    )
+    _register(router, service, repository, guards.commander_in_team())
+    return router
+
+
+def _register(router, service, repository, manager):
+    @router.get("")
+    def list_chats(session: dict = Depends(manager)):
+        return repository.list_chats(session["team_id"], session["manager_id"])
+
+    @router.post("")
+    def create_chat(session: dict = Depends(manager)):
+        return repository.create_chat(session["team_id"], session["manager_id"])
+
+    @router.get("/{chat_id}")
+    def get_chat(chat_id: str, from_message: str = Query(default="", max_length=80),
+                 session: dict = Depends(manager)):
+        return repository.get_chat(session["team_id"], session["manager_id"], chat_id,
+                                   from_message=from_message)
+
+    @router.delete("/{chat_id}")
+    def delete_chat(chat_id: str, session: dict = Depends(manager)):
+        repository.delete_chat(session["team_id"], session["manager_id"], chat_id)
+        return {"status": "ok"}
+
+    @router.post("/{chat_id}/messages")
+    def message(chat_id: str, request: ChatTurn,
+                session: dict = Depends(manager)):
+        service.start_turn(
+            session["team_id"], session["manager_id"], chat_id, request.model_dump(),
+        )
+        return repository.get_chat(session["team_id"], session["manager_id"], chat_id)
+
+    _regenerate_route(router, service, repository, manager)
+
+    @router.post("/{chat_id}/messages/{message_id}/apply")
+    def apply(chat_id: str, message_id: str, request: ChatApproval,
+              session: dict = Depends(manager)):
+        return service.apply(session["team_id"], session["manager_id"], chat_id,
+                             message_id, request.accept_exceptions)
+
+    @router.post("/{chat_id}/messages/{message_id}/dismiss")
+    def dismiss(chat_id: str, message_id: str, session: dict = Depends(manager)):
+        repository.dismiss_chat_plan(session["team_id"], session["manager_id"],
+                                     chat_id, message_id)
+        return repository.get_chat(session["team_id"], session["manager_id"], chat_id)
+
+    @router.post("/{chat_id}/stop")
+    def stop(chat_id: str, session: dict = Depends(manager)):
+        repository.stop_chat_turn(session["team_id"], session["manager_id"], chat_id)
+        return repository.get_chat(session["team_id"], session["manager_id"], chat_id)
+
+
+def _regenerate_route(router, service, repository, manager):
+    @router.post("/{chat_id}/regenerate")
+    def regenerate(chat_id: str, request: ChatRegenerate,
+                   session: dict = Depends(manager)):
+        """Answer the last request again, in place of the last answer."""
+        service.regenerate(
+            session["team_id"], session["manager_id"], chat_id, request.model_dump(),
+        )
+        return repository.get_chat(session["team_id"], session["manager_id"], chat_id)

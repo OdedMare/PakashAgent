@@ -7,7 +7,7 @@ more confusing failure than the per-query handshake it was built to remove.
 
 import pytest
 
-from app.dal.database import postgres
+from app.dal import database as postgres
 
 
 class _Settings:

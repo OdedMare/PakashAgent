@@ -4,89 +4,98 @@ import {
   AlertTriangle,
   CheckCircle2,
   LoaderCircle,
+  LockKeyhole,
   Save,
-  Settings2,
-  X,
 } from "lucide-react";
-import { useEffect } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { SettingsContent, SettingsNavigation } from "./SettingsSections";
 import type { SettingsController } from "./useSettings";
 import { useSettings } from "./useSettings";
 
-/**
- * The settings modal: model connection and database, saved live.
+/** The system settings inline, for the צוות משמרות זהב console (D28) —
+ *  the only place they are reachable from; team screens no longer open them.
  *
- * Ported from AiSummryIO's SettingsPanel. There is no authorization gate here
- * — PakashAgent is single-tenant and local, so the backend exposes these
- * routes unguarded and there is nothing for the panel to check.
- */
-export function SettingsPanel({ onClose }: { onClose: () => void }) {
+ *  The operator's own session already passed the operator password, which
+ *  the server accepts in place of the settings password — so this unlocks
+ *  itself on mount with an empty header. Should that ever be refused, the
+ *  ordinary unlock form is what renders, not a dead panel. */
+export function SystemSettings() {
   const settings = useSettings();
+  const { loaded, error, unlock } = settings;
+  // A ref, not state: whether the one automatic attempt was made is not
+  // something to render, and React's development double-mount must not send
+  // it twice.
+  const started = useRef(false);
 
-  // Escape closes, as a modal should. Bound on the document rather than the
-  // dialog so it works before anything inside has taken focus.
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    if (started.current) return;
+    started.current = true;
+    void unlock("");
+  }, [unlock]);
 
-  return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
-      <section
-        className="modal settings-workspace-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="settings-title"
-        // The backdrop closes on click; the dialog must not inherit that.
-        onClick={(event) => event.stopPropagation()}
-      >
-        <ModalHeader onClose={onClose} />
-        <PanelContent settings={settings} />
-      </section>
-    </div>
-  );
-}
-
-function ModalHeader({ onClose }: { onClose: () => void }) {
-  return (
-    <header className="modal-header">
-      <span className="modal-icon" aria-hidden="true">
-        <Settings2 size={20} />
-      </span>
-      <div>
-        <h2 id="settings-title">הגדרות מערכת</h2>
-        <p>ניהול מודל הבינה ומסד הנתונים.</p>
-      </div>
-      <button type="button" onClick={onClose} aria-label="סגירת הגדרות">
-        <X size={18} />
-      </button>
-    </header>
-  );
+  if (!loaded && !error) {
+    return (
+      <p className="settings-loading">
+        <LoaderCircle className="spin" size={16} /> טוען הגדרות…
+      </p>
+    );
+  }
+  return <PanelContent settings={settings} />;
 }
 
 function PanelContent({ settings }: { settings: SettingsController }) {
-  if (settings.loading) {
-    return (
-      <p className="loading-line">
-        <LoaderCircle className="spin" size={16} /> טוען…
-      </p>
-    );
-  }
-  // A load failure leaves no values to edit, so the form is not worth showing.
-  // A *save* failure is different — the values are still there, and the
-  // message belongs in the footer beside the button that produced it.
-  if (!settings.loaded) {
-    return (
-      <p className="form-error" role="alert">
-        <AlertTriangle size={18} /> {settings.error}
-      </p>
-    );
-  }
+  // Until a password has been accepted there are no values to edit, so a
+  // load failure belongs on the unlock form. A *save* failure is different —
+  // the values are still there, and the message belongs in the footer beside
+  // the button that produced it.
+  if (!settings.loaded) return <UnlockForm settings={settings} />;
   return <SettingsWorkspace settings={settings} />;
+}
+
+function UnlockForm({ settings }: { settings: SettingsController }) {
+  const [password, setPassword] = useState("");
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (password) void settings.unlock(password);
+  };
+  return (
+    <form className="settings-unlock" onSubmit={submit} autoComplete="off">
+      <label className="field-label" htmlFor="settings-password">
+        <LockKeyhole size={15} aria-hidden="true" /> סיסמת הגדרות המערכת
+      </label>
+      <input
+        id="settings-password"
+        className="settings-input"
+        type="password"
+        dir="ltr"
+        autoFocus
+        // Not the workspace password: keep password managers from offering it.
+        autoComplete="new-password"
+        data-1p-ignore="true"
+        data-lpignore="true"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+        disabled={settings.loading}
+      />
+      {settings.error ? (
+        <p className="form-error" role="alert">
+          <AlertTriangle size={16} /> {settings.error}
+        </p>
+      ) : null}
+      <button
+        className="primary-button"
+        type="submit"
+        disabled={!password || settings.loading}
+      >
+        {settings.loading ? (
+          <><LoaderCircle className="spin" size={16} /> בודק…</>
+        ) : (
+          "פתיחה"
+        )}
+      </button>
+    </form>
+  );
 }
 
 function SettingsWorkspace({ settings }: { settings: SettingsController }) {

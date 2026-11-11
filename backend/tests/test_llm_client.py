@@ -9,7 +9,7 @@ import httpx
 import pytest
 from openai import BadRequestError
 
-from app.common.errors import AgentError
+from app.common.errors import AgentError, ModelOutputError
 from app.dal.llm.json_response_parser import extract_json
 from app.dal.llm.message_merger import merge_system_into_user
 from app.dal.llm.model_id_extractor import extract_model_ids
@@ -125,9 +125,11 @@ def test_backend_time_context_is_injected_into_every_model_request(monkeypatch):
 
     llm.complete_json("original system prompt", "usr")
 
-    system = fake.completions.calls[0]["messages"][0]
-    assert system["role"] == "system"
-    assert system["content"] == "original system prompt\n\nCURRENT ISRAEL CLOCK"
+    system, user = fake.completions.calls[0]["messages"]
+    # The clock ends the prompt, so a minute ticking past leaves the system
+    # prompt and the user's context a reusable prefix.
+    assert system == {"role": "system", "content": "original system prompt"}
+    assert user == {"role": "user", "content": "usr\n\nCURRENT ISRAEL CLOCK"}
 
 
 def test_ladder_steps_down_through_every_rung_on_bad_request():
@@ -147,6 +149,46 @@ def test_ladder_steps_down_through_every_rung_on_bad_request():
     last = fake.completions.calls[3]["messages"]
     assert [item["role"] for item in last] == ["user"]
     assert "sys" in last[0]["content"]
+
+
+def test_the_next_call_starts_from_the_rung_that_answered():
+    # A server that refused json_schema once refuses it every time; paying
+    # that 400 again on each call is a wasted round-trip.
+    llm, fake = _client([_bad_request(), _Response('{"ok": 1}'), _Response('{"ok": 2}')])
+    llm.complete_json("sys", "usr", schema={"type": "object"})
+    llm.complete_json("sys", "usr", schema={"type": "object"})
+
+    formats = [call["response_format"]["type"] for call in fake.completions.calls]
+    assert formats == ["json_schema", "json_object", "json_object"]
+
+
+def test_a_remembered_rung_belongs_to_one_schema():
+    llm, fake = _client([_bad_request(), _Response('{"ok": 1}'), _Response('{"ok": 2}')])
+    llm.complete_json("sys", "usr", schema={"type": "object"})
+    llm.complete_json("sys", "usr", schema={"type": "object", "required": ["ok"]})
+
+    assert fake.completions.calls[2]["response_format"]["type"] == "json_schema"
+
+
+def test_a_remembered_rung_still_steps_down_when_it_is_refused():
+    llm, fake = _client([
+        _bad_request(), _Response('{"ok": 1}'),
+        _bad_request(), _Response('{"ok": 2}'), _Response('{"ok": 3}'),
+    ])
+    for _ in range(3):
+        llm.complete_json("sys", "usr", schema={"type": "object"})
+
+    formats = [(call.get("response_format") or {}).get("type") for call in fake.completions.calls]
+    assert formats == ["json_schema", "json_object", "json_object", None, None]
+
+
+def test_a_caller_can_pin_the_clock_for_a_series_of_calls():
+    llm, fake = _client([_Response('{"ok": 1}'), _Response('{"ok": 2}')])
+    llm.complete_json("sys", "usr", time_context="PINNED CLOCK")
+    llm.complete_json("sys", "usr", time_context="PINNED CLOCK")
+
+    users = [call["messages"][1]["content"] for call in fake.completions.calls]
+    assert users == ["usr\n\nPINNED CLOCK"] * 2
 
 
 def test_a_non_bad_request_error_does_not_advance_the_ladder():
@@ -185,9 +227,25 @@ def test_two_invalid_replies_raise_agent_error():
 
 
 def test_an_empty_reply_is_an_error_not_an_empty_object():
-    llm, _ = _client([_Response("")])
+    llm, _ = _client([_Response(""), _Response("")])
     with pytest.raises(AgentError):
         llm.complete_json("sys", "usr")
+
+
+def test_an_empty_reply_is_retried_and_its_tokens_still_counted():
+    # gpt-oss answers with a native function call and no content; it was paid for.
+    llm, fake = _client([_Response(None), _Response('{"ok": true}')])
+    result = llm.complete_json("sys", "usr")
+    assert result["ok"] is True
+    assert result["_usage"]["total_tokens"] == 30
+    assert "Do not call functions" in fake.completions.calls[1]["messages"][-1]["content"]
+
+
+def test_two_empty_replies_raise_with_the_tokens_they_spent():
+    llm, _ = _client([_Response(""), _Response("")])
+    with pytest.raises(ModelOutputError) as raised:
+        llm.complete_json("sys", "usr")
+    assert raised.value.usage["total_tokens"] == 30
 
 
 # --- usage, diet mode, penalty --------------------------------------------
@@ -254,6 +312,18 @@ def test_neither_key_nor_base_url_is_a_hebrew_configuration_error():
     with pytest.raises(AgentError) as caught:
         llm.complete_json("sys", "usr")
     assert "API" in str(caught.value)
+
+
+def test_client_setup_failure_is_an_agent_error_not_a_500():
+    llm, _ = _client([])
+    llm._client_for = lambda *args, **kwargs: (_ for _ in ()).throw(
+        ValueError("invalid provider URL")
+    )
+
+    with pytest.raises(AgentError) as caught:
+        llm.complete_json("sys", "usr", flow="planner")
+
+    assert "חיבור למודל" in str(caught.value)
 
 
 # --- helpers ---------------------------------------------------------------
@@ -408,7 +478,7 @@ def test_every_role_uses_its_configured_endpoint():
         return fake
 
     llm._client_for = record
-    for flow in ("briefing", "interview", "scheduler"):
+    for flow in ("briefing", "changes", "scheduler"):
         llm.complete_json("sys", "usr", flow=flow)
 
     assert fake.completions.models == ["small-model", "chat-model", "big-model"]
@@ -455,7 +525,7 @@ def test_every_role_sends_its_own_api_key_to_its_own_endpoint():
         return fake
 
     llm._client_for = record
-    for flow in ("briefing", "interview", "scheduler"):
+    for flow in ("briefing", "changes", "scheduler"):
         llm.complete_json("sys", "usr", flow=flow)
 
     assert built == [
@@ -550,25 +620,27 @@ def test_the_budget_always_leaves_room_for_one_round_trip():
     """
     for timeout in (30, 120, 300, 600, 900):
         settings = _Settings(llm_timeout_seconds=timeout)
-        for flow in ("interview", "changes", ""):
+        for flow in ("planner", "changes", ""):
             assert _budget_seconds(settings, flow) > timeout, (timeout, flow)
 
 
-def test_no_timeout_means_no_budget_either():
-    """A deadline over an unbounded call could only fire mid-generation,
-    discarding an answer the server was still producing — the exact failure
-    turning the timeout off is meant to avoid."""
+def test_no_timeout_still_ends_a_stuck_chat_call():
+    """0 used to mean "wait forever", and one chat call the server never
+    answered then held its worker and model slot until a restart: every later
+    message sat on "ממתין למודל…". It now means the built-in ceiling."""
     for timeout in (0, -30):
         settings = _Settings(llm_timeout_seconds=timeout)
-        for flow in ("scheduler", "interview", ""):
-            assert _budget_seconds(settings, flow) is None, (timeout, flow)
+        for flow in ("changes", "planner", ""):
+            ceiling = read_timeout_for(settings, flow)
+            assert ceiling == 300, (timeout, flow)
+            assert _budget_seconds(settings, flow) > ceiling, (timeout, flow)
 
 
-def test_an_unbounded_call_is_not_cut_short_by_a_deadline():
-    """End to end: with no timeout the ladder runs every rung it needs.
+def test_the_default_ceiling_leaves_room_for_the_ladder():
+    """End to end: with the default timeout the ladder runs every rung it needs.
 
-    Guards the wiring, not the arithmetic — a budget of 0 seconds rather than
-    None would have stopped this after the first BadRequestError.
+    Guards the wiring, not the arithmetic — a budget of 0 seconds would have
+    stopped this after the first BadRequestError.
     """
     settings = _Settings(llm_timeout_seconds=0)
     llm, fake = _client([
@@ -586,8 +658,8 @@ def test_a_slow_model_widens_the_budget_with_it():
     Raising the timeout used to do nothing, because the budget was hardcoded
     below it.
     """
-    slow = _budget_seconds(_Settings(llm_timeout_seconds=600), "interview")
-    quick = _budget_seconds(_Settings(llm_timeout_seconds=120), "interview")
+    slow = _budget_seconds(_Settings(llm_timeout_seconds=600), "changes")
+    quick = _budget_seconds(_Settings(llm_timeout_seconds=120), "changes")
     assert slow > quick
 
 
@@ -599,35 +671,29 @@ def test_building_a_schedule_is_never_cut_off_by_the_timeout():
     large prompt to the heavy model. A value that keeps the settings panel
     responsive is, for the scheduler, a ceiling below the real answer time --
     so the briefing kept working while every build died on `ReadTimeout` with
-    the model server still generating.
-
-    A read ceiling existed to stop one request holding a browser connection
-    open. Generation holds none: it checkpoints per day, the browser polls,
-    and the manager can stop it. So the scheduler gets no ceiling, at any
-    configured value, and no deadline above one either.
+    the model server still generating. So the scheduler's ceiling is its own,
+    far above any answer time, and its budget leaves room for that attempt.
     """
     for timeout in (30, 120, 600, 900):
         settings = _Settings(llm_timeout_seconds=timeout)
-        assert read_timeout_for(settings, "scheduler") == 0, timeout
-        assert _budget_seconds(settings, "scheduler") is None, timeout
+        ceiling = read_timeout_for(settings, "scheduler")
+        assert ceiling >= 900 and ceiling >= timeout, timeout
+        assert _budget_seconds(settings, "scheduler") > ceiling, timeout
         # Every other flow still honours the manager's setting exactly.
-        assert read_timeout_for(settings, "interview") == timeout, timeout
+        assert read_timeout_for(settings, "changes") == timeout, timeout
 
 
-def test_schedule_decision_is_small_and_always_bounded():
-    """Agent ranking must not turn deterministic generation into a wait."""
-    assert read_timeout_for(
-        _Settings(llm_timeout_seconds=0), "schedule_decision"
-    ) == 20
-    assert read_timeout_for(
-        _Settings(llm_timeout_seconds=120), "schedule_decision"
-    ) == 20
-    assert _budget_seconds(
-        _Settings(llm_timeout_seconds=0), "schedule_decision"
-    ) == 25
+def test_a_build_the_server_never_answers_still_ends():
+    """One unanswered call used to hold the model slot forever: with the
+    default limit of one, every chat and every build queued behind it. The
+    scheduler's read is bounded even when the setting says "no timeout"."""
+    for timeout in (0, -30):
+        settings = _Settings(llm_timeout_seconds=timeout)
+        assert read_timeout_for(settings, "scheduler") > 0, timeout
+        assert _budget_seconds(settings, "scheduler") is not None, timeout
 
 
-def test_the_scheduler_client_is_built_with_no_read_ceiling():
+def test_the_scheduler_client_is_built_with_its_own_ceiling():
     """The wiring, not the arithmetic: `complete_json` must hand the flow's
     own ceiling to the client, or the decision above never reaches httpx."""
     built = []
@@ -644,16 +710,107 @@ def test_the_scheduler_client_is_built_with_no_read_ceiling():
     llm.complete_json("sys", "usr", flow="scheduler")
     llm.complete_json("sys", "usr", flow="briefing")
 
-    assert built == [0, 120]
+    assert built == [read_timeout_for(settings, "scheduler"), 120]
 
 
 def test_a_settings_object_without_the_field_still_resolves():
     """A saved file from an older version, or a test double, must not raise.
 
-    It resolves to no ceiling, which is the same answer an explicit 0 gets:
-    a settings object that never heard of the field cannot be asserting a
-    limit, and inventing one for it would time out calls on the strength of
-    a missing attribute.
+    It resolves to the default ceiling, which is the same answer an explicit
+    0 gets.
     """
-    assert _budget_seconds(object(), "scheduler") is None
-    assert _budget_seconds(object(), "interview") is None
+    assert read_timeout_for(object(), "changes") == 300
+    assert _budget_seconds(object(), "changes") > 300
+
+
+def test_ssl_verification_is_always_off(monkeypatch):
+    """The SDK is always handed an httpx client that accepts any
+    certificate, even when the setting says to verify."""
+    import app.dal.llm.openai_client as module
+
+    built = []
+    monkeypatch.setattr(module, "OpenAI", lambda **kwargs: built.append(kwargs) or object())
+    settings = _Settings(llm_verify_ssl=True)
+    llm = OpenAIJsonClient(_Store(settings))
+
+    llm._client_for("", "http://local/v1", 0)
+
+    assert "http_client" in built[0]
+
+
+def test_the_models_probe_never_verifies_ssl(monkeypatch):
+    import app.dal.llm.openai_client as module
+
+    seen = []
+
+    class _Reply:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"data": [{"id": "m"}]}
+
+    monkeypatch.setattr(
+        module.httpx, "get",
+        lambda url, **kwargs: seen.append(kwargs["verify"]) or _Reply(),
+    )
+    settings = _Settings(llm_verify_ssl=True)
+    llm = OpenAIJsonClient(_Store(settings))
+
+    llm.list_models()
+    llm.list_models(verify_ssl_override=True)
+
+    assert seen == [False, False]
+
+
+# --- the server tripping over its own output, and how long it thinks -------
+
+_HARMONY = "unexpected tokens remaining in message header: Some(\"<|start|>assistant\")"
+
+
+def test_a_harmony_glitch_asks_the_same_rung_again():
+    """gpt-oss on vLLM 400s when its sampled text breaks its own format.
+    Stepping down the ladder would only drop the structured output."""
+    llm, fake = _client([_bad_request(_HARMONY), _Response('{"ok": true}')])
+    assert llm.complete_json("sys", "usr", schema={"type": "object"})["ok"] is True
+    first, second = fake.completions.calls
+    assert first["response_format"] == second["response_format"]
+
+
+def test_a_harmony_glitch_that_persists_still_steps_down():
+    llm, fake = _client([_bad_request(_HARMONY)] * 3 + [_Response('{"ok": true}')])
+    assert llm.complete_json("sys", "usr")["ok"] is True
+    formats = [call.get("response_format") for call in fake.completions.calls]
+    assert formats[:3] == [{"type": "json_object"}] * 3
+    assert formats[3] is None
+
+
+def test_reasoning_effort_is_sent_only_when_set():
+    llm, fake = _client([_Response('{"ok": true}')])
+    llm.complete_json("sys", "usr")
+    assert "reasoning_effort" not in fake.completions.calls[0]
+    assert "extra_body" not in fake.completions.calls[0]
+
+
+@pytest.mark.parametrize("effort, sent", [("off", "low"), ("low", "low"), ("high", "high")])
+def test_gpt_oss_gets_reasoning_effort(effort, sent):
+    settings = _Settings(llm_model="gpt-oss-120b", llm_reasoning_effort=effort)
+    llm, fake = _client([_Response('{"ok": true}')], settings)
+    llm.complete_json("sys", "usr")
+    assert fake.completions.calls[0]["reasoning_effort"] == sent
+
+
+@pytest.mark.parametrize("effort, thinking", [("off", False), ("low", False), ("medium", True)])
+def test_qwen_gets_its_chat_template_switch(effort, thinking):
+    settings = _Settings(
+        llm_model="qwen3.5-35b-a3b", llm_reasoning_effort=effort,
+        llm_repetition_penalty=1.1,
+    )
+    llm, fake = _client([_Response('{"ok": true}')], settings)
+    llm.complete_json("sys", "usr")
+    call = fake.completions.calls[0]
+    assert "reasoning_effort" not in call
+    assert call["extra_body"] == {
+        "repetition_penalty": 1.1,
+        "chat_template_kwargs": {"enable_thinking": thinking},
+    }

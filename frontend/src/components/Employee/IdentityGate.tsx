@@ -27,7 +27,8 @@ export function IdentityGate({
   onLogin,
   onDismissError,
 }: {
-  roster: RosterName[];
+  /** `undefined` while the roster is still being fetched. */
+  roster: RosterName[] | undefined;
   busy: boolean;
   error: string | null;
   onClaim: (employee: string, passcode: string) => void;
@@ -37,11 +38,11 @@ export function IdentityGate({
   const [selected, setSelected] = useState<string | null>(null);
   const [passcode, setPasscode] = useState("");
 
-  const chosen = roster.find((row) => row.employee === selected) ?? null;
+  const chosen = roster?.find((row) => row.employee === selected) ?? null;
   const claiming = chosen !== null && !chosen.claimed;
-  // 4 characters, matching the backend. Checked here only to keep the button
+  // 6 characters, matching the backend. Checked here only to keep the button
   // honest -- the server enforces it, and this is not the security boundary.
-  const ready = chosen !== null && passcode.length >= (claiming ? 4 : 1);
+  const ready = chosen !== null && passcode.length >= (claiming ? 6 : 1);
 
   const submit = () => {
     if (!chosen || !ready) return;
@@ -68,7 +69,9 @@ export function IdentityGate({
           </div>
         ) : null}
 
-        {roster.length === 0 ? (
+        {roster === undefined ? (
+          <p className="gate-lede" aria-busy="true">טוען את רשימת הצוות…</p>
+        ) : roster.length === 0 ? (
           <p className="gate-lede">
             רשימת העובדים עדיין לא הוגדרה. פנו למנהל.
           </p>
@@ -109,7 +112,7 @@ export function IdentityGate({
                 }}
               >
                 <label htmlFor="passcode">
-                  {claiming ? "בחרו קוד אישי (4 תווים לפחות)" : "הקוד האישי"}
+                  {claiming ? "בחרו קוד אישי (6 תווים לפחות)" : "הקוד האישי"}
                 </label>
                 <input
                   id="passcode"

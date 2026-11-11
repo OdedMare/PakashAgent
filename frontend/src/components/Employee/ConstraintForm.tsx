@@ -3,7 +3,7 @@
 import { CalendarPlus, Check, Clock3, X } from "lucide-react";
 import { useState } from "react";
 
-import { DateInput } from "@/components/DateInput";
+import { DateInput, shortDate } from "@/components/DateInput";
 import type { ConstraintRequestRow } from "@/types";
 
 /** Ask not to be scheduled — and see what happened to previous asks.
@@ -69,7 +69,7 @@ export function ConstraintForm({
         הבקשה נשלחת למנהל לאישור. עד שהמנהל יאשר אותה היא לא משנה את הסידור.
       </p>
 
-      <form className="constraint-form" onSubmit={submit}>
+      <form className="employee-constraint-form" onSubmit={submit}>
         <label htmlFor="constraint-date">תאריך</label>
         <DateInput
           id="constraint-date"
@@ -129,7 +129,7 @@ export function ConstraintForm({
                 <div className="request-head">
                   <StatusBadge status={row.status} />
                   <span className="request-date">
-                    {formatDate(row.constraint_date)}
+                    {shortDate(row.constraint_date)}
                     {row.shift_name ? ` · ${row.shift_name}` : " · כל היום"}
                   </span>
                 </div>
@@ -185,10 +185,4 @@ function StatusBadge({ status }: { status: ConstraintRequestRow["status"] }) {
       <Clock3 size={12} /> ממתינה לאישור
     </span>
   );
-}
-
-function formatDate(iso: string): string {
-  const date = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return iso;
-  return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`;
 }

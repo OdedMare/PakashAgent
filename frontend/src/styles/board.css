@@ -52,17 +52,16 @@
   width: 2.75rem;
   height: 2.75rem;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid transparent;
+  background: var(--surface-3);
   color: var(--text-soft);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .board-nav-button:hover {
-  background: var(--surface-2);
-  color: var(--text);
-  border-color: var(--border-strong);
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 .board-nav-button:focus-visible,
@@ -105,8 +104,8 @@
   margin-inline-start: 0.3rem;
   padding: 0.42rem 0.7rem;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid transparent;
+  background: var(--surface-3);
   color: var(--text-soft);
   font-size: 0.8rem;
   font-family: inherit;
@@ -142,9 +141,9 @@
   grid-template-columns: 8rem minmax(0, 1fr);
   min-height: 5.2rem;
   overflow: hidden;
-  color: var(--text-on-dark);
-  background: var(--sidebar);
-  border: 1px solid color-mix(in srgb, #ffffff 9%, transparent);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
 }
 
@@ -154,16 +153,20 @@
   justify-content: center;
   gap: 0.15rem;
   padding: 0.8rem 1rem;
-  background: var(--sidebar-2);
-  border-inline-end: 1px solid color-mix(in srgb, #ffffff 10%, transparent);
+  background: linear-gradient(160deg, var(--hue-blue-soft), var(--hue-violet-soft));
+  border-inline-end: 1px solid var(--border);
 }
 
 .week-rail-label strong {
   font-size: 0.8rem;
 }
 
+.week-rail-label strong {
+  color: var(--hue-violet);
+}
+
 .week-rail-label span {
-  color: #9eabc0;
+  color: var(--text-muted);
   font-size: 0.65rem;
 }
 
@@ -179,7 +182,7 @@
   justify-content: center;
   gap: 0.38rem;
   padding: 0.65rem 0.7rem;
-  border-inline-end: 1px solid color-mix(in srgb, #ffffff 8%, transparent);
+  border-inline-end: 1px solid var(--border);
   position: relative;
 }
 
@@ -192,7 +195,7 @@
   position: absolute;
   inset: 0 0 auto;
   height: 3px;
-  background: #7b9cff;
+  background: var(--brand-gradient);
 }
 
 .week-rail-day-head {
@@ -209,9 +212,13 @@
   white-space: nowrap;
 }
 
+.week-rail-day.is-today {
+  background: var(--primary-soft);
+}
+
 .week-rail-day-head span {
-  color: #9eabc0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
   font-size: 0.62rem;
   direction: ltr;
 }
@@ -219,8 +226,8 @@
 .week-rail-track {
   height: 0.34rem;
   overflow: hidden;
-  background: color-mix(in srgb, #ffffff 12%, transparent);
-  border-radius: 2px;
+  background: var(--surface-3);
+  border-radius: 999px;
 }
 
 .week-rail-track span {
@@ -241,7 +248,7 @@
 
 .week-rail-day small {
   overflow: hidden;
-  color: #aebbd0;
+  color: var(--text-muted);
   font-size: 0.62rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -249,7 +256,7 @@
 
 .week-rail-day.is-short small,
 .week-rail-day.is-warning small {
-  color: #f2be70;
+  color: var(--warning);
 }
 
 /* Draft and published are the two states of a period, and they must be
@@ -295,7 +302,7 @@
   flex-direction: column;
   gap: 0.15rem;
   min-width: 0;
-  padding: 0.75rem 0.9rem;
+  padding: 0.85rem 1rem;
   border: 0;
   border-inline-end: 1px solid var(--border);
   border-radius: 0;
@@ -336,14 +343,19 @@
 .board-tile-head {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.5rem;
   font-size: 0.75rem;
   color: var(--text-muted);
 }
 
 .board-tile-icon {
-  display: inline-flex;
-  color: var(--text-muted);
+  display: inline-grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  color: var(--tint, var(--primary));
+  background: var(--tint-soft, var(--primary-soft));
+  border-radius: var(--radius-sm);
 }
 
 .board-tile.is-attention .board-tile-head,
@@ -351,8 +363,13 @@
   color: var(--warning);
 }
 
+.board-tile.is-attention .board-tile-icon {
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+}
+
 .board-tile-value {
-  font-size: 1.4rem;
+  margin-top: 0.3rem;
+  font-size: 1.5rem;
   font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1.15;
@@ -371,9 +388,9 @@
   gap: 0.55rem;
   flex-wrap: wrap;
   padding: 0.55rem 0.7rem;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   border: 1px solid var(--border);
-  background: var(--surface-2);
+  background: var(--surface);
 }
 
 .board-filters-icon {
@@ -397,10 +414,10 @@
 .board-editor-fields select {
   font-family: inherit;
   font-size: 0.8rem;
-  padding: 0.32rem 0.5rem;
+  padding: 0.38rem 0.6rem;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid transparent;
+  background: var(--surface-3);
   color: var(--text);
   cursor: pointer;
 }
@@ -417,8 +434,8 @@
   gap: 0.28rem;
   padding: 0.32rem 0.6rem;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid transparent;
+  background: var(--surface-3);
   color: var(--text-soft);
   font-size: 0.76rem;
   font-family: inherit;
@@ -429,7 +446,7 @@
 
 .board-toggle.is-on {
   background: var(--primary-soft);
-  border-color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
   color: var(--primary);
 }
 
@@ -461,6 +478,11 @@
   border: 1px solid var(--border);
   background: var(--surface);
   box-shadow: none;
+}
+
+.board-grid-wrap {
+  position: relative;
+  min-width: 0;
 }
 
 .board-grid {
@@ -567,11 +589,31 @@
   white-space: nowrap;
 }
 
+.board-dayhead-closure.is-duty {
+  color: var(--hue-teal);
+  background: var(--hue-teal-soft);
+}
+
 .board-dayhead-closure.is-handover {
   background: transparent;
   border: 1px dashed var(--border);
   color: var(--text-muted);
   font-weight: 500;
+}
+
+.board-dayhead-special {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-top: 0.15rem;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 0.66rem;
+  font-weight: 650;
+  white-space: nowrap;
 }
 
 .board-dayhead-actions {
@@ -591,9 +633,9 @@
   min-width: 5.2rem;
   min-height: 2.75rem;
   padding: 0.35rem 0.5rem;
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
   color: var(--text-soft);
   font: inherit;
   font-size: 0.7rem;
@@ -728,6 +770,45 @@
   pointer-events: none;
 }
 
+/* Shown only while an assignment is being dragged. The explicit target makes
+   removal discoverable without leaving a permanent destructive control in
+   every cell; touch and keyboard use the picked-card bar below. */
+.board-trash-target {
+  position: absolute;
+  inset-block-start: 0.45rem;
+  inset-inline: 0.45rem;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  width: auto;
+  min-height: 2.75rem;
+  border: 1px dashed color-mix(in srgb, var(--danger) 55%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger-soft) 94%, var(--surface));
+  color: var(--danger);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.board-trash-target:hover,
+.board-trash-target:focus-visible,
+.board-trash-target.is-over {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  box-shadow: inset 0 0 0 1px var(--danger);
+  outline: none;
+}
+
+.board-trash-target > * {
+  pointer-events: none;
+}
+
 .board-gap {
   display: inline-flex;
   align-items: center;
@@ -738,6 +819,12 @@
   font-size: 0.7rem;
   background: var(--warning-soft);
   color: var(--warning);
+}
+
+/* More people than the slot asks for. A count, not an alarm. */
+.board-gap.is-surplus {
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 /* Appears on hover and on keyboard focus within the cell. Always reachable
@@ -881,6 +968,51 @@
   text-overflow: ellipsis;
 }
 
+/* Why a card is red, in words: the rule and the number that broke it.
+   Full width under the identity line, bold and in the alarm colour so it
+   reads as the answer to the colour rather than as more metadata. Wraps to
+   two lines at most — a reason cut to "אילוץ 08:…" says nothing. */
+.board-card-why {
+  grid-column: 1 / -1;
+  grid-row: 4;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.25rem;
+  margin: 0.15rem 0 0;
+  padding: 0.18rem 0.32rem;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+  font-size: 0.68rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.board-card-why svg {
+  flex: none;
+  margin-top: 0.1rem;
+}
+
+.board-card-why-text {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+
+.board-card-why-more {
+  flex: none;
+  margin-inline-start: auto;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--danger);
+  color: var(--danger-soft);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
 .board-card-hours {
   direction: ltr;
   unicode-bidi: isolate;
@@ -901,9 +1033,88 @@
    reading, and should not mistake the second for it. */
 .board-card-commander { font-weight: 650; }
 
+/* Overlap (נחפף/ת) gets its own colour and its own shape rather than a
+   per-name hue: one violet across the grid, a thick bar on the inline
+   start edge and diagonal stripes, so a manager sees at a glance who in a
+   cell is still being handed over to and probably not counted in staffing. */
+.board-card.is-overlap {
+  position: relative;
+  color: var(--hue-violet);
+  border: 2px solid var(--hue-violet);
+  border-inline-start-width: 6px;
+  border-radius: var(--radius-sm) 1rem 1rem var(--radius-sm);
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      transparent 0 6px,
+      color-mix(in srgb, var(--hue-violet) 12%, transparent) 6px 12px
+    ),
+    var(--hue-violet-soft);
+}
+
+.board-card.is-overlap .board-card-name {
+  font-weight: 750;
+}
+
+.board-card.is-overlap .board-card-overlap {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--hue-violet);
+  color: var(--hue-violet-soft);
+  font-weight: 700;
+  opacity: 1;
+}
+
 .board-card-overlap {
   font-weight: 500;
   opacity: 0.82;
+}
+
+/* מעמד: מילואים, אע״צ and הצ״ח each get one shared colour across the grid
+   instead of the per-name hue, with a solid inline-start bar (no stripes —
+   those stay overlap's), so a manager sees at a glance who in a cell is
+   which. */
+.board-card.is-status-reserve { --status-hue: var(--hue-teal); --status-soft: var(--hue-teal-soft); }
+.board-card.is-status-civilian { --status-hue: var(--hue-blue); --status-soft: var(--hue-blue-soft); }
+.board-card.is-status-hatzach { --status-hue: var(--hue-pink); --status-soft: var(--hue-pink-soft); }
+
+.board-card.is-status {
+  color: var(--status-hue);
+  border: 1.5px solid var(--status-hue);
+  border-inline-start-width: 6px;
+  background: var(--status-soft);
+}
+
+.board-card-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-weight: 650;
+}
+
+.board-card.is-status .board-card-status {
+  background: var(--status-hue);
+  border-color: var(--status-hue);
+  color: var(--status-soft);
+}
+
+/* A soldier's note: a small ringed "!" in the card's own ink, so it reads
+   on any person hue and never borrows the warning colour, which means the
+   placement breaks something. The hover carries the note itself. */
+.board-card-note {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.05em;
+  height: 1.05em;
+  border: 1.5px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: help;
 }
 
 .board-card-grip {
@@ -1012,25 +1223,6 @@
   color: inherit;
 }
 
-/* A borrow is not an availability. It is drawn in the warning colour so the
-   manager reads "this one has a cost" before they read the name -- these
-   people are on their exit, and choosing one is asking them to give up a
-   weekend they planned on (D25). */
-.board-alternatives.is-borrow .board-alternatives-label {
-  color: var(--warning);
-}
-
-.board-alternative.is-borrow {
-  border-style: dashed;
-  border-color: var(--warning);
-}
-
-.board-alternative.is-borrow:hover {
-  background: var(--warning-soft);
-  border-color: var(--warning);
-  color: var(--warning);
-}
-
 /* -- the editor ----------------------------------------------------------- */
 
 /* Wider than the base modal: it holds three selects, a verdict with
@@ -1088,9 +1280,12 @@
   font-size: 0.76rem;
 }
 
+/* As many equal columns as there are shortcuts: the list is two long inside
+   an existing period and four on an empty week. */
 .generate-range-presets {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   gap: 0.35rem;
   padding: 0.25rem;
   background: var(--surface);
@@ -1119,6 +1314,101 @@
   border-color: color-mix(in srgb, var(--primary) 28%, transparent);
 }
 
+.generate-shifts {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.generate-special {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.generate-special-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.generate-special-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.generate-special-row legend {
+  padding-inline: 0.3rem;
+  color: var(--text-soft);
+  font-size: 0.76rem;
+}
+
+.generate-special-row label {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+}
+
+.generate-special-row select,
+.generate-special-row input {
+  width: 100%;
+}
+
+/* Wraps rather than squeezing: a workplace may declare five or six shifts,
+   and each button still has to clear the 44px touch target. */
+.generate-shift-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.generate-shift-choices button {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.generate-shift-choices button small {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 500;
+  direction: ltr;
+}
+
+.generate-shift-choices button:hover {
+  background: var(--surface-2);
+}
+
+.generate-shift-choices button.is-active {
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-color: color-mix(in srgb, var(--primary) 28%, transparent);
+}
+
+.generate-shifts-empty {
+  margin: 0;
+  color: var(--warning);
+  font-size: 0.76rem;
+}
+
 .generate-date-fields {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -1137,13 +1427,6 @@
 .generate-date-fields input,
 .generate-instructions textarea {
   width: 100%;
-  min-height: 2.75rem;
-  padding: 0.55rem 0.65rem;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
 }
 
 .generate-date-fields input {
@@ -1154,9 +1437,44 @@
 
 .generate-date-fields input:focus-visible,
 .generate-instructions textarea:focus-visible {
+  outline-offset: 2px;
+}
+
+/* Refit rather than rebuild: rows already built stay where they fit. */
+.generate-keep {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  min-height: 44px;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.generate-keep input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: 0.15rem;
+  accent-color: var(--primary);
+}
+
+.generate-keep span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.generate-keep small {
+  color: var(--text-soft);
+  font-size: 0.76rem;
+}
+
+.generate-keep:focus-within {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
-  box-shadow: none;
 }
 
 .generate-date-connector {
@@ -1193,31 +1511,8 @@
 }
 
 .generate-instructions textarea {
-  min-height: 5rem;
   resize: vertical;
   line-height: 1.5;
-}
-
-.generate-day-dialog {
-  display: grid;
-  gap: 0.9rem;
-}
-
-.generate-day-date {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.75rem 0.85rem;
-  border: 1px solid color-mix(in srgb, var(--primary) 25%, var(--border));
-  border-radius: var(--radius-sm);
-  background: var(--primary-soft);
-  color: var(--text-soft);
-}
-
-.generate-day-date strong {
-  color: var(--primary);
-  font-variant-numeric: tabular-nums;
 }
 
 .generate-required-list {
@@ -1251,18 +1546,11 @@
 }
 
 .generate-required-row select {
-  min-height: 2.75rem;
   width: 100%;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
   padding-inline: 0.55rem;
-  font: inherit;
 }
 
 .generate-required-row select:focus-visible {
-  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
@@ -1294,6 +1582,10 @@
   }
 
   .generate-required-row {
+    grid-template-columns: 1fr;
+  }
+
+  .generate-special-row {
     grid-template-columns: 1fr;
   }
 }
@@ -1351,7 +1643,32 @@
   gap: 0.4rem;
 }
 
+.board-candidate-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.board-candidate-filters button {
+  min-height: 44px;
+  padding: 0.3rem 0.65rem;
+  color: var(--text-soft);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.board-candidate-filters button.is-active {
+  color: var(--primary);
+  background: var(--primary-soft);
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
+}
+
 .board-candidate {
+  position: relative;
   display: flex;
   min-height: 48px;
   align-items: center;
@@ -1365,8 +1682,46 @@
   cursor: pointer;
 }
 
+.board-candidate::after {
+  position: absolute;
+  z-index: 20;
+  inset-block-end: calc(100% + 0.4rem);
+  inset-inline-start: 0;
+  width: max-content;
+  max-width: min(20rem, calc(100vw - 3rem));
+  padding: 0.45rem 0.55rem;
+  color: var(--text);
+  text-align: start;
+  white-space: normal;
+  content: attr(data-tooltip);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+}
+
+.board-candidate:hover::after,
+.board-candidate:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
 .board-candidate.is-available > svg { color: var(--success); }
 .board-candidate.is-unavailable > svg { color: var(--warning); }
+.board-candidate.is-overlap { border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); }
+/* A borrow — free, same role, another post — reads in teal: not the green
+   of "this post's and free", not the amber of a real conflict. */
+.board-candidate.is-borrow {
+  background: var(--hue-teal-soft);
+  border-color: color-mix(in srgb, var(--hue-teal) 55%, var(--border));
+}
+.board-candidate.is-borrow > svg { color: var(--hue-teal); }
 .board-candidate.is-selected { border-color: var(--primary); box-shadow: var(--focus); }
 
 .board-candidate-copy {
@@ -1402,19 +1757,25 @@
   background: var(--surface-3);
 }
 
-/* The borrow badge does the opposite job of the closure badge beside it: it
-   says this person is *not* in, and that choosing them is a request rather
-   than a placement. The warning colour is the whole point -- it must not
-   read as another neutral fact about the roster (D25). */
 .board-candidate-badge.is-borrow {
+  color: var(--hue-teal);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--hue-teal) 45%, transparent);
+}
+
+.board-availability-borrow { color: var(--hue-teal); }
+
+.board-candidate-badge.is-overlap {
   color: var(--warning);
   background: var(--warning-soft);
 }
 
-.board-availability-note.is-borrow {
-  display: block;
-  margin-top: 0.2rem;
-  color: var(--warning);
+.board-candidate-empty {
+  grid-column: 1 / -1;
+  padding: 0.7rem;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 0.75rem;
 }
 
 /* Whose closure the slot being edited falls in. A statement of fact above
@@ -1525,7 +1886,7 @@
   line-height: 1.65;
 }
 
-/* Said under the ordinary empty-week copy when the interview was ended
+/* Said under the ordinary empty-week copy when setup is incomplete
    early. Muted rather than a warning: a partial profile is a state the
    manager chose, not a problem the board found. */
 .board-empty-partial {
@@ -1551,25 +1912,22 @@
   font-variant-numeric: tabular-nums;
 }
 
-.board-empty-filtered {
-  margin: 0;
-  padding: 1.6rem;
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  border-radius: var(--radius);
-  border: 1px dashed var(--border);
-}
-
 /* -- the navigation between the board and the control room ---------------- */
 
+/* A Frappe segmented control, except that each area keeps its own hue: the
+   icon is always tinted, and the active segment takes the tint as its
+   background so the manager can tell which room they are in at a glance. */
 .management-nav {
   display: flex;
-  gap: 0.25rem;
+  gap: 0.15rem;
   padding: 0.2rem;
-  border-radius: var(--radius-sm);
+  border-radius: calc(var(--radius-sm) + 2px);
   background: var(--sidebar-2);
-  border: 1px solid color-mix(in srgb, #ffffff 10%, transparent);
+  border: 0;
+}
+
+.management-nav-item svg {
+  color: var(--tint, currentColor);
 }
 
 .management-nav-item {
@@ -1580,34 +1938,41 @@
   border-radius: calc(var(--radius-sm) - 3px);
   border: none;
   background: transparent;
-  color: #aebbd0;
+  color: var(--text-muted);
   font-size: 0.8rem;
+  font-weight: 500;
   font-family: inherit;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .management-nav-item:hover {
-  color: #ffffff;
+  color: var(--text);
 }
 
 .management-nav-item.is-active {
-  background: var(--primary);
-  color: #ffffff;
-  box-shadow: none;
+  background: var(--surface);
+  color: var(--tint, var(--text));
+  box-shadow: var(--shadow-soft), inset 0 -2px 0 var(--tint, var(--primary));
+}
+
+.management-nav-badge {
+  display: grid;
+  place-items: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  margin-inline-start: auto;
+  padding-inline: 0.3rem;
+  color: var(--on-primary);
+  background: var(--hue-violet);
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .management-nav-item:focus-visible {
   outline: none;
   box-shadow: var(--focus);
-}
-
-/* `hidden` must win over the grid `display` the control room sets, or the
-   board and the room would render on top of each other. The attribute is
-   used rather than unmounting so an in-flight proposal survives the manager
-   glancing at the board and coming back. */
-.management-body[hidden] {
-  display: none;
 }
 
 /* The board is the stable workspace. Management tools live in a contextual
@@ -1633,6 +1998,32 @@
   width: min(100%, 1360px);
   margin-inline: auto;
   padding: clamp(1rem, 2.5vw, 2rem);
+}
+
+.manager-overview {
+  width: min(100%, 1180px);
+  padding-block: clamp(1.5rem, 4vw, 3rem);
+}
+
+.manager-overview .manager-analytics-head {
+  position: relative;
+  align-items: center;
+  margin-bottom: clamp(1.4rem, 3vw, 2.2rem);
+  padding: 0 1.1rem 1.4rem 0;
+  border-inline-start: 4px solid var(--hue-violet);
+}
+
+.manager-overview .manager-analytics-head h1 {
+  max-width: 24ch;
+}
+
+.manager-overview-flow {
+  display: grid;
+  gap: clamp(1.1rem, 2.5vw, 1.8rem);
+}
+
+.manager-overview .stats-page {
+  box-shadow: none;
 }
 
 .manager-analytics-head {
@@ -1755,9 +2146,9 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  color: var(--text-on-dark);
+  color: var(--text);
   background: var(--sidebar);
-  border-bottom: 1px solid color-mix(in srgb, #ffffff 9%, transparent);
+  border-bottom: 1px solid var(--border);
 }
 
 .manager-drawer-head > div {
@@ -1772,74 +2163,174 @@
 
 .manager-drawer-head span {
   font-size: 0.74rem;
-  color: #9eabc0;
+  color: var(--text-muted);
 }
 
 .manager-drawer-head .icon-button {
-  color: #aebbd0;
+  color: var(--text-muted);
 }
 
 .manager-drawer-head .icon-button:hover {
-  color: #ffffff;
+  color: var(--text);
   background: var(--sidebar-2);
 }
 
 .manager-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0;
-  padding: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem 3rem;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
+/* The tabs read as one segmented control, centred over the drawer. */
+.manager-tabs-track {
+  display: flex;
+  width: 100%;
+  max-width: 22rem;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  background: var(--surface-3);
+  border-radius: 12px;
+}
+
+.manager-tabs-close {
+  display: none;
+}
+
 .manager-tab {
   position: relative;
-  min-height: 3.25rem;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 2.25rem;
   display: inline-flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.2rem;
-  padding: 0.35rem;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
   border: 0;
-  border-inline-end: 1px solid var(--border);
-  border-radius: 0;
+  border-radius: 9px;
   background: transparent;
   color: var(--text-muted);
   font: inherit;
-  font-size: 0.66rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
 }
 
 .manager-tab-badge {
-  position: absolute;
-  inset: 0.35rem auto auto 0.35rem;
-  display: grid;
+  display: inline-grid;
   place-items: center;
   min-width: 1.1rem;
   height: 1.1rem;
-  padding-inline: 0.2rem;
+  padding-inline: 0.25rem;
   color: #ffffff;
   background: var(--danger);
   border-radius: 999px;
-  font-size: 0.6rem;
+  font-size: 0.65rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
-.manager-tab:hover,
-.manager-tab.is-active {
+/* A new constraint request, announced wherever the manager is. It floats
+   over the board rather than inside the drawer, because the drawer may be
+   closed — the "בקשות" badge is what stays once it leaves. */
+.request-toast {
+  position: fixed;
+  z-index: 60;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem 0.8rem;
+  color: var(--text);
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  animation: request-toast-in 220ms ease-out;
+}
+
+.request-toast-icon {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
   color: var(--primary);
   background: var(--primary-soft);
+  border-radius: 10px;
 }
 
-.manager-tab:last-child {
-  border-inline-end: 0;
+.request-toast-body {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 0.1rem;
+}
+
+.request-toast-body strong {
+  font-size: 0.86rem;
+}
+
+.request-toast-body span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.request-toast-open {
+  flex: none;
+  padding: 0.4rem 0.75rem;
+  color: #ffffff;
+  background: var(--primary-fill);
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.request-toast-close {
+  flex: none;
+}
+
+@keyframes request-toast-in {
+  from { opacity: 0; transform: translate(-50%, -8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .request-toast { animation: none; }
+}
+
+.manager-tab svg {
+  flex: none;
+  color: inherit;
+}
+
+.manager-tab:hover:not(.is-active) {
+  color: var(--text);
 }
 
 .manager-tab.is-active {
-  box-shadow: inset 0 -3px 0 var(--primary);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  font-weight: 600;
 }
 
 .manager-tab:focus-visible {
@@ -1848,7 +2339,7 @@
 }
 
 .manager-drawer-content {
-  height: calc(100% - 7.8rem);
+  height: calc(100% - 8.4rem);
   overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;
@@ -1913,7 +2404,6 @@
 .board-published-lock > span {
   flex: 1;
 }
-
 
 /* ── Moving a shift without a mouse ───────────────────────────────────────
    The keyboard and touch half of the drag. Drag-and-drop answers only to a
@@ -2054,6 +2544,28 @@
   cursor: pointer;
 }
 
+.board-move-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-height: 2.75rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--danger);
+  font: inherit;
+  cursor: pointer;
+}
+
+.board-move-remove:hover,
+.board-move-remove:focus-visible {
+  background: var(--danger-soft);
+  outline: none;
+  box-shadow: var(--focus);
+}
+
 .board-move-cancel:hover {
   color: var(--text);
   border-color: var(--text-muted);
@@ -2178,14 +2690,17 @@
 /* -- narrow screens ------------------------------------------------------- */
 
 @media (max-width: 820px) {
-  .management > .interview-header {
+  .management > .workspace-sidebar {
     flex-wrap: wrap;
     gap: 0.5rem;
   }
 
-  .management > .interview-header .header-actions {
+  .management-topbar .header-actions {
     gap: 0.15rem;
-    margin-inline-start: auto;
+  }
+
+  .account-menu-name {
+    display: none;
   }
 
   .board {
@@ -2224,10 +2739,10 @@
     justify-content: center;
   }
 
-  /* The board keeps all seven days and scrolls, rather than dropping to a
-     day view. A week is the unit the manager schedules in, and a phone-sized
-     board that can only show one day is a different product — every core
-     action stays reachable, the grid just moves under the finger. */
+  /* The week keeps all seven days and scrolls, rather than collapsing to a
+     day by itself. A week is the unit the manager schedules in, and a board
+     that decided on its own to show one day would hide the other six — the
+     day view is there, one tap away on the switch, as a thing they chose. */
   .board-grid {
     min-width: 54rem;
   }
@@ -2299,6 +2814,10 @@
 
   .manager-analytics-head {
     align-items: flex-start;
+  }
+
+  .manager-overview .manager-analytics-head {
+    padding-inline-start: 0.85rem;
   }
 }
 
@@ -2453,6 +2972,27 @@
 .board-card.is-touched-simulation {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
 }
+
+.board-card.is-touched-simulation.is-simulation-remove {
+  opacity: 0.48;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.board-simulation-ghost {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 6px;
+  align-items: center;
+  padding: 8px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 65%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--primary-soft) 48%, var(--surface));
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+
+.board-simulation-ghost small { grid-column: 2; color: var(--text-muted); }
 
 .board-card.is-touched-answer {
   box-shadow: 0 0 0 2px var(--border-strong);
@@ -2679,6 +3219,621 @@
 .board-load-error-detail {
   font-size: 0.78rem !important;
   color: var(--text-muted) !important;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   word-break: break-word;
+}
+
+/* -- how wide the board looks: day, week, two weeks, month ----------------
+   One control beside the arrows it changes the meaning of. A segmented row
+   rather than a menu: four choices are few enough to see at once, and the
+   one in force should be readable without opening anything. */
+
+.board-head-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.board-views {
+  display: inline-flex;
+  gap: 0.15rem;
+  padding: 0.2rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+
+.board-view {
+  min-height: 2.35rem;
+  padding: 0 0.8rem;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 3px);
+  background: transparent;
+  color: var(--text-soft);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.board-view:hover {
+  color: var(--text);
+}
+
+/* The chosen one is lifted, not coloured in: a filled blue segment would
+   read as the next action, and choosing a view is not one. */
+.board-view.is-on {
+  background: var(--surface);
+  color: var(--primary);
+  font-weight: 600;
+  box-shadow: var(--shadow-soft);
+}
+
+.board-view:focus-visible,
+.board-dayhead-open:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+/* -- a day's name as the way into that day --------------------------------
+   The column head's weekday and date become one button under a week view.
+   It keeps the text it had; only the hover says it can be pressed, so a
+   week nobody clicks on looks exactly as it did. */
+
+.board-dayhead-open {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.1rem 0.55rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.board-dayhead-open:hover {
+  background: color-mix(in srgb, var(--primary-soft) 80%, transparent);
+}
+
+.board-dayhead-open:hover .board-dayhead-weekday,
+.board-dayhead-open:hover .board-dayhead-date {
+  color: var(--primary);
+}
+
+/* The rail's segments as buttons. Only the three borders the segment never
+   had are removed — the dividing one is the rail's own structure. */
+button.week-rail-day {
+  appearance: none;
+  border-width: 0;
+  border-inline-end: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+button.week-rail-day:hover {
+  background: var(--surface-2);
+}
+
+button.week-rail-day.is-today:hover {
+  background: var(--primary-soft);
+}
+
+/* Inset, because the rail clips its overflow and an outer ring would be cut
+   off at the first and last day. */
+button.week-rail-day:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+/* The day the board below is showing. A ring rather than today's fill, so
+   "the day on screen" and "today" stay two different marks when they are
+   two different days — and stack when they are the same one. */
+.week-rail-day.is-selected {
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+/* -- the board as one day -------------------------------------------------
+   The same grid with a single column. The column is as wide as the board,
+   so cards run across it and wrap instead of stacking into a thin tower
+   down the middle of an empty screen. */
+
+.board-grid.is-day {
+  grid-template-columns: 9rem minmax(0, 1fr);
+  min-width: 0;
+}
+
+.board-grid.is-day .board-cell {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
+  gap: 0.45rem;
+  padding: 0.6rem;
+}
+
+.board-grid.is-day .board-card {
+  flex: 0 1 15rem;
+  min-width: 10rem;
+}
+
+.board-loading-grid.is-day {
+  min-width: 0;
+}
+
+.board-loading-grid.is-day .board-loading-row {
+  grid-template-columns: 9rem minmax(0, 1fr);
+}
+
+/* -- two weeks and a month ------------------------------------------------
+   Weeks down, days across — the board from further away. It borrows the
+   board's own vocabulary on purpose: the same amber for a short day, the
+   same accent for today, the same hue per person, so nothing learned on the
+   week has to be re-learned here. A day is one button; nothing inside it
+   is separately pressable, because from this far out the day is the
+   smallest thing worth aiming at. */
+
+.range-grid {
+  display: grid;
+  grid-template-columns: 5.6rem repeat(7, minmax(7.6rem, 1fr));
+  min-width: 60rem;
+}
+
+.range-grid.is-month {
+  grid-template-columns: 5.6rem repeat(7, minmax(6.8rem, 1fr));
+  min-width: 54rem;
+}
+
+/* A week contributes its cells straight to the grid above, so the eight
+   columns line up down the whole month. */
+.range-week {
+  display: contents;
+}
+
+.range-corner,
+.range-weekday {
+  padding: 0.55rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.range-corner {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 2;
+}
+
+.range-weekday {
+  text-align: center;
+  color: var(--text-soft);
+  border-inline-start: 1px solid var(--border);
+}
+
+.range-weekday.is-weekend {
+  background: color-mix(in srgb, var(--surface-3) 60%, var(--surface-2));
+}
+
+.range-weekhead {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding: 0.55rem 0.5rem;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-soft);
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.range-weekhead:hover {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.range-weekhead-dates {
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* The board's own draft and published chips, smaller. "אין סידור" is dashed
+   and uncoloured: it is an absence, not a third state of a period. */
+.range-weekhead-status {
+  white-space: nowrap;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.64rem;
+  font-weight: 600;
+}
+
+.range-weekhead-status.is-draft {
+  background: var(--surface-3);
+  color: var(--text-soft);
+  border-color: var(--border-strong);
+}
+
+.range-weekhead-status.is-published {
+  background: var(--success-soft);
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 35%, transparent);
+}
+
+.range-weekhead-status.is-none {
+  color: var(--text-muted);
+  border-style: dashed;
+  border-color: var(--border-strong);
+}
+
+.range-day {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.32rem;
+  min-width: 0;
+  min-height: 7.6rem;
+  padding: 0.4rem 0.45rem 0.5rem;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-inline-start: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.range-grid.is-month .range-day {
+  min-height: 6.4rem;
+}
+
+.range-day.is-weekend {
+  background: color-mix(in srgb, var(--surface-3) 35%, transparent);
+}
+
+.range-day.has-warning {
+  background: color-mix(in srgb, var(--warning-soft) 55%, transparent);
+}
+
+.range-day.is-today {
+  background: color-mix(in srgb, var(--primary-soft) 45%, transparent);
+  box-shadow: inset 0 3px 0 0 var(--primary);
+}
+
+.range-day.is-short {
+  box-shadow: inset 0 -2px 0 0 color-mix(in srgb, var(--warning) 55%, transparent);
+}
+
+.range-day.is-today.is-short {
+  box-shadow:
+    inset 0 3px 0 0 var(--primary),
+    inset 0 -2px 0 0 color-mix(in srgb, var(--warning) 55%, transparent);
+}
+
+.range-day:hover {
+  background: var(--surface-2);
+}
+
+.range-day.is-today:hover {
+  background: var(--primary-soft);
+}
+
+/* What the agent is talking about, at the only resolution this view has. */
+.range-day.is-touched {
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+/* Inset for the same reason the rail's is: the scroller clips. Declared
+   after every state above so a focused day always shows that it is. */
+.range-day:focus-visible,
+.range-weekhead:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+/* The days that only finish a month's first and last week. Their contents
+   recede; their borders do not, or the grid would look torn at the edges. */
+.range-day.is-outside > * {
+  opacity: 0.5;
+}
+
+.range-day.is-filtered {
+  background: var(--surface-2);
+}
+
+.range-day.is-filtered > * {
+  opacity: 0.4;
+}
+
+/* Wraps rather than overflows: beside the open conversation a day is a
+   few characters wide, and a count pushed out of its own cell lands on the
+   next day's date and reads as that day's. */
+.range-day-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.3rem;
+  min-height: 1.2rem;
+}
+
+.range-day-number {
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.range-day.is-today .range-day-number,
+.range-day-pill {
+  color: var(--primary);
+}
+
+.range-day-pill {
+  font-size: 0.6rem;
+  font-weight: 600;
+}
+
+.range-day-touch {
+  display: inline-flex;
+  color: var(--primary);
+}
+
+.range-day-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: 0.64rem;
+  font-weight: 600;
+  color: var(--warning);
+}
+
+.range-day-coverage {
+  margin-inline-start: auto;
+  padding: 0.03rem 0.32rem;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.range-day-coverage.is-short {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.range-day-closure {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 0.2rem;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+}
+
+.range-day-closure.is-handover {
+  opacity: 0.7;
+}
+
+.range-day-none {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.range-shift {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.range-shift-name {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.range-shift-people {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+/* A name in its own hue — the card's colour without the card. Truncated
+   rather than wrapped: a long name must not push a day taller than its
+   week, and the full name is one click away. */
+.range-person {
+  max-width: 100%;
+  padding: 0.08rem 0.38rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.range-grid.is-month .range-person {
+  padding: 0.04rem 0.32rem;
+  font-size: 0.66rem;
+}
+
+.range-more {
+  font-size: 0.64rem;
+  color: var(--text-muted);
+}
+
+.range-short {
+  padding: 0.04rem 0.35rem;
+  border-radius: 999px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 0.62rem;
+  white-space: nowrap;
+}
+
+/* A day still being read: its date is known, nothing else is, and a bar is
+   all that says so. The board's own skeleton pulse, so the two loading
+   states read as the same thing happening. */
+.range-day.is-loading::after {
+  content: "";
+  width: 70%;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--surface-3);
+  animation: board-skeleton 1.4s ease-in-out infinite;
+}
+
+/* Beside the open conversation the board has half a screen. The week grid
+   fits itself to that rather than scrolling, and so does this one. */
+@media (min-width: 900px) {
+  .management-workspace.has-drawer .range-grid,
+  .management-workspace.has-drawer .range-grid.is-month {
+    min-width: 0;
+    grid-template-columns: 3.9rem repeat(7, minmax(0, 1fr));
+  }
+
+  .management-workspace.has-drawer .range-day {
+    padding: 0.35rem 0.25rem 0.4rem;
+  }
+
+  .management-workspace.has-drawer .range-weekhead {
+    padding-inline: 0.3rem;
+  }
+
+  .management-workspace.has-drawer .range-weekhead-dates {
+    font-size: 0.62rem;
+  }
+
+  .management-workspace.has-drawer .range-weekhead-status {
+    padding-inline: 0.28rem;
+    font-size: 0.6rem;
+  }
+
+  /* One column has the width the seven were sharing, so its two actions
+     sit side by side again instead of stacking into a tall head. */
+  .management-workspace.has-drawer .board-grid.is-day .board-dayhead-actions {
+    flex-direction: row;
+  }
+}
+
+@media (max-width: 820px) {
+  .board-head-nav {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .board-view {
+    min-height: 2.75rem;
+    padding-inline: 0.95rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-view,
+  .board-dayhead-open,
+  button.week-rail-day,
+  .range-weekhead,
+  .range-day {
+    transition: none;
+  }
+
+  .range-day.is-loading::after {
+    animation: none;
+  }
+}
+
+/* The manual picker's filters: a name search, the exit-pattern chips, a row
+   of selects (group, shift type a person may work, role) and yes/no chips.
+   All of it narrows the list the check already returned. */
+.board-candidate-filtering {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.board-candidate-search {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0 0.6rem;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.board-candidate-search:focus-within {
+  border-color: var(--primary);
+  box-shadow: var(--focus);
+}
+
+.board-candidate-search input {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.35rem 0;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  outline: none;
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.board-candidate-selects {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.45rem;
+}
+
+.board-candidate-selects label {
+  display: grid;
+  gap: 0.2rem;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.board-candidate-selects select {
+  cursor: pointer;
+}
+
+.board-candidate-filter-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.board-candidate-filter-summary .ghost-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 44px;
+  font-size: 0.72rem;
 }

@@ -1,0 +1,75 @@
+"""Reading the stored schedule and the roster the way the placement checks do."""
+
+from typing import Dict, List
+
+from app.bl.audit.staffing_rules import counts_toward_staffing
+from app.bl.audit.stats import shift_stats
+from app.bl.shared import employees, iso, out_of_service, role_qualified, shifts, text
+
+
+def pretty(hours: float) -> str:
+    """A round number without its trailing zero. 8.0 reads as 8."""
+    return "%g" % round(hours, 1)
+
+
+def rows(schedule: dict, drop: str = "") -> List[dict]:
+    """The schedule's assignments as audit rows, optionally without one.
+
+    `drop` is the assignment being moved. Removing it is what makes a move
+    check as a move: left in, the person is momentarily in two places and
+    every drag would report a double-booking it is about to resolve.
+    """
+    return [
+        {
+            "employee": text(row.get("employee")),
+            "shift": text(row.get("shift")),
+            "date": iso(row.get("date")),
+        }
+        for row in (schedule or {}).get("assignments") or []
+        if isinstance(row, dict) and not (drop and text(row.get("id")) == drop)
+    ]
+
+
+def slots(schedule: dict) -> List[dict]:
+    """The stored grid, dates normalized -- passed to `audit()` so an
+    entirely unstaffed shift is still visible."""
+    return [
+        dict(slot, slot_date=iso(slot.get("slot_date")))
+        for slot in (schedule or {}).get("slots") or [] if isinstance(slot, dict)
+    ]
+
+
+def is_eligible(profile: dict, employee: str, shift_name: str, date: str = "") -> bool:
+    """Whether the profile says this person works this shift.
+
+    A roster that declares no `eligible_shifts` for somebody is saying
+    nothing, not saying no; likewise a shift naming no `allowed_roles`. Somebody on the grid the roster no longer carries
+    is not relitigated here either.
+    """
+    for person in employees(profile):
+        if text(person.get("name")) != employee:
+            continue
+        if out_of_service(person, date):
+            return False
+        declared = {text(row.get("name")): row for row in shifts(profile)}
+        if shift_name not in declared and shift_name in (person.get("archived_eligible_shifts") or []):
+            return True
+        if not role_qualified(person, declared.get(shift_name), list(declared.values()),
+                              not counts_toward_staffing(person, profile)):
+            return False
+        eligible = person.get("eligible_shifts")
+        if not isinstance(eligible, list) or not eligible:
+            return True
+        return shift_name in [text(item) for item in eligible]
+    return True
+
+
+def hours_by_employee(schedule: dict, profile: dict) -> Dict[str, float]:
+    """Assigned hours per person in this period, weighted as the audit does.
+
+    `audit.roster.shift_hours` is the one hours calculation in the product,
+    so a candidate's "8 hours" here is the same number the warning uses.
+    """
+    stats = shift_stats(schedule.get("assignments") or [], shifts(profile), employees(profile),
+                        slots=schedule.get("slots") or [], profile=profile)
+    return {row["employee"]: row["hours"] for row in stats["by_employee"]}

@@ -4,57 +4,95 @@ import {
   AlertCircle,
   CalendarDays,
   CheckCircle2,
-  Plus,
+  Crown,
+  Network,
   ShieldCheck,
-  Users,
+  UserCircle,
+  UserCog,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { listTeams } from "@/services/api";
-import type { TeamSummary } from "@/types";
+import { CrewStage, Guard } from "@/components/Crew";
+import { listComplexes, listTeams } from "@/services/api";
+import type { ComplexSummary, TeamSummary } from "@/types";
 
-/** The boss's way in: pick an existing workspace, or open a new one.
+/** Which door the visitor is standing at. */
+type Mode = "boss" | "worker" | "commander";
+
+/** The front door: pick the team, then come in as its manager or as a worker.
  *
- *  Members never arrive here — they follow a share link, which logs them in
- *  without a password. That asymmetry is the whole access model (D5): the
- *  side that authors has a credential, the side that reads has a link. */
+ *  The two doors take different credentials on purpose. The manager types
+ *  the team password (D10). A worker types the name they claimed and their
+ *  personal passcode (D14) — and only that: *claiming* a name still needs the
+ *  share link, because this screen is open to anyone and the team list above
+ *  it is public (D25). The name is typed rather than picked for the same
+ *  reason: a picker here would publish every team's roster.
+ *
+ *  There is no "open a team" door any more (D28): workspaces are opened by
+ *  צוות משמרות זהב from the operator console, and this page says so.
+ *
+ *  The third door is the מכלול commander's (D43): it picks a מכלול rather
+ *  than a team, and takes the password צוות משמרות זהב issued. It is shown
+ *  only when a מכלול exists. */
 export function Login({
   busy,
   error,
   onLogin,
-  onCreate,
+  onEmployeeLogin,
+  onCommanderLogin,
   onDismissError,
 }: {
   busy: boolean;
   error: string | null;
   onLogin: (teamId: string, password: string) => Promise<void>;
-  onCreate: (name: string, password: string) => Promise<void>;
+  onEmployeeLogin: (
+    teamId: string,
+    employee: string,
+    passcode: string,
+  ) => Promise<void>;
+  onCommanderLogin: (complexId: string, password: string) => Promise<void>;
   onDismissError: () => void;
 }) {
-  const [teams, setTeams] = useState<TeamSummary[]>([]);
-  const [creating, setCreating] = useState(false);
+  // `undefined` until the list has answered, so the card does not flash an
+  // empty picker before the first answer.
+  const [teams, setTeams] = useState<TeamSummary[] | undefined>(undefined);
+  const [mode, setMode] = useState<Mode>("boss");
   const [teamId, setTeamId] = useState("");
-  const [name, setName] = useState("");
+  const [complexes, setComplexes] = useState<ComplexSummary[]>([]);
+  const [complexId, setComplexId] = useState("");
+  const [employee, setEmployee] = useState("");
   const [password, setPassword] = useState("");
+
+  const switchMode = (next: Mode) => {
+    setMode(next);
+    setPassword("");
+    onDismissError();
+  };
 
   useEffect(() => {
     listTeams()
       .then((rows) => {
         setTeams(rows);
         setTeamId((current) => current || rows[0]?.id || "");
-        // With no workspace on the server there is nothing to log into, so
-        // the form opens on "create" rather than on an empty picker.
-        if (rows.length === 0) setCreating(true);
       })
       .catch(() => setTeams([]));
+    listComplexes()
+      .then((rows) => {
+        setComplexes(rows);
+        setComplexId((current) => current || rows[0]?.id || "");
+      })
+      .catch(() => setComplexes([]));
   }, []);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (busy) return;
     try {
-      if (creating) {
-        await onCreate(name.trim(), password);
+      if (mode === "commander") {
+        await onCommanderLogin(complexId, password);
+      } else if (mode === "worker") {
+        await onEmployeeLogin(teamId, employee.trim(), password);
       } else {
         await onLogin(teamId, password);
       }
@@ -66,9 +104,12 @@ export function Login({
     }
   };
 
-  const canSubmit = creating
-    ? name.trim().length > 0 && password.length >= 6
-    : teamId.length > 0 && password.length > 0;
+  const canSubmit =
+    mode === "commander"
+      ? complexId.length > 0 && password.length > 0
+      : mode === "worker"
+      ? teamId.length > 0 && employee.trim().length > 0 && password.length > 0
+      : teamId.length > 0 && password.length > 0;
 
   return (
     <main id="main-content" className="workspace-gate">
@@ -78,7 +119,7 @@ export function Login({
             <CalendarDays size={18} />
           </span>
           <span>
-            <strong>משמרות זהב</strong>
+            <strong className="brand-name">משמרות זהב</strong>
             <small>ניהול סידורי עבודה</small>
           </span>
         </div>
@@ -119,96 +160,165 @@ export function Login({
         </div>
       </section>
 
-      <form className="gate-card" onSubmit={submit} aria-labelledby="gate-form-title">
-        <div className="gate-form-head">
-          <span>{creating ? "סביבת עבודה חדשה" : "כניסה מאובטחת"}</span>
-          <h2 id="gate-form-title">{creating ? "פתיחת צוות" : "כניסת מנהל"}</h2>
+      {teams === undefined ? (
+        <div className="gate-card" aria-busy="true">
+          <CrewStage label="טוען את הצוותים…" />
         </div>
-        <p className="gate-lede">
-          {creating
-            ? "כל צוות מקבל מרחב עבודה נפרד — ראיון, סידור והגדרות משלו."
-            : "בחרו את הצוות שלכם והזינו את הסיסמה."}
-        </p>
-
-        {creating ? (
-          <label className="gate-field">
-            <span>שם הצוות</span>
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="לדוגמה: צוות תפעול"
-              maxLength={80}
-              autoComplete="organization"
-              disabled={busy}
-            />
-          </label>
-        ) : (
-          <label className="gate-field">
-            <span>צוות</span>
-            <select
-              value={teamId}
-              onChange={(event) => setTeamId(event.target.value)}
-              disabled={busy || teams.length === 0}
-            >
-              {teams.map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        <label className="gate-field">
-          <span>סיסמה</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete={creating ? "new-password" : "current-password"}
-            disabled={busy}
-          />
-          {creating ? (
-            <small className="gate-hint">לפחות 6 תווים.</small>
-          ) : null}
-        </label>
-
-        {error ? (
-          <div className="gate-error" role="alert">
-            <AlertCircle size={15} />
-            <span>{error}</span>
+      ) : (
+        <form className="gate-card" onSubmit={submit} aria-labelledby="gate-form-title">
+          <div className="gate-hero-crew" aria-hidden="true">
+            <Guard who="him" />
+            <Guard who="her" />
           </div>
-        ) : null}
+          <div className="gate-form-head">
+            <span>כניסה מאובטחת</span>
+            <h2 id="gate-form-title">
+              {mode === "worker"
+                ? "כניסת עובד/ת"
+                : mode === "commander"
+                  ? "כניסת מפקד מכלול"
+                  : "כניסת מפקד משמרת"}
+            </h2>
+          </div>
+          <p className="gate-lede">
+            {mode === "commander"
+              ? "בחרו את המכלול והיכנסו עם סיסמת המפקד שקיבלתם מצוות משמרות זהב."
+              : teams.length === 0
+                ? "עדיין לא נפתח צוות פעיל. צוותים חדשים נפתחים על ידי צוות משמרות זהב."
+                : complexes.length > 0
+                  ? "בחרו את המשמרת, ואז היכנסו כמפקד/ת משמרת או כעובד/ת — או כמפקד/ת מכלול."
+                  : "בחרו את המשמרת, ואז היכנסו כמפקד/ת משמרת או כעובד/ת."}
+          </p>
 
-        <button
-          type="submit"
-          className="start-button"
-          disabled={busy || !canSubmit}
-        >
-          {busy ? "רגע…" : creating ? "פתחו מרחב עבודה" : "כניסה"}
-        </button>
-
-        <button
-          type="button"
-          className="gate-switch"
-          onClick={() => {
-            setCreating((value) => !value);
-            setPassword("");
-            onDismissError();
-          }}
-          disabled={busy}
-        >
-          {creating ? (
-            <>
-              <Users size={14} /> יש לי כבר צוות
-            </>
-          ) : (
-            <>
-              <Plus size={14} /> פתיחת צוות חדש
-            </>
+          {mode === "commander" ? (
+            <label className="gate-field">
+              <span>מכלול</span>
+              <select
+                value={complexId}
+                onChange={(event) => setComplexId(event.target.value)}
+                disabled={busy}
+              >
+                {complexes.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : teams.length === 0 ? null : (
+            <label className="gate-field">
+              <span>משמרת</span>
+              <select
+                value={teamId}
+                onChange={(event) => setTeamId(event.target.value)}
+                disabled={busy || teams.length === 0}
+              >
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
-        </button>
-      </form>
+
+          {teams.length === 0 ? null : (
+            <div className="gate-doors" role="radiogroup" aria-label="סוג כניסה">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={mode === "boss"}
+                className={`gate-door${mode === "boss" ? " is-selected" : ""}`}
+                onClick={() => switchMode("boss")}
+                disabled={busy}
+              >
+                <UserCog size={18} />
+                <span>מפקד משמרת</span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={mode === "worker"}
+                className={`gate-door${mode === "worker" ? " is-selected" : ""}`}
+                onClick={() => switchMode("worker")}
+                disabled={busy}
+              >
+                <UserCircle size={18} />
+                <span>עובד/ת</span>
+              </button>
+              {complexes.length > 0 ? (
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={mode === "commander"}
+                  className={`gate-door${mode === "commander" ? " is-selected" : ""}`}
+                  onClick={() => switchMode("commander")}
+                  disabled={busy}
+                >
+                  <Network size={18} />
+                  <span>מפקד מכלול</span>
+                </button>
+              ) : null}
+            </div>
+          )}
+
+          {mode === "worker" ? (
+            <label className="gate-field">
+              <span>השם שלך</span>
+              <input
+                value={employee}
+                onChange={(event) => setEmployee(event.target.value)}
+                placeholder="כפי שרשום בצוות"
+                maxLength={120}
+                autoComplete="username"
+                disabled={busy}
+              />
+            </label>
+          ) : null}
+
+          <label className="gate-field">
+            <span>{mode === "worker" ? "קוד אישי" : "סיסמה"}</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+              disabled={busy || (mode !== "commander" && teams.length === 0)}
+            />
+            {mode === "worker" ? (
+              <small className="gate-hint">
+                עדיין אין לכם קוד אישי? פתחו את קישור הצוות שקיבלתם מהמנהל
+                ובחרו בו את השם שלכם.
+              </small>
+            ) : null}
+          </label>
+
+          {error ? (
+            <div className="gate-error" role="alert">
+              <AlertCircle size={15} />
+              <span>{error}</span>
+            </div>
+          ) : null}
+
+          {busy ? <CrewStage size="sm" /> : null}
+
+          <button
+            type="submit"
+            className="start-button"
+            disabled={busy || !canSubmit}
+          >
+            {busy ? "רגע…" : "כניסה"}
+          </button>
+
+          <p className="gate-golden">
+            <Crown size={14} aria-hidden="true" />
+            <span>צריכים צוות חדש? צוות משמרות זהב פותח אותו עבורכם.</span>
+          </p>
+          <Link className="gate-switch" href="/admin">
+            <ShieldCheck size={14} /> כניסת צוות משמרות זהב
+          </Link>
+        </form>
+      )}
     </main>
   );
 }

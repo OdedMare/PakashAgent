@@ -2,28 +2,35 @@
 
 A team is the tenant. Every row that belongs to a workplace hangs off one,
 which is why this module also owns the *scoped* reads — a caller that wants a
-team's interviews asks here rather than filtering in `bl/`, so a forgotten
+team's profile asks here rather than filtering in `bl/`, so a forgotten
 WHERE clause cannot become a data leak between workplaces.
 
 Passwords are hashed with `hashlib.scrypt` from the standard library. bcrypt
-or argon2 would be the usual choice, but both are dependencies, and this
-backend pins Python 3.8.10 against an EOL Debian image where every wheel that
-needs compiling is a real cost (docs/BUILD_ORDER.md). scrypt is memory-hard,
+or argon2 would be the usual choice, but both are dependencies, chosen
+against when this backend pinned Python 3.8.10 on an EOL Debian image where
+every wheel that needed compiling was a real cost. scrypt is memory-hard,
 ships with CPython, and is a genuine password hash -- unlike the SHA-256 that
 usually gets reached for when a project wants to avoid a dependency.
 """
 
 import hashlib
 import hmac
+import json
 import os
 import secrets
 from typing import List, Optional
 
 from psycopg.types.json import Jsonb
 
-from app.common.errors import AuthError, ConflictError, NotFoundError
-from app.dal.database.postgres import connect
+from app.common.errors import (
+    PROFILE_CHANGED, AuthError, ConflictError, NotFoundError,
+)
+from app.dal.database import in_atomic
 from app.dal.repository.base import RepositoryBase, new_id
+from app.dal.repository.profile_cache import ProfileCache
+
+# Per process, shared by every repository instance (`profile_cache.py`).
+_profiles = ProfileCache()
 
 # scrypt's cost parameters. n=2**14 with r=8 lands around 16MB and a few tens
 # of milliseconds per verify -- slow enough to make guessing expensive, fast
@@ -103,7 +110,9 @@ class TeamRepository(RepositoryBase):
         anyone who loads the page -- it is how a boss finds their own team --
         so it must not carry the password hash or the member token with it.
         """
-        return self._all("SELECT id, name, created_at FROM teams ORDER BY name")
+        return self._all(
+            "SELECT id, name, created_at, active FROM teams ORDER BY name"
+        )
 
     def authenticate_boss(self, team_id: str, password: str) -> dict:
         """The team if the password matches, `AuthError` if it does not.
@@ -151,77 +160,83 @@ class TeamRepository(RepositoryBase):
         )
 
     def team_profile(self, team_id: str) -> Optional[dict]:
-        """The workplace profile from this team's finished interview.
+        """The workplace profile saved by the manager.
 
-        The newest completed one wins. Re-running the interview is how a
-        workplace gets re-taught, and the most recent answer is the one the
-        boss meant.
+        The document is sent only when it changed since this process last
+        read it (`profile_cache.py`); the row is read every time, so a save
+        from any process is seen on the very next read.
         """
+        key = (getattr(self._store.get(), "database_schema", ""), team_id)
+        cacheable = not in_atomic(self._store)
+        revision, updated_at = _profiles.version(key) if cacheable else (None, None)
         rows = self._all("""
-            SELECT profile FROM interview_sessions
-            WHERE team_id=%s AND status='complete' AND profile IS NOT NULL
-            ORDER BY updated_at DESC
-            LIMIT 1
-        """, (team_id,))
+            SELECT revision, updated_at,
+                   CASE WHEN revision=%s AND updated_at=%s THEN NULL
+                        ELSE profile::text END AS profile
+            FROM team_profiles WHERE team_id=%s
+        """, (revision, updated_at, team_id))
+        if not rows:
+            _profiles.drop(key)
+            return None
+        row = rows[0]
+        text = row["profile"]
+        if text is None:
+            text = _profiles.text(key, row["revision"], row["updated_at"])
+            if text is None:  # dropped in between: read it whole
+                return self._uncached_profile(team_id)
+        elif cacheable:
+            _profiles.keep(key, row["revision"], row["updated_at"], text)
+        return json.loads(text)
+
+    def _uncached_profile(self, team_id: str) -> Optional[dict]:
+        rows = self._all(
+            "SELECT profile FROM team_profiles WHERE team_id=%s", (team_id,)
+        )
         return rows[0]["profile"] if rows else None
 
-    def update_team_profile(self, team_id: str, profile: dict) -> dict:
-        """Replace the newest completed interview's working profile.
+    def team_profile_revision(self, team_id: str) -> Optional[int]:
+        """The profile's revision, which a save may name to refuse a stale
+        edit; None before the first save."""
+        rows = self._all(
+            "SELECT revision FROM team_profiles WHERE team_id=%s", (team_id,)
+        )
+        return rows[0]["revision"] if rows else None
 
-        Manual edits update the same durable profile instead of creating a
-        second source of truth. Stored schedules keep their historical slots.
+    def update_team_profile(
+        self, team_id: str, profile: dict,
+        expected_revision: Optional[int] = None,
+    ) -> dict:
+        """Replace the team's working profile.
+
+        With `expected_revision`, only if nobody saved since that revision
+        was read: the check and the write are one statement, so two saves
+        racing each other cannot both pass it.
         """
-        with connect(self._store) as connection:
-            row = connection.execute("""
-                SELECT id FROM interview_sessions
-                WHERE team_id=%s AND status='complete' AND profile IS NOT NULL
-                ORDER BY updated_at DESC
-                LIMIT 1
-                FOR UPDATE
-            """, (team_id,)).fetchone()
-            if row is None:
-                raise NotFoundError("פרופיל הצוות לא נמצא")
-            connection.execute("""
-                UPDATE interview_sessions
-                SET profile=%s, updated_at=NOW()
-                WHERE id=%s AND team_id=%s
-            """, (Jsonb(profile), row["id"], team_id))
-            connection.commit()
-        return profile
+        rows = self._all("""
+            UPDATE team_profiles SET profile=%s, updated_at=NOW(),
+                revision=revision + 1
+            WHERE team_id=%s AND (%s::int IS NULL OR revision=%s::int)
+            RETURNING team_id
+        """, (Jsonb(profile), team_id, expected_revision, expected_revision))
+        if rows:
+            return profile
+        if expected_revision is not None and self.team_profile(team_id) is not None:
+            raise ConflictError(PROFILE_CHANGED)
+        raise NotFoundError("פרופיל הצוות לא נמצא")
 
     def create_team_profile(self, team_id: str, profile: dict) -> dict:
-        """Create the first profile without requiring an AI interview.
+        """Create the team's first manually configured profile.
 
-        A manually configured profile lives in the same completed-session
-        store as an interviewed one, so every downstream reader keeps one
-        source of truth.
+        Two first saves racing each other: the second is refused as stale
+        rather than failing on the primary key.
         """
-        self._execute("""
-            INSERT INTO interview_sessions (id, team_id, status, profile)
-            VALUES (%s,%s,'complete',%s)
-        """, (new_id(), team_id, Jsonb(profile)))
+        rows = self._all("""
+            INSERT INTO team_profiles (team_id, profile) VALUES (%s,%s)
+            ON CONFLICT (team_id) DO NOTHING RETURNING team_id
+        """, (team_id, Jsonb(profile)))
+        if not rows:
+            raise ConflictError(PROFILE_CHANGED)
         return profile
-
-    def claim_orphan_sessions(self, team_id: str) -> int:
-        """Adopt interviews recorded before workspaces existed.
-
-        Those rows have `team_id IS NULL` and are otherwise unreachable once
-        every read is scoped. Claiming them into the first team that is
-        created is what keeps an existing install's interview from vanishing
-        the moment this feature ships. Only ever claims once -- after the
-        first team exists there are no NULL rows left to take.
-        """
-        with connect(self._store) as connection:
-            row = connection.execute("""
-                WITH claimed AS (
-                    UPDATE interview_sessions SET team_id=%s
-                    WHERE team_id IS NULL
-                    RETURNING 1
-                )
-                SELECT count(*) AS n FROM claimed
-            """, (team_id,)).fetchone()
-            connection.commit()
-        return int(row["n"]) if row else 0
 
 
 __all__ = [

@@ -9,7 +9,7 @@ Composition is an include line rather than `%s` interpolation, because the
 shared fragments are shared *wording* and an include says where the text
 comes from at the point it lands:
 
-    <!-- include: shared/interview_method.md -->
+    <!-- include: shared/untrusted.md -->
 
 Includes resolve relative to this directory, nest, and are cycle-checked. A
 missing or self-referential include raises at load time — these strings are
@@ -27,7 +27,7 @@ _INCLUDE = re.compile(
     r"^[ \t]*<!--[ \t]*include:[ \t]*(?P<name>[^>]+?)[ \t]*-->[ \t]*$", re.M
 )
 
-# Read once: `load` sits inside every interview turn, hot enough that
+# Read once: `load` sits inside repeated model calls, hot enough that
 # re-reading per call would be waste for text that cannot change while the
 # process runs.
 _cache: Dict[str, str] = {}

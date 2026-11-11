@@ -8,7 +8,28 @@ export function constraintBlocksSlot(
   date: string,
   slot: Slot,
 ): boolean {
-  return constraints.some((row) => {
+  return blockingConstraint(constraints, employee, date, slot) !== null;
+}
+
+/** The constraint that blocks this cell, so the board can say *which* one —
+ * its hours and its reason — rather than only that one exists. */
+export function blockingConstraint(
+  constraints: Constraint[],
+  employee: string,
+  date: string,
+  slot: Slot,
+): Constraint | null {
+  return constraints.find((row) => {
+    if (row.constraint_type === "duty") {
+      if (!row.is_hard || row.employee !== employee) return false;
+      const shift = interval(date, slot.start_time, slot.end_time);
+      // A מכלול duty has no hours: it holds its date midnight to midnight,
+      // so the night before that ends on its morning is blocked too (D44).
+      const duty = !row.start_time && !row.end_time
+        ? interval(row.constraint_date, "00:00", "00:00")
+        : interval(row.constraint_date, row.start_time, row.end_time);
+      return Boolean(shift && duty && shift[0] < duty[1] && duty[0] < shift[1]);
+    }
     if (
       !row.is_hard ||
       row.employee !== employee ||
@@ -44,7 +65,18 @@ export function constraintBlocksSlot(
       blockedEnd += 24 * 60;
     }
     return shiftStart < blockedEnd && blockedStart < shiftEnd;
-  });
+  }) ?? null;
+}
+
+function interval(date: string, start: string, end: string): [number, number] | null {
+  const day = Date.parse(`${date}T00:00:00Z`);
+  const startMinutes = minutes(start);
+  const endMinutes = minutes(end);
+  if (!Number.isFinite(day) || startMinutes === null || endMinutes === null) return null;
+  const begins = day / 60000 + startMinutes;
+  let finishes = day / 60000 + endMinutes;
+  if (finishes <= begins) finishes += 24 * 60;
+  return [begins, finishes];
 }
 
 function minutes(value: string): number | null {

@@ -3,11 +3,12 @@
 import { ArrowLeftRight, CheckCircle2, TriangleAlert, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { formatDate, hebrewWeekday } from "@/components/Management/Calendar";
+import { hebrewWeekday } from "@/components/Management/Calendar";
+import { displayDate } from "@/components/DateInput";
 import type { Assignment, PlacementCheck } from "@/types";
 
-/** The dialog a drop opens — the same contract `ConfirmMove` has, plus what
- *  the move would cost.
+/** The dialog a drop opens: the manager's reason, plus what the move would
+ *  cost.
  *
  *  **The drag still wrote nothing** ([D12](../../../docs/DECISIONS.md#d12--dragging-a-shift-is-a-proposal-not-an-edit)),
  *  and the manager's reason is still required before anything lands
@@ -20,12 +21,8 @@ import type { Assignment, PlacementCheck } from "@/types";
  *  never has to phrase anything to an AI to find out that דנה has a
  *  constraint that day.
  *
- *  **It explains; it does not refuse.** The confirm button is live whatever
- *  the check found, because the audit advises and never gates
- *  ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)) —
- *  a manager who knows about the constraint and wants the move anyway is
- *  making a decision, not a mistake. Only the reason gates, and it gates for
- *  a different purpose entirely.
+ *  Ordinary findings remain advisory (D3). Hard unavailability marks the
+ *  check as blocking, and the server also refuses the write.
  */
 export function ConfirmDrop({
   assignment,
@@ -69,7 +66,7 @@ export function ConfirmDrop({
     return () => window.removeEventListener("keydown", onKey);
   }, [onCancel]);
 
-  const ready = reason.trim().length > 0 && !busy;
+  const ready = reason.trim().length > 0 && !busy && !check?.blocking;
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onCancel}>
@@ -99,11 +96,11 @@ export function ConfirmDrop({
           <strong>{assignment.employee}</strong> יעבור מ־
           <strong>
             {assignment.shift} · {hebrewWeekday(assignment.date)}{" "}
-            {formatDate(assignment.date)}
+            {displayDate(assignment.date)}
           </strong>{" "}
           אל{" "}
           <strong>
-            {shiftName} · {hebrewWeekday(slotDate)} {formatDate(slotDate)}
+            {shiftName} · {hebrewWeekday(slotDate)} {displayDate(slotDate)}
           </strong>
           .
         </p>
@@ -235,34 +232,6 @@ export function PlacementVerdict({
         </div>
       ) : null}
 
-      {check.alternatives.borrow?.length && onPickEmployee ? (
-        <div className="board-alternatives is-borrow">
-          {/* Its own heading, deliberately worded as a request rather than
-              as availability. These people are on their exit: choosing one
-              is asking them to come in on a weekend that is not theirs,
-              and the dialog must not let that read as "free" (D25). */}
-          <span className="board-alternatives-label">
-            אין אף אחד מהסגירה — אפשר להציע למי שאינו בסגירה, באישורך
-          </span>
-          <div className="board-alternatives-row">
-            {check.alternatives.borrow.map((option) => (
-              <button
-                key={option.employee}
-                type="button"
-                className="board-alternative is-borrow"
-                onClick={() => onPickEmployee(option.employee)}
-                title={option.why}
-              >
-                {option.employee}
-                <span className="board-alternative-hours">
-                  {option.rotation}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
       {check.alternatives.slots.length && onPickSlot ? (
         <div className="board-alternatives">
           <span className="board-alternatives-label">
@@ -284,7 +253,7 @@ export function PlacementVerdict({
               >
                 {option.shift_name}
                 <span className="board-alternative-hours">
-                  {hebrewWeekday(option.slot_date)} {formatDate(option.slot_date)}
+                  {hebrewWeekday(option.slot_date)} {displayDate(option.slot_date)}
                 </span>
               </button>
             ))}
@@ -296,7 +265,9 @@ export function PlacementVerdict({
           confirm button is otherwise ambiguous about which of the two it
           means — and under D3 it means both. */}
       <p className="board-verdict-foot">
-        אפשר להמשיך בכל מקרה — ההתראות מיידעות ולא חוסמות.
+        {check.blocking
+          ? "לא ניתן להמשיך: החייל/ת אינו/ה זמין/ה למשמרת. יש לבחור חייל/ת או משמרת אחרת."
+          : "אפשר להמשיך — ההתראות הרגילות מיידעות ולא חוסמות."}
       </p>
     </div>
   );

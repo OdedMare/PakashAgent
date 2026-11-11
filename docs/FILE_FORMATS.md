@@ -1,5 +1,12 @@
 # Real schedule file formats
 
+> These samples define the layout `bl/export.py` writes (Sample A) and are
+> the importer's first fixtures (`tests/test_importer.py`). Since
+> [D42](DECISIONS.md) the importer is not limited to them: any shape is a
+> `Layout` (`bl/importer/layout.py`) — both samples turned on their side,
+> people down the side with shift names in the cells, weekday templates,
+> weeks stacked on one sheet.
+
 Derived from two schedule files supplied by the boss. They are the evidence
 behind [D7](DECISIONS.md#d7--import-infers-layout-boss-confirms) and
 [D9](DECISIONS.md#d9--shift-vocabulary-is-per-workplace), and they should become
@@ -51,6 +58,66 @@ for one will fail on the other. This is why there is no template.
 
 ---
 
+## Sample C — the unit's own sheet: people down the side, `date × shift` across, a tab per month
+
+```
+    │  06/10/2024 (merged ×3)  │  07/10/2024 (merged ×3)  │ …
+    │        ראשון             │          שני             │
+ שם │ בוקר │ צהריים │ לילה     │ בוקר │ צהריים │ לילה     │
+────┼──────┼────────┼──────────┼──────┼────────┼──────────┤
+הלל רדובסקי │      │        │          │ רוני │        │          │
+עלמה שדה    │ בית  │  בית   │  בית     │      │ עלמה   │          │
+גלי רותם    │      │ גלי חפיפה│        │      │        │          │
+```
+
+- **Rows** = people, their full name in column A, under a header cell `שם`.
+- **Columns** = one date merged across three shift sub-columns, with a
+  weekday row between the date and the shift names. The dates sit in row 1
+  on one tab and in row 2 under a title on another.
+- **Cells**: the person's *first* name where they work; `בית` across a
+  stretch at home and `חופש` on leave (both absences); `<name> חפיפה` or
+  `<name>-חפיפה` on a handover shift — the person works it, and the word is
+  kept as the row's note.
+- **Dates are written either way round.** One copy writes `13/10/2024`,
+  another, saved on an American locale, `10/13/2024`. The header line
+  decides which (a part above 12, else the order that runs on day to day).
+- **Width**: a tab per month (אוקטובר, נובמבר, דצמבר, ינואר 25), or one tab
+  carrying the whole year out to column AEB. The preview opens on the month
+  covering today and takes any other run of dates.
+- Cell colours (purple for a shift, grey for home) and the name column's
+  colours are presentation only; the text says the same thing.
+
+---
+
+## Sample D — unit 619's task-team tab: a place and a shift in each cell
+
+```
+          │   ד    │   ה    │   ו   │    ש    │        א          │ …
+ מ.א │ שבעתה │ 25-פבר │ 26-פבר │27-פבר │ 28-פבר  │      01-מרץ       │
+     │ מעוף  │        בהצלחה, אין עליכם!  (merged across the row)          │
+     │ בית   │  צמא   │  צמא   │  צמא  │  צמא    │       צמא         │
+2157712│אמילי ו׳│ שבעתה │  צמא   │  צמא  │ צמא (משמרת לילה) │ צמא (יוצא בערב) │
+2142901│אליה וובק│ שבעתה │ שבעתה │  xer  │  צמא    │ צמא (משמרת בוקר) │
+```
+
+- **Rows** = people: a personal number (מ.א) in one column, the name in the
+  next. The number labels nobody; the name does.
+- **Columns** = dates written as Excel shows them on a Hebrew locale,
+  `01-מרץ`, with no year, and a row of bare weekday letters (א…ש) above.
+- **On top**: a legend column (`שבעתה`, `מעוף`, `בית`) whose rows are not
+  people — a banner merged across the row, and a row of the place name.
+  A lane labelled with a marker (`בית`) is skipped; any other label that
+  names nobody on the roster is listed for the manager to leave out.
+- **Cells** say where the person is and, in brackets, the shift there:
+  `צמא (משמרת בוקר)`, `צמא (משמרת לילה)`, `ירקון (יוצא בערב)`; a place
+  alone (`צמא`) is presence with no shift; `שבעתה` another posting; `בית`
+  home. None of these is the unit's declared shift vocabulary (מרכבה, סופה,
+  פריצה…), so each distinct value is a heading on the confirm screen, mapped
+  by the manager to a declared shift, to **"לא זמין (אילוץ)"** (the rows
+  become absences, the value kept as the reason), or to nothing.
+
+---
+
 ## What the importer must therefore do
 
 1. **Infer axis semantics, not just orientation.** Which axis is time; whether
@@ -73,7 +140,7 @@ for one will fail on the other. This is why there is no template.
    the latter with no year, which must be resolved from surrounding context or
    the period being imported.
 
-5. **Match shift headers against the interview's declared vocabulary** ([D9](DECISIONS.md#d9--shift-vocabulary-is-per-workplace)),
+5. **Match shift headers against the vocabulary declared in unit setup** ([D9](DECISIONS.md#d9--shift-vocabulary-is-per-workplace)),
    rather than inferring shift names from scratch.
 
 6. **Emit an interpretation for confirmation** before committing — e.g. *"8 people,
@@ -81,7 +148,8 @@ for one will fail on the other. This is why there is no template.
 
 ## Fixtures
 
-Rebuild both samples as `.xlsx` fixtures under `backend/tests/fixtures/` and assert
-the inferred interpretation for each. They are the regression suite for layout
-inference — the riskiest part of the build. Add a third real file as a fixture
-when one becomes available.
+Both samples are rebuilt in code as workbooks in `backend/tests/test_importer.py`
+(`test_sample_a_*`, `test_sample_b_*`), each also turned on its side, beside the
+other shapes D42 reads — people down the side, weekday templates, stacked weeks.
+They are the regression suite for layout inference, the riskiest part of the
+build. Add a real file the same way when one becomes available.

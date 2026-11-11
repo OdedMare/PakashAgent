@@ -6,20 +6,18 @@ a masked value coming back means "unchanged", so the stored secret is kept.
 """
 
 import json
+import time
 from dataclasses import asdict, fields, replace
 from pathlib import Path
 
-from app.common.config.settings import (
-    GENERATION_MODES, MODE_DAY, Settings,
-)
+from app.common.config import Settings
 from app.common.runtime_settings.normalizers import (
-    MASKED_SECRET,
-    extract_url_schema,
-    normalize_database_schema,
-    normalize_database_url,
-    normalize_llm_base_url,
+    MASKED_SECRET, extract_url_schema, normalize_database_schema,
+    normalize_database_url, normalize_llm_base_url,
 )
+from app.common.runtime_settings import redis_fields
 from app.common.runtime_settings.runtime_settings import RuntimeSettings
+from app.common.runtime_settings.shared import SharedSettings, shareable
 
 _SECRET_FIELDS = {
     "database_password",
@@ -27,31 +25,31 @@ _SECRET_FIELDS = {
     "llm_api_key_fast",
     "llm_api_key_default",
     "llm_api_key_advanced",
+    "redis_password",
 }
 
 # Fields where None/empty means "clear the value", not "keep current".
 # Without this, an emptied base URL or port could never be unset from the UI.
 _LLM_BASE_URL_FIELDS = (
-    "llm_base_url",
-    "llm_base_url_fast",
-    "llm_base_url_default",
-    "llm_base_url_advanced",
+    "llm_base_url", "llm_base_url_fast", "llm_base_url_default", "llm_base_url_advanced",
 )
-_NULLABLE = ("database_port", *_LLM_BASE_URL_FIELDS)
+_NULLABLE = ("database_port", "redis_port", *_LLM_BASE_URL_FIELDS)
 
 # Integers where 0 is not a meaningful value and is clamped away. Only
 # concurrency qualifies: `llm_timeout_seconds` is handled separately because
 # 0 there means "no timeout" and must survive.
 #
-# `llm_max_concurrency` is clamped here, but unlike every other live setting
-# it only takes effect on the next process start: the semaphore in `dal/llm/`
-# is built once and cannot be resized.
-_POSITIVE_INTS = ("llm_max_concurrency",)
+# `llm_max_concurrency` is read by the shared PostgreSQL limiter on each
+# acquisition, so the positive value saved here applies without a restart.
+# How often `get()` checks the file for a save made by another process.
+_RELOAD_SECONDS = 3.0
+_POSITIVE_INTS = ("llm_max_concurrency", "solver_workers")
 
 
 class RuntimeSettingsStore:
     def __init__(self, env: Settings):
         self._path = Path(env.runtime_settings_file)
+        self._env = env
         self._settings = RuntimeSettings(
             # Env values get the same normalization as UI edits, so a
             # jdbc: URL works however it is supplied.
@@ -81,15 +79,49 @@ class RuntimeSettingsStore:
             llm_api_key_default=env.llm_api_key_default,
             llm_api_key_advanced=env.llm_api_key_advanced,
             llm_queue_seconds=env.llm_queue_seconds,
-            schedule_generation_mode=_safe_generation_mode(
-                env.schedule_generation_mode
-            ),
+            llm_team_concurrency=max(0, int(env.llm_team_concurrency)),
+            llm_reasoning_effort=_reasoning_effort(env.llm_reasoning_effort),
+            llm_verify_ssl=env.llm_verify_ssl,
+            solver_time_limit_seconds=_seconds(env.solver_time_limit_seconds),
+            solver_workers=max(1, int(env.solver_workers)),
+            **redis_fields.from_env(env),
         )
+        self._mtime = None
+        self._checked = time.monotonic()
+        self._shared = None
         if self._path.exists():
+            self._mtime = self._path.stat().st_mtime_ns
             self._apply(json.loads(self._path.read_text("utf-8")), False)
 
     def get(self) -> RuntimeSettings:
+        """The live settings. At most every `_RELOAD_SECONDS` this looks at
+        the file first, so a save made by another process (an API worker,
+        `app.worker`) arrives here within seconds without a restart."""
+        now = time.monotonic()
+        if now - self._checked >= _RELOAD_SECONDS:
+            self._checked = now
+            self.reload_if_changed()
+            self.pull_shared()
         return self._settings
+
+    def peek(self) -> RuntimeSettings:
+        """The settings held now, with no file or database look (D50)."""
+        return self._settings
+
+    def share_through(self, shared) -> None:
+        """Carry saves between replicas through the database (D39). Polled
+        with the file; a saved file seeds an empty database once."""
+        seed = asdict(self._settings) if self._mtime is not None else None
+        self._shared = SharedSettings(shared, seed)
+
+    def pull_shared(self) -> None:
+        """Apply a save another replica made. Called at start-up, then by `get()`."""
+        # The poll's connection calls `get()`; `_checked` is fresh, so no loop.
+        patch = self._shared.pull() if self._shared is not None else None
+        if patch:
+            candidate = replace(self._settings)
+            self._apply(shareable(patch), False, candidate)
+            self._settings = candidate
 
     def public(self) -> dict:
         """The settings as the API may return them — secrets masked.
@@ -115,7 +147,34 @@ class RuntimeSettingsStore:
         self._apply(patch, True, candidate)
         self._settings = candidate
         self._persist()
+        if self._shared is not None:
+            self._shared.push(asdict(self._settings))
         return self._settings
+
+    def reload_if_changed(self) -> bool:
+        """Pick up a save another process wrote to the file. True if it did.
+
+        Each process holds its own store, so a save in one API worker -- or
+        anywhere, as seen from `app.worker` -- otherwise reaches the others
+        only on restart. `get()` calls this (throttled), so a save in the
+        panel reaches every process within seconds. A file
+        caught mid-write fails to parse and is simply read next time.
+        """
+        try:
+            mtime = self._path.stat().st_mtime_ns
+        except OSError:
+            return False
+        if mtime == self._mtime:
+            return False
+        try:
+            patch = json.loads(self._path.read_text("utf-8"))
+        except (OSError, ValueError):
+            return False
+        candidate = replace(self._settings)
+        self._apply(patch, False, candidate)
+        self._settings = candidate
+        self._mtime = mtime
+        return True
 
     def _persist(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -123,6 +182,7 @@ class RuntimeSettingsStore:
             json.dumps(asdict(self._settings), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        self._mtime = self._path.stat().st_mtime_ns
 
     def _apply(self, patch: dict, strict: bool, target=None) -> None:
         """Fold a patch into `target` (the live settings by default).
@@ -144,41 +204,54 @@ class RuntimeSettingsStore:
             if value is None:
                 continue
             try:
-                if key == "database_url":
-                    # A pasted jdbc:...?currentSchema=x sets the schema too,
-                    # unless the patch names one explicitly.
-                    in_url = extract_url_schema(value)
-                    if in_url and not patch.get("database_schema"):
-                        settings.database_schema = (
-                            normalize_database_schema(in_url)
-                        )
-                    value = normalize_database_url(value)
-                elif key == "database_schema":
-                    value = normalize_database_schema(value)
-                elif key in _LLM_BASE_URL_FIELDS:
-                    value = normalize_llm_base_url(value)
-                elif key == "llm_repetition_penalty":
-                    # Float, and 0 is meaningful ("do not send it"), so it
-                    # cannot join the max(1, int(...)) group below.
-                    value = _clamp_penalty(value)
-                elif key in ("llm_timeout_seconds", "llm_queue_seconds"):
-                    # 0 is meaningful here — "no timeout, wait as long as the
-                    # server needs" — so this cannot join the max(1, ...)
-                    # group below, which would quietly turn a request for no
-                    # limit into a one-second one: the harshest possible
-                    # setting, arrived at by asking for the mildest.
-                    # Negatives are folded to 0 rather than rejected; both
-                    # mean "no ceiling" and there is nothing else they could.
-                    value = max(0, int(value))
-                elif key in _POSITIVE_INTS:
-                    value = max(1, int(value))
-                elif key == "schedule_generation_mode":
-                    value = _generation_mode(value)
+                value = _normalized(key, value, patch, settings)
             except (TypeError, ValueError):
                 if strict:
                     raise
                 continue
             setattr(settings, key, value)
+        redis_fields.env_when_unset(settings, self._env)
+
+
+def _normalized(key: str, value, patch: dict, settings):
+    """One field's value as it will be stored. Raises on an unusable value."""
+    if key == "database_url":
+        # A pasted jdbc:...?currentSchema=x sets the schema too, unless the
+        # patch names one explicitly.
+        in_url = extract_url_schema(value)
+        if in_url and not patch.get("database_schema"):
+            settings.database_schema = normalize_database_schema(in_url)
+        return normalize_database_url(value)
+    if key == "database_schema":
+        return normalize_database_schema(value)
+    if key in _LLM_BASE_URL_FIELDS:
+        return normalize_llm_base_url(value)
+    if key == "llm_repetition_penalty":
+        # Float, and 0 is meaningful ("do not send it").
+        return _clamp_penalty(value)
+    if key in ("llm_timeout_seconds", "llm_queue_seconds", "llm_team_concurrency"):
+        # 0 is meaningful in each -- the default model-call ceiling, no queue
+        # limit, no per-team quota -- so these cannot join the max(1, ...)
+        # group below, which would turn it into a one. Negatives fold to 0.
+        return max(0, int(value))
+    if key in _POSITIVE_INTS:
+        return max(1, int(value))
+    if key == "llm_verify_ssl":
+        return _flag(value)
+    if key == "llm_reasoning_effort":
+        return _reasoning_effort(value)
+    if key == "solver_time_limit_seconds":
+        return _seconds(value)
+    if key in redis_fields.FIELDS:
+        return redis_fields.normalized(key, value)
+    return value
+
+
+def _reasoning_effort(value) -> str:
+    """One of the values servers accept, or empty (send nothing): a typo sent
+    as-is would 400 every call."""
+    value = str(value or "").strip().lower()
+    return value if value in ("off", "low", "medium", "high") else ""
 
 
 def _safe_database_url(value: str) -> str:
@@ -202,29 +275,22 @@ def _clamp_penalty(value) -> float:
     return min(2.0, max(0.0, float(value)))
 
 
-def _generation_mode(value) -> str:
-    """One of the two schedule-generation widths, or a rejection.
-
-    Rejected rather than silently folded to the default: the panel offers
-    exactly two choices, so anything else is a typo in an API call, and a
-    build quietly running at a width nobody asked for is the one outcome the
-    setting exists to prevent.
-    """
-    cleaned = str(value or "").strip().lower()
-    if cleaned not in GENERATION_MODES:
-        raise ValueError(
-            "schedule_generation_mode must be one of: %s"
-            % ", ".join(GENERATION_MODES)
-        )
-    return cleaned
+def _flag(value) -> bool:
+    """A boolean as JSON or a form may spell it. `bool("false")` is True, and
+    for the TLS switch that would turn verification off by accident."""
+    if isinstance(value, bool):
+        return value
+    cleaned = str(value).strip().lower()
+    if cleaned in ("true", "1", "yes", "on"):
+        return True
+    if cleaned in ("false", "0", "no", "off"):
+        return False
+    raise ValueError("expected true or false, got %r" % (value,))
 
 
-def _safe_generation_mode(value) -> str:
-    """The env value, never failing startup on a bad one."""
-    try:
-        return _generation_mode(value)
-    except (TypeError, ValueError):
-        return MODE_DAY
+def _seconds(value) -> float:
+    """A solver time limit: positive, and never beyond ten minutes."""
+    return min(600.0, max(0.5, float(value)))
 
 
 def _safe_schema(value: str) -> str:

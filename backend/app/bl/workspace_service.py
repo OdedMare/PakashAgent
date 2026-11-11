@@ -1,4 +1,4 @@
-"""Workspace decisions: who may open a team, and in which role.
+"""Workspace access, lifecycle, and manager authentication.
 
 The repository owns the SQL and `common/sessions.py` owns the signing; this
 owns the rules between them -- what a boss is allowed to do that a member is
@@ -16,6 +16,14 @@ from app.common.sessions import ROLE_BOSS, ROLE_MEMBER
 _MIN_PASSWORD = 6
 _MAX_PASSWORD = 200
 _MAX_NAME = 80
+_MAX_NOTES = 500
+
+
+def validate_notes(value: Optional[str]) -> str:
+    clean = (value or "").strip()
+    if len(clean) > _MAX_NOTES:
+        raise AgentError("ההערה ארוכה מדי")
+    return clean
 
 
 class WorkspaceService:
@@ -23,24 +31,11 @@ class WorkspaceService:
         self._repository = repository
 
     def create(self, name: str, password: str) -> dict:
-        """Open a workspace and return it with a boss session.
-
-        The first team created also adopts any interview recorded before
-        workspaces existed -- see `claim_orphan_sessions`. Without that, an
-        existing install's finished interview becomes unreachable the moment
-        every read starts filtering by team.
-        """
-        clean_name = (name or "").strip()
-        if not clean_name:
-            raise AgentError("שם הצוות אינו יכול להיות ריק")
-        if len(clean_name) > _MAX_NAME:
-            raise AgentError("שם הצוות ארוך מדי")
+        """Open a workspace and return it with a boss session."""
+        clean_name = self.validate_name(name)
         self._validate_password(password)
         team = self._repository.create_team(clean_name, password)
-        claimed = self._repository.claim_orphan_sessions(team["id"])
-        result = _public(team, role=ROLE_BOSS)
-        result["claimed_sessions"] = claimed
-        return result
+        return _public(team, role=ROLE_BOSS)
 
     def login(self, team_id: str, password: str) -> dict:
         """Verify the boss password. Raises `AuthError` if it does not match."""
@@ -59,13 +54,19 @@ class WorkspaceService:
         return _public(team, role=ROLE_MEMBER, include_token=False)
 
     def list_teams(self) -> List[dict]:
-        """Names and ids only -- this is served before anyone has logged in."""
+        """Names and ids only -- this is served before anyone has logged in.
+
+        A suspended team is left out (D28): there is nothing behind its door
+        a visitor could reach, so offering it only invites a refusal."""
         return [
             {"id": row["id"], "name": row["name"]}
             for row in self._repository.list_teams()
+            if row.get("active", True)
         ]
 
-    def describe(self, team_id: str, role: str) -> dict:
+    def describe(
+        self, team_id: str, role: str, commander: Optional[str] = None,
+    ) -> dict:
         """The workspace as the current visitor is allowed to see it.
 
         The member token is part of a boss's view (it is the link they hand
@@ -74,7 +75,13 @@ class WorkspaceService:
         """
         team = self._repository.get_team(team_id)
         view = _public(team, role=role, include_token=(role == ROLE_BOSS))
+        view["profile_revision"] = self._repository.team_profile_revision(team_id)
         view["profile"] = self._repository.team_profile(team_id)
+        # The מכלול, for a boss only (D43): a member has no use for it.
+        team_complex = getattr(self._repository, "team_complex", None)
+        if role == ROLE_BOSS and team_complex is not None:
+            view["complex"] = team_complex(team_id)
+        view["commander"] = bool(commander)
         return view
 
     def rotate_member_link(self, team_id: str) -> dict:
@@ -96,6 +103,17 @@ class WorkspaceService:
         if current == replacement:
             raise ConflictError("הסיסמה החדשה זהה לנוכחית")
         self._repository.set_password(team_id, replacement)
+
+    def validate_name(self, name: str) -> str:
+        clean_name = (name or "").strip()
+        if not clean_name:
+            raise AgentError("שם הצוות אינו יכול להיות ריק")
+        if len(clean_name) > _MAX_NAME:
+            raise AgentError("שם הצוות ארוך מדי")
+        return clean_name
+
+    def validate_password(self, password: str) -> None:
+        self._validate_password(password)
 
     def _validate_password(self, password: str) -> None:
         value = password or ""
@@ -125,4 +143,4 @@ def _public(team: dict, role: str, include_token: bool = True) -> dict:
     return view
 
 
-__all__ = ["WorkspaceService"]
+__all__ = ["WorkspaceService", "validate_notes"]

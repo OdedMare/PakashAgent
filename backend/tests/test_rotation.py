@@ -88,6 +88,30 @@ def test_the_two_cycles_run_side_by_side_and_do_not_share_a_group():
     assert "2026-09-12" not in _saturdays(profile, profile["employees"][1])
 
 
+def test_the_board_shows_a_closing_group_even_when_it_has_no_people():
+    profile = _profile([
+        {"name": "דנה", "exit_pattern": "round", "rotation_group": "א"},
+        {"name": "יוסי", "exit_pattern": "round", "rotation_group": "ב"},
+        {"name": "רון", "exit_pattern": "triplet", "rotation_group": "ב"},
+    ],
+        round_first_closure_date=ANCHOR,
+        round_first_closure_group="א",
+        triplet_first_closure_date=ANCHOR,
+        triplet_first_closure_group="א",
+    )
+
+    days = rotation.by_date(
+        profile,
+        datetime.date.fromisoformat(ANCHOR),
+        datetime.date.fromisoformat(ANCHOR) + datetime.timedelta(days=14),
+    )
+
+    assert days[ANCHOR]["label"] == "סבב א ותלתון א"
+    assert days[ANCHOR]["employees"] == ["דנה"]
+    assert days["2026-09-05"]["label"] == "סבב ב ותלתון ב"
+    assert days["2026-09-05"]["employees"] == ["יוסי", "רון"]
+
+
 def test_round_and_triplet_can_start_from_different_weekends_and_groups():
     """Each structure keeps its own phase even when both staff one shift."""
     profile = _profile([
@@ -373,7 +397,34 @@ def test_someone_out_every_weekend_does_not_put_a_rotating_group_out_of_turn():
         if row.get("source") == "closure"
     ]
 
-    assert rows == []
+    # Only טל is kept off -- they are home -- and דנה's turn stands.
+    assert [row["employee"] for row in rows] == ["טל"]
+
+
+def test_someone_out_every_weekend_is_not_placed_on_it():
+    """"יוצא כל חמישי הביתה": Thursday to the Sunday handover is off-limits.
+
+    The rest of Sunday and the weekdays stay open, and שושים starts on Friday.
+    """
+    from app.bl.scheduler import effective_availability
+
+    profile = _profile([
+        {"name": "טל", "exit_pattern": "hamshushim", "rotation_group": ""},
+        {"name": "נועה", "exit_pattern": "shushim", "rotation_group": ""},
+    ], shifts=True)
+
+    blocked = {
+        (row["employee"], row["date"], row["shift"])
+        for row in effective_availability(profile, [], "2026-08-26", "2026-08-30")
+        if row.get("source") == "closure"
+    }
+
+    def days(name, shift):
+        return sorted(date for person, date, item in blocked if person == name and item == shift)
+
+    assert days("טל", MORNING) == ["2026-08-27", "2026-08-28", "2026-08-29", "2026-08-30"]
+    assert days("טל", NIGHT) == ["2026-08-27", "2026-08-28", "2026-08-29"]
+    assert days("נועה", MORNING) == ["2026-08-28", "2026-08-29", "2026-08-30"]
 
 
 def test_the_audit_names_a_cross_rotation_assignment():
@@ -456,43 +507,3 @@ def test_the_audit_is_silent_when_the_cycle_was_never_anchored():
         warning for warning in audit(rows, shifts, employees, profile=profile)
         if warning["code"] == CROSS_ROTATION
     ] == []
-
-
-# -- full-time service (D25) -----------------------------------------------
-
-
-def test_a_unit_that_closes_is_read_as_full_time_service():
-    """The rotation is what says so; nobody is asked a second time.
-
-    Any one of the three facts the interview already collects is enough: the
-    workplace's own mode, the optional patterns it enabled, or a roster where
-    somebody carries a pattern or a group.
-    """
-    assert rotation.full_time_unit(_profile([{"name": "דנה"}])) is True
-    assert rotation.full_time_unit({
-        "workplace": {"name": "פלוגה", "enabled_exit_patterns": ["shushim"]},
-        "employees": [{"name": "דנה"}],
-    }) is True
-    assert rotation.full_time_unit({
-        "workplace": {"name": "פלוגה"},
-        "employees": [{"name": "דנה", "exit_pattern": "hamshushim"}],
-    }) is True
-    assert rotation.full_time_unit({
-        "workplace": {"name": "פלוגה"},
-        "employees": [{"name": "דנה", "rotation_group": "א"}],
-    }) is True
-
-
-def test_a_civilian_roster_is_not_full_time_service():
-    """No rotation anywhere, so the civilian ceilings still describe it.
-
-    This is the half that keeps the suspension narrow: `audit.py` drops the
-    weekly ceiling, the run length and the rest minimum only for a workplace
-    that actually closes.
-    """
-    assert rotation.full_time_unit({
-        "workplace": {"name": "מוקד"},
-        "employees": [{"name": "דנה"}, {"name": "יוסי"}],
-    }) is False
-    assert rotation.full_time_unit({}) is False
-    assert rotation.full_time_unit({"workplace": None, "employees": None}) is False

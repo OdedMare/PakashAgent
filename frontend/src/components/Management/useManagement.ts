@@ -3,41 +3,36 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  applyChange,
-  askAgent,
   assignEmployee,
   blankSchedule,
-  briefManager,
   cancelScheduleGeneration,
+  dismissScheduleGeneration,
   clearSchedule,
   deleteConstraint,
   deleteSchedule,
+  departEmployee,
   downloadSchedule,
   generateSchedule,
-  generateScheduleDay,
+  generateScheduleRange,
   GenerationStoppedError,
   moveAssignment,
   ProfileIncompleteError,
-  proposeChange,
+  previewDeparture,
   publishSchedule,
   resumeScheduleGeneration,
   scheduleOverview,
   setConstraint,
-  simulateChange,
   unassignEmployee,
   unpublishSchedule,
   updateProfile,
+  deleteShiftType,
 } from "@/services/api";
+import { displayDate } from "../dateFormat";
+import type { Departure, DepartureCover } from "@/services/api";
 import type {
-  AgentAnswer,
-  Briefing,
-  BriefingTrigger,
   GenerationProgress,
   ManagementOverview,
-  Operation,
-  Proposal,
   Schedule,
-  Simulation,
 } from "@/types";
 
 /** The management area's server state.
@@ -53,17 +48,17 @@ import type {
  */
 /** A refused build, as the UI renders it.
  *
- *  `gaps` are the interview's own required-topic lines and `blocks` says what
- *  each one costs. Both come from the backend rather than being written here:
- *  one definition of "missing" lives in `bl/interview.py`, and a second copy
- *  in the client would drift from the gate that actually refuses. */
+ *  `gaps` name missing profile data and `blocks` says what each one costs.
+ *  Both come from the backend so the UI cannot drift from the build gate. */
 export interface ProfileGaps {
   message: string;
   gaps: string[];
   blocks: string[];
 }
 
-export interface ManagementState {
+interface ManagementState {
+  focusedScheduleId: string;
+  focusedWeek: string;
   overview: ManagementOverview | undefined;
   /** A short write is in flight. Gates the board's own controls.
    *
@@ -88,7 +83,9 @@ export interface ManagementState {
    *  identical from here, and only a person can say whether anyone is still
    *  waiting. */
   cancelGeneration: () => Promise<void>;
-  /** Set when a build was refused because the interview never taught the
+  /** Hide the banner of a stopped or failed build, keeping its days. */
+  dismissGeneration: (scheduleId: string) => Promise<void>;
+  /** Set when a build was refused because setup lacks the
    *  shift vocabulary, and cleared by any later success.
    *
    *  Kept apart from `error` because it is not the same kind of thing. An
@@ -97,31 +94,22 @@ export interface ManagementState {
    *  only part the manager can act on. */
   gaps: ProfileGaps | null;
   dismissGaps: () => void;
-  /** The agent's pending proposal, awaiting the manager's confirmation.
-   *  Nothing has been applied while this is set — that is the whole point of
-   *  the two-step contract (D8). */
-  proposal: Proposal | null;
-  /** What the agent said on its own initiative, or null before it has
-   *  spoken. A quiet briefing is still a briefing — the UI decides how
-   *  loudly to render it (D15). */
-  briefing: Briefing | null;
-  briefing_busy: boolean;
-  /** Ask the agent to speak. Called on open, after writes, and before
-   *  publishing; safe to call at any time and never throws. */
-  brief: (trigger: BriefingTrigger) => Promise<Briefing | null>;
-  dismissBriefing: () => void;
-  refresh: () => Promise<void>;
+  refresh: (required?: boolean) => Promise<void>;
+  /** Build a period, part of one, or a run of days in one that exists.
+   *
+   *  `schedule_id` aims the build at a stored draft, where `starts_on` and
+   *  `ends_on` are the days to build. Without it a period is opened on those
+   *  dates and `build_from`/`build_through` narrow what the agent fills. */
   generate: (input: {
+    schedule_id?: string;
     starts_on?: string;
     ends_on?: string;
+    build_from?: string;
+    build_through?: string;
     instructions?: string;
     required_assignments?: import("@/types").RequiredAssignment[];
-  }) => Promise<void>;
-  /** Rebuild one date in the current draft from instructions on the board. */
-  generateDay: (input: {
-    schedule_id: string;
-    date: string;
-    instructions?: string;
+    /** Only these shift types; empty or absent builds every shift. */
+    shifts?: string[];
   }) => Promise<void>;
   /** Open an empty period to fill in by hand (D18). Calls no model. */
   openBlank: (input: { starts_on?: string; ends_on?: string }) => Promise<void>;
@@ -156,38 +144,23 @@ export interface ManagementState {
   publish: (scheduleId: string, published: boolean) => Promise<void>;
   /** Download the period as `.xlsx` (D17). */
   exportSchedule: (scheduleId: string) => Promise<void>;
-  propose: (request: string, reason?: string) => Promise<Proposal | null>;
-  confirm: (reason: string) => Promise<void>;
-  dismissProposal: () => void;
-  /** What the agent found when asked a question. Carries no operations, so
-   *  there is nothing here that could be applied (D15). */
-  answer: AgentAnswer | null;
-  answer_busy: boolean;
-  /** Ask the agent about the schedule. Reads only; writes nothing. */
-  ask: (request: string) => Promise<AgentAnswer | null>;
-  dismissAnswer: () => void;
-  /** A change the manager is only considering. Persists nothing until it is
-   *  approved, and approving runs the ordinary `apply` path with a reason. */
-  simulation: Simulation | null;
-  simulate: (operations: Operation[]) => Promise<Simulation | null>;
-  approveSimulation: (reason: string) => Promise<void>;
-  dismissSimulation: () => void;
   move: (input: {
     assignment_id: string;
     shift_name: string;
     slot_date: string;
     reason: string;
     schedule_id?: string;
+    from_slot_id?: string;
   }) => Promise<void>;
   /** Tell the hook which period the manager is looking at.
    *
    *  The overview hands over the *current* period, and the board may be
    *  showing another week entirely. Everything that targets "the schedule"
-   *  — the agent's proposals, its answers, a simulation — followed the
+   *  — hand-writes and the agent conversation — followed the
    *  overview and so answered about the wrong week whenever the manager had
    *  paged away. The board reports what it is rendering, and this is what
    *  the rest of the area then aims at. */
-  focusPeriod: (scheduleId: string) => void;
+  focusPeriod: (scheduleId: string, weekStart?: string) => void;
   addConstraint: (input: {
     employee: string;
     constraint_date: string;
@@ -198,23 +171,33 @@ export interface ManagementState {
     is_hard?: boolean;
     reason?: string;
     source?: string;
+    constraint_type?: "availability" | "duty";
   }) => Promise<void>;
   removeConstraint: (rowId: string) => Promise<void>;
   saveProfile: (input: {
     employees?: Record<string, unknown>[];
     shifts?: Record<string, unknown>[];
-  }) => Promise<void>;
+  }) => Promise<boolean>;
+  deleteShift: (name: string) => Promise<void>;
+  previewDeparture: (input: { employee: string; effective_date?: string }) => Promise<Departure>;
+  /** Take somebody off the roster, then place each cover the manager chose
+   *  on a shift the departure vacated. */
+  depart: (input: {
+    employee: string;
+    effective_date?: string;
+    reason?: string;
+    covers?: DepartureCover[];
+  }) => Promise<boolean>;
   clearError: () => void;
 }
-
-/** How often the agent takes the long look at an idle control room. */
-const PERIODIC_BRIEFING_MS = 30 * 60 * 1000;
 
 export function useManagement(): ManagementState {
   const [overview, setOverview] = useState<ManagementOverview | undefined>(
     undefined,
   );
   const [busy, setBusy] = useState(false);
+  const overviewToken = useRef(0);
+  const overviewRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [generation, setGeneration] = useState<GenerationProgress | null>(null);
   // A build is running and this browser is watching it. Kept apart from
@@ -238,7 +221,11 @@ export function useManagement(): ManagementState {
   // not exist in the period covering today. Empty until the board has
   // rendered; the overview is the fallback.
   const [focused, setFocused] = useState("");
-  const focusPeriod = useCallback((id: string) => setFocused(id), []);
+  const [focusedWeek, setFocusedWeek] = useState("");
+  const focusPeriod = useCallback((id: string, weekStart?: string) => {
+    setFocused(id);
+    if (weekStart) setFocusedWeek(weekStart);
+  }, []);
 
   /** Stamp the period on a hand-write that did not name one.
    *
@@ -251,76 +238,46 @@ export function useManagement(): ManagementState {
     [focused],
   );
   const [gaps, setGaps] = useState<ProfileGaps | null>(null);
-  const [proposal, setProposal] = useState<Proposal | null>(null);
-  const [briefing, setBriefing] = useState<Briefing | null>(null);
-  const [briefingBusy, setBriefingBusy] = useState(false);
-  const [answer, setAnswer] = useState<AgentAnswer | null>(null);
-  const [answerBusy, setAnswerBusy] = useState(false);
-  const [simulation, setSimulation] = useState<Simulation | null>(null);
-  // The request the agent is still waiting on an answer to, on each of the
-  // two conversations. Refs rather than state for the reason the headlines
-  // below are: they are sent back, never rendered, and holding them in state
-  // would re-render the composer on every turn to no visible effect.
-  //
-  // Kept apart because asking and changing are separate acts (D19) — a
-  // clarification about a question must not resume a held *change*, which is
-  // the one way this could target the wrong record.
-  const pendingRequest = useRef<string>("");
-  const pendingAnswer = useRef<string>("");
-  // The headlines already shown this sitting, sent back so the agent does not
-  // open with something the manager just read. Deliberately a ref and not
-  // state: it is remembered, never rendered, and putting it in state would
-  // re-run the effects that produce it.
-  const spoken = useRef<string[]>([]);
 
-  const refresh = useCallback(async () => {
-    const next = await scheduleOverview().catch(() => null);
-    if (next) setOverview(next);
-  }, []);
-
-  /** Ask the agent to speak (D15).
-   *
-   *  Never throws and never sets `error`: a briefing is the agent's own
-   *  initiative, so a failure means it has nothing to say — not that the
-   *  manager's action failed. It has its own `busy` flag for the same
-   *  reason, so a slow briefing does not disable the calendar around it.
-   *
-   *  A quiet briefing is kept rather than discarded. "נראה תקין" said once
-   *  after generating a week is worth reading; it is the UI that decides to
-   *  render it small. */
-  const brief = useCallback(async (trigger: BriefingTrigger) => {
-    setBriefingBusy(true);
-    try {
-      const said = await briefManager(trigger, spoken.current);
-      if (said.headline) {
-        spoken.current = [...spoken.current, said.headline].slice(-8);
-      }
-      setBriefing(said);
-      return said;
-    } catch {
-      return null;
-    } finally {
-      setBriefingBusy(false);
+  const refresh = useCallback(async (required = false) => {
+    if (overviewRefreshTimer.current) {
+      clearTimeout(overviewRefreshTimer.current);
+      overviewRefreshTimer.current = null;
     }
+    const token = ++overviewToken.current;
+    const next = await scheduleOverview().catch((reason) => {
+      if (required) throw reason;
+      return null;
+    });
+    if (next && token === overviewToken.current) setOverview(next);
   }, []);
 
-  const dismissBriefing = useCallback(() => setBriefing(null), []);
+  /** Coalesce rapid per-cell writes into one full overview read.
+   *
+   *  The write response already carries the freshly audited schedule, so the
+   *  grid can update immediately. Stats and history follow once the manager
+   *  pauses instead of making every click wait for the same schedule again. */
+  const deferRefresh = useCallback(() => {
+    if (overviewRefreshTimer.current) clearTimeout(overviewRefreshTimer.current);
+    overviewRefreshTimer.current = setTimeout(() => {
+      overviewRefreshTimer.current = null;
+      void refresh();
+    }, 750);
+  }, [refresh]);
 
   /** Run a write, surface its Hebrew error, and re-read the world after.
    *
-   *  `quiet` suppresses the briefing that normally follows a write. It is
-   *  for the manual path (D18), where the manager is placing one person per
-   *  click: a model call per cell would make authoring a week by hand the
-   *  most expensive thing in the product, and the agent would be remarking
-   *  on a half-built grid it is watching being typed. The audit still runs
-   *  on every one of those writes — it is pure arithmetic and costs nothing
-   *  — so the warnings under the calendar stay live throughout. The agent
-   *  catches up on the next ordinary write, on publish, or when the manager
-   *  asks. */
+   *  `quiet` marks the per-cell manual writes (D18). The automatic
+   *  briefings it used to suppress are gone — the agent speaks only in the
+   *  manager chat — so it is kept for the callers' intent only. */
   const run = useCallback(
     async <T,>(
       action: () => Promise<T>,
-      options?: { quiet?: boolean },
+      options?: {
+        quiet?: boolean;
+        apply?: (result: T) => void;
+        deferRefresh?: boolean;
+      },
     ): Promise<T | null> => {
       setBusy(true);
       setError(null);
@@ -329,13 +286,9 @@ export function useManagement(): ManagementState {
         // A build that succeeded answers the refusal, whatever filled the
         // gap in the meantime.
         setGaps(null);
-        await refresh();
-        // Every write funnels through here, so this one line is what makes
-        // the agent react to a generated week, an applied change, a recorded
-        // constraint and a ruled-on request alike. Deliberately not awaited:
-        // the manager gets their updated calendar immediately and the
-        // agent's remark arrives when it arrives.
-        if (!options?.quiet) void brief("changed");
+        options?.apply?.(result);
+        if (options?.deferRefresh) deferRefresh();
+        else await refresh();
         return result;
       } catch (reason) {
         // Every write funnels through here, so both building buttons get the
@@ -355,7 +308,7 @@ export function useManagement(): ManagementState {
         setBusy(false);
       }
     },
-    [refresh, brief],
+    [deferRefresh, refresh],
   );
 
   /** Watch a build to its end, leaving the rest of the area usable.
@@ -405,7 +358,6 @@ export function useManagement(): ManagementState {
         setGaps(null);
         setGeneration(schedule.generation);
         await refresh();
-        if (schedule.generation.status === "complete") void brief("changed");
       } catch (reason) {
         // The manager pressed stop. The days already built are on the board
         // and the last poll left the banner saying so; there is no failure
@@ -429,34 +381,56 @@ export function useManagement(): ManagementState {
         }
       }
     },
-    [refresh, brief],
+    [refresh],
   );
 
   const generate = useCallback(
     async (input: {
+      schedule_id?: string;
       starts_on?: string;
       ends_on?: string;
+      build_from?: string;
+      build_through?: string;
       instructions?: string;
       required_assignments?: import("@/types").RequiredAssignment[];
+      staffing_overrides?: import("@/types").StaffingOverride[];
+      shifts?: string[];
+      keep_existing?: boolean;
     }) => {
-      const totalDays = inclusiveDays(input.starts_on, input.ends_on) ?? 7;
+      const firstDay = input.build_from ?? input.starts_on;
+      const lastDay = input.build_through ?? input.ends_on;
+      const totalDays = inclusiveDays(firstDay, lastDay) ?? 7;
       // Show progress from the click, including the short request that opens
       // the persisted job. Waiting for that response left the board looking
       // idle even though generation had already started.
       setGeneration({
         status: "running",
-        current_date: input.starts_on ?? "",
+        current_date: firstDay ?? "",
         total_days: totalDays,
         completed_days: 0,
         failed_days: 0,
         days: [],
-        // Left empty deliberately: the mode is the server's to stamp when it
-        // opens the job, and guessing it here would render "בנייה שבועית" for
-        // the second before the first response, on a build that may not be.
-        mode: "",
       });
+      const { schedule_id: scheduleId, keep_existing: keepExisting, ...period } = input;
+      if (scheduleId && period.starts_on && period.ends_on) {
+        const days = {
+          schedule_id: scheduleId,
+          starts_on: period.starts_on,
+          ends_on: period.ends_on,
+          instructions: period.instructions,
+          shifts: period.shifts,
+          keep_existing: keepExisting,
+          staffing_overrides: period.staffing_overrides,
+        };
+        await watchGeneration(
+          (onProgress, signal) =>
+            generateScheduleRange(days, onProgress, { signal }),
+          scheduleId,
+        );
+        return;
+      }
       await watchGeneration((onProgress, signal) =>
-        generateSchedule(input, onProgress, { signal }),
+        generateSchedule(period, onProgress, { signal }),
       );
     },
     [watchGeneration],
@@ -472,26 +446,6 @@ export function useManagement(): ManagementState {
     },
     [watchGeneration],
   );
-
-  const generateDay = useCallback(async (input: {
-    schedule_id: string;
-    date: string;
-    instructions?: string;
-  }) => {
-    setGeneration({
-      status: "running",
-      current_date: input.date,
-      total_days: 1,
-      completed_days: 0,
-      failed_days: 0,
-      days: [],
-    });
-    await watchGeneration(
-      (onProgress, signal) =>
-        generateScheduleDay(input, onProgress, { signal }),
-      input.schedule_id,
-    );
-  }, [watchGeneration]);
 
   /** Stop the build this browser is watching.
    *
@@ -513,11 +467,22 @@ export function useManagement(): ManagementState {
     await refresh();
   }, [refresh]);
 
+  const dismissGeneration = useCallback(
+    async (scheduleId: string) => {
+      try {
+        const dismissed = await dismissScheduleGeneration(scheduleId);
+        setGeneration(dismissed.generation);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
   /** Open an empty period for the manager to fill in themselves (D18).
    *
-   *  The one schedule-building path with no model on it at all. It *does*
-   *  brief afterwards, unlike the per-cell writes below: an empty week is a
-   *  state worth one remark, and it happens once rather than forty times. */
+   *  The one schedule-building path with no model on it at all. */
   const openBlank = useCallback(
     async (input: { starts_on?: string; ends_on?: string }) => {
       await run(() => blankSchedule(input));
@@ -534,7 +499,13 @@ export function useManagement(): ManagementState {
       reason?: string;
       schedule_id?: string;
     }) => {
-      await run(() => assignEmployee(withPeriod(input)), { quiet: true });
+      await run(() => assignEmployee(withPeriod(input)), {
+        quiet: true,
+        apply: (schedule) => setOverview((current) =>
+          current ? { ...current, schedule } : current
+        ),
+        deferRefresh: true,
+      });
     },
     [run, withPeriod],
   );
@@ -555,8 +526,7 @@ export function useManagement(): ManagementState {
    *
    *  Not quiet, unlike `assign` and `unassign`: those are one cell each and
    *  fire per keystroke of a week being typed in, while this is one
-   *  deliberate act that changes the whole day. It is exactly the kind of
-   *  state change the briefing exists to remark on. */
+   *  deliberate act that changes the whole day. */
   const clearShifts = useCallback(
     async (input: {
       schedule_id: string;
@@ -585,27 +555,21 @@ export function useManagement(): ManagementState {
 
   /** Publish or withdraw a period.
    *
-   *  Publishing briefs *first* and waits for it: this is the last cheap
-   *  moment to catch an unstaffed slot, and a remark that arrived after the
-   *  team already had the schedule would be a report rather than a warning.
-   *  It still does not gate anything — the publish runs whatever the agent
-   *  says, because warnings inform and never block
+   *  Nothing gates it — warnings inform and never block
    *  ([D3](../../../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-)). */
   const publish = useCallback(
     async (scheduleId: string, published: boolean) => {
-      if (published) await brief("publishing");
       await run(() =>
         published ? publishSchedule(scheduleId) : unpublishSchedule(scheduleId),
       );
     },
-    [run, brief],
+    [run],
   );
 
   /** Hand the period out as a file.
    *
-   *  Not routed through `run()`: that refetches the world and re-briefs the
-   *  agent after every call, and a download changes nothing for either to
-   *  react to. It still surfaces its Hebrew error the same way, because a
+   *  Not routed through `run()`: that refetches the world after every call,
+   *  and a download changes nothing to react to. It still surfaces its Hebrew error the same way, because a
    *  failed download is otherwise completely silent. */
   const exportSchedule = useCallback(async (scheduleId: string) => {
     setBusy(true);
@@ -619,168 +583,74 @@ export function useManagement(): ManagementState {
     }
   }, []);
 
-  /** Ask the agent what it would do. Persists nothing.
-   *
-   *  The result is held in `proposal` until the manager confirms or dismisses
-   *  it. A proposal that comes back with `needs_reason` is the agent asking
-   *  why — it carries no operations, and the composer shows the question. */
-  // Read out of the overview rather than reached for inside the callback:
-  // the dependency the compiler infers from `overview?.schedule?.id` is the
-  // whole `overview`, which would not match the narrower one declared here
-  // and costs the memoization entirely.
-  const scheduleId = focused || overview?.schedule?.id;
-
-  const propose = useCallback(
-    async (request: string, reason?: string) => {
-      setBusy(true);
-      setError(null);
-      try {
-        const result = await proposeChange({
-          request,
-          reason: reason ?? "",
-          schedule_id: scheduleId,
-          // Whatever the agent was still waiting on. Read out of the
-          // proposal on screen rather than kept in a second piece of state:
-          // the question the manager is looking at *is* the pending request,
-          // and two records of it could disagree. The server clears it the
-          // moment the request is carried out, so an answered question
-          // cannot be reopened by a stale echo.
-          pending_request: pendingRequest.current,
-        });
-        setProposal(result);
-        // Only a question leaves something pending; the server sends back an
-        // empty string on a finished proposal, which clears this.
-        pendingRequest.current = result.pending_request ?? "";
-        return result;
-      } catch (reason_) {
-        setError(reason_ instanceof Error ? reason_.message : "שגיאה לא ידועה");
-        return null;
-      } finally {
-        setBusy(false);
-      }
-    },
-    [scheduleId],
-  );
-
-  /** Apply the pending proposal with the manager's reason attached. */
-  const confirm = useCallback(
-    async (reason: string) => {
-      if (!proposal) return;
-      const applied = await run(() =>
-        applyChange({
-          schedule_id: proposal.schedule_id,
-          operations: proposal.operations as Operation[],
-          profile_operations: proposal.profile_operations,
-          reason,
-          agent_reason: proposal.agent_reason,
-        }),
-      );
-      if (applied) setProposal(null);
-    },
-    [proposal, run],
-  );
-
-  const dismissProposal = useCallback(() => {
-    setProposal(null);
-    // Dismissing is the manager declining to answer. The next thing they say
-    // is a new request, not a late clarification of the one they closed.
-    pendingRequest.current = "";
-  }, []);
-
+  /** A save that added a soldier or a shift refits the drafts ahead of
+   *  today on the server. The one on screen is watched like any build, so
+   *  its banner shows the refit; a published week left alone is said. */
   const saveProfile = useCallback(async (input: {
     employees?: Record<string, unknown>[];
     shifts?: Record<string, unknown>[];
   }) => {
-    await run(() => updateProfile(input));
+    const saved = await run(() => updateProfile({
+      ...input,
+      expected_revision: overview?.profile_revision,
+    }));
+    const absorbed = saved?.absorbed;
+    if (!absorbed) return saved !== null;
+    // The week on screen first: watching only today's period left a board
+    // paged to another week showing its old rows until a reload.
+    const onScreen = [focused, overview?.schedule?.id]
+      .map((id) => id && absorbed.schedules.find((row) => row.schedule_id === id))
+      .find(Boolean);
+    if (onScreen) void resumeGeneration(onScreen.schedule_id);
+    if (absorbed.skipped.length) setError(skippedMessage(absorbed.skipped));
+    return true;
+  }, [run, focused, overview?.schedule?.id, overview?.profile_revision, resumeGeneration]);
+
+  const deleteShift = useCallback(async (name: string) => {
+    await run(() => deleteShiftType(name));
   }, [run]);
 
-  /** Ask the agent about the schedule. **Reads only.**
-   *
-   *  Separate from `propose` on purpose: a proposal is an answer with a
-   *  confirm button attached, and offering one in reply to "who could cover
-   *  Saturday" answers something the manager did not ask. The response
-   *  carries no operations, so there is nothing here that could be applied.
-   *
-   *  It does not go through `run()` — nothing was written, so there is
-   *  nothing for a refetch or a briefing to react to, and re-reading the
-   *  world after a question would make asking cost more than acting. */
-  const ask = useCallback(
-    async (request: string) => {
-      setAnswerBusy(true);
-      setAnswer(null);
-      setError(null);
-      try {
-        const found = await askAgent({
-          request,
-          schedule_id: scheduleId,
-          pending_request: pendingAnswer.current,
-        });
-        setAnswer(found);
-        pendingAnswer.current = found.pending_request ?? "";
-        return found;
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
-        return null;
-      } finally {
-        setAnswerBusy(false);
-      }
-    },
-    [scheduleId],
+  /** Not `run()`: a preview writes nothing, and its error belongs in the
+   *  dialog that asked rather than in the area's banner. */
+  const preview = useCallback(
+    (input: { employee: string; effective_date?: string }) => previewDeparture(input),
+    [],
   );
 
-  const dismissAnswer = useCallback(() => {
-    setAnswer(null);
-    pendingAnswer.current = "";
-  }, []);
-
-  /** What a set of operations would do. **Persists nothing.**
-   *
-   *  Also outside `run()`, and for a stronger reason than `ask`: a
-   *  simulation must not refetch, because refetching after a call that
-   *  changed nothing would make the screen behave as though it had. */
-  const simulate = useCallback(
-    async (operations: Operation[]) => {
-      setBusy(true);
-      setError(null);
-      try {
-        const result = await simulateChange({
-          operations,
-          schedule_id: scheduleId,
-        });
-        setSimulation(result);
+  /** One write per cover after the departure, inside the same `run`, so the
+   *  board re-reads once. A cover the server refuses (a duty overlap, say)
+   *  leaves its shift vacant and is named in the banner; the departure and
+   *  the other covers stand. */
+  const depart = useCallback(
+    async ({ covers = [], ...input }: {
+      employee: string;
+      effective_date?: string;
+      reason?: string;
+      covers?: DepartureCover[];
+    }) => {
+      const missed: string[] = [];
+      const done = await run(async () => {
+        const result = await departEmployee(input);
+        for (const cover of covers) {
+          try {
+            await assignEmployee({
+              ...cover,
+              reason: `מחליף/ה את ${input.employee} שיצא/ה מהסידור`,
+            });
+          } catch (reason) {
+            const why = reason instanceof Error ? reason.message : "";
+            missed.push(`${cover.employee} ל${cover.shift_name} ב-${displayDate(cover.slot_date)}${why ? ` (${why})` : ""}`);
+          }
+        }
         return result;
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
-        return null;
-      } finally {
-        setBusy(false);
+      });
+      if (done !== null && missed.length) {
+        setError(`${input.employee} הוצא/ה מהסידור, אבל לא ניתן היה לשבץ: ${missed.join("; ")}. המשמרות האלה נשארו פנויות.`);
       }
+      return done !== null;
     },
-    [scheduleId],
+    [run],
   );
-
-  /** Approve a simulation — the ordinary apply path, with a reason.
-   *
-   *  Deliberately the *same* call `confirm` makes. There is no dedicated
-   *  "apply simulation" endpoint, because a second write path is exactly how
-   *  a confirmation step gets routed around (D8/D12). */
-  const approveSimulation = useCallback(
-    async (reason: string) => {
-      if (!simulation) return;
-      const applied = await run(() =>
-        applyChange({
-          schedule_id: simulation.schedule_id,
-          operations: simulation.operations,
-          reason,
-          agent_reason: "אושר מתוך סימולציה",
-        }),
-      );
-      if (applied) setSimulation(null);
-    },
-    [simulation, run],
-  );
-
-  const dismissSimulation = useCallback(() => setSimulation(null), []);
 
   const move = useCallback(
     async (input: {
@@ -789,6 +659,7 @@ export function useManagement(): ManagementState {
       slot_date: string;
       reason: string;
       schedule_id?: string;
+      from_slot_id?: string;
     }) => {
       await run(() => moveAssignment(withPeriod(input)));
     },
@@ -806,6 +677,7 @@ export function useManagement(): ManagementState {
       is_hard?: boolean;
       reason?: string;
       source?: string;
+      constraint_type?: "availability" | "duty";
     }) => {
       await run(() => setConstraint(input));
     },
@@ -827,24 +699,21 @@ export function useManagement(): ManagementState {
   // than theoretical.
   useEffect(() => {
     let cancelled = false;
+    const token = ++overviewToken.current;
     scheduleOverview()
       .catch(() => null)
       .then((next) => {
-        if (!cancelled && next) {
+        if (!cancelled && next && token === overviewToken.current) {
           setOverview(next);
           if (next.schedule?.generation.status === "running") {
             void resumeGeneration(next.schedule.id);
           }
         }
-        // The opening remark, after the overview rather than beside it: the
-        // calendar is what the manager came for, and the agent's greeting
-        // must never be what they are waiting on.
-        if (!cancelled) void brief("opened");
       });
     return () => {
       cancelled = true;
     };
-  }, [brief, resumeGeneration]);
+  }, [resumeGeneration]);
 
   // A watch is a poll loop, not a subscription: nothing stops it when the
   // component goes away, so leaving the area would otherwise keep a request
@@ -853,24 +722,15 @@ export function useManagement(): ManagementState {
   useEffect(() => () => {
     watching.current?.abort();
     watching.current = null;
+    if (overviewRefreshTimer.current) {
+      clearTimeout(overviewRefreshTimer.current);
+      overviewRefreshTimer.current = null;
+    }
   }, []);
 
-  /** The long look, for a control room left open.
-   *
-   *  `periodic` is the only trigger nothing prompts — it exists so patterns
-   *  across periods ("רון עשה ארבעה סופי שבוע ברצף") get noticed at all,
-   *  since no single action reveals them. Half an hour is chosen to be
-   *  rarer than the manager's own rhythm: this speaks unasked, and a thing
-   *  that speaks unasked too often stops being read. */
-  useEffect(() => {
-    const timer = window.setInterval(
-      () => void brief("periodic"),
-      PERIODIC_BRIEFING_MS,
-    );
-    return () => window.clearInterval(timer);
-  }, [brief]);
-
   return {
+    focusedScheduleId: focused,
+    focusedWeek,
     overview,
     busy,
     error,
@@ -878,14 +738,9 @@ export function useManagement(): ManagementState {
     generating,
     resumeGeneration,
     cancelGeneration,
-    proposal,
-    briefing,
-    briefing_busy: briefingBusy,
-    brief,
-    dismissBriefing,
+    dismissGeneration,
     refresh,
     generate,
-    generateDay,
     openBlank,
     assign,
     unassign,
@@ -893,22 +748,14 @@ export function useManagement(): ManagementState {
     removeSchedule,
     publish,
     exportSchedule,
-    propose,
-    confirm,
-    dismissProposal,
-    answer,
-    answer_busy: answerBusy,
-    ask,
-    dismissAnswer,
-    simulation,
-    simulate,
-    approveSimulation,
-    dismissSimulation,
     move,
     focusPeriod,
     addConstraint,
     removeConstraint,
     saveProfile,
+    deleteShift,
+    previewDeparture: preview,
+    depart,
     clearError,
     gaps,
     dismissGaps,
@@ -923,4 +770,17 @@ function inclusiveDays(first?: string, last?: string): number | null {
     return null;
   }
   return Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
+}
+
+/** Weeks a profile save did not refit, and why, in one line. */
+function skippedMessage(
+  rows: { starts_on: string; ends_on: string; reason: string }[],
+): string {
+  const weeks = rows.map((row) => `${dayMonth(row.starts_on)} – ${dayMonth(row.ends_on)} (${row.reason})`);
+  return `השינוי נשמר, אך לא הוטמע בסידורים: ${weeks.join("; ")}.`;
+}
+
+function dayMonth(iso: string): string {
+  const [, month, day] = iso.split("-");
+  return day && month ? `${day}/${month}` : iso;
 }
