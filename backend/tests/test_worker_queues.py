@@ -47,8 +47,9 @@ class _Chat:
         self.calls = []
         self.refusal = refusal
 
-    def replacement_options(self, *args):
+    def replacement_options(self, *args, **filters):
         self.calls.append(args)
+        self.filters = filters
         if self.refusal:
             raise self.refusal
         return {"employee": args[1], "slots": []}
@@ -99,7 +100,7 @@ def test_replacement_search_runs_in_an_interactive_lane_and_saves_its_result():
         "attempts": 1,
         "payload": {
             "employee": "דנה", "starts_on": "2026-10-05",
-            "ends_on": "2026-10-06",
+            "ends_on": "2026-10-06", "roles": ["חובש"],
         },
     }
     repository = _Repository([job])
@@ -107,6 +108,7 @@ def test_replacement_search_runs_in_an_interactive_lane_and_saves_its_result():
 
     assert JobWorker(repository, chat=chat).run_once("interactive") == 1
     assert chat.calls == [("team-a", "דנה", "2026-10-05", "2026-10-06")]
+    assert chat.filters == {"from_shifts": [], "roles": ["חובש"]}
     assert repository.results == [
         ("job-3", {"employee": "דנה", "slots": []}),
     ]

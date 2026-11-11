@@ -18,6 +18,7 @@ from typing import Dict, List, Optional
 
 from app.bl.audit import shift_stats
 from app.bl.chat.contract import GAP_CODES, audit_rows, changed_rows, plan_availability
+from app.bl.placement.tiers import pool
 from app.bl.shared import iso, warning_key
 from app.bl.tools import ScheduleTools
 
@@ -42,13 +43,18 @@ class AbsenceOptions:
 
     def build(self, team_id: str, employee: str, dates: List[str],
               chosen: Optional[List[dict]] = None, reason: str = "",
-              profile: Optional[dict] = None) -> dict:
+              profile: Optional[dict] = None,
+              from_shifts=(), roles=()) -> dict:
         """The affected shifts, their ranked candidates and a fair pick each.
 
         `chosen` are the manager's own picks; they win over the fair one.
         One plan edits one stored period, so when the shifts sit in several
         the earliest is planned and the rest are listed in `elsewhere` --
         the absence itself is still saved for every date.
+
+        `from_shifts` and `roles` are the changes tab's filter: only people
+        who come from one of those shift types and hold one of those roles
+        are checked and offered (`placement/tiers.pool`).
         """
         if profile is None:
             profile = self._context.profile(team_id)
@@ -74,6 +80,7 @@ class AbsenceOptions:
                      constraints, [dict(action="remove", employee=employee, date=iso(row["date"]),
                                         shift=row["shift"], reason=reason or "היעדרות") for row in own])
         picks = {(row["date"], row["shift"]): row["employee"] for row in chosen or []}
+        among = pool(schedule, profile, from_shifts, roles)
         for row in own:
             date = iso(row["date"])
             result = self._tools.find_replacements.from_values(
@@ -86,6 +93,7 @@ class AbsenceOptions:
                 # Only the colleagues are shown; where the absent person could
                 # go instead is no question an absence asks.
                 include_other_slots=False,
+                among=among,
             )
             result = dict(result, tool="find_replacements", ok=result.get("ok", True))
             slot = fill.slot(row, schedule, result.get("candidates") or [],

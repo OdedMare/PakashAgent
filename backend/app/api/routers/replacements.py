@@ -19,10 +19,13 @@ def build_router(service, guards):
         employee: str = Query(min_length=1, max_length=120),
         starts_on: str = Query(min_length=10, max_length=10),
         ends_on: str = Query(default="", max_length=10),
+        from_shifts: list[str] = Query(default=[]),
+        roles: list[str] = Query(default=[]),
         session: dict = Depends(manager),
     ):
         return service.replacement_options(
             session["team_id"], employee, starts_on, ends_on,
+            from_shifts=from_shifts, roles=roles,
         )
 
     @router.post("/searches", status_code=202)
@@ -33,6 +36,7 @@ def build_router(service, guards):
         return service.start_replacement_search(
             session["team_id"], request.employee,
             request.starts_on, request.ends_on,
+            from_shifts=request.from_shifts, roles=request.roles,
         )
 
     @router.get("/searches/{search_id}")

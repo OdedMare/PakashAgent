@@ -96,6 +96,8 @@ class JobWorker:
                 result = self._chat.replacement_options(
                     team_id, payload["employee"],
                     payload["starts_on"], payload.get("ends_on", ""),
+                    from_shifts=payload.get("from_shifts") or [],
+                    roles=payload.get("roles") or [],
                 )
             except AppError as exc:
                 # A refusal is the answer, not a fault: retrying it three

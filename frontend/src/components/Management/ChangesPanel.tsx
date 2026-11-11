@@ -140,6 +140,8 @@ export function ChangesPanel({
       {action === "replace" ? (
         <ReplacementPanel
           employees={activeEmployees.filter((name) => !isOff(employees.find((row) => nameOf(row) === name)))}
+          shiftNames={shiftNames}
+          roles={rolesOf(employees)}
           today={today}
           disabled={disabled}
           onPrepare={onPrepare}
@@ -263,6 +265,24 @@ function withStanders(
     if (row.inactive_from || listed.length) return row;
     return { ...row, eligible_shifts: previous };
   });
+}
+
+/** Every role the roster names, for the replacement filter: `role`, `roles`
+ *  and each qualification's role, as the server counts them (`person_roles`). */
+function rolesOf(employees: Record<string, unknown>[]): string[] {
+  const found = new Set<string>();
+  const add = (value: unknown) => {
+    if (typeof value === "string" && value.trim()) found.add(value.trim());
+  };
+  for (const row of employees) {
+    if (row.inactive_from) continue;
+    add(row.role);
+    if (Array.isArray(row.roles)) row.roles.forEach(add);
+    if (Array.isArray(row.qualifications)) {
+      row.qualifications.forEach((item) => add((item as Record<string, unknown> | null)?.role));
+    }
+  }
+  return [...found].sort((a, b) => a.localeCompare(b, "he"));
 }
 
 function nameOf(row: Record<string, unknown>): string {

@@ -151,20 +151,26 @@ class ManagerChatService:
             accept_exceptions=accept_exceptions, confirmation=confirmation,
         )
 
-    def replacement_options(self, team_id, employee, starts_on, ends_on):
+    def replacement_options(self, team_id, employee, starts_on, ends_on,
+                            from_shifts=(), roles=()):
         """Who could cover one person's absence, fairest first. Reads only.
 
         The replacement tab's question. The answer is not a plan: the tab
         sends the manager's picks to the conversation, where they become one
-        through the ordinary checks and approval.
+        through the ordinary checks and approval. `from_shifts` and `roles`
+        narrow who is searched at all, before any check runs.
         """
         profile, dates, _, _ = self._replacement_input(
             team_id, employee, starts_on, ends_on,
         )
-        found = self._absence.build(team_id, employee, dates, profile=profile)
+        found = self._absence.build(
+            team_id, employee, dates, profile=profile,
+            from_shifts=from_shifts, roles=roles,
+        )
         return {key: value for key, value in found.items() if key != "results"}
 
-    def start_replacement_search(self, team_id, employee, starts_on, ends_on):
+    def start_replacement_search(self, team_id, employee, starts_on, ends_on,
+                                 from_shifts=(), roles=()):
         """Queue the expensive read and return before it starts."""
         _, _, first, last = self._replacement_input(
             team_id, employee, starts_on, ends_on,
@@ -177,6 +183,8 @@ class ManagerChatService:
                 "employee": employee,
                 "starts_on": first,
                 "ends_on": last,
+                "from_shifts": list(from_shifts or []),
+                "roles": list(roles or []),
             },
         )
         return {"id": job["id"], "status": job["status"]}

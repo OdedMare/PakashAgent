@@ -273,10 +273,14 @@ def test_the_replacement_tab_queues_a_search_and_polls_its_result():
 
     started = client.post("/api/agent/replacements/searches", json={
         "employee": "דנה", "starts_on": "2026-10-05", "ends_on": "2026-10-06",
+        "from_shifts": [MORNING], "roles": ["חובש"],
     })
     assert started.status_code == 202
     assert started.json() == {"id": "replacement-job", "status": "queued"}
     assert jobs["replacement-job"]["kind"] == "replacement_options"
+    # The filter chosen before the search travels with the job.
+    assert jobs["replacement-job"]["payload"]["from_shifts"] == [MORNING]
+    assert jobs["replacement-job"]["payload"]["roles"] == ["חובש"]
 
     waiting = client.get("/api/agent/replacements/searches/replacement-job")
     assert waiting.json() == {"id": "replacement-job", "status": "queued"}

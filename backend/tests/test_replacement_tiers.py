@@ -7,7 +7,7 @@ whole contract is fixtures in and an order out.
 """
 
 from app.bl.placement import suggest_alternatives
-from app.bl.placement.tiers import OTHER, SAME_POST, SAME_ROLE, Tiers
+from app.bl.placement.tiers import OTHER, SAME_POST, SAME_ROLE, Tiers, pool
 
 GATE = "ש.ג"
 PATROL = "סיור"
@@ -135,3 +135,26 @@ def test_the_absence_pick_is_the_earliest_stage_not_the_lightest_person():
     slot = fill.slot(leaving, schedule, _offered(profile), "")
     assert slot["pick"] == CREW_MEDIC
     assert [row["employee"] for row in slot["candidates"]][:2] == [CREW_MEDIC, OTHER_MEDIC]
+
+
+def test_no_filter_searches_everybody():
+    assert pool(_schedule(), _profile()) is None
+
+
+def test_a_filter_by_role_and_shift_type_narrows_who_is_searched():
+    schedule, profile = _schedule(), _profile()
+    assert pool(schedule, profile, roles=["נהג"]) == {CREW_DRIVER, LIGHT_DRIVER}
+    # From patrol: whoever the period has on it, or whose roster names it.
+    assert pool(schedule, profile, from_shifts=[PATROL]) == {OTHER_MEDIC, CREW_MEDIC}
+    profile["employees"] = [
+        dict(row, eligible_shifts=[PATROL]) if row["name"] == LIGHT_DRIVER else row
+        for row in profile["employees"]
+    ]
+    assert pool(schedule, profile, from_shifts=[PATROL], roles=["נהג"]) == {LIGHT_DRIVER}
+
+
+def test_only_the_filtered_people_are_offered():
+    among = pool(_schedule(), _profile(), roles=["נהג"])
+    found = suggest_alternatives(_schedule(), _profile(), LEAVING, GATE, DATE,
+                                 moving_assignment_id="a1", among=among)
+    assert [row["employee"] for row in found["employees"]] == [LIGHT_DRIVER, CREW_DRIVER]

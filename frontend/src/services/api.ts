@@ -93,12 +93,17 @@ export async function getReplacementOptions(
   employee: string,
   startsOn: string,
   endsOn: string,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; fromShifts?: string[]; roles?: string[] },
 ): Promise<ReplacementOptions> {
   const signal = options?.signal;
   let search = await request<ReplacementSearch>("/api/agent/replacements/searches", {
     method: "POST",
-    body: JSON.stringify({ employee, starts_on: startsOn, ends_on: endsOn }),
+    // The filter narrows who the server checks at all, so a narrowed search
+    // is also the faster one.
+    body: JSON.stringify({
+      employee, starts_on: startsOn, ends_on: endsOn,
+      from_shifts: options?.fromShifts ?? [], roles: options?.roles ?? [],
+    }),
     signal,
   });
   // Most searches finish in a second or two: look again soon, then ease off.

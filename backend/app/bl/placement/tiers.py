@@ -69,6 +69,34 @@ class Tiers:
         return crew
 
 
+def pool(schedule: dict, profile: dict, from_shifts=(), roles=()):
+    """The people a narrowed search may offer, or None for everybody.
+
+    The manager can say up front which shift type the cover should come
+    from and which role it should hold. Someone comes *from* a shift the
+    way they belong to a post: the period has them on it, or their
+    `eligible_shifts` names it. The search then checks only these people,
+    which is what makes a narrowed search the faster one.
+    """
+    wanted_shifts = set(_listed(list(from_shifts or [])))
+    wanted_roles = set(_listed(list(roles or [])))
+    if not wanted_shifts and not wanted_roles:
+        return None
+    standing = {row["employee"] for row in values.rows(schedule) if row["shift"] in wanted_shifts}
+    names = set()
+    for row in values.employees(profile):
+        name = values.text(row.get("name"))
+        if not name:
+            continue
+        if wanted_roles and not person_roles(row) & wanted_roles:
+            continue
+        if wanted_shifts and name not in standing \
+                and not set(_listed(row.get("eligible_shifts"))) & wanted_shifts:
+            continue
+        names.add(name)
+    return names
+
+
 def _place(row: dict, name: str) -> str:
     return values.text((row or {}).get("purpose")) or name
 

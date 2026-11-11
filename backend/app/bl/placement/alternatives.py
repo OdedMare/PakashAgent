@@ -25,6 +25,7 @@ def suggest_alternatives(
     availability: Optional[List[dict]] = None,
     moving_assignment_id: str = "",
     nearby: bool = True,
+    among: Optional[set] = None,
 ) -> dict:
     """Who else could take this slot, and where else this person could go.
 
@@ -32,6 +33,9 @@ def suggest_alternatives(
     within reach, and a caller that only wants the colleagues -- the
     replacement tab -- was paying about half of its time for a list it threw
     away.
+
+    `among` narrows the colleagues to a set of names (`tiers.pool`): nobody
+    outside it is checked at all.
 
     `employees` come in stages (`tiers.py`): the same role from this post,
     the same role from another, then anyone else -- and inside each stage
@@ -48,13 +52,14 @@ def suggest_alternatives(
         moving_assignment_id,
     )
     return {
-        "employees": free_employees(context, employee, shift_name, slot_date),
+        "employees": free_employees(context, employee, shift_name, slot_date, among),
         "slots": nearby_slots(context, employee, shift_name, slot_date) if nearby else [],
     }
 
 
 def free_employees(
     context: PlacementContext, employee: str, shift_name: str, slot_date: str,
+    among: Optional[set] = None,
 ) -> List[dict]:
     """Colleagues who could take this slot with no warning of their own."""
     taken = {
@@ -72,6 +77,7 @@ def free_employees(
             tiers.mark({"employee": name, "hours": load.get(name, 0.0)})
             for name in _names(context)
             if name != employee and name not in taken
+            and (among is None or name in among)
         ),
         key=lambda item: (item["tier"], item["hours"], item["employee"]),
     )

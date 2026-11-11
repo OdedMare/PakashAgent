@@ -18,11 +18,11 @@ _RANKED_BY = (
 _NO_PERIOD = "אין סידור מאוחסן לתאריך הזה"
 
 
-def _exception_candidates(schedule, profile, availability, leaving, shift, date):
+def _exception_candidates(schedule, profile, availability, leaving, shift, date, among=None):
     candidates = []
     for person in profile.get("employees") or []:
         name = text(person.get("name"))
-        if not name or name == leaving:
+        if not name or name == leaving or (among is not None and name not in among):
             continue
         verdict = check_placement(
             schedule, profile, employee=name, shift_name=shift, slot_date=date,
@@ -105,8 +105,13 @@ class FindReplacements(Tool):
         self, schedule: dict, profile: dict, availability: list,
         shift_name: str, slot_date: str, employee: str = "",
         include_exceptions: bool = False, include_other_slots: bool = True,
+        among=None,
     ) -> dict:
-        """Find candidates from one already-loaded scheduling snapshot."""
+        """Find candidates from one already-loaded scheduling snapshot.
+
+        `among` is the set of names the search is narrowed to
+        (`placement.tiers.pool`); None means the whole roster.
+        """
         leaving, shift, date = text(employee), text(shift_name), iso(slot_date)
         alternatives = suggest_alternatives(
             schedule,
@@ -117,11 +122,12 @@ class FindReplacements(Tool):
             availability=availability,
             moving_assignment_id=assignment_id(schedule, leaving, shift, date),
             nearby=include_other_slots,
+            among=among,
         )
         candidates = alternatives.get("employees") or []
         if include_exceptions and not candidates:
             candidates = _exception_candidates(
-                schedule, profile, availability, leaving, shift, date,
+                schedule, profile, availability, leaving, shift, date, among,
             )
         return {
             "found": True,
