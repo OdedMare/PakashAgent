@@ -24,7 +24,7 @@ import { HelpButton, useGuideSurface } from "@/components/Guide";
 import { deleteShiftType, previewDeparture, updateProfile } from "@/services/api";
 import { blockedDaysOf, withBlockedDays } from "@/lib/blockedDays";
 import { cyclePattern, isDayCycle } from "@/lib/dayCycles";
-import { LoadWeightSelect, STATUS_LABELS, ShiftLevelSelect, SoldierFields, loadWeightOf, loadWeightValue, shiftCount, statusFields, statusOf } from "@/components/Management/SoldierFields";
+import { LoadWeightSelect, STATUS_LABELS, ShiftLevelSelect, SoldierFields, daysCapOf, loadWeightOf, loadWeightValue, shiftCount, statusFields, statusOf } from "@/components/Management/SoldierFields";
 import { ExitPatternFields } from "@/components/Management/ExitPatternFields";
 import type { UnitPolicy } from "@/services/api";
 import type { DayCycle, RotationClosureWindow, RotationPresenceRule, TeamView } from "@/types";
@@ -420,7 +420,7 @@ export function ManualSetup({
           can_train: Boolean(person.can_train),
           notes: text(person.notes),
           competence: text(person.competence),
-          reserve_days_per_week: typeof person.reserve_days_per_week === "number" ? person.reserve_days_per_week : null,
+          reserve_days_per_week: daysCapOf(statusOf(person.service_type, person.rank_group), person.reserve_days_per_week),
           reserve_min_days: typeof person.reserve_min_days === "number" ? person.reserve_min_days : null,
           reserve_consecutive: person.reserve_consecutive === true,
           reserve_call: text(person.reserve_call),
@@ -548,7 +548,7 @@ export function ManualSetup({
           />
 
           {dayCycles.length ? <DayCycleSetup cycles={dayCycles} onChange={setDayCycles} used={usedDayCycles} /> : null}
-          {reserveOn ? <p className="rotation-derived-note">מילואים: בכוח אדם בוחרים מעמד ״מילואים״ לכל מילואימניק/ית, ומגדירים כמה ימים בשבוע, מינימום והאם ברצף. את הימים עצמם בוחר הסידור.</p> : null}
+          {reserveOn ? <p className="rotation-derived-note">מילואים: בכוח אדם בוחרים מעמד ״מילואים״ לכל מילואימניק/ית, ומסמנים באילו ימים הוא/היא חסום/ה, ואפשר גם מינימום ימים והאם ברצף. את הימים עצמם בוחר הסידור.</p> : null}
           {availableExitPatterns.has("personal") ? <p className="rotation-derived-note">סגירה אישית: בכוח אדם בוחרים ״סגירה אישית 1 ל־N״ ומגדירים כל כמה שבתות ומתי הסגירה הראשונה.</p> : null}
           {availableExitPatterns.has("daily") ? <p className="rotation-derived-note">יומי: בכוח אדם בוחרים ״יומי״ ומגדירים לכל אחד/ת ימי הגעה ושעות.</p> : null}
 

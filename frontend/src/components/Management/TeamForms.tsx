@@ -10,7 +10,7 @@ import { cycleOf, cyclePattern, isDayCycle } from "@/lib/dayCycles";
 import type { DayCycle } from "@/types";
 
 import { ExitPatternFields } from "./ExitPatternFields";
-import { LoadWeightSelect, STATUS_LABELS, ShiftLevelSelect, SoldierFields, loadWeightOf, loadWeightValue, statusFields, statusOf } from "./SoldierFields";
+import { LoadWeightSelect, STATUS_LABELS, ShiftLevelSelect, SoldierFields, daysCapOf, loadWeightOf, loadWeightValue, statusFields, statusOf } from "./SoldierFields";
 import {
   EXIT_PATTERN_LABELS,
   text,
@@ -87,7 +87,7 @@ export function EmployeeForm({
     <form className="constraint-form profile-form" onSubmit={(event) => {
       event.preventDefault();
       if (!name.trim()) return;
-      onSubmit({ ...exitFields, name: name.trim(), role: role.trim(), eligible_shifts: eligible, exit_pattern: exitPattern, rotation_group: rotationGroup, ...statusFields(status), counts_toward_staffing: countsTowardStaffing, is_shift_manager: isShiftManager, can_train: canTrain, notes: notes.trim(), competence, reserve_days_per_week: reserveDays, reserve_min_days: reserveMinDays, reserve_consecutive: reserveConsecutive, reserve_call: reserveCall, recurring_constraints: recurring, min_weekly_shifts: minShifts, max_weekly_shifts: maxShifts });
+      onSubmit({ ...exitFields, name: name.trim(), role: role.trim(), eligible_shifts: eligible, exit_pattern: exitPattern, rotation_group: rotationGroup, ...statusFields(status), counts_toward_staffing: countsTowardStaffing, is_shift_manager: isShiftManager, can_train: canTrain, notes: notes.trim(), competence, reserve_days_per_week: daysCapOf(status, reserveDays), reserve_min_days: reserveMinDays, reserve_consecutive: reserveConsecutive, reserve_call: reserveCall, recurring_constraints: recurring, min_weekly_shifts: minShifts, max_weekly_shifts: maxShifts });
     }}>
       <label>
         <span>שם *</span>
