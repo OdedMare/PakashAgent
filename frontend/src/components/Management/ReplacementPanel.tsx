@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Check, LoaderCircle, Sparkles, UserRound } from "lucide-react";
+import { AlertTriangle, Check, LoaderCircle, Search, Sparkles, UserRound } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
 
 import { DateInput, displayDate } from "@/components/DateInput";
@@ -13,7 +13,7 @@ const WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמיש�
 
 /** The replacement tab: who is out, when, and who should cover.
  *
- *  Candidates appear as soon as a person and dates are chosen, in stages:
+ *  Candidates appear when "חיפוש מחליפים" is pressed, in stages:
  *  the same role from the shift itself, then the same role from another
  *  place, then anyone else who fits — each under its own heading. Inside a
  *  stage they are ordered so the load spreads evenly — the server counts
@@ -23,7 +23,8 @@ const WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמיש�
  *  ordinary message, which turns them into a plan in code (no model round)
  *  that waits for approval like every other change (D12).
  *
- *  Two filters can be set before the search: which shift type the cover
+ *  Nothing is searched until that button is pressed, so two filters can be
+ *  set before the search runs: which shift type the cover
  *  should come from, and which role it should hold. They go to the server,
  *  which then checks only those people — a shorter list and a faster answer.
  *  The lists are the unit's own shift names and roles (`shiftNames`, `roles`). */
@@ -50,29 +51,36 @@ export function ReplacementPanel({ employees, shiftNames = [], roles = [], today
   const [chosen, setChosen] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // The search runs only when asked for, so the filters are set first and
+  // the server is never sent a search the manager was about to narrow.
+  const query = { employee, from, to, fromShift, role };
+  const key = JSON.stringify(query);
+  const [asked, setAsked] = useState<(typeof query & { key: string }) | null>(null);
+  // What is on screen belongs to the search that was run: once a field
+  // changes, the old answer is put away until the search is run again.
+  const current = asked?.key === key;
+  const shown = current ? found : null;
 
   useEffect(() => {
-    if (!employee || !from || !to || from > to) return;
+    if (!asked) return;
     let cancelled = false;
     const controller = new AbortController();
-    const timer = setTimeout(() => {
-      setLoading(true); setError("");
-      getReplacementOptions(employee, from, to, {
-        signal: controller.signal,
-        fromShifts: fromShift ? [fromShift] : [],
-        roles: role ? [role] : [],
-      }).then((next) => {
-        if (cancelled) return;
-        setFound(next);
-        setChosen(Object.fromEntries(next.slots.map((slot) => [slotKey(slot), slot.pick])));
-      }).catch((reason) => {
-        if (!cancelled) { setFound(null); setError(reason instanceof Error ? reason.message : "לא ניתן לחפש מחליפים"); }
-      }).finally(() => { if (!cancelled) setLoading(false); });
-    }, 250);
-    return () => { cancelled = true; controller.abort(); clearTimeout(timer); };
-  }, [employee, from, to, fromShift, role]);
+    getReplacementOptions(asked.employee, asked.from, asked.to, {
+      signal: controller.signal,
+      fromShifts: asked.fromShift ? [asked.fromShift] : [],
+      roles: asked.role ? [asked.role] : [],
+    }).then((next) => {
+      if (cancelled) return;
+      setFound(next);
+      setChosen(Object.fromEntries(next.slots.map((slot) => [slotKey(slot), slot.pick])));
+    }).catch((reason) => {
+      if (!cancelled) setError(reason instanceof Error ? reason.message : "לא ניתן לחפש מחליפים");
+    }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; controller.abort(); };
+  }, [asked]);
 
   const prepare = () => {
+    const found = shown;
     if (!found) return;
     const picks = found.slots.filter((slot) => chosen[slotKey(slot)])
       .map((slot) => selectionSentence(chosen[slotKey(slot)], slot.shift, slot.date, slot.replacing));
@@ -82,7 +90,7 @@ export function ReplacementPanel({ employees, shiftNames = [], roles = [], today
   return <section className="replacement-panel" aria-labelledby="replacement-title">
     <header>
       <h3 id="replacement-title">החלפת משמרת</h3>
-      <p>בחרו מי לא זמין/ה ומתי. המחליפים מוצעים בהדרגה: קודם בעל/ת אותו תפקיד מהמשמרת, אחר כך אותו תפקיד ממקום אחר — ובכל שלב מי שהעומס עליו/ה הכי קל.</p>
+      <p>בחרו מי לא זמין/ה ומתי, סננו אם רוצים לפי משמרת ותפקיד, ולחצו «חיפוש מחליפים». המחליפים מוצעים בהדרגה: קודם בעל/ת אותו תפקיד מהמשמרת, אחר כך אותו תפקיד ממקום אחר — ובכל שלב מי שהעומס עליו/ה הכי קל.</p>
     </header>
     <div className="replacement-fields">
       <label>מי<select value={employee} onChange={(event) => setEmployee(event.target.value)}>
@@ -103,16 +111,19 @@ export function ReplacementPanel({ employees, shiftNames = [], roles = [], today
         {roles.map((name) => <option key={name} value={name}>{name}</option>)}
       </select></label> : null}
     </div>
-    {loading ? <p className="replacement-status" role="status"><LoaderCircle size={15} /> בודק מי פנוי…</p> : null}
-    {error ? <p className="replacement-error" role="alert">{error}</p> : null}
-    {found?.error ? <p className="replacement-error" role="alert">{found.error}</p> : null}
-    {employee && found && !found.error ? <>
-      {!found.slots.length ? <p className="replacement-status">ל{employee} אין משמרות בטווח הזה. אפשר לשמור את ההיעדרות כדי שלא ישובץ/תשובץ בו.</p> : null}
-      {found.slots.map((slot) => <ReplacementSlotCard key={slotKey(slot)} slot={slot}
+    <button type="button" className="replacement-prepare" disabled={!employee || (loading && current)}
+      onClick={() => { setLoading(true); setError(""); setFound(null); setAsked({ ...query, key }); }}>
+      <Search size={15} /> חיפוש מחליפים</button>
+    {loading && current ? <p className="replacement-status" role="status"><LoaderCircle size={15} /> בודק מי פנוי…</p> : null}
+    {error && current ? <p className="replacement-error" role="alert">{error}</p> : null}
+    {shown?.error ? <p className="replacement-error" role="alert">{shown.error}</p> : null}
+    {shown && !shown.error ? <>
+      {!shown.slots.length ? <p className="replacement-status">ל{employee} אין משמרות בטווח הזה. אפשר לשמור את ההיעדרות כדי שלא ישובץ/תשובץ בו.</p> : null}
+      {shown.slots.map((slot) => <ReplacementSlotCard key={slotKey(slot)} slot={slot}
         chosen={chosen[slotKey(slot)] ?? ""} disabled={disabled} filtered={filtered}
         onChoose={(name) => setChosen((previous) => ({ ...previous, [slotKey(slot)]: name }))} />)}
-      {found.free_dates.length && found.slots.length ? <p className="replacement-status">
-        בלי משמרות: {found.free_dates.map(dayLabel).join(", ")}. יישמר להם אילוץ היעדרות בלבד.</p> : null}
+      {shown.free_dates.length && shown.slots.length ? <p className="replacement-status">
+        בלי משמרות: {shown.free_dates.map(dayLabel).join(", ")}. יישמר להם אילוץ היעדרות בלבד.</p> : null}
       <button type="button" className="replacement-prepare" disabled={disabled || loading} onClick={prepare}>
         <Sparkles size={15} /> הכנת תוכנית לאישור</button>
     </> : null}
