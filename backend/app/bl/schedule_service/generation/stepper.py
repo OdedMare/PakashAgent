@@ -193,7 +193,30 @@ class GenerationStepper:
             keep=_board_on(schedule, dates) if job.get("keep_existing") else None,
             duties=self._history.duties(
                 team_id, iso(schedule.get("starts_on")), iso(schedule.get("ends_on"))),
+            on_chunk=lambda shifts, rows: self._land_chunk(
+                schedule["id"], team_id, dates, shifts, rows),
         )
+
+    def _land_chunk(
+        self, schedule_id: str, team_id: str, dates: List[str],
+        shifts: List[str], generated: List[dict],
+    ) -> None:
+        """Put one solved chunk of a large team's span on the board while
+        the next is being solved (`solver/chunks.py`), so the manager
+        watches it fill. Only those shifts' rows on the span's dates are
+        rewritten; the span's own checkpoint still writes all of it at the
+        end. A failure here costs the preview, never the build."""
+        if getattr(self._repository, "replace_span_assignments", None) is None:
+            return
+        try:
+            fresh = self._repository.get_schedule(schedule_id, team_id)
+            on_chunk = {slot["id"] for slot in fresh.get("slots") or []
+                        if slot.get("shift_name") in shifts}
+            rows = [row for row in persisted_rows(fresh, generated, dates, shifts)
+                    if row["slot_id"] in on_chunk]
+            self._write_span(schedule_id, team_id, dates, rows, shifts)
+        except Exception:
+            return
 
     def _write_span(
         self, schedule_id: str, team_id: str, dates: List[str], rows: List[dict],

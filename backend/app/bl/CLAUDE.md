@@ -179,7 +179,11 @@ stand for it as fixed rows, so rest, limits and load carry across. The
 time limit is shared among the chunks by their placements, and the build
 is audited and reported as one; its metrics list each chunk under
 `chunks`. `generate_span(chunk_people=0)` solves whole, as does the
-benchmark's `--whole`.
+benchmark's `--whole`. A running job shows it live: each chunk names its
+shifts in the banner's progress line (`report_activity`), and the stepper
+writes each solved chunk to the board (`_land_chunk`, through `on_chunk`)
+before the next starts; the screen's poll re-reads the grid when the line
+changes.
 
 **Spans are up to four weeks** (`slots.plan_spans`). A longer period is
 solved in such blocks, each seeing the rows of the ones before it as fixed.

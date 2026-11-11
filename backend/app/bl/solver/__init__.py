@@ -29,7 +29,7 @@ schedules the pick may differ from one build to the next.
 | `rows.py` | Row and roster helpers |
 """
 
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from app.bl.solver import chunks
 from app.bl.solver.problem import Problem, checked_requests, slots_for
@@ -52,10 +52,12 @@ def generate_span(
     workers: int = 8,
     chunk_people: int = chunks.MIN_PEOPLE,
     chunk_shifts: int = chunks.SHIFTS,
+    on_chunk: Optional[Callable[[List[str], List[dict]], None]] = None,
 ) -> dict:
     """Assign every slot from `starts_on` through `ends_on`: in one solve,
     or for a roster of `chunk_people` or more in chunks of `chunk_shifts`
     shift types, alphabetically (`chunks.py`; zero for either turns it off).
+    `on_chunk(shifts, rows)` then receives each chunk's rows as it is solved.
 
     `required_assignments` are pins; rows of `already_scheduled` outside the
     span (or on shifts outside `shift_names`) stand as they are, and rows
@@ -78,7 +80,7 @@ def generate_span(
     problem = Problem(profile, slots, **inputs)
     groups = chunks.plan(problem, chunk_people, chunk_shifts)
     if groups:
-        return chunks.solve_chunks(problem, groups, inputs, time_limit, workers)
+        return chunks.solve_chunks(problem, groups, inputs, time_limit, workers, on_chunk)
     return solve(problem, time_limit, workers)
 
 

@@ -646,7 +646,9 @@ export class GenerationStoppedError extends Error {
  *
  * - It reads `/progress`, not the whole period. The counter is the entire
  *   question being asked once a second; the grid is fetched only when the
- *   counter moves, so a twelve-day build stops re-auditing twelve days of
+ *   counter moves — or the progress line does: a large team is solved in
+ *   chunks of shifts, each named there as it starts, and the chunk before
+ *   it is on the board by then — so a twelve-day build stops re-auditing twelve days of
  *   assignments to learn that the agent is still on Tuesday.
  * - It backs off while nothing is happening, up to a few seconds, and drops
  *   straight back to a tight interval the moment a day lands.
@@ -673,6 +675,7 @@ export async function resumeScheduleGeneration(
   onProgress?.(schedule);
 
   let completed = schedule.generation.completed_days;
+  let activity = schedule.generation.activity ?? "";
   let beat = schedule.generation.heartbeat ?? "";
   let beatSeenAt = Date.now();
   let relaunches = 0;
@@ -695,10 +698,13 @@ export async function resumeScheduleGeneration(
 
     const moved =
       progress.generation.completed_days !== completed ||
+      (progress.generation.activity ?? "") !== activity ||
       progress.generation.status !== "running";
     completed = progress.generation.completed_days;
+    activity = progress.generation.activity ?? "";
     if (moved) {
-      // A day landed, or the job ended. Now the grid is worth re-reading.
+      // A day or a chunk of shifts landed, or the job ended. Now the grid
+      // is worth re-reading.
       schedule = await getSchedule(scheduleId);
       delay = POLL_MIN_MS;
     } else {

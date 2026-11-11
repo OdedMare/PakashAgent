@@ -71,3 +71,43 @@ def test_chunking_can_be_turned_off():
                            chunk_people=0)
     assert "chunks" not in result["metrics"]
     assert len(result["assignments"]) == 8
+
+
+def test_each_chunk_is_named_and_handed_over_as_it_is_solved():
+    from app.common.activity import track_activity
+    said, landed = [], []
+    pin = {"employee": "עובד 00", "shift": "בוקר", "date": "2026-09-06", "reason": "ביקש"}
+    with track_activity(said.append):
+        result = generate_span(_profile(), "2026-09-06", "2026-09-06", time_limit=2, workers=2,
+                               required_assignments=[pin],
+                               on_chunk=lambda shifts, rows: landed.append((shifts, rows)))
+    assert said == ["משבצים את המשמרות בוקר, לילה (חלק 1 מתוך 2)…",
+                    "משבצים את המשמרות ערב, תורנות (חלק 2 מתוך 2)…"]
+    # Every chunk but the last: the whole answer follows it at once.
+    assert [shifts for shifts, _ in landed] == [["בוקר", "לילה"]]
+    rows = landed[0][1]
+    assert len(rows) == 4 and {row["shift"] for row in rows} == {"בוקר", "לילה"}
+    assert pin["employee"] in {row["employee"] for row in rows if row["shift"] == "בוקר"}
+    assert all(row in result["assignments"] for row in rows)
+
+
+def test_a_running_build_puts_each_chunk_on_the_board_before_the_next():
+    from tests.test_schedule_api import TEAM, _build_app, _client
+    app, repo = _build_app()
+    repo.profiles[TEAM] = _profile()
+    client = _client(app)
+    started = client.post("/api/schedule/generate/start", json={
+        "starts_on": "2026-09-06", "ends_on": "2026-09-06"}).json()
+    writes, write = [], repo.replace_span_assignments
+
+    def recording(schedule_id, team_id, dates, assignments, shifts=None):
+        writes.append((shifts, len(assignments)))
+        return write(schedule_id, team_id, dates, assignments, shifts=shifts)
+
+    repo.replace_span_assignments = recording
+    finished = client.post("/api/schedule/generate/%s/next" % started["id"]).json()
+    # The first chunk's two shifts land on their own, then the whole day.
+    assert writes == [(["בוקר", "לילה"], 4), (None, 8)]
+    assert finished["generation"]["status"] == "complete"
+    placed = [(row["employee"], row["shift"]) for row in finished["assignments"]]
+    assert len(placed) == 8 and len(set(placed)) == 8

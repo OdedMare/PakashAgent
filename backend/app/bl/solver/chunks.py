@@ -21,19 +21,26 @@ one audit, one set of coverage notes, one count of what a rebuild kept.
 
 A shift type left alone at the end joins the chunk before it, so no chunk
 is a single shift; a grid of fewer than two chunks is solved whole.
+
+A build shows on screen as it goes: each chunk names its shifts in the
+job's progress line (`common/activity.py`), and a caller that passes
+`on_chunk` is handed every chunk's rows as it is solved, so they can stand
+on the board while the next chunk is still being worked out.
 """
 
 import time
-from typing import Dict, List
+from typing import Callable, Dict, List, Optional
 
 from app.bl.solver.problem import Problem
 from app.bl.solver.rows import assignment
 from app.bl.solver.solve import answer, search
+from app.common.activity import report_activity
 
 # From how many people on the roster a build is chunked, and how many shift
 # types one chunk holds. Zero for either solves every build whole.
 MIN_PEOPLE = 30
 SHIFTS = 2
+_ACTIVITY = "משבצים את המשמרות %s (חלק %d מתוך %d)…"
 
 
 def plan(problem: Problem, min_people: int = MIN_PEOPLE, size: int = SHIFTS) -> List[List[str]]:
@@ -49,12 +56,15 @@ def plan(problem: Problem, min_people: int = MIN_PEOPLE, size: int = SHIFTS) -> 
 
 
 def solve_chunks(problem: Problem, groups: List[List[str]], inputs: dict,
-                 time_limit: float = 10.0, workers: int = 8) -> dict:
+                 time_limit: float = 10.0, workers: int = 8,
+                 on_chunk: Optional[Callable[[List[str], List[dict]], None]] = None) -> dict:
     """Solve `problem` one group of shifts at a time and answer as one build.
 
     `inputs` are the arguments `problem` was built from besides its profile
     and slots (`availability`, `history`, `required_assignments`,
-    `already_scheduled`, `requests`, `keep`, `duties`)."""
+    `already_scheduled`, `requests`, `keep`, `duties`). `on_chunk(shifts,
+    rows)` is called after every chunk but the last with the rows now
+    standing on its shifts, pins included; the whole answer follows."""
     started = time.monotonic()
     # Draft rows inside the grid are what is being rebuilt; a chunk must not
     # read the ones on another chunk's shifts as standing.
@@ -65,13 +75,16 @@ def solve_chunks(problem: Problem, groups: List[List[str]], inputs: dict,
                for group in groups}
     total = max(1, sum(decided.values()))
     chosen, notes, measured = [], [], []
-    for group in groups:
+    for number, group in enumerate(groups, 1):
+        report_activity(_ACTIVITY % (", ".join(group), number, len(groups)))
         slots = [slot for slot in problem.slots if slot["shift_name"] in group]
         part = Problem(problem.profile, slots, **dict(inputs, already_scheduled=standing + chosen))
         rows, said, metrics = search(part, time_limit * decided[tuple(group)] / total, workers)
         chosen.extend(rows)
         notes.extend(note for note in said if note not in notes)
         measured.append(dict(metrics, shifts=list(group)))
+        if on_chunk is not None and number < len(groups):
+            on_chunk(list(group), part.pins + rows)
     return answer(problem, chosen, notes, _metrics(measured, started))
 
 

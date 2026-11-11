@@ -1935,5 +1935,13 @@ cannot see is what a later chunk will need: a soft request counted across
 shifts of two chunks (`balance`, a soft `max_count`) is weighed by each
 with the earlier rows as given, not jointly.
 
+**The manager watches it happen.** A running build names the chunk it is
+on in the banner ("משבצים את המשמרות בוקר, לילה (חלק 1 מתוך 2)…"), and
+each solved chunk is written to the board before the next one starts, so
+the grid fills shift pair by shift pair instead of all at once. The span's
+checkpoint still writes the whole span at the end; a chunk already on the
+board when a span fails or is stopped stays as ordinary draft rows and is
+rebuilt when the span is run again.
+
 The threshold and chunk size are constants (`chunks.MIN_PEOPLE`,
 `chunks.SHIFTS`) and arguments of `generate_span`; zero solves whole.
