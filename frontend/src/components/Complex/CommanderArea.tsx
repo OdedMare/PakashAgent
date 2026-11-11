@@ -31,8 +31,8 @@ import { AccountMenu } from "@/components/Management/AccountMenu";
 import { buildPalette } from "@/components/Management/palette";
 import { useChatSplit } from "@/components/Management/useChatSplit";
 import { useTheme } from "@/hooks/useTheme";
-import { enterComplexTeam } from "@/services/api";
-import type { CommanderView } from "@/types";
+import { dutyBoard, enterComplexTeam } from "@/services/api";
+import type { CommanderView, DutyBoard } from "@/types";
 
 import { CommanderChat, type ChatTarget } from "./CommanderChat";
 import { ComplexGrid } from "./ComplexGrid";
@@ -119,6 +119,19 @@ export function CommanderArea({
   const week = rangeOf("week", state.focus).start;
   const units: Unit[] = useMemo(() => state.board?.teams ?? [], [state.board]);
   const shown = units.filter((unit) => !focus.unit || unit.id === focus.unit);
+  // The duties of the range, for their band on the board. Re-read with the
+  // board itself (a reload, a new range) and on coming back from the duties
+  // tab, where they are set. A failed read leaves the board without the band.
+  const [duties, setDuties] = useState<DutyBoard | null>(null);
+  const boardData = state.board;
+  useEffect(() => {
+    if (view !== "board" || !boardData) return;
+    let cancelled = false;
+    dutyBoard(state.start, state.end)
+      .then((next) => { if (!cancelled) setDuties(next); })
+      .catch(() => { if (!cancelled) setDuties(null); });
+    return () => { cancelled = true; };
+  }, [view, boardData, state.start, state.end]);
   const figures = figuresOf(shown, days, focus);
   // One colour per soldier across the whole מכלול, keyed by משמרת so two
   // soldiers who share a name in different משמרות are not one person.
@@ -132,8 +145,14 @@ export function CommanderArea({
         }
       }
     }
+    // A soldier on duty who stands no shift in the range still gets a
+    // colour of their own, after everyone the shifts already placed.
+    for (const duty of duties?.duties ?? []) {
+      const key = `${duty.team_id}:${duty.employee}`;
+      if (!roster.includes(key)) roster.push(key);
+    }
     return buildPalette(roster);
-  }, [units]);
+  }, [units, duties]);
   const rosterOf = useCallback((id: string) => {
     const names = new Set<string>();
     for (const period of units.find((unit) => unit.id === id)?.periods ?? []) {
@@ -420,6 +439,8 @@ export function CommanderArea({
                     dark={dark}
                     hueOf={hueOf}
                     busy={busy}
+                    duties={duties}
+                    onDuties={() => go("duties")}
                     onFocusShift={(unit, shift) => setFocus({ ...focus, unit, shift })}
                     onEnter={enter}
                     onChat={(unit) => openAgent(unit)}

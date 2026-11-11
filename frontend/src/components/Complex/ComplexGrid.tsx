@@ -7,11 +7,15 @@ import { shortDate } from "@/components/DateInput";
 import { hebrewWeekday, isWeekend } from "@/components/Management/Calendar";
 import { colorStyle } from "@/components/Management/palette";
 
+import type { DutyBoard } from "@/types";
+
+import { DutyBand, dutyRows } from "./DutyBand";
 import { readCell, shiftsOf, type Focus, type Unit } from "./figures";
 
 /** Every משמרת of the מכלול on one grid: a band per משמרת, a row per shift
  *  type, a column per day, the same cards and colours the משמרת's own board
- *  draws. It reads; it never writes — "כניסה לניהול" on a band's head is
+ *  draws, and the מכלול's duties as a last band of their own, a row per
+ *  kind (`DutyBand`). It reads; it never writes — "כניסה לניהול" on a band's head is
  *  the way to change anything, inside that משמרת (D43). */
 export function ComplexGrid({
   units,
@@ -21,9 +25,11 @@ export function ComplexGrid({
   dark,
   hueOf,
   busy,
+  duties,
   onFocusShift,
   onEnter,
   onChat,
+  onDuties,
 }: {
   units: Unit[];
   days: string[];
@@ -32,14 +38,16 @@ export function ComplexGrid({
   dark: boolean;
   hueOf: (name: string) => number;
   busy: boolean;
+  duties: DutyBoard | null;
   onFocusShift: (unit: string, shift: string) => void;
   onEnter: (unit: string) => void;
   onChat: (unit: string) => void;
+  onDuties: () => void;
 }) {
   const bands = units
     .map((unit) => ({ unit, rows: rowsOf(unit, days, focus) }))
     .filter((band) => band.rows.length > 0 || (!focus.soldier && !focus.gapsOnly));
-  if (bands.length === 0) {
+  if (bands.length === 0 && dutyRows(duties, days, focus).length === 0) {
     return <p className="cmd-empty">אין שורות שמתאימות לסינון בטווח שעל המסך.</p>;
   }
   return (
@@ -85,6 +93,10 @@ export function ComplexGrid({
               onChat={onChat}
             />
           ))}
+          {duties ? (
+            <DutyBand board={duties} days={days} today={today} focus={focus} dark={dark}
+              hueOf={hueOf} onManage={onDuties} />
+          ) : null}
         </div>
       </div>
     </div>
