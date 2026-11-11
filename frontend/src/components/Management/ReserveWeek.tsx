@@ -9,8 +9,7 @@ import { WEEKDAYS } from "./teamLabels";
 /** A reservist's coming week in one row of seven days.
  *
  *  A reservist whose days change week to week tells the manager which days
- *  are bad, and the solver picks the rest (`reserve_days_per_week`,
- *  `reserve_min_days`). Each day cycles through three states, each stored
+ *  are bad, and the solver picks the rest (`reserve_min_days`). Each day cycles through three states, each stored
  *  as an ordinary whole-day availability row, so the board, the audit and
  *  the solver read it the way they read any other constraint:
  *
@@ -71,7 +70,7 @@ export function ReserveWeek({ name, today, constraints, onAdd, onRemove }: {
           );
         })}
       </div>
-      <small className="reserve-week-hint">לחיצה על יום מחליפה: רגיל → עדיף שלא → לא יכול/ה. את שאר הימים בוחר הסידור לפי מספר הימים שהוגדר.</small>
+      <small className="reserve-week-hint">לחיצה על יום מחליפה: רגיל → עדיף שלא → לא יכול/ה. את שאר הימים בוחר הסידור.</small>
     </div>
   );
 }

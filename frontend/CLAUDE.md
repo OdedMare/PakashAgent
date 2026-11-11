@@ -147,7 +147,15 @@ and hours, a personal 1 ל־N and its first weekend) render under their pattern
 (`Management/ExitPatternFields.tsx`). A
 reservist's coming week is set from the team list (`Management/ReserveWeek.tsx`):
 each day cycles רגיל → עדיף שלא → לא יכול/ה, stored as whole-day
-availability rows, and the solver picks the days.
+availability rows, and the solver picks the days. A reservist is not asked
+how many days a week they come: any day they are not blocked, and both forms
+save `reserve_days_per_week` empty for one (`daysCapOf`; an officer or NCO
+still has the number). Weekdays they can never
+come ("דוד לא יכול להגיע ברביעי") are seven checkboxes in the same card
+(`SoldierFields`, in setup and in the roster's form): each is a
+hard whole-day rule in the person's `recurring_constraints`
+(`lib/blockedDays.ts`), not a field of its own, so one recorded through the
+constraint form or the chat shows ticked there too.
 
 **A cycle is typed once, in the team setup screen** (`ManualSetup/`, the
 sliders icon). The server-wide model, solver and database settings are not

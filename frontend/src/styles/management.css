@@ -2574,6 +2574,11 @@
 .soldier-reserve > small,
 .soldier-advanced > small { color: var(--text-muted); font-size: 0.72rem; line-height: 1.4; }
 
+/* Fixed blocked weekdays: seven checkboxes in one wrapping row. */
+.soldier-blocked-days { grid-template-columns: repeat(auto-fill, minmax(4.75rem, 1fr)); }
+.soldier-blocked-days label { display: flex; gap: 0.35rem; min-height: 32px; font-size: 0.82rem; cursor: pointer; }
+.soldier-reserve > small.soldier-blocked-warning { color: var(--danger); }
+
 /* A reservist's coming week: seven days, each cycling free → soft → hard. */
 .reserve-week { display: grid; gap: 0.5rem; margin-block: 0.5rem; padding: 0.75rem; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
 .reserve-week-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
