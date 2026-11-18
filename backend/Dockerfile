@@ -9,6 +9,8 @@ COPY app ./app
 # Builds the Magen Merkava radio team (people, shifts, constraints) -- run
 # `cd /app/magen_merkava && python build_team.py` inside the container.
 COPY magen_merkava ./magen_merkava
+# Builds the Almogi team the same way -- `cd /app/almogi && python build_team.py`.
+COPY almogi ./almogi
 
 RUN pip install --no-cache-dir .
 
