@@ -5,6 +5,7 @@ Settings saved in the UI beat env values WITHOUT a restart, because
 a masked value coming back means "unchanged", so the stored secret is kept.
 """
 
+import errno
 import json
 import time
 from dataclasses import asdict, fields, replace
@@ -145,10 +146,27 @@ class RuntimeSettingsStore:
         """
         candidate = replace(self._settings)
         self._apply(patch, True, candidate)
+        values = asdict(candidate)
+        try:
+            self._persist(values)
+        except OSError as exc:
+            if not isinstance(exc, PermissionError) and exc.errno != errno.EROFS:
+                raise
+            # A read-only volume can still load database credentials. Only
+            # settings carried in deployment_state can be saved without it.
+            shared_values = shareable(values)
+            local_changed = any(
+                value != getattr(self._settings, key)
+                for key, value in values.items() if key not in shared_values
+            )
+            if local_changed or self._shared is None or not self._shared.push(values):
+                raise
+            self._settings = candidate
+            return candidate
+
         self._settings = candidate
-        self._persist()
         if self._shared is not None:
-            self._shared.push(asdict(self._settings))
+            self._shared.push(values)
         return self._settings
 
     def reload_if_changed(self) -> bool:
@@ -176,10 +194,10 @@ class RuntimeSettingsStore:
         self._mtime = mtime
         return True
 
-    def _persist(self) -> None:
+    def _persist(self, values: dict) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_text(
-            json.dumps(asdict(self._settings), ensure_ascii=False, indent=2),
+            json.dumps(values, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         self._mtime = self._path.stat().st_mtime_ns

@@ -26,13 +26,14 @@ are managed from.
 """
 
 import hmac
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Cookie, Depends, Header
 
 from app.api.contracts import ModelsProbeRequest, RedisProbeRequest
 from app.common import redis_hub
-from app.common.errors import AppError, ForbiddenError
+from app.common.errors import AppError, ForbiddenError, SettingsStorageError
 from app.common.runtime_settings import redis_fields
 from app.common.sessions import ADMIN_COOKIE_NAME, COOKIE_NAME
 from app.common.throttle import LoginThrottle
@@ -99,6 +100,11 @@ def build_router(
             store.update(patch)
         except (TypeError, ValueError) as exc:
             raise AppError(str(exc))
+        except OSError as exc:
+            logging.getLogger("pakash.settings").exception("could not persist settings")
+            raise SettingsStorageError(
+                "שמירת ההגדרות נכשלה. יש לבדוק שהשרת יכול לכתוב לקובץ ההגדרות."
+            ) from exc
         return store.public()
 
     @router.get("/models")

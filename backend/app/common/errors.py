@@ -54,6 +54,10 @@ class ProfileIncompleteError(AgentError):
         self.blocks = list(blocks or [])
 
 
+class SettingsStorageError(AppError):
+    status_code = 503
+
+
 class NotFoundError(AppError):
     status_code = 404
 

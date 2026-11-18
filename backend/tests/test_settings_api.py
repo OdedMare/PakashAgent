@@ -481,3 +481,42 @@ def test_a_bad_redis_env_value_falls_back_instead_of_failing_the_boot(tmp_path):
     assert (saved.redis_url, saved.redis_key_prefix, saved.redis_port) == (
         "", "pakash", None
     )
+
+
+@pytest.mark.parametrize("database_change, shared_available, expected", [
+    (False, True, 200),
+    (True, True, 503),
+    (False, False, 503),
+])
+def test_save_with_read_only_settings_file(
+    client, store, monkeypatch, database_change, shared_available, expected,
+):
+    from unittest.mock import Mock
+    from pathlib import Path
+
+    def read_only(*args, **kwargs):
+        raise PermissionError("read-only settings volume")
+
+    monkeypatch.setattr(Path, "write_text", read_only)
+    shared = Mock()
+    shared.deployment_value.return_value = None
+    shared.write_deployment_value.return_value = 1
+    if not shared_available:
+        shared.write_deployment_value.side_effect = OSError("unavailable")
+    store.share_through(shared)
+    original = store.public()
+    form = dict(original, llm_model="updated-model")
+    if database_change:
+        form["database_host"] = "new-host"
+    response = client.put("/api/settings", json=form)
+    assert response.status_code == expected
+    if expected == 200:
+        import json
+
+        data = json.loads(shared.write_deployment_value.call_args.args[1])
+        assert data["llm_model"] == response.json()["llm_model"] == "updated-model"
+        assert "database_host" not in data
+    else:
+        assert store.public() == original
+        if database_change:
+            shared.write_deployment_value.assert_not_called()
