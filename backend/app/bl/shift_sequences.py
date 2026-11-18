@@ -24,6 +24,9 @@ class ShiftRule:
     previous: str = ""
     count: int = 0
     person: str = ""
+    # "ערב אחרי לילה" also forbids the evening of the day after that night;
+    # "מיד אחרי" means only the shift that directly follows.
+    next_day: bool = False
 
 
 def _sentence(row):
@@ -53,7 +56,9 @@ def compile_rule(row, profile):
     if pair and named(pair[1]) in shifts and named(pair[2]) in shifts:
         following, previous = named(pair[1]), named(pair[2])
         if all(minutes(shifts[name].get("start_time")) is not None for name in (following, previous)):
-            return ShiftRule("after", following, text, hard, previous=previous)
+            later_on_the_clock = minutes(shifts[previous]["start_time"]) < minutes(shifts[following]["start_time"])
+            return ShiftRule("after", following, text, hard, previous=previous,
+                             next_day=later_on_the_clock and " מיד אחרי " not in text)
     leave = re.fullmatch(r"אין לשבץ (.+?) לפני יציאה הביתה", text)
     arrive = re.fullmatch(r"אין לשבץ (.+?) בבוקר שבו עולים לבסיס", text)
     general_return = text in _RETURN_MORNING
@@ -116,6 +121,10 @@ def forbidden_groups(rule, slots, profile, person):
                 continue
             prior = day if first < second else day - _DAY
             group = [(prior.isoformat(), rule.previous), (date, shift)]
+            if rule.next_day:
+                yesterday = [((day - _DAY).isoformat(), rule.previous), (date, shift)]
+                if all(key in slots for key in yesterday):
+                    yield yesterday
         else:
             cycle = day_cycles.day_cycle(profile, person.get("exit_pattern"))
             when = minutes(slot.get("start_time"))

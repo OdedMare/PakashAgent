@@ -45,6 +45,24 @@ def test_conflicting_pins_are_refused(first, last, pins):
             required_assignments=[pin("2026-11-"+day, shift) for day, shift in pins])
 
 
+@pytest.mark.parametrize("following", ["בוקר", "ערב"])
+def test_a_night_also_rules_out_the_next_days_shift(following):
+    p = profile()
+    p["rules"] = [{"text": "אין לשבץ %s אחרי לילה" % following, "priority": "hard"}]
+    with pytest.raises(AgentError, match="שיבוץ חובה"):
+        Scheduler(None).generate_span(p, "2026-11-03", "2026-11-04", required_assignments=[
+            pin("2026-11-03", "לילה"), pin("2026-11-04", following)])
+
+
+def test_immediately_after_does_not_reach_the_next_day():
+    p = profile()
+    p["rules"] = [{"text": "אין לשבץ ערב מיד אחרי לילה", "priority": "hard"}]
+    pins = [pin("2026-11-03", "לילה"), pin("2026-11-04", "ערב")]
+    result = Scheduler(None).generate_span(p, "2026-11-03", "2026-11-04", required_assignments=pins)
+    assert {(r["date"], r["shift"]) for r in result["assignments"]} >= {
+        ("2026-11-03", "לילה"), ("2026-11-04", "ערב")}
+
+
 def test_all_rules_build_offline_when_the_return_subject_is_defined():
     result = Scheduler(None).generate_span(profile(), "2026-11-01", "2026-11-16")
     assert result["metrics"].get("model_calls", 0) == 0

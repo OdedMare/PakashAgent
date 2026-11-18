@@ -84,7 +84,10 @@ and the build still completes.
   same `policy()` thresholds: seats (never over headcount), rest between
   shifts, runs of consecutive days, weekly hours. A right-hand side made
   negative by fixed rows is clamped at zero, so placing nobody is always
-  feasible and the solver never answers "no schedule".
+  feasible and the solver never answers "no schedule". A standing "X אחרי Y"
+  (`shift_sequences.py`) forbids X after Y on the same date and, when Y starts
+  earlier on the clock, on the next date too; "מיד אחרי" is only the shift
+  that directly follows.
   **נחפפים** (`service_type` overlap, not counted toward staffing) get
   variables too but take no seat: each stands only beside one of their
   trainers (their own `trainers`, else whoever `can_train`, else any
