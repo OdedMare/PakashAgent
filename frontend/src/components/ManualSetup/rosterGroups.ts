@@ -88,3 +88,15 @@ export function matchesSearch(person: Pick<RosterPerson, "searchText">, query: s
   const haystack = normalizeSearch(person.searchText);
   return !haystack || words.every((word) => haystack.includes(word));
 }
+
+/** Whether everybody already holds every shift, so marking them all would
+ *  change nothing. */
+export function everyShiftMarked(selections: string[][], shiftNames: string[]): boolean {
+  return selections.every((picked) => shiftNames.every((name) => picked.includes(name)));
+}
+
+/** A limit somebody chose: some shifts picked, not all of them. Nothing
+ *  picked is no limit, because the server reads an empty list as every shift. */
+export function narrowerThanAll(picked: string[], shiftNames: string[]): boolean {
+  return picked.length > 0 && shiftNames.some((name) => !picked.includes(name));
+}

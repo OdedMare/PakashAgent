@@ -57,3 +57,15 @@ test("a search matches every word, anywhere on the person, Hebrew read loosely",
   // A row just added has no name yet and must not vanish behind a search.
   assert.ok(roster.matchesSearch({ searchText: "" }, "דנה"));
 });
+
+test("marking every shift is done only when everybody holds them all", () => {
+  assert.equal(roster.everyShiftMarked([shifts, shifts], shifts), true);
+  assert.equal(roster.everyShiftMarked([shifts, ["בוקר"]], shifts), false);
+  assert.equal(roster.everyShiftMarked([shifts, []], shifts), false);
+});
+
+test("only a partial choice counts as a personal limit", () => {
+  assert.equal(roster.narrowerThanAll(["בוקר"], shifts), true);
+  assert.equal(roster.narrowerThanAll([], shifts), false);
+  assert.equal(roster.narrowerThanAll(shifts, shifts), false);
+});

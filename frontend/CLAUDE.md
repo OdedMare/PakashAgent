@@ -198,6 +198,12 @@ marked `closure: true` whose days are worked out per shift at save time
 (the first day only for a shift still running when the closure opens, the
 Sunday only for one starting before the handover).
 
+**Shifts come before the roster in setup**, because a soldier's allowed
+shifts are picked from them. "סימון כל המשמרות לכל החיילים" on the roster's
+toolbar marks every shift for everyone, filtered out or not; it asks first
+only when it would erase somebody's chosen limit, and writes nothing until
+the screen is saved.
+
 **The setup screen folds, and the roster can be read in groups.** Every
 section folds from its header, and "כיווץ הכל" / "פתיחת הכל" in the screen's
 header folds or opens them all at once; a folded section shows a one-line

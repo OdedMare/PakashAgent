@@ -6,6 +6,7 @@ import {
   ChevronsUpDown,
   Clock3,
   Cpu,
+  ListChecks,
   Plus,
   Repeat2,
   Save,
@@ -35,6 +36,7 @@ import { ExitKinds } from "./ExitKinds";
 import { Field } from "./fields";
 import { CYCLES, firstGroupAnchor } from "./RotationSetup";
 import { RosterView } from "./RosterView";
+import { everyShiftMarked, narrowerThanAll } from "./rosterGroups";
 import type { RosterPerson } from "./rosterGroups";
 import type { Cycle } from "./RotationSetup";
 import { PersonStandard } from "./UnitStandard";
@@ -260,6 +262,16 @@ export function ManualSetup({
   const foldKey = (person: Row) => text(person.name);
   const namedKeys = employees.map(foldKey).filter(Boolean);
   const allFolded = namedKeys.length > 0 && namedKeys.every((key) => foldedPeople.has(key));
+  const allShiftsMarked = everyShiftMarked(employees.map((person) => strings(person.eligible_shifts)), shiftNames);
+  // Everyone, including whoever a filter is hiding. Only a chosen limit is
+  // worth a question: nobody loses anything when nothing was picked yet.
+  const markAllShifts = () => {
+    const limited = employees
+      .filter((person) => narrowerThanAll(strings(person.eligible_shifts), shiftNames))
+      .map((person) => text(person.name) || "איש צוות ללא שם");
+    if (limited.length && !window.confirm(`ל${limited.join(", ")} יש כרגע הגבלת משמרות. לסמן את כל המשמרות לכולם ולבטל את ההגבלה? השינוי נכנס לתוקף רק בשמירה.`)) return;
+    setEmployees((current) => current.map((person) => ({ ...person, eligible_shifts: [...shiftNames] })));
+  };
   const toggleFold = (key: string) => setFoldedPeople((current) => {
     const next = new Set(current);
     if (next.has(key)) next.delete(key); else next.add(key);
@@ -585,6 +597,65 @@ export function ManualSetup({
           ) : null}
         </SetupSection>
 
+        <SetupSection {...section("shifts")} summary={namedShifts.join(" · ") || "אין משמרות"} tour="setup-shifts" icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="תאריכי תוקף ריקים = משמרת קבועה; מילוי שניהם יוצר משמרת זמנית שנעלמת מהלוח מחוץ לטווח. משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה. תקן סופ״ש חל כשאחד הסבבים בבית — לפי ימים בבסיס/בבית בסעיף הסבבים.">
+          <div className="manual-list">
+            {shifts.map((shift, index) => {
+              const key = text(shift.name);
+              if (key && foldedShifts.has(key)) {
+                return (
+                  <article className="manual-row is-folded" key={`shift-${index}`}>
+                    <button type="button" className="manual-row-summary" aria-expanded={false} onClick={() => toggleShiftFold(key)}>
+                      <ChevronDown size={15} aria-hidden="true" />
+                      <strong>{key}</strong>
+                      <span>{[text(shift.start_time) && text(shift.end_time) ? `${text(shift.start_time)}–${text(shift.end_time)}` : "", `תקן ${number(shift.headcount, headcount(shift))}`, text(shift.purpose)].filter(Boolean).join(" · ")}</span>
+                    </button>
+                  </article>
+                );
+              }
+              return (
+              <article className="manual-row" key={`shift-${index}`}>
+                {key ? (
+                  <button type="button" className="manual-row-summary is-open" aria-expanded onClick={() => toggleShiftFold(key)}>
+                    <ChevronDown size={15} aria-hidden="true" /><strong>{key}</strong><span>סגירת הכרטיס</span>
+                  </button>
+                ) : null}
+                <div className="manual-grid shift-grid">
+                  <Field label="שם המשמרת *"><input value={inputText(shift.name)} onChange={(e) => renameShift(index, e.target.value)} /><RenameNote saved={text(shift[SAVED])} name={text(shift.name)} /></Field>
+                  <Field label="סוג"><select value={text(shift.shift_type) || (shift.is_on_call ? "on_call" : "regular")} onChange={(e) => edit(setShifts, index, "shift_type", e.target.value)}>{Object.entries(SHIFT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
+                  <Field label="התחלה"><TimeInput value={text(shift.start_time)} onChange={(time) => edit(setShifts, index, "start_time", time)} /></Field>
+                  <Field label="סיום"><TimeInput value={text(shift.end_time)} onChange={(time) => edit(setShifts, index, "end_time", time)} /></Field>
+                  <Field label="פעילה מתאריך (לזמנית)"><DateInput value={text(shift.starts_on)} max={text(shift.ends_on) || undefined} required={Boolean(text(shift.ends_on))} onChange={(date) => edit(setShifts, index, "starts_on", date)} /></Field>
+                  <Field label="פעילה עד תאריך (לזמנית)"><DateInput value={text(shift.ends_on)} min={text(shift.starts_on) || undefined} required={Boolean(text(shift.starts_on))} onChange={(date) => edit(setShifts, index, "ends_on", date)} /></Field>
+                  <Field label="תקן א׳–ה׳"><input type="number" min={0} max={100} value={number(shift.headcount, headcount(shift))} onChange={(e) => edit(setShifts, index, "headcount", seats(e.target.value))} /></Field>
+                  <Field label="תקן סופ״ש"><input title={`חל על: ${closureDays(shift, closure).join(", ")}`} type="number" min={0} max={100} value={shift.weekend_headcount === "" || shift.weekend_headcount === undefined ? "" : String(shift.weekend_headcount)} placeholder="כמו באמצע השבוע" onChange={(e) => edit(setShifts, index, "weekend_headcount", e.target.value === "" ? "" : seats(e.target.value))} /></Field>
+                  <Field label="ייעוד"><input value={inputText(shift.purpose)} onChange={(e) => edit(setShifts, index, "purpose", e.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></Field>
+                  <Field label="משמרת חזקה (רמה מקצועית)"><ShiftLevelSelect value={text(shift.min_competence)} onChange={(level) => edit(setShifts, index, "min_competence", level)} /></Field>
+                  <Field label="משקל עומס"><LoadWeightSelect value={loadWeightValue(shift.load_weight)} onChange={(weight) => edit(setShifts, index, "load_weight", loadWeightOf(weight))} /></Field>
+                </div>
+                {text(shift.starts_on) && text(shift.ends_on) ? <p className="manual-zero-note">משמרת זמנית: תופיע בסידור רק בטווח התאריכים שנבחר.</p> : null}
+                {offNote(number(shift.headcount, headcount(shift)), shift.weekend_headcount) ? <p className="manual-zero-note">{offNote(number(shift.headcount, headcount(shift)), shift.weekend_headcount)}</p> : null}
+                <label className="manual-check"><input type="checkbox" checked={Boolean(shift.requires_shift_manager)} onChange={(e) => edit(setShifts, index, "requires_shift_manager", e.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
+                <MultiSelect className="manual-day-picks" label="ימים" values={DAYS} selected={strings(shift.days)} onChange={(value) => edit(setShifts, index, "days", value)} placeholder="לא נבחרו ימים" />
+                <button type="button" className="icon-button subtle manual-delete" aria-label="מחיקת סוג משמרת" title={text(shift[SAVED]) ? "סידורים קיימים נשארים כפי שהם; הבנייה הבאה לא תכלול את המשמרת" : undefined} onClick={() => {
+                  const name = text(shift[SAVED]);
+                  if (name) {
+                    if (!window.confirm(`למחוק את סוג המשמרת ${name}? סידורים שכבר נבנו נשארים כפי שהם, והמחיקה תיכנס לתוקף בשמירה.`)) return;
+                    setRemovedShifts((current) => [...current, name]);
+                  }
+                  setShifts((current) => current.filter((_, row) => row !== index));
+                }}><Trash2 size={15} /></button>
+              </article>
+              );
+            })}
+          </div>
+          {namedShifts.length ? (
+            <button type="button" className="ghost-button roster-fold-all" onClick={() => setFoldedShifts(allShiftsFolded ? new Set() : new Set(namedShifts))}>
+              {allShiftsFolded ? <ChevronsUpDown size={15} /> : <ChevronsDownUp size={15} />} {allShiftsFolded ? "פתיחת כל המשמרות" : "כיווץ כל המשמרות"}
+            </button>
+          ) : null}
+          <button type="button" className="ghost-button" onClick={() => setShifts((current) => [...current, { name: "", shift_type: "regular", start_time: "", end_time: "", headcount: 1, purpose: "", days: DAYS }])}><Plus size={16} /> הוספת סוג משמרת</button>
+        </SetupSection>
+
         <SetupSection {...section("people")} summary={`${employees.filter(named).length} אנשי צוות`} tour="setup-people" icon={<Users />} title="כוח אדם" hint="לכל אדם מגדירים יציאות משלו, יכולות, מעמד והערות.">
           <label className="manual-check">
             <input type="checkbox" checked={notesVisualOnly} onChange={(e) => setNotesVisualOnly(e.target.checked)} />
@@ -665,11 +736,20 @@ export function ManualSetup({
               </article>
               );
             }}
-            actions={namedKeys.length ? (
-              <button type="button" className="ghost-button roster-fold-all" onClick={() => setFoldedPeople(allFolded ? new Set() : new Set(namedKeys))}>
-                {allFolded ? <ChevronsUpDown size={15} /> : <ChevronsDownUp size={15} />} {allFolded ? "פתיחת כל הכרטיסים" : "כיווץ כל הכרטיסים"}
-              </button>
-            ) : null}
+            actions={(
+              <>
+                {shiftNames.length && employees.length ? (
+                  <button type="button" className="ghost-button roster-fold-all" disabled={allShiftsMarked} onClick={markAllShifts}>
+                    <ListChecks size={15} /> {allShiftsMarked ? "כל המשמרות מסומנות לכולם" : "סימון כל המשמרות לכל החיילים"}
+                  </button>
+                ) : null}
+                {namedKeys.length ? (
+                  <button type="button" className="ghost-button roster-fold-all" onClick={() => setFoldedPeople(allFolded ? new Set() : new Set(namedKeys))}>
+                    {allFolded ? <ChevronsUpDown size={15} /> : <ChevronsDownUp size={15} />} {allFolded ? "פתיחת כל הכרטיסים" : "כיווץ כל הכרטיסים"}
+                  </button>
+                ) : null}
+              </>
+            )}
           />
           <button type="button" className="ghost-button" onClick={() => {
             // Added while one status is shown, the soldier takes it, so the
@@ -677,65 +757,6 @@ export function ManualSetup({
             const service = rosterServices.length === 1 ? rosterServices[0] : "standard";
             setEmployees((current) => [...current, { name: "", role: "", exit_pattern: defaultPattern, rotation_group: rotationGroups(defaultPattern, dayCycles)[0] ?? "", ...statusFields(service), counts_toward_staffing: service !== "overlap", eligible_shifts: [], is_shift_manager: false, can_train: false, notes: "" }]);
           }}><Plus size={16} /> {rosterServices.length === 1 ? `הוספת ${STATUS_LABELS[rosterServices[0]]}` : "הוספת איש/אשת צוות"}</button>
-        </SetupSection>
-
-        <SetupSection {...section("shifts")} summary={namedShifts.join(" · ") || "אין משמרות"} tour="setup-shifts" icon={<Clock3 />} title="סוגי משמרות ותקינה" hint="תאריכי תוקף ריקים = משמרת קבועה; מילוי שניהם יוצר משמרת זמנית שנעלמת מהלוח מחוץ לטווח. משמרת חפיפה מוצגת בנפרד; מי שלא נספר בתקן לא ממלא את המכסה. תקן סופ״ש חל כשאחד הסבבים בבית — לפי ימים בבסיס/בבית בסעיף הסבבים.">
-          <div className="manual-list">
-            {shifts.map((shift, index) => {
-              const key = text(shift.name);
-              if (key && foldedShifts.has(key)) {
-                return (
-                  <article className="manual-row is-folded" key={`shift-${index}`}>
-                    <button type="button" className="manual-row-summary" aria-expanded={false} onClick={() => toggleShiftFold(key)}>
-                      <ChevronDown size={15} aria-hidden="true" />
-                      <strong>{key}</strong>
-                      <span>{[text(shift.start_time) && text(shift.end_time) ? `${text(shift.start_time)}–${text(shift.end_time)}` : "", `תקן ${number(shift.headcount, headcount(shift))}`, text(shift.purpose)].filter(Boolean).join(" · ")}</span>
-                    </button>
-                  </article>
-                );
-              }
-              return (
-              <article className="manual-row" key={`shift-${index}`}>
-                {key ? (
-                  <button type="button" className="manual-row-summary is-open" aria-expanded onClick={() => toggleShiftFold(key)}>
-                    <ChevronDown size={15} aria-hidden="true" /><strong>{key}</strong><span>סגירת הכרטיס</span>
-                  </button>
-                ) : null}
-                <div className="manual-grid shift-grid">
-                  <Field label="שם המשמרת *"><input value={inputText(shift.name)} onChange={(e) => renameShift(index, e.target.value)} /><RenameNote saved={text(shift[SAVED])} name={text(shift.name)} /></Field>
-                  <Field label="סוג"><select value={text(shift.shift_type) || (shift.is_on_call ? "on_call" : "regular")} onChange={(e) => edit(setShifts, index, "shift_type", e.target.value)}>{Object.entries(SHIFT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
-                  <Field label="התחלה"><TimeInput value={text(shift.start_time)} onChange={(time) => edit(setShifts, index, "start_time", time)} /></Field>
-                  <Field label="סיום"><TimeInput value={text(shift.end_time)} onChange={(time) => edit(setShifts, index, "end_time", time)} /></Field>
-                  <Field label="פעילה מתאריך (לזמנית)"><DateInput value={text(shift.starts_on)} max={text(shift.ends_on) || undefined} required={Boolean(text(shift.ends_on))} onChange={(date) => edit(setShifts, index, "starts_on", date)} /></Field>
-                  <Field label="פעילה עד תאריך (לזמנית)"><DateInput value={text(shift.ends_on)} min={text(shift.starts_on) || undefined} required={Boolean(text(shift.starts_on))} onChange={(date) => edit(setShifts, index, "ends_on", date)} /></Field>
-                  <Field label="תקן א׳–ה׳"><input type="number" min={0} max={100} value={number(shift.headcount, headcount(shift))} onChange={(e) => edit(setShifts, index, "headcount", seats(e.target.value))} /></Field>
-                  <Field label="תקן סופ״ש"><input title={`חל על: ${closureDays(shift, closure).join(", ")}`} type="number" min={0} max={100} value={shift.weekend_headcount === "" || shift.weekend_headcount === undefined ? "" : String(shift.weekend_headcount)} placeholder="כמו באמצע השבוע" onChange={(e) => edit(setShifts, index, "weekend_headcount", e.target.value === "" ? "" : seats(e.target.value))} /></Field>
-                  <Field label="ייעוד"><input value={inputText(shift.purpose)} onChange={(e) => edit(setShifts, index, "purpose", e.target.value)} placeholder="סיור, חמ״ל, חפיפה…" /></Field>
-                  <Field label="משמרת חזקה (רמה מקצועית)"><ShiftLevelSelect value={text(shift.min_competence)} onChange={(level) => edit(setShifts, index, "min_competence", level)} /></Field>
-                  <Field label="משקל עומס"><LoadWeightSelect value={loadWeightValue(shift.load_weight)} onChange={(weight) => edit(setShifts, index, "load_weight", loadWeightOf(weight))} /></Field>
-                </div>
-                {text(shift.starts_on) && text(shift.ends_on) ? <p className="manual-zero-note">משמרת זמנית: תופיע בסידור רק בטווח התאריכים שנבחר.</p> : null}
-                {offNote(number(shift.headcount, headcount(shift)), shift.weekend_headcount) ? <p className="manual-zero-note">{offNote(number(shift.headcount, headcount(shift)), shift.weekend_headcount)}</p> : null}
-                <label className="manual-check"><input type="checkbox" checked={Boolean(shift.requires_shift_manager)} onChange={(e) => edit(setShifts, index, "requires_shift_manager", e.target.checked)} /><span>נדרש/ת מפקד/ת משמרת מוסמך/ת</span></label>
-                <MultiSelect className="manual-day-picks" label="ימים" values={DAYS} selected={strings(shift.days)} onChange={(value) => edit(setShifts, index, "days", value)} placeholder="לא נבחרו ימים" />
-                <button type="button" className="icon-button subtle manual-delete" aria-label="מחיקת סוג משמרת" title={text(shift[SAVED]) ? "סידורים קיימים נשארים כפי שהם; הבנייה הבאה לא תכלול את המשמרת" : undefined} onClick={() => {
-                  const name = text(shift[SAVED]);
-                  if (name) {
-                    if (!window.confirm(`למחוק את סוג המשמרת ${name}? סידורים שכבר נבנו נשארים כפי שהם, והמחיקה תיכנס לתוקף בשמירה.`)) return;
-                    setRemovedShifts((current) => [...current, name]);
-                  }
-                  setShifts((current) => current.filter((_, row) => row !== index));
-                }}><Trash2 size={15} /></button>
-              </article>
-              );
-            })}
-          </div>
-          {namedShifts.length ? (
-            <button type="button" className="ghost-button roster-fold-all" onClick={() => setFoldedShifts(allShiftsFolded ? new Set() : new Set(namedShifts))}>
-              {allShiftsFolded ? <ChevronsUpDown size={15} /> : <ChevronsDownUp size={15} />} {allShiftsFolded ? "פתיחת כל המשמרות" : "כיווץ כל המשמרות"}
-            </button>
-          ) : null}
-          <button type="button" className="ghost-button" onClick={() => setShifts((current) => [...current, { name: "", shift_type: "regular", start_time: "", end_time: "", headcount: 1, purpose: "", days: DAYS }])}><Plus size={16} /> הוספת סוג משמרת</button>
         </SetupSection>
 
         <SetupSection {...section("rules")} summary={`${rules.filter((rule) => text(rule.text)).length} כללים`} tour="setup-rules" icon={<ShieldCheck />} title="כללים קבועים" hint="כלל קשיח הוא חובה; כלל רך הוא העדפה שהמערכת מנסה לכבד.">
@@ -776,7 +797,7 @@ export function ManualSetup({
   );
 }
 
-const SECTION_IDS = ["rotations", "people", "shifts", "rules", "limits", "compiled"] as const;
+const SECTION_IDS = ["rotations", "shifts", "people", "rules", "limits", "compiled"] as const;
 type SectionId = (typeof SECTION_IDS)[number];
 
 /** Shifts a week (Sunday–Saturday) for סדיר and for מילואים, the unit
