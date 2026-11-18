@@ -2,6 +2,7 @@
 
 from typing import List
 
+from app.bl.scheduler.availability import availability_bounds
 from app.bl.schedule_service.constants import (
     ACTION_GENERATED, GENERATION_CANCELLED, GENERATION_FAILED,
 )
@@ -175,8 +176,8 @@ class GenerationStepper:
             day,
             through,
             availability=self._repository.availability(
-                team_id, iso(schedule.get("starts_on")), iso(schedule.get("ends_on"))),
-            history=self._history.before(team_id, iso(schedule.get("starts_on"))),
+                team_id, *availability_bounds(profile, iso(schedule["starts_on"]), iso(schedule["ends_on"]))),
+            history=self._history.for_build(team_id, profile, iso(schedule["starts_on"]), iso(schedule["ends_on"])),
             instructions=job.get("instructions") or "",
             # What the manager pinned when the job was opened, plus anything
             # placed by hand on these dates since -- the board stays writable

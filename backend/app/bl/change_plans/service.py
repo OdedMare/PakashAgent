@@ -6,7 +6,6 @@ from app.bl.chat.constraints import affected_periods
 from app.bl.chat.contract import exception_warnings, fingerprint
 from app.bl.chat.lifecycle import future_schedules
 from app.bl.chat.management import apply_management, management_state
-from app.bl.profile_service import ProfileService
 from app.bl.schedule_service.operations import OperationApplier
 from app.bl.shared import iso
 from app.common.change_plan import applying_plan
@@ -19,10 +18,16 @@ class ChangePlanService:
     """The only executor for persisted plans, independent of their source."""
 
     def __init__(self, repository, schedules, context, profiles=None):
+        if profiles is None:
+            # Local import keeps ProfileService free to use the confirmed
+            # change gate without making the two modules import each other.
+            from app.bl.profile_service import ProfileService
+
+            profiles = ProfileService(repository)
         self._repo = repository
         self._schedules = schedules
         self._context = context
-        self._profiles = profiles or ProfileService(repository)
+        self._profiles = profiles
 
     def approve(
         self, team_id, plan_id, accept_exceptions=False, request_text="",

@@ -200,15 +200,13 @@ def test_a_binding_sentence_that_did_not_translate_is_reported_not_dropped():
     assert "לא נאכפה" in result["notes"][0] and "שהחדש לא יהיה לבד" in result["notes"][0]
 
 
-def test_an_unreachable_model_still_builds_and_names_what_it_skipped():
+def test_an_untranslated_hard_rule_stops_the_build_and_names_the_rule():
     class _Down:
         def complete_json(self, *args, **kwargs):
             raise AgentError("אין חיבור")
 
-    result = Scheduler(_Down()).generate_span(PROFILE, "2026-08-30", "2026-08-30")
-
-    assert result["assignments"]
-    assert "אסור שתי משמרות ברצף" in result["notes"][0]
+    with pytest.raises(AgentError, match="אסור שתי משמרות ברצף"):
+        Scheduler(_Down()).generate_span(PROFILE, "2026-08-30", "2026-08-30")
 
 
 def test_rows_to_keep_are_kept_where_they_still_fit():

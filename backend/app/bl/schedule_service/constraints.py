@@ -4,6 +4,7 @@ import datetime
 from typing import Any, List, Optional
 
 from app.bl.audit import constraint_conflicts
+from app.bl.change_plans.confirmed import apply_confirmed_change
 from app.bl.schedule_service.constants import ACTION_CONSTRAINT, ACTION_REMOVED
 from app.bl.schedule_service.rows import iso, text
 from app.common.errors import AgentError
@@ -43,6 +44,32 @@ class ConstraintService:
         shift_name = (shift_name or "").strip()
         reason = (reason or "").strip()
         start_time, end_time = _constraint_time(start_time), _constraint_time(end_time)
+        return apply_confirmed_change(
+            self._repository,
+            team_id,
+            source="constraint",
+            body={
+                "kind": "constraint", "employee": employee,
+                "date": constraint_date, "shift": shift_name,
+                "available": available, "start_time": start_time,
+                "end_time": end_time, "is_hard": is_hard,
+                "reason": reason, "constraint_source": source,
+                "constraint_type": constraint_type,
+            },
+            apply=lambda: self._set_constraint(
+                team_id, employee, constraint_date, shift_name, available,
+                start_time, end_time, is_hard, reason, source,
+                constraint_type,
+            ),
+            message="האילוץ נשמר בהצלחה",
+            reason=reason,
+            agent_reason="אילוץ אושר ונשמר",
+        )
+
+    def _set_constraint(
+        self, team_id, employee, constraint_date, shift_name, available,
+        start_time, end_time, is_hard, reason, source, constraint_type,
+    ):
         if constraint_type == "duty":
             if shift_name:
                 raise AgentError("תורנות חוסמת לפי שעות ולא לפי שם משמרת")
@@ -101,7 +128,15 @@ class ConstraintService:
         )
 
     def delete_constraint(self, row_id: str, team_id: str) -> None:
-        self._repository.delete_availability(row_id, team_id)
+        return apply_confirmed_change(
+            self._repository,
+            team_id,
+            source="constraint",
+            body={"kind": "delete_constraint", "constraint_id": row_id},
+            apply=lambda: self._repository.delete_availability(row_id, team_id),
+            message="האילוץ נמחק בהצלחה",
+            agent_reason="אילוץ נמחק על ידי המנהל",
+        )
 
     def history(
         self, team_id: str, schedule_id: Optional[str] = None

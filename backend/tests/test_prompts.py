@@ -20,6 +20,14 @@ def test_the_manager_chat_prompt_resolves_every_include():
     assert "## Language" in text
 
 
+def test_the_manager_chat_prompt_keeps_one_explicit_turn_contract():
+    text = prompts.load("manager_chat")
+
+    assert "## Turn contract" in text
+    assert "Choose exactly one path" in text
+    assert "no resolvable date needs one date question and no plan" in text
+
+
 def test_a_missing_prompt_raises_rather_than_returning_empty():
     with pytest.raises(FileNotFoundError):
         prompts.load("no_such_prompt")

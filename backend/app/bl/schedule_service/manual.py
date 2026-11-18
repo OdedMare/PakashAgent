@@ -8,6 +8,7 @@ change log.
 import datetime
 from typing import Optional
 
+from app.bl.change_plans.confirmed import apply_confirmed_change
 from app.bl.schedule_service.constants import (
     ACTION_ASSIGNED,
     ACTION_PUBLISHED,
@@ -52,6 +53,27 @@ class ManualEditor:
         employee = (employee or "").strip()
         if not employee:
             raise AgentError("צריך לבחור עובד לשיבוץ")
+        return apply_confirmed_change(
+            self._repository,
+            team_id,
+            source="manual",
+            body={
+                "kind": "assign", "schedule_id": schedule_id or "",
+                "employee": employee, "shift": shift_name, "date": slot_date,
+                "reason": reason,
+            },
+            apply=lambda: self._assign(
+                team_id, shift_name, slot_date, employee, reason, schedule_id,
+            ),
+            message="העובד שובץ בהצלחה",
+            reason=reason,
+            agent_reason=MANUAL_REASON,
+            schedule_id=lambda result: result.get("id", ""),
+        )
+
+    def _assign(
+        self, team_id, shift_name, slot_date, employee, reason, schedule_id,
+    ):
         schedule = self._context.require_schedule(team_id, schedule_id)
         slot = self._repository.find_slot(
             schedule["id"], team_id, shift_name, slot_date
@@ -99,6 +121,24 @@ class ManualEditor:
         cleared seconds after being filled by mistake is a correction rather
         than a decision.
         """
+        return apply_confirmed_change(
+            self._repository,
+            team_id,
+            source="manual",
+            body={
+                "kind": "unassign", "schedule_id": schedule_id or "",
+                "assignment_id": assignment_id, "reason": reason,
+            },
+            apply=lambda: self._unassign(
+                team_id, assignment_id, reason, schedule_id,
+            ),
+            message="השיבוץ הוסר בהצלחה",
+            reason=reason,
+            agent_reason=MANUAL_REASON,
+            schedule_id=lambda result: result.get("id", ""),
+        )
+
+    def _unassign(self, team_id, assignment_id, reason, schedule_id):
         schedule = self._context.require_schedule(team_id, schedule_id)
         existing = find_assignment(schedule, assignment_id)
         if existing is None:
@@ -124,6 +164,24 @@ class ManualEditor:
         individually: a day cleared in one gesture is still N people taken
         off N shifts, and the log is the only history there is (D4).
         """
+        return apply_confirmed_change(
+            self._repository,
+            team_id,
+            source="manual",
+            body={
+                "kind": "clear", "schedule_id": schedule_id,
+                "date": slot_date, "reason": reason,
+            },
+            apply=lambda: self._clear(
+                team_id, schedule_id, slot_date, reason,
+            ),
+            message="השיבוצים נוקו בהצלחה",
+            reason=reason,
+            agent_reason="ניקוי ידני שאושר על ידי המנהל",
+            schedule_id=schedule_id,
+        )
+
+    def _clear(self, team_id, schedule_id, slot_date, reason):
         schedule = self._context.require_schedule(team_id, schedule_id)
         wanted = iso(slot_date)
         rows = [
@@ -145,6 +203,25 @@ class ManualEditor:
 
     def publish(self, schedule_id: str, team_id: str) -> dict:
         """Make a draft the team's. Members read only published periods."""
+        return apply_confirmed_change(
+            self._repository,
+            team_id,
+            source="manual",
+            body={"kind": "publish", "schedule_id": schedule_id},
+            apply=lambda: self._publish(schedule_id, team_id),
+            message="הסידור פורסם לצוות",
+            agent_reason="הסידור פורסם לצוות",
+            schedule_id=schedule_id,
+        )
+
+    def _publish(self, schedule_id: str, team_id: str) -> dict:
+        booked = {}
+        for row in self._repository.assignments(schedule_id, team_id):
+            key = row["employee"], iso(row["date"])
+            if key in booked:
+                raise ConflictError("אי אפשר לפרסם: %s משובץ/ת גם ל%s וגם ל%s ביום %s"
+                                    % (key[0], booked[key], row["shift"], key[1]))
+            booked[key] = row["shift"]
         schedule = self._repository.set_schedule_status(
             schedule_id, team_id, "published"
         )
@@ -155,13 +232,32 @@ class ManualEditor:
         return self._context.view(schedule, team_id)
 
     def unpublish(self, schedule_id: str, team_id: str) -> dict:
-        return self._context.view(
-            self._repository.set_schedule_status(schedule_id, team_id, "draft"),
+        return apply_confirmed_change(
+            self._repository,
             team_id,
+            source="manual",
+            body={"kind": "unpublish", "schedule_id": schedule_id},
+            apply=lambda: self._context.view(
+                self._repository.set_schedule_status(
+                    schedule_id, team_id, "draft",
+                ),
+                team_id,
+            ),
+            message="הסידור הוחזר לטיוטה",
+            agent_reason="הסידור הוחזר לטיוטה על ידי המנהל",
+            schedule_id=schedule_id,
         )
 
     def delete(self, schedule_id: str, team_id: str) -> None:
-        self._repository.delete_schedule(schedule_id, team_id)
+        return apply_confirmed_change(
+            self._repository,
+            team_id,
+            source="manual",
+            body={"kind": "delete_period", "schedule_id": schedule_id},
+            apply=lambda: self._repository.delete_schedule(schedule_id, team_id),
+            message="הסידור נמחק והיסטוריית התוכנית נשמרה",
+            agent_reason="הסידור נמחק על ידי המנהל",
+        )
 
     def departure_preview(
         self, team_id: str, employee: str, effective_date: str = "",
@@ -187,10 +283,26 @@ class ManualEditor:
         date on is vacated, each one logged. A published period that loses a
         shift goes back to draft, which the preview said before the click.
 
-        The shifts go before the profile changes, so a failure halfway leaves
-        a roster that still lists them and the same click can simply be
-        repeated.
+        The profile and every affected schedule now share the departure's
+        change-plan transaction, so a failure rolls the whole decision back.
         """
+        return apply_confirmed_change(
+            self._repository,
+            team_id,
+            source="departure",
+            body={
+                "kind": "retire", "employee": employee,
+                "effective_date": effective_date, "reason": reason,
+            },
+            apply=lambda: self._depart(
+                team_id, employee, effective_date, reason,
+            ),
+            message="העובד הוצא מהסגל והמשמרות העתידיות פונו",
+            reason=reason,
+            agent_reason=DEPARTURE_REASON,
+        )
+
+    def _depart(self, team_id, employee, effective_date, reason):
         people, first, rows, published = self._departure(team_id, employee, effective_date)
         name = employee.strip()
         roster = [dict(row, inactive_from=first) if row.get("name") == name else row

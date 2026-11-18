@@ -10,6 +10,7 @@ variable, so the model cannot even express it.
 import datetime
 from typing import Dict, List, Optional
 
+from app.bl.roster_limits import monthly_officer_limit
 from app.bl import rotation
 from app.bl.solver import ledger
 from app.bl.audit import constraint_conflicts, counts_toward_staffing
@@ -55,6 +56,16 @@ class Problem:
         self.times = [_slot_time(slot, self.shifts) for slot in slots]
         self.pins = self._pins(required_assignments)
         self.fixed = self._fixed(already_scheduled, history)
+        self.officer_cap = monthly_officer_limit(self.profile)
+        self.next_assignments = [row for row in map(assignment, history or [])
+                                 if row and row["date"] > last and
+                                 (datetime.date.fromisoformat(row["date"]) -
+                                  datetime.date.fromisoformat(last)).days <= LOOKBACK_DAYS] if last else []
+        self.month_rows = set()
+        if self.officer_cap is not None:
+            self.month_rows.update(_key(row) for row in self.fixed)
+            self.month_rows.update(_key(row) for row in map(assignment, history or [])
+                                   if row and not first <= row["date"] <= last)
         self.duty_load = self._duty_load(duties)
         self.ledger_weeks = ledger.lookback_weeks(self.profile)
         self.ledger_rows, self.first_seen, self.ledger_active = self._ledger(history, duties)

@@ -62,7 +62,9 @@ class PlacementContext:
         # `audit.py` writes Hebrew already; rewording it would be a second
         # voice describing the same fact.
         reasons = [values.text(row.get("message")) for row in caused]
-        blocking = any(
+        booked_today = any(row["date"] == slot_date and row["shift"] != shift_name
+                           for row in self._by_employee.get(employee, []))
+        blocking = booked_today or any(
             row.get("code") == "unavailable"
             and (row.get("details") or {}).get("is_hard", True) is not False
             for row in caused

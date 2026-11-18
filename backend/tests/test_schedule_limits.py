@@ -230,3 +230,59 @@ def test_the_translation_schema_carries_partners():
     translated = DirectiveAgent(llm).translate(profile, SUNDAY, SATURDAY)
 
     assert translated["requests"][0]["partners"] == ["דנה"]
+
+
+def test_native_daily_rule_and_officer_month_limit_apply_without_translation():
+    profile = _profile(PEOPLE[:2])
+    officer, regular = profile["employees"]
+    officer["rank_group"] = "officer"
+    profile["rules"] = [
+        {"text": "אין לשבץ אדם פעמיים באותו יום", "priority": "hard"},
+        {"text": "אין לשבץ קצינים ליותר מ-6 משמרות בחודש", "priority": "hard"},
+    ]
+    history = [{"employee": officer["name"], "shift": MORNING, "date": "2026-08-%02d" % day}
+               for day in range(1, 7)]
+    result = Scheduler(None).generate_span(profile, "2026-08-31", "2026-09-01", history=history)
+    pairs = [(row["employee"], row["date"]) for row in result["assignments"]]
+    assert len(pairs) == len(set(pairs))
+    assert set(pairs) == {(regular["name"], "2026-08-31"), (regular["name"], "2026-09-01"),
+                          (officer["name"], "2026-09-01")}
+
+
+def test_daily_rule_rejects_two_mandatory_assignments_on_one_date():
+    import pytest
+    from app.common.errors import AgentError
+
+    profile = _profile()
+    profile["rules"] = [{"text": "אין לשבץ אדם פעמיים באותו יום", "priority": "hard"}]
+    pins = [{"shift": shift, "employee": PEOPLE[0], "date": SUNDAY} for shift in (MORNING, NIGHT)]
+    with pytest.raises(AgentError, match="שתי משמרות"):
+        generate_span(profile, SUNDAY, SUNDAY, required_assignments=pins)
+
+
+def test_rebuilding_a_week_reserves_officer_capacity_for_other_weeks():
+    profile = _profile(PEOPLE[:1])
+    officer = profile["employees"][0]
+    officer["rank_group"] = "officer"
+    profile["rules"] = [{"text": "אין לשבץ קצינים ליותר מ-2 משמרות בחודש", "priority": "hard"}]
+    past = {"employee": officer["name"], "date": "2026-08-01", "shift": MORNING}
+    future = dict(past, date="2026-08-28")
+    result = generate_span(profile, SUNDAY, SATURDAY, history=[past], already_scheduled=[future])
+    assert not result["assignments"]
+    assert any("מכסת המשמרות החודשית" in note for note in result["notes"])
+
+
+def test_1700_to_0100_uses_one_start_date_and_eight_hours():
+    from app.bl.audit.roster import shift_hours
+
+    profile = _profile(PEOPLE[:1])
+    evening = dict(profile["shifts"][0], name="ערב", start_time="17:00", end_time="01:00")
+    morning = dict(profile["shifts"][0], start_time="09:00", end_time="17:00")
+    profile["shifts"] = [evening, morning]
+    assert shift_hours(evening) == 8
+    pins = [dict(employee=PEOPLE[0], shift="ערב", date=SUNDAY),
+            dict(employee=PEOPLE[0], shift=MORNING, date="2026-08-17")]
+    result = generate_span(profile, SUNDAY, "2026-08-17", required_assignments=[pins[0]])
+    assert len(result["assignments"]) == 2
+    result = generate_span(profile, SUNDAY, "2026-08-17", required_assignments=pins)
+    assert {(r["date"], r["shift"]) for r in result["assignments"]} == {(p["date"], p["shift"]) for p in pins}

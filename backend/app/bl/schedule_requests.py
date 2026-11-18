@@ -37,12 +37,13 @@ schema) and `solver/` (honouring) read it.
 import datetime
 from typing import Any, List, Tuple
 
+from app.bl.rotation.vocabulary import minutes
 from app.bl.shared import HEBREW_WEEKDAYS, text, weekday_key
 
 KINDS = ("avoid", "prefer", "max_count", "not_together",
-         "min_rest", "max_consecutive", "balance", "requires_with")
+         "min_rest", "max_consecutive", "balance", "requires_with", "avoid_transition")
 # The kinds that may name nobody, meaning everyone.
-TEAM_KINDS = ("min_rest", "max_consecutive", "balance")
+TEAM_KINDS = ("min_rest", "max_consecutive", "balance", "avoid_transition")
 # Only ever a wish: a "must" is a pin, and even shares are a judgement.
 SOFT_KINDS = ("prefer", "balance")
 PERIODS = ("period", "week")
@@ -67,6 +68,11 @@ def read_requests(raw: Any, profile: dict) -> Tuple[List[dict], List[str]]:
     result, errors = [], []
     for index, item in enumerate(raw[:_MAX_REQUESTS], start=1):
         request, problem = _read(item, people, shifts)
+        if not problem and request["kind"] == "avoid_transition":
+            clocked = {s.get("name") for s in profile.get("shifts") or []
+                       if isinstance(s, dict) and minutes(s.get("start_time")) is not None}
+            if any(name not in clocked for name in request["shifts"]):
+                problem = "לכל משמרת במגבלת מעבר נדרשת שעת התחלה"
         if problem:
             errors.append("בקשה %d: %s" % (index, problem))
         else:
@@ -104,6 +110,8 @@ def _problem(request: dict, people: set, shifts: set) -> str:
     unknown = [name for name in request["shifts"] if name not in shifts]
     if unknown:
         return "משמרת לא מוכרת: %s" % ", ".join(unknown)
+    if request["kind"] == "avoid_transition" and (len(request["shifts"]) != 2 or len(set(request["shifts"])) != 2):
+        return "יש לציין שתי משמרות שונות לפי הסדר"
     if any(not _is_date(day) for day in request["dates"]):
         return "תאריך לא תקין בבקשה"
     if any(day not in _WEEKDAYS for day in request["weekdays"]):
@@ -192,6 +200,7 @@ def _default_reason(request: dict) -> str:
         "prefer": "בקשה לשבץ את %s במשמרות האלה",
         "max_count": "מגבלת כמות משמרות ל%s",
         "not_together": "בקשה ש%s לא ישובצו יחד",
+        "avoid_transition": "מגבלת מעבר בין משמרות ל%s",
         "min_rest": "מנוחה מינימלית בין משמרות ל%s",
         "max_consecutive": "מגבלת ימים רצופים ל%s",
         "balance": "איזון משמרות בין %s",

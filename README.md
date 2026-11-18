@@ -145,7 +145,7 @@ See [Manager chat](docs/MANAGER_CHAT.md) for supported actions and approval beha
 backend/              FastAPI + Postgres, layered api / bl / dal
   app/api/            HTTP contracts and routers
   app/bl/             Decisions: profiles, the solver, changes, audit
-  app/bl/change_plans One persisted plan and one atomic approval path
+  app/bl/change_plans Persisted plans and one atomic write gate for every approval
   app/bl/solver/      OR-Tools CP-SAT: who works which shift
   app/dal/            Data access: Postgres (data, throttle, live signals, model slots), LLM client
   app/common/         Config, runtime settings, logging, errors

@@ -28,6 +28,11 @@ shift on those dates.
   start of the next for the same person. `employees: []` means everyone.
   `shifts` narrows it to rests touching those shifts ("after a night, 16
   hours" is `shifts: ["<the night shift>"]`, `count: 16`).
+- `avoid_transition`: forbid or discourage one shift immediately following a named
+  shift for the same person. Supply exactly two shift names, earlier then later.
+  "בלי בוקר אחרי לילה" uses ["לילה", "בוקר"]. This applies to the first occurrence
+  of the second shift by clock time that day or the next. Dates and weekdays
+  restrict the later shift. Empty employees means the entire team.
 - `max_consecutive`: at most `count` consecutive calendar days on matching
   shifts. `employees: []` means everyone; `shifts` narrows it ("no more than
   two nights in a row" is the night shift with `count: 2`).
@@ -43,7 +48,8 @@ shift on those dates.
 `shifts`, `dates` (ISO) and `weekdays` (Hebrew, e.g. "שלישי") narrow which
 slots a request covers; an empty list means any. Use `count: null` unless the
 kind is `max_count`, `max_consecutive` (whole days) or `min_rest` (hours).
-Set `is_hard: true` only for words such as "must", "never", "אסור", "בשום
+For a standing rule its saved hard/soft priority takes precedence over wording.
+Otherwise set `is_hard: true` only for words such as "must", "never", "אסור", "בשום
 מקרה", or a limit stated as a rule ("מינימום 12 שעות", "לא יותר משני לילות
 ברצף"); words such as "prefer", "if possible", "עדיף", "אם אפשר" are
 `is_hard: false`. Use `weight: 1` unless the source says one

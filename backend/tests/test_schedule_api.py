@@ -2597,3 +2597,51 @@ def test_a_checkpoint_leaves_earlier_days_rows_alone():
     )
 
     assert still["id"] == monday["id"]
+
+
+def test_manual_calendar_limits_allow_moves_and_reject_extra_assignments():
+    app, repo = _build_app([])
+    repo.profiles[TEAM] = dict(PROFILE,
+        employees=[dict(PROFILE["employees"][1], rank_group="officer")],
+        shifts=PROFILE["shifts"] + [dict(PROFILE["shifts"][0], name=EVENING)],
+        rules=[{"text": "אין לשבץ קצינים ליותר מ-1 משמרות בחודש", "priority": "hard"}])
+    client = _client(app)
+    client.post("/api/schedule/blank", json={"starts_on": "2026-08-17", "ends_on": "2026-08-18"})
+    body = {"shift_name": MORNING, "slot_date": "2026-08-17", "employee": "יוסי"}
+    result = client.post("/api/schedule/assign", json=body).json()
+    assert client.post("/api/schedule/assign", json=body).status_code == 200
+    double = client.post("/api/schedule/assign", json=dict(body, shift_name=EVENING))
+    assert double.status_code == 409 and "כבר משובץ" in double.json()["detail"]
+    over = client.post("/api/schedule/assign", json=dict(body, slot_date="2026-08-18"))
+    assert over.status_code == 409 and "מכסת" in over.json()["detail"]
+    moved = client.post("/api/schedule/move", json={"assignment_id": result["assigned"],
+                        "shift_name": EVENING, "slot_date": body["slot_date"], "reason": "שינוי"})
+    assert moved.status_code == 200
+    assert len(moved.json()["assignments"]) == 1
+
+
+def test_existing_draft_with_two_shifts_on_one_start_date_cannot_publish():
+    app, repo = _build_app([])
+    repo.profiles[TEAM] = dict(PROFILE, shifts=PROFILE["shifts"] + [dict(PROFILE["shifts"][0], name=EVENING)])
+    client = _client(app)
+    schedule = client.post("/api/schedule/blank", json={"starts_on": "2026-08-17", "ends_on": "2026-08-17"}).json()
+    for slot in schedule["slots"]:
+        repo.add_assignment(schedule["id"], TEAM, slot["id"], "יוסי", "ייבוא קיים")
+    response = client.post("/api/schedule/%s/publish" % schedule["id"])
+    assert response.status_code == 409
+    assert repo.get_schedule(schedule["id"], TEAM)["status"] == "draft"
+
+
+def test_evening_booking_blocks_only_the_actual_overlap_on_the_next_date():
+    app, repo = _build_app([])
+    shifts = [dict(PROFILE["shifts"][0], name=name, start_time=start, end_time=end)
+              for name, start, end in [("ערב", "17:00", "01:00"), ("חצות", "00:30", "04:00"),
+                                       ("בוקר", "09:00", "17:00")]]
+    repo.profiles[TEAM] = dict(PROFILE, shifts=shifts)
+    client = _client(app)
+    client.post("/api/schedule/blank", json={"starts_on": "2026-08-17", "ends_on": "2026-08-18"})
+    first = dict(employee="יוסי", shift_name="ערב", slot_date="2026-08-17")
+    assert client.post("/api/schedule/assign", json=first).status_code == 200
+    next_day = dict(first, slot_date="2026-08-18")
+    assert client.post("/api/schedule/assign", json=dict(next_day, shift_name="חצות")).status_code == 409
+    assert client.post("/api/schedule/assign", json=dict(next_day, shift_name="בוקר")).status_code == 200

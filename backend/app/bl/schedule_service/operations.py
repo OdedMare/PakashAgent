@@ -7,10 +7,15 @@ same three actions, so each action is one small handler rather than a branch
 in a long method.
 """
 
+import datetime
 from typing import Callable, Dict, List, Optional
 
+from app.bl.scheduler.availability import availability_bounds
 from app.bl.changes import OP_ASSIGN, OP_REMOVE, OP_SWAP
 from app.bl.audit import constraint_conflicts, is_whole_day
+from app.bl.rotation.closures import shift_interval
+from app.bl.shift_sequences import forbidden_groups, rules_for
+from app.bl.roster_limits import monthly_officer_limit
 from app.bl.scheduler.availability import effective_availability
 from app.bl.schedule_service.constants import (
     ACTION_ASSIGNED,
@@ -24,15 +29,16 @@ from app.common.errors import ConflictError
 
 
 def assert_no_hard_constraint(
-    repository, team_id: str, schedule: dict, employee: str, slot: dict,
+    repository, team_id: str, schedule: dict, employee: str, slot: dict, moving_id: str = "",
 ) -> None:
     """Refuse a placement that contradicts any hard availability row."""
     starts_on, ends_on = window(schedule)
     profile = repository.team_profile(team_id) or {}
+    _check_calendar_limits(repository, team_id, schedule, employee, slot, moving_id, profile)
     availability = effective_availability(
         profile,
         [availability_fact(row) for row in repository.availability(
-            team_id, starts_on, ends_on, employee,
+            team_id, *availability_bounds(profile, starts_on, ends_on), employee,
         )],
         starts_on, ends_on,
     )
@@ -66,6 +72,55 @@ def assert_no_hard_constraint(
             % (employee, blocked.get("start_time") or "?", blocked.get("end_time") or "?",
                " (%s)" % reason if reason else "")
         )
+
+
+def _check_calendar_limits(repository, team_id, schedule, employee, slot, moving_id, profile):
+    cap = monthly_officer_limit(profile)
+    if cap is not None and not any(person.get("rank_group") == "officer" and person.get("name") == employee
+                                   for person in profile.get("employees") or []):
+        cap = None
+    sequences = [rule for rule in rules_for(profile) if rule.hard and rule.kind != "availability"]
+    date = iso(slot["slot_date"])
+    rows = [row for row in repository.assignments(schedule["id"], team_id)
+            if row["employee"] == employee and (not moving_id or row.get("id") != moving_id)]
+    assigned = {(iso(row["date"]), row["shift"]) for row in rows}
+    if not moving_id and (date, slot["shift_name"]) in assigned:
+        return  # Repeating the existing assignment is idempotent.
+    month = date[:7]
+    day = datetime.date.fromisoformat(date)
+    reach = datetime.timedelta(days=max((max(1, rule.count - 1) for rule in sequences), default=1))
+    low, high = (day - reach).isoformat(), (day + reach).isoformat()
+    for period in repository.list_schedules(team_id):
+        if period["id"] == schedule["id"]:
+            continue
+        first, last = iso(period["starts_on"]), iso(period["ends_on"])
+        if low <= last and first <= high or cap is not None and first[:7] <= month <= last[:7]:
+            neighbors = [r for r in repository.assignments(period["id"], team_id) if r["employee"] == employee]
+            rows.extend(r for r in neighbors if low <= iso(r["date"]) <= high)
+            assigned.update((iso(r["date"]), r["shift"]) for r in neighbors)
+    if any(worked == date for worked, _ in assigned):
+        raise ConflictError("%s כבר משובץ/ת ביום %s" % (employee, date))
+    definitions = {s["name"]: s for s in profile.get("shifts") or []}
+    target_span = shift_interval(day, slot)
+    if target_span:
+        for row in rows:
+            other_date = iso(row["date"])
+            if other_date == date or not low <= other_date <= high:
+                continue
+            shift = dict(definitions.get(row["shift"], {}), **row)
+            other_span = shift_interval(datetime.date.fromisoformat(other_date), shift)
+            if other_span and target_span[0] < other_span[1] and other_span[0] < target_span[1]:
+                raise ConflictError("%s כבר משובץ/ת למשמרת חופפת ב-%s" % (employee, other_date))
+    if sequences:
+        person = next((p for p in profile.get("employees") or [] if p["name"] == employee), {})
+        bookings = {(iso(r["date"]), r["shift"]): dict(definitions.get(r["shift"], {}), **r) for r in rows}
+        target = date, slot["shift_name"]
+        bookings[target] = slot
+        for rule in sequences:
+            if any(target in group for group in forbidden_groups(rule, bookings, profile, person)):
+                raise ConflictError("%s: %s" % (employee, rule.text))
+    if cap is not None and sum(worked[:7] == month for worked, _ in assigned) >= cap:
+        raise ConflictError("%s הגיע/ה למכסת %d משמרות בחודש %s" % (employee, cap, month))
 
 
 class Operation:
@@ -171,10 +226,10 @@ class OperationApplier:
         if first_slot is None or second_slot is None:
             return 0
         assert_no_hard_constraint(
-            self._repository, team_id, schedule, op.employee, second_slot,
+            self._repository, team_id, schedule, op.employee, second_slot, moving_id=first["id"],
         )
         assert_no_hard_constraint(
-            self._repository, team_id, schedule, op.other, first_slot,
+            self._repository, team_id, schedule, op.other, first_slot, moving_id=second["id"],
         )
         stored_reason = op.own_reason or reason
         self._repository.move_assignment(

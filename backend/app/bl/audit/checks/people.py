@@ -3,6 +3,7 @@
 import datetime
 from typing import Dict, List
 
+from app.bl.roster_limits import monthly_officer_limit
 from app.bl.audit.checks.base import AuditCheck, AuditInput
 from app.bl.audit.codes import (
     CONSECUTIVE, DOUBLE_BOOKED, OVER_HOURS, SEVERITY_NOTICE, SEVERITY_WARNING,
@@ -14,19 +15,14 @@ from app.bl.audit.values import number, text
 
 
 class DoubleBookedCheck(AuditCheck):
-    """One person in two places in one slot.
-
-    Keyed on person+date+shift. Two *different* shifts on one day may be
-    legitimate (a split day); where they overlap in time, `ShortRestCheck`
-    reports it.
-    """
+    """A repeated slot or two assignments starting on the same calendar date."""
 
     def run(self, data: AuditInput) -> List[dict]:
         seen: Dict[tuple, int] = {}
         for row in data.rows:
             key = (row["employee"], row["date"], row["shift"])
             seen[key] = seen.get(key, 0) + 1
-        return [
+        warnings = [
             warning(
                 DOUBLE_BOOKED, SEVERITY_WARNING,
                 "%s משובץ %d פעמים למשמרת %s בתאריך %s."
@@ -35,6 +31,51 @@ class DoubleBookedCheck(AuditCheck):
             )
             for (employee, date, shift), count in seen.items() if count > 1
         ]
+
+        cap = monthly_officer_limit(data.profile)
+        shifts = {}
+        for employee, date, shift in seen:
+            shifts.setdefault((employee, date), []).append(shift)
+        for (employee, date), names in shifts.items():
+            if len(names) > 1:
+                warnings.append(warning(DOUBLE_BOOKED, SEVERITY_WARNING,
+                    "%s משובץ/ת ליותר ממשמרת אחת ביום %s: %s" % (employee, date, ", ".join(names)),
+                    employee=employee, date=date))
+        if cap is not None:
+            officers = {p.get("name") for p in data.employees if p.get("rank_group") == "officer"}
+            months = {}
+            for employee, date, shift in seen:
+                if employee in officers:
+                    key = employee, date[:7]
+                    months[key] = months.get(key, 0) + 1
+            for (employee, month), count in months.items():
+                if count > cap:
+                    warnings.append(warning("monthly_shifts", SEVERITY_WARNING,
+                        "%s משובץ/ת ל-%d משמרות בחודש %s, מעל המכסה של %d" % (employee, count, month, cap),
+                        employee=employee, details={"month": month, "count": count, "limit": cap}))
+        return warnings
+
+
+class StandingSequenceCheck(AuditCheck):
+    def run(self, data: AuditInput) -> List[dict]:
+        from app.bl.shift_sequences import forbidden_groups, rules_for
+        rules = [rule for rule in rules_for(data.profile) if rule.kind != "availability"]
+        if not rules:
+            return []
+        by_employee = {}
+        for row in data.rows:
+            slots = by_employee.setdefault(row["employee"], {})
+            slots[row["date"], row["shift"]] = {"start_time": row["start"]}
+        people = {person["name"]: person for person in data.employees if person.get("name")}
+        findings = []
+        for name, slots in by_employee.items():
+            for rule in rules:
+                for group in forbidden_groups(rule, slots, data.profile, people.get(name, {})):
+                    date, shift = group[-1] if rule.kind != "run" else group[0]
+                    findings.append(warning("shift_sequence", SEVERITY_WARNING if rule.hard else SEVERITY_NOTICE,
+                                            "%s (%s): %s" % (name, date, rule.text),
+                                            employee=name, date=date, shift=shift))
+        return findings
 
 
 class UnavailableCheck(AuditCheck):

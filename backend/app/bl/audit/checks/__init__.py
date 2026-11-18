@@ -9,6 +9,7 @@ from app.bl.audit.checks.people import (
     DoubleBookedCheck,
     OverHoursCheck,
     ShortRestCheck,
+    StandingSequenceCheck,
     UnavailableCheck,
 )
 from app.bl.audit.checks.rotation import CrossRotationCheck
@@ -21,6 +22,7 @@ DEFAULT_CHECKS = (
     OverHoursCheck(),
     ConsecutiveDaysCheck(),
     ShortRestCheck(),
+    StandingSequenceCheck(),
     StaffingCheck(),
     CrossRotationCheck(),
     UnitStandardCheck(),

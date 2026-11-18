@@ -2,6 +2,7 @@
 
 from typing import List, Optional
 
+from app.bl.scheduler.availability import availability_bounds
 from app.bl.scheduler import build_slots, plan_spans, with_staffing_overrides
 from app.bl.schedule_service.constants import ACTION_GENERATED, ACTION_OPENED
 from app.bl.schedule_service.context import ScheduleContext
@@ -49,8 +50,8 @@ class PeriodBuilder:
         )
         result = self._scheduler.generate_verified(
             profile, starts_on, ends_on,
-            availability=self._repository.availability(team_id, starts_on, ends_on),
-            history=self._history.before(team_id, starts_on),
+            availability=self._repository.availability(team_id, *availability_bounds(profile, starts_on, ends_on)),
+            history=self._history.for_build(team_id, profile, starts_on, ends_on),
             instructions=instructions,
             required_assignments=required_assignments,
             preferences=self._context.active_preferences(team_id),

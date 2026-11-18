@@ -7,6 +7,7 @@ constraint request" to "a request", with the manager as sole decider.
 
 from typing import List
 
+from app.bl.change_plans.confirmed import apply_confirmed_change
 from app.bl.employee_service.values import (
     ACTION_SWAP_REJECTED, find_assignment, iso_date, require_reason, text,
 )
@@ -88,6 +89,22 @@ class SwapRequests:
         `agent_reason` states the provenance rather than inventing a judgment.
         """
         reason = require_reason(decided_reason, "צריך לציין סיבה לאישור ההחלפה")
+        return apply_confirmed_change(
+            self._repository,
+            team_id,
+            source="swap_request",
+            body={
+                "kind": "swap_request", "swap_id": swap_id,
+                "decision": "approved", "reason": reason,
+            },
+            apply=lambda: self._approve_swap(team_id, swap_id, reason),
+            message="בקשת ההחלפה אושרה והמשמרות הוחלפו",
+            reason=reason,
+            agent_reason="בקשת החלפה אושרה על ידי המנהל",
+            schedule_id=lambda result: result["schedule"].get("id", ""),
+        )
+
+    def _approve_swap(self, team_id, swap_id, reason):
         swap = self._repository.decide_swap(swap_id, team_id, STATUS_APPROVED, reason)
         schedule = self._schedules.apply(
             team_id, swap["schedule_id"], [_swap_operation(swap)], reason,
@@ -98,6 +115,21 @@ class SwapRequests:
     def reject_swap(self, team_id: str, swap_id: str, decided_reason: str = "") -> dict:
         """Refuse a swap, with a reason both employees will read."""
         reason = require_reason(decided_reason, "צריך לציין סיבה לדחייה")
+        return apply_confirmed_change(
+            self._repository,
+            team_id,
+            source="swap_request",
+            body={
+                "kind": "swap_request", "swap_id": swap_id,
+                "decision": "rejected", "reason": reason,
+            },
+            apply=lambda: self._reject_swap(team_id, swap_id, reason),
+            message="בקשת ההחלפה נדחתה",
+            reason=reason,
+            agent_reason="בקשת החלפה נדחתה על ידי המנהל",
+        )
+
+    def _reject_swap(self, team_id, swap_id, reason):
         swap = self._repository.decide_swap(swap_id, team_id, STATUS_REJECTED, reason)
         self._repository.append_change(
             team_id, ACTION_SWAP_REJECTED,

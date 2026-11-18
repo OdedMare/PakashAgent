@@ -2,6 +2,7 @@
 
 from typing import List, Optional
 
+from app.bl.change_plans.confirmed import apply_confirmed_change
 from app.bl.schedule_service.constants import ACTION_MOVED, RECENT_CHANGES
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.operations import (
@@ -74,6 +75,32 @@ class ChangeService:
             raise AgentError("צריך לציין סיבה לשינוי")
         if operations and profile_operations:
             raise AgentError("יש לאשר שינויי צוות ושינויי סידור בנפרד")
+        return apply_confirmed_change(
+            self._repository,
+            team_id,
+            source="proposal",
+            body={
+                "kind": "profile" if profile_operations else "changes",
+                "schedule_id": schedule_id,
+                "operations": operations or [],
+                "profile_operations": profile_operations,
+                "reason": reason,
+                "agent_reason": agent_reason,
+            },
+            apply=lambda: self._apply(
+                team_id, schedule_id, operations, reason, agent_reason,
+                profile_operations,
+            ),
+            message="השינוי שאושר הוחל בהצלחה",
+            reason=reason,
+            agent_reason=agent_reason or "הצעת שינוי אושרה",
+            schedule_id=schedule_id,
+        )
+
+    def _apply(
+        self, team_id, schedule_id, operations, reason, agent_reason,
+        profile_operations,
+    ):
         if profile_operations:
             return self._apply_to_profile(team_id, profile_operations)
         schedule = self._repository.get_schedule(schedule_id, team_id)
@@ -109,6 +136,34 @@ class ChangeService:
         """
         if not (reason or "").strip():
             raise AgentError("צריך לציין סיבה להעברת המשמרת")
+        return apply_confirmed_change(
+            self._repository,
+            team_id,
+            source="drag",
+            body={
+                "kind": "move",
+                "schedule_id": schedule_id or "",
+                "assignment_id": assignment_id,
+                "from_slot_id": from_slot_id,
+                "shift": shift_name,
+                "date": slot_date,
+                "reason": reason,
+                "agent_reason": agent_reason,
+            },
+            apply=lambda: self._move(
+                team_id, assignment_id, shift_name, slot_date, reason,
+                agent_reason, schedule_id, from_slot_id,
+            ),
+            message="המשמרת הועברה בהצלחה",
+            reason=reason,
+            agent_reason=agent_reason or "גרירה שאושרה על ידי המנהל",
+            schedule_id=lambda result: result.get("id", ""),
+        )
+
+    def _move(
+        self, team_id, assignment_id, shift_name, slot_date, reason,
+        agent_reason, schedule_id, from_slot_id,
+    ):
         schedule = self._context.require_schedule(team_id, schedule_id)
         slot = self._repository.find_slot(
             schedule["id"], team_id, shift_name, slot_date
@@ -119,7 +174,7 @@ class ChangeService:
         if previous is None:
             raise NotFoundError("השיבוץ לא נמצא")
         assert_no_hard_constraint(
-            self._repository, team_id, schedule, previous["employee"], slot,
+            self._repository, team_id, schedule, previous["employee"], slot, moving_id=assignment_id,
         )
         moved = self._repository.move_assignment(
             assignment_id, team_id, slot["id"], reason=agent_reason or reason,

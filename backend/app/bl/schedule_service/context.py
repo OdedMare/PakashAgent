@@ -10,6 +10,7 @@ from typing import List, Optional
 
 from app.bl import rotation
 from app.bl.audit import audit
+from app.bl.scheduler.availability import availability_bounds
 from app.bl.scheduler import effective_availability
 from app.bl.schedule_service import rows
 from app.common.errors import NotFoundError
@@ -135,7 +136,7 @@ class ScheduleContext:
             rows.employees(profile),
             availability=effective_availability(
                 profile,
-                self._repository.availability(team_id, start, end),
+                self._repository.availability(team_id, *availability_bounds(profile, start, end)),
                 start, end,
             ),
             profile=profile,

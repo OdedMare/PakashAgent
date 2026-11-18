@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+  import type { Metadata } from "next";
 import { GuideProvider } from "@/components/Guide";
 import "@/styles/globals.css";
 

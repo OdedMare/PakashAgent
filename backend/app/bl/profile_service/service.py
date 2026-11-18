@@ -4,6 +4,7 @@ import copy
 from typing import Any, Callable, Dict, List, Optional
 
 from app.bl import compiled_sources, qualification
+from app.bl.change_plans.confirmed import apply_confirmed_change
 from app.bl.profile_service import roster
 from app.bl.profile_service import shifts as shift_rules
 from app.bl.profile_service import unit as unit_rules
@@ -54,6 +55,43 @@ class ProfileService:
         (`identity.py`): applied to the saved profile before the patch is
         merged, and to every stored row in the same transaction.
         """
+        patch = {
+            "employees": employees,
+            "shifts": shifts,
+            "workplace": workplace,
+            "rules": rules,
+            "dependencies": dependencies,
+            "expected_revision": expected_revision,
+            "renamed_employees": renamed_employees,
+            "renamed_shifts": renamed_shifts,
+            "removed_employees": removed_employees,
+            **sections,
+        }
+        return apply_confirmed_change(
+            self._repository,
+            team_id,
+            source="profile_form",
+            body={
+                "kind": "profile",
+                "profile_patch": {
+                    key: value for key, value in patch.items()
+                    if value is not None
+                },
+            },
+            apply=lambda: self._update(
+                team_id, employees, shifts, workplace, rules, dependencies,
+                expected_revision, renamed_employees, renamed_shifts,
+                removed_employees, sections,
+            ),
+            message="פרופיל הצוות נשמר בהצלחה",
+            agent_reason="טופס פרופיל נשמר על ידי המנהל",
+        )
+
+    def _update(
+        self, team_id, employees, shifts, workplace, rules, dependencies,
+        expected_revision, renamed_employees, renamed_shifts,
+        removed_employees, sections,
+    ):
         revision = self._repository.team_profile_revision(team_id)
         if expected_revision is not None and revision is not None \
                 and expected_revision != revision:
@@ -110,6 +148,17 @@ class ProfileService:
 
     def delete_shift(self, team_id: str, name: str) -> dict:
         """Archive a shift type; existing schedules keep their rows."""
+        return apply_confirmed_change(
+            self._repository,
+            team_id,
+            source="profile_form",
+            body={"kind": "delete_shift", "shift": name},
+            apply=lambda: self._delete_shift(team_id, name),
+            message="סוג המשמרת הועבר לארכיון",
+            agent_reason="סוג משמרת הועבר לארכיון על ידי המנהל",
+        )
+
+    def _delete_shift(self, team_id: str, name: str) -> dict:
         revision = self._repository.team_profile_revision(team_id)
         current = self._repository.team_profile(team_id)
         if current is None:

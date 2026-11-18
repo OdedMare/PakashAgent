@@ -126,6 +126,63 @@ def test_real_later_failure_rolls_back_earlier_repository_commits(real_repo, mon
     assert real_repo.get_schedule(period, team)["status"] == ("published" if published else "draft")
 
 
+def test_real_confirmed_drag_gets_applied_plan_and_correlated_history(real_repo):
+    team = real_repo.create_team("בדיקת גרירה", "test-password-only")["id"]
+    real_repo.create_team_profile(team, copy.deepcopy(PROFILE))
+    period = real_repo.create_schedule(team, "2026-10-04", "2026-10-10")
+    slots = real_repo.replace_slots(period["id"], team, [
+        {"shift_name": MORNING, "slot_date": "2026-10-05", "headcount": 1},
+        {"shift_name": MORNING, "slot_date": "2026-10-06", "headcount": 1},
+    ])
+    assigned = real_repo.add_assignment(
+        period["id"], team, slots[0]["id"], "דנה", "שיבוץ קיים",
+    )
+    schedules = ScheduleService(real_repo, _ScriptedLlm([]))
+
+    schedules.move(
+        team, assigned["id"], MORNING, "2026-10-06",
+        "העברה מאושרת", schedule_id=period["id"],
+        from_slot_id=slots[0]["id"],
+    )
+
+    plan = real_repo._one(
+        "SELECT * FROM change_plans WHERE team_id=%s AND source='drag'", (team,),
+    )
+    assert plan["status"] == "applied"
+    assert plan["body"]["assignment_id"] == assigned["id"]
+    assert {row["plan_id"] for row in real_repo.change_log(team)} == {plan["id"]}
+    assert real_repo.assignments(period["id"], team)[0]["slot_id"] == slots[1]["id"]
+
+
+def test_real_confirmed_change_rolls_back_domain_write_and_plan(real_repo, monkeypatch):
+    team = real_repo.create_team("בדיקת rollback", "test-password-only")["id"]
+    real_repo.create_team_profile(team, copy.deepcopy(PROFILE))
+    period = real_repo.create_schedule(team, "2026-10-04", "2026-10-10")
+    slots = real_repo.replace_slots(period["id"], team, [
+        {"shift_name": MORNING, "slot_date": "2026-10-05", "headcount": 1},
+        {"shift_name": MORNING, "slot_date": "2026-10-06", "headcount": 1},
+    ])
+    assigned = real_repo.add_assignment(
+        period["id"], team, slots[0]["id"], "דנה", "שיבוץ קיים",
+    )
+    schedules = ScheduleService(real_repo, _ScriptedLlm([]))
+
+    def fail_receipt(*args, **kwargs):
+        raise RuntimeError("simulated late receipt failure")
+
+    monkeypatch.setattr(real_repo, "mark_change_plan_applied", fail_receipt)
+    with pytest.raises(RuntimeError):
+        schedules.move(
+            team, assigned["id"], MORNING, "2026-10-06",
+            "העברה מאושרת", schedule_id=period["id"],
+            from_slot_id=slots[0]["id"],
+        )
+
+    assert real_repo.assignments(period["id"], team)[0]["slot_id"] == slots[0]["id"]
+    assert not real_repo.change_log(team)
+    assert not real_repo._all("SELECT id FROM change_plans WHERE team_id=%s", (team,))
+
+
 def test_real_conversation_confirmation_saves_instruction_and_receipt_once(real_repo):
     team, period, chat, message, service = seed(real_repo)
     request = dict(content="כן, תעשה", request_id="text-approval", approval_message_id=message)

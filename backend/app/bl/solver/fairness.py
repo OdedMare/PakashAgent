@@ -34,6 +34,7 @@ placement and nothing fixed take no part.
 """
 
 import datetime
+from collections import Counter
 from typing import Dict, List
 
 from app.bl.solver.model import (
@@ -99,8 +100,14 @@ def _spread(model: Model, measure, weight: int, peak: int, label: str,
             loads[name] = (placed, fixed)
     if len(loads) < 2:
         return
-    demand = sum(measure(times) * max(0, int(slot.get("headcount") or 0))
-                 for times, slot in zip(problem.times, problem.slots))
+    # Fixed seats are already included in their holders' loads.
+    occupied = Counter((row["date"], row["shift"]) for row in problem.pins
+                       if row["employee"] in problem.staff)
+    demand = 0
+    for times, slot in zip(problem.times, problem.slots):
+        seats = int(slot.get("headcount") or 0)
+        open_seats = max(0, seats - occupied[slot["slot_date"], slot["shift_name"]])
+        demand += measure(times) * open_seats
     demand += sum(fixed for _, fixed in loads.values())
     room = {name: _capacity(problem, name, placed, measure)
             for name, (placed, _) in loads.items()}
@@ -126,13 +133,25 @@ def _capacity(problem, name: str, placed, measure) -> int:
     for index in placed:
         day = problem.slots[index]["slot_date"]
         days[day] = max(days.get(day, 0), measure(problem.times[index]))
+    for row in problem.fixed:
+        if row["employee"] == name:
+            days.pop(row["date"], None)
+    capacity = sum(days.values())
     limit = reserve_days(problem.people[name])
-    if limit is None:
-        return sum(days.values())
-    weeks: Dict[str, List[int]] = {}
-    for day, load in days.items():
-        weeks.setdefault(week_of(day), []).append(load)
-    return sum(sum(sorted(loads, reverse=True)[:limit]) for loads in weeks.values())
+    if limit is not None:
+        weeks: Dict[str, List[int]] = {}
+        for day, load in days.items():
+            weeks.setdefault(week_of(day), []).append(load)
+        capacity = sum(sum(sorted(loads, reverse=True)[:limit]) for loads in weeks.values())
+    if problem.officer_cap is not None and problem.people[name].get("rank_group") == "officer":
+        months: Dict[str, List[int]] = {}
+        used = Counter(day[:7] for person, _, day in problem.month_rows if person == name)
+        for day, load in days.items():
+            months.setdefault(day[:7], []).append(load)
+        remaining = sum(sum(sorted(loads, reverse=True)[:max(0, problem.officer_cap - used[month])])
+                        for month, loads in months.items())
+        capacity = min(capacity, remaining)
+    return capacity
 
 
 def water_fill(floors: Dict[str, int], room: Dict[str, int], demand: int) -> Dict[str, int]:

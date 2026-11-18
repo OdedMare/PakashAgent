@@ -499,15 +499,15 @@ def test_a_rebuild_that_keeps_a_board_reports_its_held_phase_too():
 
 
 def test_a_short_team_fills_the_plan_in_order_and_leaves_the_gaps_at_the_end():
-    """Four people capped at 48 hours a week cannot hold three shifts a day
+    """Six people capped at 40 hours a week cannot hold three shifts a day
     for a week. The seats left empty should be the last ones — Sunday to
     Thursday full, the gaps together at the end — not a full day, an empty
     night and a full day again scattered across the week."""
     shifts = [("בוקר", "07:00", "15:00"), ("ערב", "15:00", "23:00"), ("לילה", "23:00", "07:00")]
     profile = {
         "workplace": {"name": "יחידה"},
-        "audit_policy": {"max_weekly_hours": 48},
-        "employees": [{"name": name} for name in ["אבי", "בני", "גדי", "דני"]],
+        "audit_policy": {"max_weekly_hours": 40},
+        "employees": [{"name": name} for name in ["אבי", "בני", "גדי", "דני", "הדר", "ורד"]],
         "shifts": [{"name": name, "start_time": start, "end_time": end, "days": [],
                     "staffing": [{"days": [], "headcount": 2, "required_roles": []}]}
                    for name, start, end in shifts],

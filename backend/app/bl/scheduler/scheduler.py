@@ -5,14 +5,15 @@ cannot read on its own — the build's free instruction, rules, policies,
 notes and preferences (`directives.semantic_sources`) — goes to the
 `DirectiveAgent`, which answers with validated absences, pins and structured
 requests. The solver (`bl/solver/`) then assigns every slot of the span in
-one solve. A sentence that could not be translated is never sent anywhere
-else: the schedule is built without it and its `notes` say so, binding or
-not, so the manager can restate it.
+one solve. An untranslated hard standing rule stops the build and names the rule.
+Other untranslated sources are reported in the schedule notes.
 """
 
+import json
 from typing import List, Optional
 
 from app.bl import solver
+from app.bl.shift_sequences import missing_return_subject
 from app.bl.scheduler.directives import semantic_sources
 from app.bl.scheduler.slots import plan_spans
 from app.bl.scheduler.quality import combine_metrics, quality
@@ -64,10 +65,15 @@ class Scheduler:
         join the translated ones.
         `translation_cache` is the team's kept translations
         (`bl/compiled_sources/`); without one every source is translated."""
+        for rule in profile.get("rules") or []:
+            question = missing_return_subject(rule, profile)
+            if question and rule.get("priority", "hard") == "hard":
+                raise AgentError(question)
         translated = self._translate(
             profile, starts_on, ends_on, availability, instructions, preferences,
             history, required_assignments, already_scheduled, translation_cache,
         )
+        _require_hard_rules(translated)
         result = solver.generate_span(
             profile, starts_on, ends_on,
             availability=list(availability or []) + translated["availability"],
@@ -135,6 +141,9 @@ class Scheduler:
                  "steps": [], "cached": 0, "cached_tokens": 0}
         if not sources:
             return empty
+        if self._llm is None and cache is None:
+            empty["unresolved"] = [dict(row, reason=_UNREACHABLE) for row in sources]
+            return empty
         from app.bl.directive_agent import DirectiveAgent
 
         translated = DirectiveAgent(self._llm).translate(
@@ -147,6 +156,24 @@ class Scheduler:
             empty["unresolved"] = [dict(row, reason=_UNREACHABLE) for row in sources]
             return empty
         return dict(empty, **translated)
+
+
+def _require_hard_rules(translated):
+    hard = {row["id"]: row["text"] for row in translated["sources"]
+            if row["kind"] == "rule" and row["binding"]}
+    missing = []
+    for row in translated["unresolved"]:
+        sentence = hard.get(row.get("source_id") or row.get("id"))
+        if sentence is None:
+            continue
+        try:
+            rule = json.loads(sentence)
+        except ValueError:
+            rule = None
+        label = rule.get("text", sentence) if isinstance(rule, dict) else sentence
+        missing.append("%s (%s)" % (label, row["reason"]))
+    if missing:
+        raise AgentError("לא ניתן לבנות סידור עד להבהרת הכללים הקשיחים: " + " | ".join(missing))
 
 
 def _report(result: dict, translated: dict) -> None:

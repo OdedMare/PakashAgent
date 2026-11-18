@@ -15,6 +15,12 @@ def constraint_conflicts(assignment: dict, constraint: dict) -> bool:
     """
     if not isinstance(assignment, dict) or not isinstance(constraint, dict):
         return False
+    if constraint.get("blocked_interval"):
+        bounds = dict(constraint)
+        if bounds.get("start_time") or bounds.get("end_time"):
+            bounds["start_time"] = bounds.get("start_time") or "00:00"
+            bounds["end_time"] = bounds.get("end_time") or "00:00"
+        return _duty_overlaps(assignment, bounds)
     if constraint.get("constraint_type") == "duty":
         return _duty_overlaps(assignment, constraint)
     if not _same_occurrence(assignment, constraint):

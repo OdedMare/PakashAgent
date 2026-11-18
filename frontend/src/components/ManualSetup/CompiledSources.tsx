@@ -96,7 +96,7 @@ function Status({ source }: { source: CompiledSource }) {
   if (source.status === "compiled") return <span className="manual-compiled-tag ok">מתורגם לקוד ✓</span>;
   return (
     <span className={`manual-compiled-tag ${source.binding ? "warn" : "muted"}`} title={source.reason}>
-      {source.binding ? "ידרוש AI" : "משאלה שלא תילקח בחשבון בקוד"}{source.reason ? `: ${source.reason}` : ""}
+      {source.binding ? (source.kind === "rule" ? "השיבוץ ממתין לתרגום הכלל" : "ידרוש AI") : "משאלה שלא תילקח בחשבון בקוד"}{source.reason ? `: ${source.reason}` : ""}
     </span>
   );
 }

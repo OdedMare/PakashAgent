@@ -20,7 +20,8 @@ _PARTLY = "בקשה רכה לא כובדה במלואה: %s."
 
 def apply_requests(model: Model) -> None:
     for request in model.problem.requests:
-        _HANDLERS[request["kind"]](model, request)
+        if request["kind"] != "avoid_transition":  # applied alongside standing sequences
+            _HANDLERS[request["kind"]](model, request)
     _soft_availability(model)
 
 

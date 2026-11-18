@@ -30,6 +30,28 @@ class ChangePlanRepository(RepositoryBase):
         )
 
     @contextmanager
+    def new_change_plan_approval(
+        self, team_id: str, body: dict, source: str, source_ref: str = "",
+    ):
+        """Create and apply an already-confirmed UI change atomically.
+
+        Chat plans live while the manager reviews them and use
+        ``change_plan_approval`` below. A drag, form save or inbox decision
+        arrives after that confirmation, so its pending lifetime is exactly
+        this transaction: if any resulting write fails, the plan disappears
+        with it instead of claiming that a partial change exists.
+        """
+        try:
+            with atomic(self._store):
+                yield self.create_change_plan(
+                    team_id, body, source, source_ref=source_ref,
+                )
+        except SerializationFailure as exc:
+            raise ConflictError(
+                "המערכת השתנתה במקביל. יש לרענן ולנסות שוב"
+            ) from exc
+
+    @contextmanager
     def change_plan_approval(self, team_id: str, plan_id: str):
         """Lock one pending plan and compose every resulting write atomically."""
         try:

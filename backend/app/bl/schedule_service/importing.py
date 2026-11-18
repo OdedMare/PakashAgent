@@ -12,6 +12,7 @@ shifts on the imported dates of that draft.
 import datetime
 from typing import Dict, List, Optional
 
+from app.bl.change_plans.confirmed import apply_confirmed_change
 from app.bl.importer import infer, read_grids
 from app.bl.importer.interpretation import MAX_IMPORT_DAYS as _MAX_DAYS
 from app.bl.scheduler.slots import build_slots
@@ -99,6 +100,29 @@ class ImportCommitter:
         rows = _clean(assignments, require_employee=True)
         if not rows:
             raise AppError("אין שיבוצים לשמור")
+        unavailable = _clean(
+            unavailability, require_employee=True, require_shift=False,
+        )
+        return apply_confirmed_change(
+            self._repository,
+            team_id,
+            source="import",
+            body={
+                "kind": "import", "schedule_id": schedule_id or "",
+                "filename": text(filename)[:80], "assignments": rows,
+                "unavailability": unavailable,
+            },
+            apply=lambda: self._commit(
+                team_id, rows, unavailable, schedule_id, filename,
+            ),
+            message="הקובץ יובא ונשמר בהצלחה",
+            agent_reason="ייבוא קובץ אושר על ידי המנהל",
+            schedule_id=lambda result: result.get("id", ""),
+        )
+
+    def _commit(
+        self, team_id, rows, unavailability, schedule_id, filename,
+    ):
         dates = sorted({row["date"] for row in rows})
         reason = IMPORTED_REASON + (" (%s)" % text(filename)[:80] if text(filename) else "")
         profile = self._context.profile(team_id)

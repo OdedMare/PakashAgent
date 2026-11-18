@@ -92,3 +92,11 @@ def test_one_night_of_evenness_stays_cheaper_than_a_soft_wish():
     units = round(SHIFT_SCALE * max(LOAD_WEIGHTS))
     saved = units * (2 * SHIFT_SPREAD + SHIFT_PEAK) + NIGHT_SCALE * (2 * NIGHT_SPREAD + NIGHT_PEAK)
     assert saved < WISH
+
+
+def test_pinned_nights_still_leave_an_even_share_of_mornings():
+    pins = [{"employee": "אבי", "shift": "לילה", "date": day}
+            for day in ("2026-08-30", "2026-08-31")]
+    result = generate_span(_nights_and_mornings(), "2026-08-30", "2026-09-04",
+                           required_assignments=pins)
+    assert _counts(result["assignments"], "בוקר") == {"בני": 3, "גדי": 3}

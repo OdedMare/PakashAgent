@@ -7,6 +7,8 @@ from typing import Any, List, Optional
 
 from app.bl.schedule_requests import KINDS, PERIODS, read_requests
 from app.bl.scheduler.slots import build_slots
+from app.bl.shift_sequences import compile_rule
+from app.bl.roster_limits import officer_cap, single_shift_rule
 from app.bl.shared import role_qualified, usage_of
 from app.bl.scheduler.values import bounded
 
@@ -112,6 +114,8 @@ def semantic_sources(profile, availability=None, instructions="", preferences=No
         add("preference", row.get("text") if isinstance(row, dict) else row,
             bounded(row.get("subject")) if isinstance(row, dict) else "", binding=False)
     for row in (profile or {}).get("rules") or []:
+        if officer_cap(row) is not None or single_shift_rule(row) or compile_rule(row, profile):
+            continue
         add("rule", row, binding=not (isinstance(row, dict) and row.get("priority") == "soft"))
     for key in _TEXT_POLICIES:
         add(key, (profile or {}).get(key))

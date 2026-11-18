@@ -10,6 +10,7 @@ import datetime
 from typing import Callable, Dict, List, Optional
 
 from app.bl.audit import constraint_conflicts
+from app.bl.change_plans.confirmed import apply_confirmed_change
 from app.bl.complex_duties import values
 from app.bl.complex_duties.collisions import DutyCollisions
 from app.bl.complex_duties.planning import DutyPlanning
@@ -101,6 +102,28 @@ class ComplexDutyService:
         day = values.parse_day(duty_date)
         employee = (employee or "").strip()
         team = self._complexes.require_team(complex_id, team_id)
+        return apply_confirmed_change(
+            self._repository,
+            team["id"],
+            source="complex_duty",
+            body={
+                "kind": "complex_duty", "complex_id": complex_id,
+                "duty_type_id": type_id, "employee": employee,
+                "date": day.isoformat(), "note": note,
+                "blocks": blocks, "resolve": resolve,
+            },
+            apply=lambda: self._assign(
+                complex_id, type_id, team, employee, day, note, blocks,
+                resolve,
+            ),
+            message="התורנות נשמרה בהצלחה",
+            reason=note,
+            agent_reason="שיבוץ תורנות מכלול אושר",
+        )
+
+    def _assign(
+        self, complex_id, type_id, team, employee, day, note, blocks, resolve,
+    ):
         duty_type = self._repository.complex_duty_type(complex_id, type_id)
         self._check_soldier(team, employee, day)
         if blocks:
@@ -128,6 +151,23 @@ class ComplexDutyService:
         return self._collisions.resolve(complex_id, conflicts)
 
     def cancel(self, complex_id: str, duty_id: str) -> dict:
+        if not hasattr(self._repository, "new_change_plan_approval"):
+            return self._cancel(complex_id, duty_id)
+        existing = self._repository.complex_duty(complex_id, duty_id)
+        return apply_confirmed_change(
+            self._repository,
+            existing["team_id"],
+            source="complex_duty",
+            body={
+                "kind": "cancel_complex_duty", "complex_id": complex_id,
+                "duty_id": duty_id,
+            },
+            apply=lambda: self._cancel(complex_id, duty_id),
+            message="התורנות בוטלה בהצלחה",
+            agent_reason="ביטול תורנות מכלול אושר",
+        )
+
+    def _cancel(self, complex_id: str, duty_id: str) -> dict:
         duty = self._repository.delete_complex_duty(complex_id, duty_id)
         self._log(complex_id, duty, ACTION_COMPLEX_DUTY_CANCELLED,
                   "תורנות %s בוטלה על ידי מפקד המכלול" % duty["duty_type"])

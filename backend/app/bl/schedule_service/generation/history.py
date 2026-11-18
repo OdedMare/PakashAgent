@@ -6,6 +6,8 @@ import time
 from threading import Lock
 from typing import List
 
+from app.bl.shift_sequences import rules_for
+from app.bl.roster_limits import monthly_officer_limit
 from app.bl.schedule_service.constants import (
     HISTORY_CACHE_ENTRIES,
     HISTORY_CACHE_SECONDS,
@@ -52,6 +54,26 @@ class AssignmentHistory:
                 self._cache.clear()
             self._cache[key] = (now + HISTORY_CACHE_SECONDS, rows)
         return list(rows)
+
+    def for_build(self, team_id, profile, starts_on, ends_on):
+        cap = monthly_officer_limit(profile)
+        reach = max((max(1, rule.count - 1) for rule in rules_for(profile)
+                     if rule.kind in ("run", "after")), default=0)
+        if cap is None and not reach:
+            return self.before(team_id, starts_on)
+        # A month may already have shifts on either side of a rebuilt week.
+        # Read fresh so a manual edit can immediately spend or free the quota.
+        rows = self._read(team_id, starts_on)
+        for period in self._repository.list_schedules(team_id):
+            first = iso(period["starts_on"])
+            nearby = first <= _days_before(ends_on, -reach)
+            same_month = cap is not None and first[:7] <= ends_on[:7]
+            if first <= starts_on or not (nearby or same_month):
+                continue
+            rows.extend(dict(employee=row["employee"], shift=row["shift"], date=iso(row["date"]))
+                        for row in self._repository.assignments(period["id"], team_id)
+                        if iso(row["date"]) > ends_on)
+        return rows
 
     def _read(self, team_id: str, before: str) -> List[dict]:
         """Every row of the earlier periods inside the fairness ledger's

@@ -37,6 +37,8 @@ LABELS = {
     "duty": "בתורנות או במשימה",
     "retired": "סיימו את עבודתם",
     "avoid": "ביקשו באופן מחייב לא לעבוד בה",
+    "daily": "כבר משובצים באותו יום",
+    "monthly": "מיצו את מכסת המשמרות החודשית לקצין/ה",
     "busy": "משובצים במשמרת חופפת",
     "rest": "בלי מנוחה מספקת ממשמרת סמוכה",
     "consecutive": "יחרגו מרצף הימים המותר",
@@ -98,6 +100,13 @@ class _Board:
             self._add(row["employee"], dict(problem.times[index], shift=row["shift"],
                                             date=row["date"]), seen)
 
+        self.monthly = {}
+        if problem.officer_cap is not None:
+            booked = problem.month_rows | seen
+            for name, _, date in booked:
+                key = (name, date[:7])
+                self.monthly[key] = self.monthly.get(key, 0) + 1
+
     def _add(self, name: str, row: dict, seen: set) -> None:
         key = (name, row["shift"], row["date"])
         if key not in seen:
@@ -132,9 +141,15 @@ class _Board:
             return refused
         slot, times = self.problem.slots[index], self.problem.times[index]
         rows = self.rows.get(name, [])
+        day = slot["slot_date"]
         clash = _clash(rows, slot, times, self.policy["min_rest_hours"])
         if clash:
             return clash
+        if any(row["date"] == day for row in rows):
+            return "daily"
+        if (self.problem.officer_cap is not None and self.problem.people[name].get("rank_group") == "officer"
+                and self.monthly.get((name, day[:7]), 0) >= self.problem.officer_cap):
+            return "monthly"
         if self._run(rows, slot["slot_date"]) > self.policy["max_consecutive_days"] > 0:
             return "consecutive"
         if self._hours(name, rows, slot, times):

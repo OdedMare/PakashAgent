@@ -6,10 +6,13 @@ sends builds to the full scheduler), or `pending` (not translated yet, or
 not for today's roster). A read: nothing here translates or queues.
 """
 
+import json
 from typing import List, Optional
 
 from app.bl.compiled_sources.compiler import standing_sources
 from app.bl.compiled_sources.keys import compiler_id, vocab_key
+from app.bl.shift_sequences import compile_rule, missing_return_subject
+from app.bl.roster_limits import officer_cap, single_shift_rule
 from app.common.time_context import israel_today
 
 STATUS_PENDING = "pending"
@@ -24,7 +27,20 @@ def report(repository, team_id: str, today: Optional[str] = None) -> List[dict]:
     rows = {row["source_key"]: row for row in repository.compiled_sources(
         team_id, vocab_key(profile), compiler_id(), [row["key"] for row in sources])}
     today = today or israel_today().isoformat()
-    return [_line(source, rows.get(source["key"]), today) for source in sources]
+    lines = [_line(source, rows.get(source["key"]), today) for source in sources]
+    for rule in profile.get("rules") or []:
+        question = missing_return_subject(rule, profile)
+        if question:
+            rendered = json.dumps(rule, ensure_ascii=False)
+            for line in lines:
+                if line["kind"] == "rule" and line["text"] == rendered:
+                    line.update(status="unresolved", reason=question, question=question,
+                                expired=False, expires_on=None, items=0)
+        if single_shift_rule(rule) or officer_cap(rule) is not None or compile_rule(rule, profile):
+            lines.append(dict(kind="rule", context="", text=json.dumps(rule, ensure_ascii=False),
+                              binding=rule.get("priority") != "soft", status="compiled", reason="", question="",
+                              expires_on=None, expired=False, items=1))
+    return lines
 
 
 def _line(source: dict, row: Optional[dict], today: str) -> dict:

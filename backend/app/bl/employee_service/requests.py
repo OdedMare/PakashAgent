@@ -7,6 +7,7 @@ moving a number (D3).
 
 from typing import List
 
+from app.bl.change_plans.confirmed import apply_confirmed_change
 from app.bl.employee_service.values import (
     ACTION_REQUEST_REJECTED, iso_date, require_reason,
 )
@@ -52,6 +53,21 @@ class ConstraintRequests:
         `source='employee_reported'` -- the D13 value for "this came from the
         employee". This is the moment the request becomes countable.
         """
+        return apply_confirmed_change(
+            self._repository,
+            team_id,
+            source="employee_request",
+            body={
+                "kind": "constraint_request", "request_id": request_id,
+                "decision": "approved", "reason": decided_reason,
+            },
+            apply=lambda: self._approve(team_id, request_id, decided_reason),
+            message="בקשת האילוץ אושרה ונשמרה",
+            reason=decided_reason,
+            agent_reason="בקשת אילוץ של עובד אושרה על ידי המנהל",
+        )
+
+    def _approve(self, team_id, request_id, decided_reason):
         request = self._repository.decide_request(
             request_id, team_id, STATUS_APPROVED, decided_reason
         )
@@ -73,6 +89,21 @@ class ConstraintRequests:
         stops being used (the D8 argument).
         """
         reason = require_reason(decided_reason, "צריך לציין סיבה לדחייה")
+        return apply_confirmed_change(
+            self._repository,
+            team_id,
+            source="employee_request",
+            body={
+                "kind": "constraint_request", "request_id": request_id,
+                "decision": "rejected", "reason": reason,
+            },
+            apply=lambda: self._reject(team_id, request_id, reason),
+            message="בקשת האילוץ נדחתה",
+            reason=reason,
+            agent_reason="בקשת אילוץ נדחתה על ידי המנהל",
+        )
+
+    def _reject(self, team_id, request_id, reason):
         request = self._repository.decide_request(
             request_id, team_id, STATUS_REJECTED, reason
         )

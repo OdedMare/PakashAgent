@@ -16,10 +16,14 @@ import datetime
 import math
 from typing import Callable, Iterator, List, Optional, Tuple
 
+from app.bl.shift_sequences import ShiftRule, forbidden_groups, rules_for
+from app.bl.schedule_requests import concerns, covers
+from app.common.errors import AgentError
 from app.bl.audit import counts_toward_staffing
 from app.bl.audit.roster import iso_week
 from app.bl.audit.values import number
-from app.bl.solver.model import HOUR_SCALE, MISSING_ROLE, SHADOW, UNFILLED, Model
+from app.bl.solver.model import HOUR_SCALE, MISSING_ROLE, SHADOW, UNFILLED, WISH, Model
+from app.bl.roster_limits import apply_calendar_limits
 from app.bl.solver.staffing import apply_staffing
 
 # Two shifts further apart than this cannot be short of any rest we model.
@@ -32,6 +36,8 @@ def apply_rules(model: Model) -> None:
     for index in range(len(problem.slots)):
         _seats(model, index, lateness[index])
         _roles(model, index)
+    _standing_sequences(model)
+    apply_calendar_limits(model)
     apply_staffing(model)
     _shadows(model)
     for name in problem.people:
@@ -236,3 +242,39 @@ def _tenths(hours: float) -> int:
 
 
 __all__ = ["apply_rules", "day_windows", "rest_pairs", "timed_pairs"]
+
+
+def _standing_sequences(model):
+    problem = model.problem
+    rules = [rule for rule in rules_for(problem.profile) if rule.kind != "availability"]
+    transitions = [(ShiftRule("after", r["shifts"][1], r["reason"], r["is_hard"], previous=r["shifts"][0]), r)
+                   for r in problem.requests if r["kind"] == "avoid_transition"]
+    if not rules and not transitions:
+        return
+    pins = {(r["employee"], r["date"], r["shift"]) for r in problem.pins}
+    for name, person in problem.people.items():
+        slots, variables = {}, {}
+        for r in problem.fixed + problem.next_assignments:
+            if r["employee"] == name:
+                slots[r["date"], r["shift"]] = problem.shifts.get(r["shift"], {})
+        for index, var in model.of_person(name).items():
+            slot = problem.slots[index]
+            key = slot["slot_date"], slot["shift_name"]
+            slots[key], variables[key] = slot, var
+        scoped = [(rule, None) for rule in rules]
+        scoped.extend((rule, request) for rule, request in transitions if concerns(request, name))
+        for rule, request in scoped:
+            for group in forbidden_groups(rule, slots, problem.profile, person):
+                if request and not covers(request, rule.shift, group[-1][0]):
+                    continue
+                free = [variables[key] for key in group if key in variables]
+                if not free:
+                    if rule.hard and any((name, *key) in pins for key in group):
+                        raise AgentError("שיבוץ חובה של %s מפר את הכלל: %s" % (name, rule.text))
+                    continue
+                if rule.hard:
+                    model.at_most(free, len(free) - 1)
+                else:
+                    weight = round(WISH * request["weight"]) if request else WISH
+                    model.price_excess(free, len(free) - 1, weight,
+                                       "העדפה שלא כובדה עבור %s: %s" % (name, rule.text), "wish")

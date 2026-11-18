@@ -8,6 +8,7 @@ import threading
 from collections import OrderedDict
 from typing import Any, List
 
+from app.bl.shift_sequences import rules_for
 from app.bl.shared import hebrew_weekday, switched_off, weekday_key
 from app.bl.scheduler.rotation_rows import (
     closure_availability, overridden, rotation_availability,
@@ -27,6 +28,14 @@ OFF_DUTY_REASON = "כבוי/ה — לא משתתף/ת בשיבוץ"
 _CACHE: "OrderedDict[str, List[dict]]" = OrderedDict()
 _CACHE_SIZE = 16
 _CACHE_LOCK = threading.Lock()
+
+
+def availability_bounds(profile, starts_on, ends_on):
+    if not starts_on or not ends_on or not any(rule.kind == "availability" for rule in rules_for(profile)):
+        return starts_on, ends_on
+    day = datetime.timedelta(days=1)
+    return ((datetime.date.fromisoformat(starts_on) - day).isoformat(),
+            (datetime.date.fromisoformat(ends_on) + day).isoformat())
 
 
 def effective_availability(
@@ -68,7 +77,8 @@ def _effective_availability(
     remain hard constraints even when a person submits a dated availability.
     """
     start, end = parse_date(starts_on), parse_date(ends_on)
-    explicit = _explicit_rows(rows, start, end)
+    submitted = any(rule.kind == "availability" for rule in rules_for(profile))
+    explicit = _explicit_rows(rows, start, end, submitted)
     if start is None or end is None or end < start:
         return explicit
     keys = {(row["employee"], row["date"], row["shift"]) for row in explicit}
@@ -112,7 +122,7 @@ def _disabled_reserve_rows(profile, start, end):
     ]
 
 
-def _explicit_rows(rows: Any, start, end) -> List[dict]:
+def _explicit_rows(rows: Any, start, end, submitted=False) -> List[dict]:
     explicit = []
     for row in bounded_rows(rows, 2000):
         date = date_text(row.get("date") or row.get("constraint_date"))
@@ -123,7 +133,9 @@ def _explicit_rows(rows: Any, start, end) -> List[dict]:
         # A duty may reach a night shift on either edge: the day before the
         # span (crossing into its first morning), or the day after it (from
         # midnight, over the last night).
-        reach = datetime.timedelta(days=1 if constraint_type == "duty" else 0)
+        blocked = submitted and not row.get("available") and constraint_type == "availability"
+        interval = blocked and not (row.get("shift") or row.get("shift_name"))
+        reach = datetime.timedelta(days=1 if constraint_type == "duty" or interval else 0)
         if start is not None and end is not None and (
             parsed is None or parsed < start - reach or parsed > end + reach
         ):
@@ -135,10 +147,11 @@ def _explicit_rows(rows: Any, start, end) -> List[dict]:
             "available": bool(row.get("available")),
             "start_time": bounded(row.get("start_time")),
             "end_time": bounded(row.get("end_time")),
-            "is_hard": row.get("is_hard", True) is not False,
+            "is_hard": blocked or row.get("is_hard", True) is not False,
             "reason": bounded(row.get("reason")),
             "source": bounded(row.get("source")),
             "constraint_type": constraint_type,
+            **({"blocked_interval": True} if interval else {}),
         })
     return explicit
 

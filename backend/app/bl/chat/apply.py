@@ -1,6 +1,6 @@
 """Chat adapter for the source-independent change-plan service."""
 
-from app.bl.change_plans import ChangePlanService
+from app.bl.change_plans.service import ChangePlanService
 
 
 class ChatPlanApplier:

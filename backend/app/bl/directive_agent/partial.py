@@ -71,7 +71,10 @@ def _items(answer: dict, by_id: Dict[str, dict], profile: dict, starts_on: str, 
         yield (row.get("source_id"), None) if read is None else (read[0], (read[1], read[2]))
     for row in _rows(answer.get("requests")):
         valid, errors = read_requests([row], profile)
-        if errors or not valid or valid[0]["source_id"] not in by_id:
+        source = by_id.get(row.get("source_id"), {})
+        downgraded = (source.get("kind") == "rule" and source.get("binding") and valid
+                      and not valid[0]["is_hard"])
+        if errors or not valid or valid[0]["source_id"] not in by_id or downgraded:
             yield row.get("source_id"), None
         else:
             yield valid[0]["source_id"], ("request", valid[0])
