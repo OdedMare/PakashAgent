@@ -41,18 +41,24 @@ SHIFTS = {
 
 # העוגן של 11/3 ו-10/4: היום שבו קבוצה א' נכנסת לבסיס.
 # העוגן של 1 ל־3: השבוע שבו קבוצה א' סוגרת.
+#
+# שעות היציאה והחזרה (leave_day/return_day מזיזים את היום הנומינלי):
+#   10/4   יוצאים בחמישי, חוזרים בשני 09:00. בלי ההזזה המחזור היה יוצא ברביעי
+#          וחוזר בראשון.
+#   11/3   יוצאים בחמישי, חוזרים בראשון 09:00.
+#   1 ל־3  מי שלא סוגר יוצא בחמישי וחוזר בראשון 09:00.
+SUNDAY_MORNING = "09:00"
 CYCLES = {
     "11/3": {"id": "c113", "name": "11/3", "kind": "days", "base_days": 11, "home_days": 3,
-             "groups": ["א", "ב"], "anchor_date": "2026-11-15"},
+             "groups": ["א", "ב"], "anchor_date": "2026-11-15",
+             "return_time": SUNDAY_MORNING},
     "10/4": {"id": "c104", "name": "10/4", "kind": "days", "base_days": 10, "home_days": 4,
-             "groups": ["א", "ב"], "anchor_date": "2026-11-15"},
+             "groups": ["א", "ב"], "anchor_date": "2026-11-15",
+             "leave_day": 1, "return_day": 1, "return_time": SUNDAY_MORNING},
     "1 ל־3": {"id": "c13", "name": "1 ל־3", "kind": "weekends",
-              "groups": ["א", "ב", "ג"], "anchor_date": "2026-11-19"},
+              "groups": ["א", "ב", "ג"], "anchor_date": "2026-11-19",
+              "return_time": SUNDAY_MORNING},
 }
-
-# הסגירה של הסבב: מחמישי 00:00 עד ראשון 09:00.
-CLOSURE = {"pattern": "round", "group": "א", "start_day": -2, "start_time": "00:00",
-           "end_day": 1, "end_time": "09:00"}
 
 RULES = [
     "אין לשבץ בוקר אחרי לילה",
@@ -109,7 +115,7 @@ def build_profile(name: str) -> dict:
     return {
         "workplace": {"name": name, "rotation_mode": "round", "planning_horizon": "שבוע",
                       "operating_days": ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"],
-                      "notes_visual_only": True, "rotation_closure_windows": [CLOSURE],
+                      "notes_visual_only": True,
                       "day_cycles": list(CYCLES.values())},
         "shifts": build_shifts(),
         "employees": build_employees(),
