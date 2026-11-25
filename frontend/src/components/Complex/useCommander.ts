@@ -46,6 +46,7 @@ export function useCommanderBoard() {
     end,
     board,
     error,
+    clearError: useCallback(() => setError(null), []),
     isCurrent: showsToday(view, focus, today),
     setView,
     reload: useCallback(() => setReloads((n) => n + 1), []),

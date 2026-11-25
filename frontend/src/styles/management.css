@@ -454,6 +454,18 @@
   border-style: dashed;
 }
 
+/* One person picked out of the grid (`Calendar.highlight`, the employee's
+   own board). Their chip gets a ring and weight; the rest fade a little but
+   stay readable, since "who am I on with" is the next question. */
+.calendar-person.is-me {
+  font-weight: 700;
+  box-shadow: 0 0 0 2px var(--primary);
+}
+
+.calendar-person.is-dimmed {
+  opacity: 0.6;
+}
+
 /* Clearing one person off a cell. Hidden until the chip is hovered or
    focused, so a dense week is not a wall of close buttons -- but focus
    counts, or the control would be unreachable from the keyboard. */
@@ -582,6 +594,13 @@
    about the schedule, the other is a reading aid. */
 .calendar-cell.is-weekend.is-short {
   background: var(--warning-soft);
+}
+
+/* A cell the highlighted person works. Placed after the weekend and short
+   tints and one class heavier, so it wins over both: on the employee's own
+   board, "this one is mine" is the reading that matters. */
+.calendar .calendar-cell.is-mine {
+  background: var(--primary-soft);
 }
 
 /* Assigned against a recorded constraint. Marked, never prevented — the

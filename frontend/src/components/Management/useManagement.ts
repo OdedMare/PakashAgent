@@ -17,6 +17,7 @@ import {
   GenerationStoppedError,
   moveAssignment,
   ProfileIncompleteError,
+  RuleBlockedError,
   previewDeparture,
   publishSchedule,
   resumeScheduleGeneration,
@@ -72,6 +73,11 @@ interface ManagementState {
    *  around, exactly as it does on a single-day rebuild. */
   busy: boolean;
   error: string | null;
+  /** A hand placement a hard rule refused, waiting on the manager: place
+   *  anyway (`confirmRuleBlock`) or leave it (`dismissRuleBlock`). */
+  ruleBlock: { message: string } | null;
+  confirmRuleBlock: () => Promise<void>;
+  dismissRuleBlock: () => void;
   generation: GenerationProgress | null;
   /** A build is running and this browser is watching it. */
   generating: boolean;
@@ -199,6 +205,11 @@ export function useManagement(): ManagementState {
   const overviewToken = useRef(0);
   const overviewRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The refused placement and the same write with `override` set.
+  const [ruleBlock, setRuleBlock] = useState<{
+    message: string;
+    retry: () => Promise<unknown>;
+  } | null>(null);
   const [generation, setGeneration] = useState<GenerationProgress | null>(null);
   // A build is running and this browser is watching it. Kept apart from
   // `busy` on purpose -- see `ManagementState.busy`. The board stays
@@ -277,6 +288,9 @@ export function useManagement(): ManagementState {
         quiet?: boolean;
         apply?: (result: T) => void;
         deferRefresh?: boolean;
+        /** The same write with `override` set: a hard rule's refusal then
+         *  opens the confirmation instead of the error toast. */
+        override?: () => Promise<unknown>;
       },
     ): Promise<T | null> => {
       setBusy(true);
@@ -300,6 +314,10 @@ export function useManagement(): ManagementState {
             gaps: reason.gaps,
             blocks: reason.blocks,
           });
+          return null;
+        }
+        if (reason instanceof RuleBlockedError && options?.override) {
+          setRuleBlock({ message: reason.message, retry: options.override });
           return null;
         }
         setError(reason instanceof Error ? reason.message : "שגיאה לא ידועה");
@@ -492,10 +510,15 @@ export function useManagement(): ManagementState {
 
   const overviewScheduleId = overview?.schedule?.id;
   const runCellWrite = useCallback(
-    (periodId: string | undefined, action: () => Promise<Schedule>) => {
+    (
+      periodId: string | undefined,
+      action: () => Promise<Schedule>,
+      override?: () => Promise<unknown>,
+    ) => {
       // Paged weeks have their own read. Only patch the overview for its own period.
-      if (periodId && periodId !== overviewScheduleId) return run(action);
+      if (periodId && periodId !== overviewScheduleId) return run(action, { override });
       return run(action, {
+        override,
         quiet: true,
         apply: (schedule) => {
           ++overviewToken.current;
@@ -519,7 +542,11 @@ export function useManagement(): ManagementState {
       schedule_id?: string;
     }) => {
       const body = withPeriod(input);
-      await runCellWrite(body.schedule_id, () => assignEmployee(body));
+      await runCellWrite(
+        body.schedule_id,
+        () => assignEmployee(body),
+        () => runCellWrite(body.schedule_id, () => assignEmployee({ ...body, override: true })),
+      );
     },
     [runCellWrite, withPeriod],
   );
@@ -676,7 +703,10 @@ export function useManagement(): ManagementState {
       schedule_id?: string;
       from_slot_id?: string;
     }) => {
-      await run(() => moveAssignment(withPeriod(input)));
+      const body = withPeriod(input);
+      await run(() => moveAssignment(body), {
+        override: () => run(() => moveAssignment({ ...body, override: true })),
+      });
     },
     [run, withPeriod],
   );
@@ -707,6 +737,12 @@ export function useManagement(): ManagementState {
   );
 
   const clearError = useCallback(() => setError(null), []);
+  const dismissRuleBlock = useCallback(() => setRuleBlock(null), []);
+  const confirmRuleBlock = useCallback(async () => {
+    const pending = ruleBlock;
+    setRuleBlock(null);
+    await pending?.retry();
+  }, [ruleBlock]);
   const dismissGaps = useCallback(() => setGaps(null), []);
 
   // `cancelled` guards the unmount race: React's development double-mount
@@ -749,6 +785,9 @@ export function useManagement(): ManagementState {
     overview,
     busy,
     error,
+    ruleBlock: ruleBlock ? { message: ruleBlock.message } : null,
+    confirmRuleBlock,
+    dismissRuleBlock,
     generation: generation ?? overview?.schedule?.generation ?? null,
     generating,
     resumeGeneration,

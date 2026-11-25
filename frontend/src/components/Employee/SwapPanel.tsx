@@ -25,12 +25,14 @@ import { shortDate } from "@/components/DateInput";
  *  slot that does not exist, and the server would have to guess what was
  *  meant. */
 export function SwapPanel({
+  id,
   view,
   busy,
   onOffer,
   onAnswer,
   onCancel,
 }: {
+  id?: string;
   view: EmployeeView;
   busy: boolean;
   onOffer: (body: {
@@ -52,7 +54,7 @@ export function SwapPanel({
   const rest = swaps.filter((row) => !incoming.includes(row));
 
   return (
-    <section className="employee-panel swap-panel">
+    <section id={id} className="employee-panel swap-panel">
       <h2>
         <ArrowLeftRight size={15} /> החלפות משמרות
         {incoming.length > 0 ? (

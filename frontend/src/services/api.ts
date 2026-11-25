@@ -249,6 +249,19 @@ export class ProfileIncompleteError extends Error {
   }
 }
 
+/** A hand placement that breaks one of the unit's hard rules (409,
+ *  `overridable`). The board asks the manager in a popup and, on "לשבץ בכל
+ *  זאת", sends the same write again with `override: true`. An operational
+ *  duty is refused as a plain error: it is occupied time, not a rule. */
+export class RuleBlockedError extends Error {
+  readonly status = 409;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "RuleBlockedError";
+  }
+}
+
 /** The thrown value for a failed response.
  *
  *  Every caller catches `Error` and reads `.message`, so the ordinary case is
@@ -260,7 +273,9 @@ function apiError(data: unknown, status: number): Error {
     can_edit_profile?: unknown;
     gaps?: unknown;
     blocks?: unknown;
+    overridable?: unknown;
   };
+  if (body?.overridable === true) return new RuleBlockedError(message);
   if (body?.can_edit_profile === true) {
     return new ProfileIncompleteError(
       message,
@@ -877,6 +892,8 @@ export function assignEmployee(body: {
   employee: string;
   reason?: string;
   schedule_id?: string;
+  /** Placed despite a broken hard rule, after the manager confirmed. */
+  override?: boolean;
 }): Promise<Schedule> {
   return request<Schedule>("/api/schedule/assign", {
     method: "POST",
@@ -1089,6 +1106,8 @@ export function moveAssignment(body: {
   /** The slot the shift was dragged from: a shift somebody else moved in
    *  the meantime is refused (409) instead of being moved again. */
   from_slot_id?: string;
+  /** Moved despite a broken hard rule, after the manager confirmed. */
+  override?: boolean;
 }): Promise<Schedule> {
   return request<Schedule>("/api/schedule/move", {
     method: "POST",

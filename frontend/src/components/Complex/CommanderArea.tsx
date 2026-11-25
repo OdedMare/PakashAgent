@@ -42,6 +42,7 @@ import { CommanderFilters, Tile } from "./parts";
 import { UnitTools, type Tool } from "./UnitTools";
 import { UnitsView } from "./UnitsView";
 import { useCommanderBoard } from "./useCommander";
+import { ErrorToast } from "@/components/Management/ErrorToast";
 
 type View = "board" | "duties" | "units" | Tool;
 
@@ -294,9 +295,7 @@ export function CommanderArea({
         </div>
       </div>
 
-      {state.error ? (
-        <div className="error" role="alert"><AlertTriangle size={16} /><span>{state.error}</span></div>
-      ) : null}
+      <ErrorToast message={state.error} onClose={state.clearError} />
 
       <main
         id="main-content"

@@ -22,7 +22,8 @@ import type { Assignment, PlacementCheck } from "@/types";
  *  constraint that day.
  *
  *  Ordinary findings remain advisory (D3). Hard unavailability marks the
- *  check as blocking, and the server also refuses the write.
+ *  check as blocking; confirming anyway opens `RuleBlockDialog`, where the
+ *  manager may overrule the rule. An operational duty is still refused.
  */
 export function ConfirmDrop({
   assignment,
@@ -66,7 +67,9 @@ export function ConfirmDrop({
     return () => window.removeEventListener("keydown", onKey);
   }, [onCancel]);
 
-  const ready = reason.trim().length > 0 && !busy && !check?.blocking;
+  // A blocking check does not disable the button: the server refuses the
+  // rule and the board asks whether to place anyway (`RuleBlockDialog`).
+  const ready = reason.trim().length > 0 && !busy;
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onCancel}>
@@ -266,7 +269,7 @@ export function PlacementVerdict({
           means — and under D3 it means both. */}
       <p className="board-verdict-foot">
         {check.blocking
-          ? "לא ניתן להמשיך: החייל/ת אינו/ה זמין/ה למשמרת. יש לבחור חייל/ת או משמרת אחרת."
+          ? "חוק חוסם את השיבוץ הזה. אפשר להמשיך — תתבקש/י לאשר שיבוץ בניגוד לחוק."
           : "אפשר להמשיך — ההתראות הרגילות מיידעות ולא חוסמות."}
       </p>
     </div>

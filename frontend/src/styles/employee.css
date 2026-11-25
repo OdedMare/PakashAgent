@@ -508,6 +508,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+.change-what {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .change-reason {
   font-size: 0.85rem;
   color: var(--text-soft);
@@ -538,6 +544,11 @@
 .change-alert-body strong {
   display: block;
   font-size: 0.9rem;
+}
+
+/* "להצגה" beside "ראיתי": two small actions, kept from crowding the text. */
+.change-alert .ghost-button {
+  flex-shrink: 0;
 }
 
 .change-alert-body p {

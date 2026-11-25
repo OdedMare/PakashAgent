@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  AlertCircle,
   ArrowLeftRight,
   BarChart3,
   CalendarDays,
@@ -43,6 +42,8 @@ import { Preferences } from "./Preferences";
 import { RequestInbox } from "./RequestInbox";
 import { ChangesPanel } from "./ChangesPanel";
 import { RequestToast } from "./RequestToast";
+import { ErrorToast } from "./ErrorToast";
+import { RuleBlockDialog } from "@/components/Board/RuleBlockDialog";
 import { SwapInbox } from "./SwapInbox";
 import { Stats } from "./Stats";
 import { TeamPanel } from "./TeamPanel";
@@ -544,14 +545,16 @@ export function Management({
         </div>
       ) : null}
 
-      {state.error ? (
-        <div className="error" role="alert">
-          <AlertCircle size={16} />
-          <span>{state.error}</span>
-          <button type="button" onClick={state.clearError}>
-            סגירה
-          </button>
-        </div>
+      {/* Refusals float over the board rather than pushing it down. A hard
+          rule's refusal is a question instead: place anyway, or leave it. */}
+      <ErrorToast message={state.error} onClose={state.clearError} />
+      {state.ruleBlock ? (
+        <RuleBlockDialog
+          message={state.ruleBlock.message}
+          busy={state.busy}
+          onConfirm={() => void state.confirmRuleBlock()}
+          onCancel={state.dismissRuleBlock}
+        />
       ) : null}
 
       {/* What the מכלול commander changed here, for this workplace's own

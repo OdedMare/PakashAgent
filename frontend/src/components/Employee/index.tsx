@@ -123,12 +123,20 @@ export function Employee({ onLeave, openRequests = false }: { onLeave?: () => vo
         <ChangeAlert
           unseen={view.unseen}
           onAcknowledge={() => void state.acknowledge()}
+          onShow={section === "mine" ? undefined : () => setSection("mine")}
         />
         {/* A colleague waiting on an answer is its own alert, not part of
             the change count: one says "something moved", the other says
             "somebody is waiting on you", and only the second has a person
             on the other end of it. */}
-        <SwapAlert waiting={view.swaps_awaiting_me ?? 0} />
+        <SwapAlert
+          waiting={view.swaps_awaiting_me ?? 0}
+          onShow={() => {
+            setInitial(undefined);
+            setSection("requests");
+            showSwapsOnceRendered();
+          }}
+        />
 
         <nav className="employee-tabs" role="tablist" aria-label="האזור שלי" data-tour="employee-tabs">
           <EmployeeTab
@@ -179,6 +187,7 @@ export function Employee({ onLeave, openRequests = false }: { onLeave?: () => vo
               />
               {view.schedule ? (
                 <SwapPanel
+                  id={SWAP_PANEL_ID}
                   view={view}
                   busy={state.busy}
                   onOffer={state.offerSwap}
@@ -193,6 +202,7 @@ export function Employee({ onLeave, openRequests = false }: { onLeave?: () => vo
             view.schedule ? (
               <section className="employee-panel employee-board">
                 <h2>הסידור המלא</h2>
+                <p className="employee-note">המשמרות שלך מסומנות במסגרת וברקע צבעוני.</p>
                 {/* `readOnly`, no `onDrop`: there is no gesture here that could
                     change anything. The same component the manager uses, so the
                     team never sees a second rendering that could drift. */}
@@ -205,6 +215,7 @@ export function Employee({ onLeave, openRequests = false }: { onLeave?: () => vo
                   constraints={view.summary.constraints}
                   dark={theme === "dark"}
                   onRequest={(date, shift) => { setInitial({ date, shift }); setSection("requests"); }}
+                  highlight={view.employee}
                   readOnly
                 />
               </section>
@@ -219,6 +230,19 @@ export function Employee({ onLeave, openRequests = false }: { onLeave?: () => vo
 }
 
 type EmployeeSection = "mine" | "requests" | "schedule";
+
+const SWAP_PANEL_ID = "employee-swaps";
+
+/** Bring the swap panel into view after the requests tab has rendered.
+ *
+ *  The panel sits below the constraint form, so switching tabs alone leaves
+ *  the swap waiting on an answer off-screen on a phone — the very thing the
+ *  alert was pressed to reach. */
+function showSwapsOnceRendered() {
+  window.requestAnimationFrame(() => {
+    document.getElementById(SWAP_PANEL_ID)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
 
 function EmployeeTab({
   active,
@@ -379,6 +403,7 @@ function MyChanges({ view }: { view: EmployeeView }) {
               {entry.slot_date ? shortDate(entry.slot_date) : ""}
               {entry.shift_name ? ` · ${entry.shift_name}` : ""}
             </span>
+            <strong className="change-what">{changeLabel(entry, view.employee)}</strong>
             {entry.reason || entry.action.startsWith("complex_duty") ? (
               <span className="change-reason">
                 {entry.action.startsWith("complex_duty") ? entry.agent_reason : entry.reason}
@@ -402,9 +427,12 @@ function MyChanges({ view }: { view: EmployeeView }) {
 function ChangeAlert({
   unseen,
   onAcknowledge,
+  onShow,
 }: {
   unseen: number;
   onAcknowledge: () => void;
+  /** Absent when the list is already on screen ("המשמרות שלי"). */
+  onShow?: () => void;
 }) {
   if (unseen <= 0) return null;
 
@@ -419,8 +447,17 @@ function ChangeAlert({
             ? "יש שינוי אחד שנוגע אליך"
             : `יש ${unseen} שינויים שנוגעים אליך`}
         </strong>
-        <p>מאז הפעם האחרונה שהיית כאן. הפירוט למטה, תחת &rdquo;שינויים שנגעו לי&rdquo;.</p>
+        <p>
+          {onShow
+            ? "מאז הפעם האחרונה שהיית כאן. הפירוט בטאב “המשמרות שלי”."
+            : "מאז הפעם האחרונה שהיית כאן. הפירוט למטה, תחת “שינויים שנגעו לי”."}
+        </p>
       </div>
+      {onShow ? (
+        <button type="button" className="ghost-button" onClick={onShow}>
+          להצגה
+        </button>
+      ) : null}
       <button type="button" className="ghost-button" onClick={onAcknowledge}>
         <Check size={14} />
         ראיתי
@@ -434,7 +471,7 @@ function ChangeAlert({
  *  Deliberately not acknowledgeable, unlike `ChangeAlert`: there is nothing
  *  to mark as read here, only something to answer. It clears when the
  *  employee accepts or declines, which is the action it exists to prompt. */
-function SwapAlert({ waiting }: { waiting: number }) {
+function SwapAlert({ waiting, onShow }: { waiting: number; onShow: () => void }) {
   if (waiting <= 0) return null;
 
   return (
@@ -448,10 +485,52 @@ function SwapAlert({ waiting }: { waiting: number }) {
             ? "יש בקשת החלפה שממתינה לתשובה שלך"
             : `יש ${waiting} בקשות החלפה שממתינות לתשובה שלך`}
         </strong>
-        <p>הפירוט למטה, תחת &rdquo;החלפות משמרות&rdquo;.</p>
+        <p>הבקשה נמצאת בטאב “בקשות והחלפות”, תחת “החלפות משמרות”.</p>
       </div>
+      <button type="button" className="ghost-button" onClick={onShow}>
+        <ArrowLeftRight size={14} />
+        לתשובה
+      </button>
     </section>
   );
+}
+
+/** What a change-log row did to *this* person, in a few words.
+ *
+ *  The date and the manager's reason were already shown; without this line
+ *  a row cannot tell "you were given a shift" from "you were taken off one".
+ *  Worded from the reader's side, which matters for the two-person actions:
+ *  a swap names this person on either column, and the
+ *  sentence differs by which. Unknown actions fall back to a neutral word
+ *  rather than the raw code. */
+function changeLabel(entry: EmployeeView["changes"][number], me: string): string {
+  const other = entry.employee === me ? entry.replaced_employee : entry.employee;
+  switch (entry.action) {
+    case "assigned":
+      return "שובצת למשמרת";
+    case "removed":
+      return entry.slot_date ? "הוסרת מהמשמרת" : "הוסרת מהצוות";
+    case "moved":
+      return "הועברת למשמרת אחרת";
+    case "swapped":
+      return other ? `הוחלפה משמרת עם ${other}` : "הוחלפה משמרת";
+    case "constraint":
+      return "נרשם לך אילוץ";
+    case "request_rejected":
+      return "בקשת האילוץ נדחתה";
+    case "swap_rejected":
+      return "בקשת ההחלפה נדחתה";
+    case "complex_duty":
+      return "שובצת לתורנות מכלול";
+    case "complex_duty_cancelled":
+      return "תורנות המכלול בוטלה";
+    case "complex_duty_recorded":
+      return "נרשמה לך תורנות";
+    case "renamed":
+      return "השם שלך עודכן";
+    default:
+      return entry.action.endsWith("_approved") ? "שינוי שהמנהל אישר" : "שינוי בסידור";
+  }
 }
 
 /** Shift names as the profile recorded them.

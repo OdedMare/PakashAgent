@@ -54,12 +54,18 @@ export function Calendar({
   onAssign,
   onUnassign,
   onRequest,
+  highlight,
 }: {
   schedule: Schedule;
   constraints: Constraint[];
   /** The roster, in profile order — what the colours are assigned from. */
   employees?: string[];
   onRequest?: (date: string, shift: string) => void;
+  /** A name to pick out of the grid: their chips stand out, everyone
+   *  else's step back, and the cells they work are tinted. The employee's
+   *  own view passes itself — on a week of a dozen names, finding yourself
+   *  is the first thing anyone does, and hashed hues do not help with it. */
+  highlight?: string;
   readOnly?: boolean;
   dark?: boolean;
   onDrop?: (move: {
@@ -154,6 +160,7 @@ export function Calendar({
                 // ever stated, where inventing one would be fiction.
                 const missing = missingFrom(cellWarnings, shift, date);
                 const short = missing > 0;
+                const mine = Boolean(highlight) && rows.some((row) => row.employee === highlight);
                 return (
                   <td
                     key={key}
@@ -163,6 +170,7 @@ export function Calendar({
                       over === key ? "is-over" : "",
                       cellWarnings.length ? "has-warning" : "",
                       isWeekend(date) ? "is-weekend" : "",
+                      mine ? "is-mine" : "",
                     ]
                       .filter(Boolean)
                       .join(" ")}
@@ -204,6 +212,7 @@ export function Calendar({
                           assignment={row}
                           hue={hueOf(row.employee)}
                           dark={dark}
+                          focus={!highlight ? undefined : row.employee === highlight ? "me" : "other"}
                           draggable={!readOnly}
                           removable={editable && Boolean(onUnassign)}
                           onRemove={() => onUnassign?.(row)}
@@ -297,10 +306,13 @@ function Person({
   onDragStart,
   onDragEnd,
   blocked,
+  focus,
 }: {
   assignment: Assignment;
   hue: number;
   dark: boolean;
+  /** Set only when the grid highlights someone (see `Calendar.highlight`). */
+  focus?: "me" | "other";
   draggable: boolean;
   removable: boolean;
   onRemove: () => void;
@@ -315,6 +327,8 @@ function Person({
         "calendar-person",
         blocked ? "is-blocked" : "",
         manual ? "is-manual" : "",
+        focus === "me" ? "is-me" : "",
+        focus === "other" ? "is-dimmed" : "",
       ]
         .filter(Boolean)
         .join(" ")}

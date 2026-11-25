@@ -158,7 +158,7 @@ export function ShiftEditor({
 
   const active = !inactiveFrom[employee] || slotDate < inactiveFrom[employee];
   const canSave = Boolean(
-    employee && shiftName && slotDate && slot && !busy && active && !check?.blocking,
+    employee && shiftName && slotDate && slot && !busy && active,
   );
   const borrowCount = check?.candidates.filter((candidate) => candidate.borrowable).length ?? 0;
   const visibleCandidates = check?.candidates.filter((candidate) =>

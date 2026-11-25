@@ -66,7 +66,7 @@ def assert_no_hard_constraint(
         reason = (blocked.get("reason") or "").strip()
         if blocked.get("constraint_type") != "duty":
             raise RuleBlockedError(
-                "%s אינו/ה זמין/ה למשמרת%s. יש לבחור חייל/ת או משמרת אחרת."
+                "%s אינו/ה זמין/ה למשמרת%s."
                 % (employee, " (%s)" % reason if reason else "")
             )
         if is_whole_day(blocked):

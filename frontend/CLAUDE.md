@@ -547,9 +547,19 @@ Warnings render as **non-blocking inline banners** on the schedule. They never
 gate a save, never block confirmation, and never present as errors. A schedule
 with warnings is a valid schedule the boss may knowingly accept
 ([D3](../docs/DECISIONS.md#d3--the-agent-decides-code-only-audits-️-amended-by-d31-assignment-superseded-by-d34)).
-An overlapping operational duty is not an advisory warning: the placement
-check marks it `blocking`, the confirmation action is disabled, and the server
-also refuses the write.
+A hard rule on a hand placement (hard unavailability, a hard sequence rule,
+the same day booked twice, a monthly cap) is not a gate either: the check
+marks it `blocking` and says so, the confirm button stays live, and the
+server's refusal arrives as `RuleBlockedError` (409, `overridable`), which
+opens `Board/RuleBlockDialog` instead of an error. "לשבץ בכל זאת" resends
+with `override: true`; the change log records the overruled rule and the
+audit keeps the warning on the card. An overlapping operational duty is
+different: it is occupied time, and the server refuses it with or without
+`override`.
+
+Refusals and failures are never a line above the board. `ErrorToast` floats
+them at the bottom of the screen (`.system-toast`), leaves on its own and
+holds while hovered or focused.
 
 ## Rules
 

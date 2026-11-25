@@ -1485,6 +1485,32 @@ def test_hard_unavailability_vacates_and_blocks_standard_and_reserve_soldiers(se
     assert "אינו/ה זמין/ה" in refused.json()["detail"]
 
 
+def test_a_manager_may_overrule_a_hard_rule_after_confirming():
+    """A broken hard rule is refused as overridable; `override` places anyway
+    and the change log says the manager overruled it."""
+    app, repo = _build_app([])
+    client = _client(app)
+    schedule = client.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    client.post("/api/schedule/constraints", json={
+        "employee": "דנה", "constraint_date": "2026-08-17",
+        "reason": "לא זמינה", "is_hard": True,
+    })
+    body = {
+        "shift_name": MORNING, "slot_date": "2026-08-17",
+        "employee": "דנה", "schedule_id": schedule["id"],
+    }
+    refused = client.post("/api/schedule/assign", json=body)
+    assert refused.status_code == 409
+    assert refused.json()["overridable"] is True
+
+    placed = client.post("/api/schedule/assign", json=dict(body, override=True))
+    assert placed.status_code == 200
+    assert [row["employee"] for row in repo.assignments(schedule["id"], TEAM)] == ["דנה"]
+    logged = [row for row in repo.changes if row["action"] == "assigned"][-1]
+    assert "בניגוד לחוק" in logged["agent_reason"]
+
 def test_soft_unavailability_still_allows_a_manual_override():
     app, _ = _build_app([])
     client = _client(app)
