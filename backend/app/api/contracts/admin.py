@@ -42,20 +42,24 @@ class AdminReleaseRequest(BaseModel):
 
 class AdminCreateComplexRequest(BaseModel):
     """A מכלול (D43): its name, the commander's first password, and the
-    existing workplaces it joins."""
+    existing workplaces it joins. A team in `view_team_ids` too is joined
+    for viewing only (D56); the rest are joined with every power."""
 
     name: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=6, max_length=200)
     team_ids: List[str] = Field(default_factory=list, max_length=100)
+    view_team_ids: List[str] = Field(default_factory=list, max_length=100)
 
 
 class AdminUpdateComplexRequest(BaseModel):
-    """A partial edit; `team_ids`, when sent, is the whole new membership."""
+    """A partial edit; `team_ids`, when sent, is the whole new membership,
+    and `view_team_ids` which of them this מכלול may only view (D56)."""
 
     name: Optional[str] = Field(default=None, min_length=1, max_length=80)
     active: Optional[bool] = None
     notes: Optional[str] = Field(default=None, max_length=500)
     team_ids: Optional[List[str]] = Field(default=None, max_length=100)
+    view_team_ids: Optional[List[str]] = Field(default=None, max_length=100)
 
 
 class CommanderLoginRequest(BaseModel):

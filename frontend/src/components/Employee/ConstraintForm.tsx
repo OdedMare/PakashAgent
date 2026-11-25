@@ -21,6 +21,7 @@ import type { ConstraintRequestPeriod, ConstraintRequestRow } from "@/types";
  *  Shift is optional: empty means the whole day, read exactly as
  *  `availability.shift_name` is. */
 export function ConstraintForm({
+  id,
   initial,
   shiftNames,
   requests,
@@ -28,6 +29,7 @@ export function ConstraintForm({
   onSubmit,
   onWithdraw,
 }: {
+  id?: string;
   initial?: { date: string; shift: string };
   shiftNames: string[];
   requests: ConstraintRequestRow[];
@@ -73,7 +75,7 @@ export function ConstraintForm({
   };
 
   return (
-    <section className="employee-panel">
+    <section id={id} className="employee-panel">
       <h2>
         <CalendarPlus size={15} /> בקשת אילוץ
       </h2>

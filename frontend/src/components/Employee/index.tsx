@@ -24,7 +24,7 @@ import type { EmployeeView } from "@/types";
 import { ConstraintForm } from "./ConstraintForm";
 import { IdentityGate } from "./IdentityGate";
 import { MyShifts } from "./MyShifts";
-import { SwapPanel } from "./SwapPanel";
+import { SWAP_THEIRS_ID, SwapPanel } from "./SwapPanel";
 import { useEmployee } from "./useEmployee";
 import { shortDate } from "@/components/DateInput";
 
@@ -46,6 +46,8 @@ export function Employee({ onLeave, openRequests = false }: { onLeave?: () => vo
   const { view } = state;
   const [section, setSection] = useState<EmployeeSection>(openRequests ? "requests" : "mine");
   const [initial, setInitial] = useState<{ date: string; shift: string }>();
+  // My assignment the swap form opens on, when "החלפה" was pressed on a shift.
+  const [swapFrom, setSwapFrom] = useState<string>();
   // Only once signed in: the claim gate has none of what the tour points at.
   useGuideSurface(view ? "employee" : null);
 
@@ -70,6 +72,21 @@ export function Employee({ onLeave, openRequests = false }: { onLeave?: () => vo
   }
 
   const shiftNames = readShiftNames(view.shifts);
+
+  /** Open "בקשות והחלפות", optionally with a form filled in and brought into
+   *  view. Every way in resets both presets, so a shortcut used once does
+   *  not linger into the next plain visit to the tab. */
+  const goToRequests = (to: {
+    initial?: { date: string; shift: string };
+    swapFrom?: string;
+    scrollTo?: string;
+    focus?: string;
+  }) => {
+    setInitial(to.initial);
+    setSwapFrom(to.swapFrom);
+    setSection("requests");
+    if (to.scrollTo) showOnceRendered(to.scrollTo, to.focus);
+  };
 
   return (
     <div className="workspace-surface">
@@ -132,11 +149,7 @@ export function Employee({ onLeave, openRequests = false }: { onLeave?: () => vo
             on the other end of it. */}
         <SwapAlert
           waiting={view.swaps_awaiting_me ?? 0}
-          onShow={() => {
-            setInitial(undefined);
-            setSection("requests");
-            showSwapsOnceRendered();
-          }}
+          onShow={() => goToRequests({ scrollTo: SWAP_PANEL_ID })}
         />
 
         <nav className="employee-tabs" role="tablist" aria-label="האזור שלי" data-tour="employee-tabs">
@@ -152,7 +165,7 @@ export function Employee({ onLeave, openRequests = false }: { onLeave?: () => vo
             label="בקשות והחלפות"
             badge={pendingCount(view)}
             tour="employee-requests-tab"
-            onClick={() => { setInitial(undefined); setSection("requests"); }}
+            onClick={() => goToRequests({})}
           />
           <EmployeeTab
             active={section === "schedule"}
@@ -168,7 +181,13 @@ export function Employee({ onLeave, openRequests = false }: { onLeave?: () => vo
           {section === "mine" ? (
             view.schedule ? (
               <>
-                <MyShifts view={view} />
+                <MyShifts
+                  view={view}
+                  onCantMake={(date, shift) =>
+                    goToRequests({ initial: { date, shift }, scrollTo: CONSTRAINT_FORM_ID })}
+                  onSwap={(assignmentId) =>
+                    goToRequests({ swapFrom: assignmentId, scrollTo: SWAP_PANEL_ID, focus: SWAP_THEIRS_ID })}
+                />
                 <MyDuties view={view} />
                 <MyChanges view={view} />
               </>
@@ -184,6 +203,7 @@ export function Employee({ onLeave, openRequests = false }: { onLeave?: () => vo
             <>
               {state.error && <p role="alert">{state.error}</p>}
               <ConstraintForm
+                id={CONSTRAINT_FORM_ID}
                 initial={initial}
                 shiftNames={shiftNames}
                 requests={view.requests}
@@ -194,6 +214,7 @@ export function Employee({ onLeave, openRequests = false }: { onLeave?: () => vo
               {view.schedule ? (
                 <SwapPanel
                   id={SWAP_PANEL_ID}
+                  preset={swapFrom}
                   view={view}
                   busy={state.busy}
                   onOffer={state.offerSwap}
@@ -220,7 +241,8 @@ export function Employee({ onLeave, openRequests = false }: { onLeave?: () => vo
                   schedule={view.schedule}
                   constraints={view.summary.constraints}
                   dark={theme === "dark"}
-                  onRequest={(date, shift) => { setInitial({ date, shift }); setSection("requests"); }}
+                  onRequest={(date, shift) =>
+                    goToRequests({ initial: { date, shift }, scrollTo: CONSTRAINT_FORM_ID })}
                   highlight={view.employee}
                   readOnly
                 />
@@ -238,15 +260,20 @@ export function Employee({ onLeave, openRequests = false }: { onLeave?: () => vo
 type EmployeeSection = "mine" | "requests" | "schedule";
 
 const SWAP_PANEL_ID = "employee-swaps";
+const CONSTRAINT_FORM_ID = "employee-constraint-form";
 
-/** Bring the swap panel into view after the requests tab has rendered.
+/** Bring a form into view after the requests tab has rendered, and
+ *  optionally put focus on its next empty field.
  *
- *  The panel sits below the constraint form, so switching tabs alone leaves
- *  the swap waiting on an answer off-screen on a phone — the very thing the
- *  alert was pressed to reach. */
-function showSwapsOnceRendered() {
+ *  Switching tabs keeps the scroll position, so a button pressed low on
+ *  "המשמרות שלי" — or the swap panel, which sits below the constraint form —
+ *  would otherwise open its form off-screen on a phone, the very thing the
+ *  button was pressed to reach. */
+function showOnceRendered(id: string, focus?: string) {
   window.requestAnimationFrame(() => {
-    document.getElementById(SWAP_PANEL_ID)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.getElementById(id)?.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+    if (focus) document.getElementById(focus)?.focus({ preventScroll: true });
   });
 }
 

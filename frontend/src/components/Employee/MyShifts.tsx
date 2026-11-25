@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, ChevronDown, Clock3, Users } from "lucide-react";
+import { ArrowLeftRight, CalendarClock, CalendarX, ChevronDown, Clock3, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { shortDate } from "@/components/DateInput";
@@ -27,10 +27,37 @@ function useNow(): Date {
  *  line, because last week's mornings were pushing next week's off a phone
  *  screen. Everything here is read from the view; nothing is recounted
  *  (the hours of a shift are the slot's own). */
-export function MyShifts({ view }: { view: EmployeeView }) {
+export function MyShifts({
+  view,
+  onCantMake,
+  onSwap,
+}: {
+  view: EmployeeView;
+  /** Open the constraint request on this date and shift. */
+  onCantMake: (date: string, shift: string) => void;
+  /** Open the swap offer with this assignment as my half. */
+  onSwap: (assignmentId: string) => void;
+}) {
   const now = useNow();
   const shifts = timedShifts(view);
   const { current, next, upcoming, past } = splitByNow(shifts, now);
+  // My own assignment per shift, which the swap form names by id.
+  const assignmentOf = new Map(
+    (view.schedule?.assignments ?? [])
+      .filter((row) => row.employee === view.employee)
+      .map((row) => [`${row.date}|${row.shift}`, row.id]),
+  );
+  // Asking is for a shift that has not started: one under way or over is
+  // past the point a request could change anything.
+  const actionsFor = (shift: TimedShift): ShiftActionProps | undefined => {
+    if (shift.start.getTime() <= now.getTime()) return undefined;
+    const assignmentId = assignmentOf.get(`${shift.date}|${shift.shift}`);
+    return {
+      label: `${shift.weekday} ${shortDate(shift.date)} · ${shift.shift}`,
+      onCantMake: () => onCantMake(shift.date, shift.shift),
+      onSwap: assignmentId ? () => onSwap(assignmentId) : undefined,
+    };
+  };
 
   if (shifts.length === 0) {
     return (
@@ -46,12 +73,12 @@ export function MyShifts({ view }: { view: EmployeeView }) {
   return (
     <>
       {current ? <NextShiftCard shift={current} now={now} live /> : null}
-      {!current && next ? <NextShiftCard shift={next} now={now} /> : null}
+      {!current && next ? <NextShiftCard shift={next} now={now} actions={actionsFor(next)} /> : null}
 
       <section className="employee-panel">
         <h2>המשמרות שלי</h2>
         {upcoming.length ? (
-          <ShiftList shifts={upcoming} highlight={(current ?? next)?.start} />
+          <ShiftList shifts={upcoming} highlight={(current ?? next)?.start} actionsFor={actionsFor} />
         ) : (
           <p className="employee-note">אין לך עוד משמרות בתקופה הזו.</p>
         )}
@@ -70,7 +97,17 @@ export function MyShifts({ view }: { view: EmployeeView }) {
 }
 
 /** The one shift that matters right now. `live` while it is under way. */
-function NextShiftCard({ shift, now, live = false }: { shift: TimedShift; now: Date; live?: boolean }) {
+function NextShiftCard({
+  shift,
+  now,
+  live = false,
+  actions,
+}: {
+  shift: TimedShift;
+  now: Date;
+  live?: boolean;
+  actions?: ShiftActionProps;
+}) {
   const hours = hoursLabel(shift);
   return (
     <section className={live ? "next-shift is-live" : "next-shift"} aria-label="המשמרת הבאה שלי">
@@ -104,16 +141,55 @@ function NextShiftCard({ shift, now, live = false }: { shift: TimedShift; now: D
           </span>
         ) : null}
       </div>
+      {actions ? <ShiftActions {...actions} wide /> : null}
     </section>
   );
 }
 
-function ShiftList({ shifts, highlight }: { shifts: TimedShift[]; highlight?: Date }) {
+interface ShiftActionProps {
+  /** Names the shift for a screen reader, since the visible text does not. */
+  label: string;
+  onCantMake: () => void;
+  onSwap?: () => void;
+}
+
+/** Ask about this one shift: not to be on it, or to trade it.
+ *
+ *  Both open a form already filled in — the same forms as "בקשות והחלפות",
+ *  so this is a shortcut to a request, never a change (D14). The manager
+ *  still decides, and the forms say so where they are sent. */
+function ShiftActions({ label, onCantMake, onSwap, wide = false }: ShiftActionProps & { wide?: boolean }) {
+  return (
+    <div className={wide ? "shift-actions is-wide" : "shift-actions"}>
+      <button type="button" className="ghost-button" onClick={onCantMake} aria-label={`לא יכול/ה להגיע · ${label}`}>
+        <CalendarX size={14} aria-hidden="true" />
+        לא יכול/ה
+      </button>
+      {onSwap ? (
+        <button type="button" className="ghost-button" onClick={onSwap} aria-label={`בקשת החלפה · ${label}`}>
+          <ArrowLeftRight size={14} aria-hidden="true" />
+          החלפה
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function ShiftList({
+  shifts,
+  highlight,
+  actionsFor,
+}: {
+  shifts: TimedShift[];
+  highlight?: Date;
+  actionsFor?: (shift: TimedShift) => ShiftActionProps | undefined;
+}) {
   return (
     <ul className="shift-list">
       {shifts.map((shift) => {
         const hours = hoursLabel(shift);
         const isNext = highlight !== undefined && shift.start.getTime() === highlight.getTime();
+        const actions = actionsFor?.(shift);
         return (
           <li key={`${shift.date}-${shift.shift}`} className={isNext ? "is-next" : undefined}>
             <div className="shift-when">
@@ -128,6 +204,7 @@ function ShiftList({ shifts, highlight }: { shifts: TimedShift[]; highlight?: Da
                 <span className="shift-with">עם {shift.with.join(", ")}</span>
               ) : null}
             </div>
+            {actions ? <ShiftActions {...actions} /> : null}
           </li>
         );
       })}

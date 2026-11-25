@@ -89,10 +89,39 @@ CREATE TABLE IF NOT EXISTS complexes (
 
 COMMIT;
 
--- A team belongs to at most one מכלול. Deleting the מכלול leaves its teams
--- standing, unlinked.
-ALTER TABLE teams ADD COLUMN IF NOT EXISTS complex_id TEXT
-    REFERENCES complexes(id) ON DELETE SET NULL;
+-- Which teams a מכלול holds (D56). A team may be in several, and each link
+-- says what that מכלול may do there: `edit` (every power its commander
+-- has, D43) or `view` (on the combined board, nothing more). Deleting a
+-- מכלול or a team removes the link only.
+CREATE TABLE IF NOT EXISTS complex_teams (
+    complex_id TEXT NOT NULL REFERENCES complexes(id) ON DELETE CASCADE,
+    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    access TEXT NOT NULL DEFAULT 'edit' CHECK (access IN ('edit', 'view')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (complex_id, team_id)
+);
+
+COMMIT;
+
+CREATE INDEX IF NOT EXISTS complex_teams_team_idx ON complex_teams (team_id);
+
+COMMIT;
+
+-- Once: the single `teams.complex_id` link of D43 becomes an editing link,
+-- and the column goes, so nothing can read a second answer to "whose".
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'teams' AND column_name = 'complex_id'
+    ) THEN
+        INSERT INTO complex_teams (complex_id, team_id, access)
+        SELECT complex_id, id, 'edit' FROM teams WHERE complex_id IS NOT NULL
+        ON CONFLICT DO NOTHING;
+        ALTER TABLE teams DROP COLUMN complex_id;
+    END IF;
+END $$;
 
 COMMIT;
 

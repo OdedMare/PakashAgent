@@ -282,7 +282,7 @@
 
 .shift-list li {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 14px;
   padding: 10px 0;
   border-block-end: 1px solid var(--border);
@@ -338,6 +338,49 @@
   font-size: 0.79rem;
   color: var(--text-soft);
   font-variant-numeric: tabular-nums;
+}
+
+/* "לא יכול/ה" and "החלפה" on a shift still ahead. Pushed to the row's far
+   (inline-end) side; full 44px touch targets, quiet until wanted. */
+.shift-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-inline-start: auto;
+}
+
+.shift-actions .ghost-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-block-size: 44px;
+  padding-inline: 10px;
+  font-size: 0.8rem;
+}
+
+/* Where those buttons scroll to: clear of the sticky header, so the form's
+   own title is the first thing in view. */
+#employee-constraint-form,
+#employee-swaps {
+  scroll-margin-block-start: 76px;
+}
+
+/* On the card the buttons get a row of their own. */
+.shift-actions.is-wide {
+  margin-inline-start: 0;
+  padding-block-start: 4px;
+}
+
+/* On a phone a row's buttons drop under the shift instead of squeezing it. */
+@media (max-width: 620px) {
+  .shift-list li {
+    flex-wrap: wrap;
+  }
+
+  .shift-list .shift-actions {
+    flex-basis: 100%;
+    margin-inline-start: 0;
+  }
 }
 
 /* The row the card above is about, so the two read as one thing. */

@@ -23,8 +23,10 @@ from app.dal.repository.base import RepositoryBase
 # token only in the single-team detail, where the operator may need to hand
 # the link over again.
 _TEAM_COLUMNS = (
-    "t.id, t.name, t.created_at, t.active, t.notes, t.complex_id, "
-    "(SELECT c.name FROM complexes c WHERE c.id = t.complex_id) AS complex_name"
+    "t.id, t.name, t.created_at, t.active, t.notes, "
+    "(SELECT string_agg(c.name, ', ' ORDER BY c.name) FROM complex_teams ct "
+    "JOIN complexes c ON c.id = ct.complex_id WHERE ct.team_id = t.id) "
+    "AS complex_name"
 )
 
 # One row per team with its counts, read in a single round trip.

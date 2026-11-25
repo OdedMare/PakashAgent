@@ -26,6 +26,7 @@ import { shortDate } from "@/components/DateInput";
  *  meant. */
 export function SwapPanel({
   id,
+  preset,
   view,
   busy,
   onOffer,
@@ -33,6 +34,9 @@ export function SwapPanel({
   onCancel,
 }: {
   id?: string;
+  /** One of my assignment ids to open the offer form on — set when the
+   *  employee pressed "החלפה" beside that shift on "המשמרות שלי". */
+  preset?: string;
   view: EmployeeView;
   busy: boolean;
   onOffer: (body: {
@@ -104,7 +108,9 @@ export function SwapPanel({
         </ul>
       ) : null}
 
-      <OfferForm view={view} busy={busy} onOffer={onOffer} />
+      {/* Keyed on the preset so a new one starts the form over rather than
+          being ignored by state that was already initialised. */}
+      <OfferForm key={preset ?? ""} preset={preset} view={view} busy={busy} onOffer={onOffer} />
 
       {rest.length > 0 ? (
         <ul className="swap-list swap-history">
@@ -156,10 +162,12 @@ export function SwapPanel({
  *  trade, and offering a swap to a person who is not working is a request
  *  the server would refuse anyway. */
 function OfferForm({
+  preset,
   view,
   busy,
   onOffer,
 }: {
+  preset?: string;
   view: EmployeeView;
   busy: boolean;
   onOffer: (body: {
@@ -169,14 +177,18 @@ function OfferForm({
     reason?: string;
   }) => Promise<boolean>;
 }) {
-  const [mine, setMine] = useState("");
-  const [theirs, setTheirs] = useState("");
-  const [reason, setReason] = useState("");
-
   const assignments = view.schedule?.assignments ?? [];
   const ownShifts = assignments.filter(
     (row) => row.employee === view.employee,
   );
+  // A preset that is not one of mine (a stale id after a re-read) is dropped
+  // rather than sent: the select would show nothing chosen while the state
+  // held an id the server would refuse.
+  const [mine, setMine] = useState(
+    preset && ownShifts.some((row) => row.id === preset) ? preset : "",
+  );
+  const [theirs, setTheirs] = useState("");
+  const [reason, setReason] = useState("");
   const otherShifts = assignments.filter(
     (row) => row.employee !== view.employee,
   );
@@ -221,6 +233,7 @@ function OfferForm({
       <label>
         בתמורה ל
         <select
+          id={SWAP_THEIRS_ID}
           value={theirs}
           onChange={(event) => setTheirs(event.target.value)}
           disabled={busy}
@@ -261,6 +274,10 @@ function OfferForm({
     </div>
   );
 }
+
+/** The "בתמורה ל" select: where focus lands when the form opens preset,
+ *  since the employee's own half is already chosen. */
+export const SWAP_THEIRS_ID = "swap-theirs";
 
 /** What a swap's status means to the person reading it.
  *
