@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, LogIn, MessagesSquare, Users } from "lucide-react";
+import { AlertTriangle, Eye, LogIn, MessagesSquare, Users } from "lucide-react";
 import type { CSSProperties } from "react";
 
 import { shortDate } from "@/components/DateInput";
@@ -158,23 +158,32 @@ function UnitBand({
         {warnings ? (
           <span className="cmd-band-warn"><AlertTriangle size={12} /> {warnings} אזהרות</span>
         ) : null}
-        <button
-          type="button"
-          className="ghost-button cmd-band-chat"
-          disabled={!unit.active}
-          onClick={() => onChat(unit.id)}
-          title={`שיחה עם הסוכן של ${unit.name}`}
-        >
-          <MessagesSquare size={14} /> סוכן
-        </button>
-        <button
-          type="button"
-          className="ghost-button cmd-band-enter"
-          disabled={busy || !unit.active}
-          onClick={() => onEnter(unit.id)}
-        >
-          <LogIn size={14} /> כניסה לניהול
-        </button>
+        {unit.access === "view" ? (
+          // Shared for viewing only (D56): on the board, never entered.
+          <span className="cmd-band-view" title="המכלול קיבל הרשאת צפייה בלבד במשמרת הזו">
+            <Eye size={13} /> צפייה בלבד
+          </span>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="ghost-button cmd-band-chat"
+              disabled={!unit.active}
+              onClick={() => onChat(unit.id)}
+              title={`שיחה עם הסוכן של ${unit.name}`}
+            >
+              <MessagesSquare size={14} /> סוכן
+            </button>
+            <button
+              type="button"
+              className="ghost-button cmd-band-enter"
+              disabled={busy || !unit.active}
+              onClick={() => onEnter(unit.id)}
+            >
+              <LogIn size={14} /> כניסה לניהול
+            </button>
+          </>
+        )}
       </div>
 
       {shifts.length === 0 ? (

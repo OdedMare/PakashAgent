@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, LayoutGrid, LogIn, UserMinus, Users } from "lucide-react";
+import { AlertTriangle, Eye, LayoutGrid, LogIn, UserMinus, Users } from "lucide-react";
 
 import { figuresOf, NO_FOCUS, shiftsOf, type Unit } from "./figures";
 
@@ -38,7 +38,10 @@ export function UnitsView({
             <header>
               <div>
                 <h2>{unit.name}</h2>
-                <p>{unit.employees} חיילים · {shiftsOf(unit).length} סוגי משמרות</p>
+                <p>
+                  {unit.employees} חיילים · {shiftsOf(unit).length} סוגי משמרות
+                  {unit.access === "view" ? " · צפייה בלבד" : ""}
+                </p>
               </div>
               <span className={`manager-analytics-status ${status.tone}`}>
                 {unit.active ? status.label : "הושבתה"}
@@ -64,10 +67,16 @@ export function UnitsView({
               <button type="button" className="ghost-button" onClick={() => onOpen(unit.id)}>
                 <LayoutGrid size={15} /> בלוח המכלול
               </button>
-              <button type="button" className="primary-button" disabled={busy || !unit.active}
-                onClick={() => onEnter(unit.id)}>
-                <LogIn size={15} /> כניסה לניהול המשמרת
-              </button>
+              {unit.access === "view" ? (
+                <span className="cmd-band-view" title="המכלול קיבל הרשאת צפייה בלבד במשמרת הזו">
+                  <Eye size={14} /> צפייה בלבד
+                </span>
+              ) : (
+                <button type="button" className="primary-button" disabled={busy || !unit.active}
+                  onClick={() => onEnter(unit.id)}>
+                  <LogIn size={15} /> כניסה לניהול המשמרת
+                </button>
+              )}
             </footer>
           </li>
         );

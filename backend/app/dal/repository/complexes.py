@@ -2,8 +2,10 @@
 
 A team stays the tenant. These queries read across the teams of one מכלול,
 and only those: every read that returns a team's data is filtered on
-`teams.complex_id`, so a commander can never be handed a workplace that is
-not linked to them. The operator's reads (every מכלול, every team) are here
+`complex_teams`, so a commander can never be handed a workplace that is
+not linked to them. A team may be linked to several מכלולים (D56), each
+link with its `access`: `edit` (every power, D43) or `view` (the board
+only). The operator's reads (every מכלול, every team) are here
 too, kept apart by name (`admin_*`).
 
 The commander's password is hashed exactly as a team's (`teams.py`).
@@ -11,7 +13,7 @@ The commander's password is hashed exactly as a team's (`teams.py`).
 
 from typing import Any, Dict, List, Optional
 
-from app.common.errors import AuthError, ConflictError, NotFoundError
+from app.common.errors import AuthError, NotFoundError
 from app.dal.database import connect
 from app.dal.repository.base import RepositoryBase, new_id
 from app.dal.repository.teams import hash_password, verify_password
@@ -24,6 +26,8 @@ _EDITABLE = ("name", "notes", "active")
 
 # Repeats of the same action within this window fold into one notice.
 _FOLD_MINUTES = 10
+
+EDIT, VIEW = "edit", "view"
 
 
 class ComplexRepository(RepositoryBase):
@@ -53,8 +57,9 @@ class ComplexRepository(RepositoryBase):
             + " FROM complexes c ORDER BY c.created_at DESC"
         )
         teams = self._all("""
-            SELECT id, name, active, complex_id FROM teams
-            WHERE complex_id IS NOT NULL ORDER BY name
+            SELECT t.id, t.name, t.active, ct.access, ct.complex_id
+            FROM complex_teams ct JOIN teams t ON t.id = ct.team_id
+            ORDER BY t.name
         """)
         by_complex = {}  # type: Dict[str, List[dict]]
         for team in teams:
@@ -85,15 +90,21 @@ class ComplexRepository(RepositoryBase):
         if not rows:
             raise NotFoundError("המכלול לא נמצא")
 
-    def set_complex_teams(self, complex_id: str, team_ids: List[str]) -> None:
-        """Make exactly `team_ids` the teams of this מכלול.
+    def set_complex_teams(
+        self, complex_id: str, team_ids: List[str],
+        view_ids: Optional[List[str]] = None,
+    ) -> None:
+        """Make exactly `team_ids` the teams of this מכלול (D56).
 
-        A team already linked to *another* מכלול is refused rather than
-        moved: taking a workplace from one commander and giving it to another
-        is a decision the operator should see named, not a side effect. A
-        team unlinked loses its מכלול duties from today on.
+        A team may be in several מכלולים. Those in `view_ids` are linked for
+        viewing only, the rest for editing; with `view_ids` None a team
+        already linked keeps its access and a new one edits. A team
+        unlinked, or turned to viewing, loses this מכלול's duties from
+        today on: they would block days nobody can cancel any more (D44).
+        Past ones stay, as history and in the statistics.
         """
         wanted = sorted(set(team_ids))
+        views = None if view_ids is None else set(view_ids) & set(wanted)
         with connect(self._store) as connection:
             exists = connection.execute(
                 "SELECT id FROM complexes WHERE id=%s FOR UPDATE", (complex_id,)
@@ -102,37 +113,36 @@ class ComplexRepository(RepositoryBase):
                 raise NotFoundError("המכלול לא נמצא")
             if wanted:
                 found = connection.execute(
-                    "SELECT id, name, complex_id FROM teams WHERE id = ANY(%s)",
-                    (wanted,),
+                    "SELECT id FROM teams WHERE id = ANY(%s)", (wanted,),
                 ).fetchall()
                 if len(found) != len(wanted):
                     raise NotFoundError("אחד הצוותים לא נמצא")
-                taken = [
-                    row["name"] for row in found
-                    if row["complex_id"] and row["complex_id"] != complex_id
-                ]
-                if taken:
-                    raise ConflictError(
-                        "כבר משויך למכלול אחר: " + ", ".join(taken)
-                    )
-            # A team leaving takes no plan with it: its duties from today on
-            # would block days nobody can cancel any more (D44). Past ones
-            # stay, as history and in the statistics.
             connection.execute(
-                "DELETE FROM complex_duties WHERE complex_id=%s "
-                "AND NOT (team_id = ANY(%s)) AND duty_date >= CURRENT_DATE",
+                "DELETE FROM complex_teams "
+                "WHERE complex_id=%s AND NOT (team_id = ANY(%s))",
                 (complex_id, wanted),
             )
-            connection.execute(
-                "UPDATE teams SET complex_id=NULL "
-                "WHERE complex_id=%s AND NOT (id = ANY(%s))",
-                (complex_id, wanted),
-            )
-            if wanted:
-                connection.execute(
-                    "UPDATE teams SET complex_id=%s WHERE id = ANY(%s)",
-                    (complex_id, wanted),
-                )
+            for team_id in wanted:
+                if views is None:
+                    connection.execute("""
+                        INSERT INTO complex_teams (complex_id, team_id, access)
+                        VALUES (%s,%s,%s) ON CONFLICT DO NOTHING
+                    """, (complex_id, team_id, EDIT))
+                else:
+                    access = VIEW if team_id in views else EDIT
+                    connection.execute("""
+                        INSERT INTO complex_teams (complex_id, team_id, access)
+                        VALUES (%s,%s,%s) ON CONFLICT (complex_id, team_id)
+                        DO UPDATE SET access = EXCLUDED.access
+                    """, (complex_id, team_id, access))
+            connection.execute("""
+                DELETE FROM complex_duties d
+                WHERE d.complex_id=%s AND d.duty_date >= CURRENT_DATE
+                  AND NOT EXISTS (
+                      SELECT 1 FROM complex_teams ct
+                      WHERE ct.complex_id = d.complex_id
+                        AND ct.team_id = d.team_id AND ct.access = 'edit')
+            """, (complex_id,))
             connection.commit()
 
     def delete_complex(self, complex_id: str) -> None:
@@ -172,28 +182,36 @@ class ComplexRepository(RepositoryBase):
         return bool(rows and rows[0]["active"])
 
     def complex_teams(self, complex_id: str) -> List[dict]:
-        """The workplaces of one מכלול, with their shift types and headcount."""
+        """The workplaces of one מכלול, with their shift types, headcount
+        and what this מכלול may do there (`access`, D56)."""
         rows = self._all("""
-            SELECT t.id, t.name, t.active, p.profile
-            FROM teams t LEFT JOIN team_profiles p ON p.team_id = t.id
-            WHERE t.complex_id=%s ORDER BY t.name
+            SELECT t.id, t.name, t.active, ct.access, p.profile
+            FROM complex_teams ct JOIN teams t ON t.id = ct.team_id
+            LEFT JOIN team_profiles p ON p.team_id = t.id
+            WHERE ct.complex_id=%s ORDER BY t.name
         """, (complex_id,))
         return [_team_summary(row) for row in rows]
 
     def team_in_complex(self, team_id: str, complex_id: str) -> bool:
-        """True while this team is linked to this מכלול and both are on."""
+        """True while this מכלול may *edit* this team and both are on: what
+        entering it, its chats and its duties need (D56). A viewing link
+        is not enough."""
         rows = self._all("""
-            SELECT 1 FROM teams t JOIN complexes c ON c.id = t.complex_id
-            WHERE t.id=%s AND c.id=%s AND t.active AND c.active
+            SELECT 1 FROM complex_teams ct
+            JOIN teams t ON t.id = ct.team_id
+            JOIN complexes c ON c.id = ct.complex_id
+            WHERE ct.team_id=%s AND ct.complex_id=%s AND ct.access = 'edit'
+              AND t.active AND c.active
         """, (team_id, complex_id))
         return bool(rows)
 
-    def team_complex(self, team_id: str) -> Optional[dict]:
-        rows = self._all("""
-            SELECT c.id, c.name FROM teams t
-            JOIN complexes c ON c.id = t.complex_id WHERE t.id=%s
+    def team_complexes(self, team_id: str) -> List[dict]:
+        """Every מכלול this team is linked to, with its access, by name."""
+        return self._all("""
+            SELECT c.id, c.name, ct.access FROM complex_teams ct
+            JOIN complexes c ON c.id = ct.complex_id
+            WHERE ct.team_id=%s ORDER BY c.name
         """, (team_id,))
-        return rows[0] if rows else None
 
     # --- what the commander changed, for the manager ---------------------------
 
@@ -249,6 +267,7 @@ def _team_summary(row: dict) -> dict:
         "id": row["id"],
         "name": row["name"],
         "active": bool(row["active"]),
+        "access": row.get("access") or EDIT,
         "has_profile": bool(row.get("profile")),
         "shifts": shifts,
         "employees": len([item for item in employees if item]),

@@ -10,16 +10,17 @@ import {
   adminResetComplexPassword,
   adminUpdateComplex,
 } from "@/services/api";
-import type { AdminComplex, AdminTeam } from "@/types";
+import type { AdminComplex, AdminTeam, ComplexAccess } from "@/types";
 
 import { generatePassword } from "./format";
 
 /** Opening or editing a מכלול (D43): a name, the existing workplaces it
  *  joins, and the commander's password, which only the operator issues.
  *
- *  Each workplace keeps its own manager and its own password; the commander
- *  holds a manager's powers in every one of them. A team already in another
- *  מכלול is shown but cannot be picked here. */
+ *  Each workplace keeps its own manager and its own password. A workplace
+ *  may be in several מכלולים (D56), and each one picked here gets its own
+ *  permission: עריכה (the commander holds a manager's powers there) or
+ *  צפייה (it shows on the combined board, nothing more). */
 export function ComplexDialog({
   complex,
   teams,
@@ -34,8 +35,8 @@ export function ComplexDialog({
   const editing = complex !== null;
   const [name, setName] = useState(complex?.name ?? "");
   const [notes, setNotes] = useState(complex?.notes ?? "");
-  const [picked, setPicked] = useState<Set<string>>(
-    () => new Set(complex?.teams.map((team) => team.id) ?? []),
+  const [picked, setPicked] = useState<Map<string, ComplexAccess>>(
+    () => new Map(complex?.teams.map((team) => [team.id, team.access ?? "edit"]) ?? []),
   );
   const [password, setPassword] = useState(editing ? "" : generatePassword());
   const [confirmName, setConfirmName] = useState("");
@@ -64,31 +65,40 @@ export function ComplexDialog({
 
   const toggle = (id: string) =>
     setPicked((current) => {
-      const next = new Set(current);
+      const next = new Map(current);
       if (next.has(id)) next.delete(id);
-      else next.add(id);
+      else next.set(id, "edit");
       return next;
     });
+
+  const setAccess = (id: string, access: ComplexAccess) =>
+    setPicked((current) => new Map(current).set(id, access));
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!name.trim() || busy) return;
     void run(async () => {
-      const team_ids = [...picked];
+      const team_ids = [...picked.keys()];
+      const view_team_ids = team_ids.filter((id) => picked.get(id) === "view");
       if (complex) {
-        await adminUpdateComplex(complex.id, { name: name.trim(), notes, team_ids });
+        await adminUpdateComplex(complex.id, { name: name.trim(), notes, team_ids, view_team_ids });
         if (password) {
           await adminResetComplexPassword(complex.id, password);
           setHandover({ name: name.trim(), password });
         } else onClose();
       } else {
-        await adminCreateComplex({ name: name.trim(), password, team_ids });
+        await adminCreateComplex({ name: name.trim(), password, team_ids, view_team_ids });
         setHandover({ name: name.trim(), password });
       }
     });
   };
 
-  const free = (team: AdminTeam) => !team.complex_id || team.complex_id === complex?.id;
+  // The other מכלולים a workplace is already in: shown, never a refusal.
+  const elsewhere = (team: AdminTeam) =>
+    (team.complex_name ?? "")
+      .split(", ")
+      .filter((other) => other && other !== complex?.name)
+      .join(", ");
 
   return (
     <div className="modal-backdrop adm-backdrop" role="presentation" onClick={onClose}>
@@ -129,20 +139,48 @@ export function ComplexDialog({
             </label>
 
             <fieldset className="adm-field adm-complex-teams">
-              <legend>המשמרות במכלול</legend>
+              <legend>המשמרות במכלול והרשאות</legend>
               {teams.length === 0 ? <small>עדיין לא נפתח אף צוות.</small> : null}
-              {teams.map((team) => (
-                <label key={team.id} className={free(team) ? "" : "is-taken"}>
-                  <input
-                    type="checkbox"
-                    checked={picked.has(team.id)}
-                    onChange={() => toggle(team.id)}
-                    disabled={busy || !free(team)}
-                  />
-                  <span>{team.name}</span>
-                  {!free(team) ? <small>במכלול {team.complex_name}</small> : null}
-                </label>
-              ))}
+              {teams.map((team) => {
+                const access = picked.get(team.id);
+                const others = elsewhere(team);
+                return (
+                  <div key={team.id} className="adm-complex-team">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={access !== undefined}
+                        onChange={() => toggle(team.id)}
+                        disabled={busy}
+                      />
+                      <span>
+                        {team.name}
+                        {others ? <small>גם ב{others}</small> : null}
+                      </span>
+                    </label>
+                    {access ? (
+                      <div className="adm-access" role="radiogroup" aria-label={`הרשאה ב${team.name}`}>
+                        {(["edit", "view"] as const).map((option) => (
+                          <button
+                            key={option}
+                            type="button"
+                            role="radio"
+                            aria-checked={access === option}
+                            className={access === option ? "is-on" : ""}
+                            onClick={() => setAccess(team.id, option)}
+                            disabled={busy}
+                          >
+                            {option === "edit" ? "עריכה" : "צפייה"}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+              <small className="adm-access-note">
+                עריכה: מפקד המכלול נכנס לניהול, מדבר עם הסוכן ומשבץ תורנויות. צפייה: המשמרת מוצגת בלוח המכלול בלבד.
+              </small>
             </fieldset>
 
             <label className="adm-field">

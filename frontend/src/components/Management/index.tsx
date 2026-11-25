@@ -441,7 +441,7 @@ export function Management({
             name={workspace.name}
             role={workspace.commander
               ? "מפקד/ת מכלול"
-              : workspace.complex ? "מפקד/ת משמרת" : undefined}
+              : workspace.complexes?.length ? "מפקד/ת משמרת" : undefined}
             onLogout={onLogout}
           />
         </div>
@@ -559,7 +559,7 @@ export function Management({
 
       {/* What the מכלול commander changed here, for this workplace's own
           manager (D43). The commander, inside, is not shown their own. */}
-      {workspace.complex && !workspace.commander ? (
+      {(workspace.complexes?.length ?? 0) > 0 && !workspace.commander ? (
         <CommanderNotices onSeen={() => void state.refresh()} />
       ) : null}
 

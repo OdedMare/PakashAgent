@@ -1,6 +1,6 @@
 """Teams, sign-in, and the workspace view."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -42,7 +42,9 @@ class TeamView(Workspace):
     profile: Optional[Dict[str, Any]] = None
     # What a profile save names as `expected_revision` (see ProfileUpdate).
     profile_revision: Optional[int] = None
-    # The מכלול this workplace belongs to, if any: {"id", "name"} (D43).
+    # Every מכלול this workplace is linked to: {"id", "name", "access"}
+    # (D43, D56), and the one whose commander is inside right now, if any.
+    complexes: List[Dict[str, Any]] = Field(default_factory=list)
     complex: Optional[Dict[str, Any]] = None
     # True when the boss session is the commander's, not the manager's.
     commander: bool = False

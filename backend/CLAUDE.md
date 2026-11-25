@@ -50,8 +50,9 @@ python -m benchmarks.solver_bench --save before.json   # solver quality and time
   suspending and deleting teams. `dal/repository/admin.py` holds its
   cross-team queries — the one deliberate exception to team scoping.
 - `bl/complex_service.py` — a מכלול (D43): משמרות (teams) joined under one
-  commander. The operator links existing teams and issues the commander's
-  password; the commander signs in on `pakash_commander`, reads the combined
+  commander. The operator links existing teams — a team may be in several
+  מכלולים, each link `edit` or `view` (D56); only `edit` enters, chats or
+  seats duties — and issues the commander's password; the commander signs in on `pakash_commander`, reads the combined
   board, and enters a team on an ordinary boss cookie marked `commander`.
   `describe_action` names the commander's writes for the notice the team's
   own commander reads (recorded by the middleware in `main.py`, which also

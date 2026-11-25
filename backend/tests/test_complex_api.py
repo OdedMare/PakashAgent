@@ -18,7 +18,7 @@ from app.bl.admin_service import AdminService
 from app.bl.complex_service import ComplexService, describe_action
 from app.bl.workspace_service import WorkspaceService
 from app.common.actor import actor_of
-from app.common.errors import AppError, AuthError, ConflictError, NotFoundError
+from app.common.errors import AppError, AuthError, NotFoundError
 from app.common.sessions import COMMANDER_COOKIE_NAME, COOKIE_NAME, read
 from app.dal.repository.teams import hash_password, verify_password
 
@@ -32,6 +32,7 @@ class _FakeComplexRepo(_FakeAdminRepo):
     def __init__(self):
         super().__init__()
         self.complexes = {}
+        self.links = {}  # (complex_id, team_id) -> "edit" | "view"
         self.notices = []
 
     def create_complex(self, name, password):
@@ -54,8 +55,9 @@ class _FakeComplexRepo(_FakeAdminRepo):
         for complex_id in self.complexes:
             row = self.get_complex(complex_id)
             row["teams"] = [
-                {"id": t["id"], "name": t["name"], "active": t["active"]}
-                for t in self.teams.values() if t.get("complex_id") == complex_id
+                {"id": t["id"], "name": t["name"], "active": t["active"],
+                 "access": self.links[(complex_id, t["id"])]}
+                for t in self.teams.values() if (complex_id, t["id"]) in self.links
             ]
             rows.append(row)
         return rows
@@ -67,24 +69,23 @@ class _FakeComplexRepo(_FakeAdminRepo):
     def set_complex_password(self, complex_id, password):
         self.complexes[complex_id]["password_hash"] = hash_password(password)
 
-    def set_complex_teams(self, complex_id, team_ids):
+    def set_complex_teams(self, complex_id, team_ids, view_ids=None):
         for team_id in team_ids:
             if team_id not in self.teams:
                 raise NotFoundError("אחד הצוותים לא נמצא")
-            other = self.teams[team_id].get("complex_id")
-            if other and other != complex_id:
-                raise ConflictError("כבר משויך למכלול אחר")
-        for team in self.teams.values():
-            if team.get("complex_id") == complex_id and team["id"] not in team_ids:
-                team["complex_id"] = None
+        for key in [k for k in self.links if k[0] == complex_id and k[1] not in team_ids]:
+            del self.links[key]
         for team_id in team_ids:
-            self.teams[team_id]["complex_id"] = complex_id
+            key = (complex_id, team_id)
+            if view_ids is None:
+                self.links.setdefault(key, "edit")
+            else:
+                self.links[key] = "view" if team_id in view_ids else "edit"
 
     def delete_complex(self, complex_id):
         self.complexes.pop(complex_id)
-        for team in self.teams.values():
-            if team.get("complex_id") == complex_id:
-                team["complex_id"] = None
+        for key in [k for k in self.links if k[0] == complex_id]:
+            del self.links[key]
 
     def list_complexes(self):
         return [self.get_complex(c) for c in self.complexes
@@ -103,21 +104,24 @@ class _FakeComplexRepo(_FakeAdminRepo):
     def complex_teams(self, complex_id):
         return [
             {"id": t["id"], "name": t["name"], "active": t["active"],
+             "access": self.links[(complex_id, t["id"])],
              "has_profile": False, "shifts": [], "employees": 0}
-            for t in self.teams.values() if t.get("complex_id") == complex_id
+            for t in self.teams.values() if (complex_id, t["id"]) in self.links
         ]
 
     def team_in_complex(self, team_id, complex_id):
         team = self.teams.get(team_id)
         return bool(
-            team and team.get("complex_id") == complex_id and team["active"]
-            and self.complex_is_active(complex_id)
+            team and self.links.get((complex_id, team_id)) == "edit"
+            and team["active"] and self.complex_is_active(complex_id)
         )
 
-    def team_complex(self, team_id):
-        complex_id = self.teams[team_id].get("complex_id")
-        return {"id": complex_id, "name": self.complexes[complex_id]["name"]} \
-            if complex_id else None
+    def team_complexes(self, team_id):
+        return sorted(
+            ({"id": c, "name": self.complexes[c]["name"], "access": access}
+             for (c, t), access in self.links.items() if t == team_id),
+            key=lambda row: row["name"],
+        )
 
     def record_commander_notice(self, team_id, complex_name, action):
         self.notices.append({"team_id": team_id, "action": action, "seen": False})
@@ -168,9 +172,11 @@ def world():
     return client, repository, complexes, ids
 
 
-def _open_complex(client, team_ids, password="mefaked1"):
+def _open_complex(client, team_ids, password="mefaked1", name="מכלול צפון",
+                  view_ids=()):
     response = client.post("/api/admin/complexes", json={
-        "name": "מכלול צפון", "password": password, "team_ids": team_ids,
+        "name": name, "password": password, "team_ids": team_ids,
+        "view_team_ids": list(view_ids),
     })
     assert response.status_code == 200, response.text
     return response.json()
@@ -190,16 +196,60 @@ def test_the_operator_links_existing_teams_into_a_complex(world):
 
     assert {t["id"] for t in created["teams"]} == set(ids[:2])
     assert "password_hash" not in created
-    assert repository.teams[ids[2]].get("complex_id") is None
+    assert {t["access"] for t in created["teams"]} == {"edit"}
+    assert not repository.team_complexes(ids[2])
 
 
-def test_a_team_cannot_sit_in_two_complexes(world):
+def test_a_team_can_be_shared_by_several_complexes(world):
+    """D56: a second מכלול may link a משמרת another already holds, and
+    both commanders may edit it."""
+    client, repository, _, ids = world
+    north = _open_complex(client, ids[:1])
+    south = _open_complex(client, ids[:1], password="mefaked2", name="מכלול דרום")
+
+    assert [c["name"] for c in repository.team_complexes(ids[0])] \
+        == ["מכלול דרום", "מכלול צפון"]
+    for created, password in ((north, "mefaked1"), (south, "mefaked2")):
+        _as_commander(client, created["id"], password)
+        assert client.post("/api/complex/teams/%s/enter" % ids[0]).status_code == 200
+        assert client.get("/probe").json()["actor"] == "commander:" + created["id"]
+
+
+def test_a_viewing_complex_sees_the_team_but_cannot_enter_it(world):
     client, _, _, ids = world
-    _open_complex(client, ids[:1])
-    response = client.post("/api/admin/complexes", json={
-        "name": "מכלול דרום", "password": "mefaked2", "team_ids": ids[:1],
-    })
-    assert response.status_code == 409
+    created = _open_complex(client, ids[:2], view_ids=ids[1:2])
+    assert {t["id"]: t["access"] for t in created["teams"]} \
+        == {ids[0]: "edit", ids[1]: "view"}
+    _as_commander(client, created["id"])
+
+    me = client.get("/api/complex/me").json()
+    assert {t["id"]: t["access"] for t in me["teams"]} \
+        == {ids[0]: "edit", ids[1]: "view"}
+    assert client.post("/api/complex/teams/%s/enter" % ids[1]).status_code == 403
+    assert client.post("/api/complex/teams/%s/enter" % ids[0]).status_code == 200
+
+
+def test_turning_a_link_to_viewing_ends_the_commanders_edit_at_once(world):
+    client, _, _, ids = world
+    created = _open_complex(client, ids[:1])
+    _as_commander(client, created["id"])
+    client.post("/api/complex/teams/%s/enter" % ids[0])
+    team_cookie = client.cookies.get(COOKIE_NAME)
+
+    client.post("/api/admin/login", json={"password": PASSWORD})
+    client.patch("/api/admin/complexes/%s" % created["id"],
+                 json={"team_ids": ids[:1], "view_team_ids": ids[:1]})
+
+    client.cookies.set(COOKIE_NAME, team_cookie)
+    assert client.get("/probe").status_code == 401
+
+
+def test_a_membership_edit_without_access_keeps_each_links_access(world):
+    client, repository, _, ids = world
+    created = _open_complex(client, ids[:1], view_ids=ids[:1])
+    client.patch("/api/admin/complexes/%s" % created["id"], json={"team_ids": ids[:2]})
+    assert repository.links[(created["id"], ids[0])] == "view"
+    assert repository.links[(created["id"], ids[1])] == "edit"
 
 
 def test_the_commander_enters_only_linked_workplaces(world):
@@ -267,7 +317,8 @@ def test_the_manager_still_signs_in_with_the_team_password(world):
     })
     assert response.status_code == 200
     me = client.get("/api/workspace/me").json()
-    assert me["commander"] is False and me["complex"]["name"] == "מכלול צפון"
+    assert me["commander"] is False and me["complex"] is None
+    assert [c["name"] for c in me["complexes"]] == ["מכלול צפון"]
     assert client.get("/probe").json()["actor"].startswith("boss")
 
 
@@ -307,7 +358,7 @@ def test_deleting_a_complex_leaves_its_teams_standing(world):
                            json={"confirm_name": "מכלול צפון"})
     assert response.status_code == 200
     assert set(repository.teams) == set(ids)
-    assert all(not t.get("complex_id") for t in repository.teams.values())
+    assert not repository.links
 
 
 def test_what_the_manager_is_told_reads_in_their_words():

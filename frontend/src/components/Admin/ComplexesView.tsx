@@ -90,6 +90,7 @@ export function ComplexesView({ state }: { state: AdminState }) {
                   row.teams.map((team) => (
                     <span key={team.id} className={`adm-pill ${team.active ? "is-setup" : "is-off"}`}>
                       {team.name}
+                      {team.access === "view" ? " · צפייה" : ""}
                     </span>
                   ))
                 )}

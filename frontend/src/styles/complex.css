@@ -74,6 +74,21 @@
   margin-inline-start: auto;
 }
 
+/* A משמרת this מכלול was given for viewing only (D56): a quiet label where
+   the agent and "כניסה לניהול" would be. */
+.cmd-band-view {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 28px;
+  padding: 0 0.6rem;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
 .cmd-band-empty {
   grid-column: 1 / -1;
   padding: 0.7rem 0.8rem;
@@ -389,6 +404,65 @@
 
 .adm-complex-teams label > span {
   flex: 1;
+  display: grid;
+}
+
+.adm-complex-teams label > span small {
+  margin-inline-start: 0;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+/* One workplace in the picker: the checkbox and, once picked, what this
+   מכלול may do there (D56). */
+.adm-complex-team {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.adm-complex-team > label {
+  flex: 1;
+  min-width: 0;
+}
+
+.adm-access {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+
+.adm-access button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.adm-access button.is-on {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 650;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.adm-access button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.adm-complex-teams .adm-access-note {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  line-height: 1.4;
 }
 
 .adm-complex-danger {
@@ -403,13 +477,6 @@
   min-width: 0;
 }
 
-.adm-complex-teams label.is-taken {
-  color: var(--text-muted);
-}
-
-.adm-complex-teams small {
-  margin-inline-start: auto;
-}
 
 @media (max-width: 720px) {
   .cmd-bar .cmd-bar-note {

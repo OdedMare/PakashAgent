@@ -32,7 +32,7 @@ class DutyPlanning:
         ledger = DutyLedger(self._repository, self._complexes, complex_id, first, last)
         types = [row for row in self._repository.complex_duty_types(complex_id) if row["active"]]
         result = fill.suggest(
-            types, _dates(first, last), ledger.soldiers, ledger.duties,
+            types, _dates(first, last), ledger.soldiers, ledger.all_duties,
             ledger.shift_days, ledger.ruled_out, ledger.busy_days,
         )
         result.update(start=first.isoformat(), end=last.isoformat(),

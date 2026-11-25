@@ -37,6 +37,8 @@ export function CommanderNotices({ onSeen }: { onSeen?: () => void }) {
   }, [load]);
 
   if (notices.length === 0) return null;
+  // A משמרת shared by several מכלולים (D56) is told which one did what.
+  const names = [...new Set(notices.map((notice) => notice.complex_name).filter(Boolean))];
 
   const seen = async () => {
     setBusy(true);
@@ -53,10 +55,15 @@ export function CommanderNotices({ onSeen }: { onSeen?: () => void }) {
     <div className="cmd-notices" role="status" aria-live="polite">
       <Network size={16} aria-hidden="true" />
       <div>
-        <strong>מפקד המכלול {notices[0].complex_name} ביצע/ה שינויים במשמרת שלך</strong>
+        <strong>
+          {names.length > 1
+            ? `מפקדי המכלולים ${names.join(", ")} ביצעו שינויים במשמרת שלך`
+            : `מפקד המכלול ${names[0] ?? ""} ביצע/ה שינויים במשמרת שלך`}
+        </strong>
         <ul>
           {notices.slice(0, 6).map((notice) => (
             <li key={notice.id}>
+              {names.length > 1 ? `${notice.complex_name}: ` : ""}
               {notice.action}
               {notice.count > 1 ? ` (${notice.count} פעמים)` : ""}
               <small> · {formatWhen(notice.created_at)}</small>

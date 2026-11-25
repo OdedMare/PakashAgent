@@ -125,13 +125,15 @@ class ComplexDutyRepository(RepositoryBase):
         one that counts without blocking the day.
 
         The INSERT selects its own guards: no row is written unless the
-        type and the team both belong to this מכלול right now."""
+        type belongs to this מכלול and it may edit the team right now (D56).
+        A soldier stands one duty a day whichever מכלול set it: the unique
+        key is the team's, not the מכלול's."""
         duty_id = new_id()
         with connect(self._store) as connection:
             guard = connection.execute("""
-                SELECT 1 FROM complex_duty_types dt, teams t
+                SELECT 1 FROM complex_duty_types dt, complex_teams ct
                 WHERE dt.id=%s AND dt.complex_id=%s
-                  AND t.id=%s AND t.complex_id=%s
+                  AND ct.team_id=%s AND ct.complex_id=%s AND ct.access = 'edit'
             """, (type_id, complex_id, team_id, complex_id)).fetchone()
             if guard is None:
                 raise NotFoundError("סוג התורנות או המשמרת לא נמצאו במכלול")
@@ -193,6 +195,21 @@ class ComplexDutyRepository(RepositoryBase):
             FROM assignments a JOIN shift_slots sl ON sl.id = a.slot_id
             WHERE a.team_id=%s AND sl.slot_date BETWEEN %s AND %s
         """, (team_id, starts_on, ends_on))
+
+    def teams_complex_duties(
+        self, team_ids: List[str], starts_on: str, ends_on: str,
+    ) -> List[dict]:
+        """These teams' soldiers on duty from *any* מכלול: a team shared by
+        several (D56) carries every one of them, and the fill counts them
+        all as the soldier's load."""
+        if not team_ids:
+            return []
+        return self._all(
+            "SELECT " + _DUTY_COLUMNS + _DUTY_FROM
+            + " WHERE d.team_id = ANY(%s) AND d.duty_date BETWEEN %s AND %s"
+            " ORDER BY d.duty_date, d.employee",
+            (list(team_ids), starts_on, ends_on),
+        )
 
     def team_complex_duties(
         self, team_id: str, starts_on: str, ends_on: str,

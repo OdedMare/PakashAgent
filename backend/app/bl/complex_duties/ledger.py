@@ -1,6 +1,7 @@
 """What the duty fill and the balance read, gathered across a מכלול once.
 
-Every soldier of every active משמרת, the מכלול's duties, each soldier's
+Every soldier of every active משמרת the מכלול may edit (D56), the
+מכלול's duties and those its soldiers stand for another מכלול, each soldier's
 shift dates, and what rules a soldier out of a whole day: leaving, a hard
 whole-day constraint or a team's own duty, or being home on the cycle --
 read through the same `bl/rotation` gates the solver uses, so a soldier
@@ -28,11 +29,23 @@ class DutyLedger:
         # date, and the next one for a shift crossing midnight.
         self.busy_days: Dict[Key, Set[datetime.date]] = {}
         self._blocked: Set[tuple] = set()
+        team_ids = []
         for team in complexes.describe(complex_id)["teams"]:
-            if team["active"]:
+            if team["active"] and team.get("access", "edit") == "edit":
+                team_ids.append(team["id"])
                 self._read_team(repository, team)
+        # This מכלול's own duties: what the balance reports and what fills
+        # its seats.
         self.duties = repository.complex_duties(
             complex_id, self.since.isoformat(), last.isoformat())
+        # Plus what the same soldiers stand for any other מכלול sharing their
+        # משמרת (D56): the fill spaces and counts a soldier by all of them.
+        mine = {row["id"] for row in self.duties}
+        reader = getattr(repository, "teams_complex_duties", None)
+        others = reader(team_ids, self.since.isoformat(), last.isoformat()) \
+            if reader is not None else []
+        self.all_duties = self.duties + [
+            row for row in others if row["id"] not in mine]
 
     def _read_team(self, repository, team: dict) -> None:
         profile = repository.team_profile(team["id"]) or {}

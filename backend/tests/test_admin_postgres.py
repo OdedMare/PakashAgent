@@ -115,12 +115,15 @@ def test_a_complex_links_existing_teams_and_scopes_its_commander(repo):
     assert teams[a["id"]]["employees"] == 1
     assert repo.team_in_complex(a["id"], group["id"])
     assert not repo.team_in_complex(c["id"], group["id"])
-    assert repo.team_complex(a["id"])["name"] == "מכלול צפון"
+    assert [c["name"] for c in repo.team_complexes(a["id"])] == ["מכלול צפון"]
     assert any(t["complex_name"] == "מכלול צפון" for t in repo.admin_teams())
 
     other = repo.create_complex("מכלול דרום", "mefaked2")
-    with pytest.raises(Exception):
-        repo.set_complex_teams(other["id"], [a["id"]])
+    repo.set_complex_teams(other["id"], [a["id"]])  # shared (D56)
+    assert [c["name"] for c in repo.team_complexes(a["id"])] \
+        == ["מכלול דרום", "מכלול צפון"]
+    assert any(t["complex_name"] == "מכלול דרום, מכלול צפון"
+               for t in repo.admin_teams())
 
     repo.set_complex_teams(group["id"], [b["id"]])
     assert not repo.team_in_complex(a["id"], group["id"])
@@ -130,7 +133,8 @@ def test_a_complex_links_existing_teams_and_scopes_its_commander(repo):
     assert repo.list_complexes() == [{"id": other["id"], "name": "מכלול דרום"}]
 
     repo.delete_complex(group["id"])
-    assert repo.get_team(b["id"])["complex_id"] is None
+    assert repo.team_complexes(b["id"]) == []
+    assert repo.get_team(b["id"])["name"] == "משמרת ב"
 
 
 def test_commander_notices_fold_repeats_and_clear_when_seen(repo):

@@ -278,8 +278,7 @@ export interface AdminTeam {
   pending_requests: number;
   pending_swaps: number;
   last_activity: string | null;
-  /** The מכלול this team is linked to (D43), if any. */
-  complex_id?: string | null;
+  /** The מכלולים this team is linked to (D43, D56), names joined by ", ". */
   complex_name?: string | null;
 }
 
@@ -348,8 +347,10 @@ export interface TeamView extends Workspace {
   profile: WorkplaceProfile | null;
   /** What a profile save sends back as `expected_revision`. */
   profile_revision?: number | null;
-  /** The מכלול this workplace belongs to (D43), for a boss session. */
-  complex?: { id: string; name: string } | null;
+  /** Every מכלול this workplace is linked to (D43, D56), for a boss session. */
+  complexes?: (ComplexSummary & { access: ComplexAccess })[];
+  /** The מכלול whose commander is inside right now, if any. */
+  complex?: (ComplexSummary & { access: ComplexAccess }) | null;
   /** The boss session is the מכלול commander's, not the manager's. */
   commander?: boolean;
 }
@@ -361,10 +362,15 @@ export interface ComplexSummary {
   name: string;
 }
 
+/** What a מכלול may do in a משמרת it is linked to (D56): everything its
+ *  commander can, or only see it on the combined board. */
+export type ComplexAccess = "edit" | "view";
+
 export interface ComplexTeam {
   id: string;
   name: string;
   active: boolean;
+  access: ComplexAccess;
   has_profile: boolean;
   shifts: { name: string; start_time: string; end_time: string }[];
   employees: number;
@@ -414,7 +420,7 @@ export interface AdminComplex {
   notes: string;
   active: boolean;
   created_at: string;
-  teams: { id: string; name: string; active: boolean }[];
+  teams: { id: string; name: string; active: boolean; access: ComplexAccess }[];
 }
 
 /** One advisory finding from `bl/audit.py`.

@@ -79,10 +79,16 @@ class WorkspaceService:
         profile = self._repository.team_profile(team_id)
         view["profile"] = (profile if role == ROLE_BOSS or not profile
                            else {"shifts": profile.get("shifts", [])})
-        # The מכלול, for a boss only (D43): a member has no use for it.
-        team_complex = getattr(self._repository, "team_complex", None)
-        if role == ROLE_BOSS and team_complex is not None:
-            view["complex"] = team_complex(team_id)
+        # The מכלולים, for a boss only (D43): a member has no use for them.
+        # A team may be in several (D56); `complex` is the one whose
+        # commander is inside right now, if any.
+        team_complexes = getattr(self._repository, "team_complexes", None)
+        if role == ROLE_BOSS and team_complexes is not None:
+            linked = team_complexes(team_id)
+            view["complexes"] = linked
+            view["complex"] = next(
+                (row for row in linked if row["id"] == commander), None,
+            ) if commander else None
         view["commander"] = bool(commander)
         return view
 

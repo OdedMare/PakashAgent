@@ -173,8 +173,15 @@ export function CommanderArea({
       setOpening(null);
     }
   };
-  const firstActive = commander.teams.find((unit) => unit.active)?.id ?? null;
-  const wanted = focus.unit ?? firstActive;
+  // The משמרות this מכלול may edit (D56): the only ones it can enter, talk
+  // to, read the statistics of or seat duties in. The rest it only sees.
+  const editable = useMemo(
+    () => commander.teams.filter((unit) => unit.access !== "view"),
+    [commander.teams],
+  );
+  const canEdit = (id: string | null) => editable.some((unit) => unit.id === id);
+  const firstActive = editable.find((unit) => unit.active)?.id ?? null;
+  const wanted = canEdit(focus.unit) ? focus.unit : firstActive;
   useEffect(() => {
     if (!tool || toolUnit || !wanted) return;
     let cancelled = false;
@@ -270,9 +277,10 @@ export function CommanderArea({
                 aria-current={sidebarUnit === unit.id ? "true" : undefined}
                 onClick={() => {
                   setFocus({ ...NO_FOCUS, unit: unit.id });
-                  if (tool) void openTool(unit.id);
-                  else go("board");
+                  if (tool && canEdit(unit.id)) void openTool(unit.id);
+                  else if (!tool) go("board");
                 }}
+                disabled={Boolean(tool) && !canEdit(unit.id)}
               >
                 <Users size={15} /><span>{unit.name}</span>
               </button>
@@ -316,7 +324,7 @@ export function CommanderArea({
             {tool ? (
               <div className="cmd-tools">
                 <div className="board-views" role="group" aria-label="המשמרת">
-                  {commander.teams.map((unit) => (
+                  {editable.map((unit) => (
                     <button
                       key={unit.id}
                       type="button"
@@ -368,7 +376,7 @@ export function CommanderArea({
           <div className="board cmd-board">
             {head}
             {view === "duties" ? (
-              <DutiesView days={days} today={localToday()} units={commander.teams} dark={dark} />
+              <DutiesView days={days} today={localToday()} units={editable} dark={dark} />
             ) : state.board === null ? (
               <CrewStage label="טוען את לוח המכלול…" />
             ) : (
@@ -478,7 +486,7 @@ export function CommanderArea({
               sentence still being answered in four משמרות keeps going. */}
           <CommanderChat
             who={agentWho}
-            units={commander.teams}
+            units={editable}
             target={chatTarget}
             week={week}
             rosterOf={rosterOf}

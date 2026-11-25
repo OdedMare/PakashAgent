@@ -1405,9 +1405,9 @@ board — is older and unrelated.)
 **The parts stay teams.** A משמרת in a מכלול is an ordinary team in every
 respect: its own roster, shift types, rotations, rules, constraints,
 requests, solver builds, agent chat, statistics and share link. Nothing in a
-team changes by joining. A מכלול is a row above teams (`complexes`, with
-`teams.complex_id`); it holds no schedule of its own. A team belongs to at
-most one מכלול, and linking one already in another is refused, not moved.
+team changes by joining. A מכלול is a row above teams (`complexes`, linked
+through `complex_teams`); it holds no schedule of its own. *(D56: a team may
+be linked to several מכלולים, each with view or edit; it was at most one.)*
 
 **Who does what:**
 
@@ -1974,3 +1974,40 @@ unclaimed name identically, and still shares `/login`'s throttle key, so the
 list makes guessing no faster per name. A suspended team lists no names, the
 same answer as a team nobody has registered in, so the list does not reveal
 suspension to someone who has not proven they belong.
+
+## D56 — A משמרת may be shared by several מכלולים, each with view or edit *(amends D43)*
+
+**Context.** D43 put a משמרת in at most one מכלול, and the console refused
+to link one already taken. Units asked for one משמרת to show in more than
+one מכלול, and for the operator to say what each of them may do there.
+
+**Decision.**
+
+- **Links are their own table.** `complex_teams (complex_id, team_id,
+  access)` replaces `teams.complex_id`; a database from before is moved
+  once, each old link becoming an editing one, and the column is dropped
+  so nothing reads a second answer.
+- **Each link is `edit` or `view`, set by the operator** in the console's
+  מכלול dialog, per משמרת (עריכה / צפייה). A membership edit that sends no
+  access keeps each kept link's access; a new one edits.
+- **Edit is everything D43 gave.** Entering, the agent and its routing,
+  statistics, changes, publishing and duties. Several מכלולים may each edit
+  the same משמרת; every write is logged and noticed under that commander's
+  own `commander:<id>`, and the משמרת commander's banner names each מכלול.
+- **View is the combined board and "המשמרות" only.** The band shows "צפייה
+  בלבד" in place of "סוכן" and "כניסה לניהול". The guards check edit, not
+  membership: `team_in_complex` (entering, the commander's chat routes, an
+  entered cookie re-checked per request) and the duty write's SQL guard both
+  require `access = 'edit'`. Entering a viewed משמרת is a 403, since the
+  commander already sees it. Turning a link to view ends an entered session
+  on the next request, as unlinking does.
+- **A soldier still stands one duty a day,** whichever מכלול set it: the
+  unique key was always the team's. The fair fill counts and spaces a
+  soldier by their duties from every מכלול (`teams_complex_duties`); the
+  balance still reports this מכלול's own. A link turned to view, like one
+  removed, drops that מכלול's duties from today on.
+
+**What this gives up.** Two מכלולים editing one משמרת can overwrite each
+other: there is no locking, as there was none between a מכלול and the
+משמרת's own commander (D43). A viewing מכלול sees drafts as well as
+published weeks, as the combined board always has.

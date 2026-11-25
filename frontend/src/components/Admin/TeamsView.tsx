@@ -181,7 +181,9 @@ function TeamTable({ teams, onOpen }: { teams: AdminTeam[]; onOpen: (id: string)
           <span className="adm-team-name">
             <strong>{team.name}</strong>
             <small>
-              {team.complex_name ? `מכלול ${team.complex_name} · ` : ""}
+              {team.complex_name
+                ? `${team.complex_name.includes(", ") ? "מכלולים" : "מכלול"} ${team.complex_name} · `
+                : ""}
               {team.notes || `נפתח ${formatDate(team.created_at)}`}
             </small>
           </span>

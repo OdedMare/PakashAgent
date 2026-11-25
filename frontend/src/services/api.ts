@@ -5,6 +5,7 @@ import type {
   CommanderNotice,
   CommanderView,
   ComplexBoard,
+  ComplexAccess,
   ComplexSummary,
   ComplexDuty,
   DutyApproval,
@@ -419,10 +420,12 @@ export const adminDeleteTeam = (id: string, confirmName: string) =>
 // hands them an ordinary manager session for it.
 
 export const adminComplexes = () => request<AdminComplex[]>("/api/admin/complexes");
-export const adminCreateComplex = (input: { name: string; password: string; team_ids: string[] }) =>
+/** `view_team_ids`: which of `team_ids` the מכלול may only view (D56). */
+export const adminCreateComplex = (input: { name: string; password: string; team_ids: string[]; view_team_ids?: string[] }) =>
   request<AdminComplex>("/api/admin/complexes", { method: "POST", body: JSON.stringify(input) });
-/** Only the keys present are applied; `team_ids` is the whole membership. */
-export const adminUpdateComplex = (id: string, patch: Partial<{ name: string; active: boolean; notes: string; team_ids: string[] }>) =>
+/** Only the keys present are applied; `team_ids` is the whole membership,
+ *  `view_team_ids` which of them are view-only (D56). */
+export const adminUpdateComplex = (id: string, patch: Partial<{ name: string; active: boolean; notes: string; team_ids: string[]; view_team_ids: string[] }>) =>
   request<AdminComplex>(`/api/admin/complexes/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) });
 export const adminResetComplexPassword = (id: string, password: string) =>
   request<{ status: string }>(`/api/admin/complexes/${encodeURIComponent(id)}/password`, { method: "POST", body: JSON.stringify({ password }) });
@@ -442,7 +445,7 @@ export const enterComplexTeam = (teamId: string) =>
 export const leaveComplexTeam = () => request<{ status: string }>("/api/complex/leave", { method: "POST" });
 /** For the workplace's own manager: what the commander changed, unseen. */
 export const commanderNotices = () =>
-  request<{ complex: ComplexSummary | null; notices: CommanderNotice[] }>("/api/complex/notices");
+  request<{ complexes: (ComplexSummary & { access: ComplexAccess })[]; notices: CommanderNotice[] }>("/api/complex/notices");
 export const markCommanderNoticesSeen = () =>
   request<{ status: string }>("/api/complex/notices/seen", { method: "POST" });
 

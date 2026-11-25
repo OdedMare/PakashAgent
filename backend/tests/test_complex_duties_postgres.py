@@ -134,3 +134,58 @@ def test_a_team_leaving_the_complex_takes_no_future_duty_with_it(complex_setup):
     left = repo.team_complex_duties(s["second"], "2000-01-01", "2100-01-01")
     assert [str(row["duty_date"]) for row in left] == ["2020-01-05"]  # history stays
     assert len(repo.team_complex_duties(s["first"], "2000-01-01", "2100-01-01")) == 1
+
+
+def test_a_team_shared_by_two_complexes_is_edited_only_where_allowed(complex_setup):
+    """D56: one משמרת in two מכלולים. A viewing link shows it and nothing
+    more; an editing one seats duties, and a soldier still stands one a day
+    whichever מכלול set it."""
+    repo, mine, other, first = (complex_setup[k] for k in ("repo", "mine", "other", "first"))
+    guard = repo.create_complex_duty_type(other, "שמירה")
+    repo.set_complex_teams(other, [complex_setup["outsider"], first], view_ids=[first])
+
+    assert {c["name"]: c["access"] for c in repo.team_complexes(first)} \
+        == {"מכלול": "edit", "מכלול אחר": "view"}
+    assert {t["id"]: t["access"] for t in repo.complex_teams(other)}[first] == "view"
+    assert repo.team_in_complex(first, mine) and not repo.team_in_complex(first, other)
+    with pytest.raises(NotFoundError):
+        repo.set_complex_duty(other, guard["id"], first, "דנה", DAY)
+
+    repo.set_complex_teams(other, [complex_setup["outsider"], first], view_ids=[])
+    assert repo.team_in_complex(first, other)
+    repo.set_complex_duty(mine, complex_setup["kitchen"]["id"], first, "דנה", DAY)
+    with pytest.raises(ConflictError):
+        repo.set_complex_duty(other, guard["id"], first, "דנה", DAY)
+    repo.set_complex_duty(other, guard["id"], first, "דנה", "2026-11-11")
+    both = repo.teams_complex_duties([first], DAY, "2026-11-11")
+    assert {row["complex_id"] for row in both} == {mine, other}
+
+
+def test_turning_a_link_to_viewing_drops_its_future_duties(complex_setup):
+    repo, mine, first = complex_setup["repo"], complex_setup["mine"], complex_setup["first"]
+    repo.set_complex_duty(mine, complex_setup["kitchen"]["id"], first, "דנה", "2099-01-05")
+    repo.set_complex_teams(mine, [first, complex_setup["second"]], view_ids=[first])
+    assert repo.complex_duties(mine, "2099-01-01", "2099-01-31") == []
+
+
+def test_the_single_link_of_d43_becomes_an_editing_link(complex_setup):
+    """A database from before D56 carries `teams.complex_id`; the DDL moves
+    each into `complex_teams` as an editing link and drops the column."""
+    repo, mine, first = complex_setup["repo"], complex_setup["mine"], complex_setup["first"]
+    repo.set_complex_teams(mine, [])
+    with _raw(repo) as connection:
+        connection.execute("ALTER TABLE teams ADD COLUMN complex_id TEXT")
+        connection.execute("UPDATE teams SET complex_id=%s WHERE id=%s", (mine, first))
+        connection.commit()
+    repo.initialize()
+    assert [(t["id"], t["access"]) for t in repo.complex_teams(mine)] == [(first, "edit")]
+    with _raw(repo) as connection:
+        gone = connection.execute(
+            "SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema()"
+            " AND table_name = 'teams' AND column_name = 'complex_id'").fetchone()
+    assert gone is None
+
+
+def _raw(repo):
+    from app.dal.database import connect
+    return connect(repo._store)

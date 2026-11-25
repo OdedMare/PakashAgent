@@ -17,7 +17,7 @@ from typing import Dict, List, Optional
 
 from app.bl.audit import counts_toward_staffing
 from app.bl.complex_routing import route as route_sentence
-from app.common.errors import AgentError, NotFoundError
+from app.common.errors import AgentError, ForbiddenError, NotFoundError
 
 # The combined board reads a month view at most (six weeks): it audits every period of
 # every workplace it draws, and a month of six workplaces is a long answer.
@@ -162,12 +162,16 @@ class ComplexService:
         }
 
     def require_team(self, complex_id: str, team_id: str) -> dict:
-        """The team, if it is one of this commander's workplaces and on.
-        A team outside the מכלול is a 404, never a distinct refusal."""
+        """The team, if this commander may edit it and it is on. A team
+        outside the מכלול is a 404, never a distinct refusal; one it only
+        views (D56) is told so, since the commander already sees it."""
         for team in self._repository.complex_teams(complex_id):
             if team["id"] == team_id:
                 if not team["active"]:
                     raise AgentError("המשמרת הושבתה על ידי צוות משמרות זהב")
+                if team.get("access", "edit") != "edit":
+                    raise ForbiddenError(
+                        "למכלול יש הרשאת צפייה בלבד במשמרת %s" % team["name"])
                 return team
         raise NotFoundError("המשמרת לא נמצאה")
 
@@ -201,7 +205,8 @@ class ComplexService:
         else all. Reads only."""
         teams = []
         for team in self._repository.complex_teams(complex_id):
-            if not team["active"]:
+            # A משמרת this מכלול only views has no agent of theirs (D56).
+            if not team["active"] or team.get("access", "edit") != "edit":
                 continue
             profile = self._repository.team_profile(team["id"]) or {}
             teams.append({
@@ -222,9 +227,8 @@ class ComplexService:
         self._repository.record_commander_notice(team_id, name, action)
 
     def notices(self, team_id: str) -> dict:
-        complex_row = self._repository.team_complex(team_id)
         return {
-            "complex": complex_row,
+            "complexes": self._repository.team_complexes(team_id),
             "notices": self._repository.commander_notices(team_id),
         }
 
