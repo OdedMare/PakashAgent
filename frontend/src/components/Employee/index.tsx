@@ -23,6 +23,7 @@ import type { EmployeeView } from "@/types";
 
 import { ConstraintForm } from "./ConstraintForm";
 import { IdentityGate } from "./IdentityGate";
+import { MyShifts } from "./MyShifts";
 import { SwapPanel } from "./SwapPanel";
 import { useEmployee } from "./useEmployee";
 import { shortDate } from "@/components/DateInput";
@@ -162,15 +163,20 @@ export function Employee({ onLeave, openRequests = false }: { onLeave?: () => vo
         </nav>
 
         <div className="employee-tab-panel" role="tabpanel">
-          {section === "mine" ? <MyDuties view={view} /> : null}
+          {/* The next shift leads (it is inside `MyShifts`); duties follow,
+              since they are whole days set by the מכלול, read less often. */}
           {section === "mine" ? (
             view.schedule ? (
               <>
                 <MyShifts view={view} />
+                <MyDuties view={view} />
                 <MyChanges view={view} />
               </>
             ) : (
-              <NoPublishedSchedule />
+              <>
+                <MyDuties view={view} />
+                <NoPublishedSchedule />
+              </>
             )
           ) : null}
 
@@ -293,56 +299,6 @@ function NoPublishedSchedule() {
           כבר עכשיו מהטאב “בקשות והחלפות”.
         </p>
       </div>
-    </section>
-  );
-}
-
-/** This person's shifts, each with who else is on it.
- *
- *  The teammate list needs no new data — the roster is already visible to the
- *  whole team — and it answers a question people actually ask before a
- *  shift. */
-function MyShifts({ view }: { view: EmployeeView }) {
-  const withMe = new Map(
-    view.teammates.map((row) => [`${row.date}|${row.shift}`, row.with]),
-  );
-
-  if (view.summary.shifts.length === 0) {
-    return (
-      <section className="employee-panel">
-        <h2>המשמרות שלי</h2>
-        <p className="employee-note">
-          אין לך משמרות בתקופה הזו. אם זו טעות — כדאי לדבר עם המנהל.
-        </p>
-      </section>
-    );
-  }
-
-  return (
-    <section className="employee-panel">
-      <h2>המשמרות שלי</h2>
-      <ul className="shift-list">
-        {view.summary.shifts.map((shift) => {
-          const others = withMe.get(`${shift.date}|${shift.shift}`) ?? [];
-          return (
-            <li key={`${shift.date}-${shift.shift}`}>
-              <div className="shift-when">
-                <strong>{shift.weekday}</strong>
-                <span>{shortDate(shift.date)}</span>
-              </div>
-              <div className="shift-what">
-                <span className="shift-name">{shift.shift}</span>
-                {shift.is_on_call ? (
-                  <span className="shift-oncall">כוננות</span>
-                ) : null}
-                {others.length > 0 ? (
-                  <span className="shift-with">עם {others.join(", ")}</span>
-                ) : null}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
     </section>
   );
 }
