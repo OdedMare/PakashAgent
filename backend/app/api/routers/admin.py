@@ -161,6 +161,7 @@ class AdminRoutes:
         ) -> dict:
             result = complexes.create(
                 request.name, request.password, request.team_ids,
+                request.view_team_ids,
             )
             guards.forget_complexes()
             return result

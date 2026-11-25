@@ -77,12 +77,18 @@ class ComplexService:
     def list_for_admin(self) -> List[dict]:
         return self._repository.admin_complexes()
 
-    def create(self, name: str, password: str, team_ids: List[str]) -> dict:
+    def create(
+        self, name: str, password: str, team_ids: List[str],
+        view_team_ids: Optional[List[str]] = None,
+    ) -> dict:
+        """`view_team_ids` are the teams joined for viewing only (D56)."""
         clean = self._name(name)
         self._workspace.validate_password(password)
         created = self._repository.create_complex(clean, password)
         if team_ids:
-            self._repository.set_complex_teams(created["id"], list(team_ids))
+            self._repository.set_complex_teams(
+                created["id"], list(team_ids), list(view_team_ids or []),
+            )
         return self._admin_row(created["id"])
 
     def update(self, complex_id: str, patch: Dict) -> dict:
@@ -100,7 +106,12 @@ class ComplexService:
             fields["active"] = patch["active"]
         self._repository.update_complex(complex_id, fields)
         if "team_ids" in patch and patch["team_ids"] is not None:
-            self._repository.set_complex_teams(complex_id, list(patch["team_ids"]))
+            # No `view_team_ids` sent: every team kept keeps its access.
+            views = patch.get("view_team_ids")
+            self._repository.set_complex_teams(
+                complex_id, list(patch["team_ids"]),
+                None if views is None else list(views),
+            )
         return self._admin_row(complex_id)
 
     def reset_password(self, complex_id: str, password: str) -> None:
