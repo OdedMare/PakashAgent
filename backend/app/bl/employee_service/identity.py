@@ -25,6 +25,19 @@ class IdentityService:
             ]
         }
 
+    def signin_names(self, team_id: str) -> List[str]:
+        """Names the front-door worker picker offers (D55).
+
+        Only names that are both on the current roster *and* claimed: the
+        front door reaches nothing else, so an unclaimed name there would be
+        a dead end, and a claim left behind by someone who has since left the
+        roster is not worth advertising. Names only -- never a hash, never a
+        last-seen time.
+        """
+        profile = self._repository.team_profile(team_id) or {}
+        claimed = set(self._repository.claimed_names(team_id))
+        return [name for name in roster_names(profile) if name in claimed]
+
     def claim(self, team_id: str, employee: str, passcode: str) -> dict:
         """Bind a roster name to a passcode.
 

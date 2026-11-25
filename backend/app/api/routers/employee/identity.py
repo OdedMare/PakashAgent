@@ -1,12 +1,13 @@
 """Claiming a roster name, signing in as it, and signing out."""
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.contracts import (
     ClaimRequest,
     EmployeeLoginRequest,
     EmployeeSignInRequest,
 )
+from app.common.errors import AppError
 from app.common.sessions import COOKIE_NAME, ROLE_EMPLOYEE, issue
 
 
@@ -90,6 +91,24 @@ class IdentityRoutes:
             ))
             sign_in(response, session["team_id"], result["employee"])
             return result
+
+        require_active = self._require_active
+
+        @router.get("/signin/names")
+        def signin_names(team_id: str = Query(min_length=1)) -> dict:
+            """Claimed names for the front-door picker (D55, amends D25).
+
+            Unauthenticated, like `/api/workspace/teams`: it is what the
+            worker picks from before there is any session. It lists claimed
+            names only -- the ones `/signin` can reach -- so it never shows
+            who on the roster has not registered yet. A suspended team lists
+            nothing, rather than saying it is suspended to anyone who asks.
+            """
+            try:
+                require_active(team_id)
+            except AppError:
+                return {"names": []}
+            return {"names": service.signin_names(team_id)}
 
         @router.post("/signin")
         def signin(request: EmployeeSignInRequest, response: Response) -> dict:

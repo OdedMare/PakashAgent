@@ -777,6 +777,9 @@ every team's roster to anyone who opens the site. The share-link
 `IdentityGate` still lists names, because a visitor there has proven they
 were invited.
 
+> **Amended by [D55](#d55--the-worker-door-picks-from-claimed-names-amends-d25):**
+> the worker now picks from the team's claimed names instead of typing one.
+
 **Consequences worth knowing:**
 
 - **`/signin` and `/login` share one throttle key**
@@ -1945,3 +1948,29 @@ rebuilt when the span is run again.
 
 The threshold and chunk size are constants (`chunks.MIN_PEOPLE`,
 `chunks.SHIFTS`) and arguments of `generate_span`; zero solves whole.
+
+---
+
+## D55 — The worker door picks from claimed names *(amends D25)*
+
+At the boss's request, a worker at the front door no longer types their name:
+they pick it from a list. D25 typed it so the public page would not publish
+every team's roster; this narrows what is published rather than ignoring that.
+
+**The list is claimed names only.** `GET /api/employee/signin/names?team_id=`
+returns the names that are both on the team's current roster and claimed —
+exactly the ones `/signin` can reach. An unclaimed name would be a dead end at
+this door (claiming still needs the share link, D14/D25), so it is not listed,
+and the page never shows who on the roster has not registered. A claim left
+behind by someone no longer on the roster is not listed either.
+
+**What is now public.** Anyone who opens the site can see, for each team, the
+names of its workers who have set a passcode. That is the price of the
+picker, accepted deliberately. Passcodes, hashes and last-seen times are
+never in the answer.
+
+**What is unchanged.** `/signin` still answers a wrong passcode and an
+unclaimed name identically, and still shares `/login`'s throttle key, so the
+list makes guessing no faster per name. A suspended team lists no names, the
+same answer as a team nobody has registered in, so the list does not reveal
+suspension to someone who has not proven they belong.

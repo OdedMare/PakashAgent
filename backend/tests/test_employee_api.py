@@ -537,7 +537,8 @@ def test_the_front_door_cannot_reach_an_unclaimed_name(client):
 
 
 def test_the_front_door_does_not_say_which_names_are_claimed(client):
-    """The front door is open to anyone, so it must not reveal the roster."""
+    """A wrong passcode must not tell an attacker more than the public
+    picker (D55) already does -- the two failures answer identically."""
     _claim(client, name=DANA, passcode="123456")
 
     wrong_code = _signin(client, name=DANA, passcode="999999")
@@ -577,6 +578,54 @@ def test_the_front_door_and_the_link_share_one_throttle():
     _signin(client, passcode="wrong")
 
     assert _signin(client).status_code == 429
+
+
+# --- the front-door name picker (D55) ---------------------------------------
+
+def _signin_names(client, team=TEAM):
+    client.cookies.clear()
+    return client.get("/api/employee/signin/names", params={"team_id": team})
+
+
+def test_the_front_door_picker_lists_claimed_names_without_a_session(client):
+    _claim(client, name=DANA)
+
+    response = _signin_names(client)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"names": [DANA]}
+
+
+def test_the_front_door_picker_never_lists_an_unregistered_name(client):
+    """Only claimed names: the rest of the roster stays off the public page."""
+    assert _signin_names(client).json() == {"names": []}
+
+
+def test_the_front_door_picker_is_scoped_to_the_named_team(client):
+    _claim(client, name=DANA, team=TEAM)
+
+    assert _signin_names(client, team=OTHER_TEAM).json() == {"names": []}
+
+
+def test_the_front_door_picker_drops_a_claim_no_longer_on_the_roster(context):
+    client, repository, _ = context
+    repository.identities[(TEAM, "עזב")] = hash_password("123456")
+    _claim(client, name=YOSSI)
+
+    assert _signin_names(client).json() == {"names": [YOSSI]}
+
+
+def test_a_suspended_team_lists_no_names():
+    repository = _FakeIdentities()
+    service = EmployeeService(repository, _FakeSchedules(repository))
+    app = FastAPI()
+    app.include_router(employee_router.build_router(
+        service, Guards(SECRET, team_active=lambda team: False), SECRET, 30,
+    ))
+    client = TestClient(app)
+    repository.identities[(TEAM, DANA)] = hash_password("123456")
+
+    assert _signin_names(client).json() == {"names": []}
 
 
 # --- the identity comes off the cookie, never the body ----------------------

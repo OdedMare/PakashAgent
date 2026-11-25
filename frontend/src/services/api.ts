@@ -1165,6 +1165,15 @@ export function employeeLogin(body: {
   });
 }
 
+/** Claimed names a worker can pick at the front door (D55). Public, like
+ *  `listTeams`: only names that already have a passcode, so the picker never
+ *  lists who on the roster has not registered yet. */
+export function employeeSignInNames(teamId: string): Promise<string[]> {
+  return request<{ names: string[] }>(
+    `/api/employee/signin/names?team_id=${encodeURIComponent(teamId)}`,
+  ).then((body) => body.names);
+}
+
 /** Sign in to a claimed name from the front door, without the share link
  *  (D25). The team is named here because there is no session to carry it.
  *  Only an existing claim is reachable — claiming still needs the link. */

@@ -14,7 +14,11 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { CrewStage, Guard } from "@/components/Crew";
-import { listComplexes, listTeams } from "@/services/api";
+import {
+  employeeSignInNames,
+  listComplexes,
+  listTeams,
+} from "@/services/api";
 import type { ComplexSummary, TeamSummary } from "@/types";
 
 /** Which door the visitor is standing at. */
@@ -26,8 +30,9 @@ type Mode = "boss" | "worker" | "commander";
  *  the team password (D10). A worker types the name they claimed and their
  *  personal passcode (D14) — and only that: *claiming* a name still needs the
  *  share link, because this screen is open to anyone and the team list above
- *  it is public (D25). The name is typed rather than picked for the same
- *  reason: a picker here would publish every team's roster.
+ *  it is public (D25). The worker picks their name from the team's *claimed*
+ *  names (D55, amending D25's typed field): those are the only ones this door
+ *  reaches, so the roster's unregistered names stay off the public page.
  *
  *  There is no "open a team" door any more (D28): workspaces are opened by
  *  צוות משמרות זהב from the operator console, and this page says so.
@@ -62,6 +67,8 @@ export function Login({
   const [complexes, setComplexes] = useState<ComplexSummary[]>([]);
   const [complexId, setComplexId] = useState("");
   const [employee, setEmployee] = useState("");
+  // Claimed names for the chosen team; `undefined` while they load.
+  const [names, setNames] = useState<string[] | undefined>(undefined);
   const [password, setPassword] = useState("");
 
   const switchMode = (next: Mode) => {
@@ -84,6 +91,25 @@ export function Login({
       })
       .catch(() => setComplexes([]));
   }, []);
+
+  // The worker picker follows the chosen team. Fetched only at the worker
+  // door, and a stale answer for a team no longer selected is dropped.
+  useEffect(() => {
+    if (mode !== "worker" || !teamId) return;
+    let live = true;
+    setNames(undefined);
+    setEmployee("");
+    employeeSignInNames(teamId)
+      .then((rows) => {
+        if (!live) return;
+        setNames(rows);
+        setEmployee(rows.length === 1 ? rows[0] : "");
+      })
+      .catch(() => live && setNames([]));
+    return () => {
+      live = false;
+    };
+  }, [mode, teamId]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -262,17 +288,37 @@ export function Login({
             </div>
           )}
 
-          {mode === "worker" ? (
+          {mode === "worker" && teams.length > 0 ? (
             <label className="gate-field">
               <span>השם שלך</span>
-              <input
-                value={employee}
-                onChange={(event) => setEmployee(event.target.value)}
-                placeholder="כפי שרשום בצוות"
-                maxLength={120}
-                autoComplete="username"
-                disabled={busy}
-              />
+              {names === undefined ? (
+                <select disabled aria-busy="true">
+                  <option>טוען את רשימת העובדים…</option>
+                </select>
+              ) : names.length === 0 ? (
+                <small className="gate-hint">
+                  אף עובד/ת במשמרת הזו עדיין לא הגדיר/ה קוד אישי.
+                </small>
+              ) : (
+                <select
+                  value={employee}
+                  onChange={(event) => {
+                    setEmployee(event.target.value);
+                    onDismissError();
+                  }}
+                  autoComplete="username"
+                  disabled={busy}
+                >
+                  <option value="" disabled>
+                    בחרו את השם שלכם
+                  </option>
+                  {names.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </label>
           ) : null}
 
@@ -287,8 +333,8 @@ export function Login({
             />
             {mode === "worker" ? (
               <small className="gate-hint">
-                עדיין אין לכם קוד אישי? פתחו את קישור הצוות שקיבלתם מהמנהל
-                ובחרו בו את השם שלכם.
+                השם שלכם לא ברשימה? עדיין אין לכם קוד אישי — פתחו את קישור
+                הצוות שקיבלתם מהמנהל ובחרו בו את השם שלכם.
               </small>
             ) : null}
           </label>

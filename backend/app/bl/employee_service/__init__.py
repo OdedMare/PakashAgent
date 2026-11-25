@@ -38,6 +38,9 @@ class EmployeeService:
     def login(self, *args, **kwargs):
         return self._identity.login(*args, **kwargs)
 
+    def signin_names(self, *args, **kwargs):
+        return self._identity.signin_names(*args, **kwargs)
+
     def identities(self, *args, **kwargs):
         return self._identity.identities(*args, **kwargs)
 
