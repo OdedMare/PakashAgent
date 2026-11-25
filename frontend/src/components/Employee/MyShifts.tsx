@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, Clock3, Users } from "lucide-react";
+import { CalendarClock, ChevronDown, Clock3, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { shortDate } from "@/components/DateInput";
@@ -58,6 +58,7 @@ export function MyShifts({ view }: { view: EmployeeView }) {
         {past.length ? (
           <details className="shift-past">
             <summary>
+              <ChevronDown size={15} aria-hidden="true" />
               {past.length === 1 ? "משמרת אחת שעברה" : `${past.length} משמרות שעברו`}
             </summary>
             <ShiftList shifts={past} />
