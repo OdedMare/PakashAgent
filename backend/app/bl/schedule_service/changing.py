@@ -3,7 +3,7 @@
 from typing import List, Optional
 
 from app.bl.change_plans.confirmed import apply_confirmed_change
-from app.bl.schedule_service.constants import ACTION_MOVED, RECENT_CHANGES
+from app.bl.schedule_service.constants import ACTION_MOVED, OVERRIDE_REASON, RECENT_CHANGES
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.operations import (
     OperationApplier,
@@ -125,6 +125,7 @@ class ChangeService:
         agent_reason: str = "",
         schedule_id: Optional[str] = None,
         from_slot_id: str = "",
+        override: bool = False,
     ) -> dict:
         """Move one assignment — what a confirmed drag resolves to.
 
@@ -149,20 +150,21 @@ class ChangeService:
                 "date": slot_date,
                 "reason": reason,
                 "agent_reason": agent_reason,
+                "override": bool(override),
             },
             apply=lambda: self._move(
                 team_id, assignment_id, shift_name, slot_date, reason,
-                agent_reason, schedule_id, from_slot_id,
+                agent_reason, schedule_id, from_slot_id, override,
             ),
             message="המשמרת הועברה בהצלחה",
             reason=reason,
-            agent_reason=agent_reason or "גרירה שאושרה על ידי המנהל",
+            agent_reason=agent_reason or (OVERRIDE_REASON if override else "גרירה שאושרה על ידי המנהל"),
             schedule_id=lambda result: result.get("id", ""),
         )
 
     def _move(
         self, team_id, assignment_id, shift_name, slot_date, reason,
-        agent_reason, schedule_id, from_slot_id,
+        agent_reason, schedule_id, from_slot_id, override=False,
     ):
         schedule = self._context.require_schedule(team_id, schedule_id)
         slot = self._repository.find_slot(
@@ -174,7 +176,8 @@ class ChangeService:
         if previous is None:
             raise NotFoundError("השיבוץ לא נמצא")
         assert_no_hard_constraint(
-            self._repository, team_id, schedule, previous["employee"], slot, moving_id=assignment_id,
+            self._repository, team_id, schedule, previous["employee"], slot,
+            moving_id=assignment_id, override=override,
         )
         moved = self._repository.move_assignment(
             assignment_id, team_id, slot["id"], reason=agent_reason or reason,
@@ -187,7 +190,7 @@ class ChangeService:
             employee=moved["employee"],
             slot_date=slot_date, shift_name=shift_name,
             reason=reason,
-            agent_reason=agent_reason or moved_from(previous),
+            agent_reason=agent_reason or (OVERRIDE_REASON if override else moved_from(previous)),
         )
         return self._context.fresh_view(schedule["id"], team_id)
 

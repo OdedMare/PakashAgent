@@ -66,6 +66,17 @@ class ConflictError(AppError):
     status_code = 409
 
 
+class RuleBlockedError(ConflictError):
+    """A hand placement that breaks one of the unit's hard rules.
+
+    Its own type because the manager can overrule it: the board shows the
+    rule in a confirmation and, on "לשבץ בכל זאת", sends the same write with
+    `override` set. On a hand-made schedule a hard rule is a loud warning,
+    not a gate (D1/D3); an operational duty is not a rule and stays a plain
+    `ConflictError`.
+    """
+
+
 # A save edited from a profile somebody else has saved over since.
 PROFILE_CHANGED = "ההגדרות נשמרו בינתיים ממקום אחר. רעננו את הדף ונסו שוב"
 # A drag confirmed after somebody else moved or removed the same shift.
@@ -110,4 +121,6 @@ def error_payload(exc: AppError) -> dict:
         payload["gaps"] = exc.gaps
         payload["blocks"] = exc.blocks
         payload["can_edit_profile"] = True
+    if isinstance(exc, RuleBlockedError):
+        payload["overridable"] = True
     return payload

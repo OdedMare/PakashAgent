@@ -67,4 +67,5 @@ class ChangeRoutes(RouteGroup):
                 agent_reason=request.agent_reason,
                 schedule_id=request.schedule_id,
                 from_slot_id=request.from_slot_id,
+                override=request.override,
             )

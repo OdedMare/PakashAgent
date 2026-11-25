@@ -118,3 +118,8 @@ RECENT_CHANGES = 40
 INSTRUCTIONS_LIMIT = 2000
 SUMMARY_LIMIT = 4000
 ERROR_LIMIT = 1000
+
+# A hand placement the manager made despite a broken hard rule
+# (`RuleBlockedError`): the change log says so, because the audit's warning
+# alone does not say the manager saw the rule and chose to overrule it.
+OVERRIDE_REASON = "שובץ ידנית בניגוד לחוק חוסם, באישור המפקד/ת"

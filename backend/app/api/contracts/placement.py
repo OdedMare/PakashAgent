@@ -110,6 +110,9 @@ class AssignRequest(BaseModel):
     employee: str = Field(min_length=1, max_length=120)
     reason: str = Field(default="", max_length=1000)
     schedule_id: Optional[str] = None
+    # The manager confirmed placing despite a broken hard rule (the 409's
+    # `overridable`). An operational duty is refused regardless.
+    override: bool = False
 
 
 class UnassignRequest(BaseModel):
@@ -187,6 +190,8 @@ class MoveRequest(BaseModel):
     # somebody else already moved it is refused (409) instead of moving it
     # again from wherever it went; empty skips the check (an older client).
     from_slot_id: str = ""
+    # As on `AssignRequest`: placed despite a broken hard rule, on purpose.
+    override: bool = False
 
 
 class ConstraintRequest(BaseModel):

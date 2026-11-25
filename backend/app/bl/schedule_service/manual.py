@@ -14,6 +14,7 @@ from app.bl.schedule_service.constants import (
     ACTION_PUBLISHED,
     ACTION_REMOVED,
     MANUAL_REASON,
+    OVERRIDE_REASON,
 )
 from app.bl.schedule_service.context import ScheduleContext
 from app.bl.schedule_service.rows import find_assignment, iso
@@ -41,6 +42,7 @@ class ManualEditor:
         employee: str,
         reason: str = "",
         schedule_id: Optional[str] = None,
+        override: bool = False,
     ) -> dict:
         """Place one person on one slot, by hand.
 
@@ -48,7 +50,8 @@ class ManualEditor:
         drag *moves someone who is already placed*, while filling an empty
         cell takes nothing away from anybody. `reason` is the manager's own
         sentence when they gave one; otherwise the row carries a true
-        statement of where it came from.
+        statement of where it came from. `override` is the manager's answer
+        to a broken hard rule (`RuleBlockedError`): placed anyway, logged so.
         """
         employee = (employee or "").strip()
         if not employee:
@@ -60,19 +63,20 @@ class ManualEditor:
             body={
                 "kind": "assign", "schedule_id": schedule_id or "",
                 "employee": employee, "shift": shift_name, "date": slot_date,
-                "reason": reason,
+                "reason": reason, "override": bool(override),
             },
             apply=lambda: self._assign(
-                team_id, shift_name, slot_date, employee, reason, schedule_id,
+                team_id, shift_name, slot_date, employee, reason, schedule_id, override,
             ),
             message="העובד שובץ בהצלחה",
             reason=reason,
-            agent_reason=MANUAL_REASON,
+            agent_reason=OVERRIDE_REASON if override else MANUAL_REASON,
             schedule_id=lambda result: result.get("id", ""),
         )
 
     def _assign(
         self, team_id, shift_name, slot_date, employee, reason, schedule_id,
+        override=False,
     ):
         schedule = self._context.require_schedule(team_id, schedule_id)
         slot = self._repository.find_slot(
@@ -87,7 +91,7 @@ class ManualEditor:
         if out_of_service(person, slot_date):
             raise AgentError("העובד סיים את העבודה לפני המשמרת שנבחרה. יש לבחור עובד פעיל")
         assert_no_hard_constraint(
-            self._repository, team_id, schedule, employee, slot,
+            self._repository, team_id, schedule, employee, slot, override=override,
         )
         stated = (reason or "").strip()
         row = self._repository.add_assignment(
@@ -98,7 +102,7 @@ class ManualEditor:
         self._repository.append_change(
             team_id, ACTION_ASSIGNED, schedule_id=schedule["id"],
             employee=employee, slot_date=slot_date, shift_name=shift_name,
-            reason=stated, agent_reason=MANUAL_REASON,
+            reason=stated, agent_reason=OVERRIDE_REASON if override else MANUAL_REASON,
         )
         view = self._context.fresh_view(schedule["id"], team_id)
         # `add_assignment` conflicts silently on (slot, employee), so a double

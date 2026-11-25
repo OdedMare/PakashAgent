@@ -31,6 +31,7 @@ class ManualRoutes(RouteGroup):
                 employee=request.employee,
                 reason=request.reason,
                 schedule_id=request.schedule_id,
+                override=request.override,
             )
 
         @router.post("/unassign", response_model=Schedule)

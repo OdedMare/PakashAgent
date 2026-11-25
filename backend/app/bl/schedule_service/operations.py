@@ -25,16 +25,23 @@ from app.bl.schedule_service.constants import (
 from app.bl.schedule_service.rows import (
     assignment_facts, availability_fact, iso, window,
 )
-from app.common.errors import ConflictError
+from app.common.errors import ConflictError, RuleBlockedError
 
 
 def assert_no_hard_constraint(
     repository, team_id: str, schedule: dict, employee: str, slot: dict, moving_id: str = "",
+    override: bool = False,
 ) -> None:
-    """Refuse a placement that contradicts any hard availability row."""
+    """Refuse a placement that contradicts any hard availability row.
+
+    A broken rule raises `RuleBlockedError`, which the manager may overrule
+    by sending the write again with `override`; an operational duty is
+    occupied time and is refused either way.
+    """
     starts_on, ends_on = window(schedule)
     profile = repository.team_profile(team_id) or {}
-    _check_calendar_limits(repository, team_id, schedule, employee, slot, moving_id, profile)
+    if not override:
+        _check_calendar_limits(repository, team_id, schedule, employee, slot, moving_id, profile)
     availability = effective_availability(
         profile,
         [availability_fact(row) for row in repository.availability(
@@ -52,12 +59,13 @@ def assert_no_hard_constraint(
     blocked = next((
         row for row in availability
         if row.get("is_hard", True) is not False
+        and (not override or row.get("constraint_type") == "duty")
         and constraint_conflicts(candidate, row)
     ), None)
     if blocked is not None:
         reason = (blocked.get("reason") or "").strip()
         if blocked.get("constraint_type") != "duty":
-            raise ConflictError(
+            raise RuleBlockedError(
                 "%s אינו/ה זמין/ה למשמרת%s. יש לבחור חייל/ת או משמרת אחרת."
                 % (employee, " (%s)" % reason if reason else "")
             )
@@ -99,7 +107,7 @@ def _check_calendar_limits(repository, team_id, schedule, employee, slot, moving
             rows.extend(r for r in neighbors if low <= iso(r["date"]) <= high)
             assigned.update((iso(r["date"]), r["shift"]) for r in neighbors)
     if any(worked == date for worked, _ in assigned):
-        raise ConflictError("%s כבר משובץ/ת ביום %s" % (employee, date))
+        raise RuleBlockedError("%s כבר משובץ/ת ביום %s" % (employee, date))
     definitions = {s["name"]: s for s in profile.get("shifts") or []}
     target_span = shift_interval(day, slot)
     if target_span:
@@ -110,7 +118,7 @@ def _check_calendar_limits(repository, team_id, schedule, employee, slot, moving
             shift = dict(definitions.get(row["shift"], {}), **row)
             other_span = shift_interval(datetime.date.fromisoformat(other_date), shift)
             if other_span and target_span[0] < other_span[1] and other_span[0] < target_span[1]:
-                raise ConflictError("%s כבר משובץ/ת למשמרת חופפת ב-%s" % (employee, other_date))
+                raise RuleBlockedError("%s כבר משובץ/ת למשמרת חופפת ב-%s" % (employee, other_date))
     if sequences:
         person = next((p for p in profile.get("employees") or [] if p["name"] == employee), {})
         bookings = {(iso(r["date"]), r["shift"]): dict(definitions.get(r["shift"], {}), **r) for r in rows}
@@ -118,9 +126,9 @@ def _check_calendar_limits(repository, team_id, schedule, employee, slot, moving
         bookings[target] = slot
         for rule in sequences:
             if any(target in group for group in forbidden_groups(rule, bookings, profile, person)):
-                raise ConflictError("%s: %s" % (employee, rule.text))
+                raise RuleBlockedError("%s: %s" % (employee, rule.text))
     if cap is not None and sum(worked[:7] == month for worked, _ in assigned) >= cap:
-        raise ConflictError("%s הגיע/ה למכסת %d משמרות בחודש %s" % (employee, cap, month))
+        raise RuleBlockedError("%s הגיע/ה למכסת %d משמרות בחודש %s" % (employee, cap, month))
 
 
 class Operation:
